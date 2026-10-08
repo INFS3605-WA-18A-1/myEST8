@@ -10,6 +10,8 @@ export const URGENT_REPAIR_LIMIT_CENTS = 1000_00;
 const NO_PHOTOS_TIMEOUT_MS = 48 * HOUR_MS;
 const MAX_UPLOAD_FILES = 10;
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+/** Photo formats phones produce. Not SVG, which can carry script into the Property Manager's pages. */
+const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/heic', 'image/heif', 'image/webp', 'image/gif'];
 
 /** What the agent is waiting for this person to answer. */
 type Awaiting =
@@ -578,7 +580,7 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
       const issue = modules.tickets.issueByPhotosToken(token);
       if (issue) {
         if (!['awaiting_photos', 'checking', 'maintenance_request'].includes(issue.status)) invalid('This upload link has expired');
-        if (uploads.some((u) => !u.contentType.startsWith('image/'))) invalid('Only photos can be uploaded here');
+        if (uploads.some((u) => !PHOTO_TYPES.includes(u.contentType))) invalid('Only photos can be uploaded here (JPEG, PNG, HEIC, WebP or GIF)');
         const tenant = modules.profiles.person(issue.tenantId);
         const property = modules.profiles.property(issue.propertyId);
         const { timeZone } = modules.profiles.agency(issue.agencyId);
@@ -604,7 +606,7 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
 
       const urgentRepair = modules.tickets.urgentRepairByToken(token);
       if (!urgentRepair) notFound('Upload link');
-      if (uploads.some((u) => !u.contentType.startsWith('image/') && u.contentType !== 'application/pdf')) {
+      if (uploads.some((u) => !PHOTO_TYPES.includes(u.contentType) && u.contentType !== 'application/pdf')) {
         invalid('Upload the receipt as a photo or PDF');
       }
       const fileIds = uploads.map((u) => files.save(urgentRepair.agencyId, u));

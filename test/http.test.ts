@@ -133,7 +133,7 @@ describe('the SendGrid webhook', () => {
 });
 
 describe('the no-login links', () => {
-  test('photos uploaded through the link reach the Maintenance Request', async () => {
+  test('photos uploaded through the JSON upload endpoint reach the Maintenance Request', async () => {
     const { h, alice, http } = await server();
     h.classifier.when('The kitchen tap is dripping', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });
     await h.receive(TOM, 'The kitchen tap is dripping');
@@ -142,11 +142,12 @@ describe('the no-login links', () => {
     await h.answer(TOM, 'No', 'no');
     await h.answer(TOM, 'Mornings', 'weekday_mornings');
     const { pathname } = new URL(h.messenger.last(TOM)!.data.uploadLink as string);
+    const api = `/api${pathname}`;
 
     const form = new FormData();
     form.append('files', new File([photo({ takenAt: '2026:10:08 08:30:00' })], 'tap-1.jpg', { type: 'image/jpeg' }));
     form.append('files', new File([photo()], 'tap-2.jpg', { type: 'image/jpeg' }));
-    const response = await http.request(pathname, { method: 'POST', body: form });
+    const response = await http.request(api, { method: 'POST', body: form });
 
     expect(response.status).toBe(202);
     await h.drain();
@@ -154,26 +155,26 @@ describe('the no-login links', () => {
 
     const notAPhoto = new FormData();
     notAPhoto.append('files', new File(['hello'], 'notes.txt', { type: 'text/plain' }));
-    const refused = await http.request(pathname, { method: 'POST', body: notAPhoto });
+    const refused = await http.request(api, { method: 'POST', body: notAPhoto });
     expect(refused.status).toBe(400);
-    expect(await refused.json()).toEqual({ error: 'Only photos can be uploaded here' });
+    expect(await refused.json()).toEqual({ error: 'Only photos can be uploaded here (JPEG, PNG, HEIC, WebP or GIF)' });
 
-    expect((await http.request('/u/not-a-real-token', { method: 'POST', body: form })).status).toBe(404);
+    expect((await http.request('/api/u/not-a-real-token', { method: 'POST', body: form })).status).toBe(404);
   });
 
-  test("the Tenant's progress tracker is served by its link, and an unknown link is not found", async () => {
+  test("the Tenant's progress tracker is served as JSON for its link's token, and an unknown token is not found", async () => {
     const w = await server();
     const { h, http } = w;
     await tomsTapTicket(w);
     const { pathname } = new URL(h.messenger.to(TOM).find((m) => m.template === 'tenant.confirmed')!.data.trackerLink as string);
 
-    const response = await http.request(pathname);
+    const response = await http.request(`/api${pathname}`);
 
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
       description: 'The kitchen tap is dripping',
       stages: [{ stage: 'reported', reached: true }, { stage: 'confirmed', reached: true }, { stage: 'getting_quotes', reached: false }, {}, {}, {}, {}],
     });
-    expect((await http.request('/t/not-a-real-token')).status).toBe(404);
+    expect((await http.request('/api/t/not-a-real-token')).status).toBe(404);
   });
 });

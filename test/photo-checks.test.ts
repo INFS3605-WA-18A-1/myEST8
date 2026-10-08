@@ -56,3 +56,12 @@ describe('photo metadata checks', () => {
     });
   });
 });
+
+describe('what can be uploaded', () => {
+  test('an SVG is refused, because it can carry script', async () => {
+    const { h, link } = await reportedTap();
+    await expect(
+      h.upload(link, [{ filename: 'tap.svg', contentType: 'image/svg+xml', content: new TextEncoder().encode('<svg onload="alert(1)"/>') }]),
+    ).rejects.toThrow(/Only photos/);
+  });
+});

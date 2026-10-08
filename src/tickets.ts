@@ -1,7 +1,7 @@
 import type { Context } from './context.ts';
 import { all, one, run, transaction, type Param } from './db.ts';
 import type { ChannelType, ImageMatchResult } from './ports.ts';
-import { invalid, iso, newToken, notFound, URGENCIES, type Availability, type Trade, type Urgency } from './shared.ts';
+import { invalid, iso, newToken, notFound, TRADES, URGENCIES, type Availability, type Trade, type Urgency } from './shared.ts';
 
 export type IssueStatus = 'gathering' | 'awaiting_photos' | 'checking' | 'maintenance_request' | 'confirmed' | 'rejected' | 'urgent';
 export const IN_INTAKE: IssueStatus[] = ['gathering', 'awaiting_photos', 'checking', 'maintenance_request'];
@@ -204,6 +204,10 @@ const toJob = (r: JobRow): Job => ({
   checkTrade: !!r.check_trade,
   status: r.status,
 });
+
+function requireTrade(trade: Trade) {
+  if (!TRADES.includes(trade)) invalid(`Choose a Trade from: ${TRADES.join(', ')}`);
+}
 
 /** Restricts a dashboard query to some Properties, or to none when `propertyIds` is null. */
 function propertyFilter(propertyIds: number[] | null): [string, Param[]] {
@@ -567,6 +571,7 @@ export function createTickets({ db, clock, settings, modules }: Context) {
     },
 
     setJobTrade(agencyId: number, jobId: number, trade: Trade) {
+      requireTrade(trade);
       const changed = jobInAgency(agencyId, jobId);
       if (changed.status !== 'quoting' || modules.quotes.hasQuoteRequests(jobId)) {
         invalid('The Trade can only change before Quote Requests are sent');
@@ -576,6 +581,7 @@ export function createTickets({ db, clock, settings, modules }: Context) {
     },
 
     addJob(agencyId: number, ticketId: number, trade: Trade) {
+      requireTrade(trade);
       const parent = ticketInAgency(agencyId, ticketId);
       if (parent.status !== 'open') invalid('This Ticket is closed');
       const jobId = run(db, `INSERT INTO jobs (agency_id, ticket_id, trade, status) VALUES (?, ?, ?, 'quoting')`, agencyId, ticketId, trade);

@@ -45,3 +45,11 @@ describe('closing a Ticket', () => {
     await expect(alice.addJob(job.ticketId, 'electrical')).rejects.toThrow(/closed/);
   });
 });
+
+describe('adding a Job', () => {
+  test('needs a Trade from the list', async () => {
+    const w = await world();
+    const job = await tomsTapTicket(w);
+    await expect(w.alice.addJob(job.ticketId, 'plumber' as 'plumbing')).rejects.toThrow(/Choose a Trade/);
+  });
+});

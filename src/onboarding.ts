@@ -64,6 +64,7 @@ export function createOnboarding({ ports, modules }: Context) {
         ),
     ) {
       requireContact(input);
+      if (!input.businessName.trim()) invalid('Enter the business name');
       if (!input.trades.length || input.trades.some((t) => !TRADES.includes(t))) invalid(`Choose Trades from: ${TRADES.join(', ')}`);
       if (!Number.isInteger(input.startingRating) || input.startingRating < 1 || input.startingRating > 5) {
         invalid('The starting rating is a whole number from 1 to 5');

@@ -1,7 +1,7 @@
 import type { Context } from './context.ts';
 import type { ChannelType } from './ports.ts';
 import type { Person } from './profiles.ts';
-import { HOUR_MS } from './shared.ts';
+import { HOUR_MS, invalid } from './shared.ts';
 import { templates, type TemplateData, type TemplateName } from './templates.ts';
 
 /** WhatsApp only allows free-form messages inside this window after the person's last message. */
@@ -111,6 +111,7 @@ export function createNotifications({ clock, ports, files, modules }: Context) {
 
     /** Sends the onboarding test message on one of the Agency's channels. */
     async sendTest(agencyId: number, channelType: ChannelType, to: string) {
+      if (!modules.profiles.channelAddress(agencyId, channelType)) invalid(`Connect the ${channelType} channel first`);
       await deliver(agencyId, channelType, to, [], 'onboarding.test_message', {}, []);
     },
   };

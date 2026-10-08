@@ -1,5 +1,6 @@
-// The thin HTTP layer: provider webhooks and the two no-login links. Webhooks only
-// store the message and return; the background worker does the rest.
+// The thin HTTP layer: provider webhooks and the JSON behind the two no-login links
+// (/api/u/:token and /api/t/:token; the HTML pages own /u/:token and /t/:token).
+// Webhooks only store the message and return; the background worker does the rest.
 
 import { Hono, type Context as HonoContext } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
@@ -60,7 +61,7 @@ export function createHttpApp(
     return c.body(null, 200);
   });
 
-  http.post('/u/:token', bodyLimit({ maxSize: 105 * MB }), async (c) => {
+  http.post('/api/u/:token', bodyLimit({ maxSize: 105 * MB }), async (c) => {
     const form = await c.req.formData().catch(() => null);
     if (!form) return c.json({ error: 'Expected multipart/form-data' }, 400);
     const files = form.getAll('files').filter((f) => typeof f !== 'string');
@@ -71,7 +72,7 @@ export function createHttpApp(
     return c.json({ ok: true }, 202);
   });
 
-  http.get('/t/:token', (c) => c.json(app.tracker(c.req.param('token'))));
+  http.get('/api/t/:token', (c) => c.json(app.tracker(c.req.param('token'))));
 
   http.onError((error, c) => {
     if (error instanceof ActionError) return c.json({ error: error.message }, STATUS[error.code]);

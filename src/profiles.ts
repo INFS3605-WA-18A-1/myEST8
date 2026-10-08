@@ -102,6 +102,9 @@ type PropertyRow = {
   building_manager_id: number | null;
 };
 
+/** Compared against when an email is unknown; no password matches it. */
+const UNUSABLE_HASH = `scrypt$${randomBytes(16).toString('base64')}$${randomBytes(32).toString('base64')}`;
+
 function hashPassword(password: string) {
   const salt = randomBytes(16);
   return `scrypt$${salt.toString('base64')}$${scryptSync(password, salt, 32).toString('base64')}`;
@@ -286,7 +289,9 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
         'SELECT id, password_hash FROM property_managers WHERE email = ?',
         normalizeAddress(email),
       );
-      return row?.password_hash && passwordMatches(password, row.password_hash) ? row.id : null;
+      // Hash even for an unknown email, so the response time doesn't reveal which emails exist.
+      const matches = passwordMatches(password, row?.password_hash ?? UNUSABLE_HASH);
+      return row?.password_hash && matches ? row.id : null;
     },
 
     propertyManagers(agencyId: number): PropertyManager[] {

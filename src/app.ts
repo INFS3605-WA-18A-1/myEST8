@@ -80,6 +80,8 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
       return {
         // Screens
         me: () => profiles.propertyManager(propertyManagerId),
+        /** The app's clock, which the demo can move forward. */
+        now: () => clock.now(),
         agency: () => profiles.agency(agencyId),
         propertyManagers: () => profiles.propertyManagers(agencyId),
         properties: () => profiles.properties(agencyId),
