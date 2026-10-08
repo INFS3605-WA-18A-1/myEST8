@@ -1,0 +1,161 @@
+// Every message myEST8 sends. Each template is fixed text with placeholders;
+// nothing here is written by a model.
+
+import { dollars, type Availability, type Trade, type Urgency } from './shared.ts';
+import { formatVisit } from './zoned-time.ts';
+
+export type GuidedQuestion = 'location' | 'started' | 'worsening' | 'availability';
+
+interface AgencyInfo {
+  name: string;
+  timeZone: string;
+}
+
+interface Template<D> {
+  subject: string;
+  text: (data: D, agency: AgencyInfo) => string;
+}
+
+function template<D>(subject: string, text: (data: D, agency: AgencyInfo) => string): Template<D> {
+  return { subject, text };
+}
+
+const GUIDED_QUESTIONS: Record<GuidedQuestion, string> = {
+  location: 'Where in the property is the issue?',
+  started: 'When did it start?',
+  worsening: 'Is it getting worse? Reply YES or NO.',
+  availability:
+    'When are you usually home? Reply 1 for weekday mornings, 2 for weekday afternoons, 3 for Saturdays or 4 for any time.',
+};
+
+export const AVAILABILITY_LABELS: Record<Availability, string> = {
+  weekday_mornings: 'weekday mornings',
+  weekday_afternoons: 'weekday afternoons',
+  saturdays: 'Saturdays',
+  any_time: 'any time',
+};
+
+const trade = (t: Trade) => t.replace('_', ' ');
+const visit = (at: string, agency: AgencyInfo) => formatVisit(at, agency.timeZone);
+
+export const templates = {
+  'tenant.acknowledgement': template<{ tenantName: string; propertyAddress: string }>(
+    'We got your message',
+    (d, a) => `Hi ${d.tenantName}, this is ${a.name}. Thanks for letting us know about an issue at ${d.propertyAddress}. We've got your message.`,
+  ),
+  'tenant.guided_question': template<{ question: GuidedQuestion }>('A quick question', (d) => GUIDED_QUESTIONS[d.question]),
+  'tenant.upload_link': template<{ uploadLink: string }>(
+    'Please send photos',
+    (d) => `Thanks. Please upload a few photos of the issue here, straight from your phone: ${d.uploadLink}`,
+  ),
+  'tenant.urgent_repair_reminder': template<{
+    limitCents: number;
+    nominatedTradies: { businessName: string; phone: string }[];
+    receiptLink: string;
+  }>('Urgent repair: what to do now', (d) =>
+    [
+      'This sounds urgent. You can arrange the repair yourself straight away and claim up to ' +
+        `${dollars(d.limitCents)} back from the property owner.`,
+      d.nominatedTradies.length
+        ? `Please use one of the property's nominated tradies where possible: ${d.nominatedTradies.map((t) => `${t.businessName} ${t.phone}`).join(', ')}.`
+        : '',
+      `Send us the receipt here when it's done: ${d.receiptLink}`,
+    ]
+      .filter(Boolean)
+      .join(' '),
+  ),
+  'tenant.common_area_passed_on': template<{ buildingManagerName: string }>(
+    'Passed to the building manager',
+    (d) => `Thanks. This is a common area issue, so we've passed it to the building manager, ${d.buildingManagerName}, who looks after it with the strata.`,
+  ),
+  'tenant.confirmed': template<{ trackerLink: string }>(
+    'Your repair is confirmed',
+    (d) => `Your maintenance request is confirmed. Follow its progress here: ${d.trackerLink}`,
+  ),
+  'tenant.rejected': template<{ reason: string }>(
+    'About your maintenance request',
+    (d) => `We won't be going ahead with your maintenance request. Reason: ${d.reason}`,
+  ),
+  'tenant.visit_time': template<{ visitStart: string; trade: Trade; tradieBusinessName: string }>(
+    'Repair visit booked',
+    (d, a) => `${d.tradieBusinessName} (${trade(d.trade)}) will visit on ${visit(d.visitStart, a)}. Reply YES to confirm or tell us if you need another time.`,
+  ),
+  'tenant.visit_moved': template<{ visitStart: string; tradieBusinessName: string }>(
+    'Repair visit moved',
+    (d, a) => `Your visit from ${d.tradieBusinessName} has moved to ${visit(d.visitStart, a)}. Reply YES to confirm or tell us if you need another time.`,
+  ),
+  'tenant.fixed_properly': template<{ trade: Trade; tradieBusinessName: string }>(
+    'Was it fixed properly?',
+    (d) => `${d.tradieBusinessName} has finished the ${trade(d.trade)} job. Was it fixed properly? Reply with a number from 1 (not at all) to 5 (perfectly).`,
+  ),
+  'tenant.ticket_closed': template<{ propertyAddress: string }>(
+    'Repair complete',
+    (d) => `The repair at ${d.propertyAddress} is complete and we've closed it. Thanks for your patience.`,
+  ),
+
+  'tradie.quote_request': template<{ trade: Trade; urgency: Urgency; description: string; suburb: string }>(
+    'Quote request',
+    (d, a) => `${a.name} is asking for a quote: ${trade(d.trade)} job in ${d.suburb} (${d.urgency}). Issue: ${d.description}. Reply with your price and earliest time, or reply NO to decline.`,
+  ),
+  'tradie.quote_reminder': template<{ trade: Trade; suburb: string }>(
+    'Reminder: quote request',
+    (d, a) => `Reminder from ${a.name}: can you quote for the ${trade(d.trade)} job in ${d.suburb}? Reply with your price and earliest time, or NO to decline.`,
+  ),
+  'tradie.not_chosen': template<{ trade: Trade; suburb: string }>(
+    'Quote not chosen',
+    (d, a) => `Thanks for quoting for the ${trade(d.trade)} job in ${d.suburb}. ${a.name} has gone with another quote this time.`,
+  ),
+  'tradie.work_order': template<{ propertyAddress: string; description: string; trade: Trade; visitStart: string; visitEnd: string }>(
+    'Work order',
+    (d, a) => `Work order from ${a.name}: ${trade(d.trade)} at ${d.propertyAddress}, ${visit(d.visitStart, a)}. Issue: ${d.description}. Reply DONE when finished, or tell us if you need another time.`,
+  ),
+  'tradie.visit_moved': template<{ propertyAddress: string; visitStart: string }>(
+    'Visit moved',
+    (d, a) => `Your visit to ${d.propertyAddress} has moved to ${visit(d.visitStart, a)}.`,
+  ),
+
+  'owner.approval_request': template<{
+    propertyAddress: string;
+    trade: Trade;
+    tradieBusinessName: string;
+    quotePriceCents: number;
+    repairCostCents: number;
+    maxRepairCostCents: number;
+  }>(
+    'Approval needed',
+    (d) =>
+      `Approval needed for ${d.propertyAddress}: ${trade(d.trade)} quote from ${d.tradieBusinessName} for ${dollars(d.quotePriceCents)}. ` +
+      `This brings the repair cost to ${dollars(d.repairCostCents)}, over the property's Max Repair Cost of ${dollars(d.maxRepairCostCents)}. Reply YES to approve or NO to decline.`,
+  ),
+  'owner.approval_reminder': template<{ propertyAddress: string; trade: Trade; quotePriceCents: number }>(
+    'Reminder: approval needed',
+    (d) => `Reminder: we need your approval for the ${trade(d.trade)} quote of ${dollars(d.quotePriceCents)} at ${d.propertyAddress}. Reply YES or NO.`,
+  ),
+  'owner.work_booked': template<{ propertyAddress: string; trade: Trade; visitStart: string }>(
+    'Repair booked',
+    (d, a) => `A ${trade(d.trade)} repair at ${d.propertyAddress} is booked for ${visit(d.visitStart, a)}.`,
+  ),
+  'owner.ticket_closed': template<{ propertyAddress: string; description: string }>(
+    'Repair complete',
+    (d) => `The repair at ${d.propertyAddress} (${d.description}) is complete.`,
+  ),
+  'owner.urgent_repair_receipt': template<{ propertyAddress: string; tenantName: string; description: string; limitCents: number }>(
+    'Urgent repair receipt',
+    (d) =>
+      `${d.tenantName} arranged an urgent repair at ${d.propertyAddress} (${d.description}). The receipt is attached. ` +
+      `Tenants can claim up to ${dollars(d.limitCents)} for urgent repairs.`,
+  ),
+
+  'building_manager.common_area_issue': template<{ propertyAddress: string; tenantName: string; message: string }>(
+    'Common area issue',
+    (d, a) => `${a.name} here. ${d.tenantName}, a tenant at ${d.propertyAddress}, reported a common area issue: "${d.message}"`,
+  ),
+
+  'onboarding.test_message': template<Record<string, never>>(
+    'Test message',
+    (_, a) => `This is a test message from ${a.name} on myEST8. This channel is working.`,
+  ),
+};
+
+export type TemplateName = keyof typeof templates;
+export type TemplateData<K extends TemplateName> = Parameters<(typeof templates)[K]['text']>[0];
