@@ -1,0 +1,3 @@
+# One app with internal modules, not microservices
+
+We considered splitting the AI intake agent and ticket creation/priority classification into separate microservices. We chose a single deployable app with clear internal modules (intake agent, tickets, quotes, scheduling, notifications), with the AI agent running as a background worker inside it. A team of 5 with a 4-week timeline can't afford to deploy, monitor and wire together several services; module boundaries give the same separation without the network and operational overhead, and a module can still be extracted later if it needs to scale on its own.
