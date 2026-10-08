@@ -22,8 +22,9 @@ export async function createHarness() {
   const imageMatcher = new FakeImageMatcher();
   const quoteReader = new FakeQuoteReader();
   const places = new FakePlaces();
+  const db = openDb(':memory:');
   const app = createApp({
-    db: openDb(':memory:'),
+    db,
     clock,
     messenger,
     classifier,
@@ -63,6 +64,7 @@ export async function createHarness() {
 
   return {
     app,
+    db,
     clock,
     messenger,
     classifier,

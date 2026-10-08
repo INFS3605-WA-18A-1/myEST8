@@ -33,6 +33,12 @@ export function createFiles(db: Db, clock: Clock) {
       );
     },
 
+    /** A file belonging to the Agency, or null. */
+    getInAgency(agencyId: number, id: number): StoredFile | null {
+      const row = one<{ agency_id: number }>(db, 'SELECT agency_id FROM files WHERE id = ?', id);
+      return row?.agency_id === agencyId ? this.get(id) : null;
+    },
+
     get(id: number): StoredFile {
       const row = one<{ id: number; filename: string; content_type: string; content: Uint8Array }>(
         db,

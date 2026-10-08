@@ -8,7 +8,7 @@ import type { ChannelType, Clock, InboundMessage } from './ports.ts';
 import { createProfiles } from './profiles.ts';
 import { createQuotes } from './quotes.ts';
 import { createScheduling } from './scheduling.ts';
-import { DEFAULT_SETTINGS, type Settings, type Trade, type Urgency } from './shared.ts';
+import { DEFAULT_SETTINGS, type Role, type Settings, type Trade, type Urgency } from './shared.ts';
 import { createTickets } from './tickets.ts';
 import { createViews } from './views.ts';
 import { createWorker } from './worker.ts';
@@ -55,8 +55,12 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
     /** Creating an Agency and its Property Managers, before anyone can sign in. */
     setup: {
       createAgency: (input: { name: string; timeZone: string }) => profiles.createAgency(input),
-      addPropertyManager: (agencyId: number, input: { name: string; email: string }) => profiles.addPropertyManager(agencyId, input),
+      addPropertyManager: (agencyId: number, input: { name: string; email: string; password?: string }) =>
+        profiles.addPropertyManager(agencyId, input),
     },
+
+    /** Checks a Property Manager's email and password. Returns their id, or null. */
+    login: (email: string, password: string) => profiles.verifyLogin(email, password),
 
     /** Called by the webhooks: stores the message and returns straight away. */
     receiveInbound: (message: InboundMessage) => intake.receive(message),
@@ -75,6 +79,13 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
       const { agencyId } = profiles.propertyManager(propertyManagerId);
       return {
         // Screens
+        me: () => profiles.propertyManager(propertyManagerId),
+        agency: () => profiles.agency(agencyId),
+        propertyManagers: () => profiles.propertyManagers(agencyId),
+        properties: () => profiles.properties(agencyId),
+        people: (role?: Role) => profiles.people(agencyId, role),
+        /** A photo, receipt or PDF Quote stored for the Agency, or null. */
+        file: (fileId: number) => files.getInAgency(agencyId, fileId),
         dashboard: ({ filter = 'mine' }: { filter?: 'mine' | 'all' } = {}) => views.dashboard(agencyId, propertyManagerId, filter),
         ticket: (ticketId: number) => views.ticket(agencyId, ticketId),
         tradie: (tradieId: number) => views.tradie(agencyId, tradieId),

@@ -1,3 +1,4 @@
+import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import type { Context } from './context.ts';
 import { all, one, run, transaction } from './db.ts';
 import type { ChannelType } from './ports.ts';
@@ -101,6 +102,19 @@ type PropertyRow = {
   building_manager_id: number | null;
 };
 
+function hashPassword(password: string) {
+  const salt = randomBytes(16);
+  return `scrypt$${salt.toString('base64')}$${scryptSync(password, salt, 32).toString('base64')}`;
+}
+
+function passwordMatches(password: string, stored: string) {
+  const [scheme, salt, hash] = stored.split('$');
+  if (scheme !== 'scrypt' || !salt || !hash) return false;
+  const expected = Buffer.from(hash, 'base64');
+  const actual = scryptSync(password, Buffer.from(salt, 'base64'), expected.length);
+  return timingSafeEqual(actual, expected);
+}
+
 /** The Agency, its Property Managers, Properties, Tenants, Property Owners, Tradies and Building Managers. */
 export function createProfiles({ db, clock, ports, modules }: Context) {
   db.exec(`
@@ -116,7 +130,8 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
       id INTEGER PRIMARY KEY,
       agency_id INTEGER NOT NULL REFERENCES agencies(id),
       name TEXT NOT NULL,
-      email TEXT NOT NULL UNIQUE
+      email TEXT NOT NULL UNIQUE,
+      password_hash TEXT
     );
     CREATE TABLE IF NOT EXISTS people (
       id INTEGER PRIMARY KEY,
@@ -253,14 +268,47 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
       return { id: row.id, name: row.name, timeZone: row.time_zone };
     },
 
-    addPropertyManager(agencyId: number, input: { name: string; email: string }) {
+    addPropertyManager(agencyId: number, input: { name: string; email: string; password?: string }) {
       return run(
         db,
-        'INSERT INTO property_managers (agency_id, name, email) VALUES (?, ?, ?)',
+        'INSERT INTO property_managers (agency_id, name, email, password_hash) VALUES (?, ?, ?, ?)',
         agencyId,
         input.name,
         normalizeAddress(input.email),
+        input.password ? hashPassword(input.password) : null,
       );
+    },
+
+    /** The Property Manager with this email and password, or null. */
+    verifyLogin(email: string, password: string): number | null {
+      const row = one<{ id: number; password_hash: string | null }>(
+        db,
+        'SELECT id, password_hash FROM property_managers WHERE email = ?',
+        normalizeAddress(email),
+      );
+      return row?.password_hash && passwordMatches(password, row.password_hash) ? row.id : null;
+    },
+
+    propertyManagers(agencyId: number): PropertyManager[] {
+      return all<{ id: number; agency_id: number; name: string; email: string }>(
+        db,
+        'SELECT id, agency_id, name, email FROM property_managers WHERE agency_id = ? ORDER BY name',
+        agencyId,
+      ).map((r) => ({ id: r.id, agencyId: r.agency_id, name: r.name, email: r.email }));
+    },
+
+    people(agencyId: number, role?: Role): Person[] {
+      return all<PersonRow>(
+        db,
+        'SELECT * FROM people WHERE agency_id = ? AND (? IS NULL OR role = ?) ORDER BY role, name',
+        agencyId,
+        role ?? null,
+        role ?? null,
+      ).map(toPerson);
+    },
+
+    properties(agencyId: number): Property[] {
+      return all<PropertyRow>(db, 'SELECT * FROM properties WHERE agency_id = ? ORDER BY address', agencyId).map(toProperty);
     },
 
     propertyManager(id: number): PropertyManager {

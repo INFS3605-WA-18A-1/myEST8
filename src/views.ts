@@ -17,7 +17,7 @@ export function createViews({ clock, modules }: Context) {
   const issueDetails = (issue: Issue) => ({
     description: issue.description,
     answers: issue.answers,
-    photos: tickets.photos(issue.id).map(({ photoId, metadata, reasons }) => ({ photoId, metadata, reasons })),
+    photos: tickets.photos(issue.id).map(({ photoId, fileId, metadata, reasons }) => ({ photoId, fileId, metadata, reasons })),
     imageMatch: issue.imageMatch,
     noPhotos: issue.noPhotos,
     tenantName: profiles.person(issue.tenantId).name,

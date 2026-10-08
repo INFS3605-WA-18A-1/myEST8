@@ -29,7 +29,7 @@ describe('photo metadata checks', () => {
 
     await h.upload(link, [upload('photo.jpg', metadata)]);
 
-    expect((await alice.dashboard()).maintenanceRequests[0]!.photos).toEqual([{ photoId: expect.any(Number), metadata: result, reasons }]);
+    expect((await alice.dashboard()).maintenanceRequests[0]!.photos).toEqual([{ photoId: expect.any(Number), fileId: expect.any(Number), metadata: result, reasons }]);
   });
 
   test('a photo check that cannot run still shows the issue to the Property Manager', async () => {
