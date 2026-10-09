@@ -138,6 +138,73 @@ The first frame at 1366×768 must show the decision queue, the Ticket pipeline a
   - The channel is a small badge, the time is muted, and text keeps its line breaks.
 - **Empty states:** one sentence saying what will appear and the action to take, with no illustration.
 
+## Vocabulary
+
+Each screen uses the same words for the same thing. `src/web/ui.ts` owns these labels; pages import them instead of writing their own.
+
+### Job stages
+
+The same labels and the same order appear in the dashboard lanes, the Ticket page's step indicator and every status badge.
+
+| Status | Label | Shown as |
+|---|---|---|
+| `quoting` | Quoting | `--action` badge |
+| `awaiting_owner` | With Property Owner | `--high` badge. As a step, it appears only when the Job needed approval. |
+| `approved` | Ready to book | `--action` badge |
+| `scheduled` | Booked | `--action` badge |
+| `done` | Done | `--done` badge |
+| `cancelled` | Cancelled | muted badge; collapsed on the Ticket page |
+
+A Ticket is Open or Closed.
+
+### Actions
+
+| Action | Notes |
+|---|---|
+| Confirm | |
+| Reject | Always with a reason |
+| Review | Opens a Maintenance Request |
+| Change Urgency | |
+| Change Trade | |
+| Send Quote Requests | |
+| Confirm Quote | |
+| Choose this Quote | |
+| Send Work Order | |
+| Suggest new times | |
+| Use this time | |
+| Rate | |
+| Close Ticket | |
+| Mark messages read | |
+| Skip for now | Setup guide |
+| Continue | Setup guide |
+
+The confirmation repeats the verb: "Work Order sent".
+
+### Flags and checks
+
+Flags are sentence case: "Check urgency", "Check trade", "No photos", "Flagged photos".
+
+A machine check never stands in for what a person said:
+
+- The intake agent's photo check appears under its own label, "Photo check". Its result shows as a badge with its reason in muted text.
+- It never appears inside "What the Tenant reported".
+
+### Dates and times
+
+- Format: "Mon 12 Oct, 9:00 am". Use three-letter months, with "Sep", never "Sept".
+- Times show in the Agency's time zone everywhere, including the Tenant's tracker.
+- Relative ages read "2 days ago".
+
+### Decisions made after the first build
+
+- **Ticket page header.** It uses `docket()` at a large size: a 26 px number in the stub. It is never hand-built, so the dashboard docket and the header stay one object at two sizes.
+- **Routine Urgency.** Routine shows as `--muted` text with a `--line` border. Ink text would read as more urgent than it is.
+- **Decision rows.** Only rows that need a decision get the hi-vis stripe. A row component takes `decision: boolean`; the stripe is never hard-coded.
+- **One-Quote rule.** The rule is visible on the Ticket page next to Choose: "Choose once two Quotes are confirmed, or give a reason to go ahead with one." Choose stays enabled. Without a reason, the server's message explains what's missing.
+- **Phone gutters.** 16 px below 1024 px.
+- **Literal colours.** No literal colour values outside the token block in `app.css`, including white. Use `var(--surface)`.
+- **The Tenant's progress tracker.** The Ticket page links to it, so a Property Manager can see what the Tenant sees.
+
 ## Copy
 
 - Use `CONTEXT.md` terms exactly: Property Manager, Tenant, Tradie, Property Owner, Maintenance Request, Ticket, Job, Quote, Quote Request, Work Order, Urgency, Urgent Repair, Repair Cost, Max Repair Cost, Building Manager, Common Area, Trade.
