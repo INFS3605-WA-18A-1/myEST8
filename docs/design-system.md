@@ -78,7 +78,7 @@ Routine Urgency is not coloured: it uses `--muted` text with a `--line` border. 
 
 ### Dashboard: the dispatch board
 
-The first frame at 1366×768 must show the decision queue, the Ticket pipeline and this week's bookings without scrolling.
+The first frame at 1366×768 must show the decision queue, the Ticket pipeline and the next 7 days of bookings without scrolling.
 
 ```
 ┌ count strip: 4 Maintenance Requests to review   9 open Tickets   3 alerts   4 in the inbox   2 Urgent Repairs ┐  36px
@@ -89,15 +89,15 @@ The first frame at 1366×768 must show the decision queue, the Ticket pipeline a
 │  High  Plumbing  2d   Review│ └──────────┘       └─────────┘               └─────────┘                     │
 │▌Owner hasn't replied 52h   │                                                                             │
 │▌Rate Drip Doctors          ├─────────────────────────────────────────────────────────────────────────────┤
-│▌Inbox: unknown sender      │ This week   Mon  Tue  Wed  Thu  Fri  Sat   (bookings as small blocks)     │
+│▌Inbox: unknown sender      │ Next 7 days  today first, then the following six days (bookings as rows)  │
 └────────────────────────────┴─────────────────────────────────────────────────────────────────────────────┘
  below the fold: Urgent Repairs table, Inbox detail with link/route/dismiss, all open Tickets table
 ```
 
 - Left column (360 px) "Needs your decision": one list of compact rows, each with a 4 px `--hivis` left stripe. Order: Maintenance Requests (oldest first), then alerts, then inbox items. A Maintenance Request row: 56 px photo thumbnail (or a "No photos" tile), address, one-line description, Urgency and Trade badges plus "Check urgency", "Flagged photos" or "No photos" flags, age, and two actions: **Confirm** (POST) and **Review** (link to `/requests/:issueId`).
 - Right column, top: "Tickets by stage", five lanes in workflow order: Quoting, With Property Owner, Ready to book, Booked, Done. A Ticket sits in the lane of its least advanced open Job. Lanes scroll vertically inside a fixed height (about 300 px) so the board never pushes the calendar off the first frame.
-- Right column, bottom: "This week", a seven-day strip of bookings for both Property Managers, linking to `/calendar`.
-- Phone: one column in priority order: count strip (wrapping), Needs your decision, Tickets as a list grouped by stage, This week.
+- Right column, bottom: "Next 7 days": today and the six days after it in the Agency's time zone, bookings for both Property Managers, empty days collapsed into one muted line, linking to `/calendar`. A rolling window always shows the coming work, where a Monday-to-Sunday week is often empty.
+- Phone: one column in priority order: count strip (wrapping), Needs your decision, Tickets as a list grouped by stage, Next 7 days.
 
 ### The docket (Tickets only)
 
