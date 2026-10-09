@@ -7,7 +7,8 @@ import type { PropertyManagerActions } from '../../app.ts';
 import type { Trade } from '../../shared.ts';
 import { wallClock, zonedInstant } from '../../zoned-time.ts';
 import type { WebEnv } from '../env.ts';
-import { badge, emptyState, flashFrom, formatWhen, humanise, linkButton, page, sectionHeader, type Html } from '../ui.ts';
+import { shellInfo } from '../shell.ts';
+import { badge, emptyState, flashFrom, formatWhen, humanise, linkButton, page, type Html } from '../ui.ts';
 
 /** One booking as the calendar returns it. */
 export type Booking = ReturnType<PropertyManagerActions['calendar']>[number];
@@ -33,10 +34,12 @@ export function calendarPages() {
         title: 'Calendar',
         pm,
         active: 'calendar',
+        shell: shellInfo(c),
         flash: flashFrom(c.req.url),
+        subtitle: `Week of ${dayLabel(monday)} ${monday.year}`,
+        actions: weekNav(monday, today),
         body: html`
-          ${weekNav(monday, today)}
-          <div class="calendar-week grid gap-3 lg:grid-cols-7">
+          <div class="grid gap-3 lg:min-h-[calc(100dvh-12rem)] lg:grid-cols-[repeat(7,minmax(0,1fr))]">
             ${days.map((day) => dayColumn(day, byDay.get(key(day)) ?? [], key(day) === key(today), timeZone, trades))}
           </div>
         `,
@@ -58,18 +61,42 @@ export function bookingTrades(actions: PropertyManagerActions, bookings: Booking
   return trades;
 }
 
-/** One booking: when, which Tradie and Trade, where, whose Property, any reschedule request, and its Ticket. */
+/**
+ * One booking as a compact block: the time range, the Tradie's business name (linked
+ * to the profile), the address, the Trade and the Property Manager's initials. The
+ * whole block links to the Ticket. A reschedule request or a Done visit says so in words.
+ */
 export function bookingItem(booking: Booking, timeZone: string, trade?: Trade): Html {
-  return html`<li class="booking card card-border bg-base-100 p-3">
-    <p><strong>${timeRange(booking.start, booking.end, timeZone)}</strong></p>
-    <p><a class="link" href="/tradies/${booking.tradieId}">${booking.businessName}</a>${trade ? html` · ${humanise(trade)}` : ''}</p>
-    <p>${booking.propertyAddress}</p>
-    <p class="text-sm opacity-70">Property Manager: ${booking.propertyManager}</p>
-    <p>
-      ${booking.status === 'done' ? badge('Done', 'success') : booking.visitConfirmed ? badge('Visit confirmed', 'success') : badge('Visit not confirmed yet')}
-      ${booking.rescheduleRequestedBy ? badge(`${booking.rescheduleRequestedBy === 'tenant' ? 'Tenant' : 'Tradie'} asked for another time`, 'warning') : ''}
+  const done = booking.status === 'done';
+  const reschedule = booking.rescheduleRequestedBy;
+  const range = `${timeOf(booking.start, timeZone)} – ${timeOf(booking.end, timeZone)}`;
+  const full = [
+    range,
+    booking.businessName,
+    trade ? humanise(trade) : '',
+    booking.propertyAddress,
+    `Property Manager: ${booking.propertyManager}`,
+    done ? 'Done' : reschedule ? `Reschedule requested by ${reschedule}` : '',
+  ]
+    .filter(Boolean)
+    .join(', ');
+
+  return html`<li class="relative min-w-0 rounded border border-line bg-surface p-2 text-sm ${reschedule && !done ? 'border-l-4 border-l-high' : ''} ${done ? 'text-muted' : ''}">
+    <a href="/tickets/${booking.ticketId}" class="absolute inset-0 rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-action" title="${full}"><span class="sr-only">Open Ticket: ${full}</span></a>
+    <p class="num font-medium leading-snug"><time datetime="${booking.start}">${timeOf(booking.start, timeZone)}</time> – <time datetime="${booking.end}">${timeOf(booking.end, timeZone)}</time></p>
+    <p class="relative z-10 min-w-0"><a class="link block truncate" href="/tradies/${booking.tradieId}" title="${booking.businessName}">${booking.businessName}</a></p>
+    <p class="truncate text-muted" title="${booking.propertyAddress}">${booking.propertyAddress}</p>
+    <p class="mt-1 flex min-w-0 items-center gap-2 text-xs text-muted">
+      ${trade ? html`<span class="min-w-0 truncate" title="Trade: ${humanise(trade)}">${humanise(trade)}</span>` : ''}
+      <span class="ml-auto shrink-0" title="Property Manager: ${booking.propertyManager}"><span class="sr-only">Property Manager: </span>${initialsOf(booking.propertyManager)}</span>
     </p>
-    <p><a class="link" href="/tickets/${booking.ticketId}">Open Ticket</a></p>
+    ${done
+      ? html`<p class="mt-1 text-xs">Done</p>`
+      : reschedule
+        ? html`<p class="mt-1 text-xs font-semibold text-high">Reschedule requested</p>`
+        : booking.visitConfirmed
+          ? ''
+          : html`<p class="mt-1 text-xs text-muted">Not confirmed yet</p>`}
   </li>`;
 }
 
@@ -84,20 +111,27 @@ export function bookingList(bookings: Booking[], timeZone: string, trades: Map<n
   return html`<ul class="bookings grid gap-2">${bookings.map((b) => bookingItem(b, timeZone, trades.get(b.jobId)))}</ul>`;
 }
 
+/** Previous, this week (only when another week is shown) and next. */
 function weekNav(monday: Day, today: Day): Html {
   const thisWeek = key(mondayOf(today)) === key(monday);
-  return html`<nav aria-label="Weeks" class="flex flex-wrap items-center gap-2 mb-4">
-    ${linkButton('← Previous week', `/calendar?week=${key(addDays(monday, -7))}`, { size: 'sm' })}
+  return html`<nav aria-label="Weeks" class="flex flex-wrap items-center gap-2 text-sm">
+    ${linkButton('Previous week', `/calendar?week=${key(addDays(monday, -7))}`, { size: 'sm' })}
     ${thisWeek ? '' : linkButton('This week', '/calendar', { size: 'sm', variant: 'ghost' })}
-    ${linkButton('Next week →', `/calendar?week=${key(addDays(monday, 7))}`, { size: 'sm' })}
-    <span class="font-semibold">Week of ${dayLabel(monday)} ${monday.year}</span>
+    ${linkButton('Next week', `/calendar?week=${key(addDays(monday, 7))}`, { size: 'sm' })}
   </nav>`;
 }
 
+/** One day: its date (underlined when it is today), then its bookings or "Nothing booked". */
 function dayColumn(day: Day, bookings: Booking[], isToday: boolean, timeZone: string, trades: Map<number, Trade>): Html {
-  return html`<section aria-label="${dayLabel(day)}">
-    ${sectionHeader(dayLabel(day), isToday ? badge('Today', 'info') : undefined)}
-    ${bookingList(bookings, timeZone, trades, 'Nothing booked')}
+  const label = dayLabel(day);
+  return html`<section aria-label="${label}" class="flex min-w-0 flex-col gap-2 rounded-lg border border-line p-2 ${isToday ? 'bg-page' : 'bg-surface'}">
+    <div class="flex flex-wrap items-center gap-2">
+      <h2 class="section-title ${isToday ? 'underline decoration-action decoration-2 underline-offset-4' : ''}">${label}</h2>
+      ${isToday ? badge('Today', 'info') : ''}
+    </div>
+    ${bookings.length
+      ? html`<ul class="grid gap-2">${bookings.map((b) => bookingItem(b, timeZone, trades.get(b.jobId)))}</ul>`
+      : html`<p class="text-sm text-muted">Nothing booked</p>`}
   </section>`;
 }
 
@@ -144,7 +178,17 @@ function dayLabel(d: Day) {
   );
 }
 
-/** "11:00 am", for the end of a time range whose start shows the day. */
+/** "9:00 am", for a time range whose day is shown by its column. The space before am/pm never breaks. */
 function timeOf(iso: string, timeZone: string) {
-  return new Intl.DateTimeFormat('en-AU', { timeZone, hour: 'numeric', minute: '2-digit' }).format(new Date(iso));
+  return new Intl.DateTimeFormat('en-AU', { timeZone, hour: 'numeric', minute: '2-digit' }).format(new Date(iso)).replace(/ (am|pm)$/i, ' $1');
+}
+
+/** "Alice Archer" -> "AA" */
+function initialsOf(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word.charAt(0).toUpperCase())
+    .join('');
 }

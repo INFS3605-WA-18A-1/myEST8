@@ -61,54 +61,66 @@ export function chosenId(form: FormValues, name: string, label: string) {
   return Number(value);
 }
 
-/** Whether a channel is connected and tested, in words with a badge. */
-export function channelStatus(channel: AgencyChannel | undefined, timeZone: string): Html {
+/** A channel's state as a short chip: not connected, connected, or tested. */
+export function channelChip(channel: AgencyChannel | undefined): Html {
   if (!channel) return badge('Not connected', 'warning');
-  return html`${channel.testedAt ? badge('Connected and tested', 'success') : badge('Connected, not tested yet', 'info')}
-    <span class="block text-sm">Connected to <strong class="break-all">${channel.address}</strong>${channel.testedAt
-        ? html`; test message sent ${formatWhen(channel.testedAt, timeZone)}`
-        : ''}.</span>`;
+  return channel.testedAt ? badge('Tested', 'success') : badge('Connected', 'info');
 }
 
-/** How to create the channel if the Agency doesn't have it yet. `origin` is this site, for the webhook addresses. */
+/** A channel's state in words: not connected, connected, or connected and tested. */
+export function channelBadge(channel: AgencyChannel | undefined): Html {
+  if (!channel) return badge('Not connected', 'warning');
+  return channel.testedAt ? badge('Connected and tested', 'success') : badge('Connected, not tested yet', 'info');
+}
+
+/** The address a connected channel uses, and when its test message was sent. */
+export function channelLine(channel: AgencyChannel, timeZone: string): Html {
+  return html`<p class="text-sm">Connected to <strong class="break-all">${channel.address}</strong>${channel.testedAt
+      ? html`. Test message sent ${formatWhen(channel.testedAt, timeZone)}`
+      : ''}.</p>`;
+}
+
+/** How to create the channel, folded away. `origin` is this site, for the webhook addresses. */
 export function channelGuide(type: ChannelType, origin: string, o: { open?: boolean } = {}): Html {
-  const twilioWebhook = html`<code class="break-all">${origin}/webhooks/twilio</code>`;
   const open = o.open ? 'open' : '';
   switch (type) {
     case 'sms':
-      return html`<p>The Twilio phone number Tenants text.</p>
-        <details class="mt-2" ${open}>
+      return html`<details class="text-sm" ${open}>
           <summary>No Twilio number yet?</summary>
-          <ol class="list-decimal ml-5 text-sm">
-            <li>Sign up at twilio.com and open the Console.</li>
-            <li>Buy an Australian number that can send and receive SMS.</li>
-            <li>In the number's Messaging settings, set "A message comes in" to Webhook ${twilioWebhook}, HTTP POST.</li>
-            <li>Connect the number here and send yourself a test message.</li>
+          <ol class="mt-2 ml-5 list-decimal space-y-1">
+            <li>In the Twilio Console, buy an Australian number that can send and receive SMS.</li>
+            <li>In the number's Messaging settings, set "A message comes in" to <code class="break-all">${origin}/webhooks/twilio</code>, HTTP POST.</li>
+            <li>Connect the number here, then send a test message.</li>
           </ol>
         </details>`;
     case 'whatsapp':
-      return html`<p>For now myEST8 uses the Twilio WhatsApp sandbox. A WhatsApp sender of your own, approved by Meta, comes later.</p>
-        <details class="mt-2" ${open}>
-          <summary>Set up the sandbox</summary>
-          <ol class="list-decimal ml-5 text-sm">
+      return html`<details class="text-sm" ${open}>
+          <summary>Set up the WhatsApp sandbox</summary>
+          <p class="mt-2">For now myEST8 uses the Twilio WhatsApp sandbox. A sender of your own, approved by Meta, comes later.</p>
+          <ol class="mt-2 ml-5 list-decimal space-y-1">
             <li>In the Twilio Console, open Messaging, then Try it out, then Send a WhatsApp message.</li>
-            <li>In the sandbox settings, set "When a message comes in" to ${twilioWebhook}, HTTP POST.</li>
-            <li>Join the sandbox from your phone by sending the join code shown there. Each Tenant does the same once.</li>
-            <li>Connect the sandbox number here and send yourself a test message.</li>
+            <li>Set "When a message comes in" to <code class="break-all">${origin}/webhooks/twilio</code>, HTTP POST.</li>
+            <li>Each Tenant joins the sandbox once by sending it the join code from their phone.</li>
+            <li>Connect the sandbox number here, then send a test message.</li>
           </ol>
         </details>`;
     case 'email':
-      return html`<p>Email reaches myEST8 through SendGrid Inbound Parse. myEST8 also sends from this address, so replies come straight back.</p>
-        <details class="mt-2" ${open}>
+      return html`<details class="text-sm" ${open}>
           <summary>Set up SendGrid Inbound Parse</summary>
-          <ol class="list-decimal ml-5 text-sm">
+          <p class="mt-2">Email reaches myEST8 through SendGrid Inbound Parse. Replies go out from the same address.</p>
+          <ol class="mt-2 ml-5 list-decimal space-y-1">
             <li>In SendGrid, authenticate your domain so email can be sent from it.</li>
-            <li>Add an MX record for a receiving subdomain (for example parse.youragency.com.au) pointing to mx.sendgrid.net.</li>
+            <li>Add an MX record for a receiving subdomain, such as parse.youragency.com.au, pointing to mx.sendgrid.net.</li>
             <li>In Settings, Inbound Parse, add that subdomain with the URL <code class="break-all">${origin}/webhooks/sendgrid</code>.</li>
-            <li>Forward the Agency inbox to an address on that subdomain, and connect that address here.</li>
+            <li>Forward the Agency inbox to an address on that subdomain, then connect that address here.</li>
           </ol>
         </details>`;
   }
+}
+
+/** Fields in two columns from 768px up, one column on phones. */
+export function fieldGrid(fields: Html): Html {
+  return html`<div class="grid gap-x-4 gap-y-3 md:grid-cols-2">${fields}</div>`;
 }
 
 /**
@@ -147,45 +159,50 @@ export function scoped(scope: string | undefined, name: string) {
   return scope ? `${scope}${name.charAt(0).toUpperCase()}${name.slice(1)}` : name;
 }
 
-/** Checkboxes or radio buttons in a labelled group. `checked` ticks the given values. */
+/** Checkboxes (in `columns` from 768px) or radio buttons in a labelled group. `checked` ticks the given values. */
 export function choiceGroup(o: {
   legend: string;
   name: string;
   type: 'checkbox' | 'radio';
   options: { value: string; label: string }[];
+  columns?: 2 | 4;
   required?: boolean;
   hint?: string;
   checked?: string[];
   error?: string;
 }): Html {
-  return html`<fieldset class="fieldset my-2" ${o.error ? html`aria-invalid="true"` : ''}>
-    <legend class="fieldset-legend">${o.legend}</legend>
-    ${o.options.map(
-      (opt) => html`<label class="label gap-2 cursor-pointer">
-        <input
-          type="${o.type}"
-          class="${o.type} ${o.type}-primary ${o.type}-sm"
-          name="${o.name}"
-          value="${opt.value}"
-          ${o.required ? 'required' : ''}
-          ${o.checked?.includes(opt.value) ? 'checked' : ''}
-        />
-        <span>${opt.label}</span>
-      </label>`,
-    )}
-    ${o.error ? html`<p class="label text-sm font-medium text-error">${o.error}</p>` : ''}
-    ${o.hint ? html`<p class="label text-sm">${o.hint}</p>` : ''}
+  const control = o.type === 'checkbox' ? 'checkbox checkbox-primary checkbox-sm' : 'radio radio-primary radio-sm';
+  const layout = o.type === 'checkbox' ? (o.columns === 4 ? 'grid gap-x-4 md:grid-cols-4' : 'grid gap-x-4 md:grid-cols-2') : 'flex flex-col';
+  return html`<fieldset class="min-w-0" ${o.error ? html`aria-invalid="true"` : ''}>
+    <legend class="field-label mb-1">${o.legend}</legend>
+    <div class="${layout}">
+      ${o.options.map(
+        (opt) => html`<label class="flex cursor-pointer items-start gap-2 py-1 text-sm">
+          <input
+            type="${o.type}"
+            class="${control} mt-0.5"
+            name="${o.name}"
+            value="${opt.value}"
+            ${o.required ? 'required' : ''}
+            ${o.checked?.includes(opt.value) ? 'checked' : ''}
+          />
+          <span>${opt.label}</span>
+        </label>`,
+      )}
+    </div>
+    ${o.error ? html`<p class="field-error">${o.error}</p>` : ''}
+    ${o.hint ? html`<p class="field-hint">${o.hint}</p>` : ''}
   </fieldset>`;
 }
 
 /** The Google listing search that comes before the Tradie form. Submits `google` to `action` by GET. */
 export function googleSearchForm(action: string, query: string, problem: string | null, found: number): Html {
-  return html`<form method="get" action="${action}">
+  return html`<form method="get" action="${action}" class="grid items-end gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
       ${field({ label: 'First, find their Google listing', name: 'google', id: 'google-search', value: query, placeholder: 'Business name and suburb' })}
       ${button('Search Google', { variant: 'secondary', size: 'sm' })}
     </form>
-    ${problem ? html`<p class="text-warning mt-2">${problem}</p>` : ''}
-    ${query && !problem && !found ? html`<p class="mt-2">No Google listings found for "${query}".</p>` : ''}`;
+    ${problem ? html`<p class="mt-2 text-sm text-high">${problem}</p>` : ''}
+    ${query && !problem && !found ? html`<p class="mt-2 text-sm">No Google listings found for "${query}".</p>` : ''}`;
 }
 
 /** Google listings for `query`, or the problem to show when the search failed. */
@@ -202,17 +219,20 @@ export async function searchListings(actions: PropertyManagerActions, query: str
 export function tradieFields(o: { listings: Listing[]; values?: Values; errors?: Errors }): Html {
   const { values, errors } = o;
   const trades = values?.trades;
-  return html`
+  return fieldGrid(html`
     ${field({ label: 'Business name', name: 'businessName', id: 'tradie-business', required: true, value: valueOf(values, 'businessName'), error: errors?.businessName })}
     ${contactFields('tradie', { values, errors, nameLabel: 'Contact name' })}
-    ${choiceGroup({
-      legend: 'Trades',
-      name: 'trades',
-      type: 'checkbox',
-      options: TRADES.map((trade) => ({ value: trade, label: humanise(trade) })),
-      checked: Array.isArray(trades) ? trades : trades ? [trades] : [],
-      error: errors?.trades,
-    })}
+    <div class="md:col-span-2">
+      ${choiceGroup({
+        legend: 'Trades',
+        name: 'trades',
+        type: 'checkbox',
+        options: TRADES.map((trade) => ({ value: trade, label: humanise(trade) })),
+        columns: 4,
+        checked: Array.isArray(trades) ? trades : trades ? [trades] : [],
+        error: errors?.trades,
+      })}
+    </div>
     ${field({
       label: 'Starting rating',
       name: 'startingRating',
@@ -225,17 +245,19 @@ export function tradieFields(o: { listings: Listing[]; values?: Values; errors?:
       hint: 'How good they have been for the Agency so far. Ratings after each Job build on it.',
       error: errors?.startingRating,
     })}
-    ${choiceGroup({
-      legend: 'Google listing',
-      name: 'placeId',
-      type: 'radio',
-      required: true,
-      options: [...o.listings.map((l) => ({ value: l.placeId, label: `${l.name}, ${l.address}` })), { value: NOT_ON_GOOGLE, label: 'Not on Google' }],
-      checked: [valueOf(values, 'placeId')],
-      hint: o.listings.length ? undefined : 'Search above to link their listing, so their Google rating shows next to ours.',
-      error: errors?.placeId,
-    })}
-  `;
+    <div class="md:col-span-2">
+      ${choiceGroup({
+        legend: 'Google listing',
+        name: 'placeId',
+        type: 'radio',
+        required: true,
+        options: [...o.listings.map((l) => ({ value: l.placeId, label: `${l.name}, ${l.address}` })), { value: NOT_ON_GOOGLE, label: 'Not on Google' }],
+        checked: [valueOf(values, 'placeId')],
+        hint: o.listings.length ? undefined : 'Search above to link their listing, so their Google rating shows next to ours.',
+        error: errors?.placeId,
+      })}
+    </div>
+  `);
 }
 
 /** Adds the Tradie posted by `tradieFields`. Refusals name the posted field at fault. */
@@ -270,7 +292,7 @@ export function tradiesTable(actions: PropertyManagerActions, tradies: Person[],
       html`<a class="link font-medium" href="/tradies/${t.id}">${t.businessName ?? t.name}</a>`,
       html`${t.name}`,
       html`${t.trades.map((trade) => html`${badge(humanise(trade), 'info')} `)}`,
-      html`${average.toFixed(1)} <span class="text-sm opacity-70">(${count})</span>`,
+      html`${average.toFixed(1)} <span class="text-sm text-muted">(${count})</span>`,
       html`${t.googlePlaceId ? `${t.googleRating?.toFixed(1) ?? '—'} (${t.googleReviewCount ?? 0} reviews)` : 'Not on Google'}`,
     ];
   });

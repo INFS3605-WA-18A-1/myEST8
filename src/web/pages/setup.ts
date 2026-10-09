@@ -5,8 +5,8 @@
 //
 // Several forms share field names ("name", "mobile"), so each control's id is
 // prefixed with its form ("owner-name") to keep every label pointing at its own
-// control. A refused form comes back with `?form=<form>` so its error also shows
-// next to the fields.
+// control. A refused form comes back with `?form=<form>`: its error shows next to
+// its fields, and it opens, while the other "Add" forms stay folded away.
 
 import { Hono, type Context } from 'hono';
 import { html } from 'hono/html';
@@ -14,17 +14,20 @@ import type { PropertyManagerActions } from '../../app.ts';
 import { ActionError } from '../../shared.ts';
 import type { WebEnv } from '../env.ts';
 import { cents, formAction, list, text } from '../forms.ts';
-import { button, card, emptyState, field, flashFrom, formatMoney, humanise, linkButton, page, sectionHeader, table, type Flash, type Html } from '../ui.ts';
+import { shellInfo } from '../shell.ts';
+import { alert, button, emptyState, field, flashFrom, formatMoney, humanise, linkButton, page, section, table, type Flash, type Html } from '../ui.ts';
 import {
   addTradieFrom,
   CHANNELS,
+  channelChip,
   channelGuide,
+  channelLine,
   channelOf,
-  channelStatus,
   choiceGroup,
   chosenId,
   contactFields,
   contactFrom,
+  fieldGrid,
   googleSearchForm,
   searchListings,
   tradieFields,
@@ -47,7 +50,11 @@ type Agency = {
   propertyManagers: PropertyManager[];
 };
 
-const STEPS = [
+/** A form's own refusal: the message to show in it, and whether it starts open. */
+type Shown = { error: Html; open: boolean };
+
+/** The areas of the page, in dependency order. */
+const AREAS = [
   ['channels', 'Channels'],
   ['people', 'Property Owners and Building Managers'],
   ['tradies', 'Tradies'],
@@ -62,8 +69,8 @@ export function setupPages() {
   pages.get('/', async (c) => {
     const { actions, pm } = c.var;
     const flash = flashFrom(c.req.url);
-    const formKey = c.req.query('form');
-    const errorFor = (key: FormKey): Html => (flash?.kind === 'error' && formKey === key ? formError(flash) : html``);
+    const refusedForm = flash?.kind === 'error' ? c.req.query('form') : undefined;
+    const shownFor = (key: FormKey): Shown => ({ error: refusedForm === key && flash ? formError(flash) : html``, open: refusedForm === key });
     const googleQuery = c.req.query('google')?.trim() ?? '';
     const agency: Agency = {
       owners: actions.people('owner'),
@@ -83,17 +90,18 @@ export function setupPages() {
         pm,
         active: 'setup',
         flash,
+        shell: shellInfo(c),
+        subtitle: 'Work through these areas once. Come back any time to add more.',
+        actions: linkButton('Use the step-by-step guide', '/welcome', { variant: 'secondary', size: 'sm' }),
         body: html`
-          <p>Work through these steps once. You can come back any time to add more.</p>
-          <p>${linkButton('Use the step-by-step guide', '/welcome', { size: 'sm' })}</p>
-          <nav aria-label="Setup steps" class="my-4">
-            <ol class="list-decimal ml-6">${STEPS.map(([id, title]) => html`<li><a class="link" href="#${id}">${title}</a></li>`)}</ol>
+          <nav aria-label="Setup areas">
+            <ul class="flex flex-wrap gap-x-4 gap-y-1 text-sm">${AREAS.map(([id, title]) => html`<li><a class="link" href="#${id}">${title}</a></li>`)}</ul>
           </nav>
-          ${step(1, 'channels', 'Channels', channelsStep(origin, channels, timeZone, errorFor('channels')))}
-          ${step(2, 'people', 'Property Owners and Building Managers', peopleStep(agency, errorFor))}
-          ${step(3, 'tradies', 'Tradies', await tradiesStep(c, agency, googleQuery, errorFor('tradie')))}
-          ${step(4, 'properties', 'Properties', propertiesStep(agency, pm.id, errorFor('property')))}
-          ${step(5, 'tenants', 'Tenants', tenantsStep(agency, errorFor('tenant')))}
+          ${section({ id: 'channels', title: 'Channels', body: channelsArea(origin, channels, timeZone, shownFor('channels')) })}
+          ${section({ id: 'people', title: 'Property Owners and Building Managers', body: peopleArea(agency, shownFor) })}
+          ${section({ id: 'tradies', title: 'Tradies', body: await tradiesArea(c, agency, googleQuery, shownFor('tradie')) })}
+          ${section({ id: 'properties', title: 'Properties', body: propertiesArea(agency, pm.id, shownFor('property')) })}
+          ${section({ id: 'tenants', title: 'Tenants', body: tenantsArea(agency, shownFor('tenant')) })}
         `,
       }),
     );
@@ -183,31 +191,46 @@ export function setupPages() {
   return pages;
 }
 
-// Steps
+// Areas
 
-function step(n: number, id: string, title: string, body: Html): Html {
-  return html`<section id="${id}" class="mt-10" aria-label="Step ${n}: ${title}">
-    ${sectionHeader(`Step ${n} · ${title}`)} ${body}
-  </section>`;
+/** A group inside an area: a surface with its own heading, an optional chip and its body. */
+function subsection(o: { title: string; id?: string; actions?: Html; body: Html }): Html {
+  return html`<div class="section" ${o.id ? html`id="${o.id}"` : ''}>
+    <div class="section-head">
+      <h3 class="section-title">${o.title}</h3>
+      ${o.actions ? html`<div class="section-actions">${o.actions}</div>` : ''}
+    </div>
+    <div class="section-body">${o.body}</div>
+  </div>`;
 }
 
-function channelsStep(origin: string, connected: AgencyChannel[], timeZone: string, error: Html): Html {
+/** An "Add" form, folded away unless `open` (when it was refused, so its errors show). */
+function addForm(title: string, open: boolean, body: Html): Html {
+  return html`<details class="mt-4" ${open ? 'open' : ''}>
+    <summary class="cursor-pointer font-semibold text-action">${title}</summary>
+    <div class="mt-3">${body}</div>
+  </details>`;
+}
+
+function channelsArea(origin: string, connected: AgencyChannel[], timeZone: string, shown: Shown): Html {
   return html`
-    <p>Tenants, Tradies and Property Owners reach the Agency by SMS, WhatsApp and email. Connect each one, then send yourself a test message.</p>
-    ${error}
-    <div class="grid gap-4 mt-4 lg:grid-cols-3">
+    <p class="text-sm">Tenants, Tradies and Property Owners reach the Agency by SMS, WhatsApp and email. Connect each channel, then send a test message.</p>
+    ${shown.error}
+    <div class="mt-4 grid gap-4 md:grid-cols-3">
       ${CHANNELS.map((channel) => channelCard(channel, connected.find((c) => c.type === channel.type), timeZone, origin))}
     </div>
   `;
 }
 
 function channelCard(channel: (typeof CHANNELS)[number], connected: AgencyChannel | undefined, timeZone: string, origin: string): Html {
-  return card({
+  return subsection({
+    id: channel.type,
     title: channel.name,
+    actions: channelChip(connected),
     body: html`
-      <p>${channelStatus(connected, timeZone)}</p>
+      ${connected ? channelLine(connected, timeZone) : ''}
       ${channelGuide(channel.type, origin)}
-      <form method="post" action="/setup/channels" class="mt-3">
+      <form method="post" action="/setup/channels" class="mt-3 grid items-end gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
         <input type="hidden" name="type" value="${channel.type}" />
         ${field({
           label: channel.addressLabel,
@@ -215,69 +238,87 @@ function channelCard(channel: (typeof CHANNELS)[number], connected: AgencyChanne
           id: `${channel.type}-address`,
           type: channel.inputType,
           required: true,
+          value: connected?.address ?? '',
           placeholder: channel.placeholder,
         })}
-        ${button(`Connect ${channel.name}`, { size: 'sm' })}
+        ${button(connected ? `Change ${channel.name}` : `Connect ${channel.name}`, { size: 'sm', variant: connected ? 'secondary' : 'primary' })}
       </form>
-      <form method="post" action="/setup/channels/test" class="mt-3">
-        <input type="hidden" name="type" value="${channel.type}" />
-        ${field({
-          label: channel.type === 'email' ? 'Send a test email to' : 'Send a test message to',
-          name: 'to',
-          id: `${channel.type}-to`,
-          type: channel.inputType,
-          required: true,
-          placeholder: channel.type === 'email' ? 'you@youragency.com.au' : 'Your mobile',
-        })}
-        ${button('Send test message', { variant: 'secondary', size: 'sm' })}
-      </form>
+      ${connected
+        ? html`<form method="post" action="/setup/channels/test" class="mt-3 grid items-end gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+            <input type="hidden" name="type" value="${channel.type}" />
+            ${field({
+              label: channel.type === 'email' ? 'Send a test email to' : 'Send a test message to',
+              name: 'to',
+              id: `${channel.type}-to`,
+              type: channel.inputType,
+              required: true,
+              placeholder: channel.type === 'email' ? 'you@youragency.com.au' : 'Your mobile',
+            })}
+            ${button('Send test message', { variant: connected.testedAt ? 'secondary' : 'primary', size: 'sm' })}
+          </form>`
+        : ''}
     `,
   });
 }
 
-function peopleStep(agency: Agency, errorFor: (key: FormKey) => Html): Html {
-  return html`<div class="grid gap-4 lg:grid-cols-2">
-    ${card({
+function peopleArea(agency: Agency, shownFor: (key: FormKey) => Shown): Html {
+  const owner = shownFor('owner');
+  const buildingManager = shownFor('building-manager');
+  return html`<div class="grid gap-4 md:grid-cols-2">
+    ${subsection({
       title: 'Property Owners',
       body: html`${peopleTable(agency.owners, 'No Property Owners yet.')}
-        <form method="post" action="/setup/owners" class="mt-4">
-          <h3 class="font-semibold">Add a Property Owner</h3>
-          ${errorFor('owner')} ${contactFields('owner')} ${button('Add Property Owner', { size: 'sm' })}
-        </form>`,
+        ${addForm(
+          'Add a Property Owner',
+          owner.open,
+          html`${owner.error}
+            <form method="post" action="/setup/owners">
+              ${fieldGrid(contactFields('owner'))}
+              <div class="mt-3">${button('Add Property Owner', { size: 'sm' })}</div>
+            </form>`,
+        )}`,
     })}
-    ${card({
+    ${subsection({
       title: 'Building Managers',
-      body: html`<p class="text-sm">For strata Properties: Common Area issues go to the Building Manager.</p>
+      body: html`<p class="text-sm text-muted">For strata Properties: Common Area issues go to the Building Manager.</p>
         ${peopleTable(agency.buildingManagers, 'No Building Managers yet.')}
-        <form method="post" action="/setup/building-managers" class="mt-4">
-          <h3 class="font-semibold">Add a Building Manager</h3>
-          ${errorFor('building-manager')} ${contactFields('building-manager')} ${button('Add Building Manager', { size: 'sm' })}
-        </form>`,
+        ${addForm(
+          'Add a Building Manager',
+          buildingManager.open,
+          html`${buildingManager.error}
+            <form method="post" action="/setup/building-managers">
+              ${fieldGrid(contactFields('building-manager'))}
+              <div class="mt-3">${button('Add Building Manager', { size: 'sm' })}</div>
+            </form>`,
+        )}`,
     })}
   </div>`;
 }
 
-async function tradiesStep(c: Context<WebEnv>, agency: Agency, googleQuery: string, error: Html): Promise<Html> {
+async function tradiesArea(c: Context<WebEnv>, agency: Agency, googleQuery: string, shown: Shown): Promise<Html> {
   const { actions } = c.var;
   const { listings, problem } = await searchListings(actions, googleQuery);
   const action = `/setup/tradies${googleQuery ? `?google=${encodeURIComponent(googleQuery)}` : ''}`;
 
   return html`
-    <p>Add the Tradies the Agency already uses. They're shared by every Property Manager.</p>
+    <p class="text-sm">Add the Tradies the Agency already uses. They're shared by every Property Manager.</p>
     ${tradiesTable(actions, agency.tradies)}
-    ${card({
-      title: 'Add a Tradie',
-      body: html`
+    ${addForm(
+      'Add a Tradie',
+      shown.open || googleQuery !== '',
+      html`
         ${googleSearchForm('/setup#tradies', googleQuery, problem, listings.length)}
         <form method="post" action="${action}" class="mt-4">
-          ${error} ${tradieFields({ listings })} ${button('Add Tradie', { size: 'sm' })}
+          ${shown.error}
+          ${tradieFields({ listings })}
+          <div class="mt-3">${button('Add Tradie', { size: 'sm' })}</div>
         </form>
       `,
-    })}
+    )}
   `;
 }
 
-function propertiesStep(agency: Agency, myId: number, error: Html): Html {
+function propertiesArea(agency: Agency, myId: number, shown: Shown): Html {
   const nameOf = (people: Person[], id: number | null) => {
     const person = people.find((p) => p.id === id);
     return person ? (person.businessName ?? person.name) : '—';
@@ -298,71 +339,76 @@ function propertiesStep(agency: Agency, myId: number, error: Html): Html {
   ]);
 
   return html`
-    <p>Each Property has one Property Owner and is assigned to one Property Manager.</p>
+    <p class="text-sm">Each Property has one Property Owner and is assigned to one Property Manager.</p>
     ${agency.properties.length
       ? table(['Address', 'Property Manager', 'Property Owner', 'Max Repair Cost', 'Tenants', 'Nominated Tradies', 'Building Manager'], rows, {
           caption: 'Properties',
         })
       : emptyState('No Properties yet.')}
-    ${card({
-      title: 'Add a Property',
-      body: html`<form method="post" action="/setup/properties">
-        ${error}
-        ${agency.owners.length ? '' : html`<p class="text-warning">Add the Property Owner in step 2 first.</p>`}
-        ${field({ label: 'Address', name: 'address', id: 'property-address', required: true, placeholder: '12 King St, Newtown NSW 2042' })}
-        ${field({ label: 'Suburb', name: 'suburb', id: 'property-suburb', required: true })}
-        ${field({
-          label: 'Property Owner',
-          name: 'ownerId',
-          id: 'property-owner',
-          type: 'select',
-          required: true,
-          placeholder: 'Choose the Property Owner',
-          options: agency.owners.map((o) => ({ value: String(o.id), label: o.name })),
-        })}
-        ${field({
-          label: 'Property Manager',
-          name: 'propertyManagerId',
-          id: 'property-manager',
-          type: 'select',
-          required: true,
-          value: String(myId),
-          options: agency.propertyManagers.map((m) => ({ value: String(m.id), label: m.name })),
-        })}
-        ${field({
-          label: 'Max Repair Cost ($)',
-          name: 'maxRepairCost',
-          id: 'property-max',
-          type: 'number',
-          step: '0.01',
-          min: 0,
-          required: true,
-          placeholder: '500',
-          hint: "The most a Ticket's Repair Cost can reach before the Property Owner must approve.",
-        })}
-        ${agency.tradies.length
-          ? choiceGroup({
-              legend: 'Nominated Tradies',
-              name: 'nominatedTradieIds',
-              type: 'checkbox',
-              options: agency.tradies.map((t) => ({ value: String(t.id), label: `${t.businessName ?? t.name} (${t.trades.map(humanise).join(', ')})` })),
-              hint: 'Who the Tenant can call for an Urgent Repair.',
-            })
-          : html`<p class="text-sm">Add Tradies in step 3 to nominate them for Urgent Repairs.</p>`}
-        ${field({
-          label: 'Building Manager (strata only)',
-          name: 'buildingManagerId',
-          id: 'property-building-manager',
-          type: 'select',
-          options: [{ value: '', label: 'None' }, ...agency.buildingManagers.map((b) => ({ value: String(b.id), label: b.name }))],
-        })}
-        ${button('Add Property', { size: 'sm' })}
-      </form>`,
-    })}
+    ${addForm(
+      'Add a Property',
+      shown.open,
+      html`${agency.owners.length ? '' : html`<p class="mb-3 text-sm text-high">Add a Property Owner first.</p>`}
+        <form method="post" action="/setup/properties">
+          ${shown.error}
+          ${fieldGrid(html`
+            ${field({ label: 'Address', name: 'address', id: 'property-address', required: true, placeholder: '12 King St, Newtown NSW 2042' })}
+            ${field({ label: 'Suburb', name: 'suburb', id: 'property-suburb', required: true })}
+            ${field({
+              label: 'Property Owner',
+              name: 'ownerId',
+              id: 'property-owner',
+              type: 'select',
+              required: true,
+              placeholder: 'Choose the Property Owner',
+              options: agency.owners.map((o) => ({ value: String(o.id), label: o.name })),
+            })}
+            ${field({
+              label: 'Property Manager',
+              name: 'propertyManagerId',
+              id: 'property-manager',
+              type: 'select',
+              required: true,
+              value: String(myId),
+              options: agency.propertyManagers.map((m) => ({ value: String(m.id), label: m.name })),
+            })}
+            ${field({
+              label: 'Max Repair Cost ($)',
+              name: 'maxRepairCost',
+              id: 'property-max',
+              type: 'number',
+              step: '0.01',
+              min: 0,
+              required: true,
+              placeholder: '500',
+              hint: "The most a Ticket's Repair Cost can reach before the Property Owner must approve.",
+            })}
+            ${field({
+              label: 'Building Manager (strata only)',
+              name: 'buildingManagerId',
+              id: 'property-building-manager',
+              type: 'select',
+              options: [{ value: '', label: 'None' }, ...agency.buildingManagers.map((b) => ({ value: String(b.id), label: b.name }))],
+            })}
+          `)}
+          <div class="mt-3">
+            ${agency.tradies.length
+              ? choiceGroup({
+                  legend: 'Nominated Tradies',
+                  name: 'nominatedTradieIds',
+                  type: 'checkbox',
+                  options: agency.tradies.map((t) => ({ value: String(t.id), label: `${t.businessName ?? t.name} (${t.trades.map(humanise).join(', ')})` })),
+                  hint: 'Who the Tenant can call for an Urgent Repair.',
+                })
+              : html`<p class="text-sm text-muted">Add Tradies above to nominate them for Urgent Repairs.</p>`}
+          </div>
+          <div class="mt-3">${button('Add Property', { size: 'sm' })}</div>
+        </form>`,
+    )}
   `;
 }
 
-function tenantsStep(agency: Agency, error: Html): Html {
+function tenantsArea(agency: Agency, shown: Shown): Html {
   const addressOf = (id: number | null) => agency.properties.find((p) => p.id === id)?.address ?? '—';
   return html`
     ${agency.tenants.length
@@ -378,25 +424,28 @@ function tenantsStep(agency: Agency, error: Html): Html {
           { caption: 'Tenants' },
         )
       : emptyState('No Tenants yet.')}
-    ${card({
-      title: 'Add a Tenant',
-      body: html`<form method="post" action="/setup/tenants">
-        ${error}
-        ${agency.properties.length ? '' : html`<p class="text-warning">Add the Property in step 4 first.</p>`}
-        ${contactFields('tenant')}
-        ${field({
-          label: 'Property',
-          name: 'propertyId',
-          id: 'tenant-property',
-          type: 'select',
-          required: true,
-          placeholder: 'Choose the Property',
-          options: agency.properties.map((p) => ({ value: String(p.id), label: p.address })),
-        })}
-        ${field({ label: 'Tenancy start date', name: 'tenancyStart', id: 'tenant-start', type: 'date', required: true, hint: 'Photos taken before this date are flagged.' })}
-        ${button('Add Tenant', { size: 'sm' })}
-      </form>`,
-    })}
+    ${addForm(
+      'Add a Tenant',
+      shown.open,
+      html`${agency.properties.length ? '' : html`<p class="mb-3 text-sm text-high">Add a Property first.</p>`}
+        <form method="post" action="/setup/tenants">
+          ${shown.error}
+          ${fieldGrid(html`
+            ${contactFields('tenant')}
+            ${field({
+              label: 'Property',
+              name: 'propertyId',
+              id: 'tenant-property',
+              type: 'select',
+              required: true,
+              placeholder: 'Choose the Property',
+              options: agency.properties.map((p) => ({ value: String(p.id), label: p.address })),
+            })}
+            ${field({ label: 'Tenancy start date', name: 'tenancyStart', id: 'tenant-start', type: 'date', required: true, hint: 'Photos taken before this date are flagged.' })}
+          `)}
+          <div class="mt-3">${button('Add Tenant', { size: 'sm' })}</div>
+        </form>`,
+    )}
   `;
 }
 
@@ -411,5 +460,5 @@ function peopleTable(people: Person[], empty: string): Html {
 }
 
 function formError(flash: Flash): Html {
-  return html`<p class="text-error font-medium my-2">${flash.message}</p>`;
+  return alert(flash.message, 'error');
 }

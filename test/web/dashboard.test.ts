@@ -54,10 +54,15 @@ describe('Maintenance Requests on the dashboard', () => {
     const { cookie } = await tomsTapRequest(w);
 
     const dashboard = await page(w, '/', cookie);
-    for (const text of ['The kitchen tap is dripping', KING_ST, 'Tom Tran', 'Kitchen sink', 'Since Monday', 'Weekday mornings', 'No photos', 'Plumbing']) {
+    for (const text of ['The kitchen tap is dripping', KING_ST, 'No photos', 'Plumbing']) {
       expect(dashboard).toContain(text);
     }
     const issueId = match(dashboard, /action="\/requests\/(\d+)\/confirm"/);
+
+    const review = await page(w, `/requests/${issueId}`, cookie);
+    for (const text of ['Tom Tran', 'Kitchen sink', 'Since Monday', 'Weekday mornings', KING_ST]) {
+      expect(review).toContain(text);
+    }
 
     const res = await w.post(`/requests/${issueId}/confirm`, {}, cookie);
     expect(res.status).toBe(303);
@@ -99,9 +104,11 @@ describe('Maintenance Requests on the dashboard', () => {
     await w.h.upload(await tomReportsTap(w), [upload('tap.jpg')]);
 
     const dashboard = await page(w, '/', cookie);
-    expect(dashboard).toContain('No metadata');
-    expect(dashboard).toContain('Photos match the description');
     const fileId = match(dashboard, /src="\/files\/(\d+)"/);
+
+    const review = await page(w, `/requests/${match(dashboard, /href="\/requests\/(\d+)"/)}`, cookie);
+    expect(review).toContain('No metadata');
+    expect(review).toContain('Photos match the description');
 
     const photo = await w.get(`/files/${fileId}`, cookie);
     expect(photo.status).toBe(200);
@@ -114,7 +121,29 @@ describe('Maintenance Requests on the dashboard', () => {
   });
 });
 
+describe('Maintenance Request review', () => {
+  test('an unknown Maintenance Request is not found', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+    const res = await w.get('/requests/99999', cookie);
+    expect(res.status).toBe(404);
+    expect(await res.text()).toContain('There is no Maintenance Request waiting for you with that number.');
+  });
+});
+
 describe('Tickets on the dashboard', () => {
+  test('a Ticket with a Job being quoted sits in the Quoting lane', async () => {
+    const w = await webWorld();
+    const { ticketId } = await tomsTapTicket(w);
+    const cookie = await w.signIn();
+
+    const board = await page(w, '/', cookie);
+    const start = board.indexOf('<h3 class="lane-title">Quoting</h3>');
+    const next = board.indexOf('<h3 class="lane-title">With Property Owner</h3>', start);
+    expect(start).toBeGreaterThan(-1);
+    expect(board.slice(start, next)).toContain(`href="/tickets/${ticketId}" class="docket"`);
+  });
+
   test("Bob's own list leaves out Alice's Tickets, and \"all\" shows them", async () => {
     const w = await webWorld();
     const { ticketId } = await tomsTapTicket(w);

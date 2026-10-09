@@ -16,7 +16,7 @@ const BARRY_ID = 904;
  * what the simulator asks of it. Only Property Managers added to `harbour` see
  * them; WhatsApp is refused as not connected when `noWhatsApp` is set.
  */
-function fakeDemo(o: { noWhatsApp?: boolean } = {}) {
+function fakeDemo(o: { noWhatsApp?: boolean; extra?: number } = {}) {
   const harbour = new Set<number>();
   const ours = <T>(propertyManagerId: number, items: T[]) => (harbour.has(propertyManagerId) ? items : []);
   const sent: { as: number; from: string; channel: string; text: string; attachments: { filename: string; contentType: string; content: Uint8Array }[] | undefined }[] = [];
@@ -57,6 +57,19 @@ function fakeDemo(o: { noWhatsApp?: boolean } = {}) {
       attachments: ['quote.pdf'],
     },
   ];
+  for (let i = 1; i <= (o.extra ?? 0); i++) {
+    outbox.push({
+      at: `2026-10-07T23:${String(i).padStart(2, '0')}:00.000Z`,
+      from: AGENCY_NUMBER,
+      to: TOM,
+      cc: [],
+      channel: 'sms',
+      template: 'tenant.upload_link',
+      subject: `Reminder ${i}`,
+      text: '',
+      attachments: [],
+    });
+  }
   const inbound: DemoInboundMessage[] = [
     { at: '2026-10-07T22:00:01.000Z', from: TOM, to: AGENCY_NUMBER, channel: 'sms', text: 'The kitchen tap is dripping', attachments: [] },
   ];
@@ -83,7 +96,7 @@ function fakeDemo(o: { noWhatsApp?: boolean } = {}) {
   return { demo, sent, advanced, harbour };
 }
 
-async function simulator(o: { noWhatsApp?: boolean } = {}) {
+async function simulator(o: { noWhatsApp?: boolean; extra?: number } = {}) {
   const fake = fakeDemo(o);
   const w = await webWorld({ demo: fake.demo });
   fake.harbour.add(w.ids.aliceId).add(w.ids.bobId);
@@ -115,8 +128,9 @@ describe('the phone simulator', () => {
     expect(page).toContain('Demo clock');
     expect(page).toContain('+24 hours');
     expect(page).toContain('What myEST8 sent');
-    expect(page).toContain('Tenant · Upload link');
-    expect(page).toContain('Owner · Approval request: Approve a repair at 12 King St');
+    expect(page).toMatch(/>Tenant<\/span>\s*<span>Upload link<\/span>/);
+    expect(page).toMatch(/>Owner<\/span>\s*<span>Approval request<\/span>/);
+    expect(page).toContain('Approve a repair at 12 King St');
   });
 
   test("a contact's thread shows both sides, escapes the text, and makes the upload link clickable", async () => {
@@ -228,5 +242,54 @@ describe('the phone simulator', () => {
     expect(location).toMatch(new RegExp(`^/demo\\?contact=${TOM_ID}&ok=`));
     expect(decodeURIComponent(location)).toContain(`Clock moved to ${formatWhen('2026-10-09T09:00:00+11:00')}`);
     expect(await (await get(location, cookie)).text()).toContain('reminders and timeouts ran');
+  });
+
+  test('the feed shows only the latest 20 messages, with a "Show older" link when there are more', async () => {
+    const { get, cookie } = await simulator({ extra: 30 });
+
+    const page = await (await get('/demo', cookie)).text();
+
+    expect(page.match(/data-feed-item/g)).toHaveLength(20);
+    expect(page).toContain('Showing the latest 20 of 33');
+    expect(page).toContain('Show older');
+    expect(page).toContain('feed=40');
+    expect(page).toContain('Reminder 30');
+    expect(page).not.toContain('Reminder 1<');
+  });
+
+  test('"Show older" grows the feed, and the link goes away once everything is shown', async () => {
+    const { get, cookie } = await simulator({ extra: 30 });
+
+    const page = await (await get('/demo?feed=40', cookie)).text();
+
+    expect(page.match(/data-feed-item/g)).toHaveLength(33);
+    expect(page).not.toContain('Show older');
+  });
+
+  test('picking a contact filters the feed to their messages, and "All contacts" shows everything', async () => {
+    const { get, cookie } = await simulator();
+
+    const tom = await (await get(`/demo?contact=${TOM_ID}`, cookie)).text();
+    expect(tom.match(/data-feed-item/g)).toHaveLength(2);
+    expect(tom).not.toContain('Approve a repair at 12 King St');
+    expect(tom).toContain('All contacts');
+
+    const everyone = await (await get(`/demo?contact=${TOM_ID}&all=1`, cookie)).text();
+    expect(everyone.match(/data-feed-item/g)).toHaveLength(3);
+    expect(everyone).toContain('Approve a repair at 12 King St');
+  });
+
+  test('the contact filter narrows the list to matching people', async () => {
+    const { get, cookie } = await simulator();
+
+    const page = await (await get('/demo?q=olivia', cookie)).text();
+    // The feed also links to everyone myEST8 wrote to, so look only at the People list.
+    const start = page.indexOf('<nav aria-label="People"');
+    const list = page.slice(start, page.indexOf('</nav>', start));
+
+    expect(page).toContain('value="olivia"');
+    expect(list).toContain('Olivia Owens');
+    expect(list).not.toContain('Tom Tran');
+    expect(list).not.toContain('Pete Park');
   });
 });

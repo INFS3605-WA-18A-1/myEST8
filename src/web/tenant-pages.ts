@@ -10,11 +10,12 @@ import { html } from 'hono/html';
 import type { App, Upload } from '../app.ts';
 import { ActionError } from '../shared.ts';
 import { files, type FormValues } from './forms.ts';
-import { button, card, field, formatWhen, publicPage, steps, type Flash, type Html } from './ui.ts';
+import { alert, button, card, formatWhen, publicPage, type Html } from './ui.ts';
 
 const MB = 1024 * 1024;
 const MAX_FILES = 10;
 const STATUS = { not_found: 404, invalid: 400, conflict: 409 } as const;
+const TRACKER_FOOTER = 'Times are Sydney time. Questions? Reply to any of our messages.';
 
 /** Tracker stages in the words a Tenant sees. */
 const STAGE_LABEL: Record<string, string> = {
@@ -32,9 +33,9 @@ export function tenantPages(app: App) {
   const pages = new Hono();
 
   pages.get('/u/:token', (c) => {
+    const token = c.req.param('token');
     const ok = c.req.query('ok');
-    const sent = ok === undefined ? null : Number(ok);
-    return c.html(uploadPage(c.req.param('token'), sent === null ? null : { kind: 'ok', message: thanks(sent) }, sent !== null));
+    return c.html(uploadPage(token, ok === undefined ? {} : { thanks: thanks(Number(ok)) }));
   });
 
   pages.post(
@@ -43,7 +44,7 @@ export function tenantPages(app: App) {
     bodyLimit({
       maxSize: (MAX_FILES * 10 + 5) * MB,
       onError: (c) =>
-        c.html(uploadPage(c.req.param('token') ?? '', { kind: 'error', message: 'That was too much in one go. Send up to 10 files at a time, each under 10 MB.' }), 413),
+        c.html(uploadPage(c.req.param('token') ?? '', { error: 'That was too much in one go. Send up to 10 files at a time, each under 10 MB.' }), 413),
     }),
     async (c) => {
       const token = c.req.param('token');
@@ -63,7 +64,7 @@ export function tenantPages(app: App) {
           error.code === 'not_found'
             ? "This upload link doesn't work. Check you opened the whole link from our message, or simply reply to that message."
             : error.message;
-        return c.html(uploadPage(token, { kind: 'error', message }), STATUS[error.code]);
+        return c.html(uploadPage(token, { error: message }), STATUS[error.code]);
       }
       return c.redirect(`/u/${encodeURIComponent(token)}?ok=${uploads.length}`, 303);
     },
@@ -94,30 +95,29 @@ function thanks(sent: number) {
   return `Thanks, we've got ${count}. You can add more below if you need to.`;
 }
 
-function uploadPage(token: string, flash: Flash | null, sent = false): Html {
+/**
+ * The upload page. `thanks` is set after a successful upload (the ok query), and
+ * `error` is the refusal shown above the form. The thank-you is a block on the page
+ * rather than a flash, because a flash fades away on its own.
+ */
+function uploadPage(token: string, o: { error?: string; thanks?: string } = {}): Html {
+  const sent = o.thanks !== undefined;
   return publicPage({
     title: 'Upload photos or your receipt',
-    flash,
     body: html`
-      <p>No account needed: this link is just for the issue you told us about.</p>
+      ${o.thanks ? doneBox(o.thanks) : ''}
       ${card({
         title: sent ? 'Add more' : 'Choose your files',
-        body: html`<form method="post" action="/u/${encodeURIComponent(token)}" enctype="multipart/form-data" class="space-y-3">
-          ${field({
-            label: 'Photos or receipt',
-            name: 'files',
-            type: 'file',
-            multiple: true,
-            required: true,
-            accept: 'image/*,application/pdf',
-            hint: 'Up to 10 files at a time, each under 10 MB.',
-          })}
-          ${button(sent ? 'Upload more' : 'Upload')}
-        </form>`,
+        body: html`${o.error ? alert(o.error, 'error') : ''}
+          <form method="post" action="/u/${encodeURIComponent(token)}" enctype="multipart/form-data" class="space-y-4">
+            <p>No account needed: this link is just for the issue you told us about.</p>
+            ${dropZone()}
+            ${button(sent ? 'Upload more' : 'Upload', { block: true })}
+          </form>`,
       })}
       ${card({
         title: 'Tips',
-        body: html`<ul class="list-disc space-y-1 pl-5">
+        body: html`<ul class="list-disc space-y-2 pl-5">
           <li>Take photos from a few angles, and one from further back so we can see where it is.</li>
           <li>Photos straight from your camera keep their details, like when they were taken, which helps us act faster.</li>
           <li>For an Urgent Repair receipt, send a photo or a PDF of it.</li>
@@ -127,21 +127,68 @@ function uploadPage(token: string, flash: Flash | null, sent = false): Html {
   });
 }
 
+/**
+ * The file picker: a large zone that is a label for the native file input. The
+ * input is visually hidden but still focusable and named; the zone shows the
+ * focus ring when the input has focus.
+ */
+function dropZone(): Html {
+  return html`<label for="field-files" class="block cursor-pointer rounded-lg border-2 border-dashed border-control bg-page p-4 text-center has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-action">
+    <span class="block text-base font-semibold text-ink">Photos or receipt</span>
+    <span class="mt-3 flex min-h-14 items-center justify-center rounded-md bg-action px-4 text-base font-semibold text-white">Choose photos or a PDF</span>
+    <span id="field-files-hint" class="field-hint mt-3 block">Up to 10 files at a time, each under 10 MB.</span>
+    <input id="field-files" name="files" type="file" multiple required accept="image/*,application/pdf" aria-describedby="field-files-hint" class="sr-only" />
+  </label>`;
+}
+
+/** The confirmation after an upload: a `--done` block that stays on the page. */
+function doneBox(message: string): Html {
+  return html`<div role="status" class="rounded-lg border border-done bg-done-bg p-4 text-base font-semibold text-done">${message}</div>`;
+}
+
 function trackerPage(progress: ReturnType<App['tracker']>): Html {
-  const current = progress.stages.filter((s) => s.reached).at(-1);
+  const last = progress.stages.findLastIndex((s) => s.reached);
+  const current = progress.stages[last];
   return publicPage({
-    title: 'Your repair progress',
+    title: progress.description,
+    footer: TRACKER_FOOTER,
     body: html`
-      ${card({ title: 'What you reported', body: html`<p class="whitespace-pre-line">${progress.description}</p>` })}
-      ${current ? html`<p>Now: <strong>${STAGE_LABEL[current.stage] ?? current.stage}</strong></p>` : ''}
-      ${steps(
-        progress.stages.map((s) => ({
-          label: STAGE_LABEL[s.stage] ?? s.stage,
-          done: s.reached,
-          detail: s.visitStart ? `Visit ${formatWhen(s.visitStart)}` : s.at ? formatWhen(s.at) : undefined,
-        })),
-      )}
-      <p class="text-sm">Times are Sydney time. Questions? Reply to any of our messages.</p>
+      ${current ? html`<p class="text-2xl leading-snug font-semibold">Now: <strong>${STAGE_LABEL[current.stage] ?? current.stage}</strong></p>` : ''}
+      ${card({ title: 'Progress', body: progressList(progress.stages, last) })}
     `,
   });
 }
+
+/**
+ * The stages as a vertical list: a circle per stage (ticked when reached, the
+ * current one filled in the action colour, the rest numbered), joined by a line
+ * that is coloured up to the last reached stage. Written here rather than with
+ * ui.ts `steps`, whose fixed row heights clip stages that have a detail line.
+ */
+function progressList(stages: ReturnType<App['tracker']>['stages'], current: number): Html {
+  return html`<ol class="m-0 list-none p-0">
+    ${stages.map((s, i) => {
+      const label = STAGE_LABEL[s.stage] ?? s.stage;
+      const detail = s.visitStart ? `Visit ${formatWhen(s.visitStart)}` : s.at ? formatWhen(s.at) : '';
+      const reached = s.reached;
+      const isCurrent = i === current;
+      const lineDone = i < current;
+      const circle = isCurrent
+        ? 'border-action bg-action text-white'
+        : reached
+          ? 'border-done bg-done text-white'
+          : 'border-control bg-surface text-muted';
+      const status = isCurrent ? 'Now' : reached ? 'Done' : 'To come';
+      return html`<li class="relative flex gap-3 pb-6 last:pb-0" ${isCurrent ? html`aria-current="step"` : ''}>
+        ${i < stages.length - 1 ? html`<span aria-hidden="true" class="absolute top-6 bottom-0 left-[11px] w-0.5 ${lineDone ? 'bg-done' : 'bg-line'}"></span>` : ''}
+        <span aria-hidden="true" class="relative z-10 flex size-6 shrink-0 items-center justify-center rounded-full border-2 text-xs font-semibold ${circle}">${reached ? CHECK : i + 1}</span>
+        <div class="min-w-0 pt-0.5">
+          <p class="${reached ? 'font-semibold text-ink' : 'text-muted'}">${label}<span class="sr-only"> (${status})</span></p>
+          ${detail ? html`<p class="text-sm text-muted">${detail}</p>` : ''}
+        </div>
+      </li>`;
+    })}
+  </ol>`;
+}
+
+const CHECK = html`<svg viewBox="0 0 16 16" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-6.5" /></svg>`;

@@ -11,6 +11,7 @@ import { AVAILABILITY_LABELS, templates, type TemplateName } from '../../templat
 import type { WebEnv } from '../env.ts';
 import { PHOTO_FLAG } from './dashboard.ts';
 import { cents, formAction, int, isoToLocal, list, localToIso, text, type FormValues } from '../forms.ts';
+import { shellInfo } from '../shell.ts';
 import {
   alert,
   badge,
@@ -29,9 +30,8 @@ import {
   photoGrid,
   postButton,
   sectionHeader,
-  stat,
-  statGroup,
   statusBadge,
+  steps,
   table,
   timeline,
   urgencyBadge,
@@ -55,6 +55,8 @@ type Extras = {
   suggest: { workOrderId: number; slots: Slot[]; error: string | null } | null;
   /** The approved Tradie's next free slots, for each Job waiting for its Work Order. */
   freeSlots: Map<number, Slot[]>;
+  /** Now, in the Agency's clock, for how long ago the Ticket was reported. */
+  now: Date;
 };
 
 /** Shown to explain the rule; the core enforces it. */
@@ -75,19 +77,20 @@ export function ticketPages() {
     const ticket = findTicket(actions, c.req.param('id'));
     if (!ticket) {
       const body = emptyState('There is no such Ticket in your Agency.', linkButton('Back to the dashboard', '/'));
-      return c.html(page({ title: 'Ticket not found', pm, active: 'dashboard', flash, body }), 404);
+      return c.html(page({ title: 'Ticket not found', pm, active: 'dashboard', flash, body, shell: shellInfo(c) }), 404);
     }
     const { timeZone } = actions.agency();
     const extras: Extras = {
       timeZone,
       suggest: suggestionsFor(actions, ticket, c.req.query('suggest')),
       freeSlots: freeSlotsFor(actions, ticket),
+      now: actions.now(),
     };
     return c.html(
       page({
-        title: `Ticket ${ticket.ticketId}: ${ticket.propertyAddress}`,
-        subtitle: `${ticket.tenantName} reported it ${formatWhen(ticket.reportedAt, timeZone)}`,
+        title: `Ticket ${ticket.ticketId}`,
         actions: closeControl(ticket),
+        shell: shellInfo(c),
         pm,
         active: 'dashboard',
         flash,
@@ -301,44 +304,75 @@ function freeSlotsFor(actions: PropertyManagerActions, ticket: TicketView): Map<
 
 // The page
 
+/** The Jobs (where the next action is) in the main column; the Tenant's answers, photos and the logs beside them. */
 function ticketBody(t: TicketView, x: Extras): Html {
-  return html`${summaryCard(t, x)} ${reportCard(t)} ${t.jobs.map((job) => jobCard(t, job, x))}
-    ${t.status === 'open' ? addJobCard(t) : nothing}
-    <div class="grid gap-6 lg:grid-cols-2">${timelineCard(t, x)} ${messagesCard(t, x)}</div>`;
+  return html`${ticketHeader(t, x)}
+    <div class="grid items-start gap-4 lg:grid-cols-3">
+      <div class="min-w-0 space-y-4 lg:col-span-2">
+        ${t.jobs.map((job) => jobCard(t, job, x))}
+        ${t.status === 'open' ? addJobCard(t) : nothing}
+      </div>
+      <div class="min-w-0 space-y-4">
+        ${photosCard(t)} ${reportCard(t)} ${detailsCard(t)} ${timelineCard(t, x)} ${messagesCard(t, x)}
+      </div>
+    </div>`;
 }
 
-function summaryCard(t: TicketView, x: Extras): Html {
-  const openJobs = t.jobs.filter(isOpen).length;
+/** The Ticket as a large docket: number and urgency word in the stub, then the address, the Tenant, status and age, the Repair Cost against the Max Repair Cost, and the Urgency change. */
+function ticketHeader(t: TicketView, x: Extras): Html {
   const overMax = t.repairCostCents > t.maxRepairCostCents;
-  const unread = t.messages.filter((m) => m.unread).length;
+  const stub = t.urgency === 'high' ? 'bg-high-bg text-high' : 'bg-page text-ink';
+  const maxLine = overMax
+    ? `Over the Max Repair Cost of ${formatMoney(t.maxRepairCostCents)}, with the Property Owner's approval`
+    : `Max Repair Cost ${formatMoney(t.maxRepairCostCents)}`;
+  return html`<header class="flex overflow-hidden rounded-[4px] border border-line bg-surface">
+    <div class="flex w-24 shrink-0 flex-col items-center justify-center gap-1 px-1 py-4 ${stub}">
+      <span class="num text-[26px] leading-none font-bold [font-family:var(--font-head)]">#${t.ticketId}</span>
+      <span class="text-sm font-semibold [font-family:var(--font-head)]">${humanise(t.urgency)}</span>
+    </div>
+    <div aria-hidden="true" class="my-3 shrink-0 border-l border-dashed border-control"></div>
+    <div class="grid min-w-0 flex-1 gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_auto]">
+      <div class="min-w-0 space-y-3">
+        <div class="space-y-1">
+          <h2 class="text-xl leading-tight font-semibold break-words [font-family:var(--font-head)]">${t.propertyAddress}</h2>
+          <p class="break-words">${t.description}</p>
+        </div>
+        <p class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
+          <span>Tenant ${t.tenantName}</span>
+          <span>${statusBadge(t.status)}</span>
+          <time datetime="${t.reportedAt}">${reportedAgo(t.reportedAt, x.now)}</time>
+        </p>
+        <div class="flex flex-wrap items-end gap-3">
+          ${t.status === 'open' ? urgencyForm(t) : urgencyBadge(t.urgency)}
+          ${t.checkUrgency ? html`<p class="flex items-center gap-2 text-xs">${badge('Check Urgency', 'warning')} The intake agent wasn't sure.</p>` : nothing}
+        </div>
+      </div>
+      <div class="flex flex-wrap items-end gap-x-8 gap-y-2 lg:flex-col lg:items-end lg:text-right">
+        <div>
+          <p class="text-xs text-muted">Repair Cost</p>
+          <p class="num text-[26px] leading-tight font-semibold [font-family:var(--font-head)] ${overMax ? 'text-high' : ''}">${formatMoney(t.repairCostCents)}</p>
+        </div>
+        <p class="text-xs ${overMax ? 'text-high' : 'text-muted'}">${maxLine}</p>
+      </div>
+    </div>
+  </header>`;
+}
+
+/** "Reported 2 days ago", in the Agency's clock's hours and days. */
+function reportedAgo(iso: string, now: Date): string {
+  const hours = Math.max(0, Math.floor((now.getTime() - new Date(iso).getTime()) / 3_600_000));
+  if (hours < 24) return `Reported ${hours} ${plural(hours, 'hour')} ago`;
+  const days = Math.floor(hours / 24);
+  return `Reported ${days} ${plural(days, 'day')} ago`;
+}
+
+function detailsCard(t: TicketView): Html {
   return card({
-    title: t.description,
-    body: html`${statGroup([
-        stat({
-          label: 'Repair Cost',
-          value: formatMoney(t.repairCostCents),
-          hint: overMax
-            ? `Over the Max Repair Cost of ${formatMoney(t.maxRepairCostCents)}, with the Property Owner's approval`
-            : `Max Repair Cost ${formatMoney(t.maxRepairCostCents)}`,
-          tone: overMax ? 'warning' : 'neutral',
-        }),
-        stat({ label: 'Open Jobs', value: openJobs, hint: `${t.jobs.length} in total` }),
-        stat({ label: 'Unread messages', value: unread, tone: unread ? 'warning' : 'neutral' }),
-      ])}
-      ${dl([
-        ['Property', t.propertyAddress],
-        ['Tenant', t.tenantName],
-        ['Property Manager', t.propertyManager],
-        ['Status', statusBadge(t.status)],
-        [
-          'Urgency',
-          html`${urgencyBadge(t.urgency)}
-          ${t.checkUrgency ? html`${badge('Check Urgency', 'warning')} <span class="text-xs">The intake agent wasn't sure.</span>` : nothing}`,
-        ],
-        ['Reported', formatWhen(t.reportedAt, x.timeZone)],
-        ['Frequent issues here', frequentIssues(t)],
-      ])}
-      ${t.status === 'open' ? urgencyForm(t) : nothing}`,
+    title: 'Ticket details',
+    body: dl([
+      ['Property Manager', t.propertyManager],
+      ['Frequent issues here', frequentIssues(t)],
+    ]),
   });
 }
 
@@ -353,7 +387,7 @@ function closeControl(t: TicketView): Html {
   }
   return html`<div class="flex flex-col items-start gap-1 sm:items-end">
     ${button('Close Ticket', { type: 'button', variant: 'secondary', size: 'sm', disabled: true })}
-    <p class="text-xs text-base-content/75">Close once every Job is done or cancelled (${openJobs} still open).</p>
+    <p class="text-xs text-muted">Close once every Job is done or cancelled (${openJobs} still open).</p>
   </div>`;
 }
 
@@ -367,21 +401,25 @@ function urgencyForm(t: TicketView): Html {
     { value: 'high', label: 'High' },
     { value: 'routine', label: 'Routine' },
   ];
-  return html`<form method="post" action="/tickets/${t.ticketId}/urgency" class="flex flex-wrap items-end gap-3">
-    <div class="min-w-48 flex-1">
-      ${field({
-        label: 'Change Urgency',
-        name: 'urgency',
-        type: 'select',
-        value: t.urgency,
-        options,
-        hint: 'A Ticket is High or Routine. Urgent issues are Urgent Repairs, which the Tenant arranges, so they never become Tickets.',
-      })}
+  return html`<form method="post" action="/tickets/${t.ticketId}/urgency" class="flex flex-wrap items-end gap-2">
+    <div class="min-w-40">
+      ${field({ label: 'Change Urgency', name: 'urgency', type: 'select', value: t.urgency, options, hint: 'Urgent issues never become Tickets.' })}
     </div>
-    ${button('Save Urgency', { variant: 'secondary' })}
+    ${button('Save Urgency', { variant: 'secondary', size: 'sm' })}
   </form>`;
 }
 
+/** The photos the Tenant sent, each with what its metadata check said. */
+function photosCard(t: TicketView): Html {
+  return card({
+    title: 'Photos',
+    body: t.photos.length
+      ? photoGrid(t.photos.map((p) => ({ src: `/files/${p.fileId}`, caption: photoCaption(p) })))
+      : emptyState(t.noPhotos ? 'No photos arrived within 48 hours.' : 'No photos.'),
+  });
+}
+
+/** The Tenant's guided answers, and what the intake agent made of the photos. */
 function reportCard(t: TicketView): Html {
   const a = t.answers;
   return card({
@@ -392,9 +430,6 @@ function reportCard(t: TicketView): Html {
         ['Getting worse', a.worsening ? humanise(a.worsening) : '—'],
         ['Usually home', a.availability ? AVAILABILITY_LABELS[a.availability] : '—'],
       ])}
-      ${t.photos.length
-        ? photoGrid(t.photos.map((p) => ({ src: `/files/${p.fileId}`, caption: photoCaption(p) })))
-        : emptyState(t.noPhotos ? 'No photos arrived within 48 hours.' : 'No photos.')}
       ${t.imageMatch ? html`<p>Image match: ${humanise(t.imageMatch.result)}. ${t.imageMatch.reason}</p>` : nothing}`,
   });
 }
@@ -404,7 +439,85 @@ function photoCaption(p: Photo): Html {
   return p.metadata === 'ok' ? badge('Metadata OK', 'success') : badge('No metadata');
 }
 
+/** One Job: where it is, the one next action, and the details below it. A cancelled Job is collapsed. */
 function jobCard(t: TicketView, job: JobView, x: Extras): Html {
+  if (job.status === 'cancelled') return cancelledJob(t, job, x);
+  return card({
+    id: `job-${job.jobId}`,
+    title: jobLabel(t, job.jobId),
+    actions: html`${statusBadge(job.status)} ${job.checkTrade ? badge('Check Trade', 'warning') : nothing}`,
+    body: html`${jobSteps(job)}
+      ${nextAction(t, job, x)}
+      ${jobMore(t, job, x)}`,
+  });
+}
+
+/** A cancelled Job stays on the record, closed until someone opens it. */
+function cancelledJob(t: TicketView, job: JobView, x: Extras): Html {
+  return html`<section class="section" id="job-${job.jobId}">
+    <details>
+      <summary class="section-head cursor-pointer">
+        <h2 class="section-title">${jobLabel(t, job.jobId)}</h2>
+        ${statusBadge(job.status)}
+      </summary>
+      <div class="section-body mt-3">
+        <p>This Job was cancelled.</p>
+        ${job.quoteRequests.length ? quoteRequestsSection(job, x) : nothing}
+      </div>
+    </details>
+  </section>`;
+}
+
+/** Progress through the Job: Quoting, the Property Owner's approval when it needed one, Booked, Done. */
+function jobSteps(job: JobView): Html {
+  const approvalNeeded = job.approval !== null || job.status === 'awaiting_owner';
+  const approved = job.status === 'approved' || job.status === 'scheduled' || job.status === 'done';
+  const items = [
+    { label: 'Quoting', done: job.status !== 'quoting' },
+    ...(approvalNeeded ? [{ label: 'Property Owner approval', done: approved }] : []),
+    { label: 'Booked', done: job.status === 'scheduled' || job.status === 'done' },
+    { label: 'Done', done: job.status === 'done' },
+  ];
+  return steps(items, { horizontal: true });
+}
+
+/** The one thing to do next on the Job, by its status. */
+function nextAction(t: TicketView, job: JobView, x: Extras): Html {
+  switch (job.status) {
+    case 'quoting':
+      return quotingAction(t, job, x);
+    case 'awaiting_owner':
+      return job.approval ? approvalSection(t, job, job.approval, x) : nothing;
+    case 'approved':
+      return job.workOrder ? workOrderDetails(t, job.workOrder, x) : workOrderForm(t, job, x);
+    case 'scheduled':
+      return job.workOrder ? workOrderDetails(t, job.workOrder, x) : nothing;
+    case 'done':
+      return ratingSection(t, job);
+    default:
+      return nothing;
+  }
+}
+
+/** While quoting: the Trade if the intake agent wasn't sure, the Tradies to ask, then the Quotes side by side. */
+function quotingAction(t: TicketView, job: JobView, x: Extras): Html {
+  const declined = job.approval?.status === 'declined';
+  return html`<div class="space-y-4">
+    ${declined ? alert('The Property Owner said NO. Choose another Quote.', 'warning') : nothing}
+    ${job.checkTrade && !job.quoteRequests.length ? tradeForm(t, job) : nothing}
+    ${recommendationsSection(t, job, x)}
+    ${job.quotes.length ? quotesSection(t, job, x) : nothing}
+  </div>`;
+}
+
+/** Secondary details, collapsed: the Trade, Quote Requests, Quotes and approval not in the main view, the finished Work Order, and cancelling. */
+function jobMore(t: TicketView, job: JobView, x: Extras): Html {
+  const quoting = job.status === 'quoting';
+  const trade = quoting && !job.quoteRequests.length && !job.checkTrade ? tradeForm(t, job) : nothing;
+  const requests = job.quoteRequests.length ? quoteRequestsSection(job, x) : nothing;
+  const quotes = !quoting && job.quotes.length ? quotesSection(t, job, x) : nothing;
+  const approval = job.approval && job.status !== 'awaiting_owner' ? approvalSection(t, job, job.approval, x) : nothing;
+  const workOrder = job.workOrder && job.status === 'done' ? workOrderDetails(t, job.workOrder, x) : nothing;
   const cancel = isOpen(job)
     ? postButton(`/tickets/${t.ticketId}/jobs/${job.jobId}/cancel`, 'Cancel Job', {
         variant: 'ghost',
@@ -412,20 +525,13 @@ function jobCard(t: TicketView, job: JobView, x: Extras): Html {
         confirm: `Cancel the ${jobLabel(t, job.jobId)}? Its Quote Requests close and any booked visit is freed.`,
       })
     : nothing;
-  return card({
-    id: `job-${job.jobId}`,
-    title: jobLabel(t, job.jobId),
-    actions: html`${statusBadge(job.status)} ${job.checkTrade ? badge('Check Trade', 'warning') : nothing} ${cancel}`,
-    body: html`<div class="space-y-6">
-      ${job.status === 'quoting' && !job.quoteRequests.length ? tradeForm(t, job) : nothing}
-      ${job.status === 'quoting' ? recommendationsSection(t, job, x) : nothing}
-      ${job.quoteRequests.length ? quoteRequestsSection(job, x) : nothing}
-      ${job.quotes.length ? quotesSection(t, job, x) : nothing}
-      ${job.approval ? approvalSection(t, job, job.approval, x) : nothing}
-      ${job.workOrder ? workOrderDetails(t, job.workOrder, x) : job.status === 'approved' ? workOrderForm(t, job, x) : nothing}
-      ${job.status === 'done' ? ratingSection(t, job) : nothing}
-    </div>`,
-  });
+  return html`<details class="group">
+    <summary class="cursor-pointer text-sm font-medium text-action">More about this Job</summary>
+    <div class="mt-3 space-y-6">
+      ${trade} ${requests} ${quotes} ${approval} ${workOrder}
+      <div>${cancel}</div>
+    </div>
+  </details>`;
 }
 
 function tradeForm(t: TicketView, job: JobView): Html {
@@ -456,56 +562,67 @@ function recommendationsSection(t: TicketView, job: JobView, x: Extras): Html {
   const firstRound = job.quoteRequests.length === 0;
   const ticked = new Set(firstRound ? job.recommendations.slice(0, FIRST_ROUND).map((r) => r.tradieId) : []);
   const anyLeft = job.recommendations.some((r) => !r.requested);
+  const rows = job.recommendations.map((r, i) => recommendationRow(job, r, i + 1, ticked.has(r.tradieId), x));
   return html`<section class="space-y-3">
     ${header}
-    <p class="text-base-content/75">
+    <p class="text-muted">
       Ranked by myEST8 rating, then Google rating, then median previous Quote.
       ${firstRound ? 'Send the first round to 3–4 Tradies; the top three are ticked.' : 'Invite more Tradies if the Job is short of Quotes.'}
     </p>
     <form method="post" action="/tickets/${t.ticketId}/jobs/${job.jobId}/quote-requests" class="space-y-3">
-      <ul role="list" class="space-y-2">
-        ${job.recommendations.map((r, i) => recommendationItem(job, r, i + 1, ticked.has(r.tradieId), x))}
-      </ul>
+      ${compactTable(['Tradie', 'Rating', 'Google', 'Median Quote', 'Ask'], rows, `Recommended Tradies for the ${humanise(job.trade)} Job`)}
       ${anyLeft ? button('Send Quote Requests', { block: true }) : html`<p>Every recommended Tradie has been asked.</p>`}
     </form>
   </section>`;
 }
 
-function recommendationItem(job: JobView, r: Recommendation, rank: number, ticked: boolean, x: Extras): Html {
+/** A table with no minimum cell width, so a Tradie list fits the main column; it still scrolls inside its frame if it must. */
+function compactTable(headers: string[], rows: Html[][], caption: string): Html {
+  return html`<div class="table-frame">
+    <table class="table table-sm">
+      <caption class="sr-only">${caption}</caption>
+      <thead>
+        <tr>${headers.map((h) => html`<th scope="col">${h}</th>`)}</tr>
+      </thead>
+      <tbody>
+        ${rows.map((row) => html`<tr class="align-top">${row.map((cell) => html`<td>${cell}</td>`)}</tr>`)}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+/** One recommended Tradie as a table row. The two ratings sit in their own columns, never combined; bookings sit under the name. */
+function recommendationRow(job: JobView, r: Recommendation, rank: number, ticked: boolean, x: Extras): Html[] {
   const id = `job-${job.jobId}-tradie-${r.tradieId}`;
   const { average, count } = r.myEst8Rating;
-  return html`<li class="flex items-start gap-3 rounded-box border border-base-300 p-3">
-    <input
+  return [
+    html`<div class="space-y-1">
+      <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <label for="${id}" class="font-semibold">${rank}. ${r.businessName}</label>
+        ${r.requested ? badge('Already asked', 'info') : nothing}
+        <a class="link text-xs" href="/tradies/${r.tradieId}">Profile</a>
+      </div>
+      ${r.bookings.length
+        ? html`<ul role="list" class="text-xs text-muted">
+            ${r.bookings.map((b) => html`<li>Booked ${formatRange(b.start, b.end, x.timeZone)} by ${b.propertyManager}</li>`)}
+          </ul>`
+        : nothing}
+    </div>`,
+    html`<span class="num whitespace-nowrap">myEST8 ${average.toFixed(1)} (${count} ${plural(count, 'rating')})</span>`,
+    html`<span class="whitespace-nowrap">${googleRating(r.googleRating)}</span>`,
+    html`<span class="num">${
+      r.medianQuoteCents === null ? 'No previous Quotes' : `Median Quote ${formatMoney(r.medianQuoteCents)} (${r.previousQuotes.length} previous)`
+    }</span>`,
+    html`<input
       type="checkbox"
-      class="checkbox checkbox-primary checkbox-sm mt-0.5"
+      class="checkbox checkbox-sm"
       id="${id}"
       name="tradieIds"
       value="${r.tradieId}"
       ${ticked && !r.requested ? 'checked' : ''}
       ${r.requested ? 'disabled' : ''}
-    />
-    <div class="min-w-0 flex-1 space-y-1">
-      <div class="flex flex-wrap items-center gap-2">
-        <label for="${id}" class="font-semibold">${rank}. ${r.businessName}</label>
-        ${r.requested ? badge('Already asked', 'info') : nothing}
-      </div>
-      <div class="flex flex-wrap gap-x-4 gap-y-1">
-        <span>myEST8 ${average.toFixed(1)} (${count} ${plural(count, 'rating')})</span>
-        <span>${googleRating(r.googleRating)}</span>
-        <span>
-          ${r.medianQuoteCents === null
-            ? 'No previous Quotes'
-            : `Median Quote ${formatMoney(r.medianQuoteCents)} (${r.previousQuotes.length} previous)`}
-        </span>
-      </div>
-      ${r.bookings.length
-        ? html`<ul role="list" class="text-xs text-base-content/75">
-            ${r.bookings.map((b) => html`<li>Booked ${formatRange(b.start, b.end, x.timeZone)} by ${b.propertyManager}</li>`)}
-          </ul>`
-        : nothing}
-    </div>
-    <a class="link shrink-0" href="/tradies/${r.tradieId}">Profile</a>
-  </li>`;
+    />`,
+  ];
 }
 
 function googleRating(g: Recommendation['googleRating']): string {
@@ -531,7 +648,7 @@ function quotesSection(t: TicketView, job: JobView, x: Extras): Html {
       : 'Compare them side by side and choose one.';
   return html`<section class="space-y-3">
     ${sectionHeader('Quotes')}
-    ${job.status === 'quoting' ? html`<p class="text-base-content/75">${confirmed} confirmed. ${advice}</p>` : nothing}
+    ${job.status === 'quoting' ? html`<p class="text-muted">${confirmed} confirmed. ${advice}</p>` : nothing}
     <ul role="list" class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
       ${job.quotes.map((q) => html`<li class="min-w-0">${quoteCard(t, job, q, confirmed, x)}</li>`)}
     </ul>
@@ -540,9 +657,9 @@ function quotesSection(t: TicketView, job: JobView, x: Extras): Html {
 
 function quoteCard(t: TicketView, job: JobView, q: QuoteView, confirmed: number, x: Extras): Html {
   const open = q.status === 'open';
-  return html`<article class="h-full space-y-2 rounded-box border p-3 ${q.status === 'approved' ? 'border-success' : 'border-base-300'}">
+  return html`<article class="h-full space-y-2 rounded-[8px] border bg-surface p-3 ${q.status === 'approved' ? 'border-done' : 'border-line'}">
     <header class="flex flex-wrap items-start justify-between gap-2">${tradieLink(q.tradieId, q.businessName)} ${statusBadge(q.status)}</header>
-    <p class="text-2xl font-semibold tabular-nums">${formatMoney(q.priceCents)}</p>
+    <p class="num text-xl font-semibold">${formatMoney(q.priceCents)}</p>
     <p>Proposed time: ${q.proposedTime ? formatWhen(q.proposedTime, x.timeZone) : 'none given'}</p>
     <p class="flex flex-wrap gap-1">
       ${q.confirmed ? badge('Confirmed', 'success') : badge('Needs checking', 'warning')}
@@ -556,7 +673,7 @@ function quoteCard(t: TicketView, job: JobView, q: QuoteView, confirmed: number,
 
 function confirmForm(t: TicketView, q: QuoteView, x: Extras): Html {
   return html`<form method="post" action="/tickets/${t.ticketId}/quotes/${q.quoteId}/confirm" class="space-y-2">
-    <p class="text-xs text-base-content/75">
+    <p class="text-xs text-muted">
       Check what was read from the reply${q.hasPdf ? ' and its PDF' : ''} and correct anything wrong. Only confirmed Quotes count.
     </p>
     ${field({
@@ -608,12 +725,11 @@ function approvalSection(t: TicketView, job: JobView, approval: NonNullable<JobV
       ${formatMoney(t.maxRepairCostCents)}. The Property Owner replies YES or NO.
     </p>
     ${waiting
-      ? html`<p class="text-base-content/75">
+      ? html`<p class="text-muted">
           ${approval.status === 'reminded' ? 'Reminded after 24 hours.' : 'A reminder goes after 24 hours.'}
           You'll get an alert if there's no reply after 48 hours.
         </p>`
       : nothing}
-    ${approval.status === 'declined' && job.status === 'quoting' ? alert('The Property Owner said NO. Choose another Quote.', 'warning') : nothing}
   </section>`;
 }
 
@@ -653,10 +769,10 @@ function workOrderForm(t: TicketView, job: JobView, x: Extras): Html {
 function workOrderDetails(t: TicketView, wo: WorkOrderView, x: Extras): Html {
   const active = wo.status === 'active';
   const suggesting = x.suggest?.workOrderId === wo.workOrderId;
-  const suggest = linkButton('Suggest new times', `/tickets/${t.ticketId}?suggest=${wo.workOrderId}`, {
-    size: 'sm',
-    variant: wo.rescheduleRequestedBy ? 'primary' : 'secondary',
-  });
+  // A link styled as a button; the primary one sets its own text colour, which the shared linkButton doesn't.
+  const suggest = wo.rescheduleRequestedBy
+    ? html`<a class="btn btn-sm btn-primary text-primary-content" href="/tickets/${t.ticketId}?suggest=${wo.workOrderId}">Suggest new times</a>`
+    : linkButton('Suggest new times', `/tickets/${t.ticketId}?suggest=${wo.workOrderId}`, { size: 'sm' });
   const tenant = wo.visitConfirmed
     ? badge('Confirmed the visit', 'success')
     : active
@@ -690,9 +806,9 @@ function suggestionsPanel(t: TicketView, wo: WorkOrderView, suggest: NonNullable
           )}
         </ul>`
       : emptyState('No suggested time fits in the next 14 days. Pick another time below.');
-  return html`<div class="space-y-3 rounded-box bg-base-200 p-3">
+  return html`<div class="space-y-3 rounded-[8px] bg-page p-3">
     <h3 class="font-semibold">New times</h3>
-    <p class="text-base-content/75">
+    <p class="text-muted">
       Free for ${wo.businessName}, inside the Tenant's availability and as long as the current visit, over the next 14 days. The Tradie
       and the Tenant are told the new time.
     </p>
@@ -743,9 +859,22 @@ function addJobCard(t: TicketView): Html {
   });
 }
 
+/** The Ticket's history, in a collapsible side panel that starts open. */
 function timelineCard(t: TicketView, x: Extras): Html {
   const events = t.timeline.map((e) => ({ at: formatWhen(e.at, x.timeZone), ...describeEvent(t, e, x) }));
-  return card({ title: 'Timeline', body: events.length ? timeline(events) : emptyState('Nothing has happened yet.') });
+  return collapsible('Timeline', events.length ? timeline(events) : emptyState('Nothing has happened yet.'));
+}
+
+/** A section whose heading opens and closes its body. */
+function collapsible(title: string, body: Html): Html {
+  return html`<section class="section">
+    <details open>
+      <summary class="section-head cursor-pointer">
+        <h2 class="section-title">${title}</h2>
+      </summary>
+      <div class="section-body mt-3">${body}</div>
+    </details>
+  </section>`;
 }
 
 /** A timeline event in words, with the Tradie, price or visit it was about. */
@@ -811,13 +940,12 @@ function describeEvent(t: TicketView, event: TimelineEvent, x: Extras): { title:
   }
 }
 
+/** The message log, as a collapsible side panel, with the mark-read control when something is unread. */
 function messagesCard(t: TicketView, x: Extras): Html {
   const unread = t.messages.filter((m) => m.unread).length;
-  return card({
-    title: unread ? `Messages (${unread} unread)` : 'Messages',
-    actions: unread ? postButton(`/tickets/${t.ticketId}/read`, 'Mark messages read', { variant: 'secondary', size: 'sm' }) : undefined,
-    body: t.messages.length ? html`<div>${t.messages.map((m) => messageBubble(m, x))}</div>` : emptyState('No messages yet.'),
-  });
+  const read = unread ? postButton(`/tickets/${t.ticketId}/read`, 'Mark messages read', { variant: 'secondary', size: 'sm' }) : nothing;
+  const log = t.messages.length ? html`<div>${t.messages.map((m) => messageBubble(m, x))}</div>` : emptyState('No messages yet.');
+  return collapsible(unread ? `Messages (${unread} unread)` : 'Messages', html`${read} ${log}`);
 }
 
 /** Inbound messages on the left, what myEST8 sent on the right; unread ones stand out. */

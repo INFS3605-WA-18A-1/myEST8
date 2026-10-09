@@ -25,7 +25,7 @@ describe('the onboarding guide', () => {
 
     const setup = await page(w, '/setup', cookie);
 
-    for (const text of ['Step 1', 'Step 5', '/webhooks/twilio', 'WhatsApp sandbox', 'Inbound Parse', '/webhooks/sendgrid']) expect(setup).toContain(text);
+    for (const text of ['id="channels"', 'id="tenants"', '/webhooks/twilio', 'WhatsApp sandbox', 'Inbound Parse', '/webhooks/sendgrid']) expect(setup).toContain(text);
     for (const text of ['Olivia Owens', 'Barry Strata', 'Flow Bros', 'Not on Google', KING_ST, '$500.00', 'Tom Tran']) expect(setup).toContain(text);
     expect(setup).toContain(`href="/tradies/${w.tradies.finn.id}"`);
   });

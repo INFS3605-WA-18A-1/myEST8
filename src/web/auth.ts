@@ -191,17 +191,20 @@ function signInPage(o: { next: string; email?: string; flash?: Flash }) {
     flash: o.flash ?? null,
     headerActions: html`<a class="link text-sm" href="/">Home</a>`,
     footer: SIGNED_OUT_FOOTER,
-    body: html`<form method="post" action="/login" class="space-y-2">
-        <input type="hidden" name="next" value="${o.next}" />
-        ${field({ label: 'Email', name: 'email', type: 'email', value: o.email ?? '', required: true, autocomplete: 'username' })}
-        ${field({ label: 'Password', name: 'password', type: 'password', required: true, autocomplete: 'current-password' })}
-        ${button('Sign in', { block: true })}
-      </form>
-      <div class="divider text-sm">New to myEST8?</div>
-      ${linkButton("Create your Agency's account", '/signup', { block: true })}
-      <p class="text-center text-sm"><a class="link" href="/">What is myEST8?</a></p>`,
+    body: html`<div class="mx-auto w-full max-w-[400px] space-y-5">
+        <form method="post" action="/login" class="space-y-4">
+          <input type="hidden" name="next" value="${o.next}" />
+          ${field({ label: 'Email', name: 'email', type: 'email', value: o.email ?? '', required: true, autocomplete: 'username' })}
+          ${field({ label: 'Password', name: 'password', type: 'password', required: true, autocomplete: 'current-password' })}
+          ${button('Sign in', { block: true })}
+        </form>
+        <div class="space-y-3 border-t border-line pt-5 text-center text-sm">
+          <p>New to myEST8? <a class="link" href="/signup">Create your Agency's account</a></p>
+          <p><a class="link" href="/">Back to the front page</a></p>
+        </div>
+      </div>`,
   });
 }
 
 /** The footer on the pages a signed-out Property Manager sees. */
-export const SIGNED_OUT_FOOTER = 'myEST8 · Maintenance for small property management Agencies';
+export const SIGNED_OUT_FOOTER = 'myEST8, maintenance for small property management Agencies';

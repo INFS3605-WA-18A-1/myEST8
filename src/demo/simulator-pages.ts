@@ -11,10 +11,14 @@ import type { ChannelType } from '../ports.ts';
 import { ActionError, type Role } from '../shared.ts';
 import type { WebEnv } from '../web/env.ts';
 import { files, int, text, type FormValues } from '../web/forms.ts';
-import { alert, badge, button, card, chatBubble, emptyState, flashFrom, formatWhen, humanise, linkButton, page, postButton, withFlash, type Html } from '../web/ui.ts';
+import { shellInfo } from '../web/shell.ts';
+import { alert, badge, button, chatBubble, emptyState, flashFrom, formatWhen, humanise, linkButton, page, section, segmented, withFlash, type Html } from '../web/ui.ts';
 import type { DemoContact, DemoControls, DemoInboundMessage, DemoOutboundMessage } from './controls.ts';
 
 const MB = 1024 * 1024;
+
+/** The feed shows this many of the latest messages, and "Show older" adds this many more. */
+const FEED_PAGE = 20;
 
 const GROUPS: [Role, string][] = [
   ['tenant', 'Tenants'],
@@ -42,6 +46,10 @@ const QUICK_REPLIES: Record<Role, string[]> = {
 
 const CLOCK_STEPS = [1, 24, 48, 72];
 
+/** The phone: 380px wide on laptops, full width below, 28px radius, one allowed shadow. */
+const PHONE_FRAME =
+  'flex min-h-[560px] h-[min(720px,calc(100dvh_-_140px))] w-full min-w-0 flex-col overflow-hidden rounded-[28px] border border-control bg-surface shadow-[0_8px_24px_rgb(50_50_51/0.18)] lg:w-[380px] lg:shrink-0';
+
 /** A message on a contact's phone or in their inbox: from myEST8, or sent by them through the simulator. */
 type ThreadMessage = {
   fromUs: boolean;
@@ -66,22 +74,39 @@ export function simulatorPages(demo: DemoControls) {
     const connected = c.get('actions').channels().map((ch) => ch.type);
     const missing = (Object.keys(CHANNEL_LABEL) as ChannelType[]).filter((ch) => !connected.includes(ch));
     const selected = contacts.find((p) => String(p.personId) === c.req.query('contact')) ?? null;
-    const received = (p: DemoContact) => outbox.filter((m) => [m.to, ...m.cc].some((a) => owns(p, a))).length;
+    const query = (c.req.query('q') ?? '').trim();
+    const showAll = c.req.query('all') === '1';
+    const limit = feedLimit(c.req.query('feed'));
+    const listed = query ? contacts.filter((p) => matchesQuery(p, query)) : contacts;
+    const sent = sentCounts(contacts, outbox);
     const thread = selected ? threadOf(selected, outbox, inbound) : [];
 
-    const body = html`${missing.length ? unconnectedNotice(missing) : ''}
-      <div class="grid gap-4 lg:grid-cols-[16rem_minmax(0,1fr)_20rem]">
-      <aside class="hidden lg:block" aria-label="People">${contactList(contacts, selected, received)}</aside>
-      <section class="min-w-0 space-y-4">
-        ${contactPicker(contacts, selected)}
-        ${selected
-          ? phone(selected, thread, timeZone)
-          : card({ body: contacts.length ? html`<p>Pick someone to act as. You'll see what myEST8 sent them, and can reply as them.</p>` : emptyState('No people to act as yet. Add Tenants, Tradies, Property Owners or Building Managers in Setup.') })}
-      </section>
-      <aside class="min-w-0 space-y-4">${clockPanel(demo.now(), timeZone, selected)} ${sentFeed(outbox, contacts, timeZone)}</aside>
-    </div>`;
+    // The feed: newest first, for the selected contact unless "All contacts" is on.
+    const scoped = selected && !showAll ? outbox.filter((m) => addressed(selected, m)) : outbox;
+    const newest = scoped.toReversed();
+    const feed = { total: newest.length, items: newest.slice(0, limit), limit, selected, showAll, query };
 
-    return c.html(page({ title: 'Phone simulator', pm: c.get('pm'), active: 'simulator', flash: flashFrom(c.req.url), body }));
+    const body = html`${missing.length ? unconnectedNotice(missing) : ''}
+      <div class="grid gap-4 lg:grid-cols-[240px_380px_minmax(0,1fr)] lg:items-start">
+        <aside class="hidden lg:sticky lg:top-4 lg:block lg:max-h-[calc(100dvh_-_96px)] lg:overflow-y-auto">${contactList(contacts, listed, selected, sent, query)}</aside>
+        <div class="flex min-w-0 flex-col gap-3">
+          ${contactPicker(contacts, selected)}
+          ${selected ? phone(selected, thread, timeZone) : pickPrompt(contacts)}
+        </div>
+        <div class="flex min-w-0 flex-col gap-4">${sentFeed(feed, contacts, timeZone)}</div>
+      </div>`;
+
+    return c.html(
+      page({
+        title: 'Phone simulator',
+        pm: c.get('pm'),
+        active: 'simulator',
+        flash: flashFrom(c.req.url),
+        shell: shellInfo(c),
+        controls: clockControls(demo.now(), timeZone, selected),
+        body,
+      }),
+    );
   });
 
   pages.post('/send', bodyLimit({ maxSize: 40 * MB }), async (c) => {
@@ -143,6 +168,23 @@ function threadPath(personId: number) {
   return `/demo?contact=${personId}`;
 }
 
+/** A /demo link keeping only the parameters that are set. */
+function demoUrl(o: { contact?: number; q?: string; all?: boolean; feed?: number }) {
+  const search = new URLSearchParams();
+  if (o.contact !== undefined) search.set('contact', String(o.contact));
+  if (o.q) search.set('q', o.q);
+  if (o.all) search.set('all', '1');
+  if (o.feed) search.set('feed', String(o.feed));
+  const query = search.toString();
+  return query ? `/demo?${query}` : '/demo';
+}
+
+/** How many feed rows to show: the default page, or a larger count from "Show older". */
+function feedLimit(raw: string | undefined) {
+  const n = Number(raw);
+  return Number.isInteger(n) && n > FEED_PAGE ? n : FEED_PAGE;
+}
+
 /** An address as written in messages, comparable with a contact's mobile or email. */
 function normalise(address: string) {
   const bracketed = /<([^>]+)>/.exec(address);
@@ -153,6 +195,28 @@ function normalise(address: string) {
 function owns(contact: DemoContact, address: string) {
   const a = normalise(address);
   return (contact.mobile !== null && normalise(contact.mobile) === a) || (contact.email !== null && normalise(contact.email) === a);
+}
+
+/** Whether myEST8's message went to the contact, directly or on copy. */
+function addressed(contact: DemoContact, m: DemoOutboundMessage) {
+  return [m.to, ...m.cc].some((a) => owns(contact, a));
+}
+
+/** Messages myEST8 sent to each contact, counted once in a pass over the outbox. */
+function sentCounts(contacts: DemoContact[], outbox: DemoOutboundMessage[]) {
+  const counts = new Map<number, number>();
+  for (const m of outbox) {
+    for (const p of contacts) {
+      if (addressed(p, m)) counts.set(p.personId, (counts.get(p.personId) ?? 0) + 1);
+    }
+  }
+  return counts;
+}
+
+/** The contact list's filter: a name, mobile or email containing the text, ignoring case. */
+function matchesQuery(contact: DemoContact, query: string) {
+  const q = query.toLowerCase();
+  return [contact.name, contact.mobile ?? '', contact.email ?? ''].some((v) => v.toLowerCase().includes(q));
 }
 
 function channelsOf(contact: DemoContact): ChannelType[] {
@@ -166,7 +230,7 @@ function threadOf(contact: DemoContact, outbox: DemoOutboundMessage[], inbound: 
     .filter((m) => owns(contact, m.from))
     .map((m, i) => ({ order: [0, i], message: { fromUs: false, at: m.at, channel: m.channel, subject: '', text: m.text, attachments: m.attachments, template: null } }));
   const ours = outbox
-    .filter((m) => [m.to, ...m.cc].some((a) => owns(contact, a)))
+    .filter((m) => addressed(contact, m))
     .map((m, i) => ({ order: [1, i], message: { fromUs: true, at: m.at, channel: m.channel, subject: m.subject, text: m.text, attachments: m.attachments, template: m.template } }));
   return [...theirs, ...ours]
     .sort((a, b) => Date.parse(a.message.at) - Date.parse(b.message.at) || a.order[0]! - b.order[0]! || a.order[1]! - b.order[1]!)
@@ -189,32 +253,47 @@ function channelBadge(channel: ChannelType): Html {
   return badge(CHANNEL_LABEL[channel] ?? channel, channel === 'email' ? 'info' : channel === 'whatsapp' ? 'success' : 'neutral');
 }
 
-/** "tenant.upload_link" -> "Tenant · Upload link" */
-function templateLabel(template: string) {
-  return template.split('.').map(humanise).join(' · ');
+/** "tenant.upload_link" -> Tenant, then Upload link, as two elements with a gap between them. */
+function templateLabel(template: string): Html {
+  return html`<span class="inline-flex flex-wrap items-center gap-x-2">${template.split('.').map((part) => html`<span>${humanise(part)}</span>`)}</span>`;
 }
 
-function contactList(contacts: DemoContact[], selected: DemoContact | null, received: (p: DemoContact) => number): Html {
+/** The contact list: a filter, then each role's people with a count. Selected is filled with --action. */
+function contactList(contacts: DemoContact[], listed: DemoContact[], selected: DemoContact | null, sent: Map<number, number>, query: string): Html {
   if (!contacts.length) return emptyState('No people yet.');
-  return html`<nav class="space-y-4">
-    ${GROUPS.map(([role, label]) => {
-      const people = contacts.filter((p) => p.role === role);
-      if (!people.length) return '';
-      return html`<div>
-        <h2 class="mb-1 text-sm font-semibold uppercase opacity-70">${label}</h2>
-        <ul class="menu w-full p-0">
-          ${people.map((p) => {
-            const count = received(p);
-            return html`<li>
-              <a href="${threadPath(p.personId)}" class="${p === selected ? 'menu-active' : ''}" ${p === selected ? html`aria-current="page"` : ''}>
-                <span class="flex-1">${p.name}<br /><span class="text-xs opacity-70">${[p.mobile, p.email].filter(Boolean).join(' · ')}</span></span>
-                ${count ? html`<span class="badge badge-sm" title="Messages from myEST8">${count}</span>` : ''}
-              </a>
-            </li>`;
-          })}
-        </ul>
-      </div>`;
-    })}
+  return html`<nav aria-label="People" class="flex flex-col gap-4">
+    <form method="get" action="/demo" role="search" class="flex flex-col gap-2">
+      ${selected ? html`<input type="hidden" name="contact" value="${selected.personId}" />` : ''}
+      <label for="contact-filter" class="field-label">Find someone</label>
+      <div class="flex gap-2">
+        <input id="contact-filter" type="search" name="q" value="${query}" placeholder="Name, phone or email" class="input input-bordered min-w-0 flex-1" />
+        ${button('Filter', { variant: 'secondary' })}
+      </div>
+    </form>
+    ${listed.length
+      ? GROUPS.map(([role, label]) => {
+          const people = listed.filter((p) => p.role === role);
+          if (!people.length) return '';
+          return html`<div class="flex flex-col gap-1">
+            <h2 class="section-title flex items-center gap-2">${label} <span class="count-chip">${people.length}</span></h2>
+            <ul class="flex flex-col gap-1">
+              ${people.map((p) => {
+                const isSelected = p === selected;
+                const count = sent.get(p.personId) ?? 0;
+                return html`<li>
+                  <a href="${demoUrl({ contact: p.personId, q: query })}" class="flex items-center gap-2 rounded-[6px] px-3 py-2 ${isSelected ? 'bg-[var(--action)] text-white' : 'text-ink hover:bg-page'}" ${isSelected ? html`aria-current="page"` : ''}>
+                    <span class="min-w-0 flex-1">
+                      <span class="block font-semibold">${p.name}</span>
+                      ${[p.mobile, p.email].filter((d): d is string => Boolean(d)).map((detail) => html`<span class="block truncate text-sm ${isSelected ? '' : 'text-muted'}">${detail}</span>`)}
+                    </span>
+                    ${count ? html`<span class="count-chip shrink-0" title="Messages from myEST8"><span class="sr-only">Messages from myEST8: </span>${count}</span>` : ''}
+                  </a>
+                </li>`;
+              })}
+            </ul>
+          </div>`;
+        })
+      : emptyState(`No one matches “${query}”.`)}
   </nav>`;
 }
 
@@ -236,102 +315,143 @@ function contactPicker(contacts: DemoContact[], selected: DemoContact | null): H
   </form>`;
 }
 
+/** Shown in the middle column until someone is picked. */
+function pickPrompt(contacts: DemoContact[]): Html {
+  return section({
+    title: 'Act as someone',
+    body: contacts.length
+      ? html`<p>Pick someone to act as. You'll see what myEST8 sent them, and can reply as them.</p>`
+      : emptyState('No people to act as yet. Add Tenants, Tradies, Property Owners or Building Managers in Setup.'),
+  });
+}
+
+/** The phone: a header, the thread scrolling inside it with the newest at the bottom, and the composer pinned below. */
 function phone(contact: DemoContact, thread: ThreadMessage[], timeZone: string): Html {
   const channels = channelsOf(contact);
   const lastChannel = thread.at(-1)?.channel;
   const defaultChannel = lastChannel && channels.includes(lastChannel) ? lastChannel : channels[0];
-  return card({
-    title: `${contact.name}'s ${channels.length === 1 && channels[0] === 'email' ? 'inbox' : 'phone'}`,
-    actions: badge(ROLE_LABEL[contact.role]),
-    body: html`
-      <p class="text-sm opacity-70">${[contact.mobile, contact.email].filter(Boolean).join(' · ')}</p>
-      <div class="my-4 space-y-2">
+  const label = `${contact.name}'s ${channels.length === 1 && channels[0] === 'email' ? 'inbox' : 'phone'}`;
+  return html`<section class="${PHONE_FRAME}" aria-label="${label}">
+    <header class="flex shrink-0 flex-col gap-2 border-b border-line px-4 py-3">
+      <div class="flex items-center justify-between gap-2">
+        <h2 class="section-title min-w-0 truncate">${contact.name}</h2>
+        ${badge(ROLE_LABEL[contact.role])}
+      </div>
+      <div class="flex flex-wrap items-center gap-2">${channels.map((ch) => channelBadge(ch))}</div>
+    </header>
+    <div class="flex min-h-0 flex-1 flex-col-reverse overflow-y-auto bg-surface px-3 py-3" role="region" tabindex="0" aria-label="${`Messages with ${contact.name}`}">
+      <div class="flex flex-col gap-3">
         ${thread.length
           ? thread.map((m) =>
               chatBubble({
                 side: m.fromUs ? 'start' : 'end',
-                header: `${m.fromUs ? 'myEST8' : contact.name} · ${CHANNEL_LABEL[m.channel]} · ${formatWhen(m.at, timeZone)}`,
+                header: html`<span class="font-semibold">${m.fromUs ? 'myEST8' : contact.name}</span>
+                  <span>${CHANNEL_LABEL[m.channel]}</span>
+                  <time class="text-muted" datetime="${m.at}">${formatWhen(m.at, timeZone)}</time>`,
                 text: m.subject ? `Subject: ${m.subject}\n\n${m.text}` : m.text,
                 footer: footer(m),
               }),
             )
           : emptyState(`Nothing yet. Send a message as ${contact.name} to start.`)}
       </div>
-      ${channels.length ? composer(contact, channels, defaultChannel!) : emptyState(`${contact.name} has no mobile or email to send from.`)}
-    `,
-  });
+    </div>
+    ${channels.length ? composer(contact, channels, defaultChannel!) : html`<div class="shrink-0 border-t border-line px-4 py-3">${emptyState(`${contact.name} has no mobile or email to send from.`)}</div>`}
+  </section>`;
 }
 
-function footer(m: ThreadMessage): string | undefined {
-  const notes = [...(m.attachments.length ? [`Attached: ${m.attachments.join(', ')}`] : []), ...(m.template ? [templateLabel(m.template)] : [])];
-  return notes.length ? notes.join(' · ') : undefined;
+function footer(m: ThreadMessage): Html | undefined {
+  const notes: Html[] = [
+    ...(m.attachments.length ? [html`<span>Attached: ${m.attachments.join(', ')}</span>`] : []),
+    ...(m.template ? [templateLabel(m.template)] : []),
+  ];
+  return notes.length ? html`<span class="flex flex-wrap gap-x-3 gap-y-1">${notes}</span>` : undefined;
 }
 
+/** The composer pinned to the foot of the phone: channel, attachments, quick replies, message, Send. */
 function composer(contact: DemoContact, channels: ChannelType[], defaultChannel: ChannelType): Html {
-  return html`<form method="post" action="/demo/send" enctype="multipart/form-data" class="space-y-3">
+  return html`<form method="post" action="/demo/send" enctype="multipart/form-data" class="flex shrink-0 flex-col gap-2 border-t border-line bg-surface px-3 py-3">
     <input type="hidden" name="contact" value="${contact.personId}" />
-    <div>
-      <label for="field-channel">Send by</label>
-      <select id="field-channel" name="channel" class="select select-bordered">
-        ${channels.map((ch) => html`<option value="${ch}" ${ch === defaultChannel ? 'selected' : ''}>${CHANNEL_LABEL[ch]}</option>`)}
-      </select>
+    <div class="flex items-end gap-2">
+      <div class="flex shrink-0 flex-col">
+        <label for="field-channel" class="field-label">Send by</label>
+        <select id="field-channel" name="channel" class="select select-bordered select-sm">
+          ${channels.map((ch) => html`<option value="${ch}" ${ch === defaultChannel ? 'selected' : ''}>${CHANNEL_LABEL[ch]}</option>`)}
+        </select>
+      </div>
+      <div class="flex min-w-0 flex-1 flex-col">
+        <label for="field-attachments" class="field-label">Attachments</label>
+        <input id="field-attachments" name="attachments" type="file" multiple class="file-input file-input-bordered file-input-sm w-full" />
+      </div>
     </div>
     <div>
-      <p class="text-sm">Quick replies</p>
-      <div class="flex flex-wrap gap-2">
+      <p id="quick-replies-label" class="field-label">Quick replies</p>
+      <div class="flex flex-wrap gap-1" role="group" aria-labelledby="quick-replies-label">
         ${QUICK_REPLIES[contact.role].map((reply) => button(reply, { variant: 'secondary', size: 'sm', name: 'quick', value: reply }))}
       </div>
     </div>
     <div>
-      <label for="field-text">Message</label>
-      <textarea id="field-text" name="text" rows="3" class="textarea textarea-bordered w-full" placeholder="Type as ${contact.name}"></textarea>
+      <label for="field-text" class="field-label">Message</label>
+      <textarea id="field-text" name="text" rows="2" class="textarea textarea-bordered w-full" placeholder="Type as ${contact.name}"></textarea>
     </div>
-    <div>
-      <label for="field-attachments">Attachments</label>
-      <input id="field-attachments" name="attachments" type="file" multiple class="file-input file-input-bordered w-full" />
-      <p class="text-sm opacity-70">A photo, receipt or PDF Quote, sent as an attachment.</p>
-    </div>
-    ${button(`Send as ${contact.name}`)}
+    <div class="flex justify-end">${button(`Send as ${contact.name}`)}</div>
   </form>`;
 }
 
-function clockPanel(now: Date, timeZone: string, selected: DemoContact | null): Html {
-  return card({
-    title: 'Demo clock',
-    body: html`
-      <p class="text-xl font-semibold"><time datetime="${now.toISOString()}">${formatWhen(now.toISOString(), timeZone)}</time></p>
-      <p class="text-sm opacity-70">Agency time (${timeZone})</p>
-      <div class="mt-2 flex flex-wrap gap-2">
-        ${CLOCK_STEPS.map((hours) =>
-          postButton('/demo/advance', `+${hours} hour${hours === 1 ? '' : 's'}`, {
-            variant: 'secondary',
-            size: 'sm',
-            fields: { hours, ...(selected ? { contact: selected.personId } : {}) },
-          }),
-        )}
-      </div>
-      <p class="mt-2 text-sm opacity-70">Moving the clock runs every reminder and timeout that falls due.</p>
-    `,
+/** The demo clock, in the top bar: the Agency's time and steps forward that POST /demo/advance. */
+function clockControls(now: Date, timeZone: string, selected: DemoContact | null): Html {
+  return html`<div class="flex items-center gap-2 text-sm">
+    <span class="hidden text-muted sm:inline">Demo clock</span>
+    <time class="num hidden font-semibold text-ink sm:inline" datetime="${now.toISOString()}">${formatWhen(now.toISOString(), timeZone)}</time>
+    <span class="hidden text-xs text-muted md:inline">${timeZone}</span>
+    ${CLOCK_STEPS.map((hours) => {
+      const unit = hours === 1 ? 'hour' : 'hours';
+      return html`<form method="post" action="/demo/advance" class="inline-flex">
+        <input type="hidden" name="hours" value="${hours}" />
+        ${selected ? html`<input type="hidden" name="contact" value="${selected.personId}" />` : ''}
+        <button type="submit" class="btn btn-outline btn-xs sm:btn-sm" aria-label="${`Move the clock +${hours} ${unit}`}">+${hours}h</button>
+      </form>`;
+    })}
+  </div>`;
+}
+
+/** What myEST8 sent: the latest rows, for the selected contact unless "All contacts" is on, with "Show older" for more. */
+function sentFeed(
+  o: { total: number; items: DemoOutboundMessage[]; limit: number; selected: DemoContact | null; showAll: boolean; query: string },
+  contacts: DemoContact[],
+  timeZone: string,
+): Html {
+  const scope = o.selected && !o.showAll ? `Nothing sent to ${o.selected.name} yet.` : 'Nothing sent yet.';
+  const toggle = o.selected
+    ? segmented([
+        { label: 'All contacts', href: demoUrl({ contact: o.selected.personId, q: o.query, all: true }), active: o.showAll },
+        { label: o.selected.name, href: demoUrl({ contact: o.selected.personId, q: o.query }), active: !o.showAll },
+      ])
+    : undefined;
+  const contactId = o.selected?.personId;
+  return section({
+    title: 'What myEST8 sent',
+    actions: toggle,
+    body: html`${o.items.length
+        ? html`<p class="text-sm text-muted">Showing the latest ${o.items.length} of ${o.total}</p>
+            <ol class="flex flex-col gap-3">${o.items.map((m) => feedItem(m, contacts, timeZone))}</ol>`
+        : emptyState(scope)}
+      ${o.total > o.items.length
+        ? html`<p><a class="link" href="${demoUrl({ contact: contactId, q: o.query, all: o.showAll, feed: o.limit + FEED_PAGE })}">Show older</a></p>`
+        : ''}`,
   });
 }
 
-function sentFeed(outbox: DemoOutboundMessage[], contacts: DemoContact[], timeZone: string): Html {
-  return card({
-    title: 'What myEST8 sent',
-    body: outbox.length
-      ? html`<ol class="space-y-2">
-          ${outbox.toReversed().map((m) => {
-            const to = contacts.find((p) => owns(p, m.to));
-            return html`<li class="text-sm">
-              <div class="flex flex-wrap items-center gap-2">
-                ${to ? html`<a class="link" href="${threadPath(to.personId)}">${to.name}</a>` : html`<span>${m.to}</span>`}
-                ${channelBadge(m.channel)}
-                <time class="opacity-70" datetime="${m.at}">${formatWhen(m.at, timeZone)}</time>
-              </div>
-              <div>${templateLabel(m.template)}${m.subject ? html`: ${m.subject}` : ''}</div>
-            </li>`;
-          })}
-        </ol>`
-      : emptyState('Nothing sent yet.'),
-  });
+function feedItem(m: DemoOutboundMessage, contacts: DemoContact[], timeZone: string): Html {
+  const to = contacts.find((p) => owns(p, m.to));
+  return html`<li data-feed-item class="flex flex-col gap-1 border-b border-line pb-3 text-sm last:border-b-0 last:pb-0">
+    <div class="flex flex-wrap items-center gap-2">
+      ${to ? html`<a class="link font-semibold" href="${threadPath(to.personId)}">${to.name}</a>` : html`<span class="font-semibold">${m.to}</span>`}
+      ${channelBadge(m.channel)}
+      <time class="text-muted" datetime="${m.at}">${formatWhen(m.at, timeZone)}</time>
+    </div>
+    <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+      ${templateLabel(m.template)}
+      ${m.subject ? html`<span class="text-muted">${m.subject}</span>` : ''}
+    </div>
+  </li>`;
 }

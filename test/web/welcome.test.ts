@@ -194,12 +194,12 @@ describe('a new Agency', () => {
 
     const dashboard = await page(w, '/', sam);
     expect(visible(dashboard)).toContain('Finish setting up Sunrise Realty');
-    expect(visible(dashboard)).toContain('connect SMS, WhatsApp and email, add your first Property and add the Tradies you use');
+    expect(visible(dashboard)).toContain('connect SMS, WhatsApp and email, add the Tradies you use and add your first Property');
     expect(dashboard).toMatch(/data-banner="finish-setup"[\s\S]*href="\/welcome\/channels"/);
 
     for (const type of ['sms', 'whatsapp']) await w.post('/welcome/channels', { type, address: '+61 2 9100 0002' }, sam);
     await w.post('/welcome/channels', { type: 'email', address: 'inbox@sunrise.example' }, sam);
-    expect(await page(w, '/', sam)).toMatch(/data-banner="finish-setup"[\s\S]*href="\/welcome\/property"/);
+    expect(await page(w, '/', sam)).toMatch(/data-banner="finish-setup"[\s\S]*href="\/welcome\/tradies"/);
   });
 
   test('a set-up Agency gets no banner', async () => {

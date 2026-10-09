@@ -83,54 +83,62 @@ function signUpPage(o: { values?: Values; errors?: Errors; flash?: Flash }) {
     flash: o.flash ?? null,
     headerActions: html`<a class="link text-sm" href="/">Home</a>`,
     footer: SIGNED_OUT_FOOTER,
-    body: html`<form method="post" action="/signup" class="space-y-2">
-        <fieldset class="space-y-1">
+    body: html`<form method="post" action="/signup" class="space-y-6">
+        <fieldset class="space-y-4">
           <legend class="text-base font-semibold">About you</legend>
-          ${field({ label: 'Your name', name: 'name', required: true, autocomplete: 'name', value: valueOf(values, 'name'), error: errors.name })}
-          ${field({
-            label: 'Work email',
-            name: 'email',
-            type: 'email',
-            required: true,
-            autocomplete: 'email',
-            value: valueOf(values, 'email'),
-            hint: 'You sign in with this.',
-            error: errors.email,
-          })}
-          ${field({
-            label: 'Password',
-            name: 'password',
-            type: 'password',
-            required: true,
-            autocomplete: 'new-password',
-            hint: `At least ${MIN_PASSWORD_LENGTH} characters.`,
-            error: errors.password,
-          })}
-          ${field({ label: 'Confirm password', name: 'confirmPassword', type: 'password', required: true, autocomplete: 'new-password', error: errors.confirmPassword })}
+          <div class="grid items-start gap-x-4 gap-y-4 md:grid-cols-2">
+            ${field({ label: 'Your name', name: 'name', required: true, autocomplete: 'name', value: valueOf(values, 'name'), error: errors.name })}
+            ${field({
+              label: 'Work email',
+              name: 'email',
+              type: 'email',
+              required: true,
+              autocomplete: 'email',
+              value: valueOf(values, 'email'),
+              hint: 'You sign in with this.',
+              error: errors.email,
+            })}
+          </div>
+          <div class="grid items-start gap-x-4 gap-y-4 md:grid-cols-2">
+            ${field({
+              label: 'Password',
+              name: 'password',
+              type: 'password',
+              required: true,
+              autocomplete: 'new-password',
+              hint: `At least ${MIN_PASSWORD_LENGTH} characters.`,
+              error: errors.password,
+            })}
+            ${field({ label: 'Confirm password', name: 'confirmPassword', type: 'password', required: true, autocomplete: 'new-password', error: errors.confirmPassword })}
+          </div>
         </fieldset>
-        <fieldset class="mt-6 space-y-1">
+        <fieldset class="space-y-4">
           <legend class="text-base font-semibold">Your Agency</legend>
-          ${field({
-            label: 'Agency name',
-            name: 'agencyName',
-            required: true,
-            autocomplete: 'organization',
-            value: valueOf(values, 'agencyName'),
-            error: errors.agencyName,
-          })}
-          ${field({
-            label: 'Time zone',
-            name: 'timeZone',
-            type: 'select',
-            required: true,
-            value: valueOf(values, 'timeZone') || DEFAULT_TIME_ZONE,
-            options: TIME_ZONES,
-            hint: 'Bookings, reminders and the calendar use this time.',
-            error: errors.timeZone,
-          })}
+          <div class="grid items-start gap-x-4 gap-y-4 md:grid-cols-2">
+            ${field({
+              label: 'Agency name',
+              name: 'agencyName',
+              required: true,
+              autocomplete: 'organization',
+              value: valueOf(values, 'agencyName'),
+              error: errors.agencyName,
+            })}
+            ${field({
+              label: 'Time zone',
+              name: 'timeZone',
+              type: 'select',
+              required: true,
+              value: valueOf(values, 'timeZone') || DEFAULT_TIME_ZONE,
+              options: TIME_ZONES,
+              hint: 'Bookings, reminders and the calendar use this time.',
+              error: errors.timeZone,
+            })}
+          </div>
         </fieldset>
-        <div class="pt-2">${button("Create your Agency's account", { block: true })}</div>
-      </form>
-      <p class="text-center text-sm">Already have an account? <a class="link" href="/login">Sign in</a></p>`,
+        <div class="space-y-4">
+          ${button('Create account', { block: true })}
+          <p class="text-center text-sm">Already have an account? <a class="link" href="/login">Sign in</a></p>
+        </div>
+      </form>`,
   });
 }

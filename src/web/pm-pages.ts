@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { WebEnv } from './env.ts';
 import { calendarPages } from './pages/calendar.ts';
 import { dashboardPages } from './pages/dashboard.ts';
+import { requestPages } from './pages/requests.ts';
 import { setupPages } from './pages/setup.ts';
 import { ticketPages } from './pages/ticket.ts';
 import { tradiePages } from './pages/tradie.ts';
@@ -15,6 +16,7 @@ export function pmPages(o: { demo: boolean } = { demo: false }) {
   pages.route('/calendar', calendarPages());
   pages.route('/tradies', tradiePages());
   pages.route('/setup', setupPages());
+  pages.route('/requests', requestPages());
   pages.route('/', dashboardPages());
   return pages;
 }

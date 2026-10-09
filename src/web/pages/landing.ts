@@ -6,31 +6,26 @@ import { Hono } from 'hono';
 import { html } from 'hono/html';
 import type { App } from '../../app.ts';
 import { SIGNED_OUT_FOOTER, signedInId, type Sessions } from '../auth.ts';
-import { alert, card, linkButton, publicPage, type Html } from '../ui.ts';
+import { badge, chatBubble, docket, linkButton, publicPage, type Html } from '../ui.ts';
 
 /** The demo Agency's sign-ins, shown on the landing page when the app runs as the demo. */
 export const DEMO_LOGINS = { emails: ['alice@harbour.example', 'bob@harbour.example'], password: 'demo1234' };
 
-const VALUE: { title: string; text: string }[] = [
-  {
-    title: 'Tenants report the way they already do',
-    text: 'By SMS, WhatsApp or email. No app to download and no account to create, for Tenants, Tradies or Property Owners.',
-  },
-  {
-    title: 'An intake agent does the first pass',
-    text: 'It works out who wrote and which Property it is about, asks a few short questions, collects and checks photos, ranks the Urgency, and hands you a Maintenance Request to confirm.',
-  },
-  {
-    title: 'Quotes, approval and bookings in one place',
-    text: "Quote Requests go to your Tradies, the Property Owner approves by replying YES when a Repair Cost would go over the Max Repair Cost, and a shared calendar stops two Property Managers booking the same Tradie.",
-  },
-];
-
+/** The four steps from a Tenant's text to a booked Work Order, in order. */
 const HOW_IT_WORKS: { title: string; text: string }[] = [
-  { title: "Create your Agency's account", text: 'Then connect your SMS number, WhatsApp and email inbox, with a test message for each.' },
-  { title: 'Add your Properties and people', text: 'Each Property with its Property Owner, Tenants and Max Repair Cost, and the Tradies you already use.' },
-  { title: 'Confirm what comes in', text: 'Tenants message as usual. You confirm each Maintenance Request and it becomes a Ticket.' },
-  { title: 'Let the follow-up run itself', text: 'myEST8 gathers Quotes, asks the Property Owner when it must, books the Tradie and keeps everyone updated on their own channel.' },
+  { title: 'A Tenant texts the problem', text: 'By SMS, WhatsApp or email, as they already do. No app and no account for the Tenant.' },
+  {
+    title: 'The intake agent asks its questions',
+    text: 'It asks a few short questions, checks the photos and ranks the Urgency, then sends you a Maintenance Request to confirm.',
+  },
+  {
+    title: 'You confirm, and Tradies quote',
+    text: 'Quote Requests go to your Tradies. The Property Owner approves any Repair Cost over the Max Repair Cost.',
+  },
+  {
+    title: 'The Work Order is booked',
+    text: 'The Tradie goes onto a shared calendar, so two Property Managers never book the same Tradie.',
+  },
 ];
 
 /**
@@ -48,56 +43,83 @@ export function landingRoutes(app: App, sessions: Sessions, o: { demo: boolean }
 
 /** The landing page. */
 export function landingPage(o: { demo: boolean }): Html {
-  const ctas = html`<div class="flex flex-col gap-3 sm:flex-row">
-    ${linkButton("Create your Agency's account", '/signup', { variant: 'primary' })} ${linkButton('Sign in', '/login')}
-  </div>`;
   return publicPage({
-    title: "From a Tenant's message to a finished Job, in one place",
-    subtitle: 'myEST8 is the maintenance desk for Property Managers at small Agencies.',
+    title: 'Maintenance dispatch for Property Managers',
     wide: true,
     headerActions: html`<a class="btn btn-ghost btn-sm" href="/login">Sign in</a>`,
     footer: SIGNED_OUT_FOOTER,
-    body: html`
-      <section aria-label="Get started" class="space-y-4">
-        <p class="max-w-prose text-base">
-          Tenants report issues on SMS, WhatsApp or email. An intake agent turns their messages into Maintenance Requests for you to confirm. Quotes,
-          Property Owner approval and a shared calendar of Tradie bookings sit together, so nothing lives only in someone's inbox.
-        </p>
-        ${ctas}
-      </section>
-      ${o.demo ? demoHint() : ''}
-      <section aria-labelledby="why" class="space-y-3">
-        <h2 id="why" class="text-lg font-semibold tracking-tight">Why Property Managers use it</h2>
-        <div class="grid gap-4 md:grid-cols-3">${VALUE.map((v) => card({ title: v.title, body: html`<p>${v.text}</p>` }))}</div>
-      </section>
-      <section aria-labelledby="how" class="space-y-3">
-        <h2 id="how" class="text-lg font-semibold tracking-tight">How it works</h2>
-        <ol class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          ${HOW_IT_WORKS.map(
-            (step, i) => html`<li class="rounded-box border border-base-300 bg-base-100 p-4">
-              <p class="text-sm font-semibold text-primary">Step ${i + 1}</p>
-              <p class="font-semibold">${step.title}</p>
-              <p class="text-sm text-base-content/80">${step.text}</p>
-            </li>`,
-          )}
-        </ol>
-      </section>
-      <section aria-label="Start now" class="space-y-3 rounded-box border border-base-300 bg-base-100 p-4 sm:p-6">
-        <p class="font-semibold">Setting up takes about 5 minutes, and a guide walks you through it.</p>
-        ${ctas}
-      </section>
-    `,
+    body: html`${hero()}
+      ${howItWorks()}
+      ${o.demo ? demoNote() : ''}`,
   });
 }
 
-function demoHint(): Html {
-  return alert(
-    html`<p>
-        Sign in as <strong>${DEMO_LOGINS.emails[0]}</strong> or <strong>${DEMO_LOGINS.emails[1]}</strong> with the password
-        <strong>${DEMO_LOGINS.password}</strong> to look around Harbour Realty, or create your own Agency.
+/** The headline and lead on the left; the text message and the docket it becomes on the right. */
+function hero(): Html {
+  return html`<section aria-labelledby="hero" class="grid items-center gap-10 md:grid-cols-2">
+    <div class="space-y-5">
+      <h2 id="hero" class="text-[32px] leading-[1.15] font-semibold text-ink md:text-[40px]">Every repair request, from the first text to the finished job.</h2>
+      <p class="max-w-[60ch] text-base">
+        For Property Managers at small Agencies. Tenants' messages become Maintenance Requests for you to confirm, and Quotes, Property Owner
+        approval and bookings run from there.
       </p>
-      <p>The phone simulator lets you message in as a Tenant, Tradie or Property Owner.</p>`,
-    'info',
-    { title: 'Try the demo Agency' },
-  );
+      <div class="flex flex-col gap-3 sm:flex-row">
+        <a href="/signup" class="btn btn-primary" style="color: var(--color-primary-content)">Create your Agency's account</a>
+        ${linkButton('Sign in', '/login')}
+      </div>
+    </div>
+    ${illustration()}
+  </section>`;
+}
+
+/** A Tenant's text message beside the Ticket docket it becomes. Pure markup. */
+function illustration(): Html {
+  return html`<div class="flex flex-col gap-4 sm:flex-row sm:items-start">
+    <div class="w-full max-w-64 shrink-0 rounded-[24px] border border-line bg-surface p-4 sm:w-56" style="box-shadow: 0 8px 24px rgb(50 50 51 / 0.18)">
+      ${chatBubble({
+        side: 'start',
+        header: html`<span class="font-semibold">Tenant</span>${badge('SMS')}`,
+        text: 'The kitchen tap is dripping',
+        footer: '7:42 am',
+      })}
+    </div>
+    <div class="min-w-0 flex-1">
+      ${docket({
+        number: 12,
+        href: '/signup',
+        urgency: 'routine',
+        address: '12 King St, Newtown',
+        issue: 'Kitchen tap dripping',
+        meta: [html`Plumbing`, html`3 Quotes`],
+      })}
+    </div>
+  </div>`;
+}
+
+/** The four steps as a numbered sequence. */
+function howItWorks(): Html {
+  return html`<section aria-labelledby="how" class="space-y-3">
+    <h2 id="how" class="text-base font-semibold text-ink">How it works</h2>
+    <ol class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      ${HOW_IT_WORKS.map(
+        (step, i) => html`<li class="flex flex-col gap-2 rounded-lg border border-line bg-surface p-4">
+          <span class="num flex size-6 items-center justify-center rounded-full bg-action text-[13px] font-semibold text-white"><span class="sr-only">Step </span>${i + 1}</span>
+          <p class="font-semibold text-ink">${step.title}</p>
+          <p class="text-muted">${step.text}</p>
+        </li>`,
+      )}
+    </ol>
+  </section>`;
+}
+
+/** The demo sign-ins, as a quiet bordered note rather than an alert. */
+function demoNote(): Html {
+  return html`<aside aria-labelledby="demo" class="space-y-2 rounded-lg border border-line bg-surface p-4 text-sm">
+    <h2 id="demo" class="text-base font-semibold text-ink">Try the demo Agency</h2>
+    <p>
+      Sign in as <strong>${DEMO_LOGINS.emails[0]}</strong> or <strong>${DEMO_LOGINS.emails[1]}</strong> with the password
+      <strong>${DEMO_LOGINS.password}</strong> to look around Harbour Realty, or create your own Agency.
+    </p>
+    <p>The phone simulator lets you message in as a Tenant, Tradie or Property Owner.</p>
+  </aside>`;
 }

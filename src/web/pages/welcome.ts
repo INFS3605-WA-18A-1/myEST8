@@ -8,8 +8,8 @@
 //   1 Welcome          what we'll set up, and the Agency's details
 //   2 Your team        colleagues as Property Managers (optional)
 //   3 Channels         SMS, WhatsApp and email, each with a test message
-//   4 First Property   address, Max Repair Cost, Property Owner, Tenant, Building Manager
-//   5 Tradies          the Tradies the Agency already uses
+//   4 Tradies          the Tradies the Agency already uses, so a Property can nominate them
+//   5 First Property   address, Max Repair Cost, Property Owner, Tenant, Building Manager
 //   6 Done             what's set up, and where to go next
 
 import { Hono, type Context } from 'hono';
@@ -19,6 +19,7 @@ import type { ChannelType } from '../../ports.ts';
 import { ActionError, isEmail, normalizeAddress, type Role } from '../../shared.ts';
 import type { WebEnv } from '../env.ts';
 import { cents, list, text, type FormValues } from '../forms.ts';
+import { shellInfo } from '../shell.ts';
 import {
   alert,
   badge,
@@ -32,6 +33,7 @@ import {
   humanise,
   linkButton,
   page,
+  section,
   steps,
   table,
   withFlash,
@@ -41,12 +43,14 @@ import {
 import {
   addTradieFrom,
   CHANNELS,
+  channelBadge,
   channelGuide,
+  channelLine,
   channelOf,
-  channelStatus,
   choiceGroup,
   contactFields,
   contactFrom,
+  fieldGrid,
   googleSearchForm,
   scoped,
   searchListings,
@@ -67,14 +71,14 @@ const STEPS = [
   { key: 'welcome', label: 'Welcome', path: '/welcome' },
   { key: 'team', label: 'Your team', path: '/welcome/team' },
   { key: 'channels', label: 'Channels', path: '/welcome/channels' },
-  { key: 'property', label: 'First Property', path: '/welcome/property' },
   { key: 'tradies', label: 'Tradies', path: '/welcome/tradies' },
+  { key: 'property', label: 'First Property', path: '/welcome/property' },
   { key: 'done', label: 'Done', path: '/welcome/done' },
 ] as const;
 type StepKey = (typeof STEPS)[number]['key'];
 
-/** What a new Agency needs before Tenants' messages can be handled. Adding colleagues is optional. */
-const NEEDED = ['channels', 'property', 'tradies'] as const;
+/** What a new Agency needs before Tenants' messages can be handled, in guide order. Adding colleagues is optional. */
+const NEEDED = ['channels', 'tradies', 'property'] as const;
 
 /** Each needed step as the "Finish setting up" banner says it. */
 const STILL_TO_DO: Record<(typeof NEEDED)[number], string> = {
@@ -171,6 +175,18 @@ export function welcomePages(o: { demo: boolean }) {
     }),
   );
 
+  pages.get('/tradies', async (c) => c.html(await tradiesStep(c, {})));
+  pages.post('/tradies', async (c) => {
+    const form = (await c.req.parseBody({ all: true })) as FormValues;
+    try {
+      const businessName = await addTradieFrom(c.var.actions, form);
+      return c.redirect(withFlash('/welcome/tradies', 'ok', `${businessName} added as a Tradie`), 303);
+    } catch (error) {
+      if (!(error instanceof ActionError)) throw error;
+      return c.html(await tradiesStep(c, { values: valuesOf(form), errors: error.fields, message: error.message }), 400);
+    }
+  });
+
   pages.get('/property', (c) => c.html(propertyStep(c, {})));
   pages.post('/property', async (c) => {
     const form = (await c.req.parseBody({ all: true })) as FormValues;
@@ -184,18 +200,6 @@ export function welcomePages(o: { demo: boolean }) {
     } catch (error) {
       if (!(error instanceof ActionError)) throw error;
       return refused(error.fields, error.message);
-    }
-  });
-
-  pages.get('/tradies', async (c) => c.html(await tradiesStep(c, {})));
-  pages.post('/tradies', async (c) => {
-    const form = (await c.req.parseBody({ all: true })) as FormValues;
-    try {
-      const businessName = await addTradieFrom(c.var.actions, form);
-      return c.redirect(withFlash('/welcome/tradies', 'ok', `${businessName} added as a Tradie`), 303);
-    } catch (error) {
-      if (!(error instanceof ActionError)) throw error;
-      return c.html(await tradiesStep(c, { values: valuesOf(form), errors: error.fields, message: error.message }), 400);
     }
   });
 
@@ -223,11 +227,12 @@ function wizardPage(
     : '';
   return page({
     title: o.title,
-    subtitle: `Step ${index + 1} of ${STEPS.length} · Setting up ${actions.agency().name}`,
+    subtitle: html`<span class="flex flex-wrap gap-x-4"><span>Step ${index + 1} of ${STEPS.length}</span><span>Setting up ${actions.agency().name}</span></span>`,
     pm,
     active: 'setup',
+    shell: shellInfo(c),
     flash: o.flash ?? null,
-    body: html`
+    body: html`<div class="mx-auto flex w-full max-w-[720px] flex-col gap-4">
       <nav aria-label="Setup steps">
         ${steps(
           STEPS.map((s) => ({ label: s.label, done: isDone(s.key, progress), href: s.path })),
@@ -235,11 +240,11 @@ function wizardPage(
         )}
       </nav>
       ${o.body}
-      <div class="flex flex-wrap items-center justify-between gap-3 border-t border-base-300 pt-4">
+      <div class="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
         ${back ? linkButton('Back', back.path, { variant: 'secondary' }) : html`<a class="link text-sm" href="/">Set up later</a>`}
         <div class="flex flex-wrap items-center gap-2">${onward}</div>
       </div>
-    `,
+    </div>`,
   });
 }
 
@@ -253,17 +258,17 @@ function welcomeStep(c: WizardContext): Html {
     step: 'welcome',
     title: `Welcome to myEST8, ${firstName(pm.name)}`,
     body: html`
-      <p class="max-w-prose">
+      <p>
         Let's get ${agency.name} ready for its first maintenance message. It takes about 5 minutes. You can skip any step and come back to it: what
         you add is saved as you go.
       </p>
       ${card({
         title: "What we'll set up",
-        body: html`<ol class="list-decimal space-y-2 ml-5">
+        body: html`<ol class="ml-5 list-decimal space-y-2">
           <li><strong>Your team.</strong> Add the other Property Managers so each has their own sign-in. Optional.</li>
           <li><strong>Channels.</strong> Connect the SMS number, WhatsApp and email inbox Tenants already use, and test each one.</li>
-          <li><strong>Your first Property.</strong> Its address, Max Repair Cost, Property Owner and Tenant.</li>
           <li><strong>Tradies.</strong> The Tradies you already use, with their Trades and a starting rating.</li>
+          <li><strong>Your first Property.</strong> Its address, Max Repair Cost, Property Owner and Tenant.</li>
         </ol>`,
       })}
       ${card({
@@ -271,7 +276,7 @@ function welcomeStep(c: WizardContext): Html {
         body: dl([
           ['Agency', agency.name],
           ['Time zone', zone],
-          ['First Property Manager', html`${pm.name} <span class="text-base-content/75">(${pm.email})</span>`],
+          ['First Property Manager', html`${pm.name} <span class="text-muted">(${pm.email})</span>`],
         ]),
       })}
     `,
@@ -288,7 +293,7 @@ function teamStep(c: WizardContext, o: { added?: { name: string; email: string; 
     step: 'team',
     title: 'Your team',
     body: html`
-      <p class="max-w-prose">
+      <p>
         Add the other Property Managers at ${actions.agency().name}. Each gets their own sign-in and sees their own Properties first, and can cover for
         colleagues when needed. Tenants, Tradies and Property Owners never need an account.
       </p>
@@ -301,7 +306,7 @@ function teamStep(c: WizardContext, o: { added?: { name: string; email: string; 
                 <dt>Email</dt>
                 <dd class="break-all">${o.added.email}</dd>
                 <dt>Temporary password</dt>
-                <dd><code class="rounded bg-base-100 px-2 py-0.5 text-base font-semibold tracking-wider" data-temporary-password>${o.added.temporaryPassword}</code></dd>
+                <dd><code class="rounded bg-page px-2 py-0.5 text-base font-semibold tracking-wider" data-temporary-password>${o.added.temporaryPassword}</code></dd>
               </dl>`,
             'success',
             { title: `${o.added.name} added as a Property Manager` },
@@ -314,20 +319,22 @@ function teamStep(c: WizardContext, o: { added?: { name: string; email: string; 
       )}
       ${card({
         title: 'Add a colleague',
-        body: html`<form method="post" action="/welcome/team" class="space-y-1">
-          ${field({ label: 'Name', name: 'name', id: 'colleague-name', required: true, autocomplete: 'off', value: valueOf(o.values, 'name'), error: o.errors?.name })}
-          ${field({
-            label: 'Work email',
-            name: 'email',
-            id: 'colleague-email',
-            type: 'email',
-            required: true,
-            autocomplete: 'off',
-            value: valueOf(o.values, 'email'),
-            hint: 'They sign in with this. myEST8 makes them a temporary password.',
-            error: o.errors?.email,
-          })}
-          <div class="pt-2">${button('Add colleague')}</div>
+        body: html`<form method="post" action="/welcome/team" class="space-y-3">
+          ${fieldGrid(html`
+            ${field({ label: 'Name', name: 'name', id: 'colleague-name', required: true, autocomplete: 'off', value: valueOf(o.values, 'name'), error: o.errors?.name })}
+            ${field({
+              label: 'Work email',
+              name: 'email',
+              id: 'colleague-email',
+              type: 'email',
+              required: true,
+              autocomplete: 'off',
+              value: valueOf(o.values, 'email'),
+              hint: 'They sign in with this. myEST8 makes them a temporary password.',
+              error: o.errors?.email,
+            })}
+          `)}
+          <div>${button('Add colleague')}</div>
         </form>`,
       })}
     `,
@@ -363,62 +370,59 @@ function channelsStep(c: WizardContext, demo: boolean): Html {
   const flashChannel = c.req.query('channel');
   const origin = new URL(c.req.url).origin;
   const tested = connected.filter((ch) => ch.testedAt).length;
+  const rowForm = 'mt-2 grid items-end gap-3 md:grid-cols-[minmax(0,1fr)_auto]';
   return wizardPage(c, {
     step: 'channels',
     title: 'Channels',
-    // A channel's own result shows in its card; anything else at the top.
+    // A channel's own result shows in its row; anything else at the top.
     flash: flash && !CHANNELS.some((ch) => ch.type === flashChannel) ? flash : null,
     body: html`
-      <p class="max-w-prose">
-        Tenants, Tradies and Property Owners reach ${agency.name} by SMS, WhatsApp and email. Connect each one, then send yourself a test message to check
-        it works. Don't have one yet? Each card explains how to create it.
+      <p>
+        Tenants, Tradies and Property Owners reach ${agency.name} by SMS, WhatsApp and email. Connect each one, then send yourself a test message.${demo ? ' In the demo nothing is really sent, and the addresses work with the phone simulator.' : ''}
       </p>
-      <p class="text-sm">${connected.length} of ${CHANNELS.length} connected, ${tested} tested.</p>
-      ${demo
-        ? alert('This is the demo, so nothing is really sent. Each form suggests a made-up address that works with the phone simulator.', 'info')
-        : ''}
-      <div class="grid gap-4 lg:grid-cols-3">
+      <p class="text-sm text-muted">${connected.length} of ${CHANNELS.length} connected, ${tested} tested.</p>
+      <div class="flex flex-col gap-4">
         ${CHANNELS.map((channel) => {
           const current = connected.find((ch) => ch.type === channel.type);
           const suggestion = demo ? demoAddress(channel.type, agency) : '';
-          return html`<div id="${channel.type}" class="min-w-0">
-            ${card({
-              title: channel.name,
-              body: html`
-                ${flash && flashChannel === channel.type ? flashMessage(flash) : ''}
-                <p>${channelStatus(current, agency.timeZone)}</p>
-                ${channelGuide(channel.type, origin)}
-                <form method="post" action="/welcome/channels" class="space-y-1">
-                  <input type="hidden" name="type" value="${channel.type}" />
-                  ${field({
-                    label: channel.addressLabel,
-                    name: 'address',
-                    id: `${channel.type}-address`,
-                    type: channel.inputType,
-                    required: true,
-                    value: current?.address ?? suggestion,
-                    placeholder: channel.placeholder,
-                    hint: demo && !current ? 'A made-up address for the demo. Any address no other Agency uses works.' : undefined,
-                  })}
-                  ${button(current ? `Change ${channel.name}` : `Connect ${channel.name}`, { size: 'sm', variant: current ? 'secondary' : 'primary' })}
-                </form>
-                ${current
-                  ? html`<form method="post" action="/welcome/channels/test" class="space-y-1">
-                      <input type="hidden" name="type" value="${channel.type}" />
-                      ${field({
-                        label: channel.type === 'email' ? 'Send a test email to' : 'Send a test message to',
-                        name: 'to',
-                        id: `${channel.type}-to`,
-                        type: channel.inputType,
-                        required: true,
-                        value: channel.type === 'email' ? pm.email : '',
-                        placeholder: channel.type === 'email' ? 'you@youragency.com.au' : 'Your mobile, like 0412 345 678',
-                      })}
-                      ${button('Send a test message', { variant: current.testedAt ? 'secondary' : 'primary', size: 'sm' })}
-                    </form>`
-                  : ''}
-              `,
-            })}
+          return html`<div id="${channel.type}" class="grid gap-2 border-t border-line pt-4 first:border-t-0 first:pt-0 md:grid-cols-[9rem_minmax(0,1fr)]">
+            <div>
+              <h2 class="section-title">${channel.name}</h2>
+              <p class="mt-1">${channelBadge(current)}</p>
+            </div>
+            <div class="min-w-0">
+              ${flash && flashChannel === channel.type ? flashMessage(flash) : ''}
+              ${current ? channelLine(current, agency.timeZone) : ''}
+              <form method="post" action="/welcome/channels" class="${rowForm}">
+                <input type="hidden" name="type" value="${channel.type}" />
+                ${field({
+                  label: channel.addressLabel,
+                  name: 'address',
+                  id: `${channel.type}-address`,
+                  type: channel.inputType,
+                  required: true,
+                  value: current?.address ?? suggestion,
+                  placeholder: channel.placeholder,
+                })}
+                ${button(current ? `Change ${channel.name}` : `Connect ${channel.name}`, { size: 'sm', variant: current ? 'secondary' : 'primary' })}
+              </form>
+              ${current
+                ? html`<form method="post" action="/welcome/channels/test" class="${rowForm}">
+                    <input type="hidden" name="type" value="${channel.type}" />
+                    ${field({
+                      label: channel.type === 'email' ? 'Send a test email to' : 'Send a test message to',
+                      name: 'to',
+                      id: `${channel.type}-to`,
+                      type: channel.inputType,
+                      required: true,
+                      value: channel.type === 'email' ? pm.email : '',
+                      placeholder: channel.type === 'email' ? 'you@youragency.com.au' : 'Your mobile, like 0412 345 678',
+                    })}
+                    ${button('Send a test message', { variant: current.testedAt ? 'secondary' : 'primary', size: 'sm' })}
+                  </form>`
+                : ''}
+              <div class="mt-2">${channelGuide(channel.type, origin)}</div>
+            </div>
           </div>`;
         })}
       </div>
@@ -435,7 +439,41 @@ function demoAddress(type: ChannelType, agency: { id: number; name: string }) {
   return `+61 2 9100 ${String(agency.id).padStart(4, '0')}`;
 }
 
-// 4 First Property
+// 4 Tradies
+
+async function tradiesStep(c: WizardContext, o: { values?: Values; errors?: Errors; message?: string }): Promise<Html> {
+  const { actions } = c.var;
+  const tradies = actions.people('tradie');
+  const query = c.req.query('google')?.trim() ?? '';
+  const { listings, problem } = await searchListings(actions, query);
+  const unplaced = o.message && !Object.keys(o.errors ?? {}).length ? o.message : null;
+  return wizardPage(c, {
+    step: 'tradies',
+    title: 'Tradies',
+    flash: flashFrom(c.req.url),
+    body: html`
+      <p>
+        Add the Tradies ${actions.agency().name} already uses, with their Trades and how good they've been so far, so recommendations work from the first
+        Job. Linking a Google listing shows their Google rating next to ours.
+      </p>
+      ${tradiesTable(actions, tradies, 'No Tradies yet. Add the first one below.')}
+      ${card({
+        id: 'add-tradie',
+        title: 'Add a Tradie',
+        body: html`
+          ${googleSearchForm('/welcome/tradies#add-tradie', query, problem, listings.length)}
+          <form method="post" action="/welcome/tradies${query ? `?google=${encodeURIComponent(query)}` : ''}" class="mt-4 space-y-3">
+            ${unplaced ? alert(unplaced, 'error') : ''}
+            ${tradieFields({ listings, values: o.values, errors: o.errors })}
+            <div>${button('Add Tradie')}</div>
+          </form>
+        `,
+      })}
+    `,
+  });
+}
+
+// 5 First Property
 
 type PropertyInput = {
   address: string;
@@ -591,7 +629,7 @@ function propertyStep(c: WizardContext, o: { values?: Values; errors?: Errors; m
     step: 'property',
     title: properties.length ? 'Your Properties' : 'Your first Property',
     body: html`
-      <p class="max-w-prose">
+      <p>
         A Property is one rentable dwelling with its own lease. Add it with its Property Owner and Tenant, and the intake agent can act on their messages
         straight away. You can add the rest later, here or in Setup.
       </p>
@@ -627,71 +665,83 @@ function propertyForm(actions: Actions, myId: number, o: { values?: Values; erro
   const managers = actions.propertyManagers();
   const tradies = actions.people('tradie');
   const nominated = values?.nominatedTradieIds;
-  const legend = (text: string) => html`<legend class="fieldset-legend text-base font-semibold">${text}</legend>`;
+  // The Building Manager is optional, so its fields fold away unless they hold something or were refused.
+  const buildingManagerShown =
+    ['buildingManagerName', 'buildingManagerMobile', 'buildingManagerEmail'].some((f) => valueOf(values, f) !== '') ||
+    Object.keys(errors).some((f) => f.startsWith('buildingManager'));
   return card({
     id: 'add-property',
     title: 'Add a Property',
     body: html`<form method="post" action="/welcome/property" class="space-y-4">
       ${o.message ? alert(o.message, 'error') : ''}
-      <fieldset class="fieldset">
-        ${legend('The Property')}
-        ${field({ label: 'Address', name: 'address', id: 'property-address', required: true, placeholder: '12 King St, Newtown NSW 2042', value: valueOf(values, 'address'), error: errors.address })}
-        ${field({ label: 'Suburb', name: 'suburb', id: 'property-suburb', required: true, value: valueOf(values, 'suburb'), error: errors.suburb })}
-        ${field({
-          label: 'Max Repair Cost ($)',
-          name: 'maxRepairCost',
-          id: 'property-max',
-          type: 'number',
-          step: '0.01',
-          min: 0,
-          required: true,
-          placeholder: '500',
-          value: valueOf(values, 'maxRepairCost'),
-          hint: "The most a Ticket's Repair Cost can reach before the Property Owner must approve.",
-          error: errors.maxRepairCost,
-        })}
-        ${managers.length > 1
-          ? field({
-              label: 'Property Manager',
-              name: 'propertyManagerId',
-              id: 'property-manager',
-              type: 'select',
-              required: true,
-              value: valueOf(values, 'propertyManagerId') || String(myId),
-              options: managers.map((m) => ({ value: String(m.id), label: m.name })),
-              hint: 'Their dashboard shows this Property first.',
-              error: errors.propertyManagerId,
-            })
-          : html`<input type="hidden" name="propertyManagerId" value="${myId}" />`}
-      </fieldset>
-      <fieldset class="fieldset">
-        ${legend('Property Owner')}
-        ${contactFields('owner', {
-          scope: 'owner',
-          values,
-          errors,
-          hint: "A mobile number, an email address, or both. If they own another Property you've added, use the same details and they're linked, not added twice.",
-        })}
-      </fieldset>
-      <fieldset class="fieldset">
-        ${legend('Tenant')} ${contactFields('tenant', { scope: 'tenant', values, errors })}
-        ${field({
-          label: 'Tenancy start date',
-          name: 'tenancyStart',
-          id: 'tenant-start',
-          type: 'date',
-          required: true,
-          value: valueOf(values, 'tenancyStart'),
-          hint: 'Photos taken before this date are flagged.',
-          error: errors.tenancyStart,
-        })}
-        <p class="text-sm text-base-content/75">More Tenants on the same lease can be added in Setup.</p>
-      </fieldset>
-      <fieldset class="fieldset">
-        ${legend('Building Manager (strata only, optional)')}
-        <p class="text-sm">For a unit in a strata building: Common Area issues, like a broken lift, go straight to them.</p>
-        ${contactFields('building-manager', { scope: 'buildingManager', values, errors, optional: true })}
-      </fieldset>
+      ${group(
+        'The Property',
+        fieldGrid(html`
+          ${field({ label: 'Address', name: 'address', id: 'property-address', required: true, placeholder: '12 King St, Newtown NSW 2042', value: valueOf(values, 'address'), error: errors.address })}
+          ${field({ label: 'Suburb', name: 'suburb', id: 'property-suburb', required: true, value: valueOf(values, 'suburb'), error: errors.suburb })}
+          ${field({
+            label: 'Max Repair Cost ($)',
+            name: 'maxRepairCost',
+            id: 'property-max',
+            type: 'number',
+            step: '0.01',
+            min: 0,
+            required: true,
+            placeholder: '500',
+            value: valueOf(values, 'maxRepairCost'),
+            hint: "Repairs over this need the Property Owner's approval.",
+            error: errors.maxRepairCost,
+          })}
+          ${managers.length > 1
+            ? field({
+                label: 'Property Manager',
+                name: 'propertyManagerId',
+                id: 'property-manager',
+                type: 'select',
+                required: true,
+                value: valueOf(values, 'propertyManagerId') || String(myId),
+                options: managers.map((m) => ({ value: String(m.id), label: m.name })),
+                hint: 'Their dashboard shows this Property first.',
+                error: errors.propertyManagerId,
+              })
+            : html`<input type="hidden" name="propertyManagerId" value="${myId}" />`}
+        `),
+      )}
+      ${group(
+        'Property Owner',
+        fieldGrid(
+          contactFields('owner', {
+            scope: 'owner',
+            values,
+            errors,
+            hint: 'Already on another Property? The same mobile or email links them.',
+          }),
+        ),
+      )}
+      ${group(
+        'Tenant',
+        fieldGrid(html`
+          ${contactFields('tenant', { scope: 'tenant', values, errors })}
+          ${field({
+            label: 'Tenancy start date',
+            name: 'tenancyStart',
+            id: 'tenant-start',
+            type: 'date',
+            required: true,
+            value: valueOf(values, 'tenancyStart'),
+            hint: 'Photos taken before this date are flagged.',
+            error: errors.tenancyStart,
+          })}
+        `),
+        'More Tenants on the same lease can be added in Setup.',
+      )}
+      <details ${buildingManagerShown ? 'open' : ''}>
+        <summary class="cursor-pointer font-semibold text-action">Add a Building Manager (strata only, optional)</summary>
+        <div class="mt-3 space-y-3">
+          <p class="text-sm text-muted">For a unit in a strata building: Common Area issues, like a broken lift, go straight to them.</p>
+          ${fieldGrid(contactFields('building-manager', { scope: 'buildingManager', values, errors, optional: true }))}
+        </div>
+      </details>
       ${tradies.length
         ? choiceGroup({
             legend: 'Nominated Tradies (optional)',
@@ -702,43 +752,19 @@ function propertyForm(actions: Actions, myId: number, o: { values?: Values; erro
             hint: 'Who the Tenant can call for an Urgent Repair.',
             error: errors.nominatedTradieIds,
           })
-        : ''}
-      ${button('Add the Property')}
+        : html`<p class="text-sm text-muted">Add Tradies in the Tradies step to nominate them for Urgent Repairs.</p>`}
+      <div>${button('Add the Property')}</div>
     </form>`,
   });
 }
 
-// 5 Tradies
-
-async function tradiesStep(c: WizardContext, o: { values?: Values; errors?: Errors; message?: string }): Promise<Html> {
-  const { actions } = c.var;
-  const tradies = actions.people('tradie');
-  const query = c.req.query('google')?.trim() ?? '';
-  const { listings, problem } = await searchListings(actions, query);
-  const unplaced = o.message && !Object.keys(o.errors ?? {}).length ? o.message : null;
-  return wizardPage(c, {
-    step: 'tradies',
-    title: 'Tradies',
-    flash: flashFrom(c.req.url),
-    body: html`
-      <p class="max-w-prose">
-        Add the Tradies ${actions.agency().name} already uses, with their Trades and how good they've been so far, so recommendations work from the first
-        Job. They're shared by every Property Manager. Linking a Google listing shows their Google rating next to ours.
-      </p>
-      ${tradiesTable(actions, tradies, 'No Tradies yet. Add the first one below.')}
-      ${card({
-        id: 'add-tradie',
-        title: 'Add a Tradie',
-        body: html`
-          ${googleSearchForm('/welcome/tradies#add-tradie', query, problem, listings.length)}
-          <form method="post" action="/welcome/tradies${query ? `?google=${encodeURIComponent(query)}` : ''}" class="mt-4 space-y-1">
-            ${unplaced ? alert(unplaced, 'error') : ''} ${tradieFields({ listings, values: o.values, errors: o.errors })}
-            <div class="pt-2">${button('Add Tradie')}</div>
-          </form>
-        `,
-      })}
-    `,
-  });
+/** A labelled group of fields in a form: a legend, an optional note, then the fields. */
+function group(legend: string, fields: Html, note?: string): Html {
+  return html`<fieldset class="min-w-0 space-y-3">
+    <legend class="text-sm font-semibold text-ink">${legend}</legend>
+    ${note ? html`<p class="text-sm text-muted">${note}</p>` : ''}
+    ${fields}
+  </fieldset>`;
 }
 
 // 6 Done
@@ -769,12 +795,12 @@ function doneStep(c: WizardContext, demo: boolean): Html {
         fix: [current ? 'Send a test message' : `Connect ${ch.name}`, `/welcome/channels#${ch.type}`] as [string, string],
       };
     }),
+    { done: progress.tradies, text: progress.tradies ? count(tradies.length, 'Tradie') : 'No Tradies yet', fix: ['Add Tradies', '/welcome/tradies'] },
     {
       done: progress.property,
       text: progress.property ? `${count(properties.length, 'Property', 'Properties')} with ${count(tenants.length, 'Tenant')}` : 'No Properties yet',
       fix: ['Add a Property', '/welcome/property'],
     },
-    { done: progress.tradies, text: progress.tradies ? count(tradies.length, 'Tradie') : 'No Tradies yet', fix: ['Add Tradies', '/welcome/tradies'] },
   ];
   const firstTenant = tenants[0];
   const sms = channels.find((ch) => ch.type === 'sms');
@@ -784,17 +810,17 @@ function doneStep(c: WizardContext, demo: boolean): Html {
     title: finished ? "You're set up" : 'Nearly there',
     progress,
     body: html`
-      <p class="max-w-prose">
+      <p>
         ${finished
           ? `${agency.name} is ready for its first maintenance message. Here's what's set up.`
           : `A few things are still to do before Tenants' messages can reach you. You can finish them now or come back later.`}
       </p>
       ${card({
         title: 'Your setup',
-        body: html`<ul class="space-y-2" aria-label="Setup checklist">
+        body: html`<ul class="space-y-1" aria-label="Setup checklist">
           ${items.map(
-            (item) => html`<li class="flex flex-wrap items-start gap-2">
-              <span class="badge badge-sm ${item.done ? 'badge-success' : 'badge-soft badge-neutral'} mt-0.5 w-6 justify-center" aria-hidden="true">${item.done ? '✓' : '–'}</span>
+            (item) => html`<li class="flex items-start gap-3 text-sm">
+              <span class="${item.done ? 'text-done' : 'text-muted'} w-4 shrink-0 text-center font-semibold" aria-hidden="true">${item.done ? '✓' : '–'}</span>
               <span class="sr-only">${item.done ? 'Done: ' : 'To do: '}</span>
               <span class="min-w-0 flex-1">${item.text}</span>
               ${!item.done && item.fix ? html`<a class="link text-sm" href="${item.fix[1]}">${item.fix[0]}</a>` : ''}
