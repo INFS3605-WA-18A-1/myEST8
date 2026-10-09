@@ -1,6 +1,6 @@
 // Small enhancements for every page. Pages work without this file: it only adds
-// confirm dialogs, a guard against double submits, dismissable flash messages
-// and closing the phone menu.
+// confirm dialogs, a guard against double submits, dismissable flash messages,
+// the drawer that opens the rail under 1024px, and closing the user menu.
 
 (() => {
   // Forms with data-confirm (postButton's `confirm`) ask first. A form already
@@ -54,13 +54,44 @@
     window.history.replaceState(window.history.state, '', url);
   }
 
-  // The phone menu (<details class="dropdown">) closes on a click elsewhere or Escape.
-  const openMenus = () => document.querySelectorAll('details.dropdown[open]');
+  // The drawer: under 1024px the rail slides in from the left, opened by the
+  // menu button in the top bar. Escape, the scrim or a larger screen closes it
+  // and the focus goes back to the button (or stays put, on a larger screen).
+  const shell = document.querySelector('[data-shell]');
+  const toggle = document.querySelector('[data-drawer-toggle]');
+  const content = document.getElementById('main');
+  const scrim = document.querySelector('[data-drawer-scrim]');
+  const wide = window.matchMedia('(min-width: 64rem)');
+
+  function setDrawer(open, returnFocus = false) {
+    if (!shell || !toggle) return;
+    shell.classList.toggle('drawer-open', open);
+    toggle.setAttribute('aria-expanded', String(open));
+    if (content) content.inert = open;
+    if (open) {
+      document.querySelector('#rail a')?.focus();
+    } else if (returnFocus) {
+      toggle.focus();
+    }
+  }
+
+  toggle?.addEventListener('click', () => setDrawer(!shell.classList.contains('drawer-open')));
+  scrim?.addEventListener('click', () => setDrawer(false, true));
+  wide.addEventListener('change', (event) => {
+    if (event.matches) setDrawer(false);
+  });
+
+  // The Property Manager's menu (<details data-menu>) closes on a click elsewhere or Escape.
+  const openMenus = () => document.querySelectorAll('details[data-menu][open]');
   document.addEventListener('click', (event) => {
     for (const menu of openMenus()) if (!menu.contains(event.target)) menu.open = false;
   });
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
+    if (shell?.classList.contains('drawer-open')) {
+      setDrawer(false, true);
+      return;
+    }
     for (const menu of openMenus()) {
       menu.open = false;
       menu.querySelector('summary')?.focus();

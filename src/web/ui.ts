@@ -1,13 +1,14 @@
 // The design system: page layouts and components as HTML. Interpolated values are
 // escaped by `html`; use `raw` only for markup this module builds itself.
 //
-// Built on daisyUI 5 components (https://daisyui.com, MIT) styled by the
-// "myest8" theme in static/app.css, with Tailwind utilities generated in the
-// browser by Tailwind's browser build. Some layouts are adapted from HyperUI
-// (https://hyperui.dev, MIT); each component says where it came from.
+// Built on daisyUI 5 components (https://daisyui.com, MIT) styled by the "myest8"
+// theme and the tokens in static/app.css (docs/design-system.md), with Tailwind
+// utilities generated in the browser by Tailwind's browser build. Some layouts are
+// adapted from HyperUI (https://hyperui.dev, MIT); each component says where it came from.
 
 import { html } from 'hono/html';
 import type { HtmlEscapedString } from 'hono/utils/html';
+import type { ShellInfo } from './shell.ts';
 
 export type Html = HtmlEscapedString | Promise<HtmlEscapedString>;
 export type Flash = { kind: 'ok' | 'error'; message: string };
@@ -33,7 +34,8 @@ const THEME = 'myest8';
 
 /**
  * Lets Tailwind generate utilities for daisyUI's colours (ring-primary,
- * divide-base-300, text-base-content/75...) without redefining them.
+ * divide-base-300, text-base-content/75...) and for the design tokens (text-muted,
+ * border-line, bg-page, text-urgent...) without redefining them.
  */
 const TAILWIND_THEME = html`<style type="text/tailwindcss">
   @theme inline reference {
@@ -57,13 +59,36 @@ const TAILWIND_THEME = html`<style type="text/tailwindcss">
     --color-warning-content: var(--color-warning-content);
     --color-error: var(--color-error);
     --color-error-content: var(--color-error-content);
+    --color-ink: var(--ink);
+    --color-page: var(--page);
+    --color-surface: var(--surface);
+    --color-muted: var(--muted);
+    --color-line: var(--line);
+    --color-control: var(--control);
+    --color-action: var(--action);
+    --color-hivis: var(--hivis);
+    --color-urgent: var(--urgent);
+    --color-urgent-bg: var(--urgent-bg);
+    --color-high: var(--high);
+    --color-high-bg: var(--high-bg);
+    --color-done: var(--done);
+    --color-done-bg: var(--done-bg);
+    --color-rail-text: var(--rail-text);
+    --color-rail-muted: var(--rail-muted);
   }
 </style>`;
 
+/**
+ * The document's head. The inline script marks the page as having JavaScript
+ * before the first paint, so the rail can become a drawer only when it can open.
+ */
 function head(title: string): Html {
   return html`<meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>${title} · myEST8</title>
+    <title>${title} - myEST8</title>
+    <script>document.documentElement.classList.add('js')</script>
+    <link rel="preload" href="/assets/fonts/barlow-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/assets/fonts/barlow-semi-condensed-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="/assets/daisyui.css" />
     <link rel="stylesheet" href="/assets/app.css" />
     <script src="/assets/tailwind.js"></script>
@@ -78,63 +103,66 @@ const NAV: { key: NavKey; label: string; href: string }[] = [
   { key: 'simulator', label: 'Simulator', href: '/demo' },
 ];
 
-function navLinks(active: NavKey | undefined): Html[] {
-  return NAV.map(
-    (item) =>
-      html`<li>
-        <a href="${item.href}" ${item.key === active ? html`class="menu-active font-semibold" aria-current="page"` : ''}>${item.label}</a>
-      </li>`,
-  );
+/**
+ * The rail: the logotype, the four sections with their icons (the current one
+ * gets the hi-vis bar and aria-current), and the Agency's name at the bottom.
+ * On phones it is a drawer when JavaScript is on, and a row above the page otherwise.
+ */
+function rail(active: NavKey | undefined, agencyName: string | undefined, counts: Partial<Record<NavKey, number>>): Html {
+  return html`<aside id="rail" class="rail" aria-label="Sections">
+    <a href="/" class="rail-logo">myEST8</a>
+    <nav aria-label="Main">
+      <ul class="rail-nav">
+        ${NAV.map((item) => {
+          const count = counts[item.key];
+          return html`<li>
+            <a href="${item.href}" class="rail-link" ${item.key === active ? html`aria-current="page"` : ''}>${NAV_ICON[item.key]}<span>${item.label}</span>${count !== undefined ? html`<span class="rail-count num">${count}</span>` : ''}</a>
+          </li>`;
+        })}
+      </ul>
+    </nav>
+    ${agencyName ? html`<p class="rail-agency">${agencyName}</p>` : ''}
+  </aside>`;
 }
 
-/**
- * The top bar (daisyUI navbar + menu, https://daisyui.com/components/navbar/).
- * On wide screens the links sit in a row; on phones they fold into a
- * <details> dropdown, which opens and closes without JavaScript.
- */
-function navbar(pm: { name: string } | null | undefined, active: NavKey | undefined): Html {
-  const signOut = postButton('/logout', 'Sign out', { variant: 'ghost', size: 'sm' });
-  return html`<header class="border-b border-base-300 bg-base-100">
-    <nav class="app-container navbar min-h-16 gap-2" aria-label="Main">
-      <a href="/" class="mr-2 text-xl font-bold tracking-tight text-primary">myEST8</a>
-      ${pm
-        ? html`<ul class="app-nav-wide menu menu-horizontal gap-1 p-0">
-              ${navLinks(active)}
-            </ul>
-            <div class="app-nav-wide ml-auto items-center gap-3">
-              <span class="text-sm text-base-content/80">${pm.name}</span>
-              ${signOut}
-            </div>
-            <details class="app-nav-narrow dropdown dropdown-end ml-auto">
-              <summary class="btn btn-ghost btn-square" aria-label="Menu">${ICON.menu}</summary>
-              <div class="dropdown-content z-20 mt-2 w-64 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg">
-                <ul class="menu w-full p-0">
-                  ${navLinks(active)}
-                </ul>
-                <div class="mt-2 flex items-center justify-between gap-2 border-t border-base-300 px-3 pt-2">
-                  <span class="truncate text-sm text-base-content/80">${pm.name}</span>
-                  ${signOut}
-                </div>
-              </div>
-            </details>`
-        : ''}
-    </nav>
+/** The Property Manager's name, opening a menu with Sign out. */
+function userMenu(name: string): Html {
+  return html`<details class="user-menu" data-menu>
+    <summary>${name}${ICON.chevron}</summary>
+    <div class="user-menu-panel">${postButton('/logout', 'Sign out', { variant: 'ghost', size: 'sm' })}</div>
+  </details>`;
+}
+
+/** The top bar: the menu button (drawer only), the page title, controls, today's date and the user menu. */
+function topBar(
+  title: string,
+  o: { menu: boolean; controls?: Html; today?: string; pm?: { name: string } | null },
+): Html {
+  return html`<header class="topbar">
+    ${o.menu ? html`<button type="button" class="menu-button" data-drawer-toggle aria-controls="rail" aria-expanded="false" aria-label="Menu">${ICON.menu}</button>` : ''}
+    <h1 class="topbar-title">${title}</h1>
+    <div class="topbar-controls">
+      ${o.controls ?? ''}
+      ${o.today ? html`<time class="topbar-date">${o.today}</time>` : ''}
+      ${o.pm ? userMenu(o.pm.name) : ''}
+    </div>
   </header>`;
 }
 
-function heading(title: string, subtitle?: Html | string, actions?: Html): Html {
-  return html`<div class="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
-    <div class="min-w-0">
-      <h1 class="text-2xl font-bold tracking-tight break-words sm:text-3xl">${title}</h1>
-      ${subtitle ? html`<p class="mt-1 text-sm text-base-content/75">${subtitle}</p>` : ''}
-    </div>
-    ${actions ? html`<div class="flex flex-wrap items-center gap-2">${actions}</div>` : ''}
+/** The subtitle and buttons under the top bar (nothing when a page has neither). */
+function contentHead(subtitle: Html | string | undefined, actions: Html | undefined): Html | string {
+  if (!subtitle && !actions) return '';
+  return html`<div class="page-head">
+    ${subtitle ? html`<p class="page-subtitle">${subtitle}</p>` : html`<span></span>`}
+    ${actions ? html`<div class="page-actions">${actions}</div>` : ''}
   </div>`;
 }
 
 /**
- * A signed-in Property Manager's page: navbar, flash, the title as the page's
- * only <h1>, then `body`. Top-level elements in `body` are spaced apart.
+ * A signed-in Property Manager's page: the rail (with the Agency's name), the top
+ * bar with the title as the page's only <h1>, the flash under it, then `body`.
+ * Top-level elements in `body` are spaced apart. `shell` (from shellInfo) adds the
+ * Agency's name and today's date; `controls` sit in the top bar.
  */
 export function page(o: {
   title: string;
@@ -144,21 +172,35 @@ export function page(o: {
   body: Html;
   /** A line under the title. */
   subtitle?: Html | string;
-  /** Buttons beside the title. */
+  /** Buttons beside the subtitle. */
   actions?: Html;
+  /** Controls in the top bar, such as the Mine/All segmented control. */
+  controls?: Html;
+  /** The Agency's name for the rail and today's date for the top bar. */
+  shell?: ShellInfo;
+  /** Counts shown beside rail links. */
+  navCounts?: Partial<Record<NavKey, number>>;
 }): Html {
+  const signedIn = Boolean(o.pm);
   return html`<!doctype html>
     <html lang="en-AU" data-theme="${THEME}">
       <head>
         ${head(o.title)}
       </head>
-      <body class="min-h-screen bg-base-200 text-base-content antialiased">
+      <body>
         <a href="#main" class="skip-link">Skip to content</a>
-        ${navbar(o.pm, o.active)}
-        <main id="main" class="app-container space-y-6 py-6">
-          ${o.flash ? flashMessage(o.flash) : ''} ${heading(o.title, o.subtitle, o.actions)}
-          <div class="space-y-6">${o.body}</div>
-        </main>
+        <div class="app-shell ${signedIn ? 'has-rail' : ''}" data-shell>
+          ${signedIn ? rail(o.active, o.shell?.agencyName, o.navCounts ?? {}) : ''}
+          <div class="app-main">
+            ${topBar(o.title, { menu: signedIn, controls: o.controls, today: o.shell?.today, pm: o.pm })}
+            ${o.flash ? html`<div class="app-flash">${flashMessage(o.flash)}</div>` : ''}
+            <main id="main" class="app-content">
+              ${contentHead(o.subtitle, o.actions)}
+              <div class="app-body-stack">${o.body}</div>
+            </main>
+          </div>
+          ${signedIn ? html`<div class="drawer-scrim" data-drawer-scrim></div>` : ''}
+        </div>
       </body>
     </html>`;
 }
@@ -167,9 +209,9 @@ const TENANT_FOOTER = 'Questions? Reply to the message your Property Manager sen
 
 /**
  * A page for someone who isn't signed in: a Tenant using an upload or tracker
- * link, or a Property Manager signing in or up. Phone first. `wide` gives the
- * body the full app width; `headerActions` sit at the right of the top bar;
- * `footer` replaces the line for Tenants.
+ * link, or a Property Manager signing in or up. Phone first, a centred column
+ * (560px; 1120px with `wide`) under a logotype bar, with no rail. `headerActions`
+ * sit at the right of the bar; `footer` replaces the line for Tenants.
  */
 export function publicPage(o: {
   title: string;
@@ -180,26 +222,31 @@ export function publicPage(o: {
   headerActions?: Html;
   footer?: Html | string;
 }): Html {
-  const width = o.wide ? '' : 'app-container-narrow';
+  const width = o.wide ? 'is-wide' : '';
   return html`<!doctype html>
     <html lang="en-AU" data-theme="${THEME}">
       <head>
         ${head(o.title)}
       </head>
-      <body class="min-h-screen bg-base-200 text-base-content antialiased">
+      <body>
         <a href="#main" class="skip-link">Skip to content</a>
-        <header class="border-b border-base-300 bg-base-100">
-          <div class="app-container ${width} flex min-h-14 items-center gap-2">
-            <span class="text-primary">${ICON.home}</span>
-            <span class="text-lg font-bold tracking-tight text-primary">myEST8</span>
+        <header class="public-bar">
+          <div class="public-bar-inner ${width}">
+            <span class="logotype">myEST8</span>
             ${o.headerActions ? html`<div class="ml-auto flex items-center gap-2">${o.headerActions}</div>` : ''}
           </div>
         </header>
-        <main id="main" class="app-container ${width} space-y-5 py-6">
-          ${o.flash ? flashMessage(o.flash) : ''} ${heading(o.title, o.subtitle)}
-          <div class="space-y-5">${o.body}</div>
+        <main id="main" class="public-main ${width}">
+          ${o.flash ? flashMessage(o.flash) : ''}
+          <div class="app-body-stack">
+            <div class="page-head">
+              <h1 class="page-title">${o.title}</h1>
+              ${o.subtitle ? html`<p class="page-subtitle">${o.subtitle}</p>` : ''}
+            </div>
+            ${o.body}
+          </div>
         </main>
-        <footer class="app-container ${width} pb-8 text-center text-xs text-base-content/75">${o.footer ?? TENANT_FOOTER}</footer>
+        <footer class="public-footer ${width}">${o.footer ?? TENANT_FOOTER}</footer>
       </body>
     </html>`;
 }
@@ -217,10 +264,10 @@ export function withFlash(path: string, kind: Flash['kind'], message: string) {
   return `${path}${path.includes('?') ? '&' : '?'}${kind}=${encodeURIComponent(message)}`;
 }
 
-/** The message after an action. app.js adds a close button and fades "ok" ones. */
+/** The message after an action, one line under the top bar. app.js adds a close button and fades "ok" ones. */
 export function flashMessage(flash: Flash): Html {
   const error = flash.kind === 'error';
-  return html`<div role="${error ? 'alert' : 'status'}" data-flash="${flash.kind}" class="alert alert-soft ${error ? 'alert-error' : 'alert-success'}">
+  return html`<div role="${error ? 'alert' : 'status'}" data-flash="${flash.kind}" class="alert alert-soft ${error ? 'alert-error' : 'alert-success'} py-2 text-sm">
     ${error ? ICON.error : ICON.success}
     <span><span class="sr-only">${error ? 'Error: ' : 'Done: '}</span>${flash.message}</span>
   </div>`;
@@ -245,7 +292,7 @@ export function alert(body: Html | string, tone: Tone = 'info', o: { title?: str
   </div>`;
 }
 
-const VARIANT: Record<Variant, string> = { primary: 'btn-primary', secondary: 'btn-outline', danger: 'btn-error', ghost: 'btn-ghost' };
+const VARIANT: Record<Variant, string> = { primary: 'btn-primary', secondary: 'btn-outline', danger: 'btn-danger', ghost: 'btn-ghost' };
 
 function buttonClass(variant: Variant, size: 'sm' | 'md' | undefined, block: boolean | undefined) {
   return `btn ${VARIANT[variant]}${size === 'sm' ? ' btn-sm' : ''}${block ? ' btn-block' : ''}`;
@@ -276,26 +323,34 @@ export function postButton(
   </form>`;
 }
 
-/** A white panel with an optional <h2> title and actions (daisyUI card). */
-export function card(o: { title?: string; actions?: Html; body: Html; id?: string }): Html {
-  return html`<section class="card min-w-0 border border-base-300 bg-base-100 shadow-sm" ${o.id ? html`id="${o.id}"` : ''}>
-    <div class="card-body gap-4 p-4 sm:p-6">
-      ${o.title || o.actions
-        ? html`<div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-            ${o.title ? html`<h2 class="card-title text-lg">${o.title}</h2>` : ''}
-            ${o.actions ? html`<div class="flex flex-wrap items-center gap-2">${o.actions}</div>` : ''}
-          </div>`
-        : ''}
-      <div class="min-w-0 space-y-3 text-sm">${o.body}</div>
-    </div>
+/** The section box shared by card() and section(). */
+function panel(o: { title?: string; actions?: Html; body: Html; id?: string }): Html {
+  return html`<section class="section" ${o.id ? html`id="${o.id}"` : ''}>
+    ${o.title || o.actions
+      ? html`<div class="section-head">
+          ${o.title ? html`<h2 class="section-title">${o.title}</h2>` : ''}
+          ${o.actions ? html`<div class="section-actions">${o.actions}</div>` : ''}
+        </div>`
+      : ''}
+    <div class="section-body">${o.body}</div>
   </section>`;
+}
+
+/** A surface with a hairline border and an optional <h2> title and actions (a section, not a card). */
+export function card(o: { title?: string; actions?: Html; body: Html; id?: string }): Html {
+  return panel(o);
+}
+
+/** A titled section: a surface with a hairline, the heading on the left and actions on the right. */
+export function section(o: { title: string; actions?: Html; body: Html; id?: string }): Html {
+  return panel(o);
 }
 
 /** A heading for a group of cards or a list, with actions on the right. */
 export function sectionHeader(title: string, actions?: Html): Html {
-  return html`<div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-    <h2 class="text-lg font-semibold tracking-tight">${title}</h2>
-    ${actions ? html`<div class="flex flex-wrap items-center gap-2">${actions}</div>` : ''}
+  return html`<div class="section-head">
+    <h2 class="section-title">${title}</h2>
+    ${actions ? html`<div class="section-actions">${actions}</div>` : ''}
   </div>`;
 }
 
@@ -306,7 +361,7 @@ export function badge(text: string, tone: Tone = 'neutral'): Html {
   return html`<span class="badge badge-soft ${TONE[tone]} whitespace-nowrap">${text}</span>`;
 }
 
-/** Urgent, High or Routine. */
+/** Urgent, High or Routine. Routine is uncoloured: its word is the signal. */
 export function urgencyBadge(urgency: string): Html {
   return badge(humanise(urgency), urgency === 'urgent' ? 'error' : urgency === 'high' ? 'warning' : 'neutral');
 }
@@ -351,11 +406,10 @@ export function statusBadge(status: string): Html {
   return badge(STATUS_LABEL[status] ?? humanise(status), STATUS_TONE[status] ?? 'neutral');
 }
 
-/** "Nothing here yet" (layout adapted from HyperUI's empty states, https://hyperui.dev/components/application/empty-states). */
+/** "Nothing here yet": one sentence and the action to take (layout adapted from HyperUI's empty states, https://hyperui.dev/components/application/empty-states). */
 export function emptyState(text: string, action?: Html): Html {
-  return html`<div class="flex flex-col items-center gap-3 rounded-box border border-dashed border-base-content/20 px-4 py-8 text-center">
-    <span class="text-base-content/50">${ICON.inbox}</span>
-    <p class="max-w-prose text-sm text-base-content/75">${text}</p>
+  return html`<div class="empty-state">
+    <p>${text}</p>
     ${action ?? ''}
   </div>`;
 }
@@ -365,8 +419,8 @@ export function emptyState(text: string, action?: Html): Html {
  * phones, never the page. `caption` names it for screen readers.
  */
 export function table(headers: string[], rows: Html[][], o: { caption?: string } = {}): Html {
-  return html`<div class="overflow-x-auto rounded-box border border-base-300 bg-base-100">
-    <table class="table table-sm sm:table-md">
+  return html`<div class="table-frame">
+    <table class="table table-sm">
       ${o.caption ? html`<caption class="sr-only">${o.caption}</caption>` : ''}
       <thead>
         <tr>
@@ -381,10 +435,11 @@ export function table(headers: string[], rows: Html[][], o: { caption?: string }
 }
 
 /**
- * A labelled form control (daisyUI fieldset, input, select, textarea,
- * file-input, checkbox). The label's `for` matches the control's id,
+ * A labelled form control (daisyUI input, select, textarea, file-input, checkbox,
+ * styled as a field). The label's `for` matches the control's id,
  * `field-<name>` unless `id` is given (give one when a name repeats on a page).
- * `hint` is tied to the control with aria-describedby.
+ * `hint` is tied to the control with aria-describedby, and so is `error`, which
+ * also marks the control aria-invalid.
  */
 export function field(o: {
   label: string;
@@ -412,8 +467,8 @@ export function field(o: {
   const type = o.type ?? 'text';
   const hintId = `${id}-hint`;
   const errorId = `${id}-error`;
-  const hint = o.hint ? html`<p id="${hintId}" class="label text-xs">${o.hint}</p>` : '';
-  const error = o.error ? html`<p id="${errorId}" class="label text-sm font-medium text-error">${o.error}</p>` : '';
+  const hint = o.hint ? html`<p id="${hintId}" class="field-hint">${o.hint}</p>` : '';
+  const error = o.error ? html`<p id="${errorId}" class="field-error">${o.error}</p>` : '';
   const describedBy = [o.error ? errorId : '', o.hint ? hintId : ''].filter(Boolean).join(' ');
   const common = html`id="${id}" name="${o.name}" ${o.required ? 'required' : ''} ${o.multiple ? 'multiple' : ''} ${describedBy ? html`aria-describedby="${describedBy}"` : ''} ${o.error ? html`aria-invalid="true"` : ''}`;
   const invalid = o.error ? ' input-error' : '';
@@ -440,25 +495,25 @@ export function field(o: {
           ? html`<input ${common} type="file" class="file-input w-full" ${o.accept ? html`accept="${o.accept}"` : ''} />`
           : html`<input ${common} type="${type}" class="input w-full${invalid}" value="${o.value ?? ''}" placeholder="${o.placeholder ?? ''}" ${o.autocomplete ? html`autocomplete="${o.autocomplete}"` : ''} ${o.step ? html`step="${o.step}"` : ''} ${o.min !== undefined ? html`min="${o.min}"` : ''} ${o.max !== undefined ? html`max="${o.max}"` : ''} />`;
   return html`<div class="fieldset">
-    <label for="${id}" class="fieldset-legend text-sm font-medium">${o.label}</label>
+    <label for="${id}" class="field-label">${o.label}</label>
     ${control} ${error} ${hint}
   </div>`;
 }
 
 const STAT_TONE: Record<Tone, string> = { neutral: '', info: 'text-info', success: 'text-success', warning: 'text-warning', error: 'text-error' };
 
-/** One number with its label (daisyUI stat). Put several in `statGroup`. */
+/** One number with its label, compact (a tile, not a card). Put several in `statGroup`. */
 export function stat(o: { label: string; value: string | number; hint?: string; tone?: Tone }): Html {
-  return html`<div class="stat min-w-0 rounded-box border border-base-300 bg-base-100 px-4 py-3 shadow-sm">
-    <div class="stat-title text-sm">${o.label}</div>
-    <div class="stat-value text-2xl break-words whitespace-normal tabular-nums sm:text-3xl ${STAT_TONE[o.tone ?? 'neutral']}">${o.value}</div>
-    ${o.hint ? html`<div class="stat-desc">${o.hint}</div>` : ''}
+  return html`<div class="stat-tile">
+    <div class="stat-tile-label">${o.label}</div>
+    <div class="stat-tile-value ${STAT_TONE[o.tone ?? 'neutral']}">${o.value}</div>
+    ${o.hint ? html`<div class="stat-tile-hint">${o.hint}</div>` : ''}
   </div>`;
 }
 
 /** A row of stats: two columns on phones, as many as fit on wider screens. */
 export function statGroup(items: Html[]): Html {
-  return html`<div class="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fit,minmax(11rem,1fr))]">${items}</div>`;
+  return html`<div class="grid grid-cols-2 gap-2 sm:grid-cols-[repeat(auto-fit,minmax(11rem,1fr))]">${items}</div>`;
 }
 
 /**
@@ -485,12 +540,12 @@ export function steps(
       (item, i) =>
         html`<li class="step ${o.horizontal ? 'min-w-0' : ''} ${item.done || (o.current !== undefined && i === current) ? 'step-primary' : ''}" ${item.done ? html`data-content="✓"` : ''} ${i === current ? html`aria-current="step"` : ''}>
           <div class="pb-2 ${o.horizontal ? 'px-0.5 text-center' : `text-start ${responsive ? 'lg:px-1 lg:text-center' : ''}`}">
-            <span class="block ${o.horizontal ? 'text-xs sm:text-sm' : 'text-sm'} ${item.done || i === current ? 'font-semibold' : 'text-base-content/80'}"
+            <span class="block ${o.horizontal ? 'text-xs sm:text-sm' : 'text-sm'} ${item.done || i === current ? 'font-semibold' : 'text-muted'}"
               >${item.href && i !== current ? html`<a class="link link-hover" href="${item.href}">${item.label}</a>` : item.label}<span class="sr-only"
                 >${item.done ? ' (done)' : ''}${i === current ? (o.current === undefined ? ' (next)' : ' (this step)') : ''}</span
               ></span
             >
-            ${item.detail ? html`<span class="block text-xs text-base-content/75">${item.detail}</span>` : ''}
+            ${item.detail ? html`<span class="block text-xs text-muted">${item.detail}</span>` : ''}
           </div>
         </li>`,
     )}
@@ -517,21 +572,22 @@ const BUBBLE_TONE: Record<Tone, string> = { neutral: '', info: 'chat-bubble-info
 /**
  * One message in a conversation (daisyUI chat, https://daisyui.com/components/chat/).
  * Line breaks in `text` are kept; when it is a string, links in it can be
- * followed. Without a tone, `end` bubbles are primary and `start` bubbles grey.
+ * followed. Without a tone, `end` bubbles are the action colour and `start`
+ * bubbles sit on the page colour.
  */
 export function chatBubble(o: { side: 'start' | 'end'; header: Html | string; text: Html | string; footer?: Html | string; tone?: Tone }): Html {
   const tone = o.tone ? BUBBLE_TONE[o.tone] : o.side === 'end' ? 'chat-bubble-primary' : '';
   return html`<div class="chat ${o.side === 'end' ? 'chat-end' : 'chat-start'}">
-    <div class="chat-header flex-wrap items-center text-xs text-base-content/75">${o.header}</div>
-    <div class="chat-bubble ${tone} text-sm whitespace-pre-wrap">${typeof o.text === 'string' ? linkified(o.text) : o.text}</div>
-    ${o.footer ? html`<div class="chat-footer text-xs text-base-content/75">${o.footer}</div>` : ''}
+    <div class="chat-header flex-wrap items-center">${o.header}</div>
+    <div class="chat-bubble ${tone} whitespace-pre-wrap">${typeof o.text === 'string' ? linkified(o.text) : o.text}</div>
+    ${o.footer ? html`<div class="chat-footer">${o.footer}</div>` : ''}
   </div>`;
 }
 
 /**
- * Links that switch between views of one page, such as "Mine" and "All"
- * (daisyUI tabs, border style). They are links, so they use aria-current,
- * not the ARIA tab pattern.
+ * Links that switch between views of one page (daisyUI tabs, border style). They
+ * are links, so they use aria-current, not the ARIA tab pattern. For the Mine/All
+ * control in a page's top bar, use `segmented`.
  */
 export function tabs(items: { label: string; href: string; active: boolean; count?: number }[], label = 'Views'): Html {
   return html`<nav class="tabs tabs-border" aria-label="${label}">
@@ -539,7 +595,7 @@ export function tabs(items: { label: string; href: string; active: boolean; coun
       (item) =>
         html`<a href="${item.href}" class="tab gap-2 ${item.active ? 'tab-active font-semibold' : ''}" ${item.active ? html`aria-current="page"` : ''}>
           ${item.label}
-          ${item.count !== undefined ? html`<span class="badge badge-sm ${item.active ? 'badge-primary' : 'badge-soft badge-neutral'}">${item.count}</span>` : ''}
+          ${item.count !== undefined ? html`<span class="count-chip ${item.active ? 'is-decision' : ''}">${item.count}</span>` : ''}
         </a>`,
     )}
   </nav>`;
@@ -554,14 +610,14 @@ export function timeline(items: { at: string; title: string; detail?: string }[]
     ${items.map(
       (item, i) =>
         html`<li>
-          ${i > 0 ? html`<hr class="bg-base-300" />` : ''}
+          ${i > 0 ? html`<hr class="bg-line" />` : ''}
           <div class="timeline-middle text-primary">${ICON.dot}</div>
           <div class="timeline-end min-w-0 ${i < items.length - 1 ? 'mb-5' : ''}">
-            <p class="text-xs text-base-content/75">${item.at}</p>
+            <p class="text-xs text-muted">${item.at}</p>
             <p class="text-sm font-medium">${item.title}</p>
-            ${item.detail ? html`<p class="text-sm whitespace-pre-line text-base-content/80">${item.detail}</p>` : ''}
+            ${item.detail ? html`<p class="text-sm whitespace-pre-line text-muted">${item.detail}</p>` : ''}
           </div>
-          ${i < items.length - 1 ? html`<hr class="bg-base-300" />` : ''}
+          ${i < items.length - 1 ? html`<hr class="bg-line" />` : ''}
         </li>`,
     )}
   </ol>`;
@@ -574,11 +630,11 @@ export function photoGrid(items: { src: string; caption?: Html | string; alt?: s
       (item, i) =>
         html`<li>
           <figure class="flex flex-col items-stretch gap-1.5">
-            <a href="${item.src}" target="_blank" rel="noopener" class="block overflow-hidden rounded-box border border-base-300 bg-base-200">
+            <a href="${item.src}" target="_blank" rel="noopener" class="block overflow-hidden rounded-box border border-line bg-page">
               <img src="${item.src}" alt="${item.alt ?? `Photo ${i + 1} of ${items.length}`}" loading="lazy" decoding="async" class="aspect-square w-full object-cover" />
               <span class="sr-only">(opens full size in a new tab)</span>
             </a>
-            ${item.caption ? html`<figcaption class="text-xs text-base-content/80">${item.caption}</figcaption>` : ''}
+            ${item.caption ? html`<figcaption class="text-xs text-muted">${item.caption}</figcaption>` : ''}
           </figure>
         </li>`,
     )}
@@ -587,21 +643,101 @@ export function photoGrid(items: { src: string; caption?: Html | string; alt?: s
 
 /** Label and value pairs (layout adapted from HyperUI's details lists, https://hyperui.dev/components/application/details-list). */
 export function dl(items: [string, Html | string][]): Html {
-  return html`<dl class="divide-y divide-base-300 text-sm">
+  return html`<dl class="divide-y divide-line text-sm">
     ${items.map(
       ([term, value]) =>
         html`<div class="grid grid-cols-1 gap-0.5 py-2.5 first:pt-0 last:pb-0 sm:grid-cols-3 sm:gap-4">
-          <dt class="font-medium text-base-content/75">${term}</dt>
+          <dt class="font-medium text-muted">${term}</dt>
           <dd class="min-w-0 break-words sm:col-span-2">${value}</dd>
         </div>`,
     )}
   </dl>`;
 }
 
+/**
+ * A Ticket as a work-order docket: the number and urgency word in a stub, a
+ * dashed perforation, then the address, the issue and a meta row. The whole
+ * docket is one link. `unread` adds the unread dot, with the words for screen readers.
+ */
+export function docket(o: { number: number; href: string; urgency: string; address: string; issue: string; meta: Html[]; unread?: number }): Html {
+  const stub = o.urgency === 'urgent' ? 'is-urgent' : o.urgency === 'high' ? 'is-high' : '';
+  return html`<a href="${o.href}" class="docket">
+    <span class="docket-stub ${stub}">
+      <span class="docket-number num">#${o.number}</span>
+      <span class="docket-urgency">${humanise(o.urgency)}</span>
+    </span>
+    <span class="docket-perf" aria-hidden="true"></span>
+    <span class="docket-body">
+      <span class="docket-address">${o.address}</span>
+      <span class="docket-issue">${o.issue}</span>
+      <span class="docket-meta">
+        ${o.meta.map((item) => html`<span>${item}</span>`)}
+        ${o.unread ? html`<span><span class="unread-dot" aria-hidden="true"></span><span class="sr-only">unread messages</span></span>` : ''}
+      </span>
+    </span>
+  </a>`;
+}
+
+/**
+ * The count strip: one 36px row of counts that link into the queues. Decision
+ * counts take the hi-vis chip; the others a quiet one.
+ */
+export function countStrip(items: { label: string; count: number; href: string; decision?: boolean }[]): Html {
+  return html`<nav aria-label="Counts">
+    <ul class="count-strip">
+      ${items.map(
+        (item) =>
+          html`<li><a href="${item.href}" class="count-item"><span class="count-chip ${item.decision ? 'is-decision' : ''}">${item.count}</span><span class="count-label">${item.label}</span></a></li>`,
+      )}
+    </ul>
+  </nav>`;
+}
+
+/**
+ * A compact queue row with the 4px hi-vis stripe on its left: an optional photo
+ * thumbnail, the title (a link when `href` is given), a detail line, badges, a
+ * meta line and actions such as Confirm and Review.
+ */
+export function queueRow(o: { href?: string; thumb?: Html; title: string; detail?: string; badges?: Html[]; meta?: string; actions?: Html }): Html {
+  return html`<article class="queue-row">
+    ${o.thumb ? html`<div class="queue-thumb">${o.thumb}</div>` : ''}
+    <div class="queue-main">
+      ${o.href ? html`<a href="${o.href}" class="queue-title">${o.title}</a>` : html`<p class="queue-title">${o.title}</p>`}
+      ${o.detail ? html`<p class="queue-detail">${o.detail}</p>` : ''}
+      ${o.badges && o.badges.length > 0 ? html`<div class="queue-badges">${o.badges}</div>` : ''}
+      ${o.meta ? html`<p class="queue-meta">${o.meta}</p>` : ''}
+      ${o.actions ? html`<div class="queue-actions">${o.actions}</div>` : ''}
+    </div>
+  </article>`;
+}
+
+/** The Mine/All control: links with the current one filled and aria-current. */
+export function segmented(items: { label: string; href: string; active: boolean }[]): Html {
+  return html`<nav class="segmented" aria-label="Views">
+    ${items.map((item) => html`<a href="${item.href}" class="segmented-item" ${item.active ? html`aria-current="page"` : ''}>${item.label}</a>`)}
+  </nav>`;
+}
+
+/**
+ * A board column (a lane): a heading with its count, and a body that scrolls
+ * inside about 300px. The body is focusable so the keyboard can scroll it.
+ */
+export function lane(o: { title: string; count: number; body: Html }): Html {
+  return html`<section class="lane">
+    <div class="lane-head">
+      <h3 class="lane-title">${o.title}</h3>
+      <span class="count-chip">${o.count}</span>
+    </div>
+    <div class="lane-body" tabindex="0" role="region" aria-label="${o.title}">${o.body}</div>
+  </section>`;
+}
+
+/** Formats cents as Australian dollars, or an em dash when there is no amount. */
 export function formatMoney(cents: number | null): string {
   return cents === null ? '—' : (cents / 100).toLocaleString('en-AU', { style: 'currency', currency: 'AUD' });
 }
 
+/** A timestamp in the Agency's time zone, such as "Fri 9 Oct, 2:05 pm". */
 export function formatWhen(iso: string | null, timeZone = 'Australia/Sydney'): string {
   if (!iso) return '—';
   return new Intl.DateTimeFormat('en-AU', { timeZone, weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }).format(new Date(iso));
@@ -619,10 +755,17 @@ const svg = (d: string, size = 'size-5') =>
 
 const ICON = {
   menu: svg('M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5', 'size-6'),
-  home: svg('m2.25 12 8.954-8.955a1.126 1.126 0 0 1 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25', 'size-6'),
+  chevron: svg('m19.5 8.25-7.5 7.5-7.5-7.5', 'size-4'),
   success: svg('M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z'),
   error: svg('M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z'),
   info: svg('m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z'),
-  inbox: svg('M2.25 13.5h3.86a2.25 2.25 0 0 1 2.012 1.244l.256.512a2.25 2.25 0 0 0 2.013 1.244h3.218a2.25 2.25 0 0 0 2.013-1.244l.256-.512a2.25 2.25 0 0 1 2.013-1.244h3.859m-19.5.338V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18v-4.162c0-.224-.034-.447-.1-.661L19.24 5.338a2.25 2.25 0 0 0-2.15-1.588H6.911a2.25 2.25 0 0 0-2.15 1.588L2.35 13.177a2.25 2.25 0 0 0-.1.661Z', 'size-10'),
   dot: html`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-4" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="6" /></svg>`,
+};
+
+/** The rail's icons, 18px, stroke 1.75. */
+const NAV_ICON: Record<NavKey, Html> = {
+  dashboard: svg('M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z', 'size-[18px]'),
+  calendar: svg('M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5', 'size-[18px]'),
+  setup: svg('M11.42 15.17 17.25 21A2.652 2.652 0 0 0 21 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 1 1-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 0 0 4.486-6.336l-3.276 3.277a3.004 3.004 0 0 1-2.25-2.25l3.276-3.276a4.5 4.5 0 0 0-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437 1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008Z', 'size-[18px]'),
+  simulator: svg('M10.5 1.5H8.25A2.25 2.25 0 0 0 6 3.75v16.5a2.25 2.25 0 0 0 2.25 2.25h7.5A2.25 2.25 0 0 0 18 20.25V3.75a2.25 2.25 0 0 0-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3', 'size-[18px]'),
 };
