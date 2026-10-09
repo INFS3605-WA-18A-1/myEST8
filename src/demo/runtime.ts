@@ -9,14 +9,16 @@ import { createJevClassifier } from '../adapters/jev.ts';
 import { createQuoteReader } from '../adapters/quote-reader.ts';
 import { createApp } from '../app.ts';
 import { openDb } from '../db.ts';
-import type { Clock } from '../ports.ts';
+import type { ChannelType, Clock } from '../ports.ts';
+import { ActionError, normalizeAddress } from '../shared.ts';
 import { createSessions } from '../web/auth.ts';
 import { createWebApp } from '../web/server.ts';
 import { OffsetClock } from './clock.ts';
 import type { DemoContact, DemoControls, DemoInboundMessage, DemoOutboundMessage } from './controls.ts';
 import { mockApis } from './mock-apis.ts';
-import { DEMO_CHANNELS, seedDemo } from './seed.ts';
+import { seedDemo } from './seed.ts';
 import { SimulatedMessenger } from './simulated-messenger.ts';
+import { seedStories, storiesStart } from './stories.ts';
 
 const HOUR_MS = 3_600_000;
 const MOCK = 'http://mock.local';
@@ -40,11 +42,18 @@ export async function createDemo(
     onOutbound?: (message: DemoOutboundMessage) => void;
     /** Where task errors go. Defaults to console.error. */
     logError?: (error: Error) => void;
+    /**
+     * Plays the demo stories (src/demo/stories.ts) so the Agency starts with
+     * work in flight: the clock starts ten days back and ends at `now`. Off by
+     * default; skipped when the classifier or quote reader is real.
+     */
+    stories?: boolean;
   } = {},
 ) {
   const env = options.env ?? process.env;
   const logError = options.logError ?? ((error: Error) => console.error('[worker]', error));
-  const clock = new OffsetClock(options.now);
+  const storiesEnd = options.stories && !env.JEV_API_URL && !env.QUOTES_API_URL ? (options.now ?? new Date()) : null;
+  const clock = new OffsetClock(storiesEnd ? storiesStart(storiesEnd) : options.now);
   const timeZone = 'Australia/Sydney';
   const port = Number(env.PORT ?? 3000);
   const baseUrl = (env.PUBLIC_URL ?? `http://localhost:${port}`).replace(/\/$/, '');
@@ -110,23 +119,42 @@ export async function createDemo(
 
   const seed = await seedDemo(app, { googleListings: apis.places === 'mock' });
   await runWorker();
-  const anyPropertyManager = app.asPropertyManager(seed.ids.aliceId);
 
+  // The simulator is limited to the Agency of the Property Manager using it, so
+  // each Agency that signs up to the demo sees only its own people and messages.
   const inbound: DemoInboundMessage[] = [];
+  const channelsOf = (propertyManagerId: number) => app.asPropertyManager(propertyManagerId).channels();
+  /** Whether a message on `channel` from or to `address` went through one of the Agency's channels. */
+  const throughAgency = (propertyManagerId: number) => {
+    const channels = channelsOf(propertyManagerId);
+    return (channel: ChannelType, address: string) => channels.some((c) => c.type === channel && c.address === normalizeAddress(address));
+  };
   const demo: DemoControls = {
-    contacts(): DemoContact[] {
-      return anyPropertyManager
+    contacts(propertyManagerId): DemoContact[] {
+      return app
+        .asPropertyManager(propertyManagerId)
         .people()
         .map((p) => ({ personId: p.id, name: p.name, role: p.role, mobile: p.mobile, email: p.email }));
     },
-    outbox: () => messenger.messages(),
-    inbound: () => [...inbound],
-    async sendAs(from, channel, text, attachments = []) {
+    outbox(propertyManagerId) {
+      const ours = throughAgency(propertyManagerId);
+      return messenger.messages().filter((m) => ours(m.channel, m.from));
+    },
+    inbound(propertyManagerId) {
+      const ours = throughAgency(propertyManagerId);
+      return inbound.filter((m) => ours(m.channel, m.to));
+    },
+    async sendAs(propertyManagerId, from, channel, text, attachments = []) {
+      const to = channelsOf(propertyManagerId).find((c) => c.type === channel)?.address;
+      if (!to) {
+        const [name, what] = channel === 'email' ? ['email', 'inbox address'] : [channel === 'sms' ? 'SMS' : 'WhatsApp', 'number'];
+        throw new ActionError('invalid', `Connect ${name} in Setup first: the Agency has no ${name} ${what} for this message to go to.`);
+      }
       const receivedAt = clock.now();
-      inbound.push({ at: receivedAt.toISOString(), from, channel, text, attachments: attachments.map((a) => a.filename) });
+      inbound.push({ at: receivedAt.toISOString(), from, to, channel, text, attachments: attachments.map((a) => a.filename) });
       app.receiveInbound({
         providerMessageId: `demo-${randomUUID()}`,
-        agencyChannel: DEMO_CHANNELS[channel],
+        agencyChannel: to,
         channelType: channel,
         from,
         text,
@@ -142,6 +170,9 @@ export async function createDemo(
     now: () => clock.now(),
   };
 
+  // The stories play the clock forward to `options.now`, or to the real time.
+  const stories = storiesEnd ? await seedStories({ app, simulator: demo, seed, clock, ...(options.now ? { end: options.now } : {}) }) : null;
+
   // Sessions run on real time, so moving the demo clock forward never signs anyone out.
   const sessions = createSessions(db, { now: () => new Date() } satisfies Clock);
   const web = createWebApp({
@@ -154,7 +185,7 @@ export async function createDemo(
     demo,
   });
 
-  return { app, web, demo, sessions, clock, messenger, seed, baseUrl, apis, runWorker, startWorkerLoop };
+  return { app, web, demo, sessions, clock, messenger, seed, stories, baseUrl, apis, runWorker, startWorkerLoop };
 }
 
 export type Demo = Awaited<ReturnType<typeof createDemo>>;

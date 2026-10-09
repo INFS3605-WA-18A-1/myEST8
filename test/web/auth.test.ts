@@ -27,11 +27,22 @@ describe('signing in', () => {
     expect(body).toContain('value="/tickets/1"');
   });
 
-  test('the dashboard needs a signed-in Property Manager', async () => {
+  test('signed out, / is the landing page; every other page needs a signed-in Property Manager', async () => {
     const { get } = await webWorld();
-    const res = await get('/');
+    const landing = await get('/');
+    expect(landing.status).toBe(200);
+    expect(await landing.text()).toContain('href="/signup"');
+
+    const res = await get('/calendar');
     expect(res.status).toBe(303);
-    expect(res.headers.get('location')).toBe('/login?next=%2F');
+    expect(res.headers.get('location')).toBe('/login?next=%2Fcalendar');
+  });
+
+  test('the sign-in page links to sign-up and back to the landing page', async () => {
+    const { get } = await webWorld();
+    const page = await (await get('/login')).text();
+    expect(page).toContain('href="/signup"');
+    expect(page).toContain('href="/"');
   });
 
   test('a wrong password is refused without saying which field was wrong', async () => {
@@ -59,7 +70,7 @@ describe('signing in', () => {
     expect(cookie).toContain('Path=/');
     expect(cookie).not.toContain('Secure');
 
-    const signedIn = await get('/', await signIn());
+    const signedIn = await get('/calendar', await signIn());
     expect(toSignIn(signedIn)).toBe(false);
     expect(toSignIn(await get('/login', await signIn()))).toBe(false);
   });
@@ -90,23 +101,23 @@ describe('sessions', () => {
     expect(res.status).toBe(303);
     expect(res.headers.get('location')).toBe('/login');
     expect(res.headers.get('set-cookie')).toMatch(/^myest8_session=;.*Max-Age=0/);
-    expect(toSignIn(await get('/', cookie))).toBe(true);
+    expect(toSignIn(await get('/calendar', cookie))).toBe(true);
   });
 
   test('a session ends after 12 hours without use, and each request extends it', async () => {
     const { h, get, signIn } = await webWorld();
     const cookie = await signIn();
     h.clock.advance(11 * HOUR);
-    expect(toSignIn(await get('/', cookie))).toBe(false);
+    expect(toSignIn(await get('/calendar', cookie))).toBe(false);
     h.clock.advance(11 * HOUR);
-    expect(toSignIn(await get('/', cookie))).toBe(false);
+    expect(toSignIn(await get('/calendar', cookie))).toBe(false);
     h.clock.advance(12 * HOUR + 1);
-    expect(toSignIn(await get('/', cookie))).toBe(true);
+    expect(toSignIn(await get('/calendar', cookie))).toBe(true);
   });
 
   test('a made-up session cookie is ignored', async () => {
     const { get } = await webWorld();
-    expect(toSignIn(await get('/', 'myest8_session=made-up'))).toBe(true);
+    expect(toSignIn(await get('/calendar', 'myest8_session=made-up'))).toBe(true);
   });
 
   test('a signed-out post is refused with 401', async () => {

@@ -74,10 +74,14 @@ const URGENT_WORDS = [
   'break-in', 'break in', 'broken into',
 ];
 const HIGH_WORDS = ['leak', 'leaks', 'leaking', 'mould', 'mold', 'mouldy', 'water damage', 'getting worse', 'worsening', 'crack', 'cracked', 'cracks'];
+/** Signs of a possible hazard that keywords can't judge: it may be Urgent, or may not. */
+const MAYBE_URGENT_WORDS = ['buzzing', 'crackling', 'burning smell', 'warm to touch', 'hot to touch', 'scorched', 'scorch marks'];
 
 const urgency: Rule = (r) => {
   const text = [r.text, normalise(r.guidedAnswers.location ?? ''), normalise(r.guidedAnswers.started ?? '')].join(' ');
   if (mentions(text, URGENT_WORDS)) return answer('urgent');
+  // Unsure, so the app treats it as High and flags it for the Property Manager to check.
+  if (mentions(text, MAYBE_URGENT_WORDS)) return answer('urgent', UNSURE);
   if (mentions(text, HIGH_WORDS) || r.guidedAnswers.worsening === 'yes') return answer('high');
   return answer('routine', LIKELY);
 };

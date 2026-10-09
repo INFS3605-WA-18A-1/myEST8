@@ -35,6 +35,7 @@ import {
   type Tone,
 } from '../ui.ts';
 import { bookingList, bookingTrades } from './calendar.ts';
+import { finishSetupBanner } from './welcome.ts';
 
 type Dashboard = ReturnType<PropertyManagerActions['dashboard']>;
 type MaintenanceRequest = Dashboard['maintenanceRequests'][number];
@@ -112,6 +113,7 @@ export function dashboardPages() {
         active: 'dashboard',
         flash: flashFrom(c.req.url),
         body: html`
+          ${finishSetupBanner(actions)}
           ${tabs([
             { label: 'My Properties', href: '/', active: filter === 'mine' },
             { label: 'All Properties', href: '/?filter=all', active: filter === 'all' },

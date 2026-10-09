@@ -3,9 +3,10 @@
 // page: the first frame (what fits without scrolling) and the full page, at
 // laptop, desktop and phone sizes.
 //
-//   npx tsx scripts/screenshot.ts [--as alice|bob|none] [--out .screenshots] [--only laptop,phone] [path[=name] ...]
+//   npx tsx scripts/screenshot.ts [--as alice|bob|none] [--out .screenshots] [--only laptop,phone] [path[#name] ...]
 //
-// With no paths it captures the main pages. Output is git-ignored.
+// With no paths it captures the main pages. The demo stories are played first,
+// so the pages are full; DEMO_DATA=empty shows the bare Agency. Output is git-ignored.
 
 import { mkdirSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
@@ -31,14 +32,14 @@ const signInAs = option('as', 'alice');
 const out = option('out', '.screenshots');
 const only = option('only', Object.keys(VIEWPORTS).join(',')).split(',') as ViewportName[];
 const targets = (args.length ? args : DEFAULT_PATHS).map((arg) => {
-  const [path, name] = arg.split('=');
+  const [path, name] = arg.split('#');
   return { path: path!, name: name ?? (path!.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'home') };
 });
 
 mkdirSync(out, { recursive: true });
 const errors: Error[] = [];
 const port = await freePort();
-const demo = await createDemo({ env: { PORT: String(port) }, logError: (e) => errors.push(e) });
+const demo = await createDemo({ env: { PORT: String(port) }, logError: (e) => errors.push(e), stories: process.env.DEMO_DATA !== 'empty' });
 const server = serve({ fetch: demo.web.fetch, port });
 const base = `http://localhost:${port}`;
 const browser = await chromium.launch();

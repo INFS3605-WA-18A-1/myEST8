@@ -18,29 +18,70 @@ describe('the demo', () => {
     expect(app.login('bob@harbour.example', 'demo1234')).toBe(seed.ids.bobId);
 
     const alice = app.asPropertyManager(seed.ids.aliceId);
-    expect(alice.properties().map((p) => p.address)).toEqual([
-      '12 King St, Newtown NSW 2042',
-      '21 Glebe Point Rd, Glebe NSW 2037',
-      '5/40 Ocean Ave, Bondi NSW 2026',
-      '7 Wilson St, Newtown NSW 2042',
-    ]);
+    const properties = alice.properties();
+    expect(properties.map((p) => p.address)).toEqual(
+      expect.arrayContaining([
+        '12 King St, Newtown NSW 2042',
+        '21 Glebe Point Rd, Glebe NSW 2037',
+        '5/40 Ocean Ave, Bondi NSW 2026',
+        '7 Wilson St, Newtown NSW 2042',
+      ]),
+    );
+    // Five Properties each for Alice and Bob.
+    expect([seed.ids.aliceId, seed.ids.bobId].map((pm) => properties.filter((p) => p.propertyManagerId === pm).length)).toEqual([5, 5]);
 
-    const contacts = demo.contacts();
+    const contacts = demo.contacts(seed.ids.aliceId);
     const count = (role: string) => contacts.filter((c) => c.role === role).length;
-    expect([count('tenant'), count('tradie'), count('owner'), count('building_manager')]).toEqual([5, 9, 2, 1]);
+    expect([count('tenant'), count('tradie'), count('owner'), count('building_manager')]).toEqual([13, 17, 6, 1]);
     expect(contacts.find((c) => c.name === 'Tom Tran')).toMatchObject({ role: 'tenant', mobile: '+61400000001', email: null });
     expect(contacts.find((c) => c.name === 'Bella Bui')).toMatchObject({ mobile: null, email: 'bella@example.com' });
     expect(errors).toEqual([]);
   });
 
   test('a Tenant texting from the simulator gets an acknowledgement', async () => {
-    const { demo, errors } = await demoWorld();
-    await demo.sendAs('+61400000001', 'sms', 'The kitchen tap is dripping');
+    const { demo, seed, errors } = await demoWorld();
+    const alice = seed.ids.aliceId;
+    await demo.sendAs(alice, '+61400000001', 'sms', 'The kitchen tap is dripping');
 
-    expect(demo.inbound()).toMatchObject([{ from: '+61400000001', channel: 'sms', text: 'The kitchen tap is dripping' }]);
+    expect(demo.inbound(alice)).toMatchObject([{ from: '+61400000001', to: '+61290000000', channel: 'sms', text: 'The kitchen tap is dripping' }]);
     expect(errors).toEqual([]);
-    const toTom = demo.outbox().filter((m) => m.to === '+61400000001');
-    expect(toTom[0]).toMatchObject({ channel: 'sms', template: 'tenant.acknowledgement' });
+    const toTom = demo.outbox(alice).filter((m) => m.to === '+61400000001');
+    expect(toTom[0]).toMatchObject({ channel: 'sms', from: '+61290000000', template: 'tenant.acknowledgement' });
+  });
+
+  test('an Agency that signs up gets its own simulator: its own people, channels and messages', async () => {
+    const { app, demo, seed, errors } = await demoWorld();
+    const sam = app.signUp({ agencyName: 'Sunrise Realty', timeZone: 'Australia/Brisbane', name: 'Sam Sun', email: 'sam@sunrise.example', password: 'sunrise-2026' });
+    const sunrise = app.asPropertyManager(sam);
+    const TINA = '+61400000999';
+
+    expect(demo.contacts(sam)).toEqual([]);
+    expect(demo.outbox(sam)).toEqual([]);
+    await expect(demo.sendAs(sam, TINA, 'sms', 'Hello')).rejects.toThrow('Connect SMS in Setup first');
+
+    sunrise.connectChannel('sms', '+61 2 9100 0002');
+    sunrise.connectChannel('whatsapp', '+61 2 9100 0002');
+    sunrise.connectChannel('email', 'inbox@sunrise-realty.example');
+    const owner = sunrise.addOwner({ name: 'Omar Owen', mobile: '+61400000998' });
+    const property = await sunrise.addProperty({
+      address: '3 Sun St, Newtown NSW 2042',
+      suburb: 'Newtown',
+      ownerId: owner,
+      propertyManagerId: sam,
+      maxRepairCostCents: 300_00,
+      nominatedTradieIds: [],
+    });
+    sunrise.addTenant({ name: 'Tina Tan', mobile: TINA, propertyId: property, tenancyStart: '2026-01-01' });
+
+    expect(demo.contacts(sam).map((p) => p.name)).toEqual(['Omar Owen', 'Tina Tan']);
+    await demo.sendAs(sam, TINA, 'sms', 'The kitchen tap is dripping');
+
+    expect(demo.inbound(sam)).toMatchObject([{ from: TINA, to: '+61291000002' }]);
+    expect(demo.outbox(sam).filter((m) => m.to === TINA)[0]).toMatchObject({ from: '+61291000002', template: 'tenant.acknowledgement' });
+    expect(demo.inbound(seed.ids.aliceId)).toEqual([]);
+    expect(demo.outbox(seed.ids.aliceId).some((m) => m.to === TINA)).toBe(false);
+    expect(demo.contacts(seed.ids.aliceId).some((p) => p.name === 'Tina Tan')).toBe(false);
+    expect(errors).toEqual([]);
   });
 
   test('time travel moves the clock and runs what falls due', async () => {

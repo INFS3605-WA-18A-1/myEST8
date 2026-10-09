@@ -11,7 +11,7 @@ import { one, run, type Db } from '../db.ts';
 import type { Clock } from '../ports.ts';
 import { iso } from '../shared.ts';
 import type { WebEnv } from './env.ts';
-import { button, field, publicPage, type Flash } from './ui.ts';
+import { button, field, linkButton, publicPage, type Flash } from './ui.ts';
 
 /** The session cookie's name. */
 export const SESSION_COOKIE = 'myest8_session';
@@ -95,12 +95,7 @@ export function authRoutes(app: App, sessions: Sessions) {
     if (propertyManagerId === null) {
       return c.html(signInPage({ next, email, flash: { kind: 'error', message: 'That email and password don’t match. Try again.' } }), 401);
     }
-    setCookie(c, SESSION_COOKIE, sessions.start(propertyManagerId), {
-      httpOnly: true,
-      sameSite: 'Lax',
-      path: '/',
-      secure: isHttps(c),
-    });
+    startSession(c, sessions, propertyManagerId);
     return c.redirect(next, 303);
   });
 
@@ -137,8 +132,18 @@ export function requirePropertyManager(app: App, sessions: Sessions): Middleware
   };
 }
 
+/** Signs a Property Manager in: starts a session and sets its HttpOnly cookie on the response. */
+export function startSession(c: HonoContext, sessions: Sessions, propertyManagerId: number) {
+  setCookie(c, SESSION_COOKIE, sessions.start(propertyManagerId), {
+    httpOnly: true,
+    sameSite: 'Lax',
+    path: '/',
+    secure: isHttps(c),
+  });
+}
+
 /** The signed-in Property Manager's id, or null. A session for a Property Manager who no longer exists counts as signed out. */
-function signedInId(app: App, sessions: Sessions, c: HonoContext): number | null {
+export function signedInId(app: App, sessions: Sessions, c: HonoContext): number | null {
   const token = getCookie(c, SESSION_COOKIE);
   const id = token ? sessions.find(token) : null;
   if (id === null) return null;
@@ -166,7 +171,7 @@ function isHttps(c: HonoContext) {
  * False when the browser says the request came from another site. Browsers send
  * Origin on cross-site form posts; Referer is the fallback. Neither present is let through.
  */
-function sameOrigin(c: HonoContext): boolean {
+export function sameOrigin(c: HonoContext): boolean {
   const source = c.req.header('origin') ?? c.req.header('referer');
   if (!source) return true;
   let sourceHost: string;
@@ -182,12 +187,21 @@ function sameOrigin(c: HonoContext): boolean {
 function signInPage(o: { next: string; email?: string; flash?: Flash }) {
   return publicPage({
     title: 'Sign in to myEST8',
+    subtitle: 'For Property Managers. Tenants, Tradies and Property Owners never need an account.',
     flash: o.flash ?? null,
-    body: html`<form method="post" action="/login">
-      <input type="hidden" name="next" value="${o.next}" />
-      ${field({ label: 'Email', name: 'email', type: 'email', value: o.email ?? '', required: true })}
-      ${field({ label: 'Password', name: 'password', type: 'password', required: true })}
-      ${button('Sign in')}
-    </form>`,
+    headerActions: html`<a class="link text-sm" href="/">Home</a>`,
+    footer: SIGNED_OUT_FOOTER,
+    body: html`<form method="post" action="/login" class="space-y-2">
+        <input type="hidden" name="next" value="${o.next}" />
+        ${field({ label: 'Email', name: 'email', type: 'email', value: o.email ?? '', required: true, autocomplete: 'username' })}
+        ${field({ label: 'Password', name: 'password', type: 'password', required: true, autocomplete: 'current-password' })}
+        ${button('Sign in', { block: true })}
+      </form>
+      <div class="divider text-sm">New to myEST8?</div>
+      ${linkButton("Create your Agency's account", '/signup', { block: true })}
+      <p class="text-center text-sm"><a class="link" href="/">What is myEST8?</a></p>`,
   });
 }
+
+/** The footer on the pages a signed-out Property Manager sees. */
+export const SIGNED_OUT_FOOTER = 'myEST8 · Maintenance for small property management Agencies';

@@ -11,30 +11,30 @@
 import { Hono, type Context } from 'hono';
 import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
-import type { ChannelType } from '../../ports.ts';
-import { ActionError, TRADES, type Trade } from '../../shared.ts';
+import { ActionError } from '../../shared.ts';
 import type { WebEnv } from '../env.ts';
-import { cents, formAction, int, list, optional, text, type FormValues } from '../forms.ts';
+import { cents, formAction, list, text } from '../forms.ts';
+import { button, card, emptyState, field, flashFrom, formatMoney, humanise, linkButton, page, sectionHeader, table, type Flash, type Html } from '../ui.ts';
 import {
-  badge,
-  button,
-  card,
-  emptyState,
-  field,
-  flashFrom,
-  formatMoney,
-  humanise,
-  page,
-  sectionHeader,
-  table,
-  type Flash,
-  type Html,
-} from '../ui.ts';
+  addTradieFrom,
+  CHANNELS,
+  channelGuide,
+  channelOf,
+  channelStatus,
+  choiceGroup,
+  chosenId,
+  contactFields,
+  contactFrom,
+  googleSearchForm,
+  searchListings,
+  tradieFields,
+  tradiesTable,
+} from './onboarding-forms.ts';
 
 type Person = ReturnType<PropertyManagerActions['people']>[number];
 type Property = ReturnType<PropertyManagerActions['properties']>[number];
 type PropertyManager = ReturnType<PropertyManagerActions['propertyManagers']>[number];
-type Listing = Awaited<ReturnType<PropertyManagerActions['findGoogleListings']>>[number];
+type AgencyChannel = ReturnType<PropertyManagerActions['channels']>[number];
 type FormKey = 'channels' | 'owner' | 'building-manager' | 'tradie' | 'property' | 'tenant';
 
 /** Everything the guide lists, read once per page. */
@@ -46,15 +46,6 @@ type Agency = {
   properties: Property[];
   propertyManagers: PropertyManager[];
 };
-
-/** The radio value for a Tradie who has no Google listing. */
-const NOT_ON_GOOGLE = 'none';
-
-const CHANNELS: { type: ChannelType; name: string; addressLabel: string; inputType: 'tel' | 'email'; placeholder: string }[] = [
-  { type: 'sms', name: 'SMS', addressLabel: 'Agency SMS number', inputType: 'tel', placeholder: '+61 2 9000 0000' },
-  { type: 'whatsapp', name: 'WhatsApp', addressLabel: 'WhatsApp sandbox number', inputType: 'tel', placeholder: '+1 415 523 8886' },
-  { type: 'email', name: 'Email', addressLabel: 'Address the Agency inbox forwards to', inputType: 'email', placeholder: 'maintenance@parse.youragency.com.au' },
-];
 
 const STEPS = [
   ['channels', 'Channels'],
@@ -83,6 +74,8 @@ export function setupPages() {
       propertyManagers: actions.propertyManagers(),
     };
     const origin = new URL(c.req.url).origin;
+    const { timeZone } = actions.agency();
+    const channels = actions.channels();
 
     return c.html(
       page({
@@ -92,10 +85,11 @@ export function setupPages() {
         flash,
         body: html`
           <p>Work through these steps once. You can come back any time to add more.</p>
+          <p>${linkButton('Use the step-by-step guide', '/welcome', { size: 'sm' })}</p>
           <nav aria-label="Setup steps" class="my-4">
             <ol class="list-decimal ml-6">${STEPS.map(([id, title]) => html`<li><a class="link" href="#${id}">${title}</a></li>`)}</ol>
           </nav>
-          ${step(1, 'channels', 'Channels', channelsStep(origin, errorFor('channels')))}
+          ${step(1, 'channels', 'Channels', channelsStep(origin, channels, timeZone, errorFor('channels')))}
           ${step(2, 'people', 'Property Owners and Building Managers', peopleStep(agency, errorFor))}
           ${step(3, 'tradies', 'Tradies', await tradiesStep(c, agency, googleQuery, errorFor('tradie')))}
           ${step(4, 'properties', 'Properties', propertiesStep(agency, pm.id, errorFor('property')))}
@@ -151,17 +145,7 @@ export function setupPages() {
     const google = c.req.query('google');
     const back = `/setup?form=tradie${google ? `&google=${encodeURIComponent(google)}` : ''}`;
     return formAction(c, back, async (form) => {
-      const businessName = text(form, 'businessName');
-      if (!businessName) throw new ActionError('invalid', 'Enter the business name');
-      const tradie = {
-        ...contactFrom(form),
-        businessName,
-        trades: list(form, 'trades') as Trade[],
-        startingRating: int(form, 'startingRating', 'the starting rating'),
-      };
-      const listing = text(form, 'placeId');
-      // An empty listing is left for addTradie to refuse with its own message.
-      await c.var.actions.addTradie(listing === NOT_ON_GOOGLE ? { ...tradie, notOnGoogle: true } : { ...tradie, googlePlaceId: listing });
+      const businessName = await addTradieFrom(c.var.actions, form);
       return { ok: `${businessName} added as a Tradie`, redirect: '/setup?form=tradie' };
     });
   });
@@ -207,18 +191,21 @@ function step(n: number, id: string, title: string, body: Html): Html {
   </section>`;
 }
 
-function channelsStep(origin: string, error: Html): Html {
+function channelsStep(origin: string, connected: AgencyChannel[], timeZone: string, error: Html): Html {
   return html`
     <p>Tenants, Tradies and Property Owners reach the Agency by SMS, WhatsApp and email. Connect each one, then send yourself a test message.</p>
     ${error}
-    <div class="grid gap-4 mt-4 lg:grid-cols-3">${CHANNELS.map((channel) => channelCard(channel, origin))}</div>
+    <div class="grid gap-4 mt-4 lg:grid-cols-3">
+      ${CHANNELS.map((channel) => channelCard(channel, connected.find((c) => c.type === channel.type), timeZone, origin))}
+    </div>
   `;
 }
 
-function channelCard(channel: (typeof CHANNELS)[number], origin: string): Html {
+function channelCard(channel: (typeof CHANNELS)[number], connected: AgencyChannel | undefined, timeZone: string, origin: string): Html {
   return card({
     title: channel.name,
     body: html`
+      <p>${channelStatus(connected, timeZone)}</p>
       ${channelGuide(channel.type, origin)}
       <form method="post" action="/setup/channels" class="mt-3">
         <input type="hidden" name="type" value="${channel.type}" />
@@ -248,46 +235,6 @@ function channelCard(channel: (typeof CHANNELS)[number], origin: string): Html {
   });
 }
 
-/** How to create the channel if the Agency doesn't have it yet. */
-function channelGuide(type: ChannelType, origin: string): Html {
-  const twilioWebhook = html`<code class="break-all">${origin}/webhooks/twilio</code>`;
-  switch (type) {
-    case 'sms':
-      return html`<p>The Twilio phone number Tenants text.</p>
-        <details class="mt-2">
-          <summary>No Twilio number yet?</summary>
-          <ol class="list-decimal ml-5 text-sm">
-            <li>Sign up at twilio.com and open the Console.</li>
-            <li>Buy an Australian number that can send and receive SMS.</li>
-            <li>In the number's Messaging settings, set "A message comes in" to Webhook ${twilioWebhook}, HTTP POST.</li>
-            <li>Connect the number here and send yourself a test message.</li>
-          </ol>
-        </details>`;
-    case 'whatsapp':
-      return html`<p>For now myEST8 uses the Twilio WhatsApp sandbox. A WhatsApp sender of your own, approved by Meta, comes later.</p>
-        <details class="mt-2">
-          <summary>Set up the sandbox</summary>
-          <ol class="list-decimal ml-5 text-sm">
-            <li>In the Twilio Console, open Messaging, then Try it out, then Send a WhatsApp message.</li>
-            <li>In the sandbox settings, set "When a message comes in" to ${twilioWebhook}, HTTP POST.</li>
-            <li>Join the sandbox from your phone by sending the join code shown there. Each Tenant does the same once.</li>
-            <li>Connect the sandbox number here and send yourself a test message.</li>
-          </ol>
-        </details>`;
-    case 'email':
-      return html`<p>Email reaches myEST8 through SendGrid Inbound Parse. myEST8 also sends from this address, so replies come straight back.</p>
-        <details class="mt-2">
-          <summary>Set up SendGrid Inbound Parse</summary>
-          <ol class="list-decimal ml-5 text-sm">
-            <li>In SendGrid, authenticate your domain so email can be sent from it.</li>
-            <li>Add an MX record for a receiving subdomain (for example parse.youragency.com.au) pointing to mx.sendgrid.net.</li>
-            <li>In Settings, Inbound Parse, add that subdomain with the URL <code class="break-all">${origin}/webhooks/sendgrid</code>.</li>
-            <li>Forward the Agency inbox to an address on that subdomain, and connect that address here.</li>
-          </ol>
-        </details>`;
-  }
-}
-
 function peopleStep(agency: Agency, errorFor: (key: FormKey) => Html): Html {
   return html`<div class="grid gap-4 lg:grid-cols-2">
     ${card({
@@ -312,71 +259,18 @@ function peopleStep(agency: Agency, errorFor: (key: FormKey) => Html): Html {
 
 async function tradiesStep(c: Context<WebEnv>, agency: Agency, googleQuery: string, error: Html): Promise<Html> {
   const { actions } = c.var;
-  let listings: Listing[] = [];
-  let searchProblem: string | null = null;
-  if (googleQuery) {
-    try {
-      listings = await actions.findGoogleListings(googleQuery);
-    } catch {
-      searchProblem = "Google search isn't working right now. Try again, or mark the Tradie as not on Google.";
-    }
-  }
-  const rows = agency.tradies.map((t) => {
-    const { average, count } = actions.tradie(t.id).myEst8Rating;
-    return [
-      html`<a class="link font-medium" href="/tradies/${t.id}">${t.businessName ?? t.name}</a>`,
-      html`${t.name}`,
-      html`${t.trades.map((trade) => html`${badge(humanise(trade), 'info')} `)}`,
-      html`${average.toFixed(1)} <span class="text-sm opacity-70">(${count})</span>`,
-      html`${t.googlePlaceId ? `${t.googleRating?.toFixed(1) ?? '—'} (${t.googleReviewCount ?? 0} reviews)` : 'Not on Google'}`,
-    ];
-  });
+  const { listings, problem } = await searchListings(actions, googleQuery);
   const action = `/setup/tradies${googleQuery ? `?google=${encodeURIComponent(googleQuery)}` : ''}`;
 
   return html`
     <p>Add the Tradies the Agency already uses. They're shared by every Property Manager.</p>
-    ${agency.tradies.length ? table(['Business', 'Name', 'Trades', 'myEST8 rating', 'Google rating'], rows, { caption: 'Tradies' }) : emptyState('No Tradies yet.')}
+    ${tradiesTable(actions, agency.tradies)}
     ${card({
       title: 'Add a Tradie',
       body: html`
-        <form method="get" action="/setup#tradies">
-          ${field({ label: 'First, find their Google listing', name: 'google', id: 'google-search', value: googleQuery, placeholder: 'Business name and suburb' })}
-          ${button('Search Google', { variant: 'secondary', size: 'sm' })}
-        </form>
-        ${searchProblem ? html`<p class="text-warning mt-2">${searchProblem}</p>` : ''}
-        ${googleQuery && !searchProblem && !listings.length ? html`<p class="mt-2">No Google listings found for "${googleQuery}".</p>` : ''}
+        ${googleSearchForm('/setup#tradies', googleQuery, problem, listings.length)}
         <form method="post" action="${action}" class="mt-4">
-          ${error}
-          ${field({ label: 'Business name', name: 'businessName', id: 'tradie-business', required: true })}
-          ${contactFields('tradie')}
-          ${choiceGroup({
-            legend: 'Trades',
-            name: 'trades',
-            type: 'checkbox',
-            options: TRADES.map((trade) => ({ value: trade, label: humanise(trade) })),
-          })}
-          ${field({
-            label: 'Starting rating',
-            name: 'startingRating',
-            id: 'tradie-rating',
-            type: 'select',
-            required: true,
-            placeholder: 'Choose 1 to 5',
-            options: [5, 4, 3, 2, 1].map((n) => ({ value: String(n), label: `${n} / 5` })),
-            hint: 'How good they have been for the Agency so far. Ratings after each Job build on it.',
-          })}
-          ${choiceGroup({
-            legend: 'Google listing',
-            name: 'placeId',
-            type: 'radio',
-            required: true,
-            options: [
-              ...listings.map((l) => ({ value: l.placeId, label: `${l.name}, ${l.address}` })),
-              { value: NOT_ON_GOOGLE, label: 'Not on Google' },
-            ],
-            hint: listings.length ? undefined : 'Search above to link their listing, so their Google rating shows next to ours.',
-          })}
-          ${button('Add Tradie', { size: 'sm' })}
+          ${error} ${tradieFields({ listings })} ${button('Add Tradie', { size: 'sm' })}
         </form>
       `,
     })}
@@ -508,40 +402,6 @@ function tenantsStep(agency: Agency, error: Html): Html {
 
 // Form parts
 
-/** Name, mobile and email; `form` prefixes the control ids. */
-function contactFields(form: FormKey): Html {
-  return html`
-    ${field({ label: 'Name', name: 'name', id: `${form}-name`, required: true, autocomplete: 'off' })}
-    ${field({ label: 'Mobile', name: 'mobile', id: `${form}-mobile`, type: 'tel', placeholder: '0412 345 678', autocomplete: 'off' })}
-    ${field({ label: 'Email', name: 'email', id: `${form}-email`, type: 'email', hint: 'A mobile number, an email address, or both.', autocomplete: 'off' })}
-  `;
-}
-
-function contactFrom(form: FormValues) {
-  return { name: text(form, 'name'), mobile: optional(form, 'mobile'), email: optional(form, 'email') };
-}
-
-/** Checkboxes or radio buttons in a labelled group. */
-function choiceGroup(o: {
-  legend: string;
-  name: string;
-  type: 'checkbox' | 'radio';
-  options: { value: string; label: string }[];
-  required?: boolean;
-  hint?: string;
-}): Html {
-  return html`<fieldset class="fieldset my-2">
-    <legend class="fieldset-legend">${o.legend}</legend>
-    ${o.options.map(
-      (opt) => html`<label class="label gap-2 cursor-pointer">
-        <input type="${o.type}" class="${o.type} ${o.type}-primary ${o.type}-sm" name="${o.name}" value="${opt.value}" ${o.required ? 'required' : ''} />
-        <span>${opt.label}</span>
-      </label>`,
-    )}
-    ${o.hint ? html`<p class="label text-sm">${o.hint}</p>` : ''}
-  </fieldset>`;
-}
-
 function peopleTable(people: Person[], empty: string): Html {
   if (!people.length) return emptyState(empty);
   return table(
@@ -552,18 +412,4 @@ function peopleTable(people: Person[], empty: string): Html {
 
 function formError(flash: Flash): Html {
   return html`<p class="text-error font-medium my-2">${flash.message}</p>`;
-}
-
-function channelOf(form: FormValues) {
-  const type = text(form, 'type');
-  const channel = CHANNELS.find((ch) => ch.type === type);
-  if (!channel) throw new ActionError('invalid', 'Choose SMS, WhatsApp or email');
-  return channel;
-}
-
-/** A chosen option's id; refuses an empty choice with "Choose <label>". */
-function chosenId(form: FormValues, name: string, label: string) {
-  const value = text(form, name);
-  if (!value) throw new ActionError('invalid', `Choose ${label}`);
-  return Number(value);
 }

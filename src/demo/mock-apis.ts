@@ -15,6 +15,11 @@ export const DEMO_PLACES = [
   { placeId: 'demo-sparky-sam', name: 'Sparky Sam Electrical', address: '12 Glebe Point Rd, Glebe NSW 2037', rating: 4.5, reviewCount: 60 },
   { placeId: 'demo-fixit-carpentry', name: 'FixIt Carpentry', address: '3 Parramatta Rd, Annandale NSW 2038', rating: 4.6, reviewCount: 48 },
   { placeId: 'demo-cool-appliances', name: 'Cool Appliance Repairs', address: '55 Victoria Rd, Rozelle NSW 2039', rating: 4.3, reviewCount: 72 },
+  { placeId: 'demo-ellis-electrical', name: 'Ellis Electrical', address: '41 Addison Rd, Marrickville NSW 2204', rating: 4.7, reviewCount: 89 },
+  { placeId: 'demo-ridgeline-roofing', name: 'Ridgeline Roofing', address: '9 Botany Rd, Alexandria NSW 2015', rating: 4.4, reviewCount: 27 },
+  { placeId: 'demo-appliance-rescue', name: 'Appliance Rescue', address: '160 Oxford St, Bondi Junction NSW 2022', rating: 3.9, reviewCount: 210 },
+  { placeId: 'demo-handy-harry', name: "Handy Harry's", address: '22 Booth St, Annandale NSW 2038', rating: 4.8, reviewCount: 64 },
+  { placeId: 'demo-bugs-away', name: 'Bugs Away Pest Control', address: '5 Princes Hwy, St Peters NSW 2044', rating: 4.1, reviewCount: 132 },
 ] as const;
 
 /**
@@ -221,6 +226,17 @@ const KNOWN_LOCATIONS = new Map(
       ['12 Glebe Point Rd, Glebe NSW 2037', -33.881, 151.194],
       ['3 Parramatta Rd, Annandale NSW 2038', -33.885, 151.183],
       ['55 Victoria Rd, Rozelle NSW 2039', -33.864, 151.172],
+      ['2/31 Australia St, Camperdown NSW 2050', -33.8905, 151.1765],
+      ['9 Albion St, Annandale NSW 2038', -33.8815, 151.17],
+      ['27 Llewellyn St, Marrickville NSW 2204', -33.9105, 151.156],
+      ['17 Glenmore Rd, Paddington NSW 2021', -33.883, 151.224],
+      ['42 Coogee Bay Rd, Coogee NSW 2034', -33.9205, 151.251],
+      ['3/15 Bronte Rd, Bondi Junction NSW 2022', -33.8935, 151.252],
+      ['41 Addison Rd, Marrickville NSW 2204', -33.901, 151.1605],
+      ['9 Botany Rd, Alexandria NSW 2015', -33.9, 151.1985],
+      ['160 Oxford St, Bondi Junction NSW 2022', -33.8915, 151.247],
+      ['22 Booth St, Annandale NSW 2038', -33.88, 151.172],
+      ['5 Princes Hwy, St Peters NSW 2044', -33.912, 151.18],
     ] as const
   ).map(([address, lat, lng]) => [searchable(address), { lat, lng }]),
 );

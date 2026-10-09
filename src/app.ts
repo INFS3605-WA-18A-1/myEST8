@@ -5,7 +5,7 @@ import { createIntake } from './intake.ts';
 import { createNotifications } from './notifications.ts';
 import { createOnboarding } from './onboarding.ts';
 import type { ChannelType, Clock, InboundMessage } from './ports.ts';
-import { createProfiles } from './profiles.ts';
+import { createProfiles, type SignUp } from './profiles.ts';
 import { createQuotes } from './quotes.ts';
 import { createScheduling } from './scheduling.ts';
 import { DEFAULT_SETTINGS, type Role, type Settings, type Trade, type Urgency } from './shared.ts';
@@ -59,6 +59,13 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
         profiles.addPropertyManager(agencyId, input),
     },
 
+    /**
+     * A new Agency signs up: creates the Agency and its first Property Manager
+     * together. Refuses bad input field by field (ActionError.fields), including
+     * "An account with that email already exists". Returns the Property Manager's id.
+     */
+    signUp: (input: SignUp) => profiles.signUp(input),
+
     /** Checks a Property Manager's email and password. Returns their id, or null. */
     login: (email: string, password: string) => profiles.verifyLogin(email, password),
 
@@ -93,6 +100,10 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
         tradie: (tradieId: number) => views.tradie(agencyId, tradieId),
 
         // Onboarding
+        /** The Agency's connected channels, with when each last passed a test message. */
+        channels: () => profiles.channels(agencyId),
+        /** Adds a colleague as a Property Manager. Returns their id and a temporary password to pass on, shown once. */
+        addColleague: (input: { name: string; email: string }) => profiles.addColleague(agencyId, input),
         connectChannel: (channelType: ChannelType, address: string) => onboarding.connectChannel(agencyId, channelType, address),
         sendTestMessage: (channelType: ChannelType, to: string) => onboarding.sendTestMessage(agencyId, channelType, to),
         addOwner: (input: Parameters<typeof onboarding.addOwner>[1]) => onboarding.addOwner(agencyId, input),

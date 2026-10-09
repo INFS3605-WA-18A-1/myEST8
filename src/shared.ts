@@ -40,9 +40,15 @@ export const DEFAULT_SETTINGS: Omit<Settings, 'baseUrl'> = {
 /** A Property Manager action was refused. The message is shown to the Property Manager. */
 export class ActionError extends Error {
   readonly code: 'not_found' | 'invalid' | 'conflict';
-  constructor(code: ActionError['code'], message: string) {
+  /**
+   * The input fields at fault, each with its own message, named as in the
+   * action's input ("email", "password"). Empty when the refusal isn't about one field.
+   */
+  readonly fields: Readonly<Record<string, string>>;
+  constructor(code: ActionError['code'], message: string, fields: Record<string, string> = {}) {
     super(message);
     this.code = code;
+    this.fields = fields;
   }
 }
 
@@ -50,8 +56,14 @@ export function notFound(what: string): never {
   throw new ActionError('not_found', `${what} not found`);
 }
 
-export function invalid(message: string): never {
-  throw new ActionError('invalid', message);
+/** Refuses an action. `field` names the input at fault, so a form can show the message next to it. */
+export function invalid(message: string, field?: string): never {
+  throw new ActionError('invalid', message, field ? { [field]: message } : {});
+}
+
+/** True for something shaped like an email address: text, one @, and a dotted domain. */
+export function isEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
 /** An unguessable token for a no-login link. */

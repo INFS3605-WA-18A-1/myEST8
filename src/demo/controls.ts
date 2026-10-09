@@ -4,6 +4,8 @@ import type { ChannelType } from '../ports.ts';
 /** A message myEST8 sent, as the simulator shows it on the recipient's phone or inbox. */
 export interface DemoOutboundMessage {
   at: string;
+  /** The Agency channel address it was sent from. */
+  from: string;
   to: string;
   cc: string[];
   channel: ChannelType;
@@ -17,6 +19,8 @@ export interface DemoOutboundMessage {
 export interface DemoInboundMessage {
   at: string;
   from: string;
+  /** The Agency channel address it was sent to. */
+  to: string;
   channel: ChannelType;
   text: string;
   attachments: string[];
@@ -31,15 +35,26 @@ export interface DemoContact {
   email: string | null;
 }
 
-/** The demo's controls: the people outside the Agency, their messages, and the clock. */
+/**
+ * The demo's controls: the people outside an Agency, their messages, and the
+ * clock. Everything but the clock is limited to the Agency of the Property
+ * Manager running the simulator, named by `propertyManagerId`, so every Agency
+ * that signs up to the demo has its own simulator.
+ */
 export interface DemoControls {
-  contacts(): DemoContact[];
-  /** Every message myEST8 sent, oldest first. */
-  outbox(): DemoOutboundMessage[];
-  /** Every message the simulator sent in, oldest first. */
-  inbound(): DemoInboundMessage[];
-  /** Sends a message in as `from` (a phone number or email) and lets the worker handle it. */
+  /** Everyone outside the Agency the simulator can act as. */
+  contacts(propertyManagerId: number): DemoContact[];
+  /** Every message myEST8 sent from the Agency's channels, oldest first. */
+  outbox(propertyManagerId: number): DemoOutboundMessage[];
+  /** Every message the simulator sent in to the Agency's channels, oldest first. */
+  inbound(propertyManagerId: number): DemoInboundMessage[];
+  /**
+   * Sends a message in as `from` (a phone number or email) to the Agency's own
+   * address on `channel`, and lets the worker handle it. Refuses with an
+   * ActionError when the Agency hasn't connected that channel.
+   */
   sendAs(
+    propertyManagerId: number,
     from: string,
     channel: ChannelType,
     text: string,

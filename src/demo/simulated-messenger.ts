@@ -15,6 +15,7 @@ export class SimulatedMessenger implements Messenger {
   async send(message: OutboundMessage) {
     const sent: DemoOutboundMessage = {
       at: this.#clock.now().toISOString(),
+      from: message.from,
       to: message.to,
       cc: [...message.cc],
       channel: message.channelType,

@@ -16,7 +16,7 @@ async function signedInDemo() {
   });
   const cookie = login.headers.get('set-cookie')!.split(';')[0]!;
   const alice = d.app.asPropertyManager(d.seed.ids.aliceId);
-  const contact = (name: string) => d.demo.contacts().find((c) => c.name === name)!;
+  const contact = (name: string) => d.demo.contacts(d.seed.ids.aliceId).find((c) => c.name === name)!;
 
   async function post(path: string, fields: Record<string, string | string[]>) {
     const body = new URLSearchParams();
@@ -30,7 +30,7 @@ async function signedInDemo() {
   /** Sends a message in from the simulator, as that person on that channel. */
   const say = (name: string, text: string, channel = 'sms') => post('/demo/send', { contact: String(contact(name).personId), channel, text });
   const page = async (path: string) => (await d.web.request(path, { headers: { cookie } })).text();
-  const lastTo = (address: string) => d.demo.outbox().filter((m) => m.to === address).at(-1)!;
+  const lastTo = (address: string) => d.demo.outbox(d.seed.ids.aliceId).filter((m) => m.to === address).at(-1)!;
   const tokenOf = (link: string) => new URL(link.match(/https?:\/\/\S+/)![0]).pathname.split('/').at(-1)!;
   const tradieId = (businessName: string) => alice.people('tradie').find((t) => t.businessName === businessName)!.id;
 
@@ -43,7 +43,7 @@ describe('the demo script', () => {
     const TOM = '+61400000001';
 
     await d.say('Tom Tran', 'The kitchen tap is dripping');
-    expect(d.demo.outbox().filter((m) => m.to === TOM).map((m) => m.template)).toEqual(['tenant.acknowledgement', 'tenant.guided_question']);
+    expect(d.demo.outbox(d.seed.ids.aliceId).filter((m) => m.to === TOM).map((m) => m.template)).toEqual(['tenant.acknowledgement', 'tenant.guided_question']);
     await d.say('Tom Tran', 'Kitchen sink');
     await d.say('Tom Tran', 'Since Monday');
     await d.say('Tom Tran', 'No');
@@ -103,7 +103,7 @@ describe('the demo script', () => {
     await d.post(`${ticketPath}/close`, {});
 
     expect(d.lastTo(TOM).template).toBe('tenant.ticket_closed');
-    const trackerLink = d.demo.outbox().find((m) => m.to === TOM && m.template === 'tenant.confirmed')!.text;
+    const trackerLink = d.demo.outbox(d.seed.ids.aliceId).find((m) => m.to === TOM && m.template === 'tenant.confirmed')!.text;
     const tracker = await (await d.web.request(`/t/${d.tokenOf(trackerLink)}`)).text();
     expect(tracker).toContain('Closed');
     expect(tracker).not.toContain('$');

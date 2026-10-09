@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'vitest';
 import type { DemoControls, DemoInboundMessage, DemoOutboundMessage } from '../../src/demo/controls.ts';
+import { ActionError } from '../../src/shared.ts';
 import { formatWhen } from '../../src/web/ui.ts';
 import { webWorld } from '../support/web.ts';
+import { AGENCY_INBOX, AGENCY_NUMBER } from '../support/harness.ts';
 import { BARRY, OLIVIA, OLIVIA_EMAIL, PETE, TOM } from '../support/world.ts';
 
 const TOM_ID = 901;
@@ -9,14 +11,21 @@ const PETE_ID = 902;
 const OLIVIA_ID = 903;
 const BARRY_ID = 904;
 
-/** A demo with four people outside the Agency and a few messages, recording what the simulator asks of it. */
-function fakeDemo() {
-  const sent: { from: string; channel: string; text: string; attachments: { filename: string; contentType: string; content: Uint8Array }[] | undefined }[] = [];
+/**
+ * A demo with four people outside Harbour Realty and a few messages, recording
+ * what the simulator asks of it. Only Property Managers added to `harbour` see
+ * them; WhatsApp is refused as not connected when `noWhatsApp` is set.
+ */
+function fakeDemo(o: { noWhatsApp?: boolean } = {}) {
+  const harbour = new Set<number>();
+  const ours = <T>(propertyManagerId: number, items: T[]) => (harbour.has(propertyManagerId) ? items : []);
+  const sent: { as: number; from: string; channel: string; text: string; attachments: { filename: string; contentType: string; content: Uint8Array }[] | undefined }[] = [];
   const advanced: number[] = [];
   let now = new Date('2026-10-08T09:00:00+11:00');
   const outbox: DemoOutboundMessage[] = [
     {
       at: '2026-10-07T22:00:01.000Z',
+      from: AGENCY_NUMBER,
       to: TOM,
       cc: [],
       channel: 'sms',
@@ -27,6 +36,7 @@ function fakeDemo() {
     },
     {
       at: '2026-10-07T22:05:00.000Z',
+      from: AGENCY_NUMBER,
       to: TOM,
       cc: [],
       channel: 'sms',
@@ -37,6 +47,7 @@ function fakeDemo() {
     },
     {
       at: '2026-10-07T23:00:00.000Z',
+      from: AGENCY_INBOX,
       to: OLIVIA_EMAIL,
       cc: [],
       channel: 'email',
@@ -46,18 +57,22 @@ function fakeDemo() {
       attachments: ['quote.pdf'],
     },
   ];
-  const inbound: DemoInboundMessage[] = [{ at: '2026-10-07T22:00:01.000Z', from: TOM, channel: 'sms', text: 'The kitchen tap is dripping', attachments: [] }];
+  const inbound: DemoInboundMessage[] = [
+    { at: '2026-10-07T22:00:01.000Z', from: TOM, to: AGENCY_NUMBER, channel: 'sms', text: 'The kitchen tap is dripping', attachments: [] },
+  ];
   const demo: DemoControls = {
-    contacts: () => [
-      { personId: TOM_ID, name: 'Tom Tran', role: 'tenant', mobile: TOM, email: null },
-      { personId: PETE_ID, name: 'Pete Park', role: 'tradie', mobile: PETE, email: null },
-      { personId: OLIVIA_ID, name: 'Olivia Owens', role: 'owner', mobile: OLIVIA, email: OLIVIA_EMAIL },
-      { personId: BARRY_ID, name: 'Barry Strata', role: 'building_manager', mobile: null, email: BARRY },
-    ],
-    outbox: () => outbox,
-    inbound: () => inbound,
-    async sendAs(from, channel, text, attachments) {
-      sent.push({ from, channel, text, attachments });
+    contacts: (id) =>
+      ours(id, [
+        { personId: TOM_ID, name: 'Tom Tran', role: 'tenant', mobile: TOM, email: null },
+        { personId: PETE_ID, name: 'Pete Park', role: 'tradie', mobile: PETE, email: null },
+        { personId: OLIVIA_ID, name: 'Olivia Owens', role: 'owner', mobile: OLIVIA, email: OLIVIA_EMAIL },
+        { personId: BARRY_ID, name: 'Barry Strata', role: 'building_manager', mobile: null, email: BARRY },
+      ]),
+    outbox: (id) => ours(id, outbox),
+    inbound: (id) => ours(id, inbound),
+    async sendAs(id, from, channel, text, attachments) {
+      if (o.noWhatsApp && channel === 'whatsapp') throw new ActionError('invalid', 'Connect WhatsApp in Setup first');
+      sent.push({ as: id, from, channel, text, attachments });
     },
     async advance(hours) {
       advanced.push(hours);
@@ -65,12 +80,13 @@ function fakeDemo() {
     },
     now: () => now,
   };
-  return { demo, sent, advanced };
+  return { demo, sent, advanced, harbour };
 }
 
-async function simulator() {
-  const fake = fakeDemo();
+async function simulator(o: { noWhatsApp?: boolean } = {}) {
+  const fake = fakeDemo(o);
   const w = await webWorld({ demo: fake.demo });
+  fake.harbour.add(w.ids.aliceId).add(w.ids.bobId);
   const cookie = await w.signIn();
   return { ...w, ...fake, cookie };
 }
@@ -132,17 +148,17 @@ describe('the phone simulator', () => {
   });
 
   test('replying as a contact sends in from their address on the chosen channel', async () => {
-    const { post, cookie, sent } = await simulator();
+    const { post, cookie, sent, ids } = await simulator();
 
     const res = await post('/demo/send', { contact: TOM_ID, channel: 'whatsapp', text: '  Yes  ' }, cookie);
 
     expect(res.status).toBe(303);
     expect(res.headers.get('location')).toMatch(new RegExp(`^/demo\\?contact=${TOM_ID}&ok=`));
-    expect(sent).toEqual([{ from: TOM, channel: 'whatsapp', text: 'Yes', attachments: [] }]);
+    expect(sent).toEqual([{ as: ids.aliceId, from: TOM, channel: 'whatsapp', text: 'Yes', attachments: [] }]);
   });
 
   test('a quick reply sends its text, and a file goes as an attachment', async () => {
-    const { web, post, cookie, sent } = await simulator();
+    const { web, post, cookie, sent, ids } = await simulator();
 
     await post('/demo/send', { contact: PETE_ID, channel: 'sms', quick: '$180, Tue 9am', text: '' }, cookie);
     const form = new FormData();
@@ -154,8 +170,8 @@ describe('the phone simulator', () => {
 
     expect(res.status).toBe(303);
     expect(sent).toEqual([
-      { from: PETE, channel: 'sms', text: '$180, Tue 9am', attachments: [] },
-      { from: PETE, channel: 'sms', text: 'Here is my quote', attachments: [{ filename: 'quote.pdf', contentType: 'application/pdf', content: new Uint8Array([1, 2, 3]) }] },
+      { as: ids.aliceId, from: PETE, channel: 'sms', text: '$180, Tue 9am', attachments: [] },
+      { as: ids.aliceId, from: PETE, channel: 'sms', text: 'Here is my quote', attachments: [{ filename: 'quote.pdf', contentType: 'application/pdf', content: new Uint8Array([1, 2, 3]) }] },
     ]);
   });
 
@@ -168,6 +184,37 @@ describe('the phone simulator', () => {
     expect(decodeURIComponent(noEmail.headers.get('location')!)).toContain("Tom Tran can't send by Email");
     expect(decodeURIComponent(empty.headers.get('location')!)).toContain('Type a message or attach a file');
     expect(sent).toEqual([]);
+  });
+
+  test("a channel the Agency hasn't connected is refused with how to fix it", async () => {
+    const { post, get, cookie, sent } = await simulator({ noWhatsApp: true });
+
+    const res = await post('/demo/send', { contact: TOM_ID, channel: 'whatsapp', text: 'Hello' }, cookie);
+
+    expect(decodeURIComponent(res.headers.get('location')!)).toContain('Connect WhatsApp in Setup first');
+    expect(await (await get(res.headers.get('location')!, cookie)).text()).toContain('Connect WhatsApp in Setup first');
+    expect(sent).toEqual([]);
+  });
+
+  test("shows only the signed-in Property Manager's Agency, and says which channels it still has to connect", async () => {
+    const { web, get } = await simulator();
+    const signUp = await web.request('/signup', {
+      method: 'POST',
+      body: new URLSearchParams({ name: 'Sam Sun', email: 'sam@sunrise.example', password: 'sunrise-2026', confirmPassword: 'sunrise-2026', agencyName: 'Sunrise Realty', timeZone: 'Australia/Sydney' }),
+    });
+    const sam = signUp.headers.get('set-cookie')!.split(';')[0]!;
+
+    const page = await (await get('/demo', sam)).text();
+
+    for (const name of ['Tom Tran', 'Pete Park', 'Olivia Owens', 'Approve a repair at 12 King St']) expect(page).not.toContain(name);
+    expect(page).toContain('SMS, WhatsApp and Email not connected yet');
+    expect(page).toContain('href="/welcome/channels"');
+    expect(page).toContain('No people to act as yet');
+  });
+
+  test('Harbour Realty, with every channel connected, gets no notice about channels', async () => {
+    const { get, cookie } = await simulator();
+    expect(await (await get('/demo', cookie)).text()).not.toContain('not connected yet');
   });
 
   test('moving the clock runs the demo forward and says where it is now', async () => {

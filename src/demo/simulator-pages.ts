@@ -1,7 +1,8 @@
 // The demo phone simulator under /demo. A signed-in Property Manager presenting the
-// demo acts as any Tenant, Tradie, Property Owner or Building Manager: reads what
-// myEST8 sent to their phone or inbox, replies on any of their channels, and moves
-// the demo clock on so reminders and timeouts run.
+// demo acts as any Tenant, Tradie, Property Owner or Building Manager of their own
+// Agency: reads what myEST8 sent to their phone or inbox, replies on any of their
+// channels to the Agency's own number or inbox, and moves the demo clock on so
+// reminders and timeouts run.
 
 import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
@@ -10,7 +11,7 @@ import type { ChannelType } from '../ports.ts';
 import { ActionError, type Role } from '../shared.ts';
 import type { WebEnv } from '../web/env.ts';
 import { files, int, text, type FormValues } from '../web/forms.ts';
-import { badge, button, card, chatBubble, emptyState, flashFrom, formatWhen, humanise, page, postButton, withFlash, type Html } from '../web/ui.ts';
+import { alert, badge, button, card, chatBubble, emptyState, flashFrom, formatWhen, humanise, linkButton, page, postButton, withFlash, type Html } from '../web/ui.ts';
 import type { DemoContact, DemoControls, DemoInboundMessage, DemoOutboundMessage } from './controls.ts';
 
 const MB = 1024 * 1024;
@@ -58,14 +59,18 @@ export function simulatorPages(demo: DemoControls) {
 
   pages.get('/', (c) => {
     const timeZone = agencyTimeZone(c);
-    const contacts = demo.contacts();
-    const outbox = demo.outbox();
-    const inbound = demo.inbound();
+    const me = c.get('pm').id;
+    const contacts = demo.contacts(me);
+    const outbox = demo.outbox(me);
+    const inbound = demo.inbound(me);
+    const connected = c.get('actions').channels().map((ch) => ch.type);
+    const missing = (Object.keys(CHANNEL_LABEL) as ChannelType[]).filter((ch) => !connected.includes(ch));
     const selected = contacts.find((p) => String(p.personId) === c.req.query('contact')) ?? null;
     const received = (p: DemoContact) => outbox.filter((m) => [m.to, ...m.cc].some((a) => owns(p, a))).length;
     const thread = selected ? threadOf(selected, outbox, inbound) : [];
 
-    const body = html`<div class="grid gap-4 lg:grid-cols-[16rem_minmax(0,1fr)_20rem]">
+    const body = html`${missing.length ? unconnectedNotice(missing) : ''}
+      <div class="grid gap-4 lg:grid-cols-[16rem_minmax(0,1fr)_20rem]">
       <aside class="hidden lg:block" aria-label="People">${contactList(contacts, selected, received)}</aside>
       <section class="min-w-0 space-y-4">
         ${contactPicker(contacts, selected)}
@@ -81,7 +86,8 @@ export function simulatorPages(demo: DemoControls) {
 
   pages.post('/send', bodyLimit({ maxSize: 40 * MB }), async (c) => {
     const form = (await c.req.parseBody({ all: true })) as FormValues;
-    const contact = demo.contacts().find((p) => String(p.personId) === text(form, 'contact'));
+    const me = c.get('pm').id;
+    const contact = demo.contacts(me).find((p) => String(p.personId) === text(form, 'contact'));
     return refusable(c, contact ? threadPath(contact.personId) : '/demo', async () => {
       if (!contact) throw new ActionError('not_found', 'Pick someone to act as');
       const asked = text(form, 'channel');
@@ -100,7 +106,7 @@ export function simulatorPages(demo: DemoControls) {
         })),
       );
       if (!message && !attachments.length) throw new ActionError('invalid', 'Type a message or attach a file');
-      await demo.sendAs(address, channel, message, attachments);
+      await demo.sendAs(me, address, channel, message, attachments);
       return `Sent as ${contact.name} by ${CHANNEL_LABEL[channel]}`;
     });
   });
@@ -165,6 +171,18 @@ function threadOf(contact: DemoContact, outbox: DemoOutboundMessage[], inbound: 
   return [...theirs, ...ours]
     .sort((a, b) => Date.parse(a.message.at) - Date.parse(b.message.at) || a.order[0]! - b.order[0]! || a.order[1]! - b.order[1]!)
     .map((m) => m.message);
+}
+
+/** People can only message the Agency on the channels it has connected. */
+function unconnectedNotice(missing: ChannelType[]): Html {
+  const names = missing.map((ch) => CHANNEL_LABEL[ch]);
+  const list = names.length < 2 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+  return alert(
+    html`<p>Connect ${list} in Setup first. Until then, nobody can message the Agency that way from here.</p>
+      <p class="mt-2">${linkButton('Connect channels', '/welcome/channels', { size: 'sm' })}</p>`,
+    'info',
+    { title: `${list} not connected yet` },
+  );
 }
 
 function channelBadge(channel: ChannelType): Html {

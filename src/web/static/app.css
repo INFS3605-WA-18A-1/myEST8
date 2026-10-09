@@ -84,6 +84,12 @@
     .checkbox {
       --input-color: color-mix(in oklab, var(--color-base-content) 55%, transparent);
     }
+    /* A refused field keeps daisyUI's error border; the message under it says why. */
+    .input-error,
+    .select-error,
+    .textarea-error {
+      --input-color: var(--color-error);
+    }
 
     /* 16px text in fields on phones, so iOS Safari doesn't zoom in on focus. */
     @media (max-width: 40rem) {

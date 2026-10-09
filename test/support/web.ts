@@ -4,6 +4,32 @@ import { createSessions } from '../../src/web/auth.ts';
 import { createWebApp } from '../../src/web/server.ts';
 import { PASSWORD, world } from './world.ts';
 
+/** A new Agency's complete, valid sign-up form, with `changes` applied. */
+export function signUpFields(changes: Record<string, string> = {}) {
+  return {
+    name: 'Sam Sun',
+    email: 'sam@sunrise.example',
+    password: 'sunrise-2026',
+    confirmPassword: 'sunrise-2026',
+    agencyName: 'Sunrise Realty',
+    timeZone: 'Australia/Brisbane',
+    ...changes,
+  };
+}
+
+/** A page's visible text: tags dropped, entities decoded, spaces collapsed. */
+export function visible(page: string) {
+  return page
+    .replace(/<(script|style)[\s\S]*?<\/\1>/g, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ');
+}
+
 /** The standard world behind the web app, with helpers to sign in and click through pages. */
 export async function webWorld(options: { demo?: DemoControls } = {}) {
   const w = await world();
@@ -40,5 +66,13 @@ export async function webWorld(options: { demo?: DemoControls } = {}) {
     return res;
   }
 
-  return { ...w, web, signIn, get, post };
+  /** Signs a new Agency up through /signup and returns its first Property Manager's session cookie. */
+  async function signUp(changes: Record<string, string> = {}) {
+    const res = await web.request('/signup', { method: 'POST', body: new URLSearchParams(signUpFields(changes)) });
+    const cookie = res.headers.get('set-cookie')?.split(';')[0];
+    if (res.status !== 303 || !cookie) throw new Error(`Sign-up failed: ${res.status}`);
+    return cookie;
+  }
+
+  return { ...w, web, signIn, signUp, get, post };
 }

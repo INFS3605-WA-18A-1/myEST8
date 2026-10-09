@@ -44,6 +44,7 @@ describe('mock classifier', () => {
     ['There is mould on the bedroom ceiling', 'high', 0.9],
     ['The kitchen tap is leaking', 'high', 0.9],
     ['The kitchen tap is dripping', 'routine', 0.8],
+    ['The power point is buzzing and warm to touch', 'urgent', 0.5],
   ])('urgency: %s -> %s', async (text, answer, confidence) => {
     expect(await ask(text, tenant(), { id: 'urgency', options: URGENCIES })).toEqual({ answer, confidence });
   });

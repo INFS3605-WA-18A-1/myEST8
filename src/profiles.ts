@@ -2,7 +2,7 @@ import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import type { Context } from './context.ts';
 import { all, one, run, transaction } from './db.ts';
 import type { ChannelType } from './ports.ts';
-import { invalid, iso, normalizeAddress, notFound, type Availability, type Role, type Trade } from './shared.ts';
+import { ActionError, invalid, isEmail, iso, normalizeAddress, notFound, type Availability, type Role, type Trade } from './shared.ts';
 
 export interface Agency {
   id: number;
@@ -50,6 +50,30 @@ export interface Property {
   buildingManagerId: number | null;
   nominatedTradieIds: number[];
 }
+
+/** One of the Agency's channels: the address Tenants, Tradies and Property Owners send to, and when it last passed a test message. */
+export interface AgencyChannel {
+  type: ChannelType;
+  address: string;
+  testedAt: string | null;
+}
+
+/** A new Agency and the Property Manager signing it up. */
+export type SignUp = {
+  agencyName: string;
+  timeZone: string;
+  name: string;
+  email: string;
+  password: string;
+};
+
+/** Passwords shorter than this are refused. */
+export const MIN_PASSWORD_LENGTH = 10;
+
+const CHANNEL_ORDER: ChannelType[] = ['sms', 'whatsapp', 'email'];
+
+/** Letters and digits that can't be mistaken for each other when read off a screen. */
+const READABLE = 'abcdefghjkmnpqrstuvwxyz23456789';
 
 export type NewPerson = {
   role: Role;
@@ -104,6 +128,22 @@ type PropertyRow = {
 
 /** Compared against when an email is unknown; no password matches it. */
 const UNUSABLE_HASH = `scrypt$${randomBytes(16).toString('base64')}$${randomBytes(32).toString('base64')}`;
+
+/** A password to read out or copy once: three groups of four, like "k7mq-x2rd-9pfa". */
+function temporaryPassword() {
+  const bytes = randomBytes(12);
+  const chars = [...bytes].map((b) => READABLE[b % READABLE.length]);
+  return [0, 4, 8].map((i) => chars.slice(i, i + 4).join('')).join('-');
+}
+
+function isTimeZone(timeZone: string) {
+  try {
+    new Intl.DateTimeFormat('en', { timeZone });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function hashPassword(password: string) {
   const salt = randomBytes(16);
@@ -247,8 +287,41 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
       agencyId,
       normalized,
     );
-    if (existing && existing.person_id !== personId) invalid(`${address} already belongs to someone else`);
+    if (existing && existing.person_id !== personId) invalid(`${address} already belongs to someone else`, address.includes('@') ? 'email' : 'mobile');
     if (!existing) run(db, 'INSERT INTO contact_addresses (agency_id, address, person_id) VALUES (?, ?, ?)', agencyId, normalized, personId);
+  }
+
+  function emailTaken(email: string) {
+    return !!one(db, 'SELECT 1 FROM property_managers WHERE email = ?', normalizeAddress(email));
+  }
+
+  /** What's wrong with a new Property Manager's name and email, by field. */
+  function accountProblems(input: { name: string; email: string }): Record<string, string> {
+    const problems: Record<string, string> = {};
+    if (!input.name.trim()) problems.name = 'Enter a name';
+    if (!input.email.trim()) problems.email = 'Enter an email address';
+    else if (!isEmail(input.email)) problems.email = `${input.email.trim()} isn't an email address`;
+    else if (emailTaken(input.email)) problems.email = 'An account with that email already exists';
+    return problems;
+  }
+
+  /** Refuses with every problem at once, each against its field; the first one is the message. */
+  function refuse(problems: Record<string, string>) {
+    const [first] = Object.values(problems);
+    if (!first) return;
+    const conflict = Object.keys(problems).length === 1 && problems.email === 'An account with that email already exists';
+    throw new ActionError(conflict ? 'conflict' : 'invalid', first, problems);
+  }
+
+  function insertPropertyManager(agencyId: number, input: { name: string; email: string; password?: string }) {
+    return run(
+      db,
+      'INSERT INTO property_managers (agency_id, name, email, password_hash) VALUES (?, ?, ?, ?)',
+      agencyId,
+      input.name.trim(),
+      normalizeAddress(input.email),
+      input.password ? hashPassword(input.password) : null,
+    );
   }
 
   async function googleRating(placeId: string) {
@@ -257,11 +330,7 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
 
   return {
     createAgency(input: { name: string; timeZone: string }) {
-      try {
-        new Intl.DateTimeFormat('en', { timeZone: input.timeZone });
-      } catch {
-        invalid(`Unknown time zone ${input.timeZone}`);
-      }
+      if (!isTimeZone(input.timeZone)) invalid(`Unknown time zone ${input.timeZone}`);
       return run(db, 'INSERT INTO agencies (name, time_zone) VALUES (?, ?)', input.name, input.timeZone);
     },
 
@@ -272,14 +341,36 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
     },
 
     addPropertyManager(agencyId: number, input: { name: string; email: string; password?: string }) {
-      return run(
-        db,
-        'INSERT INTO property_managers (agency_id, name, email, password_hash) VALUES (?, ?, ?, ?)',
-        agencyId,
-        input.name,
-        normalizeAddress(input.email),
-        input.password ? hashPassword(input.password) : null,
-      );
+      return insertPropertyManager(agencyId, input);
+    },
+
+    /**
+     * Creates an Agency and the Property Manager signing it up, together or not at
+     * all. Refuses a missing field, an email that isn't one, a password under
+     * MIN_PASSWORD_LENGTH characters, an unknown time zone and an email that
+     * already has an account, each against its field. Returns the Property Manager's id.
+     */
+    signUp(input: SignUp): number {
+      const problems = accountProblems(input);
+      if (!input.password) problems.password = 'Choose a password';
+      else if (input.password.length < MIN_PASSWORD_LENGTH) problems.password = `Use at least ${MIN_PASSWORD_LENGTH} characters`;
+      if (!input.agencyName.trim()) problems.agencyName = "Enter your Agency's name";
+      if (!isTimeZone(input.timeZone)) problems.timeZone = 'Choose a time zone';
+      refuse(problems);
+      return transaction(db, () => {
+        const agencyId = run(db, 'INSERT INTO agencies (name, time_zone) VALUES (?, ?)', input.agencyName.trim(), input.timeZone);
+        return insertPropertyManager(agencyId, input);
+      });
+    },
+
+    /**
+     * Adds a colleague to the Agency as a Property Manager with a temporary
+     * password, checked like a sign-up. The password is returned once, to pass on.
+     */
+    addColleague(agencyId: number, input: { name: string; email: string }) {
+      refuse(accountProblems(input));
+      const password = temporaryPassword();
+      return { propertyManagerId: insertPropertyManager(agencyId, { ...input, password }), temporaryPassword: password };
     },
 
     /** The Property Manager with this email and password, or null. */
@@ -337,6 +428,17 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
       if (existing && existing.agency_id !== agencyId) invalid(`${address} is connected to another Agency`);
       run(db, 'DELETE FROM agency_channels WHERE agency_id = ? AND channel_type = ?', agencyId, channelType);
       run(db, 'INSERT INTO agency_channels (agency_id, channel_type, address) VALUES (?, ?, ?)', agencyId, channelType, normalized);
+    },
+
+    /** The Agency's connected channels: SMS, then WhatsApp, then email. */
+    channels(agencyId: number): AgencyChannel[] {
+      return all<{ channel_type: ChannelType; address: string; tested_at: string | null }>(
+        db,
+        'SELECT channel_type, address, tested_at FROM agency_channels WHERE agency_id = ?',
+        agencyId,
+      )
+        .map((r) => ({ type: r.channel_type, address: r.address, testedAt: r.tested_at }))
+        .sort((a, b) => CHANNEL_ORDER.indexOf(a.type) - CHANNEL_ORDER.indexOf(b.type));
     },
 
     markChannelTested(agencyId: number, channelType: ChannelType) {

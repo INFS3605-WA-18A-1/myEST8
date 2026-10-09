@@ -163,8 +163,24 @@ export function page(o: {
     </html>`;
 }
 
-/** A page for people who don't sign in: Tenants using an upload or tracker link. Phone first. */
-export function publicPage(o: { title: string; flash?: Flash | null; body: Html; subtitle?: Html | string }): Html {
+const TENANT_FOOTER = 'Questions? Reply to the message your Property Manager sent you.';
+
+/**
+ * A page for someone who isn't signed in: a Tenant using an upload or tracker
+ * link, or a Property Manager signing in or up. Phone first. `wide` gives the
+ * body the full app width; `headerActions` sit at the right of the top bar;
+ * `footer` replaces the line for Tenants.
+ */
+export function publicPage(o: {
+  title: string;
+  flash?: Flash | null;
+  body: Html;
+  subtitle?: Html | string;
+  wide?: boolean;
+  headerActions?: Html;
+  footer?: Html | string;
+}): Html {
+  const width = o.wide ? '' : 'app-container-narrow';
   return html`<!doctype html>
     <html lang="en-AU" data-theme="${THEME}">
       <head>
@@ -173,18 +189,17 @@ export function publicPage(o: { title: string; flash?: Flash | null; body: Html;
       <body class="min-h-screen bg-base-200 text-base-content antialiased">
         <a href="#main" class="skip-link">Skip to content</a>
         <header class="border-b border-base-300 bg-base-100">
-          <div class="app-container app-container-narrow flex min-h-14 items-center gap-2">
+          <div class="app-container ${width} flex min-h-14 items-center gap-2">
             <span class="text-primary">${ICON.home}</span>
             <span class="text-lg font-bold tracking-tight text-primary">myEST8</span>
+            ${o.headerActions ? html`<div class="ml-auto flex items-center gap-2">${o.headerActions}</div>` : ''}
           </div>
         </header>
-        <main id="main" class="app-container app-container-narrow space-y-5 py-6">
+        <main id="main" class="app-container ${width} space-y-5 py-6">
           ${o.flash ? flashMessage(o.flash) : ''} ${heading(o.title, o.subtitle)}
           <div class="space-y-5">${o.body}</div>
         </main>
-        <footer class="app-container app-container-narrow pb-8 text-center text-xs text-base-content/75">
-          Questions? Reply to the message your Property Manager sent you.
-        </footer>
+        <footer class="app-container ${width} pb-8 text-center text-xs text-base-content/75">${o.footer ?? TENANT_FOOTER}</footer>
       </body>
     </html>`;
 }
@@ -390,12 +405,18 @@ export function field(o: {
   rows?: number;
   /** For checkboxes. */
   checked?: boolean;
+  /** Why the posted value was refused, shown under the control. */
+  error?: string;
 }): Html {
   const id = o.id ?? `field-${o.name}`;
   const type = o.type ?? 'text';
   const hintId = `${id}-hint`;
+  const errorId = `${id}-error`;
   const hint = o.hint ? html`<p id="${hintId}" class="label text-xs">${o.hint}</p>` : '';
-  const common = html`id="${id}" name="${o.name}" ${o.required ? 'required' : ''} ${o.multiple ? 'multiple' : ''} ${o.hint ? html`aria-describedby="${hintId}"` : ''}`;
+  const error = o.error ? html`<p id="${errorId}" class="label text-sm font-medium text-error">${o.error}</p>` : '';
+  const describedBy = [o.error ? errorId : '', o.hint ? hintId : ''].filter(Boolean).join(' ');
+  const common = html`id="${id}" name="${o.name}" ${o.required ? 'required' : ''} ${o.multiple ? 'multiple' : ''} ${describedBy ? html`aria-describedby="${describedBy}"` : ''} ${o.error ? html`aria-invalid="true"` : ''}`;
+  const invalid = o.error ? ' input-error' : '';
 
   if (type === 'checkbox') {
     return html`<div class="fieldset">
@@ -403,24 +424,24 @@ export function field(o: {
         <input ${common} type="checkbox" class="checkbox checkbox-primary checkbox-sm mt-0.5" value="${o.value ?? 'on'}" ${o.checked ? 'checked' : ''} />
         <span>${o.label}</span>
       </label>
-      ${hint}
+      ${error} ${hint}
     </div>`;
   }
 
   const control =
     type === 'textarea'
-      ? html`<textarea ${common} class="textarea w-full" rows="${o.rows ?? 4}" placeholder="${o.placeholder ?? ''}">${o.value ?? ''}</textarea>`
+      ? html`<textarea ${common} class="textarea w-full${invalid.replace('input', 'textarea')}" rows="${o.rows ?? 4}" placeholder="${o.placeholder ?? ''}">${o.value ?? ''}</textarea>`
       : type === 'select'
-        ? html`<select ${common} class="select w-full ${o.multiple ? 'h-auto min-h-28 py-2' : ''}">
+        ? html`<select ${common} class="select w-full${invalid.replace('input', 'select')} ${o.multiple ? 'h-auto min-h-28 py-2' : ''}">
             ${o.placeholder ? html`<option value="">${o.placeholder}</option>` : ''}
             ${(o.options ?? []).map((opt) => html`<option value="${opt.value}" ${String(o.value ?? '') === opt.value ? 'selected' : ''}>${opt.label}</option>`)}
           </select>`
         : type === 'file'
           ? html`<input ${common} type="file" class="file-input w-full" ${o.accept ? html`accept="${o.accept}"` : ''} />`
-          : html`<input ${common} type="${type}" class="input w-full" value="${o.value ?? ''}" placeholder="${o.placeholder ?? ''}" ${o.autocomplete ? html`autocomplete="${o.autocomplete}"` : ''} ${o.step ? html`step="${o.step}"` : ''} ${o.min !== undefined ? html`min="${o.min}"` : ''} ${o.max !== undefined ? html`max="${o.max}"` : ''} />`;
+          : html`<input ${common} type="${type}" class="input w-full${invalid}" value="${o.value ?? ''}" placeholder="${o.placeholder ?? ''}" ${o.autocomplete ? html`autocomplete="${o.autocomplete}"` : ''} ${o.step ? html`step="${o.step}"` : ''} ${o.min !== undefined ? html`min="${o.min}"` : ''} ${o.max !== undefined ? html`max="${o.max}"` : ''} />`;
   return html`<div class="fieldset">
     <label for="${id}" class="fieldset-legend text-sm font-medium">${o.label}</label>
-    ${control} ${hint}
+    ${control} ${error} ${hint}
   </div>`;
 }
 
@@ -446,15 +467,29 @@ export function statGroup(items: Html[]): Html {
  * readers; the first stage not done is the current one. Vertical on phones and
  * horizontal on wide screens, or always vertical with `vertical`.
  */
-export function steps(items: { label: string; done: boolean; detail?: string }[], o: { vertical?: boolean } = {}): Html {
-  const current = items.findIndex((item) => !item.done);
-  const responsive = !o.vertical;
-  return html`<ol class="steps steps-vertical ${responsive ? 'lg:steps-horizontal' : ''} w-full">
+export function steps(
+  items: { label: string; done: boolean; detail?: string; href?: string }[],
+  o: {
+    vertical?: boolean;
+    /** Always horizontal, with small labels on phones: a wizard's short step names. */
+    horizontal?: boolean;
+    /** The stage being shown, when it isn't simply the first one not done (a wizard's step). */
+    current?: number;
+  } = {},
+): Html {
+  const current = o.current ?? items.findIndex((item) => !item.done);
+  const responsive = !o.vertical && !o.horizontal;
+  const direction = o.horizontal ? 'steps-horizontal' : `steps-vertical ${responsive ? 'lg:steps-horizontal' : ''}`;
+  return html`<ol class="steps ${direction} w-full">
     ${items.map(
       (item, i) =>
-        html`<li class="step ${item.done ? 'step-primary' : ''}" ${item.done ? html`data-content="✓"` : ''} ${i === current ? html`aria-current="step"` : ''}>
-          <div class="pb-2 text-start ${responsive ? 'lg:px-1 lg:text-center' : ''}">
-            <span class="block text-sm ${item.done || i === current ? 'font-semibold' : 'text-base-content/80'}">${item.label}<span class="sr-only">${item.done ? ' (done)' : i === current ? ' (next)' : ''}</span></span>
+        html`<li class="step ${o.horizontal ? 'min-w-0' : ''} ${item.done || (o.current !== undefined && i === current) ? 'step-primary' : ''}" ${item.done ? html`data-content="✓"` : ''} ${i === current ? html`aria-current="step"` : ''}>
+          <div class="pb-2 ${o.horizontal ? 'px-0.5 text-center' : `text-start ${responsive ? 'lg:px-1 lg:text-center' : ''}`}">
+            <span class="block ${o.horizontal ? 'text-xs sm:text-sm' : 'text-sm'} ${item.done || i === current ? 'font-semibold' : 'text-base-content/80'}"
+              >${item.href && i !== current ? html`<a class="link link-hover" href="${item.href}">${item.label}</a>` : item.label}<span class="sr-only"
+                >${item.done ? ' (done)' : ''}${i === current ? (o.current === undefined ? ' (next)' : ' (this step)') : ''}</span
+              ></span
+            >
             ${item.detail ? html`<span class="block text-xs text-base-content/75">${item.detail}</span>` : ''}
           </div>
         </li>`,

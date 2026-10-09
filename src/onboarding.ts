@@ -7,12 +7,12 @@ type Contact = { name: string; mobile?: string; email?: string };
 const CHANNEL_TYPES: ChannelType[] = ['sms', 'whatsapp', 'email'];
 
 function requireContact(input: Contact) {
-  if (!input.name.trim()) invalid('Enter a name');
-  if (!input.mobile && !input.email) invalid('Enter a mobile number or email address');
+  if (!input.name.trim()) invalid('Enter a name', 'name');
+  if (!input.mobile && !input.email) invalid('Enter a mobile number or email address', 'mobile');
 }
 
-function requireDate(value: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(value))) invalid(`${value} is not a date (YYYY-MM-DD)`);
+function requireDate(value: string, field: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(value))) invalid(`${value} is not a date (YYYY-MM-DD)`, field);
 }
 
 /** Connecting the Agency's channels, test messages, and the forms for Properties, people and Tradies. */
@@ -46,7 +46,7 @@ export function createOnboarding({ ports, modules }: Context) {
 
     addTenant(agencyId: number, input: Contact & { propertyId: number; tenancyStart: string }) {
       requireContact(input);
-      requireDate(input.tenancyStart);
+      requireDate(input.tenancyStart, 'tenancyStart');
       profiles.propertyInAgency(agencyId, input.propertyId);
       return profiles.addPerson(agencyId, { role: 'tenant', ...input });
     },
@@ -64,12 +64,12 @@ export function createOnboarding({ ports, modules }: Context) {
         ),
     ) {
       requireContact(input);
-      if (!input.businessName.trim()) invalid('Enter the business name');
-      if (!input.trades.length || input.trades.some((t) => !TRADES.includes(t))) invalid(`Choose Trades from: ${TRADES.join(', ')}`);
+      if (!input.businessName.trim()) invalid('Enter the business name', 'businessName');
+      if (!input.trades.length || input.trades.some((t) => !TRADES.includes(t))) invalid(`Choose Trades from: ${TRADES.join(', ')}`, 'trades');
       if (!Number.isInteger(input.startingRating) || input.startingRating < 1 || input.startingRating > 5) {
-        invalid('The starting rating is a whole number from 1 to 5');
+        invalid('The starting rating is a whole number from 1 to 5', 'startingRating');
       }
-      if (!input.googlePlaceId && !input.notOnGoogle) invalid('Link the Tradie to their Google listing, or mark them as not on Google');
+      if (!input.googlePlaceId && !input.notOnGoogle) invalid('Link the Tradie to their Google listing, or mark them as not on Google', 'googlePlaceId');
       const { notOnGoogle: _, ...person } = input;
       const id = profiles.addPerson(agencyId, { role: 'tradie', ...person });
       await profiles.refreshGoogleRating(id);
@@ -88,8 +88,9 @@ export function createOnboarding({ ports, modules }: Context) {
         buildingManagerId?: number;
       },
     ) {
-      if (!input.address.trim() || !input.suburb.trim()) invalid('Enter the address and suburb');
-      if (!Number.isInteger(input.maxRepairCostCents) || input.maxRepairCostCents < 0) invalid('The Max Repair Cost must be zero or more');
+      if (!input.address.trim()) invalid('Enter the address and suburb', 'address');
+      if (!input.suburb.trim()) invalid('Enter the address and suburb', 'suburb');
+      if (!Number.isInteger(input.maxRepairCostCents) || input.maxRepairCostCents < 0) invalid('The Max Repair Cost must be zero or more', 'maxRepairCostCents');
       requireRole(agencyId, input.ownerId, 'owner');
       if (profiles.propertyManager(input.propertyManagerId).agencyId !== agencyId) invalid('Assign the Property to a Property Manager in your Agency');
       input.nominatedTradieIds.forEach((id) => requireRole(agencyId, id, 'tradie'));
