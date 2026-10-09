@@ -119,13 +119,11 @@ export function finishSetupBanner(actions: Actions): Html {
   const next = nextSetupStep(progress);
   if (!next) return html``;
   const left = NEEDED.filter((k) => !progress[k]).map((k) => STILL_TO_DO[k]);
-  return html`<div data-banner="finish-setup">
-    ${alert(
-      html`<p>Before Tenants' messages can reach you, ${sentence(left)}. The guide takes you through it.</p>
-        <p class="mt-3">${linkButton('Finish setting up', next, { variant: 'primary', size: 'sm' })}</p>`,
-      'info',
-      { title: `Finish setting up ${actions.agency().name}` },
-    )}
+  // One line on wide screens: a hi-vis stripe, the sentence, and the one link to the next step.
+  return html`<div data-banner="finish-setup" class="flex flex-wrap items-center gap-x-3 gap-y-1 overflow-hidden rounded-md border border-line bg-surface text-sm">
+    <span aria-hidden="true" class="inline-block h-6 w-4 shrink-0 self-center bg-[image:repeating-linear-gradient(-45deg,var(--ink)_0_4px,var(--hivis)_4px_8px)] sm:ml-2"></span>
+    <p class="min-w-0 flex-1 py-2 pl-2 sm:pl-0"><strong class="font-semibold">Finish setting up ${actions.agency().name}.</strong> Still to do: ${sentence(left)}.</p>
+    <div class="py-1.5 pr-3">${linkButton('Continue setup', next, { variant: 'primary', size: 'sm' })}</div>
   </div>`;
 }
 

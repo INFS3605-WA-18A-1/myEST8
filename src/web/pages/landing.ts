@@ -41,11 +41,14 @@ export function landingRoutes(app: App, sessions: Sessions, o: { demo: boolean }
   return routes;
 }
 
+const HEADLINE = 'Every repair request, from the first text to the finished job.';
+
 /** The landing page. */
 export function landingPage(o: { demo: boolean }): Html {
   return publicPage({
-    title: 'Maintenance dispatch for Property Managers',
-    wide: true,
+    title: HEADLINE,
+    titleSize: 'hero',
+    width: 'wide',
     headerActions: html`<a class="btn btn-ghost btn-sm" href="/login">Sign in</a>`,
     footer: SIGNED_OUT_FOOTER,
     body: html`${hero()}
@@ -54,17 +57,16 @@ export function landingPage(o: { demo: boolean }): Html {
   });
 }
 
-/** The headline and lead on the left; the text message and the docket it becomes on the right. */
+/** The headline is the page's h1 (publicPage's title); the lead and actions on the left, the text message and the docket it becomes on the right. */
 function hero(): Html {
-  return html`<section aria-labelledby="hero" class="grid items-center gap-10 md:grid-cols-2">
+  return html`<section class="grid items-center gap-10 md:grid-cols-2">
     <div class="space-y-5">
-      <h2 id="hero" class="text-[32px] leading-[1.15] font-semibold text-ink md:text-[40px]">Every repair request, from the first text to the finished job.</h2>
       <p class="max-w-[60ch] text-base">
         For Property Managers at small Agencies. Tenants' messages become Maintenance Requests for you to confirm, and Quotes, Property Owner
         approval and bookings run from there.
       </p>
       <div class="flex flex-col gap-3 sm:flex-row">
-        <a href="/signup" class="btn btn-primary" style="color: var(--color-primary-content)">Create your Agency's account</a>
+        ${linkButton("Create your Agency's account", '/signup', { variant: 'primary' })}
         ${linkButton('Sign in', '/login')}
       </div>
     </div>

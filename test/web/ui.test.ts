@@ -2,7 +2,7 @@ import { html } from 'hono/html';
 import { describe, expect, it } from 'vitest';
 import { assetRoutes } from '../../src/web/assets.ts';
 import { shellInfo } from '../../src/web/shell.ts';
-import { chatBubble, docket, field, page, type Html } from '../../src/web/ui.ts';
+import { chatBubble, docket, field, linkButton, page, publicPage, segmented, type Html } from '../../src/web/ui.ts';
 
 const render = async (markup: Html) => String(await markup);
 const HOSTILE = '<script>alert("x")</script>';
@@ -118,5 +118,50 @@ describe('ui', () => {
     expect(out).toContain('unread messages');
     expect(out).toContain('aria-hidden="true"');
     expect(out.match(/<a /g)).toHaveLength(1);
+  });
+
+  it('a primary link button carries the primary class, so its text stays white on the action colour', async () => {
+    const out = await render(linkButton('Create your account', '/signup', { variant: 'primary' }));
+    expect(out).toContain('href="/signup"');
+    expect(out).toMatch(/class="btn btn-primary"/);
+    expect(out).not.toContain('btn-outline');
+  });
+
+  it('a narrow public page applies the narrow width to its bar, column and footer', async () => {
+    const out = await render(publicPage({ title: 'Sign in to myEST8', width: 'narrow', body: html`<p>x</p>` }));
+    expect(out).toContain('class="public-bar-inner is-narrow"');
+    expect(out).toContain('class="public-main is-narrow"');
+    expect(out).toContain('class="public-footer is-narrow"');
+    expect(out).not.toContain('is-wide');
+  });
+
+  it('wide: true still gives the wide column, and the hero title is the page h1', async () => {
+    const out = await render(publicPage({ title: 'Headline', wide: true, titleSize: 'hero', body: html`<p>x</p>` }));
+    expect(out).toContain('class="public-main is-wide"');
+    expect(out).toContain('<h1 class="page-title is-hero">Headline</h1>');
+  });
+
+  it('page controls render in the second-row container, after the title', async () => {
+    const out = await render(
+      page({
+        title: 'Dashboard',
+        pm: { name: 'Alice' },
+        active: 'dashboard',
+        body: html`<p>x</p>`,
+        controls: segmented([
+          { label: 'Mine', href: '/', active: true },
+          { label: 'All', href: '/?filter=all', active: false },
+        ]),
+      }),
+    );
+    const controls = out.indexOf('<div class="topbar-controls">');
+    expect(controls).toBeGreaterThan(out.indexOf('<h1 class="topbar-title">Dashboard</h1>'));
+    expect(out.slice(controls)).toMatch(/<div class="topbar-controls">\s*<nav class="segmented"/);
+    expect(out.indexOf('class="topbar-end"')).toBeGreaterThan(controls);
+  });
+
+  it('a page without controls renders no controls container', async () => {
+    const out = await render(page({ title: 'Calendar', pm: { name: 'Alice' }, active: 'calendar', body: html`<p>x</p>` }));
+    expect(out).not.toContain('topbar-controls');
   });
 });

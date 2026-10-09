@@ -769,10 +769,10 @@ function workOrderForm(t: TicketView, job: JobView, x: Extras): Html {
 function workOrderDetails(t: TicketView, wo: WorkOrderView, x: Extras): Html {
   const active = wo.status === 'active';
   const suggesting = x.suggest?.workOrderId === wo.workOrderId;
-  // A link styled as a button; the primary one sets its own text colour, which the shared linkButton doesn't.
-  const suggest = wo.rescheduleRequestedBy
-    ? html`<a class="btn btn-sm btn-primary text-primary-content" href="/tickets/${t.ticketId}?suggest=${wo.workOrderId}">Suggest new times</a>`
-    : linkButton('Suggest new times', `/tickets/${t.ticketId}?suggest=${wo.workOrderId}`, { size: 'sm' });
+  const suggest = linkButton('Suggest new times', `/tickets/${t.ticketId}?suggest=${wo.workOrderId}`, {
+    variant: wo.rescheduleRequestedBy ? 'primary' : 'secondary',
+    size: 'sm',
+  });
   const tenant = wo.visitConfirmed
     ? badge('Confirmed the visit', 'success')
     : active

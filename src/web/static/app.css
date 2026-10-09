@@ -143,7 +143,8 @@
       line-height: 1.2;
     }
 
-    a {
+    /* Ordinary links are Deep Ocean. Links styled as buttons (.btn) keep their variant's text colour. :where keeps this at zero specificity, so any class (rail, docket, segmented) still wins. */
+    :where(a:not(.btn)) {
       color: var(--action);
     }
 
@@ -225,6 +226,14 @@
     .btn:focus-visible {
       outline: 2px solid var(--action);
       outline-offset: 2px;
+    }
+    /* Links styled as buttons: no underline; primary keeps white text on Deep Ocean whatever the link colour. */
+    .btn {
+      text-decoration: none;
+    }
+    .btn-primary,
+    .btn-primary:hover {
+      color: var(--color-primary-content);
     }
     /* Secondary: surface fill, a control border, ink text. */
     .btn-outline {
@@ -444,10 +453,21 @@
 
     /* ----- Steps: 24px circles; done is --done with a tick, current is --action, to come is --line. */
     .steps .step {
-      grid-template-rows: 24px 1fr;
       min-width: 3rem;
       --step-bg: var(--line);
       --step-fg: var(--ink);
+    }
+    /* Horizontal: the 24px circle on a 24px row, the detail below. Vertical rows grow with their text (daisyUI's auto rows). */
+    .steps-horizontal .step {
+      grid-template-rows: 24px 1fr;
+    }
+    .steps-vertical .step {
+      grid-template-rows: auto;
+    }
+    @media (min-width: 64rem) {
+      .steps.lg\:steps-horizontal .step {
+        grid-template-rows: 24px 1fr;
+      }
     }
     .steps .step[data-content] {
       --step-bg: var(--done);
@@ -883,6 +903,7 @@
 
     .topbar {
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
       gap: 12px;
       min-height: 56px;
@@ -891,7 +912,8 @@
       border-bottom: 1px solid var(--line);
     }
     .topbar-title {
-      min-width: 0;
+      flex: 1 1 0;
+      min-width: 12ch;
       margin: 0;
       overflow: hidden;
       font-family: var(--font-head);
@@ -904,10 +926,31 @@
     }
     .topbar-controls {
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
       gap: 12px;
-      margin-left: auto;
       min-width: 0;
+    }
+    .topbar-end {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+    /* Under 1024px the page's controls take a second row under the title, full width. */
+    @media (max-width: 63.99rem) {
+      .topbar {
+        padding-block: 8px;
+        padding-inline: 16px;
+      }
+      .topbar-controls {
+        order: 1;
+        flex: 0 0 100%;
+        padding-bottom: 4px;
+      }
+      .topbar-end {
+        order: 0;
+      }
     }
     .topbar-date {
       display: none;
@@ -1010,6 +1053,11 @@
       margin-inline: auto;
       padding-inline: 16px;
     }
+    .public-bar-inner.is-narrow,
+    .public-main.is-narrow,
+    .public-footer.is-narrow {
+      max-width: 400px;
+    }
     .public-bar-inner.is-wide,
     .public-main.is-wide,
     .public-footer.is-wide {
@@ -1089,6 +1137,16 @@
       line-height: 1.2;
       color: var(--ink);
       overflow-wrap: anywhere;
+    }
+    /* The landing headline: 32px on phones, 40px from 768px. */
+    .page-title.is-hero {
+      font-size: 32px;
+      line-height: 1.15;
+    }
+    @media (min-width: 48rem) {
+      .page-title.is-hero {
+        font-size: 40px;
+      }
     }
     .page-subtitle {
       margin: 0;

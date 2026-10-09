@@ -27,7 +27,6 @@ import {
   linkButton,
   page,
   postButton,
-  queueRow,
   section,
   segmented,
   table,
@@ -36,7 +35,7 @@ import {
   type Html,
   type Tone,
 } from '../ui.ts';
-import { bookingList, bookingTrades, type Booking } from './calendar.ts';
+import type { Booking } from './calendar.ts';
 import { finishSetupBanner } from './welcome.ts';
 
 type Dashboard = ReturnType<PropertyManagerActions['dashboard']>;
@@ -107,6 +106,10 @@ const BOARD_CLASS = [
   '[&_.docket-perf]:!border-dashed',
   '[&_.docket-perf]:!border-control',
   '[&_.docket-body]:!p-2',
+  '[&_.docket-address]:!whitespace-normal',
+  '[&_.docket-address]:line-clamp-2',
+  '[&_.docket-issue]:!whitespace-normal',
+  '[&_.docket-issue]:line-clamp-2',
 ].join(' ');
 
 /** The board's lanes in workflow order. Each lane's key is the Job status that puts a Ticket in it. */
@@ -132,7 +135,6 @@ export function dashboardPages() {
     const { timeZone } = actions.agency();
     const now = actions.now();
     const people = view.inbox.some((item) => item.personId === null) ? actions.people() : [];
-    const trades = bookingTrades(actions, view.calendar, view.tickets.flatMap((t) => t.jobs));
     const q = filter === 'all' ? '?filter=all' : '';
     const needReceipt = view.urgentRepairs.filter((u) => u.status === 'reminder_sent').length;
     const board = boardOf(actions, view.tickets);
@@ -157,23 +159,16 @@ export function dashboardPages() {
             { label: 'In the inbox', count: view.inbox.length, href: '#inbox', decision: true },
             { label: 'Urgent Repairs needing a receipt', count: needReceipt, href: '#urgent-repairs' },
           ])}
-          <div class="dispatch grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)] lg:items-start">
-            ${decisions(view, q, timeZone, now)}
+          <div class="dispatch grid gap-4 lg:grid-cols-[340px_minmax(0,1fr)] lg:items-start">
+            <div class="min-w-0 [&_.section]:!p-2.5">${decisions(view, q, timeZone, now)}</div>
             <div class="grid min-w-0 gap-4">
               ${ticketsByStage(board, now)}
-              ${thisWeek(view.calendar, now, timeZone)}
+              ${nextSevenDays(view.calendar, now, timeZone)}
             </div>
           </div>
           ${section({ title: 'Urgent Repairs', id: 'urgent-repairs', actions: countBadge(view.urgentRepairs.length), body: urgentRepairsTable(view.urgentRepairs, timeZone) })}
           ${section({ title: 'Inbox', id: 'inbox', actions: countBadge(view.inbox.length), body: inboxList(view.inbox, people, timeZone, q) })}
           ${section({ title: 'All open Tickets', id: 'open-tickets', actions: countBadge(view.tickets.length), body: ticketsTable(view.tickets, filter, timeZone) })}
-          ${section({
-            title: 'Coming up',
-            id: 'coming-up',
-            actions: countBadge(view.calendar.length),
-            body: html`${bookingList(view.calendar, timeZone, trades, 'Nothing booked in the next 14 days.')}
-              <p class="mt-2">${linkButton('Open the calendar', '/calendar', { size: 'sm' })}</p>`,
-          })}
         `,
       }),
     );
@@ -271,7 +266,7 @@ function decisions(view: Dashboard, q: string, timeZone: string, now: Date): Htm
   return section({
     title: 'Needs your decision',
     id: 'decisions',
-    body: html`<div class="grid gap-4 [&_.queue-detail]:truncate [&_.queue-row]:!py-1.5">
+    body: html`<div class="grid gap-4">
       <div id="requests" class="grid gap-2">
         <h3 class="text-sm font-semibold">Maintenance Requests to review</h3>
         ${requests.length ? requests.map((r) => requestRow(r, q, now)) : emptyState('No Maintenance Requests waiting for you.')}
@@ -290,69 +285,107 @@ function decisions(view: Dashboard, q: string, timeZone: string, now: Date): Htm
   });
 }
 
+/** A Maintenance Request in "Needs your decision": its photo, street, one-line description and badges, with Confirm and Review. */
 function requestRow(r: MaintenanceRequest, q: string, now: Date): Html {
   const [first] = r.photos;
   const flagged = r.photos.some((p) => p.metadata !== 'ok' && p.metadata !== 'no_metadata');
   const thumb = first
-    ? html`<img src="/files/${first.fileId}" alt="Photo of ${r.propertyAddress}" width="56" height="56" loading="lazy" class="object-cover" />`
-    : html`<span class="flex size-14 items-center justify-center rounded border border-line bg-page text-center text-xs text-muted">No photos</span>`;
-  const badges = [
-    urgencyBadge(r.urgency),
-    badge(humanise(r.trade)),
-    ...(r.checkUrgency ? [badge('Check urgency', 'warning')] : []),
-    ...(r.checkTrade ? [badge('Check trade', 'warning')] : []),
-    ...(flagged ? [badge('Flagged photos', 'warning')] : []),
-    ...(r.noPhotos ? [badge('No photos', 'warning')] : []),
+    ? html`<img src="/files/${first.fileId}" alt="Photo of ${r.propertyAddress}" width="48" height="48" loading="lazy" class="size-full object-cover" />`
+    : html`<span class="flex size-full items-center justify-center p-1 text-center text-[11px] leading-tight text-muted">No photos</span>`;
+  const flags = [
+    ...(r.checkUrgency ? ['Check urgency'] : []),
+    ...(r.checkTrade ? ['Check trade'] : []),
+    ...(flagged ? ['Flagged photos'] : []),
+    ...(r.noPhotos ? ['No photos'] : []),
   ];
-  return queueRow({
+  // Urgency, Trade and at most one flag; the rest of the flags count as "+N" so the line never wraps.
+  const [firstFlag, ...moreFlags] = flags;
+  const badges = [
+    html`<span class="shrink-0">${urgencyBadge(r.urgency)}</span>`,
+    html`<span class="min-w-0 shrink overflow-hidden">${badge(humanise(r.trade))}</span>`,
+    ...(firstFlag ? [html`<span class="min-w-0 shrink overflow-hidden">${badge(firstFlag, 'warning')}</span>`] : []),
+    ...(moreFlags.length ? [html`<span class="shrink-0"><span class="badge badge-soft badge-neutral whitespace-nowrap" title="${moreFlags.join(', ')}">+${moreFlags.length}</span></span>`] : []),
+  ];
+  return decisionRow({
     thumb,
-    title: r.propertyAddress,
+    title: addressTitle(r.propertyAddress),
     detail: r.description,
+    oneLine: true,
     badges,
     meta: ageOf(r.reportedAt, now),
-    actions: html`${postButton(`/requests/${r.issueId}/confirm${q}`, 'Confirm', { size: 'sm' })}
-      ${linkButton('Review', `/requests/${r.issueId}`, { variant: 'secondary', size: 'sm' })}`,
+    actions: html`${postButton(`/requests/${r.issueId}/confirm${q}`, 'Confirm', { size: 'sm' })}${linkButton('Review', `/requests/${r.issueId}`, { variant: 'secondary', size: 'sm' })}`,
   });
+}
+
+/**
+ * A row in "Needs your decision": a 4px hi-vis stripe, an optional thumbnail, a title
+ * line with its actions on the right, a detail line with its age, and a line of badges
+ * that is clipped rather than wrapped.
+ */
+function decisionRow(o: { thumb?: Html; title: Html; detail?: Html | string; oneLine?: boolean; badges?: Html[]; meta?: string; actions?: Html }): Html {
+  return html`<article class="flex min-w-0 items-start gap-3 rounded border border-line border-l-4 border-l-hivis bg-surface px-3 py-1.5">
+    ${o.thumb ? html`<div class="size-12 shrink-0 overflow-hidden rounded bg-page">${o.thumb}</div>` : ''}
+    <div class="grid min-w-0 flex-1 gap-0.5">
+      <div class="flex min-w-0 items-center gap-2">
+        <p class="flex min-w-0 flex-1 items-baseline gap-1.5 text-sm leading-snug">${o.title}</p>
+        ${o.actions ? html`<div class="flex shrink-0 items-center gap-1.5 [&_.btn]:!h-7 [&_.btn]:!min-h-7 [&_.btn]:!px-2.5 [&_.btn]:!text-xs">${o.actions}</div>` : ''}
+      </div>
+      ${o.detail
+        ? html`<p class="flex min-w-0 items-baseline gap-2 text-sm"><span class="${o.oneLine ? 'truncate' : 'line-clamp-2'} min-w-0 flex-1">${o.detail}</span>${o.meta ? html`<span class="shrink-0 text-xs text-muted">${o.meta}</span>` : ''}</p>`
+        : ''}
+      ${o.badges?.length ? html`<div class="flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap [&_.badge]:max-w-full [&_.badge]:justify-start [&_.badge]:truncate">${o.badges}</div>` : ''}
+    </div>
+  </article>`;
+}
+
+/** A street address as a title: the street, with the suburb and postcode muted beside it. The full address is in the tooltip. */
+function addressTitle(address: string, href?: string): Html {
+  const street = streetOf(address);
+  const suburb = address.slice(street.length).replace(/^,\s*/, '').trim();
+  return html`<span class="max-w-[78%] shrink-0 truncate font-semibold" title="${address}">${href ? html`<a class="link" href="${href}">${street}</a>` : street}</span>${suburb ? html`<span class="min-w-0 flex-1 truncate text-muted">${suburb}</span>` : ''}`;
+}
+
+/** The street part of an address: "12 King St" from "12 King St, Newtown NSW 2042". */
+function streetOf(address: string) {
+  return address.split(',')[0]?.trim() || address;
 }
 
 /** Each alert keeps its wording and links to its Ticket. */
 function alertRow(alert: Alert, timeZone: string): Html {
-  const ticketHref = `/tickets/${alert.ticketId}`;
+  const title = addressTitle(alert.propertyAddress, `/tickets/${alert.ticketId}`);
   switch (alert.kind) {
     case 'invite_more_tradies':
-      return queueRow({
-        href: ticketHref,
-        title: alert.propertyAddress,
+      return decisionRow({
+        title,
         detail: `Only ${alert.confirmedQuotes} confirmed ${alert.confirmedQuotes === 1 ? 'Quote' : 'Quotes'} for the Job after 72 hours.`,
-        badges: [badge('Quotes', 'warning')],
+        oneLine: true,
+        actions: badge('Quotes', 'warning'),
       });
     case 'owner_no_reply':
-      return queueRow({
-        href: ticketHref,
-        title: alert.propertyAddress,
-        detail: `${alert.ownerName}, the Property Owner, hasn't replied since ${formatWhen(alert.requestedAt, timeZone)}.`,
-        badges: [badge('Approval', 'warning')],
-        actions: alert.ownerPhone
+      return decisionRow({
+        title,
+        detail: html`${alert.ownerName}, the Property Owner, hasn't replied since ${formatWhen(alert.requestedAt, timeZone)}. ${alert.ownerPhone
           ? html`Call <a class="link" href="tel:${alert.ownerPhone}">${alert.ownerPhone}</a>`
-          : html`No phone number on file.`,
+          : 'No phone number on file.'}`,
+        actions: badge('Approval', 'warning'),
       });
     case 'rating_due':
-      return queueRow({
-        href: ticketHref,
-        title: alert.propertyAddress,
+      return decisionRow({
+        title,
         detail: `${alert.businessName} finished the Job. Rate the Tradie.`,
-        badges: [badge('Rating', 'info')],
+        oneLine: true,
+        actions: badge('Rating', 'info'),
       });
   }
 }
 
 function inboxRow(item: InboxItem, timeZone: string): Html {
   const [reason, tone] = INBOX_REASON[item.reason];
-  return queueRow({
-    href: '#inbox',
-    title: item.personName ?? item.from,
+  return decisionRow({
+    title: html`<a class="link min-w-0 truncate font-semibold" href="#inbox">${item.personName ?? item.from}</a>`,
     detail: item.text,
-    badges: [badge(reason, tone)],
+    oneLine: true,
+    actions: badge(reason, tone),
     meta: formatWhen(item.receivedAt, timeZone),
   });
 }
@@ -406,7 +439,7 @@ function ticketDocket(t: BoardTicket, now: Date): Html {
     number: t.ticketId,
     href: `/tickets/${t.ticketId}`,
     urgency: t.urgency,
-    address: t.propertyAddress,
+    address: streetOf(t.propertyAddress),
     issue: t.description,
     meta: [
       ...t.trades.map((trade) => html`${humanise(trade)}`),
@@ -417,51 +450,77 @@ function ticketDocket(t: BoardTicket, now: Date): Html {
   });
 }
 
-// This week
+// Next 7 days
 
-const MON_FIRST = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-/** The seven days (Monday to Sunday) of the week containing today, in the Agency's time zone, with the bookings on each. */
-function thisWeek(bookings: Booking[], now: Date, timeZone: string): Html {
+/**
+ * Today and the six days after it, in the Agency's time zone. Each day with bookings
+ * gets a row (today always has one); the empty days between them collapse into a
+ * single muted line.
+ */
+function nextSevenDays(bookings: Booking[], now: Date, timeZone: string): Html {
   const today = dayKey(now, timeZone);
-  const weekday = new Intl.DateTimeFormat('en-US', { timeZone, weekday: 'short' }).format(now);
-  const monday = addDays(today, -MON_FIRST.indexOf(weekday));
   const byDay = new Map<string, Booking[]>();
   for (const b of bookings) {
     const day = dayKey(new Date(b.start), timeZone);
     byDay.set(day, [...(byDay.get(day) ?? []), b]);
   }
-  const days = Array.from({ length: 7 }, (_, i) => addDays(monday, i));
+  const rows: Html[] = [];
+  let quiet: string[] = [];
+  const flushQuiet = () => {
+    if (quiet.length) rows.push(html`<li class="px-2 py-2 text-sm text-muted">Nothing booked ${dayRange(quiet)}</li>`);
+    quiet = [];
+  };
+  for (let i = 0; i < 7; i++) {
+    const day = addDays(today, i);
+    const dayBookings = byDay.get(day) ?? [];
+    if (i > 0 && !dayBookings.length) {
+      quiet.push(day);
+      continue;
+    }
+    flushQuiet();
+    rows.push(dayRow(day, dayBookings, i === 0, timeZone));
+  }
+  flushQuiet();
   return section({
-    title: 'This week',
-    id: 'this-week',
+    title: 'Next 7 days',
+    id: 'next-7-days',
     actions: linkButton('Open calendar', '/calendar', { variant: 'ghost', size: 'sm' }),
-    body: html`<ol class="grid gap-2 lg:grid-cols-7">
-      ${days.map((day) => weekDay(day, byDay.get(day) ?? [], day === today, timeZone))}
-    </ol>`,
+    body: html`<ol class="grid">${rows}</ol>`,
   });
 }
 
-function weekDay(day: string, bookings: Booking[], isToday: boolean, timeZone: string): Html {
-  const label = new Intl.DateTimeFormat('en-AU', { timeZone: 'UTC', weekday: 'short', day: 'numeric' }).format(new Date(`${day}T00:00:00Z`));
-  return html`<li class="min-w-0 rounded border bg-surface p-2 ${isToday ? 'border-2 border-action' : 'border-line'}" ${isToday ? html`aria-current="date"` : ''}>
-    <p class="text-sm font-semibold"><time datetime="${day}">${label}</time></p>
-    ${isToday ? html`<p class="text-xs text-action">Today</p>` : ''}
+/** One day: its date (today is highlighted), then its bookings or "Nothing booked today". */
+function dayRow(day: string, bookings: Booking[], isToday: boolean, timeZone: string): Html {
+  return html`<li class="grid gap-2 border-t border-line px-2 py-2 first:border-t-0 sm:grid-cols-[7rem_minmax(0,1fr)] ${isToday ? 'rounded bg-page' : ''}" ${isToday ? html`aria-current="date"` : ''}>
+    <p class="text-sm font-semibold"><time datetime="${day}">${dayLabel(day, true)}</time>${isToday ? html` ${badge('Today', 'info')}` : ''}</p>
     ${bookings.length
-      ? html`<ul class="mt-1 grid gap-1.5">${bookings.map((b) => weekBlock(b, timeZone))}</ul>`
-      : html`<p class="mt-1 text-xs text-muted">No visits</p>`}
+      ? html`<ul class="grid gap-1.5">${bookings.map((b) => bookingLine(b, timeZone))}</ul>`
+      : html`<p class="text-sm text-muted">Nothing booked today</p>`}
   </li>`;
 }
 
-/** One booking as a compact block: its time, the Tradie, and the Property linking to its Ticket. */
-function weekBlock(b: Booking, timeZone: string): Html {
+/** One booking: its time, the Tradie's business name (linked to the profile) and the street (linked to the Ticket). */
+function bookingLine(b: Booking, timeZone: string): Html {
   const time = new Intl.DateTimeFormat('en-AU', { timeZone, hour: 'numeric', minute: '2-digit' }).format(new Date(b.start));
-  return html`<li class="rounded bg-page p-1.5 text-xs">
-    <p class="num font-semibold"><time datetime="${b.start}">${time}</time></p>
-    <p><a class="link" href="/tradies/${b.tradieId}">${b.businessName}</a></p>
-    <p><a class="link" href="/tickets/${b.ticketId}">${b.propertyAddress.split(',')[0]}</a></p>
+  return html`<li class="flex min-w-0 flex-wrap items-baseline gap-x-3 text-sm">
+    <time datetime="${b.start}" class="num shrink-0 font-semibold">${time}</time>
+    <a class="link min-w-0 truncate" href="/tradies/${b.tradieId}">${b.businessName}</a>
+    <a class="link min-w-0 truncate" href="/tickets/${b.ticketId}">${streetOf(b.propertyAddress)}</a>
   </li>`;
 }
+
+/** A day as "Thu 8 Oct", or "Thu 8" when a range of days is named after its last day (en-GB writes it without a comma). */
+function dayLabel(day: string, withMonth: boolean) {
+  return new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: withMonth ? 'short' : undefined }).format(new Date(`${day}T00:00:00Z`));
+}
+
+/** "Fri 9 – Mon 12 Oct" for a run of days, or "Mon 12 Oct" for one. */
+function dayRange(days: string[]) {
+  const first = days[0] ?? '';
+  const last = days.at(-1) ?? first;
+  return first === last ? dayLabel(first, true) : `${dayLabel(first, false)} – ${dayLabel(last, true)}`;
+}
+
 
 /** The calendar day ("2026-10-12") that an instant falls on in the time zone. */
 function dayKey(at: Date, timeZone: string) {

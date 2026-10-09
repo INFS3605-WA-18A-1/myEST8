@@ -213,6 +213,25 @@ describe('the calendar and Tradie profiles', () => {
     for (const text of ['Pete Park', 'myEST8 rating', '4.0', '4.8', '120 reviews', '$150.00', KING_ST]) expect(pete).toContain(text);
   });
 
+  test('the Next 7 days strip shows a visit booked within a week of today, with its Tradie and Ticket', async () => {
+    const w = await webWorld();
+    const job = await tomsTapTicket(w);
+    const [quote] = await confirmedQuotes(w, job, [[w.tradies.pete, 150_00, TUE_9AM]]);
+    await w.alice.chooseQuote(quote!.quoteId, 'Usual plumber');
+    await w.alice.sendWorkOrder(job.jobId);
+    const cookie = await w.signIn();
+
+    const board = await page(w, '/', cookie);
+    const start = board.indexOf('id="next-7-days"');
+    expect(start).toBeGreaterThan(-1);
+    const strip = board.slice(start, board.indexOf('</section>', start));
+    expect(strip).toContain('Tue 13 Oct');
+    expect(strip).toContain(`href="/tradies/${w.tradies.pete.id}"`);
+    expect(strip).toContain(`href="/tickets/${job.ticketId}"`);
+    expect(strip).toContain('12 King St');
+    expect(strip).toContain('Nothing booked Wed 14 – Fri 16 Oct');
+  });
+
   test('a Tradie not on Google says so, and an unknown Tradie is not found', async () => {
     const w = await webWorld();
     const cookie = await w.signIn();

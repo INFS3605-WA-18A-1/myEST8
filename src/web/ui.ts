@@ -133,7 +133,11 @@ function userMenu(name: string): Html {
   </details>`;
 }
 
-/** The top bar: the menu button (drawer only), the page title, controls, today's date and the user menu. */
+/**
+ * The top bar: the menu button (drawer only), the page title, the page's controls,
+ * then today's date and the user menu. Under 1024px the controls drop to a second
+ * row under the title, so the title always has room.
+ */
 function topBar(
   title: string,
   o: { menu: boolean; controls?: Html; today?: string; pm?: { name: string } | null },
@@ -141,8 +145,8 @@ function topBar(
   return html`<header class="topbar">
     ${o.menu ? html`<button type="button" class="menu-button" data-drawer-toggle aria-controls="rail" aria-expanded="false" aria-label="Menu">${ICON.menu}</button>` : ''}
     <h1 class="topbar-title">${title}</h1>
-    <div class="topbar-controls">
-      ${o.controls ?? ''}
+    ${o.controls ? html`<div class="topbar-controls">${o.controls}</div>` : ''}
+    <div class="topbar-end">
       ${o.today ? html`<time class="topbar-date">${o.today}</time>` : ''}
       ${o.pm ? userMenu(o.pm.name) : ''}
     </div>
@@ -210,7 +214,10 @@ const TENANT_FOOTER = 'Questions? Reply to the message your Property Manager sen
 /**
  * A page for someone who isn't signed in: a Tenant using an upload or tracker
  * link, or a Property Manager signing in or up. Phone first, a centred column
- * (560px; 1120px with `wide`) under a logotype bar, with no rail. `headerActions`
+ * under a logotype bar, with no rail. `width` picks the column: narrow (400px) for
+ * a single form so its heading lines up with it, default (560px), or wide (1120px).
+ * `wide` is the older way to ask for wide. `titleSize: 'hero'` makes the title a
+ * headline (40px from 768px, 32px on phones) for the landing page. `headerActions`
  * sit at the right of the bar; `footer` replaces the line for Tenants.
  */
 export function publicPage(o: {
@@ -218,11 +225,16 @@ export function publicPage(o: {
   flash?: Flash | null;
   body: Html;
   subtitle?: Html | string;
+  width?: 'narrow' | 'default' | 'wide';
+  /** The same as width: 'wide'. */
   wide?: boolean;
+  titleSize?: 'page' | 'hero';
   headerActions?: Html;
   footer?: Html | string;
 }): Html {
-  const width = o.wide ? 'is-wide' : '';
+  const width = o.width ?? (o.wide ? 'wide' : 'default');
+  const widthClass = width === 'default' ? '' : `is-${width}`;
+  const titleClass = o.titleSize === 'hero' ? 'page-title is-hero' : 'page-title';
   return html`<!doctype html>
     <html lang="en-AU" data-theme="${THEME}">
       <head>
@@ -231,22 +243,22 @@ export function publicPage(o: {
       <body>
         <a href="#main" class="skip-link">Skip to content</a>
         <header class="public-bar">
-          <div class="public-bar-inner ${width}">
+          <div class="public-bar-inner ${widthClass}">
             <span class="logotype">myEST8</span>
             ${o.headerActions ? html`<div class="ml-auto flex items-center gap-2">${o.headerActions}</div>` : ''}
           </div>
         </header>
-        <main id="main" class="public-main ${width}">
+        <main id="main" class="public-main ${widthClass}">
           ${o.flash ? flashMessage(o.flash) : ''}
           <div class="app-body-stack">
             <div class="page-head">
-              <h1 class="page-title">${o.title}</h1>
+              <h1 class="${titleClass}">${o.title}</h1>
               ${o.subtitle ? html`<p class="page-subtitle">${o.subtitle}</p>` : ''}
             </div>
             ${o.body}
           </div>
         </main>
-        <footer class="public-footer ${width}">${o.footer ?? TENANT_FOOTER}</footer>
+        <footer class="public-footer ${widthClass}">${o.footer ?? TENANT_FOOTER}</footer>
       </body>
     </html>`;
 }
