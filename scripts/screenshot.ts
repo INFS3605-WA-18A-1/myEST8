@@ -61,7 +61,7 @@ try {
       const file = `${out}/${target.name}.${viewportName}`;
       await page.screenshot({ path: `${file}.png` });
       await page.screenshot({ path: `${file}.full.png`, fullPage: true });
-      const height = await page.evaluate(() => document.documentElement.scrollHeight);
+      const height = await page.evaluate<number>('document.documentElement.scrollHeight');
       console.log(`${res?.status()} ${target.path} [${viewportName}] -> ${file}.png (page height ${height}px)`);
     }
     await context.close();
