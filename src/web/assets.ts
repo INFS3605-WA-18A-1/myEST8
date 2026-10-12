@@ -1,7 +1,7 @@
 // The design system's static files, served from this server so the demo works
 // offline: Tailwind's browser build and daisyUI from node_modules, the app's
-// own CSS and JS from ./static, and the self-hosted Barlow fonts. Each file is
-// read once, on first request.
+// own CSS, JS and favicon from ./static, and the self-hosted Lexend and Red Hat
+// Text fonts. Each file is read once, on first request.
 
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -13,22 +13,25 @@ const require = createRequire(import.meta.url);
 const JS = 'text/javascript; charset=utf-8';
 const CSS = 'text/css; charset=utf-8';
 const WOFF2 = 'font/woff2';
+const SVG = 'image/svg+xml';
 
 const ASSETS: Record<string, { file: () => string; type: string }> = {
   'tailwind.js': { file: () => require.resolve('@tailwindcss/browser'), type: JS },
   'daisyui.css': { file: () => require.resolve('daisyui/daisyui.css'), type: CSS },
   'app.css': { file: () => fileURLToPath(new URL('./static/app.css', import.meta.url)), type: CSS },
   'app.js': { file: () => fileURLToPath(new URL('./static/app.js', import.meta.url)), type: JS },
+  'favicon.svg': { file: () => fileURLToPath(new URL('./static/favicon.svg', import.meta.url)), type: SVG },
 };
 
 /** The fonts the design uses, by package and file name. Only these are served under /assets/fonts/. */
 const FONTS: Record<string, string> = {
-  'barlow-latin-400-normal.woff2': '@fontsource/barlow',
-  'barlow-latin-500-normal.woff2': '@fontsource/barlow',
-  'barlow-latin-600-normal.woff2': '@fontsource/barlow',
-  'barlow-semi-condensed-latin-500-normal.woff2': '@fontsource/barlow-semi-condensed',
-  'barlow-semi-condensed-latin-600-normal.woff2': '@fontsource/barlow-semi-condensed',
-  'barlow-semi-condensed-latin-700-normal.woff2': '@fontsource/barlow-semi-condensed',
+  'lexend-latin-400-normal.woff2': '@fontsource/lexend',
+  'lexend-latin-600-normal.woff2': '@fontsource/lexend',
+  'lexend-latin-700-normal.woff2': '@fontsource/lexend',
+  'red-hat-text-latin-400-normal.woff2': '@fontsource/red-hat-text',
+  'red-hat-text-latin-400-italic.woff2': '@fontsource/red-hat-text',
+  'red-hat-text-latin-500-normal.woff2': '@fontsource/red-hat-text',
+  'red-hat-text-latin-600-normal.woff2': '@fontsource/red-hat-text',
 };
 
 const cache = new Map<string, Uint8Array<ArrayBuffer>>();
@@ -49,8 +52,8 @@ function fontFile(name: string) {
 }
 
 /**
- * Serves /assets/*: Tailwind's browser build, daisyUI, the app's own CSS and JS,
- * and the Barlow fonts under /assets/fonts/. Anything else there is a 404.
+ * Serves /assets/*: Tailwind's browser build, daisyUI, the app's own CSS, JS and favicon,
+ * and the Lexend and Red Hat Text fonts under /assets/fonts/. Anything else there is a 404.
  */
 export function assetRoutes() {
   const routes = new Hono();

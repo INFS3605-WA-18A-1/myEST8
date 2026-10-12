@@ -11,20 +11,11 @@ export interface StoredFile {
 
 /** File storage for photos, receipts, PDF quotes and message attachments. */
 export function createFiles(db: Db, clock: Clock) {
-  db.exec(`CREATE TABLE IF NOT EXISTS files (
-    id INTEGER PRIMARY KEY,
-    agency_id INTEGER NOT NULL,
-    filename TEXT NOT NULL,
-    content_type TEXT NOT NULL,
-    content BLOB NOT NULL,
-    created_at TEXT NOT NULL
-  )`);
-
   return {
     save(agencyId: number, file: { filename: string; contentType: string; content: Uint8Array }) {
       return run(
         db,
-        'INSERT INTO files (agency_id, filename, content_type, content, created_at) VALUES (?, ?, ?, ?, ?)',
+        'INSERT INTO files (agency_id, filename, content_type, content, created_at) VALUES (?, ?, ?, ?, ?) RETURNING id',
         agencyId,
         file.filename,
         file.contentType,
@@ -34,13 +25,13 @@ export function createFiles(db: Db, clock: Clock) {
     },
 
     /** A file belonging to the Agency, or null. */
-    getInAgency(agencyId: number, id: number): StoredFile | null {
-      const row = one<{ agency_id: number }>(db, 'SELECT agency_id FROM files WHERE id = ?', id);
+    async getInAgency(agencyId: number, id: number): Promise<StoredFile | null> {
+      const row = await one<{ agency_id: number }>(db, 'SELECT agency_id FROM files WHERE id = ?', id);
       return row?.agency_id === agencyId ? this.get(id) : null;
     },
 
-    get(id: number): StoredFile {
-      const row = one<{ id: number; filename: string; content_type: string; content: Uint8Array }>(
+    async get(id: number): Promise<StoredFile> {
+      const row = await one<{ id: number; filename: string; content_type: string; content: Uint8Array }>(
         db,
         'SELECT id, filename, content_type, content FROM files WHERE id = ?',
         id,

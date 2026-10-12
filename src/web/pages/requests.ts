@@ -7,11 +7,12 @@ import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
 import { URGENCIES } from '../../shared.ts';
 import type { WebEnv } from '../env.ts';
+import { COLLEAGUES_ONLY, shareButton, shareUrl } from '../share.ts';
 import { shellInfo } from '../shell.ts';
 import { badge, button, dl, emptyState, field, flashFrom, formatWhen, humanise, linkButton, page, photoGrid, postButton, section, urgencyBadge, type Html, type Tone } from '../ui.ts';
 import { PHOTO_FLAG } from './dashboard.ts';
 
-type Dashboard = ReturnType<PropertyManagerActions['dashboard']>;
+type Dashboard = Awaited<ReturnType<PropertyManagerActions['dashboard']>>;
 type MaintenanceRequest = Dashboard['maintenanceRequests'][number];
 type Photo = MaintenanceRequest['photos'][number];
 
@@ -25,10 +26,10 @@ const IMAGE_CHECK: Record<NonNullable<MaintenanceRequest['imageMatch']>['result'
 export function requestPages() {
   const pages = new Hono<WebEnv>();
 
-  pages.get('/:issueId{[0-9]+}', (c) => {
+  pages.get('/:issueId{[0-9]+}', async (c) => {
     const { actions, pm } = c.var;
     const issueId = Number(c.req.param('issueId'));
-    const request = actions.dashboard({ filter: 'all' }).maintenanceRequests.find((r) => r.issueId === issueId);
+    const request = (await actions.dashboard({ filter: 'all' })).maintenanceRequests.find((r) => r.issueId === issueId);
     const flash = flashFrom(c.req.url);
     if (!request) {
       const body = emptyState('There is no Maintenance Request waiting for you with that number.', linkButton('Back to the dashboard', '/'));
@@ -42,7 +43,12 @@ export function requestPages() {
         active: 'dashboard',
         flash,
         shell: shellInfo(c),
-        actions: linkButton('Back to the dashboard', '/', { variant: 'ghost', size: 'sm' }),
+        actions: html`${linkButton('Back to the dashboard', '/', { variant: 'ghost', size: 'sm' })}${shareButton({
+          title: `Maintenance Request: ${request.description}`,
+          text: `Maintenance Request at ${request.propertyAddress}, waiting for review: ${request.description}`,
+          url: shareUrl(c, `/requests/${issueId}`),
+          note: COLLEAGUES_ONLY,
+        })}`,
         body: review(request, timeZone),
       }),
     );

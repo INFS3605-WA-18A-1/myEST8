@@ -1,0 +1,23 @@
+{
+  "name": "myest8-design-system",
+  "version": "0.1.0",
+  "private": true,
+  "description": "React wrappers around myEST8's server-rendered design system (src/web/ui.ts), for claude.ai/design.",
+  "type": "module",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.3.3",
+    "@tailwindcss/node": "4.3.3",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "esbuild": "^0.25.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "tailwindcss": "4.3.3",
+    "typescript": "~5.9.0"
+  }
+}

@@ -160,75 +160,6 @@ function passwordMatches(password: string, stored: string) {
 
 /** The Agency, its Property Managers, Properties, Tenants, Property Owners, Tradies and Building Managers. */
 export function createProfiles({ db, clock, ports, modules }: Context) {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS agencies (id INTEGER PRIMARY KEY, name TEXT NOT NULL, time_zone TEXT NOT NULL);
-    CREATE TABLE IF NOT EXISTS agency_channels (
-      agency_id INTEGER NOT NULL REFERENCES agencies(id),
-      channel_type TEXT NOT NULL,
-      address TEXT NOT NULL,
-      tested_at TEXT,
-      PRIMARY KEY (channel_type, address)
-    );
-    CREATE TABLE IF NOT EXISTS property_managers (
-      id INTEGER PRIMARY KEY,
-      agency_id INTEGER NOT NULL REFERENCES agencies(id),
-      name TEXT NOT NULL,
-      email TEXT NOT NULL UNIQUE,
-      password_hash TEXT
-    );
-    CREATE TABLE IF NOT EXISTS people (
-      id INTEGER PRIMARY KEY,
-      agency_id INTEGER NOT NULL REFERENCES agencies(id),
-      role TEXT NOT NULL,
-      name TEXT NOT NULL,
-      business_name TEXT,
-      mobile TEXT,
-      email TEXT,
-      property_id INTEGER,
-      tenancy_start TEXT,
-      availability TEXT,
-      trades TEXT NOT NULL DEFAULT '[]',
-      starting_rating REAL,
-      google_place_id TEXT,
-      google_rating REAL,
-      google_review_count INTEGER,
-      last_inbound_channel TEXT,
-      last_inbound_address TEXT,
-      last_inbound_at TEXT
-    );
-    CREATE TABLE IF NOT EXISTS contact_addresses (
-      agency_id INTEGER NOT NULL,
-      address TEXT NOT NULL,
-      person_id INTEGER NOT NULL REFERENCES people(id),
-      PRIMARY KEY (agency_id, address)
-    );
-    CREATE TABLE IF NOT EXISTS properties (
-      id INTEGER PRIMARY KEY,
-      agency_id INTEGER NOT NULL REFERENCES agencies(id),
-      property_manager_id INTEGER NOT NULL REFERENCES property_managers(id),
-      address TEXT NOT NULL,
-      suburb TEXT NOT NULL,
-      lat REAL,
-      lng REAL,
-      owner_id INTEGER NOT NULL REFERENCES people(id),
-      max_repair_cost_cents INTEGER NOT NULL,
-      building_manager_id INTEGER REFERENCES people(id)
-    );
-    CREATE TABLE IF NOT EXISTS nominated_tradies (
-      property_id INTEGER NOT NULL REFERENCES properties(id),
-      tradie_id INTEGER NOT NULL REFERENCES people(id),
-      PRIMARY KEY (property_id, tradie_id)
-    );
-    CREATE TABLE IF NOT EXISTS ratings (
-      id INTEGER PRIMARY KEY,
-      tradie_id INTEGER NOT NULL REFERENCES people(id),
-      source TEXT NOT NULL,
-      score INTEGER NOT NULL,
-      job_id INTEGER NOT NULL,
-      at TEXT NOT NULL,
-      UNIQUE (job_id, source)
-    );
-  `);
 
   function toPerson(row: PersonRow): Person {
     return {
@@ -254,7 +185,7 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
     };
   }
 
-  function toProperty(row: PropertyRow): Property {
+  async function toProperty(row: PropertyRow): Promise<Property> {
     return {
       id: row.id,
       agencyId: row.agency_id,
@@ -265,43 +196,43 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
       ownerId: row.owner_id,
       maxRepairCostCents: row.max_repair_cost_cents,
       buildingManagerId: row.building_manager_id,
-      nominatedTradieIds: all<{ tradie_id: number }>(
+      nominatedTradieIds: (await all<{ tradie_id: number }>(
         db,
         'SELECT tradie_id FROM nominated_tradies WHERE property_id = ? ORDER BY tradie_id',
         row.id,
-      ).map((r) => r.tradie_id),
+      )).map((r) => r.tradie_id),
     };
   }
 
-  function person(id: number): Person {
-    const row = one<PersonRow>(db, 'SELECT * FROM people WHERE id = ?', id);
+  async function person(id: number): Promise<Person> {
+    const row = await one<PersonRow>(db, 'SELECT * FROM people WHERE id = ?', id);
     if (!row) throw new Error(`Person ${id} not found`);
     return toPerson(row);
   }
 
-  function addAddress(agencyId: number, personId: number, address: string) {
+  async function addAddress(agencyId: number, personId: number, address: string) {
     const normalized = normalizeAddress(address);
-    const existing = one<{ person_id: number }>(
+    const existing = await one<{ person_id: number }>(
       db,
       'SELECT person_id FROM contact_addresses WHERE agency_id = ? AND address = ?',
       agencyId,
       normalized,
     );
     if (existing && existing.person_id !== personId) invalid(`${address} already belongs to someone else`, address.includes('@') ? 'email' : 'mobile');
-    if (!existing) run(db, 'INSERT INTO contact_addresses (agency_id, address, person_id) VALUES (?, ?, ?)', agencyId, normalized, personId);
+    if (!existing) await run(db, 'INSERT INTO contact_addresses (agency_id, address, person_id) VALUES (?, ?, ?)', agencyId, normalized, personId);
   }
 
-  function emailTaken(email: string) {
-    return !!one(db, 'SELECT 1 FROM property_managers WHERE email = ?', normalizeAddress(email));
+  async function emailTaken(email: string) {
+    return !!(await one(db, 'SELECT 1 FROM property_managers WHERE email = ?', normalizeAddress(email)));
   }
 
   /** What's wrong with a new Property Manager's name and email, by field. */
-  function accountProblems(input: { name: string; email: string }): Record<string, string> {
+  async function accountProblems(input: { name: string; email: string }): Promise<Record<string, string>> {
     const problems: Record<string, string> = {};
     if (!input.name.trim()) problems.name = 'Enter a name';
     if (!input.email.trim()) problems.email = 'Enter an email address';
     else if (!isEmail(input.email)) problems.email = `${input.email.trim()} isn't an email address`;
-    else if (emailTaken(input.email)) problems.email = 'An account with that email already exists';
+    else if (await emailTaken(input.email)) problems.email = 'An account with that email already exists';
     return problems;
   }
 
@@ -313,10 +244,10 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
     throw new ActionError(conflict ? 'conflict' : 'invalid', first, problems);
   }
 
-  function insertPropertyManager(agencyId: number, input: { name: string; email: string; password?: string }) {
+  async function insertPropertyManager(agencyId: number, input: { name: string; email: string; password?: string }) {
     return run(
       db,
-      'INSERT INTO property_managers (agency_id, name, email, password_hash) VALUES (?, ?, ?, ?)',
+      'INSERT INTO property_managers (agency_id, name, email, password_hash) VALUES (?, ?, ?, ?) RETURNING id',
       agencyId,
       input.name.trim(),
       normalizeAddress(input.email),
@@ -329,13 +260,13 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
   }
 
   return {
-    createAgency(input: { name: string; timeZone: string }) {
+    async createAgency(input: { name: string; timeZone: string }) {
       if (!isTimeZone(input.timeZone)) invalid(`Unknown time zone ${input.timeZone}`);
-      return run(db, 'INSERT INTO agencies (name, time_zone) VALUES (?, ?)', input.name, input.timeZone);
+      return run(db, 'INSERT INTO agencies (name, time_zone) VALUES (?, ?) RETURNING id', input.name, input.timeZone);
     },
 
-    agency(id: number): Agency {
-      const row = one<{ id: number; name: string; time_zone: string }>(db, 'SELECT * FROM agencies WHERE id = ?', id);
+    async agency(id: number): Promise<Agency> {
+      const row = await one<{ id: number; name: string; time_zone: string }>(db, 'SELECT * FROM agencies WHERE id = ?', id);
       if (!row) throw new Error(`Agency ${id} not found`);
       return { id: row.id, name: row.name, timeZone: row.time_zone };
     },
@@ -350,15 +281,16 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
      * MIN_PASSWORD_LENGTH characters, an unknown time zone and an email that
      * already has an account, each against its field. Returns the Property Manager's id.
      */
-    signUp(input: SignUp): number {
-      const problems = accountProblems(input);
-      if (!input.password) problems.password = 'Choose a password';
-      else if (input.password.length < MIN_PASSWORD_LENGTH) problems.password = `Use at least ${MIN_PASSWORD_LENGTH} characters`;
-      if (!input.agencyName.trim()) problems.agencyName = "Enter your Agency's name";
-      if (!isTimeZone(input.timeZone)) problems.timeZone = 'Choose a time zone';
-      refuse(problems);
-      return transaction(db, () => {
-        const agencyId = run(db, 'INSERT INTO agencies (name, time_zone) VALUES (?, ?)', input.agencyName.trim(), input.timeZone);
+    async signUp(input: SignUp): Promise<number> {
+      // Checked inside the transaction, so two sign-ups with one email can't both pass the check.
+      return transaction(db, async () => {
+        const problems = await accountProblems(input);
+        if (!input.password) problems.password = 'Choose a password';
+        else if (input.password.length < MIN_PASSWORD_LENGTH) problems.password = `Use at least ${MIN_PASSWORD_LENGTH} characters`;
+        if (!input.agencyName.trim()) problems.agencyName = "Enter your Agency's name";
+        if (!isTimeZone(input.timeZone)) problems.timeZone = 'Choose a time zone';
+        refuse(problems);
+        const agencyId = await run(db, 'INSERT INTO agencies (name, time_zone) VALUES (?, ?) RETURNING id', input.agencyName.trim(), input.timeZone);
         return insertPropertyManager(agencyId, input);
       });
     },
@@ -367,15 +299,17 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
      * Adds a colleague to the Agency as a Property Manager with a temporary
      * password, checked like a sign-up. The password is returned once, to pass on.
      */
-    addColleague(agencyId: number, input: { name: string; email: string }) {
-      refuse(accountProblems(input));
-      const password = temporaryPassword();
-      return { propertyManagerId: insertPropertyManager(agencyId, { ...input, password }), temporaryPassword: password };
+    async addColleague(agencyId: number, input: { name: string; email: string }) {
+      return transaction(db, async () => {
+        refuse(await accountProblems(input));
+        const password = temporaryPassword();
+        return { propertyManagerId: await insertPropertyManager(agencyId, { ...input, password }), temporaryPassword: password };
+      });
     },
 
     /** The Property Manager with this email and password, or null. */
-    verifyLogin(email: string, password: string): number | null {
-      const row = one<{ id: number; password_hash: string | null }>(
+    async verifyLogin(email: string, password: string): Promise<number | null> {
+      const row = await one<{ id: number; password_hash: string | null }>(
         db,
         'SELECT id, password_hash FROM property_managers WHERE email = ?',
         normalizeAddress(email),
@@ -385,30 +319,30 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
       return row?.password_hash && matches ? row.id : null;
     },
 
-    propertyManagers(agencyId: number): PropertyManager[] {
-      return all<{ id: number; agency_id: number; name: string; email: string }>(
+    async propertyManagers(agencyId: number): Promise<PropertyManager[]> {
+      return (await all<{ id: number; agency_id: number; name: string; email: string }>(
         db,
-        'SELECT id, agency_id, name, email FROM property_managers WHERE agency_id = ? ORDER BY name',
+        'SELECT id, agency_id, name, email FROM property_managers WHERE agency_id = ? ORDER BY name, id',
         agencyId,
-      ).map((r) => ({ id: r.id, agencyId: r.agency_id, name: r.name, email: r.email }));
+      )).map((r) => ({ id: r.id, agencyId: r.agency_id, name: r.name, email: r.email }));
     },
 
-    people(agencyId: number, role?: Role): Person[] {
-      return all<PersonRow>(
+    async people(agencyId: number, role?: Role): Promise<Person[]> {
+      return (await all<PersonRow>(
         db,
-        'SELECT * FROM people WHERE agency_id = ? AND (? IS NULL OR role = ?) ORDER BY role, name',
+        'SELECT * FROM people WHERE agency_id = ? AND (?::text IS NULL OR role = ?) ORDER BY role, name, id',
         agencyId,
         role ?? null,
         role ?? null,
-      ).map(toPerson);
+      )).map(toPerson);
     },
 
-    properties(agencyId: number): Property[] {
-      return all<PropertyRow>(db, 'SELECT * FROM properties WHERE agency_id = ? ORDER BY address', agencyId).map(toProperty);
+    async properties(agencyId: number): Promise<Property[]> {
+      return Promise.all((await all<PropertyRow>(db, 'SELECT * FROM properties WHERE agency_id = ? ORDER BY address, id', agencyId)).map(toProperty));
     },
 
-    propertyManager(id: number): PropertyManager {
-      const row = one<{ id: number; agency_id: number; name: string; email: string }>(
+    async propertyManager(id: number): Promise<PropertyManager> {
+      const row = await one<{ id: number; agency_id: number; name: string; email: string }>(
         db,
         'SELECT * FROM property_managers WHERE id = ?',
         id,
@@ -417,62 +351,64 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
       return { id: row.id, agencyId: row.agency_id, name: row.name, email: row.email };
     },
 
-    connectChannel(agencyId: number, channelType: ChannelType, address: string) {
-      const normalized = normalizeAddress(address);
-      const existing = one<{ agency_id: number }>(
-        db,
-        'SELECT agency_id FROM agency_channels WHERE channel_type = ? AND address = ?',
-        channelType,
-        normalized,
-      );
-      if (existing && existing.agency_id !== agencyId) invalid(`${address} is connected to another Agency`);
-      run(db, 'DELETE FROM agency_channels WHERE agency_id = ? AND channel_type = ?', agencyId, channelType);
-      run(db, 'INSERT INTO agency_channels (agency_id, channel_type, address) VALUES (?, ?, ?)', agencyId, channelType, normalized);
+    async connectChannel(agencyId: number, channelType: ChannelType, address: string) {
+      await transaction(db, async () => {
+        const normalized = normalizeAddress(address);
+        const existing = await one<{ agency_id: number }>(
+          db,
+          'SELECT agency_id FROM agency_channels WHERE channel_type = ? AND address = ?',
+          channelType,
+          normalized,
+        );
+        if (existing && existing.agency_id !== agencyId) invalid(`${address} is connected to another Agency`);
+        await run(db, 'DELETE FROM agency_channels WHERE agency_id = ? AND channel_type = ?', agencyId, channelType);
+        await run(db, 'INSERT INTO agency_channels (agency_id, channel_type, address) VALUES (?, ?, ?)', agencyId, channelType, normalized);
+      });
     },
 
     /** The Agency's connected channels: SMS, then WhatsApp, then email. */
-    channels(agencyId: number): AgencyChannel[] {
-      return all<{ channel_type: ChannelType; address: string; tested_at: string | null }>(
+    async channels(agencyId: number): Promise<AgencyChannel[]> {
+      return (await all<{ channel_type: ChannelType; address: string; tested_at: string | null }>(
         db,
         'SELECT channel_type, address, tested_at FROM agency_channels WHERE agency_id = ?',
         agencyId,
-      )
+      ))
         .map((r) => ({ type: r.channel_type, address: r.address, testedAt: r.tested_at }))
         .sort((a, b) => CHANNEL_ORDER.indexOf(a.type) - CHANNEL_ORDER.indexOf(b.type));
     },
 
-    markChannelTested(agencyId: number, channelType: ChannelType) {
-      run(db, 'UPDATE agency_channels SET tested_at = ? WHERE agency_id = ? AND channel_type = ?', iso(clock.now()), agencyId, channelType);
+    async markChannelTested(agencyId: number, channelType: ChannelType) {
+      await run(db, 'UPDATE agency_channels SET tested_at = ? WHERE agency_id = ? AND channel_type = ?', iso(clock.now()), agencyId, channelType);
     },
 
-    agencyByChannel(channelType: ChannelType, address: string): number | null {
+    async agencyByChannel(channelType: ChannelType, address: string): Promise<number | null> {
       return (
-        one<{ agency_id: number }>(
+        (await one<{ agency_id: number }>(
           db,
           'SELECT agency_id FROM agency_channels WHERE channel_type = ? AND address = ?',
           channelType,
           normalizeAddress(address),
-        )?.agency_id ?? null
+        ))?.agency_id ?? null
       );
     },
 
-    channelAddress(agencyId: number, channelType: ChannelType): string | null {
+    async channelAddress(agencyId: number, channelType: ChannelType): Promise<string | null> {
       return (
-        one<{ address: string }>(
+        (await one<{ address: string }>(
           db,
           'SELECT address FROM agency_channels WHERE agency_id = ? AND channel_type = ?',
           agencyId,
           channelType,
-        )?.address ?? null
+        ))?.address ?? null
       );
     },
 
-    addPerson(agencyId: number, input: NewPerson) {
-      return transaction(db, () => {
-        const id = run(
+    async addPerson(agencyId: number, input: NewPerson) {
+      return transaction(db, async () => {
+        const id = await run(
           db,
           `INSERT INTO people (agency_id, role, name, business_name, mobile, email, property_id, tenancy_start, trades, starting_rating, google_place_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
           agencyId,
           input.role,
           input.name,
@@ -485,8 +421,8 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
           input.startingRating ?? null,
           input.googlePlaceId ?? null,
         );
-        if (input.mobile) addAddress(agencyId, id, input.mobile);
-        if (input.email) addAddress(agencyId, id, input.email);
+        if (input.mobile) await addAddress(agencyId, id, input.mobile);
+        if (input.email) await addAddress(agencyId, id, input.email);
         return id;
       });
     },
@@ -494,15 +430,15 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
     person,
 
     /** A person in the Agency, optionally with a given role, or a not-found error. */
-    personInAgency(agencyId: number, id: number, role?: Role): Person {
-      const row = one<PersonRow>(db, 'SELECT * FROM people WHERE id = ? AND agency_id = ?', id, agencyId);
+    async personInAgency(agencyId: number, id: number, role?: Role): Promise<Person> {
+      const row = await one<PersonRow>(db, 'SELECT * FROM people WHERE id = ? AND agency_id = ?', id, agencyId);
       if (!row || (role && row.role !== role)) notFound(role ? role.replace('_', ' ') : 'Person');
       return toPerson(row);
     },
 
     /** Finds who sent a message: their role, Agency and Properties. */
-    findByAddress(agencyId: number, address: string) {
-      const row = one<PersonRow>(
+    async findByAddress(agencyId: number, address: string) {
+      const row = await one<PersonRow>(
         db,
         `SELECT people.* FROM contact_addresses JOIN people ON people.id = contact_addresses.person_id
          WHERE contact_addresses.agency_id = ? AND contact_addresses.address = ?`,
@@ -513,21 +449,21 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
       const propertyIds =
         row.role === 'tenant'
           ? [row.property_id!]
-          : all<{ id: number }>(
+          : (await all<{ id: number }>(
               db,
               'SELECT id FROM properties WHERE owner_id = ? OR building_manager_id = ? ORDER BY id',
               row.id,
               row.id,
-            ).map((p) => p.id);
+            )).map((p) => p.id);
       return { personId: row.id, role: row.role, agencyId: row.agency_id, propertyIds };
     },
 
-    linkAddress(agencyId: number, personId: number, address: string) {
-      addAddress(agencyId, personId, address);
+    async linkAddress(agencyId: number, personId: number, address: string) {
+      await addAddress(agencyId, personId, address);
     },
 
-    recordInbound(personId: number, channelType: ChannelType, address: string, at: Date) {
-      run(
+    async recordInbound(personId: number, channelType: ChannelType, address: string, at: Date) {
+      await run(
         db,
         'UPDATE people SET last_inbound_channel = ?, last_inbound_address = ?, last_inbound_at = ? WHERE id = ?',
         channelType,
@@ -537,17 +473,17 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
       );
     },
 
-    setAvailability(tenantId: number, availability: Availability) {
-      run(db, 'UPDATE people SET availability = ? WHERE id = ?', availability, tenantId);
+    async setAvailability(tenantId: number, availability: Availability) {
+      await run(db, 'UPDATE people SET availability = ? WHERE id = ?', availability, tenantId);
     },
 
     async addProperty(agencyId: number, input: NewProperty) {
       const location = await ports.places.geocode(input.address);
-      return transaction(db, () => {
-        const id = run(
+      return transaction(db, async () => {
+        const id = await run(
           db,
           `INSERT INTO properties (agency_id, property_manager_id, address, suburb, lat, lng, owner_id, max_repair_cost_cents, building_manager_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
           agencyId,
           input.propertyManagerId,
           input.address,
@@ -559,73 +495,73 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
           input.buildingManagerId ?? null,
         );
         for (const tradieId of input.nominatedTradieIds) {
-          run(db, 'INSERT INTO nominated_tradies (property_id, tradie_id) VALUES (?, ?)', id, tradieId);
+          await run(db, 'INSERT INTO nominated_tradies (property_id, tradie_id) VALUES (?, ?)', id, tradieId);
         }
         return id;
       });
     },
 
-    property(id: number): Property {
-      const row = one<PropertyRow>(db, 'SELECT * FROM properties WHERE id = ?', id);
+    async property(id: number): Promise<Property> {
+      const row = await one<PropertyRow>(db, 'SELECT * FROM properties WHERE id = ?', id);
       if (!row) throw new Error(`Property ${id} not found`);
       return toProperty(row);
     },
 
-    propertyInAgency(agencyId: number, id: number): Property {
-      const row = one<PropertyRow>(db, 'SELECT * FROM properties WHERE id = ? AND agency_id = ?', id, agencyId);
+    async propertyInAgency(agencyId: number, id: number): Promise<Property> {
+      const row = await one<PropertyRow>(db, 'SELECT * FROM properties WHERE id = ? AND agency_id = ?', id, agencyId);
       if (!row) notFound('Property');
       return toProperty(row);
     },
 
     /** The Properties assigned to a Property Manager. */
-    propertyIdsOf(propertyManagerId: number) {
-      return all<{ id: number }>(db, 'SELECT id FROM properties WHERE property_manager_id = ?', propertyManagerId).map((r) => r.id);
+    async propertyIdsOf(propertyManagerId: number) {
+      return (await all<{ id: number }>(db, 'SELECT id FROM properties WHERE property_manager_id = ?', propertyManagerId)).map((r) => r.id);
     },
 
-    tradiesWithTrade(agencyId: number, trade: Trade): Person[] {
-      return all<PersonRow>(
+    async tradiesWithTrade(agencyId: number, trade: Trade): Promise<Person[]> {
+      return (await all<PersonRow>(
         db,
         `SELECT * FROM people WHERE agency_id = ? AND role = 'tradie'
-         AND EXISTS (SELECT 1 FROM json_each(people.trades) WHERE value = ?) ORDER BY id`,
+         AND EXISTS (SELECT 1 FROM jsonb_array_elements_text(people.trades::jsonb) AS t (value) WHERE t.value = ?) ORDER BY id`,
         agencyId,
         trade,
-      ).map(toPerson);
+      )).map(toPerson);
     },
 
-    recordRating(tradieId: number, source: 'property_manager' | 'tenant', score: number, jobId: number) {
-      run(db, 'INSERT INTO ratings (tradie_id, source, score, job_id, at) VALUES (?, ?, ?, ?, ?)', tradieId, source, score, jobId, iso(clock.now()));
+    async recordRating(tradieId: number, source: 'property_manager' | 'tenant', score: number, jobId: number) {
+      await run(db, 'INSERT INTO ratings (tradie_id, source, score, job_id, at) VALUES (?, ?, ?, ?, ?)', tradieId, source, score, jobId, iso(clock.now()));
     },
 
-    hasRating(jobId: number, source: 'property_manager' | 'tenant') {
-      return !!one(db, 'SELECT 1 FROM ratings WHERE job_id = ? AND source = ?', jobId, source);
+    async hasRating(jobId: number, source: 'property_manager' | 'tenant') {
+      return !!(await one(db, 'SELECT 1 FROM ratings WHERE job_id = ? AND source = ?', jobId, source));
     },
 
-    ratings(tradieId: number) {
-      return all<{ source: 'property_manager' | 'tenant'; score: number; job_id: number; at: string }>(
+    async ratings(tradieId: number) {
+      return (await all<{ source: 'property_manager' | 'tenant'; score: number; job_id: number; at: string }>(
         db,
         'SELECT source, score, job_id, at FROM ratings WHERE tradie_id = ? ORDER BY id',
         tradieId,
-      ).map((r) => ({ source: r.source, score: r.score, jobId: r.job_id, at: r.at }));
+      )).map((r) => ({ source: r.source, score: r.score, jobId: r.job_id, at: r.at }));
     },
 
     /** The average of the starting rating and every rating since, with how many there are. */
-    myEst8Rating(tradieId: number) {
-      const { starting_rating } = one<{ starting_rating: number }>(db, 'SELECT starting_rating FROM people WHERE id = ?', tradieId)!;
-      const scores = [starting_rating, ...this.ratings(tradieId).map((r) => r.score)];
+    async myEst8Rating(tradieId: number) {
+      const { starting_rating } = (await one<{ starting_rating: number }>(db, 'SELECT starting_rating FROM people WHERE id = ?', tradieId))!;
+      const scores = [starting_rating, ...(await this.ratings(tradieId)).map((r) => r.score)];
       return { average: scores.reduce((a, b) => a + b, 0) / scores.length, count: scores.length };
     },
 
     async refreshGoogleRating(tradieId: number) {
-      const tradie = person(tradieId);
+      const tradie = await person(tradieId);
       if (!tradie.googlePlaceId) return;
       const { rating, reviewCount } = await googleRating(tradie.googlePlaceId);
-      run(db, 'UPDATE people SET google_rating = ?, google_review_count = ? WHERE id = ?', rating, reviewCount, tradieId);
+      await run(db, 'UPDATE people SET google_rating = ?, google_review_count = ? WHERE id = ?', rating, reviewCount, tradieId);
     },
 
     /** The Trades of a Property's past Tickets, most frequent first. */
-    frequentIssues(propertyId: number) {
+    async frequentIssues(propertyId: number) {
       const counts = new Map<Trade, number>();
-      for (const trade of modules.tickets.tradesForProperty(propertyId)) counts.set(trade, (counts.get(trade) ?? 0) + 1);
+      for (const trade of await modules.tickets.tradesForProperty(propertyId)) counts.set(trade, (counts.get(trade) ?? 0) + 1);
       return [...counts].map(([trade, tickets]) => ({ trade, tickets })).sort((a, b) => b.tickets - a.tickets);
     },
   };

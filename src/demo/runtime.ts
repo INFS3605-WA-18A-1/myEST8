@@ -1,22 +1,27 @@
-// The whole app wired for a demo: an in-memory database, the in-process mock
-// APIs (or real ones, from env vars), a simulated messenger, a movable clock,
-// and the seeded Agency.
+// The whole app wired for a demo: a database (a throwaway Postgres schema, or
+// the schema named by DATABASE_SCHEMA so it survives restarts), the in-process mock APIs (or real
+// ones, from env vars), a simulated messenger (that also sends for real through
+// Twilio and SendGrid when their env vars are set), a movable clock, and the
+// seeded Agency.
 
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
 import { createGooglePlaces } from '../adapters/google-places.ts';
 import { createImageMatcher } from '../adapters/image-matcher.ts';
 import { createJevClassifier } from '../adapters/jev.ts';
+import { messengersFromEnv } from '../adapters/messenger.ts';
 import { createQuoteReader } from '../adapters/quote-reader.ts';
+import { twilioFetchMedia } from '../adapters/twilio.ts';
 import { createApp } from '../app.ts';
-import { openDb } from '../db.ts';
-import type { ChannelType, Clock } from '../ports.ts';
+import { all, ident, LOCAL_DATABASE_URL, one, openDb, run, type Db } from '../db.ts';
+import { migrate } from '../migrate.ts';
+import type { ChannelType, Clock, Messenger } from '../ports.ts';
 import { ActionError, normalizeAddress } from '../shared.ts';
 import { createSessions } from '../web/auth.ts';
 import { createWebApp } from '../web/server.ts';
 import { OffsetClock } from './clock.ts';
 import type { DemoContact, DemoControls, DemoInboundMessage, DemoOutboundMessage } from './controls.ts';
 import { mockApis } from './mock-apis.ts';
-import { seedDemo } from './seed.ts';
+import { seedDemo, type DemoSeed } from './seed.ts';
 import { SimulatedMessenger } from './simulated-messenger.ts';
 import { seedStories, storiesStart } from './stories.ts';
 
@@ -26,7 +31,71 @@ const MOCK = 'http://mock.local';
 export type Env = Record<string, string | undefined>;
 
 /** Which external APIs are real (set by env vars) and which are the in-process mocks. */
-export type ApiChoice = Record<'classifier' | 'imageMatcher' | 'quoteReader' | 'places', 'mock' | 'real'>;
+export type ApiChoice = Record<'classifier' | 'imageMatcher' | 'quoteReader' | 'places' | 'messenger', 'mock' | 'real'>;
+
+/**
+ * Which Postgres schema the demo runs on, whether it's kept when the demo stops
+ * (DATABASE_SCHEMA named it) or thrown away (a fresh one per start), and
+ * whether it reopened one seeded by an earlier start.
+ */
+export type DemoDatabase =
+  | { schema: string; kept: boolean; reused: false }
+  | { schema: string; kept: true; reused: true; seededAt: string; storiesPlayed: boolean };
+
+/** What the demo keeps about itself so a database can be reopened. */
+type SavedDemo = { seed: DemoSeed; seededAt: string; storiesPlayed: boolean };
+
+/**
+ * The demo's own records, kept beside the app's tables: what the seed created,
+ * how far the clock has been moved, and the phone simulator's history.
+ */
+function demoStore(db: Db) {
+  return {
+    async get<T>(key: string): Promise<T | undefined> {
+      const row = await one<{ value: string }>(db, 'SELECT value FROM demo_state WHERE key = ?', key);
+      return row ? (JSON.parse(row.value) as T) : undefined;
+    },
+    async set(key: string, value: unknown) {
+      await run(db, 'INSERT INTO demo_state (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value', key, JSON.stringify(value));
+    },
+    async addMessage(direction: 'in' | 'out', message: DemoInboundMessage | DemoOutboundMessage) {
+      await run(db, 'INSERT INTO demo_messages (direction, message) VALUES (?, ?)', direction, JSON.stringify(message));
+    },
+    async messages<T>(direction: 'in' | 'out'): Promise<T[]> {
+      return (await all<{ message: string }>(db, 'SELECT message FROM demo_messages WHERE direction = ? ORDER BY id', direction)).map((r) => JSON.parse(r.message) as T);
+    },
+  };
+}
+
+/**
+ * Opens the demo's database: the Postgres at SUPABASE_DB_URL (default: the local
+ * one, LOCAL_DATABASE_URL), in the schema DATABASE_SCHEMA names (kept across
+ * restarts) or in a fresh schema thrown away on close. Applies the migrations,
+ * so it only works on a local Postgres (src/migrate.ts refuses any other).
+ */
+async function openDemoDb(env: Env) {
+  const url = env.SUPABASE_DB_URL || LOCAL_DATABASE_URL;
+  const kept = !!env.DATABASE_SCHEMA;
+  const schema = env.DATABASE_SCHEMA || `demo_${randomUUID().replaceAll('-', '').slice(0, 12)}`;
+  const db = openDb(url, { schema });
+  try {
+    await migrate(db);
+  } catch (error) {
+    await db.close();
+    const refused = (error as { code?: string }).code === 'ECONNREFUSED';
+    throw refused ? new Error(`No Postgres answers at ${new URL(url).host}. Start the local one with \`npm run db:start\` (needs Docker), or set SUPABASE_DB_URL.`) : error;
+  }
+  const store = demoStore(db);
+  const hasData = (await one(db, 'SELECT 1 AS found FROM agencies LIMIT 1')) !== undefined;
+  const saved = await store.get<SavedDemo>('saved');
+  if (hasData && !saved) {
+    await db.close();
+    throw new Error(
+      `Schema ${schema} has data that wasn't seeded by the demo, or a start-up that stopped part-way. Run \`npm run db:reset\` to start afresh, or set DATABASE_SCHEMA to another schema.`,
+    );
+  }
+  return { db, store, saved, schema, kept };
+}
 
 /**
  * Builds the demo: app, web app, simulator controls and seeded data. Nothing
@@ -45,15 +114,22 @@ export async function createDemo(
     /**
      * Plays the demo stories (src/demo/stories.ts) so the Agency starts with
      * work in flight: the clock starts ten days back and ends at `now`. Off by
-     * default; skipped when the classifier or quote reader is real.
+     * default; skipped when the classifier or quote reader is real, and when
+     * DATABASE_SCHEMA reopens a schema seeded by an earlier start.
      */
     stories?: boolean;
   } = {},
 ) {
   const env = options.env ?? process.env;
   const logError = options.logError ?? ((error: Error) => console.error('[worker]', error));
-  const storiesEnd = options.stories && !env.JEV_API_URL && !env.QUOTES_API_URL ? (options.now ?? new Date()) : null;
-  const clock = new OffsetClock(storiesEnd ? storiesStart(storiesEnd) : options.now);
+  // DATABASE_SCHEMA unset: a fresh schema, dropped on close. Set: a schema that is
+  // seeded on the first start and reopened as it was on every start after.
+  const { db, store, saved, schema, kept } = await openDemoDb(env);
+  const storiesEnd = !saved && options.stories && !env.JEV_API_URL && !env.QUOTES_API_URL ? (options.now ?? new Date()) : null;
+  // A reopened database carries on from where its clock was moved to; the stories start ten days back.
+  const savedOffsetMs = (await store.get<number>('clockOffsetMs')) ?? 0;
+  const clock = new OffsetClock(saved ? new Date(Date.now() + savedOffsetMs) : storiesEnd ? storiesStart(storiesEnd) : options.now);
+  const saveClock = () => store.set('clockOffsetMs', clock.now().getTime() - Date.now());
   const timeZone = 'Australia/Sydney';
   const port = Number(env.PORT ?? 3000);
   const baseUrl = (env.PUBLIC_URL ?? `http://localhost:${port}`).replace(/\/$/, '');
@@ -72,21 +148,44 @@ export async function createDemo(
     imageMatcher: env.VISION_API_URL ? 'real' : 'mock',
     quoteReader: env.QUOTES_API_URL ? 'real' : 'mock',
     places: env.GOOGLE_MAPS_API_KEY ? 'real' : 'mock',
+    messenger: env.TWILIO_ACCOUNT_SID || env.SENDGRID_API_KEY ? 'real' : 'mock',
   };
 
-  const messenger = new SimulatedMessenger(clock, options.onOutbound);
-  const db = openDb(':memory:');
+  const messenger = new SimulatedMessenger(clock, async (message) => {
+    await store.addMessage('out', message);
+    options.onOutbound?.(message);
+  });
+  // Channels whose provider is configured (TWILIO_*, SENDGRID_*) really send, but
+  // only to the addresses in DEMO_SEND_TO ("*" for anyone): the seeded people's
+  // numbers are made up and could belong to someone. The simulator records every
+  // message once it's sent. File links run on real time, as Twilio fetches them in
+  // real time however far the demo clock has moved.
+  const providers = messengersFromEnv(env, { clock: { now: () => new Date() } });
+  const sendTo = new Set((env.DEMO_SEND_TO ?? '').split(',').map((a) => a.trim()).filter(Boolean).map((a) => (a === '*' ? a : normalizeAddress(a))));
+  const reallySends = (to: string) => sendTo.has('*') || sendTo.has(normalizeAddress(to));
+  const outbound: Messenger = {
+    async send(message) {
+      const provider = providers.channels[message.channelType];
+      if (provider && reallySends(message.to)) await provider.send({ ...message, cc: message.cc.filter(reallySends) });
+      await messenger.send(message);
+    },
+  };
+  const twilioAccountSid = env.TWILIO_ACCOUNT_SID?.trim();
+  const twilioAuthToken = env.TWILIO_AUTH_TOKEN?.trim();
   const app = createApp({
     db,
     clock,
-    messenger,
+    messenger: outbound,
     classifier: createJevClassifier({ ...jev, apiKey: env.JEV_API_KEY ?? 'demo' }),
     imageMatcher: createImageMatcher({ ...vision, apiKey: env.VISION_API_KEY ?? 'demo' }),
     quoteReader: createQuoteReader({ ...quotes, apiKey: env.QUOTES_API_KEY ?? 'demo', clock, timeZone }),
     places: createGooglePlaces(google),
-    fetchMedia: async (url) => {
-      throw new Error(`The demo has no media to fetch at ${url}: the simulator sends attachments directly`);
-    },
+    fetchMedia:
+      twilioAccountSid && twilioAuthToken
+        ? twilioFetchMedia(twilioAccountSid, twilioAuthToken)
+        : async (url) => {
+            throw new Error(`The demo has no media to fetch at ${url}: the simulator sends attachments directly`);
+          },
     settings: { baseUrl },
   });
 
@@ -117,42 +216,39 @@ export async function createDemo(
     return () => clearInterval(timer);
   }
 
-  const seed = await seedDemo(app, { googleListings: apis.places === 'mock' });
+  const seed = saved ? saved.seed : await seedDemo(app, { googleListings: apis.places === 'mock' });
   await runWorker();
 
   // The simulator is limited to the Agency of the Property Manager using it, so
   // each Agency that signs up to the demo sees only its own people and messages.
-  const inbound: DemoInboundMessage[] = [];
-  const channelsOf = (propertyManagerId: number) => app.asPropertyManager(propertyManagerId).channels();
+  const channelsOf = async (propertyManagerId: number) => (await app.asPropertyManager(propertyManagerId)).channels();
   /** Whether a message on `channel` from or to `address` went through one of the Agency's channels. */
-  const throughAgency = (propertyManagerId: number) => {
-    const channels = channelsOf(propertyManagerId);
+  const throughAgency = async (propertyManagerId: number) => {
+    const channels = await channelsOf(propertyManagerId);
     return (channel: ChannelType, address: string) => channels.some((c) => c.type === channel && c.address === normalizeAddress(address));
   };
   const demo: DemoControls = {
-    contacts(propertyManagerId): DemoContact[] {
-      return app
-        .asPropertyManager(propertyManagerId)
-        .people()
-        .map((p) => ({ personId: p.id, name: p.name, role: p.role, mobile: p.mobile, email: p.email }));
+    async contacts(propertyManagerId): Promise<DemoContact[]> {
+      const people = await (await app.asPropertyManager(propertyManagerId)).people();
+      return people.map((p) => ({ personId: p.id, name: p.name, role: p.role, mobile: p.mobile, email: p.email }));
     },
-    outbox(propertyManagerId) {
-      const ours = throughAgency(propertyManagerId);
-      return messenger.messages().filter((m) => ours(m.channel, m.from));
+    async outbox(propertyManagerId) {
+      const ours = await throughAgency(propertyManagerId);
+      return (await store.messages<DemoOutboundMessage>('out')).filter((m) => ours(m.channel, m.from));
     },
-    inbound(propertyManagerId) {
-      const ours = throughAgency(propertyManagerId);
-      return inbound.filter((m) => ours(m.channel, m.to));
+    async inbound(propertyManagerId) {
+      const ours = await throughAgency(propertyManagerId);
+      return (await store.messages<DemoInboundMessage>('in')).filter((m) => ours(m.channel, m.to));
     },
     async sendAs(propertyManagerId, from, channel, text, attachments = []) {
-      const to = channelsOf(propertyManagerId).find((c) => c.type === channel)?.address;
+      const to = (await channelsOf(propertyManagerId)).find((c) => c.type === channel)?.address;
       if (!to) {
         const [name, what] = channel === 'email' ? ['email', 'inbox address'] : [channel === 'sms' ? 'SMS' : 'WhatsApp', 'number'];
         throw new ActionError('invalid', `Connect ${name} in Setup first: the Agency has no ${name} ${what} for this message to go to.`);
       }
       const receivedAt = clock.now();
-      inbound.push({ at: receivedAt.toISOString(), from, to, channel, text, attachments: attachments.map((a) => a.filename) });
-      app.receiveInbound({
+      await store.addMessage('in', { at: receivedAt.toISOString(), from, to, channel, text, attachments: attachments.map((a) => a.filename) });
+      await app.receiveInbound({
         providerMessageId: `demo-${randomUUID()}`,
         agencyChannel: to,
         channelType: channel,
@@ -165,6 +261,7 @@ export async function createDemo(
     },
     async advance(hours) {
       clock.advance(hours * HOUR_MS);
+      await saveClock();
       await runWorker();
     },
     now: () => clock.now(),
@@ -172,6 +269,22 @@ export async function createDemo(
 
   // The stories play the clock forward to `options.now`, or to the real time.
   const stories = storiesEnd ? await seedStories({ app, simulator: demo, seed, clock, ...(options.now ? { end: options.now } : {}) }) : null;
+  await saveClock();
+  // Saved last, so a start-up stopped part-way is caught on the next start rather than half-reused.
+  if (!saved) await store.set('saved', { seed, seededAt: clock.now().toISOString(), storiesPlayed: stories !== null } satisfies SavedDemo);
+  const database: DemoDatabase = saved
+    ? { schema, kept: true, reused: true, seededAt: saved.seededAt, storiesPlayed: saved.storiesPlayed }
+    : { schema, kept, reused: false };
+
+  /** Waits for any worker run in progress, then closes the database, dropping a throwaway schema. Stop the worker loop first. */
+  async function close() {
+    await tail;
+    try {
+      if (!kept) await db.sql.unsafe(`DROP SCHEMA IF EXISTS ${ident(schema)} CASCADE`);
+    } finally {
+      await db.close();
+    }
+  }
 
   // Sessions run on real time, so moving the demo clock forward never signs anyone out.
   const sessions = createSessions(db, { now: () => new Date() } satisfies Clock);
@@ -180,12 +293,15 @@ export async function createDemo(
     sessions,
     clock,
     publicUrl: baseUrl,
-    twilioAuthToken: 'demo',
-    sendgridPublicKey: generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).publicKey.export({ format: 'der', type: 'spki' }).toString('base64'),
+    twilioAuthToken: twilioAuthToken || 'demo',
+    sendgridPublicKey:
+      env.SENDGRID_INBOUND_PUBLIC_KEY?.trim() ||
+      generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).publicKey.export({ format: 'der', type: 'spki' }).toString('base64'),
+    fileLinks: providers.fileLinks,
     demo,
   });
 
-  return { app, web, demo, sessions, clock, messenger, seed, stories, baseUrl, apis, runWorker, startWorkerLoop };
+  return { app, web, demo, sessions, clock, messenger, seed, stories, database, baseUrl, apis, runWorker, startWorkerLoop, close };
 }
 
 export type Demo = Awaited<ReturnType<typeof createDemo>>;

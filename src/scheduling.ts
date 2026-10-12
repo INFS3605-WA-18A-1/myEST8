@@ -38,50 +38,35 @@ type WorkOrderRow = {
 
 /** The shared calendar, Work Orders, reschedule suggestions and Job completion. */
 export function createScheduling({ db, clock, modules }: Context) {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS work_orders (
-      id INTEGER PRIMARY KEY,
-      agency_id INTEGER NOT NULL,
-      job_id INTEGER NOT NULL,
-      ticket_id INTEGER NOT NULL,
-      tradie_id INTEGER NOT NULL,
-      start TEXT NOT NULL,
-      end TEXT NOT NULL,
-      status TEXT NOT NULL,
-      visit_confirmed INTEGER NOT NULL DEFAULT 0,
-      reschedule_requested_by TEXT
-    );
-    CREATE INDEX IF NOT EXISTS work_orders_by_tradie ON work_orders (agency_id, tradie_id, start);
-  `);
 
   const { profiles, tickets, notifications } = modules;
 
-  function workOrderRow(id: number) {
-    return one<WorkOrderRow>(db, 'SELECT * FROM work_orders WHERE id = ?', id);
+  async function workOrderRow(id: number) {
+    return await one<WorkOrderRow>(db, 'SELECT * FROM work_orders WHERE id = ?', id);
   }
 
-  function activeWorkOrder(agencyId: number, id: number) {
-    const row = one<WorkOrderRow>(db, `SELECT * FROM work_orders WHERE id = ? AND agency_id = ? AND status = 'active'`, id, agencyId);
+  async function activeWorkOrder(agencyId: number, id: number) {
+    const row = await one<WorkOrderRow>(db, `SELECT * FROM work_orders WHERE id = ? AND agency_id = ? AND status = 'active'`, id, agencyId);
     if (!row) notFound('Work Order');
     return row;
   }
 
   /** A Tradie is free when none of their Work Orders in the Agency overlap the slot. */
-  function isFree(agencyId: number, tradieId: number, start: Date, end: Date, ignoreWorkOrderId = 0) {
-    return !one(
+  async function isFree(agencyId: number, tradieId: number, start: Date, end: Date, ignoreWorkOrderId = 0) {
+    return !(await one(
       db,
       `SELECT 1 FROM work_orders WHERE agency_id = ? AND tradie_id = ? AND status != 'cancelled' AND id != ?
-       AND start < ? AND end > ?`,
+       AND start < ? AND "end" > ?`,
       agencyId,
       tradieId,
       ignoreWorkOrderId,
       iso(end),
       iso(start),
-    );
+    ));
   }
 
   /** Free slots that start on the hour and fit inside one of the windows. */
-  function findSlots(input: {
+  async function findSlots(input: {
     agencyId: number;
     tradieId: number;
     durationMs: number;
@@ -92,16 +77,28 @@ export function createScheduling({ db, clock, modules }: Context) {
     ignoreWorkOrderId?: number;
     skipStart?: string;
   }) {
-    const { timeZone } = profiles.agency(input.agencyId);
+    const { timeZone } = await profiles.agency(input.agencyId);
     const now = wallClock(input.from, timeZone);
     let start = zonedInstant(timeZone, now.year, now.month, now.day, now.hour + 1);
     const until = addMs(input.from, input.days * 24 * HOUR_MS);
+    // The Tradie's bookings over the whole span, read once; each slot is checked against them as isFree would.
+    const booked = await all<{ start: string; end: string }>(
+      db,
+      `SELECT start, "end" FROM work_orders WHERE agency_id = ? AND tradie_id = ? AND status != 'cancelled' AND id != ?
+       AND start < ? AND "end" > ?`,
+      input.agencyId,
+      input.tradieId,
+      input.ignoreWorkOrderId ?? 0,
+      iso(addMs(until, input.durationMs)),
+      iso(start),
+    );
+    const free = (from: string, to: string) => !booked.some((b) => b.start < to && b.end > from);
     const slots: { start: string; end: string }[] = [];
     for (; start < until && slots.length < input.limit; start = addMs(start, HOUR_MS)) {
       const end = addMs(start, input.durationMs);
       if (iso(start) === input.skipStart) continue;
       if (!fitsWindow(start, end, input.windows, timeZone)) continue;
-      if (!isFree(input.agencyId, input.tradieId, start, end, input.ignoreWorkOrderId)) continue;
+      if (!free(iso(start), iso(end))) continue;
       slots.push({ start: iso(start), end: iso(end) });
     }
     return slots;
@@ -116,16 +113,16 @@ export function createScheduling({ db, clock, modules }: Context) {
     );
   }
 
-  function place(row: WorkOrderRow) {
-    const job = tickets.job(row.job_id);
-    const ticket = tickets.ticket(row.ticket_id);
-    const property = profiles.property(ticket.propertyId);
-    const tradie = profiles.person(row.tradie_id);
+  async function place(row: WorkOrderRow) {
+    const job = await tickets.job(row.job_id);
+    const ticket = await tickets.ticket(row.ticket_id);
+    const property = await profiles.property(ticket.propertyId);
+    const tradie = await profiles.person(row.tradie_id);
     return { job, ticket, property, tradieBusinessName: tradie.businessName ?? tradie.name };
   }
 
-  function toView(row: WorkOrderRow) {
-    const { property, tradieBusinessName } = place(row);
+  async function toView(row: WorkOrderRow) {
+    const { property, tradieBusinessName } = await place(row);
     return {
       workOrderId: row.id,
       jobId: row.job_id,
@@ -138,12 +135,12 @@ export function createScheduling({ db, clock, modules }: Context) {
       visitConfirmed: !!row.visit_confirmed,
       rescheduleRequestedBy: row.reschedule_requested_by,
       propertyAddress: property.address,
-      propertyManager: profiles.propertyManager(property.propertyManagerId).name,
+      propertyManager: (await profiles.propertyManager(property.propertyManagerId)).name,
     };
   }
 
   async function tellTenantVisitTime(row: WorkOrderRow, moved: boolean) {
-    const { job, ticket, tradieBusinessName } = place(row);
+    const { job, ticket, tradieBusinessName } = await place(row);
     if (moved) {
       await notifications.send(ticket.tenantId, 'tenant.visit_moved', { visitStart: row.start, tradieBusinessName }, { issueId: ticket.issueId });
     } else {
@@ -154,15 +151,15 @@ export function createScheduling({ db, clock, modules }: Context) {
         { issueId: ticket.issueId },
       );
     }
-    modules.intake.expectAnswer(ticket.tenantId, { kind: 'visit', workOrderId: row.id });
+    await modules.intake.expectAnswer(ticket.tenantId, { kind: 'visit', workOrderId: row.id });
   }
 
   return {
     isFree,
 
     /** A Tradie's free slots over the coming days, on the hour, inside working hours. */
-    freeSlots(agencyId: number, tradieId: number, options: { days?: number; durationMinutes?: number } = {}) {
-      profiles.personInAgency(agencyId, tradieId, 'tradie');
+    async freeSlots(agencyId: number, tradieId: number, options: { days?: number; durationMinutes?: number } = {}) {
+      await profiles.personInAgency(agencyId, tradieId, 'tradie');
       return findSlots({
         agencyId,
         tradieId,
@@ -176,9 +173,9 @@ export function createScheduling({ db, clock, modules }: Context) {
 
     /** Books the Job's chosen Tradie, at the Quote's proposed time unless the Property Manager picks one. */
     async sendWorkOrder(agencyId: number, jobId: number, options: { start?: string; durationMinutes?: number } = {}) {
-      const job = tickets.jobInAgency(agencyId, jobId);
+      const job = await tickets.jobInAgency(agencyId, jobId);
       if (job.status !== 'approved') invalid('Send a Work Order once the Job has an approved Quote');
-      const quote = modules.quotes.approvedQuote(jobId)!;
+      const quote = (await modules.quotes.approvedQuote(jobId))!;
       const durationMinutes = options.durationMinutes ?? DEFAULT_SLOT_MINUTES;
       if (!Number.isInteger(durationMinutes) || durationMinutes <= 0 || durationMinutes > 24 * 60) {
         invalid('The slot must be between 1 minute and 24 hours long');
@@ -189,20 +186,22 @@ export function createScheduling({ db, clock, modules }: Context) {
       if (Number.isNaN(start.getTime())) invalid(`${startAt} is not a time`);
       if (start < clock.now()) invalid('Pick a start time in the future');
       const end = addMs(start, durationMinutes * MINUTE_MS);
-      const ticket = tickets.ticket(job.ticketId);
-      const tradie = profiles.person(quote.tradieId);
+      const ticket = await tickets.ticket(job.ticketId);
+      const tradie = await profiles.person(quote.tradieId);
       const name = tradie.businessName ?? tradie.name;
 
-      const id = transaction(db, () => {
-        if (!isFree(agencyId, tradie.id, start, end)) {
+      const id = await transaction(db, async () => {
+        // Checked again inside: a Work Order sent for this Job a moment ago has moved it on.
+        if ((await tickets.job(jobId)).status !== 'approved') invalid('Send a Work Order once the Job has an approved Quote');
+        if (!(await isFree(agencyId, tradie.id, start, end))) {
           throw new ActionError(
             'conflict',
             options.start ? `${name} is already booked then` : `${name} is booked at the proposed time. Pick another start time.`,
           );
         }
-        const id = run(
+        const id = await run(
           db,
-          `INSERT INTO work_orders (agency_id, job_id, ticket_id, tradie_id, start, end, status) VALUES (?, ?, ?, ?, ?, ?, 'active')`,
+          `INSERT INTO work_orders (agency_id, job_id, ticket_id, tradie_id, start, "end", status) VALUES (?, ?, ?, ?, ?, ?, 'active') RETURNING id`,
           agencyId,
           jobId,
           ticket.id,
@@ -210,14 +209,14 @@ export function createScheduling({ db, clock, modules }: Context) {
           iso(start),
           iso(end),
         );
-        tickets.setJobStatus(jobId, 'scheduled');
-        tickets.recordEvent(ticket.id, 'work_order_sent', { jobId, tradie: name, visitStart: iso(start), visitEnd: iso(end) });
+        await tickets.setJobStatus(jobId, 'scheduled');
+        await tickets.recordEvent(ticket.id, 'work_order_sent', { jobId, tradie: name, visitStart: iso(start), visitEnd: iso(end) });
         return id;
       });
 
-      const row = workOrderRow(id)!;
-      const { property } = place(row);
-      const issue = tickets.issue(ticket.issueId);
+      const row = (await workOrderRow(id))!;
+      const { property } = await place(row);
+      const issue = await tickets.issue(ticket.issueId);
       await notifications.send(
         tradie.id,
         'tradie.work_order',
@@ -234,23 +233,27 @@ export function createScheduling({ db, clock, modules }: Context) {
     },
 
     async recordRescheduleRequest(workOrderId: number, by: 'tenant' | 'tradie') {
-      const row = workOrderRow(workOrderId);
-      if (row?.status !== 'active') return;
-      run(db, 'UPDATE work_orders SET reschedule_requested_by = ?, visit_confirmed = 0 WHERE id = ?', by, workOrderId);
-      tickets.recordEvent(row.ticket_id, 'reschedule_requested', { jobId: row.job_id, by });
+      return transaction(db, async () => {
+        const row = await workOrderRow(workOrderId);
+        if (row?.status !== 'active') return;
+        await run(db, 'UPDATE work_orders SET reschedule_requested_by = ?, visit_confirmed = 0 WHERE id = ?', by, workOrderId);
+        await tickets.recordEvent(row.ticket_id, 'reschedule_requested', { jobId: row.job_id, by });
+      });
     },
 
     async recordVisitConfirmation(workOrderId: number) {
-      const row = workOrderRow(workOrderId);
-      if (row?.status !== 'active') return;
-      run(db, 'UPDATE work_orders SET visit_confirmed = 1 WHERE id = ?', workOrderId);
-      tickets.recordEvent(row.ticket_id, 'visit_confirmed', { jobId: row.job_id });
+      return transaction(db, async () => {
+        const row = await workOrderRow(workOrderId);
+        if (row?.status !== 'active') return;
+        await run(db, 'UPDATE work_orders SET visit_confirmed = 1 WHERE id = ?', workOrderId);
+        await tickets.recordEvent(row.ticket_id, 'visit_confirmed', { jobId: row.job_id });
+      });
     },
 
     /** Up to three slots in the next 14 days, as long as the current one, free for the Tradie and inside the Tenant's availability. */
-    suggestTimes(agencyId: number, workOrderId: number) {
-      const row = activeWorkOrder(agencyId, workOrderId);
-      const tenant = profiles.person(tickets.ticket(row.ticket_id).tenantId);
+    async suggestTimes(agencyId: number, workOrderId: number) {
+      const row = await activeWorkOrder(agencyId, workOrderId);
+      const tenant = await profiles.person((await tickets.ticket(row.ticket_id)).tenantId);
       return findSlots({
         agencyId,
         tradieId: row.tradie_id,
@@ -266,24 +269,25 @@ export function createScheduling({ db, clock, modules }: Context) {
 
     /** Moves a visit to a suggested time or any other free slot, and tells the Tradie and the Tenant. */
     async acceptTime(agencyId: number, workOrderId: number, startAt: string) {
-      const row = activeWorkOrder(agencyId, workOrderId);
+      const row = await activeWorkOrder(agencyId, workOrderId);
       const start = new Date(startAt);
       if (Number.isNaN(start.getTime())) invalid(`${startAt} is not a time`);
       if (start < clock.now()) invalid('Pick a start time in the future');
       const end = addMs(start, Date.parse(row.end) - Date.parse(row.start));
-      const { property, tradieBusinessName, ticket } = place(row);
-      transaction(db, () => {
-        if (!isFree(agencyId, row.tradie_id, start, end, row.id)) throw new ActionError('conflict', `${tradieBusinessName} is already booked then`);
-        run(
+      const { property, tradieBusinessName, ticket } = await place(row);
+      await transaction(db, async () => {
+        await activeWorkOrder(agencyId, workOrderId);
+        if (!(await isFree(agencyId, row.tradie_id, start, end, row.id))) throw new ActionError('conflict', `${tradieBusinessName} is already booked then`);
+        await run(
           db,
-          'UPDATE work_orders SET start = ?, end = ?, reschedule_requested_by = NULL, visit_confirmed = 0 WHERE id = ?',
+          'UPDATE work_orders SET start = ?, "end" = ?, reschedule_requested_by = NULL, visit_confirmed = 0 WHERE id = ?',
           iso(start),
           iso(end),
           row.id,
         );
-        tickets.recordEvent(row.ticket_id, 'visit_moved', { jobId: row.job_id, visitStart: iso(start), visitEnd: iso(end) });
+        await tickets.recordEvent(row.ticket_id, 'visit_moved', { jobId: row.job_id, visitStart: iso(start), visitEnd: iso(end) });
       });
-      const moved = workOrderRow(row.id)!;
+      const moved = (await workOrderRow(row.id))!;
       await notifications.send(
         row.tradie_id,
         'tradie.visit_moved',
@@ -295,106 +299,120 @@ export function createScheduling({ db, clock, modules }: Context) {
 
     /** The Tradie replied "done": the Job is done, and the Tenant is asked if it was fixed properly. */
     async markDone(workOrderId: number) {
-      const row = workOrderRow(workOrderId);
-      if (row?.status !== 'active') return;
-      const { job, ticket, tradieBusinessName } = place(row);
-      transaction(db, () => {
-        run(db, `UPDATE work_orders SET status = 'done' WHERE id = ?`, row.id);
-        tickets.setJobStatus(job.id, 'done');
-        tickets.recordEvent(ticket.id, 'job_done', { jobId: job.id, tradie: tradieBusinessName });
+      const done = await transaction(db, async () => {
+        const row = await workOrderRow(workOrderId);
+        if (row?.status !== 'active') return null;
+        const { job, ticket, tradieBusinessName } = await place(row);
+        await run(db, `UPDATE work_orders SET status = 'done' WHERE id = ?`, row.id);
+        await tickets.setJobStatus(job.id, 'done');
+        await tickets.recordEvent(ticket.id, 'job_done', { jobId: job.id, tradie: tradieBusinessName });
+        return { job, ticket, tradieBusinessName };
       });
+      if (!done) return;
+      const { job, ticket, tradieBusinessName } = done;
       await notifications.send(ticket.tenantId, 'tenant.fixed_properly', { trade: job.trade, tradieBusinessName }, { issueId: ticket.issueId });
-      modules.intake.expectAnswer(ticket.tenantId, { kind: 'fix_rating', jobId: job.id });
+      await modules.intake.expectAnswer(ticket.tenantId, { kind: 'fix_rating', jobId: job.id });
     },
 
     async recordTenantRating(jobId: number, score: number) {
-      if (!Number.isInteger(score) || score < 1 || score > 5 || profiles.hasRating(jobId, 'tenant')) return;
-      const row = one<WorkOrderRow>(db, `SELECT * FROM work_orders WHERE job_id = ? AND status = 'done'`, jobId);
-      if (!row) return;
-      profiles.recordRating(row.tradie_id, 'tenant', score, jobId);
-      tickets.recordEvent(row.ticket_id, 'tenant_rated', { jobId, score });
-    },
-
-    rateTradie(agencyId: number, jobId: number, score: number) {
-      const job = tickets.jobInAgency(agencyId, jobId);
-      if (job.status !== 'done') invalid('Rate the Tradie once the Job is done');
-      if (!Number.isInteger(score) || score < 1 || score > 5) invalid('Rate from 1 to 5');
-      if (profiles.hasRating(jobId, 'property_manager')) invalid('This Job is already rated');
-      const row = one<WorkOrderRow>(db, `SELECT * FROM work_orders WHERE job_id = ? AND status = 'done'`, jobId)!;
-      profiles.recordRating(row.tradie_id, 'property_manager', score, jobId);
-      tickets.recordEvent(job.ticketId, 'tradie_rated', { jobId, score });
-    },
-
-    /** Every booking in the Agency that overlaps the range. */
-    calendar(agencyId: number, range: { from: string; to: string }) {
-      return all<WorkOrderRow>(
-        db,
-        `SELECT * FROM work_orders WHERE agency_id = ? AND status != 'cancelled' AND start < ? AND end > ? ORDER BY start, id`,
-        agencyId,
-        iso(new Date(range.to)),
-        iso(new Date(range.from)),
-      ).map(toView);
-    },
-
-    /** A Tradie's upcoming bookings, shown next to recommendations. */
-    bookings(agencyId: number, tradieId: number) {
-      return all<WorkOrderRow>(
-        db,
-        `SELECT * FROM work_orders WHERE agency_id = ? AND tradie_id = ? AND status = 'active' AND end > ? ORDER BY start`,
-        agencyId,
-        tradieId,
-        iso(clock.now()),
-      ).map((row) => {
-        const { start, end, propertyAddress, propertyManager } = toView(row);
-        return { start, end, propertyAddress, propertyManager };
+      return transaction(db, async () => {
+        if (!Number.isInteger(score) || score < 1 || score > 5 || (await profiles.hasRating(jobId, 'tenant'))) return;
+        const row = await one<WorkOrderRow>(db, `SELECT * FROM work_orders WHERE job_id = ? AND status = 'done'`, jobId);
+        if (!row) return;
+        await profiles.recordRating(row.tradie_id, 'tenant', score, jobId);
+        await tickets.recordEvent(row.ticket_id, 'tenant_rated', { jobId, score });
       });
     },
 
+    async rateTradie(agencyId: number, jobId: number, score: number) {
+      return transaction(db, async () => {
+        const job = await tickets.jobInAgency(agencyId, jobId);
+        if (job.status !== 'done') invalid('Rate the Tradie once the Job is done');
+        if (!Number.isInteger(score) || score < 1 || score > 5) invalid('Rate from 1 to 5');
+        if (await profiles.hasRating(jobId, 'property_manager')) invalid('This Job is already rated');
+        const row = (await one<WorkOrderRow>(db, `SELECT * FROM work_orders WHERE job_id = ? AND status = 'done'`, jobId))!;
+        await profiles.recordRating(row.tradie_id, 'property_manager', score, jobId);
+        await tickets.recordEvent(job.ticketId, 'tradie_rated', { jobId, score });
+      });
+    },
+
+    /** Every booking in the Agency that overlaps the range. */
+    async calendar(agencyId: number, range: { from: string; to: string }) {
+      return Promise.all((await all<WorkOrderRow>(
+        db,
+        `SELECT * FROM work_orders WHERE agency_id = ? AND status != 'cancelled' AND start < ? AND "end" > ? ORDER BY start, id`,
+        agencyId,
+        iso(new Date(range.to)),
+        iso(new Date(range.from)),
+      )).map(toView));
+    },
+
+    /** A Tradie's upcoming bookings, shown next to recommendations. */
+    async bookings(agencyId: number, tradieId: number) {
+      return Promise.all((await all<WorkOrderRow>(
+        db,
+        `SELECT * FROM work_orders WHERE agency_id = ? AND tradie_id = ? AND status = 'active' AND "end" > ? ORDER BY start, id`,
+        agencyId,
+        tradieId,
+        iso(clock.now()),
+      )).map(async (row) => {
+        const { start, end, propertyAddress, propertyManager } = await toView(row);
+        return { start, end, propertyAddress, propertyManager };
+      }));
+    },
+
     /** Done Jobs the Property Manager hasn't rated yet. */
-    alerts(agencyId: number, propertyIds: number[] | null) {
-      return all<WorkOrderRow>(db, `SELECT * FROM work_orders WHERE agency_id = ? AND status = 'done' ORDER BY start`, agencyId)
-        .filter((row) => !profiles.hasRating(row.job_id, 'property_manager'))
-        .map((row) => ({ row, view: toView(row), propertyId: tickets.ticket(row.ticket_id).propertyId }))
-        .filter(({ propertyId }) => propertyIds === null || propertyIds.includes(propertyId))
-        .map(({ row, view }) => ({
+    async alerts(agencyId: number, propertyIds: number[] | null) {
+      const due = [];
+      for (const row of await all<WorkOrderRow>(db, `SELECT * FROM work_orders WHERE agency_id = ? AND status = 'done' ORDER BY start, id`, agencyId)) {
+        if (await profiles.hasRating(row.job_id, 'property_manager')) continue;
+        const { propertyId } = await tickets.ticket(row.ticket_id);
+        if (propertyIds !== null && !propertyIds.includes(propertyId)) continue;
+        const view = await toView(row);
+        due.push({
           kind: 'rating_due' as const,
           ticketId: row.ticket_id,
           jobId: row.job_id,
           propertyAddress: view.propertyAddress,
           businessName: view.businessName,
-        }));
+        });
+      }
+      return due;
     },
 
-    itemsWaitingOn(tradieId: number): OpenItem[] {
-      return all<WorkOrderRow>(db, `SELECT * FROM work_orders WHERE tradie_id = ? AND status = 'active' ORDER BY start`, tradieId).map((row) => {
-        const { job, property } = place(row);
-        const { timeZone } = profiles.agency(row.agency_id);
-        return { ref: `work_order:${row.id}`, summary: `Work Order: ${job.trade} at ${property.address}, ${formatVisit(row.start, timeZone)}` };
-      });
+    async itemsWaitingOn(tradieId: number): Promise<OpenItem[]> {
+      const rows = await all<WorkOrderRow>(db, `SELECT * FROM work_orders WHERE tradie_id = ? AND status = 'active' ORDER BY start, id`, tradieId);
+      return Promise.all(
+        rows.map(async (row) => {
+          const { job, property } = await place(row);
+          const { timeZone } = await profiles.agency(row.agency_id);
+          return { ref: `work_order:${row.id}`, summary: `Work Order: ${job.trade} at ${property.address}, ${formatVisit(row.start, timeZone)}` };
+        }),
+      );
     },
 
-    workOrder(id: number) {
-      const row = workOrderRow(id);
+    async workOrder(id: number) {
+      const row = await workOrderRow(id);
       return row ? { id: row.id, jobId: row.job_id, ticketId: row.ticket_id } : null;
     },
 
-    activeWorkOrderForJob(jobId: number) {
-      return one<{ id: number }>(db, `SELECT id FROM work_orders WHERE job_id = ? AND status = 'active'`, jobId);
+    async activeWorkOrderForJob(jobId: number) {
+      return await one<{ id: number }>(db, `SELECT id FROM work_orders WHERE job_id = ? AND status = 'active'`, jobId);
     },
 
-    activeWorkOrdersForTicket(ticketId: number) {
-      return all<{ id: number }>(db, `SELECT id FROM work_orders WHERE ticket_id = ? AND status = 'active' ORDER BY id`, ticketId);
+    async activeWorkOrdersForTicket(ticketId: number) {
+      return await all<{ id: number }>(db, `SELECT id FROM work_orders WHERE ticket_id = ? AND status = 'active' ORDER BY id`, ticketId);
     },
 
     /** The Job's current Work Order, for the Ticket view. */
-    workOrderForJob(jobId: number) {
-      const row = one<WorkOrderRow>(db, `SELECT * FROM work_orders WHERE job_id = ? AND status != 'cancelled' ORDER BY id DESC LIMIT 1`, jobId);
+    async workOrderForJob(jobId: number) {
+      const row = await one<WorkOrderRow>(db, `SELECT * FROM work_orders WHERE job_id = ? AND status != 'cancelled' ORDER BY id DESC LIMIT 1`, jobId);
       return row ? toView(row) : null;
     },
 
     /** A cancelled Job frees the Tradie's slot. */
-    jobCancelled(jobId: number) {
-      run(db, `UPDATE work_orders SET status = 'cancelled' WHERE job_id = ? AND status = 'active'`, jobId);
+    async jobCancelled(jobId: number) {
+      await run(db, `UPDATE work_orders SET status = 'cancelled' WHERE job_id = ? AND status = 'active'`, jobId);
     },
   };
 }

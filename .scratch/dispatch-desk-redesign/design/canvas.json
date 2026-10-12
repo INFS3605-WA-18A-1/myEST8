@@ -1,0 +1,93 @@
+{
+  "v": 3,
+  "createdOnFiles": {
+    "v": 1,
+    "at": "2026-10-10T09:00:00+11:00"
+  },
+  "title": "myEST8 dispatch desk",
+  "launch": {
+    "view": "canvas"
+  },
+  "pages": [],
+  "boards": {
+    "Main.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 1280,
+      "h": 1180,
+      "title": "Landing page",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Dashboard.dc.html": {
+      "x": 1360,
+      "y": 0,
+      "w": 1366,
+      "h": 980,
+      "title": "Dashboard",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Dispatch.dc.html": {
+      "x": 2806,
+      "y": 0,
+      "w": 1366,
+      "h": 1200,
+      "title": "Dispatch: map and Tradie schedule",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Import.dc.html": {
+      "x": 5698,
+      "y": 0,
+      "w": 1280,
+      "h": 1060,
+      "title": "Settings: review a spreadsheet",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    "Tracker.dc.html": {
+      "x": 7058,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Tenant tracker with Share"
+    },
+    "Brand.dc.html": {
+      "x": 0,
+      "y": 1320,
+      "w": 1280,
+      "h": 1560,
+      "title": "Logo, type and palette",
+      "expand": "fill"
+    },
+    "Settings.dc.html": {
+      "x": 4252,
+      "y": 0,
+      "w": 1366,
+      "h": 980,
+      "title": "Settings: Agency customisations",
+      "expand": "fill",
+      "is_interactive": true
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "Dashboard.dc.html",
+    "Dispatch.dc.html",
+    "Settings.dc.html",
+    "Import.dc.html",
+    "Tracker.dc.html",
+    "Brand.dc.html"
+  ],
+  "notes": {
+    "heading": {
+      "x": 0,
+      "y": -300,
+      "text": "myEST8: the dispatch desk",
+      "kind": "title1",
+      "maxW": 7448
+    }
+  },
+  "designSystems": []
+}

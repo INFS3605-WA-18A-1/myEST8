@@ -86,6 +86,28 @@ describe('Google Geocoding', () => {
     expect(url.origin + url.pathname).toBe('https://maps.googleapis.com/maps/api/geocode/json');
     expect(url.searchParams.get('address')).toBe('12 King St, Newtown NSW 2042');
     expect(url.searchParams.get('key')).toBe('google-key');
+    expect(url.searchParams.get('region')).toBe('au');
+  });
+
+  test("a Tradie's business address with a unit geocodes the same way", async () => {
+    const { stub, google } = places(() =>
+      json({
+        results: [{ formatted_address: 'Unit 3/45 Sydenham Rd, Marrickville NSW 2204, Australia', geometry: { location: { lat: -33.9105, lng: 151.1601 }, location_type: 'ROOFTOP' } }],
+        status: 'OK',
+      }),
+    );
+    expect(await google.geocode('Unit 3, 45 Sydenham Rd, Marrickville NSW 2204')).toEqual({ lat: -33.9105, lng: 151.1601 });
+    expect(new URL(stub.requests[0]!.url).searchParams.get('address')).toBe('Unit 3, 45 Sydenham Rd, Marrickville NSW 2204');
+  });
+
+  test('a result only placed at the suburb or postcode (APPROXIMATE) is no location', async () => {
+    const { google } = places(() =>
+      json({
+        results: [{ formatted_address: 'Newtown NSW 2042, Australia', geometry: { location: { lat: -33.8983, lng: 151.1785 }, location_type: 'APPROXIMATE' }, partial_match: true }],
+        status: 'OK',
+      }),
+    );
+    expect(await google.geocode('99 Madeup Lane, Newtown NSW 2042')).toBeNull();
   });
 
   test('no results is no location, and a blank address is not looked up', async () => {

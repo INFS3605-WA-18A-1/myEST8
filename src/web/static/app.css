@@ -5,73 +5,88 @@
  * accessibility rules. Page markup is Tailwind utilities and the classes in src/web/ui.ts.
  */
 
-/* Barlow (body) and Barlow Semi Condensed (headings), self-hosted under /assets/fonts/. */
+/* Lexend (wordmark, headings, buttons, nav) and Red Hat Text (body, tables, forms), self-hosted under /assets/fonts/. */
 @font-face {
-  font-family: 'Barlow';
+  font-family: 'Lexend';
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url('/assets/fonts/barlow-latin-400-normal.woff2') format('woff2');
+  src: url('/assets/fonts/lexend-latin-400-normal.woff2') format('woff2');
 }
 @font-face {
-  font-family: 'Barlow';
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url('/assets/fonts/barlow-latin-500-normal.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Barlow';
+  font-family: 'Lexend';
   font-style: normal;
   font-weight: 600;
   font-display: swap;
-  src: url('/assets/fonts/barlow-latin-600-normal.woff2') format('woff2');
+  src: url('/assets/fonts/lexend-latin-600-normal.woff2') format('woff2');
 }
 @font-face {
-  font-family: 'Barlow Semi Condensed';
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url('/assets/fonts/barlow-semi-condensed-latin-500-normal.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Barlow Semi Condensed';
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url('/assets/fonts/barlow-semi-condensed-latin-600-normal.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Barlow Semi Condensed';
+  font-family: 'Lexend';
   font-style: normal;
   font-weight: 700;
   font-display: swap;
-  src: url('/assets/fonts/barlow-semi-condensed-latin-700-normal.woff2') format('woff2');
+  src: url('/assets/fonts/lexend-latin-700-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Red Hat Text';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/assets/fonts/red-hat-text-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Red Hat Text';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/assets/fonts/red-hat-text-latin-500-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Red Hat Text';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/assets/fonts/red-hat-text-latin-600-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Red Hat Text';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/assets/fonts/red-hat-text-latin-400-italic.woff2') format('woff2');
 }
 
 /*
- * The tokens. Named after Colorbond steel colours; every text pair meets WCAG AA
- * (the doc lists the contrast of each pair).
+ * The tokens: the "Harbour and Wattle" palette. A harbour blue for actions, a wattle
+ * yellow for anything that needs the Property Manager's decision, on cool neutrals.
+ * Every text pair meets WCAG AA (docs/design-system.md lists each measured pair).
  */
 :root {
-  --ink: #323233; /* Monument: body text, the rail */
-  --page: #f1f0ea; /* Surfmist: the app background */
+  --ink: #13212e; /* Night: body text, the rail (16.4:1 on white) */
+  --page: #f2f4f6; /* Paper: the page behind sections */
   --surface: #ffffff; /* sections, rows, dockets, inputs */
-  --muted: #6b6a66; /* Basalt: secondary text, timestamps, hints */
-  --line: #dedcd4; /* Shale: hairlines and section borders (decorative) */
-  --control: #8e8d88; /* input, select and checkbox borders (3.3:1) */
-  --action: #2d3b4e; /* Deep Ocean: primary buttons, links, focus, selected */
-  --hivis: #ffd100; /* "needs your decision" stripe, active nav bar, decision chips */
+  --muted: #55636f; /* Slate: secondary text, timestamps, hints (6.2:1 on white, 5.6:1 on Paper) */
+  --line: #d8dee4; /* Line: hairlines and section borders (decorative) */
+  --control: #7d8a95; /* input, select, checkbox and secondary button borders (3.5:1 on white) */
+  --action: #1f5c8b; /* Harbour: primary buttons, links, focus, selected (white on it 7.1:1) */
+  --action-hover: #174a70; /* Harbour, pressed darker: primary hover, link hover */
+  --hivis: #ffc233; /* Wattle: the decision stripe, the current rail item, decision chips (Night on it 10.1:1) */
+  --info-bg: #e8f0f7; /* Harbour's tint: info badges and alerts, "Filled in by AI" */
   --urgent: #b42318; /* urgent, errors, destructive actions */
   --urgent-bg: #fdecea;
   --high: #9a4a0b; /* High Urgency, warnings, flags */
   --high-bg: #fdf1e3;
-  --done: #2f5a3e; /* Cottage Green: done, approved, confirmed */
+  --done: #2f5a3e; /* done, approved, confirmed */
   --done-bg: #e8f1ea;
-  --rail-text: #e8e6de; /* rail text on ink (10.3:1) */
-  --rail-muted: #a8a7a2; /* rail counts and secondary text (5.3:1) */
-  --font-body: 'Barlow', system-ui, sans-serif;
-  --font-head: 'Barlow Semi Condensed', system-ui, sans-serif;
+  --rail: #13212e; /* the rail is Night */
+  --rail-text: #e6ebf0; /* rail text on Night (13.6:1) */
+  --rail-muted: #9aa8b4; /* rail counts, the Phone simulator, the Agency (6.7:1) */
+  --rail-hover: rgb(255 255 255 / 0.05);
+  --rail-current: rgb(255 255 255 / 0.08);
+  --scrim: rgb(19 33 46 / 0.45); /* Night over the page, behind the open drawer */
+  --shadow-lift: 0 8px 24px rgb(19 33 46 / 0.18); /* the one shadow: menus, dialogs, the phone frame */
+  --font-body: 'Red Hat Text', system-ui, sans-serif;
+  --font-head: 'Lexend', system-ui, sans-serif;
 }
 
 /*
@@ -86,22 +101,22 @@
   --color-base-300: var(--line);
   --color-base-content: var(--ink);
   --color-primary: var(--action);
-  --color-primary-content: #ffffff;
+  --color-primary-content: var(--surface);
   --color-secondary: var(--muted);
-  --color-secondary-content: #ffffff;
+  --color-secondary-content: var(--surface);
   --color-accent: var(--hivis);
   --color-accent-content: var(--ink);
   --color-neutral: var(--ink);
   --color-neutral-content: var(--page);
   --color-info: var(--action);
-  --color-info-content: #ffffff;
+  --color-info-content: var(--surface);
   --color-success: var(--done);
-  --color-success-content: #ffffff;
+  --color-success-content: var(--surface);
   --color-warning: var(--high);
-  --color-warning-content: #ffffff;
+  --color-warning-content: var(--surface);
   --color-error: var(--urgent);
-  --color-error-content: #ffffff;
-  --radius-selector: 3px;
+  --color-error-content: var(--surface);
+  --radius-selector: 4px;
   --radius-field: 4px;
   --radius-box: 8px;
   --size-selector: 0.25rem;
@@ -140,12 +155,15 @@
     h2,
     h3 {
       font-family: var(--font-head);
-      line-height: 1.2;
+      line-height: 1.15;
     }
 
-    /* Ordinary links are Deep Ocean. Links styled as buttons (.btn) keep their variant's text colour. :where keeps this at zero specificity, so any class (rail, docket, segmented) still wins. */
+    /* Ordinary links are Harbour. Links styled as buttons (.btn) keep their variant's text colour. :where keeps this at zero specificity, so any class (rail, docket, segmented, a chat bubble) still wins. */
     :where(a:not(.btn)) {
       color: var(--action);
+    }
+    :where(a:not(.btn)):hover {
+      color: var(--action-hover);
     }
 
     .text-muted {
@@ -188,54 +206,89 @@
       padding: 0.5rem 1rem;
       border-radius: var(--radius-field);
       background: var(--action);
-      color: #ffffff;
+      color: var(--surface);
     }
     .skip-link:focus {
       top: 0.5rem;
     }
 
-    .app-container {
-      width: 100%;
-      max-width: 72rem;
-      margin-inline: auto;
-      padding-inline: 1rem;
+    /* Text that must not run past its box: one line, cut with an ellipsis at a word boundary where it can be. */
+    .truncate-words {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
-    .app-container-narrow {
-      max-width: 36rem;
+    /* Clamped text (see clip() in ui.ts): wraps to N lines, then an ellipsis. */
+    .line-clamp-1,
+    .line-clamp-2,
+    .line-clamp-3 {
+      display: -webkit-box;
+      min-width: 0;
+      overflow: hidden;
+      -webkit-box-orient: vertical;
+      overflow-wrap: break-word;
+    }
+    .line-clamp-1 {
+      -webkit-line-clamp: 1;
+    }
+    .line-clamp-2 {
+      -webkit-line-clamp: 2;
+    }
+    .line-clamp-3 {
+      -webkit-line-clamp: 3;
     }
 
-    /* ----- Buttons: 32px (36px on phones), 6px radius, verbs that say what happens. */
+    /* ----- Buttons: Lexend 600, 6px radius. 36px, 32px small, 44px large; every size is 44px on phones and touch screens. */
     .btn {
-      height: 2rem;
-      min-height: 2rem;
-      padding-inline: 0.75rem;
+      --size: 2.25rem;
+      height: var(--size);
+      min-height: var(--size);
+      padding-inline: 14px;
+      gap: 6px;
       border-radius: 6px;
       font-family: var(--font-head);
       font-weight: 600;
       font-size: 14px;
       letter-spacing: 0;
       text-transform: none;
+      text-decoration: none;
       box-shadow: none;
     }
-    @media (max-width: 40rem) {
-      .btn {
-        height: 2.25rem;
-        min-height: 2.25rem;
+    .btn-sm {
+      --size: 2rem;
+      padding-inline: 10px;
+      font-size: 14px;
+    }
+    .btn-lg {
+      --size: 2.75rem;
+      padding-inline: 18px;
+      font-size: 16px;
+    }
+    @media (max-width: 40rem), (pointer: coarse) {
+      .btn,
+      .btn-sm {
+        --size: 2.75rem;
       }
     }
     .btn:focus-visible {
       outline: 2px solid var(--action);
       outline-offset: 2px;
     }
-    /* Links styled as buttons: no underline; primary keeps white text on Deep Ocean whatever the link colour. */
-    .btn {
-      text-decoration: none;
+    /* Primary: white on Harbour, darker Harbour on hover, whatever the link colour. */
+    .btn-primary {
+      --btn-color: var(--action);
+      --btn-fg: var(--surface);
     }
     .btn-primary,
     .btn-primary:hover {
-      color: var(--color-primary-content);
+      color: var(--surface);
     }
-    /* Secondary: surface fill, a control border, ink text. */
+    .btn-primary:hover {
+      --btn-bg: var(--action-hover);
+      --btn-border: var(--action-hover);
+    }
+    /* Secondary: surface fill, a control border, Night text. */
     .btn-outline {
       background: var(--surface);
       border: 1px solid var(--control);
@@ -244,6 +297,7 @@
     .btn-outline:hover {
       background: var(--page);
       border-color: var(--ink);
+      color: var(--ink);
     }
     /* Danger: urgent text on surface; the border turns red on hover. */
     .btn-danger {
@@ -254,32 +308,51 @@
     .btn-danger:hover {
       background: var(--urgent-bg);
       border-color: var(--urgent);
+      color: var(--urgent);
     }
     .btn-ghost {
       color: var(--ink);
     }
+    .btn-ghost:hover {
+      --btn-bg: var(--page);
+      --btn-border: transparent;
+      color: var(--ink);
+    }
+    .btn:disabled,
+    .btn[disabled] {
+      background: var(--page);
+      border-color: var(--line);
+      color: var(--muted);
+    }
 
-    /* ----- Badges: 13px, word always present, tinted from the tokens. */
+    /* ----- Badges: 13px, 4px radius, the word always present, tinted from the tokens. */
     .badge {
       height: auto;
       min-height: 20px;
-      padding: 2px 6px;
-      border-radius: 3px;
+      padding: 1px 8px;
+      border-radius: 4px;
       font-size: 13px;
       font-weight: 500;
-      line-height: 1.3;
+      line-height: 1.35;
     }
     .badge.badge-soft {
       border: 1px solid transparent;
     }
+    /* Neutral (a Trade, a channel): Night on Paper. */
     .badge-soft.badge-neutral {
       color: var(--ink);
       background-color: var(--page);
+      border-color: transparent;
+    }
+    /* Quiet badges (Routine, cancelled): muted text on a hairline, no tint. */
+    .badge.badge-soft.badge-muted {
+      color: var(--muted);
+      background-color: var(--surface);
       border-color: var(--line);
     }
     .badge-soft.badge-info {
       color: var(--action);
-      background-color: color-mix(in oklab, var(--action) 10%, var(--surface));
+      background-color: var(--info-bg);
     }
     .badge-soft.badge-success {
       color: var(--done);
@@ -294,19 +367,55 @@
       background-color: var(--urgent-bg);
     }
 
-    /* Count chips: pills for counts. Decisions get the hi-vis fill. */
+    /* Alerts: each tone is a token pair, never a mix of two. Text is the pair's
+       strong colour on its tint; the icon repeats the tone and the word says it. */
+    .alert {
+      gap: 10px;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+    .alert.alert-soft {
+      color: var(--ink);
+      background-color: var(--page);
+      border: 1px solid transparent;
+    }
+    .alert.alert-soft.alert-info {
+      color: var(--ink);
+      background-color: var(--info-bg);
+    }
+    .alert.alert-soft.alert-info > svg {
+      color: var(--action);
+    }
+    .alert.alert-soft.alert-success {
+      color: var(--done);
+      background-color: var(--done-bg);
+    }
+    .alert.alert-soft.alert-warning {
+      color: var(--high);
+      background-color: var(--high-bg);
+    }
+    .alert.alert-soft.alert-error {
+      color: var(--urgent);
+      background-color: var(--urgent-bg);
+    }
+    .alert a:not(.btn) {
+      color: inherit;
+      text-decoration: underline;
+    }
+
+    /* Count chips: round counts. Decisions get the Wattle fill; the rest are Paper. */
     .count-chip {
       display: inline-flex;
       align-items: center;
       justify-content: center;
       min-width: 22px;
-      height: 20px;
+      height: 22px;
       padding-inline: 6px;
       border-radius: 999px;
       background: var(--page);
-      color: var(--muted);
-      font-family: var(--font-head);
-      font-size: 13px;
+      color: var(--ink);
+      font-family: var(--font-body);
+      font-size: 12px;
       font-weight: 600;
       line-height: 1;
       font-variant-numeric: tabular-nums;
@@ -316,7 +425,7 @@
       color: var(--ink);
     }
 
-    /* ----- Forms: label above the control, 36px controls, hints and errors under them. */
+    /* ----- Forms: label above the control, 40px controls (44px on phones), hints and errors under them. */
     .fieldset {
       display: flex;
       flex-direction: column;
@@ -326,8 +435,8 @@
     }
     .field-label {
       display: block;
-      font-size: 13px;
-      font-weight: 500;
+      font-size: 14px;
+      font-weight: 600;
       line-height: 1.45;
       color: var(--ink);
     }
@@ -345,7 +454,8 @@
     .input,
     .select,
     .textarea,
-    .file-input {
+    .file-input,
+    .checkbox {
       --input-color: var(--control);
       border-radius: var(--radius-field);
       background: var(--surface);
@@ -354,7 +464,14 @@
     }
     .input,
     .select {
-      height: 2.25rem;
+      height: 2.5rem;
+    }
+    .checkbox {
+      --input-color: var(--control);
+      border-color: var(--control);
+    }
+    .checkbox:checked {
+      border-color: var(--action);
     }
     .textarea {
       min-height: 5.5rem;
@@ -379,6 +496,10 @@
       .textarea,
       .file-input {
         font-size: 1rem;
+      }
+      .input,
+      .select {
+        height: 2.75rem;
       }
     }
 
@@ -422,7 +543,7 @@
       font-size: 14px;
     }
 
-    /* ----- Tables: 36px rows, semi-condensed muted headers, hairlines, no zebra. */
+    /* ----- Tables: 36px rows, Lexend headers, hairlines, no zebra. */
     .table-frame {
       min-width: 0;
       overflow-x: auto;
@@ -436,7 +557,7 @@
     }
     .table :where(th, td) {
       height: 36px;
-      padding: 6px 12px;
+      padding: 8px 12px;
       border-bottom: 1px solid var(--line);
       vertical-align: middle;
     }
@@ -444,18 +565,19 @@
       font-family: var(--font-head);
       font-size: 13px;
       font-weight: 600;
-      color: var(--muted);
+      color: var(--ink);
       white-space: nowrap;
     }
     .table tbody tr:last-child :where(th, td) {
       border-bottom: 0;
     }
 
-    /* ----- Steps: 24px circles; done is --done with a tick, current is --action, to come is --line. */
+    /* ----- Steps: 24px circles. Done is --done with a tick, current is Harbour with its
+       number, to come is a white circle on a hairline with a muted number. */
     .steps .step {
       min-width: 3rem;
       --step-bg: var(--line);
-      --step-fg: var(--ink);
+      --step-fg: var(--muted);
     }
     /* Horizontal: the 24px circle on a 24px row, the detail below. Vertical rows grow with their text (daisyUI's auto rows). */
     .steps-horizontal .step {
@@ -469,21 +591,35 @@
         grid-template-rows: 24px 1fr;
       }
     }
-    .steps .step[data-content] {
-      --step-bg: var(--done);
-      --step-fg: #ffffff;
-    }
-    .steps .step-primary {
-      --step-bg: var(--action);
-      --step-fg: #ffffff;
-    }
     .steps .step::after {
       width: 24px;
       height: 24px;
       font-size: 12px;
+      font-weight: 600;
+    }
+    .steps .step:not(.step-primary):not([data-content])::after {
+      background-color: var(--surface);
+      box-shadow: inset 0 0 0 1px var(--line);
+      color: var(--muted);
+    }
+    .steps .step[data-content] {
+      --step-bg: var(--done);
+      --step-fg: var(--surface);
+    }
+    .steps .step-primary {
+      --step-bg: var(--action);
+      --step-fg: var(--surface);
+    }
+    /* daisyUI colours step-primary's circle and connector on the pseudo-elements, so
+       a done step (which is also step-primary) is set there too: Done green, with
+       the line between two done steps green as well. */
+    .steps .step[data-content]::after,
+    .steps .step[data-content] + .step[data-content]::before {
+      --step-bg: var(--done);
+      --step-fg: var(--surface);
     }
 
-    /* ----- Chat: myEST8 on the left on --page, the person on the right on --action. */
+    /* ----- Chat: myEST8 on the left on Paper, the person on the right on Harbour. */
     .chat-header,
     .chat-footer {
       font-size: 12px;
@@ -495,31 +631,106 @@
     }
     .chat-end .chat-bubble:not([class*='chat-bubble-']) {
       background-color: var(--action);
-      color: #ffffff;
+      color: var(--surface);
     }
     .chat-bubble {
+      border-radius: 8px;
       font-size: 14px;
       white-space: pre-wrap;
       overflow-wrap: anywhere;
     }
+    /* Links in a bubble take its text colour, underlined, so they read on Harbour
+       and every tone as well as on Paper; the focus ring follows the text too. */
+    .chat-bubble a:not(.btn) {
+      color: inherit;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    .chat-bubble a:not(.btn):hover {
+      color: inherit;
+      text-decoration-thickness: 2px;
+    }
+    .chat-bubble a:focus-visible {
+      outline-color: currentColor;
+    }
 
-    /* Tabs: the active one carries the Deep Ocean underline. */
+    /* Tabs: Lexend, the active one Night with the Harbour underline. */
+    .tabs-border > .tab {
+      font-family: var(--font-head);
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--muted);
+    }
+    .tabs-border > .tab:hover {
+      color: var(--ink);
+    }
     .tabs-border > .tab.tab-active {
       --tab-border-color: var(--action);
       color: var(--ink);
       font-weight: 600;
     }
 
-    /* daisyUI's snap-icon rule undoes compact on a vertical timeline; keep the icon column only. */
+    /* Side tabs (sideTabs() in ui.ts, the Settings sections): a column of links, the
+       current one a white tab with the Wattle bar. A sideways-scrolling row on phones. */
+    .side-tabs ul {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .side-tab {
+      display: flex;
+      align-items: center;
+      min-height: 40px;
+      padding: 0 12px;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      font-family: var(--font-head);
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--ink);
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    .side-tab:hover {
+      background: var(--surface);
+      color: var(--ink);
+    }
+    .side-tab[aria-current='page'] {
+      background: var(--surface);
+      border-color: var(--line);
+      box-shadow: inset 4px 0 0 var(--hivis);
+      font-weight: 600;
+    }
+    @media (max-width: 47.99rem) {
+      .side-tabs ul {
+        flex-direction: row;
+        overflow-x: auto;
+        padding-bottom: 4px;
+      }
+      .side-tab {
+        min-height: 44px;
+      }
+    }
+
+        /* daisyUI's snap-icon rule undoes compact on a vertical timeline; keep the icon column only. */
     .timeline-compact.timeline-vertical.timeline-snap-icon > li {
       --timeline-col-start: 0;
+    }
+    .timeline > li > hr {
+      background-color: var(--line);
+    }
+    .timeline-middle {
+      color: var(--action);
     }
 
     /* ----- Stat tiles: compact, no shadow. */
     .stat-tile {
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      gap: 4px;
       min-width: 0;
       padding: 12px 16px;
       background: var(--surface);
@@ -551,7 +762,7 @@
       align-items: flex-start;
       gap: 12px;
       padding: 16px;
-      border: 1px dashed var(--control);
+      border: 1px solid var(--line);
       border-radius: 8px;
     }
     .empty-state p {
@@ -559,83 +770,87 @@
       color: var(--muted);
     }
 
-    /* ----- Dockets: Tickets only. A stub with the number and urgency, a perforation, a body. */
+    /* ----- Dockets: Tickets only. A stub with the number and Urgency, a dashed perforation, a body. */
     .docket {
       display: flex;
-      align-items: stretch;
+      flex-direction: column;
+      gap: 4px;
       min-width: 0;
+      padding: 8px;
       background: var(--surface);
       border: 1px solid var(--line);
       border-radius: 4px;
       color: var(--ink);
       text-decoration: none;
     }
-    .docket:hover {
+    a.docket:hover {
       border-color: var(--control);
-    }
-    .docket-stub {
-      flex: 0 0 48px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 2px;
-      padding: 8px 4px;
-      border-radius: 3px 0 0 3px;
-      background: var(--page);
       color: var(--ink);
     }
-    .docket-stub.is-urgent {
-      background: var(--urgent-bg);
-      color: var(--urgent);
+    .docket-stub {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
     }
-    .docket-stub.is-high {
-      background: var(--high-bg);
-      color: var(--high);
+    .docket-stub .badge {
+      min-height: 18px;
+      padding: 0 6px;
+      font-size: 12px;
     }
     .docket-number {
       font-family: var(--font-head);
       font-size: 14px;
-      font-weight: 700;
-      line-height: 1.1;
-    }
-    .docket-urgency {
-      font-family: var(--font-head);
-      font-size: 12px;
       font-weight: 600;
-      line-height: 1.1;
+      line-height: 1.2;
     }
+    /* The Ticket page's header docket: the number at 26px. */
+    .docket.is-large {
+      gap: 8px;
+      padding: 12px 16px;
+      border-radius: 8px;
+    }
+    .docket.is-large .docket-number {
+      font-size: 26px;
+      font-weight: 700;
+      line-height: 1.15;
+    }
+    .docket.is-large .docket-stub .badge {
+      min-height: 20px;
+      padding: 1px 8px;
+      font-size: 13px;
+    }
+    .docket.is-large .docket-address,
+    .docket.is-large .docket-issue {
+      font-size: 14px;
+    }
+    /* The perforation: a dashed hairline across the docket, under the stub. */
     .docket-perf {
-      flex: 0 0 0;
-      margin: 6px 0;
-      border-left: 1px dashed var(--control);
+      display: block;
+      border-top: 1px dashed var(--control);
+      opacity: 0.6;
     }
     .docket-body {
-      flex: 1 1 auto;
       display: flex;
       flex-direction: column;
       gap: 2px;
       min-width: 0;
-      padding: 8px 12px;
+      padding-top: 2px;
     }
+    /* The address is one line and the issue up to two (line-clamp-1 and -2 in clip()). */
     .docket-address {
-      overflow: hidden;
-      font-size: 13px;
+      font-size: 14px;
       font-weight: 600;
-      text-overflow: ellipsis;
-      white-space: nowrap;
     }
     .docket-issue {
-      overflow: hidden;
-      font-size: 13px;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      font-size: 14px;
     }
     .docket-meta {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 4px 12px;
+      gap: 2px 12px;
       margin-top: 2px;
       font-size: 12px;
       color: var(--muted);
@@ -648,38 +863,41 @@
       background: var(--action);
     }
 
-    /* ----- The count strip: 36px, links into the queues. */
+    /* ----- The count strip: links into the queues. */
     .count-strip {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 8px 20px;
-      min-height: 36px;
+      gap: 4px 20px;
+      min-height: 44px;
       margin: 0;
       padding: 4px 16px;
       list-style: none;
       background: var(--surface);
       border: 1px solid var(--line);
       border-radius: 8px;
-      font-size: 13px;
+      font-size: 14px;
     }
     .count-item {
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      min-height: 28px;
+      min-height: 36px;
       color: var(--ink);
       text-decoration: none;
+    }
+    .count-item:hover {
+      color: var(--ink);
     }
     .count-item:hover .count-label {
       text-decoration: underline;
     }
 
-    /* ----- Segmented control (Mine | All): links, the current one filled. */
+    /* ----- Segmented control (Mine | All): links, the current one filled with Harbour. */
     .segmented {
       display: inline-flex;
       gap: 2px;
-      padding: 2px;
+      padding: 3px;
       background: var(--surface);
       border: 1px solid var(--control);
       border-radius: 6px;
@@ -687,7 +905,7 @@
     .segmented-item {
       display: inline-flex;
       align-items: center;
-      min-height: 28px;
+      min-height: 32px;
       padding-inline: 12px;
       border-radius: 4px;
       font-family: var(--font-head);
@@ -696,22 +914,36 @@
       color: var(--ink);
       text-decoration: none;
     }
-    .segmented-item[aria-current='page'] {
+    .segmented-item:hover {
+      background: var(--page);
+      color: var(--ink);
+    }
+    .segmented-item[aria-current='page'],
+    .segmented-item[aria-current='page']:hover {
       background: var(--action);
-      color: #ffffff;
+      color: var(--surface);
+    }
+    @media (max-width: 40rem), (pointer: coarse) {
+      .segmented-item {
+        min-height: 40px;
+        padding-inline: 16px;
+      }
     }
 
-    /* ----- Queue rows: compact, with the 4px hi-vis stripe for "needs your decision". */
+    /* ----- Queue rows: compact. Only a row that needs the Property Manager's decision gets the 4px Wattle stripe. */
     .queue-row {
       display: flex;
       align-items: flex-start;
       gap: 12px;
       min-width: 0;
-      padding: 8px 12px;
+      padding: 10px 10px 10px 12px;
       background: var(--surface);
       border: 1px solid var(--line);
-      border-left: 4px solid var(--hivis);
       border-radius: 4px;
+    }
+    .queue-row.is-decision {
+      border-left-width: 4px;
+      border-left-color: var(--hivis);
     }
     .queue-thumb {
       flex: 0 0 56px;
@@ -730,53 +962,69 @@
       display: flex;
       flex: 1 1 auto;
       flex-direction: column;
-      gap: 4px;
+      gap: 6px;
+      min-width: 0;
+    }
+    /* The title, then the actions at the end of its line (under it when there's no room). */
+    .queue-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px 8px;
       min-width: 0;
     }
     .queue-title {
+      flex: 1 1 8rem;
+      min-width: 0;
       margin: 0;
       font-size: 14px;
       font-weight: 600;
       line-height: 1.3;
       color: var(--ink);
+      overflow-wrap: anywhere;
+    }
+    a.queue-title:hover {
+      color: var(--action);
+      text-decoration: underline;
     }
     .queue-detail {
       margin: 0;
-      font-size: 13px;
+      font-size: 14px;
       color: var(--ink);
-    }
-    .queue-meta {
-      margin: 0;
-      font-size: 12px;
-      color: var(--muted);
     }
     .queue-badges,
     .queue-actions {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 4px 8px;
+      gap: 6px;
     }
     .queue-actions {
-      margin-top: 4px;
+      flex: 0 0 auto;
+    }
+    /* The age sits at the end of the badges' row. */
+    .queue-meta {
+      margin: 0 0 0 auto;
+      font-size: 12px;
+      color: var(--muted);
+      white-space: nowrap;
     }
 
-    /* ----- Lanes: a board column; its body scrolls inside about 300px. */
+    /* ----- Lanes: a board column, a Paper tray of white dockets; its body scrolls inside about 300px. */
     .lane {
       display: flex;
       flex-direction: column;
       min-width: 0;
-      background: var(--surface);
+      background: var(--page);
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: 6px;
     }
     .lane-head {
       display: flex;
-      align-items: center;
+      align-items: baseline;
       justify-content: space-between;
       gap: 8px;
-      padding: 10px 12px;
-      border-bottom: 1px solid var(--line);
+      padding: 8px 8px 0;
     }
     .lane-title {
       margin: 0;
@@ -786,6 +1034,12 @@
       line-height: 1.2;
       color: var(--ink);
     }
+    .lane-count {
+      font-family: var(--font-head);
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--muted);
+    }
     .lane-body {
       display: flex;
       flex-direction: column;
@@ -793,10 +1047,14 @@
       min-height: 0;
       max-height: 300px;
       overflow-y: auto;
-      padding: 12px;
+      padding: 8px;
     }
     .lane-body > * {
       flex-shrink: 0;
+    }
+    .lane-body > p,
+    .lane-body > .empty-state {
+      color: var(--muted);
     }
 
     /* ----- The shell: rail, top bar, content. */
@@ -817,8 +1075,8 @@
       display: flex;
       flex-direction: column;
       gap: 4px;
-      padding: 16px 12px;
-      background: var(--ink);
+      padding: 20px 12px 16px;
+      background: var(--rail);
       color: var(--rail-text);
     }
     @media (min-width: 64rem) {
@@ -832,31 +1090,46 @@
       }
     }
     .rail-logo {
-      display: block;
-      padding: 4px 12px 16px;
-      font-family: var(--font-head);
-      font-size: 22px;
-      font-weight: 700;
-      line-height: 1.2;
+      display: flex;
+      align-self: flex-start;
+      margin-bottom: 16px;
+      padding: 4px 12px;
+      border-radius: 6px;
       color: var(--rail-text);
       text-decoration: none;
+    }
+    .rail-logo:hover {
+      color: var(--rail-text);
+    }
+    .rail-logo .logo-mark {
+      color: var(--hivis);
+    }
+    /* The nav fills the rail, so the Phone simulator can sit at its foot. */
+    .rail-menu {
+      display: flex;
+      flex: 1 1 auto;
+      flex-direction: column;
+      gap: 4px;
     }
     .rail-nav {
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      gap: 4px;
       margin: 0;
       padding: 0;
       list-style: none;
     }
+    .rail-foot {
+      margin-top: auto;
+      padding-top: 16px;
+    }
     .rail-link {
-      position: relative;
       display: flex;
       align-items: center;
       gap: 10px;
-      height: 40px;
+      min-height: 40px;
       padding: 0 12px;
-      border-radius: 4px;
+      border-radius: 6px;
       font-family: var(--font-head);
       font-size: 16px;
       font-weight: 600;
@@ -864,40 +1137,55 @@
       text-decoration: none;
     }
     .rail-link:hover {
-      background: rgb(255 255 255 / 0.06);
+      background: var(--rail-hover);
+      color: var(--rail-text);
     }
+    /* The current place: a lighter band with the Wattle bar on its left edge. */
     .rail-link[aria-current='page'] {
-      background: rgb(255 255 255 / 0.08);
-      color: #ffffff;
+      background: var(--rail-current);
+      box-shadow: inset 4px 0 0 var(--hivis);
+      color: var(--surface);
     }
-    .rail-link[aria-current='page']::before {
-      content: '';
-      position: absolute;
-      left: 0;
-      top: 0;
-      bottom: 0;
-      width: 4px;
-      background: var(--hivis);
+    /* The demo's Phone simulator: quieter, in the body face. */
+    .rail-link.is-quiet {
+      gap: 8px;
+      min-height: 36px;
+      font-family: var(--font-body);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--rail-muted);
+    }
+    .rail-link.is-quiet:hover,
+    .rail-link.is-quiet[aria-current='page'] {
+      color: var(--rail-text);
+    }
+    @media (max-width: 40rem), (pointer: coarse) {
+      .rail-link {
+        min-height: 44px;
+      }
     }
     .rail-count {
       margin-left: auto;
+      font-family: var(--font-body);
       font-size: 13px;
       color: var(--rail-muted);
     }
     .rail-agency {
-      margin: auto 0 0;
-      padding: 12px;
+      margin: 0;
+      padding: 4px 12px 0;
       font-size: 13px;
       color: var(--rail-muted);
     }
     /* Without JavaScript the rail sits above the content as a wrapping row, so the nav is still reachable. */
     @media (max-width: 63.99rem) {
+      html:not(.js) .rail-menu,
       html:not(.js) .rail-nav {
         flex-direction: row;
         flex-wrap: wrap;
       }
-      html:not(.js) .rail-agency {
+      html:not(.js) .rail-foot {
         margin-top: 0;
+        padding-top: 0;
       }
     }
 
@@ -906,8 +1194,8 @@
       flex-wrap: wrap;
       align-items: center;
       gap: 12px;
-      min-height: 56px;
-      padding-inline: 24px;
+      min-height: 60px;
+      padding: 10px 24px;
       background: var(--surface);
       border-bottom: 1px solid var(--line);
     }
@@ -917,12 +1205,17 @@
       margin: 0;
       overflow: hidden;
       font-family: var(--font-head);
-      font-size: 20px;
+      font-size: 22px;
       font-weight: 600;
       line-height: 1.2;
       text-overflow: ellipsis;
       white-space: nowrap;
       color: var(--ink);
+    }
+    @media (max-width: 40rem) {
+      .topbar-title {
+        font-size: 20px;
+      }
     }
     .topbar-controls {
       display: flex;
@@ -934,7 +1227,7 @@
     .topbar-end {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 16px;
       min-width: 0;
     }
     /* Under 1024px the page's controls take a second row under the title, full width. */
@@ -954,7 +1247,7 @@
     }
     .topbar-date {
       display: none;
-      font-size: 13px;
+      font-size: 14px;
       color: var(--muted);
       white-space: nowrap;
       font-variant-numeric: tabular-nums;
@@ -971,12 +1264,18 @@
       flex: 0 0 auto;
       align-items: center;
       justify-content: center;
-      width: 36px;
-      height: 36px;
+      width: 40px;
+      height: 40px;
       border: 1px solid var(--control);
-      border-radius: 4px;
+      border-radius: 6px;
       background: var(--surface);
       color: var(--ink);
+    }
+    @media (max-width: 40rem), (pointer: coarse) {
+      .menu-button {
+        width: 44px;
+        height: 44px;
+      }
     }
     .menu-button:hover {
       background: var(--page);
@@ -991,10 +1290,10 @@
     .user-menu > summary {
       display: flex;
       align-items: center;
-      gap: 6px;
-      min-height: 36px;
+      gap: 8px;
+      min-height: 40px;
       padding-inline: 8px;
-      border-radius: 4px;
+      border-radius: 6px;
       font-size: 14px;
       font-weight: 500;
       color: var(--ink);
@@ -1023,7 +1322,7 @@
       background: var(--surface);
       border: 1px solid var(--line);
       border-radius: 8px;
-      box-shadow: 0 8px 24px rgb(50 50 51 / 0.18);
+      box-shadow: var(--shadow-lift);
     }
     .user-menu[open] > .user-menu-panel {
       animation: menu-in 150ms ease-out;
@@ -1051,7 +1350,15 @@
       max-width: 560px;
       min-height: 56px;
       margin-inline: auto;
-      padding-inline: 16px;
+      padding: 12px 16px;
+    }
+    /* The wide column (the landing page) has 24px gutters from 768px, bar and page alike. */
+    @media (min-width: 48rem) {
+      .public-bar-inner.is-wide,
+      .public-main.is-wide,
+      .public-footer.is-wide {
+        padding-inline: 24px;
+      }
     }
     .public-bar-inner.is-narrow,
     .public-main.is-narrow,
@@ -1064,12 +1371,12 @@
       max-width: 1120px;
     }
     .logotype {
-      font-family: var(--font-head);
-      font-size: 20px;
-      font-weight: 700;
-      line-height: 1;
+      display: flex;
       color: var(--ink);
       text-decoration: none;
+    }
+    .logotype .logo-mark {
+      color: var(--action);
     }
     .public-main {
       display: flex;
@@ -1090,7 +1397,7 @@
       text-align: center;
     }
 
-    /* The app's content column: 1280px max, 24px gutters, 16px on phones. */
+    /* The app's content column: 1280px max, 24px gutters, 16px below 1024px (the drawer breakpoint). */
     .app-content {
       display: flex;
       flex-direction: column;
@@ -1101,8 +1408,12 @@
       padding: 24px;
       min-width: 0;
     }
+    @media (max-width: 63.99rem) {
+      .app-content {
+        padding: 16px;
+      }
+    }
     @media (max-width: 40rem) {
-      .app-content,
       .public-main {
         padding: 16px;
       }
@@ -1110,7 +1421,7 @@
     .app-flash {
       padding: 12px 24px 0;
     }
-    @media (max-width: 40rem) {
+    @media (max-width: 63.99rem) {
       .app-flash {
         padding: 12px 16px 0;
       }
@@ -1132,29 +1443,30 @@
     .page-title {
       margin: 0;
       font-family: var(--font-head);
-      font-size: 20px;
+      font-size: 26px;
       font-weight: 600;
-      line-height: 1.2;
+      line-height: 1.15;
       color: var(--ink);
       overflow-wrap: anywhere;
     }
-    /* The landing headline: 32px on phones, 40px from 768px. */
-    .page-title.is-hero {
-      font-size: 32px;
-      line-height: 1.15;
-    }
-    @media (min-width: 48rem) {
-      .page-title.is-hero {
-        font-size: 40px;
+    @media (max-width: 40rem) {
+      .page-title {
+        font-size: 22px;
       }
+    }
+    /* A headline (the landing page): 36px on phones up to 52px on wide screens. */
+    .page-title.is-hero {
+      max-width: 22ch;
+      font-size: clamp(36px, 5vw, 52px);
+      font-weight: 700;
+      line-height: 1.08;
     }
     .page-subtitle {
       margin: 0;
       max-width: 72ch;
       font-size: 14px;
       color: var(--muted);
-    }
-    .page-actions {
+    }    .page-actions {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
@@ -1189,12 +1501,880 @@
         position: fixed;
         inset: 0;
         z-index: 35;
-        background: rgb(50 50 51 / 0.45);
+        background: var(--scrim);
       }
     }
     @media (min-width: 64rem) {
       .drawer-scrim {
         display: none !important;
+      }
+    }
+  }
+}
+
+/* === Icons and logo === */
+@layer utilities {
+  @layer app {
+    /* The logo: the key tag beside the wordmark (logo() in ui.ts). The word takes the
+       parent's colour; the tag is Harbour on the public bar and Wattle in the rail. */
+    .logo {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--font-head);
+      font-weight: 700;
+      line-height: 1;
+      letter-spacing: -0.01em;
+      white-space: nowrap;
+    }
+    .logo-mark {
+      flex-shrink: 0;
+    }
+    .logo-my {
+      font-weight: 400;
+    }
+    .logo.is-md {
+      font-size: 22px;
+    }
+    .logo.is-md .logo-mark {
+      width: 28px;
+      height: 28px;
+    }
+    .logo.is-sm {
+      gap: 6px;
+      font-size: 18px;
+    }
+    .logo.is-sm .logo-mark {
+      width: 20px;
+      height: 20px;
+    }
+    /* The Harbour ring is too dark on the Night rail, so the rail's links ring in rail text. */
+    .rail-logo:focus-visible,
+    .rail-link:focus-visible {
+      outline-color: var(--rail-text);
+    }
+  }
+}
+
+/* === share === */
+@layer utilities {
+  @layer app {
+    /* The Share control (shareButton() in share.ts): a <details> whose panel drops
+       below the button on wider screens and is a sheet along the bottom on phones. */
+    .share {
+      position: relative;
+      display: inline-block;
+    }
+    .share > summary {
+      list-style: none;
+      gap: 6px;
+    }
+    /* Copy, close and More options start hidden until app.js can make them work;
+       .btn's display would otherwise show them. */
+    .share [hidden] {
+      display: none !important;
+    }
+    /* Without the Tailwind build (no JavaScript), screen-reader text stays hidden, on every page. */
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+    /* Icon sizes that hold without the Tailwind build (no JavaScript). */
+    .share svg {
+      width: 20px;
+      height: 20px;
+    }
+    .share > summary svg,
+    .share .btn svg {
+      width: 16px;
+      height: 16px;
+    }
+    .share > summary::-webkit-details-marker {
+      display: none;
+    }
+    .share[open] > summary {
+      background: var(--page);
+    }
+    .share-panel {
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      z-index: 30;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      width: min(22rem, calc(100vw - 32px));
+      padding: 16px;
+      text-align: left;
+      font-size: 14px;
+      color: var(--ink);
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow-lift);
+    }
+    .share.is-start .share-panel {
+      right: auto;
+      left: 0;
+    }
+    .share[open] .share-panel {
+      animation: share-in 150ms ease-out;
+    }
+    @keyframes share-in {
+      from {
+        opacity: 0;
+        transform: translateY(-4px);
+      }
+    }
+    .share-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .share-title {
+      margin: 0;
+      padding-top: 4px;
+      font-family: var(--font-head);
+      font-size: 16px;
+      font-weight: 600;
+      line-height: 1.2;
+      overflow-wrap: anywhere;
+    }
+    .share-close {
+      flex-shrink: 0;
+      margin: -4px -8px 0 0;
+    }
+    .share-note {
+      margin: -4px 0 0;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .share-label {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .share-copy {
+      display: flex;
+      gap: 8px;
+    }
+    .share-url {
+      flex: 1;
+      min-width: 0;
+      height: 36px;
+      padding: 0 8px;
+      font: inherit;
+      font-size: 13px;
+      color: var(--ink);
+      text-overflow: ellipsis;
+      background: var(--page);
+      border: 1px solid var(--control);
+      border-radius: 4px;
+    }
+    .share-copy-button {
+      flex-shrink: 0;
+      gap: 6px;
+      height: 36px;
+    }
+    .share-status {
+      min-height: 18px;
+      margin: 4px 0 0;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--done);
+    }
+    .share-status:empty {
+      min-height: 0;
+      margin: 0;
+    }
+    .share-options {
+      display: grid;
+      gap: 2px;
+      margin: 0;
+      padding: 8px 0 0;
+      list-style: none;
+      border-top: 1px solid var(--line);
+    }
+    .share-option {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      min-height: 40px;
+      padding: 0 8px;
+      font: inherit;
+      font-weight: 500;
+      color: var(--ink);
+      text-align: left;
+      text-decoration: none;
+      cursor: pointer;
+      background: none;
+      border: 0;
+      border-radius: 6px;
+    }
+    .share-option:hover {
+      background: var(--page);
+    }
+    .share-option:focus-visible,
+    .share-url:focus-visible {
+      outline: 2px solid var(--action);
+      outline-offset: 2px;
+    }
+    .share-option svg {
+      color: var(--muted);
+    }
+    /* Phones: a sheet along the bottom of the screen, clear of the edges. */
+    @media (max-width: 39.99rem) {
+      .share-panel,
+      .share.is-start .share-panel {
+        position: fixed;
+        top: auto;
+        right: 16px;
+        bottom: max(16px, env(safe-area-inset-bottom));
+        left: 16px;
+        width: auto;
+        max-height: calc(100dvh - 32px);
+        overflow-y: auto;
+      }
+      .share-option {
+        min-height: 44px;
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .share[open] .share-panel {
+        animation: none;
+      }
+    }
+
+    /* The invitations around a Share button on the sign-up page and the Tenant's tracker. */
+    .signup-share,
+    .tracker-share {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 8px;
+      padding-top: 16px;
+      border-top: 1px solid var(--line);
+    }
+  }
+}
+
+/* === landing === */
+@layer utilities {
+  @layer app {
+    /* The landing page (pages/landing.ts): the headline, one lead line, two ways in,
+       then the workflow, the one moving thing on the page. */
+    .public-main:has(.flow) {
+      padding-top: 40px;
+    }
+    .public-main:has(.flow) .page-title.is-hero {
+      max-width: 620px;
+      letter-spacing: -0.015em;
+    }
+    .landing-intro {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      max-width: 620px;
+      margin-top: -4px;
+    }
+    .landing-lead {
+      margin: 0;
+      max-width: 60ch;
+      font-size: 16px;
+      line-height: 1.5;
+    }
+    .landing-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    @media (max-width: 40rem) {
+      .landing-actions > .btn {
+        flex: 1 1 100%;
+      }
+    }
+    .landing-demo {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-width: 576px;
+      margin-top: 24px;
+      padding-top: 20px;
+      border-top: 1px solid var(--line);
+    }
+    .landing-demo p {
+      margin: 0;
+    }
+
+    /*
+     * The workflow: one repair, stage by stage. The stage titles run down the left;
+     * each stage's picture sits in the pane on the right (above the titles on
+     * phones), one at a time. A band moves down the titles with the stage being
+     * shown; at the Property Manager's decision it carries the Wattle stripe, as a
+     * decision row does on the dashboard. One cycle is 8 stages of 2.6s.
+     */
+    .flow {
+      --row: 44px;
+      --step: calc(var(--row) + 4px);
+      --list-w: 22.5rem;
+      --pane-top: 0px;
+      --cycle: 20.8s;
+      --slot: 2.6s;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin-top: 24px;
+    }
+    .flow-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 44px;
+    }
+    .flow-pause {
+      min-height: 44px;
+      height: 44px;
+    }
+    .flow-heading {
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .flow-play-icon,
+    .flow[data-paused] .flow-pause-icon {
+      display: none;
+    }
+    .flow[data-paused] .flow-play-icon {
+      display: inline-flex;
+    }
+    .flow-pause-icon {
+      display: inline-flex;
+    }
+
+    .flow-stages {
+      position: relative;
+      margin: 0;
+      padding: 0 calc(100% - var(--list-w)) 0 0;
+      list-style: none;
+    }
+    /* The pane the pictures appear in. */
+    .flow-stages::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      left: calc(var(--list-w) + 32px);
+      min-height: 360px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    @media (min-width: 48rem) {
+      .flow-stages {
+        min-height: 360px;
+      }
+    }
+    /* The band that marks the stage being shown. */
+    .flow-stages::before {
+      content: '';
+      position: absolute;
+      top: var(--pane-top);
+      left: 0;
+      width: var(--list-w);
+      height: var(--row);
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      animation: flow-band var(--cycle) infinite;
+    }
+    /* Static, so each picture is placed in the pane (the list), not in its row. */
+    .flow-stage {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      height: var(--row);
+      margin-bottom: 4px;
+      padding-inline: 12px;
+    }
+    .flow-num {
+      position: relative;
+      display: inline-flex;
+      flex: 0 0 auto;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      animation: flow-num var(--cycle) calc(var(--i) * var(--slot)) infinite;
+    }
+    .flow-title {
+      position: relative;
+      font-size: 15px;
+      color: var(--muted);
+      white-space: nowrap;
+      animation: flow-title var(--cycle) calc(var(--i) * var(--slot)) infinite;
+    }
+    /* At the decision the band's left edge is the Wattle stripe, as on a decision row. */
+    .flow-stage.is-decision .flow-title::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: -48px;
+      width: 4px;
+      height: var(--row);
+      transform: translateY(-50%);
+      border-radius: 4px 0 0 4px;
+      background: var(--hivis);
+      opacity: 0;
+      animation: flow-bar var(--cycle) calc(var(--i) * var(--slot)) infinite;
+    }
+    .flow-picture {
+      position: absolute;
+      z-index: 1;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      left: calc(var(--list-w) + 32px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      opacity: 0;
+      animation: flow-picture var(--cycle) calc(var(--i) * var(--slot)) infinite;
+    }
+    .flow-picture > * {
+      width: 100%;
+      max-width: 400px;
+    }
+    .flow-picture > .chat {
+      max-width: 320px;
+    }
+    /* On wide screens the pictures are drawn a size up, to fill the pane. */
+    @media (min-width: 64rem) {
+      .flow-picture > * {
+        zoom: 1.2;
+      }
+    }
+
+    /* The pictures: plain rows in the dispatch-desk look. */
+    .flow-card {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 12px 16px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+    }
+    .flow-card p {
+      margin: 0;
+    }
+    .flow-card.is-decision {
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px 14px 14px 16px;
+      border-left: 4px solid var(--hivis);
+    }
+    .flow-card-title {
+      font-size: 15px;
+      font-weight: 600;
+    }
+    .flow-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding-block: 4px;
+    }
+    .flow-confirm {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      min-height: 36px;
+      padding: 0 14px;
+      border-radius: 6px;
+      background: var(--action);
+      color: var(--surface);
+      font-family: var(--font-head);
+      font-weight: 600;
+    }
+    .flow-rows {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin: 4px 0 0;
+      padding: 0;
+      list-style: none;
+    }
+    .flow-rows li,
+    .flow-sent {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .flow-rows svg {
+      color: var(--muted);
+    }
+    .flow-sent svg {
+      color: var(--done);
+    }
+    .flow-quote {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .flow-amount {
+      font-family: var(--font-head);
+      font-size: 26px;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    /* Paused (the button, via app.js): everything holds where it is. */
+    .flow[data-paused] .flow-stages::before,
+    .flow[data-paused] .flow-title::before,
+    .flow[data-paused] .flow-num,
+    .flow[data-paused] .flow-title,
+    .flow[data-paused] .flow-picture {
+      animation-play-state: paused;
+    }
+
+    @keyframes flow-picture {
+      0% {
+        opacity: 0;
+        transform: translateY(6px);
+      }
+      2%,
+      11% {
+        opacity: 1;
+        transform: none;
+      }
+      12.5%,
+      100% {
+        opacity: 0;
+        transform: none;
+      }
+    }
+    @keyframes flow-title {
+      0%,
+      11.5% {
+        color: var(--ink);
+      }
+      12.5%,
+      100% {
+        color: var(--muted);
+      }
+    }
+    @keyframes flow-bar {
+      0%,
+      11.5% {
+        opacity: 1;
+      }
+      12.5%,
+      100% {
+        opacity: 0;
+      }
+    }
+    @keyframes flow-num {
+      0%,
+      11.5% {
+        background: var(--action);
+        border-color: var(--action);
+        color: var(--surface);
+      }
+      12.5%,
+      100% {
+        background: var(--surface);
+        border-color: var(--line);
+        color: var(--muted);
+      }
+    }
+    @keyframes flow-band {
+      0% {
+        opacity: 0;
+        transform: translateY(0);
+      }
+      1.5%,
+      11% {
+        opacity: 1;
+        transform: translateY(0);
+      }
+      12.5%,
+      23.5% {
+        transform: translateY(calc(var(--step) * 1));
+      }
+      25%,
+      36% {
+        transform: translateY(calc(var(--step) * 2));
+      }
+      37.5%,
+      48.5% {
+        transform: translateY(calc(var(--step) * 3));
+      }
+      50%,
+      61% {
+        transform: translateY(calc(var(--step) * 4));
+      }
+      62.5%,
+      73.5% {
+        transform: translateY(calc(var(--step) * 5));
+      }
+      75%,
+      86% {
+        transform: translateY(calc(var(--step) * 6));
+      }
+      87.5%,
+      98.5% {
+        opacity: 1;
+        transform: translateY(calc(var(--step) * 7));
+      }
+      100% {
+        opacity: 0;
+        transform: translateY(calc(var(--step) * 7));
+      }
+    }
+
+    /* Phones and narrow tablets: the pane sits above the titles. */
+    @media (max-width: 47.99rem) {
+      .flow {
+        --list-w: 100%;
+        --pane-top: 192px;
+      }
+      .flow-stages {
+        padding: var(--pane-top) 0 0;
+      }
+      .flow-stages::after,
+      .flow-picture {
+        top: 0;
+        right: 0;
+        bottom: auto;
+        left: 0;
+        height: calc(var(--pane-top) - 16px);
+        min-height: 0;
+      }
+      .flow-picture {
+        padding: 16px;
+      }
+      .flow-title {
+        font-size: 14px;
+      }
+    }
+
+    /*
+     * Less motion: no animation at all. Every stage shows with its picture, as the
+     * finished story, and the pause button has nothing to pause.
+     */
+    @media (prefers-reduced-motion: reduce) {
+      .flow-stages {
+        display: grid;
+        gap: 24px;
+        padding: 0;
+      }
+      @media (min-width: 48rem) {
+        .flow-stages {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 24px 32px;
+        }
+      }
+      .flow-stages::before,
+      .flow-stages::after,
+      .flow-stage.is-decision .flow-title::before {
+        display: none;
+      }
+      .flow-stage {
+        flex-wrap: wrap;
+        align-content: flex-start;
+        height: auto;
+        padding: 0;
+      }
+      .flow-num,
+      .flow-title,
+      .flow-picture {
+        animation: none;
+      }
+      .flow-title {
+        color: var(--ink);
+        white-space: normal;
+      }
+      .flow-picture {
+        position: static;
+        flex: 1 1 100%;
+        justify-content: flex-start;
+        height: auto;
+        padding: 0 0 0 36px;
+        opacity: 1;
+      }
+      .flow-pause {
+        display: none !important;
+      }
+    }
+  }
+}
+
+/* === import === */
+@layer utilities {
+  @layer app {
+    /* Importing from a spreadsheet (pages/import.ts, importPanel() in onboarding-forms.ts):
+       the upload panel on Setup and in the guide, and the review page. The one bold
+       thing is the "Filled in by AI" mark: anything the AI supplied carries it. */
+    .import-details > summary svg {
+      display: inline-block;
+      margin-right: 4px;
+      vertical-align: -2px;
+    }
+    .import-details:not(.section) {
+      margin-top: 8px;
+    }
+    .import-details.section {
+      padding: 16px;
+    }
+    .import-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      max-width: 72ch;
+    }
+    .import-upload {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .import-upload-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 16px;
+    }
+    .import-template {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 14px;
+    }
+    .import-steps {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .import-steps > li + li {
+      padding-top: 16px;
+      border-top: 1px solid var(--line);
+    }
+    .import-step-title {
+      margin: 0 0 8px;
+      font-family: var(--font-head);
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    /* The review page. */
+    .import-summary {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px 8px;
+      margin: 0;
+      font-size: 14px;
+    }
+    .import-ai {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      margin-top: 2px;
+      padding: 1px 8px 1px 6px;
+      border-radius: 4px;
+      border: 1px solid transparent;
+      background: var(--info-bg);
+      color: var(--action);
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1.4;
+      white-space: nowrap;
+    }
+    .import-table td > .import-ai,
+    .import-table td > .import-note {
+      display: flex;
+      width: fit-content;
+    }
+    .import-note {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    .import-how {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
+    }
+    .import-samples {
+      max-width: 28ch;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+    .import-table td {
+      vertical-align: top;
+    }
+    .import-table td[data-field='address'],
+    .import-table td[data-field='property'] {
+      min-width: 14rem;
+    }
+    .import-table th .import-note {
+      font-family: var(--font-body);
+      font-weight: 400;
+      white-space: normal;
+    }
+    .import-table td.import-fix {
+      min-width: 13rem;
+      background: var(--high-bg);
+    }
+    .import-table td.import-fix .field-error {
+      margin-top: 2px;
+      color: var(--high);
+    }
+    .import-notes {
+      min-width: 10rem;
+      max-width: 16rem;
+    }
+    .import-notes > span {
+      display: block;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    .import-table tr[data-status='duplicate'] td {
+      color: var(--muted);
+    }
+    .import-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    @media (max-width: 39.99rem) {
+      .import-actions > .btn {
+        flex: 1 1 100%;
       }
     }
   }

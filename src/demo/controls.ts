@@ -43,11 +43,11 @@ export interface DemoContact {
  */
 export interface DemoControls {
   /** Everyone outside the Agency the simulator can act as. */
-  contacts(propertyManagerId: number): DemoContact[];
+  contacts(propertyManagerId: number): Promise<DemoContact[]>;
   /** Every message myEST8 sent from the Agency's channels, oldest first. */
-  outbox(propertyManagerId: number): DemoOutboundMessage[];
+  outbox(propertyManagerId: number): Promise<DemoOutboundMessage[]>;
   /** Every message the simulator sent in to the Agency's channels, oldest first. */
-  inbound(propertyManagerId: number): DemoInboundMessage[];
+  inbound(propertyManagerId: number): Promise<DemoInboundMessage[]>;
   /**
    * Sends a message in as `from` (a phone number or email) to the Agency's own
    * address on `channel`, and lets the worker handle it. Refuses with an

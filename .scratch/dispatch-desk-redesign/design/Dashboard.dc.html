@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<title>myEST8 dashboard</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700&amp;family=Red+Hat+Text:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0;background:#f2f4f6}
+a{color:#1f5c8b}a:hover{color:#174a70}
+</style>
+</helmet>
+<div style="display: flex; flex-wrap: wrap; min-height: 100vh; background: #f2f4f6; color: #13212e; font-family: 'Red Hat Text', system-ui, sans-serif; font-size: 14px; line-height: 1.45">
+  <nav aria-label="Main" style="flex: 1 1 220px; max-width: 220px; background: #13212e; color: #e6ebf0; padding: 20px 12px; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px">
+    <a href="Dashboard.dc.html" style="display: flex; align-items: center; gap: 8px; padding: 0 12px 20px; color: #e6ebf0; text-decoration: none">
+      <svg viewBox="0 0 256 256" fill="currentColor" style="width: 28px; height: 28px; color: #ffc233; flex: none" aria-hidden="true"><path fill-rule="evenodd" d="M128 14 L208 94 L208 232 Q208 244 196 244 L60 244 Q48 244 48 232 L48 94 Z M128 46 A12 12 0 1 0 128.01 46 Z M146.49 152.53 A34 34 0 1 0 109.51 152.53 A40 40 0 1 0 146.49 152.53 Z M128 106 A16 16 0 1 0 128.01 106 Z M128 170 A20 20 0 1 0 128.01 170 Z"></path></svg>
+      <span style="font-family: 'Lexend', system-ui, sans-serif; font-size: 22px; font-weight: 700"><span style="font-weight: 400">my</span>EST8</span>
+    </a>
+    <a href="Dashboard.dc.html" aria-current="page" style="display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 12px; border-radius: 6px; background: rgba(255,255,255,0.08); box-shadow: inset 4px 0 0 {{hivis}}; color: #e6ebf0; text-decoration: none; font-family: 'Lexend', system-ui, sans-serif; font-size: 16px; font-weight: 600">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" style="width: 18px; height: 18px" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1"></rect><rect x="14" y="4" width="6" height="6" rx="1"></rect><rect x="4" y="14" width="6" height="6" rx="1"></rect><rect x="14" y="14" width="6" height="6" rx="1"></rect></svg>Dashboard</a>
+    <a href="Dispatch.dc.html" style="display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 12px; color: #e6ebf0; text-decoration: none; font-family: 'Lexend', system-ui, sans-serif; font-size: 16px; font-weight: 600">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" style="width: 18px; height: 18px" aria-hidden="true"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11Z"></path><circle cx="12" cy="10" r="2.3"></circle></svg>Dispatch</a>
+    <a href="Settings.dc.html" style="display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 12px; color: #e6ebf0; text-decoration: none; font-family: 'Lexend', system-ui, sans-serif; font-size: 16px; font-weight: 600">
+      <svg viewBox="0 0 256 256" fill="currentColor" style="width: 18px; height: 18px" aria-hidden="true"><path d="M128,80a48,48,0,1,0,48,48A48.05,48.05,0,0,0,128,80Zm0,80a32,32,0,1,1,32-32A32,32,0,0,1,128,160Zm109.94-52.79a8,8,0,0,0-3.89-5.4l-29.83-17-.12-33.62a8,8,0,0,0-2.83-6.08,111.91,111.91,0,0,0-36.72-20.67,8,8,0,0,0-6.46.59L128,41.85,97.88,25a8,8,0,0,0-6.47-.6A112.1,112.1,0,0,0,54.73,45.15a8,8,0,0,0-2.83,6.07l-.15,33.65-29.83,17a8,8,0,0,0-3.89,5.4,106.47,106.47,0,0,0,0,41.56,8,8,0,0,0,3.89,5.4l29.83,17,.12,33.62a8,8,0,0,0,2.83,6.08,111.91,111.91,0,0,0,36.72,20.67,8,8,0,0,0,6.46-.59L128,214.15,158.12,231a7.91,7.91,0,0,0,3.9,1,8.09,8.09,0,0,0,2.57-.42,112.1,112.1,0,0,0,36.68-20.73,8,8,0,0,0,2.83-6.07l.15-33.65,29.83-17a8,8,0,0,0,3.89-5.4A106.47,106.47,0,0,0,237.94,107.21Zm-15,34.91-28.57,16.25a8,8,0,0,0-3,3c-.58,1-1.19,2.06-1.81,3.06a7.94,7.94,0,0,0-1.22,4.21l-.15,32.25a95.89,95.89,0,0,1-25.37,14.3L134,199.13a8,8,0,0,0-3.91-1h-.19c-1.21,0-2.43,0-3.64,0a8.08,8.08,0,0,0-4.1,1l-28.84,16.1A96,96,0,0,1,67.88,201l-.11-32.2a8,8,0,0,0-1.22-4.22c-.62-1-1.23-2-1.8-3.06a8.09,8.09,0,0,0-3-3.06l-28.6-16.29a90.49,90.49,0,0,1,0-28.26L61.67,97.63a8,8,0,0,0,3-3c.58-1,1.19-2.06,1.81-3.06a7.94,7.94,0,0,0,1.22-4.21l.15-32.25a95.89,95.89,0,0,1,25.37-14.3L122,56.87a8,8,0,0,0,4.1,1c1.21,0,2.43,0,3.64,0a8.08,8.08,0,0,0,4.1-1l28.84-16.1A96,96,0,0,1,188.12,55l.11,32.2a8,8,0,0,0,1.22,4.22c.62,1,1.23,2,1.8,3.06a8.09,8.09,0,0,0,3,3.06l28.6,16.29A90.49,90.49,0,0,1,222.9,142.12Z"></path></svg>Settings</a>
+    <a href="Tracker.dc.html" style="margin-top: auto; display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 12px; color: #9aa8b4; text-decoration: none; font-size: 13px">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" style="width: 16px; height: 16px" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2"></rect><path d="M11 18.5h2"></path></svg>Phone simulator (demo)</a>
+    <span style="padding: 0 12px; color: #9aa8b4; font-size: 13px">Harbour Realty</span>
+  </nav>
+
+  <div style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column">
+    <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 14px 24px; background: #ffffff; border-bottom: 1px solid #d8dee4">
+      <h1 style="margin: 0; font-family: 'Lexend', system-ui, sans-serif; font-size: 22px; font-weight: 600">Dashboard</h1>
+      <div style="margin-left: auto; display: flex; align-items: center; gap: 16px; flex-wrap: wrap">
+        <div role="group" aria-label="Whose work" style="display: inline-flex; padding: 3px; border: 1px solid #7d8a95; border-radius: 6px">
+          <button type="button" aria-pressed="true" style="min-height: 34px; padding: 0 12px; border: 0; border-radius: 4px; background: {{action}}; color: #ffffff; font-family: 'Lexend', system-ui, sans-serif; font-weight: 600">Mine</button>
+          <button type="button" aria-pressed="false" style="min-height: 34px; padding: 0 12px; border: 0; background: transparent; color: #13212e; font-family: 'Lexend', system-ui, sans-serif; font-weight: 600">All</button>
+        </div>
+        <span style="color: #55636f">Sat 10 Oct</span>
+        <span style="font-weight: 500">Alice Archer</span>
+      </div>
+    </header>
+
+    <main style="padding: 16px 24px 32px; display: flex; flex-direction: column; gap: 16px">
+      <div style="display: flex; flex-wrap: wrap; gap: 20px; padding: 10px 16px; background: #ffffff; border: 1px solid #d8dee4; border-radius: 8px">
+        <span style="display: inline-flex; align-items: center; gap: 8px"><span style="display: inline-grid; place-items: center; min-width: 22px; height: 22px; border-radius: 999px; background: {{hivis}}; font-size: 12px; font-weight: 600">2</span>Maintenance Requests to review</span>
+        <span style="display: inline-flex; align-items: center; gap: 8px"><span style="display: inline-grid; place-items: center; min-width: 22px; height: 22px; border-radius: 999px; background: #f2f4f6; font-size: 12px; font-weight: 600">5</span>Open Tickets</span>
+        <span style="display: inline-flex; align-items: center; gap: 8px"><span style="display: inline-grid; place-items: center; min-width: 22px; height: 22px; border-radius: 999px; background: {{hivis}}; font-size: 12px; font-weight: 600">1</span>Alerts</span>
+        <span style="display: inline-flex; align-items: center; gap: 8px"><span style="display: inline-grid; place-items: center; min-width: 22px; height: 22px; border-radius: 999px; background: {{hivis}}; font-size: 12px; font-weight: 600">4</span>In the inbox</span>
+      </div>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: stretch">
+        <section style="flex: 1 1 320px; max-width: 360px; background: #ffffff; border: 1px solid #d8dee4; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 10px">
+          <h2 style="margin: 0; font-family: 'Lexend', system-ui, sans-serif; font-size: 16px; font-weight: 600">Needs your decision</h2>
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px">
+            <h3 style="margin: 0; font-family: 'Lexend', system-ui, sans-serif; font-size: 15px; font-weight: 600">Maintenance Requests to review</h3>
+            <button type="button" style="display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border: 1px solid #7d8a95; border-radius: 6px; background: #ffffff; font-family: 'Lexend', system-ui, sans-serif; font-weight: 600">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" style="width: 16px; height: 16px" aria-hidden="true"><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="6" r="2.5"></circle><circle cx="18" cy="18" r="2.5"></circle><path d="m8.2 10.8 7.6-3.6M8.2 13.2l7.6 3.6"></path></svg>Share</button>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px; padding: 10px 10px 10px 12px; border: 1px solid #d8dee4; border-left: 4px solid {{hivis}}; border-radius: 4px">
+            <div style="display: flex; align-items: center; gap: 8px"><strong style="flex: 1; min-width: 0">27 Llewellyn St</strong><button type="button" style="min-height: 32px; padding: 0 10px; border: 0; border-radius: 6px; background: {{action}}; color: #ffffff; font-family: 'Lexend', system-ui, sans-serif; font-weight: 600">Confirm</button><button type="button" style="min-height: 32px; padding: 0 10px; border: 1px solid #7d8a95; border-radius: 6px; background: #ffffff; font-family: 'Lexend', system-ui, sans-serif; font-weight: 600">Review</button></div>
+            <span>Some palings on the back fence have come loose</span>
+            <div style="display: flex; gap: 6px; flex-wrap: wrap"><span style="padding: 1px 8px; border: 1px solid #d8dee4; border-radius: 4px; color: #55636f; font-size: 13px">Routine</span><span style="padding: 1px 8px; border-radius: 4px; background: #f2f4f6; font-size: 13px">Carpentry</span><span style="padding: 1px 8px; border-radius: 4px; background: #fdf1e3; color: #9a4a0b; font-size: 13px">No photos</span><span style="margin-left: auto; color: #55636f; font-size: 12px">3 days ago</span></div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px; padding: 10px 10px 10px 12px; border: 1px solid #d8dee4; border-left: 4px solid {{hivis}}; border-radius: 4px">
+            <div style="display: flex; align-items: center; gap: 8px"><strong style="flex: 1; min-width: 0">7 Wilson St</strong><button type="button" style="min-height: 32px; padding: 0 10px; border: 0; border-radius: 6px; background: {{action}}; color: #ffffff; font-family: 'Lexend', system-ui, sans-serif; font-weight: 600">Confirm</button><button type="button" style="min-height: 32px; padding: 0 10px; border: 1px solid #7d8a95; border-radius: 6px; background: #ffffff; font-family: 'Lexend', system-ui, sans-serif; font-weight: 600">Review</button></div>
+            <span>The bathroom basin is draining slowly</span>
+            <div style="display: flex; gap: 6px; flex-wrap: wrap"><span style="padding: 1px 8px; border: 1px solid #d8dee4; border-radius: 4px; color: #55636f; font-size: 13px">Routine</span><span style="padding: 1px 8px; border-radius: 4px; background: #f2f4f6; font-size: 13px">Plumbing</span><span style="margin-left: auto; color: #55636f; font-size: 12px">1 day ago</span></div>
+          </div>
+          <h3 style="margin: 6px 0 0; font-family: 'Lexend', system-ui, sans-serif; font-size: 15px; font-weight: 600">Alerts</h3>
+          <div style="display: flex; flex-direction: column; gap: 4px; padding: 10px 10px 10px 12px; border: 1px solid #d8dee4; border-left: 4px solid {{hivis}}; border-radius: 4px">
+            <div style="display: flex; gap: 8px; align-items: center"><a href="#" style="font-weight: 600">9 Albion St</a><span style="margin-left: auto; padding: 1px 8px; border-radius: 4px; background: #f2f4f6; font-size: 13px">Rating</span></div>
+            <span>FixIt Carpentry finished the Job. Rate the Tradie.</span>
+          </div>
+        </section>
+
+        <section style="flex: 999 1 520px; min-width: 0; background: #ffffff; border: 1px solid #d8dee4; border-radius: 8px; padding: 12px 16px; display: flex; flex-direction: column; gap: 12px">
+          <h2 style="margin: 0; font-family: 'Lexend', system-ui, sans-serif; font-size: 16px; font-weight: 600">Tickets by stage</h2>
+          <div style="overflow-x: auto">
+            <div style="display: grid; grid-template-columns: repeat(5, minmax(150px, 1fr)); gap: 8px">
+              <div style="border: 1px solid #d8dee4; border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 8px; background: #f2f4f6">
+                <div style="display: flex; justify-content: space-between; font-family: 'Lexend', system-ui, sans-serif; font-weight: 600">Quoting<span style="color: #55636f">2</span></div>
+                <article style="background: #ffffff; border: 1px solid #d8dee4; border-radius: 4px; padding: 8px; display: flex; flex-direction: column; gap: 4px"><div style="display: flex; gap: 6px; align-items: center; padding-bottom: 4px; border-bottom: 1px dashed #d8dee4"><strong style="font-family: 'Lexend', system-ui, sans-serif">#7</strong><span style="padding: 0 6px; border-radius: 4px; background: #fdf1e3; color: #9a4a0b; font-size: 12px">High</span></div><strong>27 Llewellyn St</strong><span>The cupboard under the sink</span><span style="color: #55636f; font-size: 12px">4 Quotes</span></article>
+                <article style="background: #ffffff; border: 1px solid #d8dee4; border-radius: 4px; padding: 8px; display: flex; flex-direction: column; gap: 4px"><div style="display: flex; gap: 6px; align-items: center; padding-bottom: 4px; border-bottom: 1px dashed #d8dee4"><strong style="font-family: 'Lexend', system-ui, sans-serif">#12</strong><span style="padding: 0 6px; border: 1px solid #d8dee4; border-radius: 4px; color: #55636f; font-size: 12px">Routine</span></div><strong>9 Albion St</strong><span>The oven isn’t heating up</span><span style="color: #55636f; font-size: 12px">1 Quote</span></article>
+              </div>
+              <div style="border: 1px solid #d8dee4; border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 8px; background: #f2f4f6">
+                <div style="display: flex; justify-content: space-between; font-family: 'Lexend', system-ui, sans-serif; font-weight: 600">With Property Owner<span style="color: #55636f">0</span></div>
+                <span style="color: #55636f">Nothing at this stage.</span>
+              </div>
+              <div style="border: 1px solid #d8dee4; border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 8px; background: #f2f4f6">
+                <div style="display: flex; justify-content: space-between; font-family: 'Lexend', system-ui, sans-serif; font-weight: 600">Ready to book<span style="color: #55636f">1</span></div>
+                <article style="background: #ffffff; border: 1px solid #d8dee4; border-radius: 4px; padding: 8px; display: flex; flex-direction: column; gap: 4px"><div style="display: flex; gap: 6px; align-items: center; padding-bottom: 4px; border-bottom: 1px dashed #d8dee4"><strong style="font-family: 'Lexend', system-ui, sans-serif">#11</strong><span style="padding: 0 6px; border: 1px solid #d8dee4; border-radius: 4px; color: #55636f; font-size: 12px">Routine</span></div><strong>2/31 Australia St</strong><span>The bedroom light switch</span><span style="color: #55636f; font-size: 12px">2 Quotes</span><a href="Dispatch.dc.html" style="font-family: 'Lexend', system-ui, sans-serif; font-weight: 600">Choose a Tradie on the map</a></article>
+              </div>
+              <div style="border: 1px solid #d8dee4; border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 8px; background: #f2f4f6">
+                <div style="display: flex; justify-content: space-between; font-family: 'Lexend', system-ui, sans-serif; font-weight: 600">Booked<span style="color: #55636f">1</span></div>
+                <article style="background: #ffffff; border: 1px solid #d8dee4; border-radius: 4px; padding: 8px; display: flex; flex-direction: column; gap: 4px"><div style="display: flex; gap: 6px; align-items: center; padding-bottom: 4px; border-bottom: 1px dashed #d8dee4"><strong style="font-family: 'Lexend', system-ui, sans-serif">#14</strong><span style="padding: 0 6px; border: 1px solid #d8dee4; border-radius: 4px; color: #55636f; font-size: 12px">Routine</span></div><strong>7 Wilson St</strong><span>The toilet cistern keeps running</span><span style="color: #55636f; font-size: 12px">Mon 12 Oct, 9:00 am</span></article>
+              </div>
+              <div style="border: 1px solid #d8dee4; border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 8px; background: #f2f4f6">
+                <div style="display: flex; justify-content: space-between; font-family: 'Lexend', system-ui, sans-serif; font-weight: 600">Done<span style="color: #55636f">1</span></div>
+                <article style="background: #ffffff; border: 1px solid #d8dee4; border-radius: 4px; padding: 8px; display: flex; flex-direction: column; gap: 4px"><div style="display: flex; gap: 6px; align-items: center; padding-bottom: 4px; border-bottom: 1px dashed #d8dee4"><strong style="font-family: 'Lexend', system-ui, sans-serif">#8</strong><span style="padding: 0 6px; border-radius: 4px; background: #e8f1ea; color: #2f5a3e; font-size: 12px">Done</span></div><strong>9 Albion St</strong><span>The bathroom door handle</span><span style="color: #55636f; font-size: 12px">6 days ago</span></article>
+              </div>
+            </div>
+          </div>
+
+          <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px">
+            <h2 style="margin: 0; font-family: 'Lexend', system-ui, sans-serif; font-size: 16px; font-weight: 600">This week’s bookings</h2>
+            <div style="display: flex; align-items: center; gap: 8px">
+              <button type="button" aria-label="Previous week" style="width: 36px; height: 36px; border: 1px solid #7d8a95; border-radius: 6px; background: #ffffff; display: grid; place-items: center"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px" aria-hidden="true"><path d="m15 6-6 6 6 6"></path></svg></button>
+              <button type="button" aria-label="Next week" style="width: 36px; height: 36px; border: 1px solid #7d8a95; border-radius: 6px; background: #ffffff; display: grid; place-items: center"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></button>
+              <button type="button" style="display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border: 1px solid #7d8a95; border-radius: 6px; background: #ffffff; font-family: 'Lexend', system-ui, sans-serif; font-weight: 600"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" style="width: 16px; height: 16px" aria-hidden="true"><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="6" r="2.5"></circle><circle cx="18" cy="18" r="2.5"></circle><path d="m8.2 10.8 7.6-3.6M8.2 13.2l7.6 3.6"></path></svg>Share</button>
+              <a href="Dispatch.dc.html" style="font-family: 'Lexend', system-ui, sans-serif; font-weight: 600">Open Dispatch</a>
+            </div>
+          </div>
+          <div style="overflow-x: auto">
+            <ol style="margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(7, minmax(112px, 1fr)); gap: 8px">
+              <li style="min-height: 120px; padding: 8px; background: #f2f4f6; border: 1px solid #d8dee4; border-radius: 6px; display: flex; flex-direction: column; gap: 6px"><div style="display: flex; align-items: center; justify-content: space-between; gap: 4px"><strong style="font-family: 'Lexend', system-ui, sans-serif">Sat 10</strong><span style="padding: 0 6px; border-radius: 4px; background: #ffc233; font-size: 11px; font-weight: 600">Today</span></div><span style="color: #55636f; font-size: 13px">Free</span></li>
+              <li style="min-height: 120px; padding: 8px; background: #ffffff; border: 1px solid #d8dee4; border-radius: 6px; display: flex; flex-direction: column; gap: 6px"><div style="display: flex; align-items: center; justify-content: space-between; gap: 4px"><strong style="font-family: 'Lexend', system-ui, sans-serif">Sun 11</strong></div><span style="color: #55636f; font-size: 13px">Free</span></li>
+              <li style="min-height: 120px; padding: 8px; background: #ffffff; border: 1px solid #d8dee4; border-radius: 6px; display: flex; flex-direction: column; gap: 6px"><div style="display: flex; align-items: center; justify-content: space-between; gap: 4px"><strong style="font-family: 'Lexend', system-ui, sans-serif">Mon 12</strong></div><div style="padding: 6px 6px 6px 8px; border-left: 4px solid #ffc233; background: #ffffff; border-radius: 4px; border-top: 1px solid #d8dee4; border-right: 1px solid #d8dee4; border-bottom: 1px solid #d8dee4; font-size: 13px; display: flex; flex-direction: column"><strong>9:00 am</strong><a href="#">Flow Bros Plumbing</a><span style="color: #55636f">7 Wilson St</span></div></li>
+              <li style="min-height: 120px; padding: 8px; background: #ffffff; border: 1px solid #d8dee4; border-radius: 6px; display: flex; flex-direction: column; gap: 6px"><div style="display: flex; align-items: center; justify-content: space-between; gap: 4px"><strong style="font-family: 'Lexend', system-ui, sans-serif">Tue 13</strong></div><div style="padding: 6px 6px 6px 8px; border-left: 4px solid #ffc233; background: #ffffff; border-radius: 4px; border-top: 1px solid #d8dee4; border-right: 1px solid #d8dee4; border-bottom: 1px solid #d8dee4; font-size: 13px; display: flex; flex-direction: column"><strong>1:00 pm</strong><a href="#">Lucy’s Locksmiths</a><span style="color: #55636f">3/15 Bronte Rd</span></div></li>
+              <li style="min-height: 120px; padding: 8px; background: #ffffff; border: 1px solid #d8dee4; border-radius: 6px; display: flex; flex-direction: column; gap: 6px"><div style="display: flex; align-items: center; justify-content: space-between; gap: 4px"><strong style="font-family: 'Lexend', system-ui, sans-serif">Wed 14</strong></div><span style="color: #55636f; font-size: 13px">Free</span></li>
+              <li style="min-height: 120px; padding: 8px; background: #ffffff; border: 1px solid #d8dee4; border-radius: 6px; display: flex; flex-direction: column; gap: 6px"><div style="display: flex; align-items: center; justify-content: space-between; gap: 4px"><strong style="font-family: 'Lexend', system-ui, sans-serif">Thu 15</strong></div><span style="color: #55636f; font-size: 13px">Free</span></li>
+              <li style="min-height: 120px; padding: 8px; background: #ffffff; border: 1px solid #d8dee4; border-radius: 6px; display: flex; flex-direction: column; gap: 6px"><div style="display: flex; align-items: center; justify-content: space-between; gap: 4px"><strong style="font-family: 'Lexend', system-ui, sans-serif">Fri 16</strong></div><span style="color: #55636f; font-size: 13px">Free</span></li>
+            </ol>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"action":{"editor":"color","default":"#1f5c8b","options":["#1f5c8b","#13212e","#2f5a3e"]},"hivis":{"editor":"color","default":"#ffc233","options":["#ffc233","#f59e0b","#1f5c8b"]},"$preview":{"width":1366,"height":980}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { action: this.props.action ?? '#1f5c8b', hivis: this.props.hivis ?? '#ffc233' };
+  }
+}
+</script>
+</body>
+</html>

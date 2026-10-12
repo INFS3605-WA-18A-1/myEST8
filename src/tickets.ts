@@ -211,147 +211,59 @@ function requireTrade(trade: Trade) {
 
 /** Restricts a dashboard query to some Properties, or to none when `propertyIds` is null. */
 function propertyFilter(propertyIds: number[] | null): [string, Param[]] {
-  return propertyIds === null ? ['', []] : [' AND property_id IN (SELECT value FROM json_each(?))', [JSON.stringify(propertyIds)]];
+  return propertyIds === null ? ['', []] : [' AND property_id IN (SELECT value::bigint FROM jsonb_array_elements_text(?::text::jsonb) AS ids (value))', [JSON.stringify(propertyIds)]];
 }
 
 /** Issues in intake, Maintenance Requests, Tickets, Jobs, Urgent Repairs, the message log and the Ticket timeline. */
 export function createTickets({ db, clock, settings, modules }: Context) {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS issues (
-      id INTEGER PRIMARY KEY,
-      agency_id INTEGER NOT NULL,
-      property_id INTEGER NOT NULL,
-      tenant_id INTEGER NOT NULL,
-      status TEXT NOT NULL,
-      description TEXT NOT NULL,
-      location TEXT,
-      started TEXT,
-      worsening TEXT,
-      availability TEXT,
-      urgency TEXT NOT NULL,
-      check_urgency INTEGER NOT NULL DEFAULT 0,
-      trade TEXT NOT NULL,
-      check_trade INTEGER NOT NULL DEFAULT 0,
-      no_photos INTEGER NOT NULL DEFAULT 0,
-      image_match TEXT,
-      image_match_reason TEXT,
-      photos_token TEXT NOT NULL UNIQUE,
-      reported_at TEXT NOT NULL,
-      rejected_reason TEXT
-    );
-    CREATE TABLE IF NOT EXISTS photos (
-      id INTEGER PRIMARY KEY,
-      issue_id INTEGER NOT NULL REFERENCES issues(id),
-      file_id INTEGER NOT NULL,
-      metadata TEXT NOT NULL,
-      reasons TEXT NOT NULL,
-      uploaded_at TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS tickets (
-      id INTEGER PRIMARY KEY,
-      agency_id INTEGER NOT NULL,
-      issue_id INTEGER NOT NULL UNIQUE REFERENCES issues(id),
-      property_id INTEGER NOT NULL,
-      tenant_id INTEGER NOT NULL,
-      status TEXT NOT NULL,
-      urgency TEXT NOT NULL,
-      check_urgency INTEGER NOT NULL,
-      reported_at TEXT NOT NULL,
-      tracker_token TEXT NOT NULL UNIQUE,
-      closed_at TEXT
-    );
-    CREATE TABLE IF NOT EXISTS jobs (
-      id INTEGER PRIMARY KEY,
-      agency_id INTEGER NOT NULL,
-      ticket_id INTEGER NOT NULL REFERENCES tickets(id),
-      trade TEXT NOT NULL,
-      check_trade INTEGER NOT NULL DEFAULT 0,
-      status TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS urgent_repairs (
-      id INTEGER PRIMARY KEY,
-      agency_id INTEGER NOT NULL,
-      issue_id INTEGER NOT NULL UNIQUE REFERENCES issues(id),
-      property_id INTEGER NOT NULL,
-      tenant_id INTEGER NOT NULL,
-      status TEXT NOT NULL,
-      receipt_token TEXT NOT NULL UNIQUE,
-      created_at TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS urgent_repair_receipts (
-      urgent_repair_id INTEGER NOT NULL REFERENCES urgent_repairs(id),
-      file_id INTEGER NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS timeline (
-      id INTEGER PRIMARY KEY,
-      ticket_id INTEGER NOT NULL REFERENCES tickets(id),
-      kind TEXT NOT NULL,
-      data TEXT NOT NULL,
-      at TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS messages (
-      id INTEGER PRIMARY KEY,
-      agency_id INTEGER NOT NULL,
-      direction TEXT NOT NULL,
-      person_id INTEGER,
-      channel_type TEXT NOT NULL,
-      address TEXT NOT NULL,
-      template TEXT,
-      text TEXT NOT NULL,
-      issue_id INTEGER,
-      files TEXT NOT NULL,
-      unread INTEGER NOT NULL DEFAULT 0,
-      at TEXT NOT NULL
-    );
-  `);
 
-  function issue(id: number): Issue {
-    const row = one<IssueRow>(db, 'SELECT * FROM issues WHERE id = ?', id);
+  async function issue(id: number): Promise<Issue> {
+    const row = await one<IssueRow>(db, 'SELECT * FROM issues WHERE id = ?', id);
     if (!row) throw new Error(`Issue ${id} not found`);
     return toIssue(row);
   }
 
-  function issueInAgency(agencyId: number, id: number) {
-    const row = one<IssueRow>(db, 'SELECT * FROM issues WHERE id = ? AND agency_id = ?', id, agencyId);
+  async function issueInAgency(agencyId: number, id: number) {
+    const row = await one<IssueRow>(db, 'SELECT * FROM issues WHERE id = ? AND agency_id = ?', id, agencyId);
     if (!row) notFound('Maintenance Request');
     return toIssue(row);
   }
 
-  function ticket(id: number): Ticket {
-    const row = one<TicketRow>(db, 'SELECT * FROM tickets WHERE id = ?', id);
+  async function ticket(id: number): Promise<Ticket> {
+    const row = await one<TicketRow>(db, 'SELECT * FROM tickets WHERE id = ?', id);
     if (!row) throw new Error(`Ticket ${id} not found`);
     return toTicket(row);
   }
 
-  function ticketInAgency(agencyId: number, id: number) {
-    const row = one<TicketRow>(db, 'SELECT * FROM tickets WHERE id = ? AND agency_id = ?', id, agencyId);
+  async function ticketInAgency(agencyId: number, id: number) {
+    const row = await one<TicketRow>(db, 'SELECT * FROM tickets WHERE id = ? AND agency_id = ?', id, agencyId);
     if (!row) notFound('Ticket');
     return toTicket(row);
   }
 
-  function job(id: number): Job {
-    const row = one<JobRow>(db, 'SELECT * FROM jobs WHERE id = ?', id);
+  async function job(id: number): Promise<Job> {
+    const row = await one<JobRow>(db, 'SELECT * FROM jobs WHERE id = ?', id);
     if (!row) throw new Error(`Job ${id} not found`);
     return toJob(row);
   }
 
-  function jobInAgency(agencyId: number, id: number) {
-    const row = one<JobRow>(db, 'SELECT * FROM jobs WHERE id = ? AND agency_id = ?', id, agencyId);
+  async function jobInAgency(agencyId: number, id: number) {
+    const row = await one<JobRow>(db, 'SELECT * FROM jobs WHERE id = ? AND agency_id = ?', id, agencyId);
     if (!row) notFound('Job');
     return toJob(row);
   }
 
-  function jobsOf(ticketId: number) {
-    return all<JobRow>(db, 'SELECT * FROM jobs WHERE ticket_id = ? ORDER BY id', ticketId).map(toJob);
+  async function jobsOf(ticketId: number) {
+    return (await all<JobRow>(db, 'SELECT * FROM jobs WHERE ticket_id = ? ORDER BY id', ticketId)).map(toJob);
   }
 
-  function urgentRepair(id: number): UrgentRepair {
-    const row = one<UrgentRepairRow>(db, 'SELECT * FROM urgent_repairs WHERE id = ?', id);
+  async function urgentRepair(id: number): Promise<UrgentRepair> {
+    const row = await one<UrgentRepairRow>(db, 'SELECT * FROM urgent_repairs WHERE id = ?', id);
     if (!row) throw new Error(`Urgent Repair ${id} not found`);
     return toUrgentRepair(row);
   }
 
-  function toUrgentRepair(r: UrgentRepairRow): UrgentRepair {
+  async function toUrgentRepair(r: UrgentRepairRow): Promise<UrgentRepair> {
     return {
       id: r.id,
       agencyId: r.agency_id,
@@ -360,34 +272,34 @@ export function createTickets({ db, clock, settings, modules }: Context) {
       tenantId: r.tenant_id,
       status: r.status,
       receiptToken: r.receipt_token,
-      receiptFileIds: all<{ file_id: number }>(
+      receiptFileIds: (await all<{ file_id: number }>(
         db,
-        'SELECT file_id FROM urgent_repair_receipts WHERE urgent_repair_id = ?',
+        'SELECT file_id FROM urgent_repair_receipts WHERE urgent_repair_id = ? ORDER BY file_id',
         r.id,
-      ).map((f) => f.file_id),
+      )).map((f) => f.file_id),
       createdAt: r.created_at,
     };
   }
 
-  function recordEvent(ticketId: number, kind: string, data: object = {}, at: Date | string = clock.now()) {
-    run(db, 'INSERT INTO timeline (ticket_id, kind, data, at) VALUES (?, ?, ?, ?)', ticketId, kind, JSON.stringify(data), typeof at === 'string' ? at : iso(at));
+  async function recordEvent(ticketId: number, kind: string, data: object = {}, at: Date | string = clock.now()) {
+    await run(db, 'INSERT INTO timeline (ticket_id, kind, data, at) VALUES (?, ?, ?, ?)', ticketId, kind, JSON.stringify(data), typeof at === 'string' ? at : iso(at));
   }
 
-  function timeline(ticketId: number) {
-    return all<{ kind: string; data: string; at: string }>(
+  async function timeline(ticketId: number) {
+    return (await all<{ kind: string; data: string; at: string }>(
       db,
       'SELECT kind, data, at FROM timeline WHERE ticket_id = ? ORDER BY at, id',
       ticketId,
-    ).map((e) => ({ kind: e.kind, at: e.at, ...(JSON.parse(e.data) as object) }));
+    )).map((e) => ({ kind: e.kind, at: e.at, ...(JSON.parse(e.data) as object) }));
   }
 
-  function ticketForIssue(issueId: number): Ticket | null {
-    const row = one<TicketRow>(db, 'SELECT * FROM tickets WHERE issue_id = ?', issueId);
+  async function ticketForIssue(issueId: number): Promise<Ticket | null> {
+    const row = await one<TicketRow>(db, 'SELECT * FROM tickets WHERE issue_id = ?', issueId);
     return row ? toTicket(row) : null;
   }
 
   return {
-    createIssue(input: {
+    async createIssue(input: {
       agencyId: number;
       propertyId: number;
       tenantId: number;
@@ -400,7 +312,7 @@ export function createTickets({ db, clock, settings, modules }: Context) {
       return run(
         db,
         `INSERT INTO issues (agency_id, property_id, tenant_id, status, description, urgency, check_urgency, trade, check_trade, photos_token, reported_at)
-         VALUES (?, ?, ?, 'gathering', ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, 'gathering', ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
         input.agencyId,
         input.propertyId,
         input.tenantId,
@@ -416,21 +328,21 @@ export function createTickets({ db, clock, settings, modules }: Context) {
 
     issue,
 
-    updateIssue(id: number, patch: IssuePatch) {
+    async updateIssue(id: number, patch: IssuePatch) {
       const entries = Object.entries(patch).filter(([, value]) => value !== undefined);
       if (!entries.length) return;
       const columns = entries.map(([key]) => `${ISSUE_COLUMNS[key as keyof IssuePatch]} = ?`);
       const values = entries.map(([, value]) => (typeof value === 'boolean' ? Number(value) : (value as Param)));
-      run(db, `UPDATE issues SET ${columns.join(', ')} WHERE id = ?`, ...values, id);
+      await run(db, `UPDATE issues SET ${columns.join(', ')} WHERE id = ?`, ...values, id);
     },
 
-    issueByPhotosToken(token: string): Issue | null {
-      const row = one<IssueRow>(db, 'SELECT * FROM issues WHERE photos_token = ?', token);
+    async issueByPhotosToken(token: string): Promise<Issue | null> {
+      const row = await one<IssueRow>(db, 'SELECT * FROM issues WHERE photos_token = ?', token);
       return row ? toIssue(row) : null;
     },
 
-    addPhoto(issueId: number, fileId: number, metadata: PhotoMetadata, reasons: string[]) {
-      run(
+    async addPhoto(issueId: number, fileId: number, metadata: PhotoMetadata, reasons: string[]) {
+      await run(
         db,
         'INSERT INTO photos (issue_id, file_id, metadata, reasons, uploaded_at) VALUES (?, ?, ?, ?, ?)',
         issueId,
@@ -441,23 +353,24 @@ export function createTickets({ db, clock, settings, modules }: Context) {
       );
     },
 
-    photos(issueId: number) {
-      return all<{ id: number; file_id: number; metadata: PhotoMetadata; reasons: string }>(
+    async photos(issueId: number) {
+      return (await all<{ id: number; file_id: number; metadata: PhotoMetadata; reasons: string }>(
         db,
         'SELECT id, file_id, metadata, reasons FROM photos WHERE issue_id = ? ORDER BY id',
         issueId,
-      ).map((p) => ({ photoId: p.id, fileId: p.file_id, metadata: p.metadata, reasons: JSON.parse(p.reasons) as string[] }));
+      )).map((p) => ({ photoId: p.id, fileId: p.file_id, metadata: p.metadata, reasons: JSON.parse(p.reasons) as string[] }));
     },
 
     async confirmMaintenanceRequest(agencyId: number, issueId: number) {
-      const confirmed = issueInAgency(agencyId, issueId);
-      if (confirmed.status !== 'maintenance_request') invalid('Only a Maintenance Request waiting for confirmation can be confirmed');
-      const { ticketId, trackerToken } = transaction(db, () => {
+      // Checked inside the transaction, so confirming twice at once makes one Ticket.
+      const { confirmed, ticketId, trackerToken } = await transaction(db, async () => {
+        const confirmed = await issueInAgency(agencyId, issueId);
+        if (confirmed.status !== 'maintenance_request') invalid('Only a Maintenance Request waiting for confirmation can be confirmed');
         const trackerToken = newToken();
-        const ticketId = run(
+        const ticketId = await run(
           db,
           `INSERT INTO tickets (agency_id, issue_id, property_id, tenant_id, status, urgency, check_urgency, reported_at, tracker_token)
-           VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?)`,
+           VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?) RETURNING id`,
           agencyId,
           issueId,
           confirmed.propertyId,
@@ -467,7 +380,7 @@ export function createTickets({ db, clock, settings, modules }: Context) {
           confirmed.reportedAt,
           trackerToken,
         );
-        run(
+        await run(
           db,
           `INSERT INTO jobs (agency_id, ticket_id, trade, check_trade, status) VALUES (?, ?, ?, ?, 'quoting')`,
           agencyId,
@@ -475,10 +388,10 @@ export function createTickets({ db, clock, settings, modules }: Context) {
           confirmed.trade,
           Number(confirmed.checkTrade),
         );
-        run(db, `UPDATE issues SET status = 'confirmed' WHERE id = ?`, issueId);
-        recordEvent(ticketId, 'reported', {}, confirmed.reportedAt);
-        recordEvent(ticketId, 'confirmed');
-        return { ticketId, trackerToken };
+        await run(db, `UPDATE issues SET status = 'confirmed' WHERE id = ?`, issueId);
+        await recordEvent(ticketId, 'reported', {}, confirmed.reportedAt);
+        await recordEvent(ticketId, 'confirmed');
+        return { confirmed, ticketId, trackerToken };
       });
       await modules.notifications.send(
         confirmed.tenantId,
@@ -490,38 +403,43 @@ export function createTickets({ db, clock, settings, modules }: Context) {
     },
 
     async rejectMaintenanceRequest(agencyId: number, issueId: number, reason: string) {
-      const rejected = issueInAgency(agencyId, issueId);
-      if (rejected.status !== 'maintenance_request') invalid('Only a Maintenance Request waiting for confirmation can be rejected');
       const trimmed = reason.trim();
-      if (!trimmed) invalid('Give the Tenant a reason');
-      run(db, `UPDATE issues SET status = 'rejected', rejected_reason = ? WHERE id = ?`, trimmed, issueId);
+      const rejected = await transaction(db, async () => {
+        const rejected = await issueInAgency(agencyId, issueId);
+        if (rejected.status !== 'maintenance_request') invalid('Only a Maintenance Request waiting for confirmation can be rejected');
+        if (!trimmed) invalid('Give the Tenant a reason');
+        await run(db, `UPDATE issues SET status = 'rejected', rejected_reason = ? WHERE id = ?`, trimmed, issueId);
+        return rejected;
+      });
       await modules.notifications.send(rejected.tenantId, 'tenant.rejected', { reason: trimmed }, { issueId });
     },
 
     async changeUrgency(agencyId: number, target: { issueId: number } | { ticketId: number }, urgency: Urgency) {
       if (!URGENCIES.includes(urgency)) invalid(`Unknown Urgency ${urgency}`);
       if ('issueId' in target) {
-        const changed = issueInAgency(agencyId, target.issueId);
+        const changed = await issueInAgency(agencyId, target.issueId);
         if (!IN_INTAKE.includes(changed.status)) invalid('This issue is no longer in intake');
         if (urgency === 'urgent') return modules.intake.startUrgentRepair(changed.id);
-        this.updateIssue(changed.id, { urgency, checkUrgency: false });
+        await this.updateIssue(changed.id, { urgency, checkUrgency: false });
         return;
       }
-      const changed = ticketInAgency(agencyId, target.ticketId);
-      if (urgency === 'urgent') invalid('Urgent issues are Urgent Repairs, which the Tenant arranges. A Ticket can be High or Routine.');
-      run(db, 'UPDATE tickets SET urgency = ?, check_urgency = 0 WHERE id = ?', urgency, changed.id);
-      recordEvent(changed.id, 'urgency_changed', { urgency });
+      await transaction(db, async () => {
+        const changed = await ticketInAgency(agencyId, target.ticketId);
+        if (urgency === 'urgent') invalid('Urgent issues are Urgent Repairs, which the Tenant arranges. A Ticket can be High or Routine.');
+        await run(db, 'UPDATE tickets SET urgency = ?, check_urgency = 0 WHERE id = ?', urgency, changed.id);
+        await recordEvent(changed.id, 'urgency_changed', { urgency });
+      });
     },
 
-    createUrgentRepair(issueId: number) {
-      const urgent = issue(issueId);
-      return transaction(db, () => {
-        run(db, `UPDATE issues SET status = 'urgent', urgency = 'urgent', check_urgency = 0 WHERE id = ?`, issueId);
+    async createUrgentRepair(issueId: number) {
+      const urgent = await issue(issueId);
+      return await transaction(db, async () => {
+        await run(db, `UPDATE issues SET status = 'urgent', urgency = 'urgent', check_urgency = 0 WHERE id = ?`, issueId);
         const receiptToken = newToken();
-        const id = run(
+        const id = await run(
           db,
           `INSERT INTO urgent_repairs (agency_id, issue_id, property_id, tenant_id, status, receipt_token, created_at)
-           VALUES (?, ?, ?, ?, 'reminder_sent', ?, ?)`,
+           VALUES (?, ?, ?, ?, 'reminder_sent', ?, ?) RETURNING id`,
           urgent.agencyId,
           issueId,
           urgent.propertyId,
@@ -535,30 +453,30 @@ export function createTickets({ db, clock, settings, modules }: Context) {
 
     urgentRepair,
 
-    urgentRepairByToken(token: string): UrgentRepair | null {
-      const row = one<UrgentRepairRow>(db, 'SELECT * FROM urgent_repairs WHERE receipt_token = ?', token);
+    async urgentRepairByToken(token: string): Promise<UrgentRepair | null> {
+      const row = await one<UrgentRepairRow>(db, 'SELECT * FROM urgent_repairs WHERE receipt_token = ?', token);
       return row ? toUrgentRepair(row) : null;
     },
 
-    addReceipt(urgentRepairId: number, fileIds: number[]) {
-      transaction(db, () => {
+    async addReceipt(urgentRepairId: number, fileIds: number[]) {
+      await transaction(db, async () => {
         for (const fileId of fileIds) {
-          run(db, 'INSERT INTO urgent_repair_receipts (urgent_repair_id, file_id) VALUES (?, ?)', urgentRepairId, fileId);
+          await run(db, 'INSERT INTO urgent_repair_receipts (urgent_repair_id, file_id) VALUES (?, ?)', urgentRepairId, fileId);
         }
-        run(db, `UPDATE urgent_repairs SET status = 'receipt_received' WHERE id = ?`, urgentRepairId);
+        await run(db, `UPDATE urgent_repairs SET status = 'receipt_received' WHERE id = ?`, urgentRepairId);
       });
     },
 
-    setUrgentRepairStatus(urgentRepairId: number, status: UrgentRepairStatus) {
-      run(db, 'UPDATE urgent_repairs SET status = ? WHERE id = ?', status, urgentRepairId);
+    async setUrgentRepairStatus(urgentRepairId: number, status: UrgentRepairStatus) {
+      await run(db, 'UPDATE urgent_repairs SET status = ? WHERE id = ?', status, urgentRepairId);
     },
 
     ticket,
     ticketInAgency,
     ticketForIssue,
 
-    ticketByTrackerToken(token: string): Ticket | null {
-      const row = one<TicketRow>(db, 'SELECT * FROM tickets WHERE tracker_token = ?', token);
+    async ticketByTrackerToken(token: string): Promise<Ticket | null> {
+      const row = await one<TicketRow>(db, 'SELECT * FROM tickets WHERE tracker_token = ?', token);
       return row ? toTicket(row) : null;
     },
 
@@ -566,48 +484,57 @@ export function createTickets({ db, clock, settings, modules }: Context) {
     jobInAgency,
     jobsOf,
 
-    setJobStatus(jobId: number, status: JobStatus) {
-      run(db, 'UPDATE jobs SET status = ? WHERE id = ?', status, jobId);
+    async setJobStatus(jobId: number, status: JobStatus) {
+      await run(db, 'UPDATE jobs SET status = ? WHERE id = ?', status, jobId);
     },
 
-    setJobTrade(agencyId: number, jobId: number, trade: Trade) {
-      requireTrade(trade);
-      const changed = jobInAgency(agencyId, jobId);
-      if (changed.status !== 'quoting' || modules.quotes.hasQuoteRequests(jobId)) {
-        invalid('The Trade can only change before Quote Requests are sent');
-      }
-      run(db, 'UPDATE jobs SET trade = ?, check_trade = 0 WHERE id = ?', trade, jobId);
-      recordEvent(changed.ticketId, 'trade_changed', { jobId, trade });
+    async setJobTrade(agencyId: number, jobId: number, trade: Trade) {
+      return transaction(db, async () => {
+        requireTrade(trade);
+        const changed = await jobInAgency(agencyId, jobId);
+        if (changed.status !== 'quoting' || (await modules.quotes.hasQuoteRequests(jobId))) {
+          invalid('The Trade can only change before Quote Requests are sent');
+        }
+        await run(db, 'UPDATE jobs SET trade = ?, check_trade = 0 WHERE id = ?', trade, jobId);
+        await recordEvent(changed.ticketId, 'trade_changed', { jobId, trade });
+      });
     },
 
-    addJob(agencyId: number, ticketId: number, trade: Trade) {
-      requireTrade(trade);
-      const parent = ticketInAgency(agencyId, ticketId);
-      if (parent.status !== 'open') invalid('This Ticket is closed');
-      const jobId = run(db, `INSERT INTO jobs (agency_id, ticket_id, trade, status) VALUES (?, ?, ?, 'quoting')`, agencyId, ticketId, trade);
-      recordEvent(ticketId, 'job_added', { jobId, trade });
-      return jobId;
+    async addJob(agencyId: number, ticketId: number, trade: Trade) {
+      return transaction(db, async () => {
+        requireTrade(trade);
+        const parent = await ticketInAgency(agencyId, ticketId);
+        if (parent.status !== 'open') invalid('This Ticket is closed');
+        const jobId = await run(db, `INSERT INTO jobs (agency_id, ticket_id, trade, status) VALUES (?, ?, ?, 'quoting') RETURNING id`, agencyId, ticketId, trade);
+        await recordEvent(ticketId, 'job_added', { jobId, trade });
+        return jobId;
+      });
     },
 
     async cancelJob(agencyId: number, jobId: number) {
-      const cancelled = jobInAgency(agencyId, jobId);
-      if (cancelled.status === 'done' || cancelled.status === 'cancelled') invalid(`This Job is already ${cancelled.status}`);
-      run(db, `UPDATE jobs SET status = 'cancelled' WHERE id = ?`, jobId);
-      modules.quotes.jobCancelled(jobId);
-      modules.scheduling.jobCancelled(jobId);
-      recordEvent(cancelled.ticketId, 'job_cancelled', { jobId });
+      return transaction(db, async () => {
+        const cancelled = await jobInAgency(agencyId, jobId);
+        if (cancelled.status === 'done' || cancelled.status === 'cancelled') invalid(`This Job is already ${cancelled.status}`);
+        await run(db, `UPDATE jobs SET status = 'cancelled' WHERE id = ?`, jobId);
+        await modules.quotes.jobCancelled(jobId);
+        await modules.scheduling.jobCancelled(jobId);
+        await recordEvent(cancelled.ticketId, 'job_cancelled', { jobId });
+      });
     },
 
     async closeTicket(agencyId: number, ticketId: number) {
-      const closing = ticketInAgency(agencyId, ticketId);
-      if (closing.status !== 'open') invalid('This Ticket is already closed');
-      if (jobsOf(ticketId).some((j) => j.status !== 'done' && j.status !== 'cancelled')) {
-        invalid('Every Job must be done or cancelled before the Ticket closes');
-      }
-      run(db, `UPDATE tickets SET status = 'closed', closed_at = ? WHERE id = ?`, iso(clock.now()), ticketId);
-      recordEvent(ticketId, 'closed');
-      const property = modules.profiles.property(closing.propertyId);
-      const { description } = issue(closing.issueId);
+      const closing = await transaction(db, async () => {
+        const closing = await ticketInAgency(agencyId, ticketId);
+        if (closing.status !== 'open') invalid('This Ticket is already closed');
+        if ((await jobsOf(ticketId)).some((j) => j.status !== 'done' && j.status !== 'cancelled')) {
+          invalid('Every Job must be done or cancelled before the Ticket closes');
+        }
+        await run(db, `UPDATE tickets SET status = 'closed', closed_at = ? WHERE id = ?`, iso(clock.now()), ticketId);
+        await recordEvent(ticketId, 'closed');
+        return closing;
+      });
+      const property = await modules.profiles.property(closing.propertyId);
+      const { description } = await issue(closing.issueId);
       await modules.notifications.send(closing.tenantId, 'tenant.ticket_closed', { propertyAddress: property.address }, { issueId: closing.issueId });
       await modules.notifications.send(
         property.ownerId,
@@ -620,11 +547,11 @@ export function createTickets({ db, clock, settings, modules }: Context) {
     recordEvent,
     timeline,
 
-    logMessage(entry: LoggedMessage) {
+    async logMessage(entry: LoggedMessage) {
       return run(
         db,
         `INSERT INTO messages (agency_id, direction, person_id, channel_type, address, template, text, issue_id, files, unread, at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
         entry.agencyId,
         entry.direction,
         entry.personId,
@@ -640,16 +567,16 @@ export function createTickets({ db, clock, settings, modules }: Context) {
     },
 
     /** Attaches a logged message to an issue, once the inbox routes it. */
-    attachMessage(messageId: number, issueId: number, unread: boolean) {
-      run(db, 'UPDATE messages SET issue_id = ?, unread = ? WHERE id = ?', issueId, Number(unread), messageId);
+    async attachMessage(messageId: number, issueId: number, unread: boolean) {
+      await run(db, 'UPDATE messages SET issue_id = ?, unread = ? WHERE id = ?', issueId, Number(unread), messageId);
     },
 
-    messages(issueId: number) {
-      return all<{ direction: 'in' | 'out'; person_id: number | null; channel_type: ChannelType; address: string; template: string | null; text: string; unread: number; at: string }>(
+    async messages(issueId: number) {
+      return (await all<{ direction: 'in' | 'out'; person_id: number | null; channel_type: ChannelType; address: string; template: string | null; text: string; unread: number; at: string }>(
         db,
         'SELECT direction, person_id, channel_type, address, template, text, unread, at FROM messages WHERE issue_id = ? ORDER BY at, id',
         issueId,
-      ).map((m) => ({
+      )).map((m) => ({
         direction: m.direction,
         personId: m.person_id,
         channel: m.channel_type,
@@ -661,113 +588,118 @@ export function createTickets({ db, clock, settings, modules }: Context) {
       }));
     },
 
-    unreadCount(issueId: number) {
-      return one<{ n: number }>(db, 'SELECT count(*) AS n FROM messages WHERE issue_id = ? AND unread = 1', issueId)!.n;
+    async unreadCount(issueId: number) {
+      return (await one<{ n: number }>(db, 'SELECT count(*) AS n FROM messages WHERE issue_id = ? AND unread = 1', issueId))!.n;
     },
 
-    markRead(agencyId: number, ticketId: number) {
-      const read = ticketInAgency(agencyId, ticketId);
-      run(db, 'UPDATE messages SET unread = 0 WHERE issue_id = ?', read.issueId);
+    async markRead(agencyId: number, ticketId: number) {
+      return transaction(db, async () => {
+        const read = await ticketInAgency(agencyId, ticketId);
+        await run(db, 'UPDATE messages SET unread = 0 WHERE issue_id = ?', read.issueId);
+      });
     },
 
     /** Everything still open on a Property, for the classifier to relate a Tenant's message to. */
-    openItemsForProperty(propertyId: number): OpenItem[] {
+    async openItemsForProperty(propertyId: number): Promise<OpenItem[]> {
       const items: OpenItem[] = [];
-      for (const i of all<IssueRow>(
+      for (const i of await all<IssueRow>(
         db,
-        `SELECT * FROM issues WHERE property_id = ? AND status IN (SELECT value FROM json_each(?)) ORDER BY id DESC`,
+        `SELECT * FROM issues WHERE property_id = ? AND status IN (SELECT jsonb_array_elements_text(?::text::jsonb)) ORDER BY id DESC`,
         propertyId,
         JSON.stringify(IN_INTAKE),
       )) {
         items.push({ ref: `issue:${i.id}`, summary: `Reported issue (${i.status.replace('_', ' ')}): ${i.description}` });
       }
-      for (const t of all<TicketRow>(db, `SELECT * FROM tickets WHERE property_id = ? AND status = 'open' ORDER BY id DESC`, propertyId)) {
-        items.push({ ref: `ticket:${t.id}`, summary: `Ticket: ${issue(t.issue_id).description}` });
-        for (const j of jobsOf(t.id).filter((j) => j.status !== 'cancelled' && j.status !== 'done')) {
+      for (const t of await all<TicketRow>(db, `SELECT * FROM tickets WHERE property_id = ? AND status = 'open' ORDER BY id DESC`, propertyId)) {
+        items.push({ ref: `ticket:${t.id}`, summary: `Ticket: ${(await issue(t.issue_id)).description}` });
+        for (const j of (await jobsOf(t.id)).filter((j) => j.status !== 'cancelled' && j.status !== 'done')) {
           items.push({ ref: `job:${j.id}`, summary: `${j.trade} Job (${j.status.replace('_', ' ')}) on Ticket ${t.id}` });
         }
       }
-      for (const u of all<UrgentRepairRow>(
+      for (const u of await all<UrgentRepairRow>(
         db,
         `SELECT * FROM urgent_repairs WHERE property_id = ? AND status = 'reminder_sent' ORDER BY id DESC`,
         propertyId,
       )) {
-        items.push({ ref: `urgent_repair:${u.id}`, summary: `Urgent Repair waiting for a receipt: ${issue(u.issue_id).description}` });
+        items.push({ ref: `urgent_repair:${u.id}`, summary: `Urgent Repair waiting for a receipt: ${(await issue(u.issue_id)).description}` });
       }
       return items;
     },
 
     /** The issue an open item belongs to, with the Ticket, Job or Urgent Repair it names. */
-    resolveRef(ref: string): { issueId: number; ticketId?: number; jobId?: number; urgentRepairId?: number } | null {
+    async resolveRef(ref: string): Promise<{ issueId: number; ticketId?: number; jobId?: number; urgentRepairId?: number } | null> {
       const [kind, rawId] = ref.split(':');
       const id = Number(rawId);
       if (!Number.isInteger(id)) return null;
-      if (kind === 'issue') return one(db, 'SELECT 1 FROM issues WHERE id = ?', id) ? { issueId: id } : null;
+      if (kind === 'issue') return await one(db, 'SELECT 1 FROM issues WHERE id = ?', id) ? { issueId: id } : null;
       if (kind === 'ticket') {
-        const row = one<TicketRow>(db, 'SELECT * FROM tickets WHERE id = ?', id);
+        const row = await one<TicketRow>(db, 'SELECT * FROM tickets WHERE id = ?', id);
         return row ? { issueId: row.issue_id, ticketId: row.id } : null;
       }
       if (kind === 'job') {
-        const row = one<JobRow>(db, 'SELECT * FROM jobs WHERE id = ?', id);
-        return row ? { issueId: ticket(row.ticket_id).issueId, ticketId: row.ticket_id, jobId: row.id } : null;
+        const row = await one<JobRow>(db, 'SELECT * FROM jobs WHERE id = ?', id);
+        return row ? { issueId: (await ticket(row.ticket_id)).issueId, ticketId: row.ticket_id, jobId: row.id } : null;
       }
       if (kind === 'urgent_repair') {
-        const row = one<UrgentRepairRow>(db, 'SELECT * FROM urgent_repairs WHERE id = ?', id);
+        const row = await one<UrgentRepairRow>(db, 'SELECT * FROM urgent_repairs WHERE id = ?', id);
         return row ? { issueId: row.issue_id, urgentRepairId: row.id } : null;
       }
       return null;
     },
 
     /** One entry per Ticket per Trade, for working out a Property's frequent issues. */
-    tradesForProperty(propertyId: number): Trade[] {
-      return all<{ trade: Trade }>(
+    async tradesForProperty(propertyId: number): Promise<Trade[]> {
+      return (await all<{ trade: Trade }>(
         db,
-        `SELECT DISTINCT jobs.ticket_id, jobs.trade FROM jobs JOIN tickets ON tickets.id = jobs.ticket_id
-         WHERE tickets.property_id = ? AND jobs.status != 'cancelled'`,
+        `SELECT jobs.ticket_id, jobs.trade FROM jobs JOIN tickets ON tickets.id = jobs.ticket_id
+         WHERE tickets.property_id = ? AND jobs.status != 'cancelled'
+         GROUP BY jobs.ticket_id, jobs.trade ORDER BY min(jobs.id)`,
         propertyId,
-      ).map((r) => r.trade);
+      )).map((r) => r.trade);
     },
 
-    maintenanceRequests(agencyId: number, propertyIds: number[] | null) {
+    async maintenanceRequests(agencyId: number, propertyIds: number[] | null) {
       const [filter, params] = propertyFilter(propertyIds);
-      return all<IssueRow>(
+      return (await all<IssueRow>(
         db,
         `SELECT * FROM issues WHERE agency_id = ? AND status = 'maintenance_request'${filter} ORDER BY reported_at, id`,
         agencyId,
         ...params,
-      ).map(toIssue);
+      )).map(toIssue);
     },
 
     /** Open Tickets, High before Routine, then oldest first. */
-    openTickets(agencyId: number, propertyIds: number[] | null) {
+    async openTickets(agencyId: number, propertyIds: number[] | null) {
       const [filter, params] = propertyFilter(propertyIds);
-      return all<TicketRow>(
+      return (await all<TicketRow>(
         db,
         `SELECT * FROM tickets WHERE agency_id = ? AND status = 'open'${filter}
          ORDER BY CASE urgency WHEN 'high' THEN 0 ELSE 1 END, reported_at, id`,
         agencyId,
         ...params,
-      ).map(toTicket);
+      )).map(toTicket);
     },
 
-    urgentRepairs(agencyId: number, propertyIds: number[] | null) {
+    async urgentRepairs(agencyId: number, propertyIds: number[] | null) {
       const [filter, params] = propertyFilter(propertyIds);
-      return all<UrgentRepairRow>(
-        db,
-        `SELECT * FROM urgent_repairs WHERE agency_id = ?${filter} ORDER BY created_at DESC, id DESC`,
-        agencyId,
-        ...params,
-      ).map(toUrgentRepair);
+      return Promise.all(
+        (await all<UrgentRepairRow>(
+          db,
+          `SELECT * FROM urgent_repairs WHERE agency_id = ?${filter} ORDER BY created_at DESC, id DESC`,
+          agencyId,
+          ...params,
+        )).map(toUrgentRepair),
+      );
     },
 
     /** The Tenant's progress tracker. Built from statuses only: no prices, Quotes or ratings. */
-    tracker(token: string) {
-      const tracked = this.ticketByTrackerToken(token);
+    async tracker(token: string) {
+      const tracked = await this.ticketByTrackerToken(token);
       if (!tracked) notFound('Ticket');
-      const events = timeline(tracked.id);
+      const events = await timeline(tracked.id);
       const first = (kind: string) => events.find((e) => e.kind === kind)?.at ?? null;
       const visits = events.filter((e) => e.kind === 'work_order_sent' || e.kind === 'visit_moved') as { visitStart?: string }[];
-      const jobs = jobsOf(tracked.id).filter((j) => j.status !== 'cancelled');
+      const jobs = (await jobsOf(tracked.id)).filter((j) => j.status !== 'cancelled');
       const allDone = jobs.length > 0 && jobs.every((j) => j.status === 'done');
       const doneAt = allDone ? (events.filter((e) => e.kind === 'job_done').at(-1)?.at ?? null) : null;
       const stages: { stage: string; at: string | null; visitStart?: string }[] = [
@@ -780,7 +712,9 @@ export function createTickets({ db, clock, settings, modules }: Context) {
         { stage: 'closed', at: tracked.closedAt },
       ];
       return {
-        description: issue(tracked.issueId).description,
+        description: (await issue(tracked.issueId)).description,
+        // The Agency's zone, so the Tenant sees times as the Agency does.
+        timeZone: (await modules.profiles.agency(tracked.agencyId)).timeZone,
         stages: stages.map((s) => ({ ...s, reached: s.at !== null })),
       };
     },

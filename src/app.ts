@@ -1,6 +1,8 @@
 import type { Context, Modules, Ports } from './context.ts';
 import type { Db } from './db.ts';
 import { createFiles } from './files.ts';
+import { createGoogleRatingRefresh } from './google-ratings.ts';
+import { createImports, type ImportChanges, type ImportKind } from './imports.ts';
 import { createIntake } from './intake.ts';
 import { createNotifications } from './notifications.ts';
 import { createOnboarding } from './onboarding.ts';
@@ -47,7 +49,9 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
   modules.intake = createIntake(ctx);
   modules.quotes = createQuotes(ctx);
   modules.scheduling = createScheduling(ctx);
+  createGoogleRatingRefresh(ctx);
   const onboarding = createOnboarding(ctx);
+  const imports = createImports(ctx, onboarding);
   const views = createViews(ctx);
   const { profiles, tickets, intake, quotes, scheduling } = modules;
 
@@ -81,15 +85,25 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
     /** Runs every background task that is due. */
     runWorker: () => worker.runDue(),
 
-    /** Everything a signed-in Property Manager can see and do, limited to their Agency. */
-    asPropertyManager(propertyManagerId: number) {
-      const { agencyId } = profiles.propertyManager(propertyManagerId);
+    /** A stored file, for a signed file link (src/file-links.ts): the checked signature is the access control. */
+    linkedFile: (fileId: number) => files.get(fileId),
+
+    /**
+     * Everything a signed-in Property Manager can see and do, limited to their
+     * Agency. Refuses (not_found) a Property Manager who doesn't exist. Who they
+     * are and their Agency are read once, here, so `me()` and `agency()` answer
+     * straight away; everything else reads the database when called.
+     */
+    async asPropertyManager(propertyManagerId: number) {
+      const me = await profiles.propertyManager(propertyManagerId);
+      const { agencyId } = me;
+      const agency = await profiles.agency(agencyId);
       return {
         // Screens
-        me: () => profiles.propertyManager(propertyManagerId),
+        me: () => me,
         /** The app's clock, which the demo can move forward. */
         now: () => clock.now(),
-        agency: () => profiles.agency(agencyId),
+        agency: () => agency,
         propertyManagers: () => profiles.propertyManagers(agencyId),
         properties: () => profiles.properties(agencyId),
         people: (role?: Role) => profiles.people(agencyId, role),
@@ -112,6 +126,19 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
         addTradie: (input: Parameters<typeof onboarding.addTradie>[1]) => onboarding.addTradie(agencyId, input),
         addProperty: (input: Parameters<typeof onboarding.addProperty>[1]) => onboarding.addProperty(agencyId, input),
         findGoogleListings: (query: string) => onboarding.findGoogleListings(query),
+
+        // Importing from a spreadsheet: upload, review, then add
+        /** Reads an .xlsx or .csv of Property Owners, Building Managers, Tradies, Properties or Tenants and keeps it for review. Returns its token. */
+        importSheet: (kind: ImportKind, upload: Upload) => imports.start(agencyId, propertyManagerId, kind, upload),
+        /** The upload's columns and rows, each row ready, needing a fix, or a duplicate. Only the Property Manager who uploaded it can see it. */
+        importPreview: (token: string) => imports.preview(agencyId, propertyManagerId, token),
+        /** Sets what each column of the upload holds: a field, or null to ignore it. */
+        remapImport: (token: string, fields: (string | null)[]) => imports.remap(agencyId, propertyManagerId, token, fields),
+        /** Keeps the review's ticked rows and edited cells. */
+        reviseImport: (token: string, changes: ImportChanges) => imports.revise(agencyId, propertyManagerId, token, changes),
+        /** Adds the ticked rows through the add actions above, and reports the rows it couldn't add. */
+        confirmImport: (token: string, changes: ImportChanges) => imports.confirm(agencyId, propertyManagerId, token, changes),
+        discardImport: (token: string) => imports.discard(agencyId, propertyManagerId, token),
 
         // Inbox
         linkSender: (itemId: number, personId: number) => intake.linkSender(agencyId, itemId, personId),
@@ -150,4 +177,4 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
 }
 
 export type App = ReturnType<typeof createApp>;
-export type PropertyManagerActions = ReturnType<App['asPropertyManager']>;
+export type PropertyManagerActions = Awaited<ReturnType<App['asPropertyManager']>>;

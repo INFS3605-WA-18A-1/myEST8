@@ -10,6 +10,7 @@ import type { PropertyManagerActions } from '../../app.ts';
 import { ActionError, URGENCIES, type Role, type Urgency } from '../../shared.ts';
 import type { WebEnv } from '../env.ts';
 import { formAction, text } from '../forms.ts';
+import { COLLEAGUES_ONLY, shareButton, shareUrl } from '../share.ts';
 import { shellInfo } from '../shell.ts';
 import {
   badge,
@@ -38,13 +39,13 @@ import {
 import type { Booking } from './calendar.ts';
 import { finishSetupBanner } from './welcome.ts';
 
-type Dashboard = ReturnType<PropertyManagerActions['dashboard']>;
+type Dashboard = Awaited<ReturnType<PropertyManagerActions['dashboard']>>;
 type MaintenanceRequest = Dashboard['maintenanceRequests'][number];
 type TicketSummary = Dashboard['tickets'][number];
 type UrgentRepair = Dashboard['urgentRepairs'][number];
 type InboxItem = Dashboard['inbox'][number];
 type Alert = Dashboard['alerts'][number];
-type Person = ReturnType<PropertyManagerActions['people']>[number];
+type Person = Awaited<ReturnType<PropertyManagerActions['people']>>[number];
 type Filter = 'mine' | 'all';
 type Stage = 'quoting' | 'awaiting_owner' | 'approved' | 'scheduled' | 'done';
 
@@ -128,16 +129,16 @@ const INLINE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/web
 export function dashboardPages() {
   const pages = new Hono<WebEnv>();
 
-  pages.get('/', (c) => {
+  pages.get('/', async (c) => {
     const { actions, pm } = c.var;
     const filter = filterOf(c);
-    const view = actions.dashboard({ filter });
+    const view = await actions.dashboard({ filter });
     const { timeZone } = actions.agency();
     const now = actions.now();
-    const people = view.inbox.some((item) => item.personId === null) ? actions.people() : [];
+    const people = view.inbox.some((item) => item.personId === null) ? await actions.people() : [];
     const q = filter === 'all' ? '?filter=all' : '';
     const needReceipt = view.urgentRepairs.filter((u) => u.status === 'reminder_sent').length;
-    const board = boardOf(actions, view.tickets);
+    const board = await boardOf(actions, view.tickets);
 
     return c.html(
       page({
@@ -151,7 +152,7 @@ export function dashboardPages() {
           { label: 'All', href: '/?filter=all', active: filter === 'all' },
         ]),
         body: html`
-          ${finishSetupBanner(actions)}
+          ${(await finishSetupBanner(actions))}
           ${countStrip([
             { label: 'Maintenance Requests to review', count: view.maintenanceRequests.length, href: '#requests', decision: true },
             { label: 'Open Tickets', count: view.tickets.length, href: '#tickets' },
@@ -160,7 +161,7 @@ export function dashboardPages() {
             { label: 'Urgent Repairs needing a receipt', count: needReceipt, href: '#urgent-repairs' },
           ])}
           <div class="dispatch grid gap-4 lg:grid-cols-[340px_minmax(0,1fr)] lg:items-start">
-            <div class="min-w-0 [&_.section]:!p-2.5">${decisions(view, q, timeZone, now)}</div>
+            <div class="min-w-0 [&_.section]:!p-2.5">${decisions(view, q, timeZone, now, shareUrl(c, '/?filter=all#requests'))}</div>
             <div class="grid min-w-0 gap-4">
               ${ticketsByStage(board, now)}
               ${nextSevenDays(view.calendar, now, timeZone)}
@@ -204,10 +205,10 @@ export function dashboardPages() {
   );
 
   pages.post('/inbox/:itemId{[0-9]+}/link', (c) =>
-    formAction(c, back(c), (form) => {
+    formAction(c, back(c), async (form) => {
       const personId = text(form, 'personId');
       if (!personId) throw new ActionError('invalid', 'Choose who sent this message');
-      c.var.actions.linkSender(idParam(c, 'itemId'), Number(personId));
+      await c.var.actions.linkSender(idParam(c, 'itemId'), Number(personId));
       return { ok: 'Sender linked. Their next message will be recognised.' };
     }),
   );
@@ -220,14 +221,14 @@ export function dashboardPages() {
   );
 
   pages.post('/inbox/:itemId{[0-9]+}/dismiss', (c) =>
-    formAction(c, back(c), () => {
-      c.var.actions.dismissInboxItem(idParam(c, 'itemId'));
+    formAction(c, back(c), async () => {
+      await c.var.actions.dismissInboxItem(idParam(c, 'itemId'));
       return { ok: 'Message dismissed' };
     }),
   );
 
-  pages.get('/files/:id{[0-9]+}', (c) => {
-    const file = c.var.actions.file(idParam(c, 'id'));
+  pages.get('/files/:id{[0-9]+}', async (c) => {
+    const file = await c.var.actions.file(idParam(c, 'id'));
     if (!file) return c.notFound();
     const inline = INLINE_TYPES.has(file.contentType.toLowerCase());
     return c.body(new Uint8Array(file.content), 200, {
@@ -260,15 +261,29 @@ function countBadge(count: number) {
 
 // Needs your decision
 
-/** Maintenance Requests (oldest first), then alerts, then inbox items: the decisions, each with its actions. */
-function decisions(view: Dashboard, q: string, timeZone: string, now: Date): Html {
+/**
+ * Maintenance Requests (oldest first), then alerts, then inbox items: the decisions,
+ * each with its actions. `shareLink` is the Agency-wide list of Maintenance
+ * Requests, which a Share button passes on when there are any.
+ */
+function decisions(view: Dashboard, q: string, timeZone: string, now: Date, shareLink: string): Html {
   const requests = [...view.maintenanceRequests].sort((a, b) => a.reportedAt.localeCompare(b.reportedAt));
   return section({
     title: 'Needs your decision',
     id: 'decisions',
     body: html`<div class="grid gap-4">
       <div id="requests" class="grid gap-2">
-        <h3 class="text-sm font-semibold">Maintenance Requests to review</h3>
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h3 class="text-sm font-semibold">Maintenance Requests to review</h3>
+          ${requests.length
+            ? shareButton({
+                title: 'Maintenance Requests to review',
+                text: `${requests.length} ${requests.length === 1 ? 'Maintenance Request is' : 'Maintenance Requests are'} waiting for review in myEST8.`,
+                url: shareLink,
+                note: COLLEAGUES_ONLY,
+              })
+            : ''}
+        </div>
         ${requests.length ? requests.map((r) => requestRow(r, q, now)) : emptyState('No Maintenance Requests waiting for you.')}
       </div>
       <div id="alerts" class="grid gap-2">
@@ -395,13 +410,15 @@ function inboxRow(item: InboxItem, timeZone: string): Html {
 /** A Ticket with the facts its docket shows: its lane, its Trades and its Quote count. */
 type BoardTicket = TicketSummary & { stage: Stage; trades: string[]; quotes: number };
 
-function boardOf(actions: PropertyManagerActions, tickets: TicketSummary[]): BoardTicket[] {
-  return tickets.map((t) => ({
-    ...t,
-    stage: stageOf(t.jobs),
-    trades: [...new Set(t.jobs.filter((j) => j.status !== 'cancelled').map((j) => j.trade))],
-    quotes: actions.ticket(t.ticketId).jobs.reduce((n, j) => n + j.quotes.length, 0),
-  }));
+function boardOf(actions: PropertyManagerActions, tickets: TicketSummary[]): Promise<BoardTicket[]> {
+  return Promise.all(
+    tickets.map(async (t) => ({
+      ...t,
+      stage: stageOf(t.jobs),
+      trades: [...new Set(t.jobs.filter((j) => j.status !== 'cancelled').map((j) => j.trade))],
+      quotes: (await actions.ticket(t.ticketId)).jobs.reduce((n, j) => n + j.quotes.length, 0),
+    })),
+  );
 }
 
 /**

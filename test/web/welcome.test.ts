@@ -175,7 +175,7 @@ describe('the onboarding wizard', () => {
   });
 
   test('as the demo, the Channels step suggests made-up addresses the phone simulator can use', async () => {
-    const demo: DemoControls = { contacts: () => [], outbox: () => [], inbound: () => [], sendAs: async () => {}, advance: async () => {}, now: () => new Date() };
+    const demo: DemoControls = { contacts: async () => [], outbox: async () => [], inbound: async () => [], sendAs: async () => {}, advance: async () => {}, now: () => new Date() };
     const w = await webWorld({ demo });
     const sam = await w.signUp();
 
@@ -222,5 +222,25 @@ describe('a new Agency', () => {
 
     // Contact details are the Agency's own: Olivia's number is free to use here.
     await submit(w, '/welcome/property', propertyFields({ ownerName: 'Olive Other', ownerMobile: OLIVIA }), sam);
+  });
+});
+
+describe('inviting a colleague', () => {
+  test('after adding a colleague, the guide offers to send them the sign-in link, never the temporary password', async () => {
+    const w = await webWorld();
+    const sam = await w.signUp();
+    const added = await (await w.post('/welcome/team', { name: 'Casey Cole', email: 'casey@sunrise.example' }, sam)).text();
+    const temporaryPassword = /data-temporary-password>([^<]+)</.exec(added)![1]!;
+
+    const share = /<details class="share[\s\S]*?<\/details>/.exec(added)?.[0];
+    expect(share, 'a Share control on the team step').toBeDefined();
+    expect(visible(share!)).toContain('Send Casey Cole their sign-in link');
+    expect(share).toContain(encodeURIComponent('/login'));
+    expect(share).toContain(encodeURIComponent('casey@sunrise.example'));
+    expect(share).not.toContain(temporaryPassword);
+    expect(share).not.toContain(encodeURIComponent(temporaryPassword));
+
+    // Before anyone is added there's nothing to send.
+    expect(await page(w, '/welcome/team', sam)).not.toContain('their sign-in link');
   });
 });

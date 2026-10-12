@@ -25,3 +25,7 @@ A runnable server: `src/main.ts` that wires the app to real services and serves 
 ## Testing
 
 - A smoke test that starts the server with fake ports on a random port and posts a signed Twilio webhook. The full demo runs from the manual checklist.
+
+## Comments
+
+- Testing setup added (see `docs/testing.md`): `DATABASE_PATH` in the demo runtime (file database seeded once, reopened on restart), `npm run dev`, Playwright browser tests against the real server process (`npm run test:e2e`, `test/e2e/support/server.ts` shows how to start the server on a free port with its own database and stop it cleanly with SIGTERM), and CI in `.github/workflows/ci.yml`. The smoke test for this issue can follow `test/e2e/persistence.spec.ts`. Every env var is listed in `.env.example`. If the data layer moves to Postgres first (issue 14), read the connection string from `SUPABASE_DB_URL` instead of a database path.

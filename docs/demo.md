@@ -3,23 +3,53 @@
 `npm run demo` starts the whole app on your machine with:
 
 - **Dummy external APIs.** The classifier (Jev), the photo matcher, the quote reader and Google Places/Geocoding are answered by an in-process mock (`src/demo/mock-apis.ts`). Nothing leaves your machine unless you set the env vars below.
-- **A simulated messenger.** No SMS, WhatsApp or email is really sent. Every outbound message is kept in memory and shown in the phone simulator.
+- **A simulated messenger.** No SMS, WhatsApp or email is really sent (unless you set up Twilio and SendGrid: see [Sending real messages](#sending-real-messages)). Every outbound message is kept in the demo's database and shown in the phone simulator.
 - **A movable clock.** The demo clock runs in real time, and the simulator can move it forward to show reminders and deadlines without waiting.
 - **Seed data.** The Agency "Harbour Realty" with its Property Managers, Properties, Owners, Tenants and Tradies.
 - **Work already in flight.** Ten days of maintenance stories are played before the demo opens, so every screen has something on it. See [What's already in the demo](#whats-already-in-the-demo).
 
-Everything lives in an in-memory database. **Stopping the demo throws all data away**; the next start is a fresh copy of the seed and stories.
+The data lives in Postgres: a local one in Docker that `npm run demo` starts for you (see [The database](#the-database)). `npm run demo` keeps everything in a fresh throwaway schema. **Stopping it throws all data away**; the next start is a fresh copy of the seed and stories. To keep your data between restarts, use `npm run dev` or set `DATABASE_SCHEMA` (see [Keep your data](#keep-your-data)).
 
 ## Start it
 
 ```sh
 npm install
-npm run demo                  # http://localhost:3000
+npm run demo                  # http://localhost:3000 (starts Postgres in Docker first, if it isn't running)
 PORT=4000 npm run demo        # another port
 DEMO_DATA=empty npm run demo  # just the Agency, with nothing in flight
 ```
 
 Start-up takes a few seconds while the stories play; the banner says what they left.
+
+### Keep your data
+
+```sh
+npm run dev                             # data in the schema "dev", restarts when you edit the code
+npm run dev:reset                       # empty the local database (same as npm run db:reset) to start afresh
+DATABASE_SCHEMA=mine npm run demo       # any schema name you like
+```
+
+With `DATABASE_SCHEMA` set, the demo keeps its data in that Postgres schema (created and migrated on first use) instead of a throwaway one:
+
+- **First start, empty schema:** seeds Harbour Realty and plays the stories (unless `DEMO_DATA=empty`), as `npm run demo` does.
+- **Every start after:** carries on from what is in the schema. Nothing is seeded again and **the stories are never replayed**: they are played against a clock set ten days back, which can't be done on top of later data. The banner says so. `npm run db:reset` gets them again.
+- **Kept across restarts:** everything in the app (Agencies, people, Tickets, sessions, so you stay signed in), the phone simulator's history, and how far the demo clock has been moved forward.
+- **Refused:** a schema with data the demo didn't finish seeding (a start-up stopped part-way). Run `npm run db:reset`, or set `DATABASE_SCHEMA` to another name.
+
+Tests never touch this database: they make their own throwaway databases (see [testing.md](testing.md)).
+
+### The database
+
+The demo runs on Postgres, as production does on Supabase. Locally that's a `postgres:17` container in Docker:
+
+```sh
+npm run db:start     # start it (created the first time, on port 54340; data kept in the myest8-pgdata volume)
+npm run db:stop      # stop it; the data stays
+npm run db:migrate   # apply supabase/migrations to the dev schema (the demo does this itself on start)
+npm run db:reset     # empty the local database: npm run dev's data and anything a killed demo left behind
+```
+
+The connection string is `SUPABASE_DB_URL`, defaulting to the local one, `postgres://postgres:postgres@127.0.0.1:54340/myest8`. Point it at any other Postgres on your machine (for example `npx supabase start`, port 54322) to use that instead. The demo applies the migrations itself, so it only runs on a Postgres on this machine; it refuses a hosted one.
 
 Open <http://localhost:3000>, sign in, and open the phone simulator at <http://localhost:3000/demo>. The background worker runs every 2 seconds, and straight away after every simulator action. Each message myEST8 sends is also printed to the terminal. Ctrl+C stops it.
 
@@ -163,13 +193,51 @@ Each external API can be pointed at a real endpoint with env vars. Anything not 
 | `VISION_API_URL`, `VISION_API_KEY`    | The photo matcher                                     |
 | `QUOTES_API_URL`, `QUOTES_API_KEY`    | The quote reader                                      |
 | `GOOGLE_MAPS_API_KEY`                 | Google Places (New) and the Geocoding API             |
+| `TWILIO_*`, `SENDGRID_*`, `FILE_LINK_SECRET`, `DEMO_SEND_TO` | Real SMS, WhatsApp and email. See [Sending real messages](#sending-real-messages) |
 | `PORT`                                | The port to listen on (default 3000)                  |
 | `PUBLIC_URL`                          | The address used in upload and tracker links (default `http://localhost:$PORT`) |
+| `SUPABASE_DB_URL`                     | The Postgres to use (default: the local one from `npm run db:start`). See [The database](#the-database) |
+| `DATABASE_SCHEMA`                     | A Postgres schema to keep data in across restarts (default: a throwaway one). See [Keep your data](#keep-your-data) |
+| `DEMO_DATA`                           | `empty` starts with just the Agency, no stories       |
 
 ```sh
 JEV_API_URL=https://jev.example/api JEV_API_KEY=... npm run demo
 ```
 
-The stories are skipped when the classifier or quote reader is real: they rely on the mock reading each message the same way every time. With a real Google key, the seeded Tradies are added as not on Google, because their demo listings only exist in the mock. Messages are always simulated: the demo never sends real SMS, WhatsApp or email.
+[`.env.example`](../.env.example) lists every variable with a one-line note. Copy it to `.env` (git-ignored) and export it in your shell; the demo doesn't load it by itself.
+
+The stories are skipped when the classifier or quote reader is real: they rely on the mock reading each message the same way every time. With a real Google key, the seeded Tradies are added as not on Google, because their demo listings only exist in the mock. Linked Tradies' Google ratings are refreshed weekly by the worker.
 
 To open upload and tracker links on a real phone, set `PUBLIC_URL` to an address the phone can reach, such as your machine's LAN address (`PUBLIC_URL=http://192.168.1.20:3000`) or a tunnel.
+
+## Sending real messages
+
+With Twilio and/or SendGrid configured, the demo really sends on those channels (`src/adapters/messenger.ts`), and still shows every message in the phone simulator. **It only really messages the addresses in `DEMO_SEND_TO`** (comma-separated phone numbers and emails, or `*` for anyone): the seeded people's numbers are made up and could belong to real people. Everyone else is simulated only.
+
+| Env vars | What for |
+| -------- | -------- |
+| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` | SMS and WhatsApp through Twilio's Messages API. The token also checks signatures on `/webhooks/twilio` |
+| `TWILIO_SMS_FROM`, `TWILIO_WHATSAPP_FROM` | Optional senders used instead of the Agency's connected numbers (the seeded `+61290000000` isn't a Twilio number). For the WhatsApp sandbox, `+14155238886` |
+| `FILE_LINK_SECRET`, `PUBLIC_URL` | Required with Twilio: photos and PDFs go as `MediaUrl` links to `PUBLIC_URL/media/:id`, signed with this secret and valid for an hour. `PUBLIC_URL` must be an https address Twilio can reach (a tunnel works) |
+| `SENDGRID_API_KEY` | Email through SendGrid v3 Mail Send, with reply-to the Agency's inbox address and cc and attachments |
+| `SENDGRID_FROM` | Optional sender on a SendGrid-verified domain, used instead of the Agency's inbox address |
+| `SENDGRID_INBOUND_PUBLIC_KEY` | Checks signatures on `/webhooks/sendgrid` (Inbound Parse) |
+
+```sh
+PUBLIC_URL=https://my-tunnel.example FILE_LINK_SECRET=$(openssl rand -base64 48) \
+TWILIO_ACCOUNT_SID=AC... TWILIO_AUTH_TOKEN=... TWILIO_SMS_FROM=+61480000000 \
+DEMO_SEND_TO=+61412345678 npm run demo
+```
+
+For replies to come back in, point the Twilio number's "A message comes in" webhook (and the WhatsApp sandbox's) at `PUBLIC_URL/webhooks/twilio` (HTTP POST), and SendGrid Inbound Parse at `PUBLIC_URL/webhooks/sendgrid` with signing on. In Setup, connect the Agency's SMS and WhatsApp channels to the Twilio number (and email to the Inbound Parse address), so inbound messages reach the right Agency. A recipient the provider refuses for good (Twilio 21211, 21614 or 21610; a SendGrid 400 on the address) fails its task once with an "Undeliverable" error in the log instead of being retried.
+
+### Checking the live services by hand
+
+`npm run smoke:live -- --to +61412345678` sends one SMS to that number, makes one Jev classify call and one geocode, and prints each result. It refuses to run without `--to` and every key it needs (`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_SMS_FROM` or `--from`, `JEV_API_URL`, `JEV_API_KEY`, `GOOGLE_MAPS_API_KEY`). Automated tests never call a real provider.
+
+Manual checklist with real providers:
+
+1. `npm run smoke:live -- --to <your mobile>`: the SMS arrives, Jev answers each question with an option and a confidence, the geocode is near 12 King St, Newtown.
+2. Demo with Twilio set and `DEMO_SEND_TO=<your mobile>`, and a Tenant added in Setup with your mobile: text the Agency's Twilio number from your phone, get the acknowledgement by SMS, reply, and see the reply land.
+3. Add a Property Owner with your mobile and no email, and a Tenant at their Property: report an Urgent Repair as the Tenant and upload a receipt photo. The Owner's SMS arrives as an MMS with the receipt (WhatsApp in the sandbox shows it too); its `/media/...` link stops working after an hour. (Quote Requests only attach photos on email.)
+4. With SendGrid set, a Tradie on email gets the Quote Request with the photos attached; replying lands in the Ticket through Inbound Parse.

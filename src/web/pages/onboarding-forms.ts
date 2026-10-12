@@ -5,14 +5,17 @@
 
 import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
+import { MAX_IMPORT_ROWS, type ImportKind } from '../../imports.ts';
 import type { ChannelType } from '../../ports.ts';
+import { MAX_SHEET_BYTES } from '../../spreadsheet.ts';
 import { ActionError, TRADES, type Trade } from '../../shared.ts';
 import { int, list, optional, text, type FormValues } from '../forms.ts';
+import { icon } from '../icons.ts';
 import { badge, button, emptyState, field, formatWhen, humanise, table, type Html } from '../ui.ts';
 
-type Person = ReturnType<PropertyManagerActions['people']>[number];
+type Person = Awaited<ReturnType<PropertyManagerActions['people']>>[number];
 type Listing = Awaited<ReturnType<PropertyManagerActions['findGoogleListings']>>[number];
-type AgencyChannel = ReturnType<PropertyManagerActions['channels']>[number];
+type AgencyChannel = Awaited<ReturnType<PropertyManagerActions['channels']>>[number];
 
 /** Posted values to show again in a refused form, by field name. Files are never shown again. */
 export type Values = Record<string, string | string[]>;
@@ -284,10 +287,11 @@ export async function addTradieFrom(actions: PropertyManagerActions, form: FormV
 }
 
 /** The Agency's Tradies with their Trades and both ratings. */
-export function tradiesTable(actions: PropertyManagerActions, tradies: Person[], empty = 'No Tradies yet.'): Html {
+export async function tradiesTable(actions: PropertyManagerActions, tradies: Person[], empty = 'No Tradies yet.'): Promise<Html> {
   if (!tradies.length) return emptyState(empty);
-  const rows = tradies.map((t) => {
-    const { average, count } = actions.tradie(t.id).myEst8Rating;
+  const ratings = await Promise.all(tradies.map(async (t) => (await actions.tradie(t.id)).myEst8Rating));
+  const rows = tradies.map((t, i) => {
+    const { average, count } = ratings[i]!;
     return [
       html`<a class="link font-medium" href="/tradies/${t.id}">${t.businessName ?? t.name}</a>`,
       html`${t.name}`,
@@ -297,4 +301,54 @@ export function tradiesTable(actions: PropertyManagerActions, tradies: Person[],
     ];
   });
   return table(['Business', 'Name', 'Trades', 'myEST8 rating', 'Google rating'], rows, { caption: 'Tradies' });
+}
+
+// Importing from a spreadsheet
+
+/** Each kind of import as the pages name it: one and many. */
+export const IMPORT_NOUNS: Record<ImportKind, { one: string; many: string }> = {
+  owners: { one: 'Property Owner', many: 'Property Owners' },
+  'building-managers': { one: 'Building Manager', many: 'Building Managers' },
+  tradies: { one: 'Tradie', many: 'Tradies' },
+  properties: { one: 'Property', many: 'Properties' },
+  tenants: { one: 'Tenant', many: 'Tenants' },
+};
+
+/** Where the guide came from, so the review goes back there. */
+export type ImportFrom = 'setup' | 'welcome';
+
+/** The template's address: a CSV with our headings and an example row. */
+export const templatePath = (kind: ImportKind) => `/setup/templates/${kind}.csv`;
+
+/**
+ * Adding many records at once: download the template, then upload a filled-in
+ * .xlsx or .csv to review. `error` is the upload's own refusal, shown inside it.
+ */
+export function importPanel(kind: ImportKind, o: { from?: ImportFrom; error?: Html; compact?: boolean } = {}): Html {
+  const { many } = IMPORT_NOUNS[kind];
+  const from = o.from ?? 'setup';
+  return html`<div class="import-panel" data-import-panel>
+    ${o.compact
+      ? ''
+      : html`<p class="text-sm">
+          Upload your own list as an Excel (.xlsx) or CSV file. Your column names can be anything: myEST8 matches them, and AI fills in what's
+          missing. You check every row before anything is added.
+        </p>`}
+    ${o.error ?? ''}
+    <form method="post" action="/setup/import/${kind}${from === 'welcome' ? '?from=welcome' : ''}" enctype="multipart/form-data" class="import-upload">
+      ${field({
+        label: `Spreadsheet of ${many}`,
+        name: 'file',
+        id: `import-${kind}-${from}-file`,
+        type: 'file',
+        required: true,
+        accept: '.xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv',
+        hint: `.xlsx or .csv, up to ${MAX_IMPORT_ROWS} rows and ${MAX_SHEET_BYTES / 1024 / 1024} MB.`,
+      })}
+      <div class="import-upload-actions">
+        ${button('Upload and review', { size: 'sm', variant: o.compact ? 'secondary' : 'primary' })}
+        <a class="link import-template" href="${templatePath(kind)}" download>${icon('download-simple', { size: 'size-4' })}<span>Download template</span></a>
+      </div>
+    </form>
+  </div>`;
 }

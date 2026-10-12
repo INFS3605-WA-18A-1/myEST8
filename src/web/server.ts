@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import type { App } from '../app.ts';
 import type { DemoControls } from '../demo/controls.ts';
+import type { FileLinks } from '../file-links.ts';
 import { simulatorPages } from '../demo/simulator-pages.ts';
 import { createHttpApp } from '../http.ts';
 import type { Clock } from '../ports.ts';
@@ -24,6 +25,8 @@ export function createWebApp(deps: {
   publicUrl: string;
   twilioAuthToken: string;
   sendgridPublicKey: string;
+  /** Signed file links (src/file-links.ts), for Twilio to fetch attachments. */
+  fileLinks?: FileLinks | null;
   demo?: DemoControls;
 }) {
   const web = new Hono();

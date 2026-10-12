@@ -40,8 +40,8 @@ export function createNotifications({ clock, ports, files, modules }: Context) {
     attachmentFileIds: number[],
   ) {
     const { profiles } = modules;
-    const agency = profiles.agency(agencyId);
-    const from = profiles.channelAddress(agencyId, channelType);
+    const agency = await profiles.agency(agencyId);
+    const from = await profiles.channelAddress(agencyId, channelType);
     if (!from) throw new Error(`${agency.name} has no ${channelType} channel connected`);
     const template = templates[name] as { subject: string; text: (d: TemplateData<K>, a: typeof agency) => string };
     const text = template.text(data, agency);
@@ -54,7 +54,7 @@ export function createNotifications({ clock, ports, files, modules }: Context) {
       text,
       template: name,
       data,
-      attachments: attachmentFileIds.map((id) => files.get(id)),
+      attachments: await Promise.all(attachmentFileIds.map((id) => files.get(id))),
     });
     return text;
   }
@@ -65,9 +65,9 @@ export function createNotifications({ clock, ports, files, modules }: Context) {
     data: TemplateData<K>,
     options: SendOptions = {},
   ) {
-    const pm = modules.profiles.propertyManager(propertyManagerId);
+    const pm = await modules.profiles.propertyManager(propertyManagerId);
     const text = await deliver(pm.agencyId, 'email', pm.email, [], name, data, options.attachmentFileIds ?? []);
-    modules.tickets.logMessage({
+    await modules.tickets.logMessage({
       agencyId: pm.agencyId,
       direction: 'out',
       personId: null,
@@ -82,18 +82,18 @@ export function createNotifications({ clock, ports, files, modules }: Context) {
 
   return {
     /** The channel the next message to this person would use. */
-    channelFor(personId: number): ChannelType {
-      return route(modules.profiles.person(personId)).channelType;
+    async channelFor(personId: number): Promise<ChannelType> {
+      return route(await modules.profiles.person(personId)).channelType;
     },
 
     async send<K extends TemplateName>(personId: number, name: K, data: TemplateData<K>, options: SendOptions = {}) {
-      const person = modules.profiles.person(personId);
+      const person = await modules.profiles.person(personId);
       const { channelType, to } = route(person, options.preferEmail);
-      const pm = options.copyPropertyManagerId ? modules.profiles.propertyManager(options.copyPropertyManagerId) : null;
+      const pm = options.copyPropertyManagerId ? await modules.profiles.propertyManager(options.copyPropertyManagerId) : null;
       const cc = pm && channelType === 'email' ? [pm.email] : [];
       const fileIds = options.attachmentFileIds ?? [];
       const text = await deliver(person.agencyId, channelType, to, cc, name, data, fileIds);
-      modules.tickets.logMessage({
+      await modules.tickets.logMessage({
         agencyId: person.agencyId,
         direction: 'out',
         personId,
@@ -111,7 +111,7 @@ export function createNotifications({ clock, ports, files, modules }: Context) {
 
     /** Sends the onboarding test message on one of the Agency's channels. */
     async sendTest(agencyId: number, channelType: ChannelType, to: string) {
-      if (!modules.profiles.channelAddress(agencyId, channelType)) invalid(`Connect the ${channelType} channel first`);
+      if (!(await modules.profiles.channelAddress(agencyId, channelType))) invalid(`Connect the ${channelType} channel first`);
       await deliver(agencyId, channelType, to, [], 'onboarding.test_message', {}, []);
     },
   };

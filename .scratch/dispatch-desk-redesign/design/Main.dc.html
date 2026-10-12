@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<title>myEST8 landing page</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700&amp;family=Red+Hat+Text:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0;background:#f2f4f6}
+a{color:#1f5c8b}a:hover{color:#174a70}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #f2f4f6; color: #13212e; font-family: 'Red Hat Text', system-ui, sans-serif; font-size: 14px; line-height: 1.45">
+  <header style="background: #ffffff; border-bottom: 1px solid #d8dee4">
+    <div style="max-width: 1120px; margin: 0 auto; padding: 14px 24px; display: flex; align-items: center; gap: 8px">
+      <svg viewBox="0 0 256 256" fill="currentColor" style="width: 28px; height: 28px; color: #1f5c8b; flex: none" aria-hidden="true"><path fill-rule="evenodd" d="M128 14 L208 94 L208 232 Q208 244 196 244 L60 244 Q48 244 48 232 L48 94 Z M128 46 A12 12 0 1 0 128.01 46 Z M146.49 152.53 A34 34 0 1 0 109.51 152.53 A40 40 0 1 0 146.49 152.53 Z M128 106 A16 16 0 1 0 128.01 106 Z M128 170 A20 20 0 1 0 128.01 170 Z"></path></svg>
+      <span style="font-family: 'Lexend', system-ui, sans-serif; font-size: 22px; font-weight: 700"><span style="font-weight: 400">my</span>EST8</span>
+    </div>
+  </header>
+
+  <main style="max-width: 1120px; margin: 0 auto; padding: 40px 24px 48px; display: flex; flex-direction: column; gap: 56px">
+    <section style="display: flex; flex-direction: column; gap: 20px; max-width: 620px">
+      <h1 style="margin: 0; font-family: 'Lexend', system-ui, sans-serif; font-size: clamp(36px, 5vw, 52px); line-height: 1.08; font-weight: 700">From a Tenant’s first text to the finished repair.</h1>
+      <p style="margin: 0; font-size: 16px; max-width: 72ch">For Property Managers at small Agencies. Tenants text the way they already do, and myEST8 turns each message into a Maintenance Request for you to confirm, then gets the Quotes and books the Tradie.</p>
+      <div style="display: flex; flex-wrap: wrap; gap: 12px">
+        <a href="Dashboard.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 18px; border-radius: 6px; background: {{action}}; color: #ffffff; text-decoration: none; font-family: 'Lexend', system-ui, sans-serif; font-size: 16px; font-weight: 600">Create your Agency’s account</a>
+        <a href="Dashboard.dc.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 18px; border-radius: 6px; border: 1px solid #7d8a95; background: #ffffff; color: #13212e; text-decoration: none; font-family: 'Lexend', system-ui, sans-serif; font-size: 16px; font-weight: 600">Sign in</a>
+      </div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 16px">
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+        <h2 style="margin: 0; font-family: 'Lexend', system-ui, sans-serif; font-size: 16px; font-weight: 600">One repair, start to finish</h2>
+        <button type="button" style="display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 12px; border: 0; background: transparent; color: #13212e; font-family: 'Lexend', system-ui, sans-serif; font-size: 14px; font-weight: 600; cursor: pointer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"></rect><rect x="14" y="5" width="4" height="14" rx="1"></rect></svg>
+          Pause
+        </button>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 32px; align-items: stretch">
+        <ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; flex: 1 1 320px; max-width: 360px">
+          <li style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; color: #55636f; font-size: 15px"><span style="display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 999px; border: 1px solid #d8dee4; background: #ffffff; font-size: 12px; font-weight: 600">1</span>A Tenant texts the problem</li>
+          <li style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; color: #55636f; font-size: 15px"><span style="display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 999px; border: 1px solid #d8dee4; background: #ffffff; font-size: 12px; font-weight: 600">2</span>It becomes a Maintenance Request</li>
+          <li style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; color: #13212e; font-size: 15px; background: #ffffff; border: 1px solid #d8dee4; border-left: 4px solid {{hivis}}; border-radius: 4px"><span style="display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 999px; background: {{action}}; color: #ffffff; font-size: 12px; font-weight: 600">3</span>The Property Manager confirms</li>
+          <li style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; color: #55636f; font-size: 15px"><span style="display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 999px; border: 1px solid #d8dee4; background: #ffffff; font-size: 12px; font-weight: 600">4</span>It becomes a Ticket</li>
+          <li style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; color: #55636f; font-size: 15px"><span style="display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 999px; border: 1px solid #d8dee4; background: #ffffff; font-size: 12px; font-weight: 600">5</span>Quote Requests go to Tradies</li>
+          <li style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; color: #55636f; font-size: 15px"><span style="display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 999px; border: 1px solid #d8dee4; background: #ffffff; font-size: 12px; font-weight: 600">6</span>A Quote comes back</li>
+          <li style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; color: #55636f; font-size: 15px"><span style="display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 999px; border: 1px solid #d8dee4; background: #ffffff; font-size: 12px; font-weight: 600">7</span>The Work Order goes out</li>
+          <li style="display: flex; align-items: center; gap: 12px; padding: 10px 12px; color: #55636f; font-size: 15px"><span style="display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 999px; border: 1px solid #d8dee4; background: #ffffff; font-size: 12px; font-weight: 600">8</span>The Job is done, and the Tenant sees it</li>
+        </ol>
+        <div style="flex: 999 1 420px; min-width: 0; min-height: 360px; background: #ffffff; border: 1px solid #d8dee4; border-radius: 8px; display: grid; place-items: center; padding: 32px; box-sizing: border-box">
+          <div style="width: 100%; max-width: 480px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 16px 16px 20px; border: 1px solid #d8dee4; border-left: 4px solid {{hivis}}; border-radius: 4px; background: #ffffff; box-sizing: border-box">
+            <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
+              <span style="font-size: 16px; font-weight: 600">Kitchen tap dripping</span>
+              <span style="color: #55636f">12 King St, Newtown</span>
+              <div style="display: flex; gap: 6px; margin-top: 6px">
+                <span style="padding: 1px 8px; border: 1px solid #d8dee4; border-radius: 4px; color: #55636f; font-size: 13px">Routine</span>
+                <span style="padding: 1px 8px; border-radius: 4px; background: #f2f4f6; font-size: 13px">Plumbing</span>
+              </div>
+            </div>
+            <button type="button" style="min-height: 44px; padding: 0 18px; border: 0; border-radius: 6px; background: {{action}}; color: #ffffff; font-family: 'Lexend', system-ui, sans-serif; font-size: 16px; font-weight: 600">Confirm</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section style="border-top: 1px solid #d8dee4; padding-top: 20px; max-width: 576px; display: flex; flex-direction: column; gap: 6px">
+      <h2 style="margin: 0; font-family: 'Lexend', system-ui, sans-serif; font-size: 16px; font-weight: 600">Try the demo Agency</h2>
+      <p style="margin: 0">Sign in as <strong>alice@harbour.example</strong> or <strong>bob@harbour.example</strong> with the password <strong>demo1234</strong> to look around Harbour Realty. The phone simulator lets you message in as a Tenant, Tradie or Property Owner.</p>
+    </section>
+  </main>
+
+  <footer style="padding: 24px; text-align: center; color: #55636f; font-size: 12px">myEST8, maintenance for small property management Agencies</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"action":{"editor":"color","default":"#1f5c8b","options":["#1f5c8b","#13212e","#2f5a3e"]},"hivis":{"editor":"color","default":"#ffc233","options":["#ffc233","#f59e0b","#1f5c8b"]},"$preview":{"width":1280,"height":1180}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { action: this.props.action ?? '#1f5c8b', hivis: this.props.hivis ?? '#ffc233' };
+  }
+}
+</script>
+</body>
+</html>

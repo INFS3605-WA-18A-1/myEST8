@@ -10,17 +10,17 @@ import { shellInfo } from '../shell.ts';
 import { badge, emptyState, flashFrom, formatMoney, formatWhen, humanise, linkButton, page, sectionHeader, stat, statGroup, table, type Html } from '../ui.ts';
 import { timeRange } from './calendar.ts';
 
-type TradieView = ReturnType<PropertyManagerActions['tradie']>;
+type TradieView = Awaited<ReturnType<PropertyManagerActions['tradie']>>;
 
 /** A Tradie's profile under /tradies/:id. */
 export function tradiePages() {
   const pages = new Hono<WebEnv>();
 
-  pages.get('/:id{[0-9]+}', (c) => {
+  pages.get('/:id{[0-9]+}', async (c) => {
     const { actions, pm } = c.var;
     let tradie: TradieView;
     try {
-      tradie = actions.tradie(Number(c.req.param('id')));
+      tradie = await actions.tradie(Number(c.req.param('id')));
     } catch (error) {
       if (!(error instanceof ActionError) || error.code !== 'not_found') throw error;
       return c.html(

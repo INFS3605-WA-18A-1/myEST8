@@ -26,9 +26,9 @@ export const OCEAN_AVE = '5/40 Ocean Ave, Bondi NSW 2026';
 
 export async function world() {
   const h = await createHarness();
-  const agencyId = h.app.setup.createAgency({ name: 'Harbour Realty', timeZone: 'Australia/Sydney' });
-  const aliceId = h.app.setup.addPropertyManager(agencyId, { name: 'Alice Archer', email: 'alice@harbour.example', password: PASSWORD });
-  const bobId = h.app.setup.addPropertyManager(agencyId, { name: 'Bob Baker', email: 'bob@harbour.example', password: PASSWORD });
+  const agencyId = await h.app.setup.createAgency({ name: 'Harbour Realty', timeZone: 'Australia/Sydney' });
+  const aliceId = await h.app.setup.addPropertyManager(agencyId, { name: 'Alice Archer', email: 'alice@harbour.example', password: PASSWORD });
+  const bobId = await h.app.setup.addPropertyManager(agencyId, { name: 'Bob Baker', email: 'bob@harbour.example', password: PASSWORD });
   const alice = h.as(aliceId);
   const bob = h.as(bobId);
 

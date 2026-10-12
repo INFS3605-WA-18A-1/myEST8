@@ -14,11 +14,11 @@ A real `PlacesLookup` (`src/ports.ts`) on the Google Places API, and a regular r
 
 ## Acceptance criteria
 
-- [ ] Text search returns candidate listings (place id, name, address).
-- [ ] Place details return the rating and number of reviews; a listing with no rating returns `null`.
-- [ ] Geocoding returns latitude and longitude, or `null` when the address isn't found (the photo GPS check is then skipped).
-- [ ] A scheduled worker task refreshes every linked Tradie's Google rating, e.g. weekly.
-- [ ] The API key comes from configuration.
+- [x] Text search returns candidate listings (place id, name, address).
+- [x] Place details return the rating and number of reviews; a listing with no rating returns `null`.
+- [x] Geocoding returns latitude and longitude, or `null` when the address isn't found (the photo GPS check is then skipped).
+- [x] A scheduled worker task refreshes every linked Tradie's Google rating, e.g. weekly.
+- [x] The API key comes from configuration.
 
 ## Needs a human
 

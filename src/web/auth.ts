@@ -24,21 +24,15 @@ const hashToken = (token: string) => createHash('sha256').update(token).digest('
 
 /** Signed-in Property Manager sessions, stored in the `sessions` table. Each one slides 12 hours from its last use. */
 export function createSessions(db: Db, clock: Clock) {
-  db.exec(`CREATE TABLE IF NOT EXISTS sessions (
-    token_hash TEXT PRIMARY KEY,
-    property_manager_id INTEGER NOT NULL REFERENCES property_managers(id),
-    created_at TEXT NOT NULL,
-    expires_at TEXT NOT NULL
-  )`);
   const expiry = () => iso(new Date(clock.now().getTime() + SESSION_IDLE_MS));
 
   return {
     /** Starts a session for a Property Manager and returns its token for the cookie. */
-    start(propertyManagerId: number): string {
+    async start(propertyManagerId: number): Promise<string> {
       const now = iso(clock.now());
-      run(db, 'DELETE FROM sessions WHERE expires_at <= ?', now);
+      await run(db, 'DELETE FROM sessions WHERE expires_at <= ?', now);
       const token = randomBytes(32).toString('base64url');
-      run(
+      await run(
         db,
         'INSERT INTO sessions (token_hash, property_manager_id, created_at, expires_at) VALUES (?, ?, ?, ?)',
         hashToken(token),
@@ -50,26 +44,26 @@ export function createSessions(db: Db, clock: Clock) {
     },
 
     /** The Property Manager signed in with this token, or null when it is unknown or expired. Extends the session. */
-    find(token: string): number | null {
+    async find(token: string): Promise<number | null> {
       if (!token) return null;
       const hash = hashToken(token);
-      const row = one<{ property_manager_id: number; expires_at: string }>(
+      const row = await one<{ property_manager_id: number; expires_at: string }>(
         db,
         'SELECT property_manager_id, expires_at FROM sessions WHERE token_hash = ?',
         hash,
       );
       if (!row) return null;
       if (row.expires_at <= iso(clock.now())) {
-        run(db, 'DELETE FROM sessions WHERE token_hash = ?', hash);
+        await run(db, 'DELETE FROM sessions WHERE token_hash = ?', hash);
         return null;
       }
-      run(db, 'UPDATE sessions SET expires_at = ? WHERE token_hash = ?', expiry(), hash);
+      await run(db, 'UPDATE sessions SET expires_at = ? WHERE token_hash = ?', expiry(), hash);
       return row.property_manager_id;
     },
 
     /** Signs the session out. */
-    end(token: string) {
-      run(db, 'DELETE FROM sessions WHERE token_hash = ?', hashToken(token));
+    async end(token: string) {
+      await run(db, 'DELETE FROM sessions WHERE token_hash = ?', hashToken(token));
     },
   };
 }
@@ -79,9 +73,9 @@ export type Sessions = ReturnType<typeof createSessions>;
 export function authRoutes(app: App, sessions: Sessions) {
   const routes = new Hono();
 
-  routes.get('/login', (c) => {
+  routes.get('/login', async (c) => {
     const next = safeNext(c.req.query('next'));
-    if (signedInId(app, sessions, c) !== null) return c.redirect(next, 303);
+    if ((await signedInId(app, sessions, c)) !== null) return c.redirect(next, 303);
     return c.html(signInPage({ next }));
   });
 
@@ -91,18 +85,18 @@ export function authRoutes(app: App, sessions: Sessions) {
     const email = String(form.email ?? '').trim();
     const password = String(form.password ?? '');
     const next = safeNext(String(form.next ?? ''));
-    const propertyManagerId = email && password ? app.login(email, password) : null;
+    const propertyManagerId = email && password ? await app.login(email, password) : null;
     if (propertyManagerId === null) {
       return c.html(signInPage({ next, email, flash: { kind: 'error', message: 'That email and password don’t match. Try again.' } }), 401);
     }
-    startSession(c, sessions, propertyManagerId);
+    await startSession(c, sessions, propertyManagerId);
     return c.redirect(next, 303);
   });
 
-  routes.post('/logout', (c) => {
+  routes.post('/logout', async (c) => {
     if (!sameOrigin(c)) return c.text('Cross-site request refused', 403);
     const token = getCookie(c, SESSION_COOKIE);
-    if (token) sessions.end(token);
+    if (token) await sessions.end(token);
     deleteCookie(c, SESSION_COOKIE, { path: '/', secure: isHttps(c) });
     return c.redirect('/login', 303);
   });
@@ -119,13 +113,13 @@ export function requirePropertyManager(app: App, sessions: Sessions): Middleware
   return async (c, next) => {
     const reading = c.req.method === 'GET' || c.req.method === 'HEAD';
     if (!reading && !sameOrigin(c)) return c.text('Cross-site request refused', 403);
-    const propertyManagerId = signedInId(app, sessions, c);
+    const propertyManagerId = await signedInId(app, sessions, c);
     if (propertyManagerId === null) {
       if (!reading) return c.text('Sign in to continue', 401);
       const { pathname, search } = new URL(c.req.url);
       return c.redirect(`/login?next=${encodeURIComponent(pathname + search)}`, 303);
     }
-    const actions = app.asPropertyManager(propertyManagerId);
+    const actions = await app.asPropertyManager(propertyManagerId);
     c.set('pm', actions.me());
     c.set('actions', actions);
     await next();
@@ -133,8 +127,8 @@ export function requirePropertyManager(app: App, sessions: Sessions): Middleware
 }
 
 /** Signs a Property Manager in: starts a session and sets its HttpOnly cookie on the response. */
-export function startSession(c: HonoContext, sessions: Sessions, propertyManagerId: number) {
-  setCookie(c, SESSION_COOKIE, sessions.start(propertyManagerId), {
+export async function startSession(c: HonoContext, sessions: Sessions, propertyManagerId: number) {
+  setCookie(c, SESSION_COOKIE, await sessions.start(propertyManagerId), {
     httpOnly: true,
     sameSite: 'Lax',
     path: '/',
@@ -143,15 +137,15 @@ export function startSession(c: HonoContext, sessions: Sessions, propertyManager
 }
 
 /** The signed-in Property Manager's id, or null. A session for a Property Manager who no longer exists counts as signed out. */
-export function signedInId(app: App, sessions: Sessions, c: HonoContext): number | null {
+export async function signedInId(app: App, sessions: Sessions, c: HonoContext): Promise<number | null> {
   const token = getCookie(c, SESSION_COOKIE);
-  const id = token ? sessions.find(token) : null;
+  const id = token ? await sessions.find(token) : null;
   if (id === null) return null;
   try {
-    app.asPropertyManager(id);
+    await app.asPropertyManager(id);
     return id;
   } catch {
-    sessions.end(token!);
+    await sessions.end(token!);
     return null;
   }
 }
@@ -188,10 +182,11 @@ function signInPage(o: { next: string; email?: string; flash?: Flash }) {
   return publicPage({
     title: 'Sign in to myEST8',
     subtitle: 'For Property Managers. Tenants, Tradies and Property Owners never need an account.',
+    width: 'narrow',
     flash: o.flash ?? null,
     headerActions: html`<a class="link text-sm" href="/">Home</a>`,
     footer: SIGNED_OUT_FOOTER,
-    body: html`<div class="mx-auto w-full max-w-[400px] space-y-5">
+    body: html`<div class="space-y-5">
         <form method="post" action="/login" class="space-y-4">
           <input type="hidden" name="next" value="${o.next}" />
           ${field({ label: 'Email', name: 'email', type: 'email', value: o.email ?? '', required: true, autocomplete: 'username' })}
@@ -199,7 +194,7 @@ function signInPage(o: { next: string; email?: string; flash?: Flash }) {
           ${button('Sign in', { block: true })}
         </form>
         <div class="space-y-3 border-t border-line pt-5 text-center text-sm">
-          <p>New to myEST8? <a class="link" href="/signup">Create your Agency's account</a></p>
+          <p>New to myEST8? <a class="link" href="/signup">Create your Agency’s account</a></p>
           <p><a class="link" href="/">Back to the front page</a></p>
         </div>
       </div>`,

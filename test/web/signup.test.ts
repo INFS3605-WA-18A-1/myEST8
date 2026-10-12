@@ -1,59 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import type { DemoControls } from '../../src/demo/controls.ts';
 import { signUpFields, visible, webWorld } from '../support/web.ts';
-
-const noDemo = (): DemoControls => ({
-  contacts: () => [],
-  outbox: () => [],
-  inbound: () => [],
-  sendAs: async () => {},
-  advance: async () => {},
-  now: () => new Date(),
-});
-
-describe('the landing page', () => {
-  test('greets a signed-out visitor with what myEST8 does and the ways in', async () => {
-    const w = await webWorld();
-
-    const res = await w.get('/');
-
-    expect(res.status).toBe(200);
-    const page = await res.text();
-    const text = visible(page);
-    expect(text).toContain('myEST8');
-    for (const words of ['SMS, WhatsApp or email', 'Maintenance Requests', 'Property Owner', 'shared calendar', 'How it works', 'Step 4']) {
-      expect(text).toContain(words);
-    }
-    expect(text).toContain("Create your Agency's account");
-    expect(page).toContain('href="/signup"');
-    expect(page).toContain('href="/login"');
-    expect(text).not.toContain('demo1234');
-  });
-
-  test('when the app runs as the demo, it gives the demo sign-ins', async () => {
-    const w = await webWorld({ demo: noDemo() });
-
-    const text = visible(await (await w.get('/')).text());
-
-    expect(text).toContain('Try the demo Agency');
-    expect(text).toContain('alice@harbour.example');
-    expect(text).toContain('bob@harbour.example');
-    expect(text).toContain('demo1234');
-  });
-
-  test('a signed-in Property Manager gets their dashboard at / instead', async () => {
-    const w = await webWorld();
-    const cookie = await w.signIn();
-
-    const res = await w.get('/', cookie);
-
-    expect(res.status).toBe(200);
-    const text = visible(await res.text());
-    expect(text).toContain('Dashboard');
-    expect(text).toContain('Maintenance Requests');
-    expect(text).not.toContain('How it works');
-  });
-});
 
 describe('signing up', () => {
   test('the form asks for the Property Manager and their Agency, with Sydney time by default', async () => {

@@ -8,11 +8,12 @@
 
 import { html } from 'hono/html';
 import type { HtmlEscapedString } from 'hono/utils/html';
+import { icon } from './icons.ts';
 import type { ShellInfo } from './shell.ts';
 
 export type Html = HtmlEscapedString | Promise<HtmlEscapedString>;
 export type Flash = { kind: 'ok' | 'error'; message: string };
-export type NavKey = 'dashboard' | 'calendar' | 'setup' | 'simulator';
+export type NavKey = 'dashboard' | 'dispatch' | 'settings' | 'simulator';
 export type Variant = 'primary' | 'secondary' | 'danger' | 'ghost';
 export type Tone = 'neutral' | 'info' | 'success' | 'warning' | 'error';
 export type FieldType =
@@ -66,6 +67,8 @@ const TAILWIND_THEME = html`<style type="text/tailwindcss">
     --color-line: var(--line);
     --color-control: var(--control);
     --color-action: var(--action);
+    --color-action-hover: var(--action-hover);
+    --color-info-bg: var(--info-bg);
     --color-hivis: var(--hivis);
     --color-urgent: var(--urgent);
     --color-urgent-bg: var(--urgent-bg);
@@ -86,9 +89,10 @@ function head(title: string): Html {
   return html`<meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${title} - myEST8</title>
+    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
     <script>document.documentElement.classList.add('js')</script>
-    <link rel="preload" href="/assets/fonts/barlow-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="preload" href="/assets/fonts/barlow-semi-condensed-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/assets/fonts/red-hat-text-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/assets/fonts/lexend-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="/assets/daisyui.css" />
     <link rel="stylesheet" href="/assets/app.css" />
     <script src="/assets/tailwind.js"></script>
@@ -96,30 +100,35 @@ function head(title: string): Html {
     <script src="/assets/app.js" defer></script>`;
 }
 
+/** The three places a Property Manager works. */
 const NAV: { key: NavKey; label: string; href: string }[] = [
   { key: 'dashboard', label: 'Dashboard', href: '/' },
-  { key: 'calendar', label: 'Calendar', href: '/calendar' },
-  { key: 'setup', label: 'Setup', href: '/setup' },
-  { key: 'simulator', label: 'Simulator', href: '/demo' },
+  { key: 'dispatch', label: 'Dispatch', href: '/dispatch' },
+  { key: 'settings', label: 'Settings', href: '/settings' },
 ];
 
+/** The demo's Phone simulator: not a place to work, so it sits quietly at the bottom of the rail. */
+const SIMULATOR = { key: 'simulator', label: 'Phone simulator (demo)', href: '/demo' } as const;
+
+/** One rail link with its icon, aria-current when it is the page shown, and an optional count. */
+function railLink(item: { key: NavKey; label: string; href: string }, active: NavKey | undefined, count: number | undefined, cls = 'rail-link'): Html {
+  return html`<a href="${item.href}" class="${cls}" ${item.key === active ? html`aria-current="page"` : ''}>${NAV_ICON[item.key]}<span>${item.label}</span>${count !== undefined ? html`<span class="rail-count num">${count}</span>` : ''}</a>`;
+}
+
 /**
- * The rail: the logotype, the four sections with their icons (the current one
- * gets the hi-vis bar and aria-current), and the Agency's name at the bottom.
- * On phones it is a drawer when JavaScript is on, and a row above the page otherwise.
+ * The rail: the logo, Dashboard, Dispatch and Settings with their icons (the
+ * current one gets the Wattle bar and aria-current), then at the bottom the demo's
+ * Phone simulator and the Agency's name. On phones it is a drawer when JavaScript
+ * is on, and a block above the page otherwise.
  */
-function rail(active: NavKey | undefined, agencyName: string | undefined, counts: Partial<Record<NavKey, number>>): Html {
+function rail(active: NavKey | undefined, agencyName: string | undefined, counts: Partial<Record<NavKey, number>>, demo: boolean): Html {
   return html`<aside id="rail" class="rail" aria-label="Sections">
-    <a href="/" class="rail-logo">myEST8</a>
-    <nav aria-label="Main">
+    <a href="/" class="rail-logo">${logo()}</a>
+    <nav aria-label="Main" class="rail-menu">
       <ul class="rail-nav">
-        ${NAV.map((item) => {
-          const count = counts[item.key];
-          return html`<li>
-            <a href="${item.href}" class="rail-link" ${item.key === active ? html`aria-current="page"` : ''}>${NAV_ICON[item.key]}<span>${item.label}</span>${count !== undefined ? html`<span class="rail-count num">${count}</span>` : ''}</a>
-          </li>`;
-        })}
+        ${NAV.map((item) => html`<li>${railLink(item, active, counts[item.key])}</li>`)}
       </ul>
+      ${demo ? html`<ul class="rail-nav rail-foot"><li>${railLink(SIMULATOR, active, counts.simulator, 'rail-link is-quiet')}</li></ul>` : ''}
     </nav>
     ${agencyName ? html`<p class="rail-agency">${agencyName}</p>` : ''}
   </aside>`;
@@ -184,6 +193,8 @@ export function page(o: {
   shell?: ShellInfo;
   /** Counts shown beside rail links. */
   navCounts?: Partial<Record<NavKey, number>>;
+  /** Whether the rail shows the Simulator link (demo deployments only). Defaults to true. */
+  demo?: boolean;
 }): Html {
   const signedIn = Boolean(o.pm);
   return html`<!doctype html>
@@ -194,7 +205,7 @@ export function page(o: {
       <body>
         <a href="#main" class="skip-link">Skip to content</a>
         <div class="app-shell ${signedIn ? 'has-rail' : ''}" data-shell>
-          ${signedIn ? rail(o.active, o.shell?.agencyName, o.navCounts ?? {}) : ''}
+          ${signedIn ? rail(o.active, o.shell?.agencyName, o.navCounts ?? {}, o.demo ?? true) : ''}
           <div class="app-main">
             ${topBar(o.title, { menu: signedIn, controls: o.controls, today: o.shell?.today, pm: o.pm })}
             ${o.flash ? html`<div class="app-flash">${flashMessage(o.flash)}</div>` : ''}
@@ -214,7 +225,7 @@ const TENANT_FOOTER = 'Questions? Reply to the message your Property Manager sen
 /**
  * A page for someone who isn't signed in: a Tenant using an upload or tracker
  * link, or a Property Manager signing in or up. Phone first, a centred column
- * under a logotype bar, with no rail. `width` picks the column: narrow (400px) for
+ * under a bar with the logo, and no rail. `width` picks the column: narrow (400px) for
  * a single form so its heading lines up with it, default (560px), or wide (1120px).
  * `wide` is the older way to ask for wide. `titleSize: 'hero'` makes the title a
  * headline (40px from 768px, 32px on phones) for the landing page. `headerActions`
@@ -244,7 +255,7 @@ export function publicPage(o: {
         <a href="#main" class="skip-link">Skip to content</a>
         <header class="public-bar">
           <div class="public-bar-inner ${widthClass}">
-            <span class="logotype">myEST8</span>
+            <span class="logotype">${logo()}</span>
             ${o.headerActions ? html`<div class="ml-auto flex items-center gap-2">${o.headerActions}</div>` : ''}
           </div>
         </header>
@@ -306,20 +317,23 @@ export function alert(body: Html | string, tone: Tone = 'info', o: { title?: str
 
 const VARIANT: Record<Variant, string> = { primary: 'btn-primary', secondary: 'btn-outline', danger: 'btn-danger', ghost: 'btn-ghost' };
 
-function buttonClass(variant: Variant, size: 'sm' | 'md' | undefined, block: boolean | undefined) {
-  return `btn ${VARIANT[variant]}${size === 'sm' ? ' btn-sm' : ''}${block ? ' btn-block' : ''}`;
+/** Button sizes: `sm` 32px for rows and lanes, `md` (default) 36px, `lg` 44px for a page's main way in. All are 44px on phones. */
+export type ButtonSize = 'sm' | 'md' | 'lg';
+
+function buttonClass(variant: Variant, size: ButtonSize | undefined, block: boolean | undefined) {
+  return `btn ${VARIANT[variant]}${size === 'sm' ? ' btn-sm' : size === 'lg' ? ' btn-lg' : ''}${block ? ' btn-block' : ''}`;
 }
 
 /** A form button (daisyUI btn). `block` makes it full width, as on phone forms. */
 export function button(
   label: string,
-  o: { variant?: Variant; type?: 'submit' | 'button'; name?: string; value?: string; size?: 'sm' | 'md'; block?: boolean; disabled?: boolean } = {},
+  o: { variant?: Variant; type?: 'submit' | 'button'; name?: string; value?: string; size?: ButtonSize; block?: boolean; disabled?: boolean } = {},
 ): Html {
   return html`<button type="${o.type ?? 'submit'}" class="${buttonClass(o.variant ?? 'primary', o.size, o.block)}" ${o.name ? html`name="${o.name}" value="${o.value ?? ''}"` : ''} ${o.disabled ? 'disabled' : ''}>${label}</button>`;
 }
 
 /** A link styled as a button. */
-export function linkButton(label: string, href: string, o: { variant?: Variant; size?: 'sm' | 'md'; block?: boolean } = {}): Html {
+export function linkButton(label: string, href: string, o: { variant?: Variant; size?: ButtonSize; block?: boolean } = {}): Html {
   return html`<a href="${href}" class="${buttonClass(o.variant ?? 'secondary', o.size, o.block)}">${label}</a>`;
 }
 
@@ -327,7 +341,7 @@ export function linkButton(label: string, href: string, o: { variant?: Variant; 
 export function postButton(
   action: string,
   label: string,
-  o: { variant?: Variant; size?: 'sm' | 'md'; fields?: Record<string, string | number>; confirm?: string } = {},
+  o: { variant?: Variant; size?: ButtonSize; fields?: Record<string, string | number>; confirm?: string } = {},
 ): Html {
   return html`<form method="post" action="${action}" class="inline-flex" ${o.confirm ? html`data-confirm="${o.confirm}"` : ''}>
     ${Object.entries(o.fields ?? {}).map(([name, value]) => html`<input type="hidden" name="${name}" value="${value}" />`)}
@@ -370,12 +384,19 @@ const TONE: Record<Tone, string> = { neutral: 'badge-neutral', info: 'badge-info
 
 /** A short label (daisyUI badge, soft style). The text carries the meaning; colour only backs it up. */
 export function badge(text: string, tone: Tone = 'neutral'): Html {
-  return html`<span class="badge badge-soft ${TONE[tone]} whitespace-nowrap">${text}</span>`;
+  return toneBadge(text, TONE[tone]);
 }
 
-/** Urgent, High or Routine. Routine is uncoloured: its word is the signal. */
+/** A badge with its class given: for the quiet looks (Routine, cancelled) that have no Tone. */
+function toneBadge(text: string, toneClass: string): Html {
+  return html`<span class="badge badge-soft ${toneClass} whitespace-nowrap">${text}</span>`;
+}
+
+/** Urgent, High or Routine. Routine is quiet: muted text on a hairline, so its word is the only signal. */
 export function urgencyBadge(urgency: string): Html {
-  return badge(humanise(urgency), urgency === 'urgent' ? 'error' : urgency === 'high' ? 'warning' : 'neutral');
+  if (urgency === 'urgent') return badge(humanise(urgency), 'error');
+  if (urgency === 'high') return badge(humanise(urgency), 'warning');
+  return toneBadge(humanise(urgency), 'badge-muted');
 }
 
 const STATUS_TONE: Record<string, Tone> = {
@@ -409,12 +430,51 @@ const STATUS_TONE: Record<string, Tone> = {
 const STATUS_LABEL: Record<string, string> = {
   maintenance_request: 'Maintenance Request',
   urgent: 'Urgent Repair',
-  awaiting_owner: 'Awaiting Property Owner',
   declined_by_owner: 'Declined by Property Owner',
 };
 
-/** Any status from the core (Job, Quote, Quote Request, approval...), in words. */
-export function statusBadge(status: string): Html {
+/**
+ * The Job stages in workflow order, with the words every screen uses for them (the
+ * dashboard lanes, the Ticket's step indicator and every status badge).
+ */
+export const JOB_STAGES: { status: string; label: string }[] = [
+  { status: 'quoting', label: 'Quoting' },
+  { status: 'awaiting_owner', label: 'With Property Owner' },
+  { status: 'approved', label: 'Ready to book' },
+  { status: 'scheduled', label: 'Booked' },
+  { status: 'done', label: 'Done' },
+  { status: 'cancelled', label: 'Cancelled' },
+];
+
+/** The label for a Job stage ("scheduled" is "Booked"). Other values are humanised. */
+export function jobStageLabel(status: string): string {
+  return JOB_STAGES.find((stage) => stage.status === status)?.label ?? humanise(status);
+}
+
+/** Each Job stage's badge tone, from the design doc's table. Cancelled is muted. */
+const JOB_TONE: Record<string, Tone | 'muted'> = {
+  quoting: 'info',
+  awaiting_owner: 'warning',
+  approved: 'info',
+  scheduled: 'info',
+  done: 'success',
+  cancelled: 'muted',
+};
+
+/** Statuses that name a Job stage on any screen, so their words need no `job` flag. */
+const JOB_WORDS = new Set(['quoting', 'awaiting_owner', 'scheduled', 'done', 'cancelled']);
+
+/**
+ * Any status from the core (Job, Quote, Quote Request, approval...), in words. A Job's
+ * `approved` is "Ready to book", but on a Quote or approval it is "Approved": pass
+ * `{ job: true }` on a Job's status.
+ */
+export function statusBadge(status: string, o: { job?: boolean } = {}): Html {
+  const stage = JOB_STAGES.find((s) => s.status === status);
+  if (stage && (o.job || JOB_WORDS.has(status))) {
+    const tone = JOB_TONE[stage.status];
+    return tone === 'muted' ? toneBadge(stage.label, 'badge-muted') : badge(stage.label, tone);
+  }
   return badge(STATUS_LABEL[status] ?? humanise(status), STATUS_TONE[status] ?? 'neutral');
 }
 
@@ -428,19 +488,21 @@ export function emptyState(text: string, action?: Html): Html {
 
 /**
  * A data table (daisyUI table). It scrolls sideways inside its own frame on
- * phones, never the page. `caption` names it for screen readers.
+ * phones, never the page. `caption` names it for screen readers. `align` gives each
+ * column 'left' (the default) or 'right'; right-aligned figures get the tabular `num` class.
  */
-export function table(headers: string[], rows: Html[][], o: { caption?: string } = {}): Html {
+export function table(headers: string[], rows: Html[][], o: { caption?: string; align?: ('left' | 'right')[] } = {}): Html {
+  const right = (i: number) => o.align?.[i] === 'right';
   return html`<div class="table-frame">
     <table class="table table-sm">
       ${o.caption ? html`<caption class="sr-only">${o.caption}</caption>` : ''}
       <thead>
         <tr>
-          ${headers.map((h) => html`<th scope="col">${h}</th>`)}
+          ${headers.map((h, i) => html`<th scope="col"${right(i) ? html` class="text-right"` : ''}>${h}</th>`)}
         </tr>
       </thead>
       <tbody>
-        ${rows.map((row) => html`<tr class="align-top">${row.map((cell) => html`<td class="min-w-28">${cell}</td>`)}</tr>`)}
+        ${rows.map((row) => html`<tr>${row.map((cell, i) => html`<td class="min-w-28${right(i) ? ' num text-right' : ''}">${cell}</td>`)}</tr>`)}
       </tbody>
     </table>
   </div>`;
@@ -488,7 +550,7 @@ export function field(o: {
   if (type === 'checkbox') {
     return html`<div class="fieldset">
       <label for="${id}" class="flex cursor-pointer items-start gap-3 py-1 text-sm">
-        <input ${common} type="checkbox" class="checkbox checkbox-primary checkbox-sm mt-0.5" value="${o.value ?? 'on'}" ${o.checked ? 'checked' : ''} />
+        <input ${common} type="checkbox" class="checkbox checkbox-primary checkbox-sm mt-1" value="${o.value ?? 'on'}" ${o.checked ? 'checked' : ''} />
         <span>${o.label}</span>
       </label>
       ${error} ${hint}
@@ -530,9 +592,10 @@ export function statGroup(items: Html[]): Html {
 
 /**
  * Progress through stages (daisyUI steps, https://daisyui.com/components/steps/),
- * as for the Tenant's tracker. Done stages are ticked and say so to screen
- * readers; the first stage not done is the current one. Vertical on phones and
- * horizontal on wide screens, or always vertical with `vertical`.
+ * as for the Tenant's tracker. Done stages are ticked (--done) and say so to screen
+ * readers; the current one is --action, and the stages to come are --line. The
+ * current stage is the first not done unless `current` says otherwise. Vertical on
+ * phones and horizontal on wide screens, or always vertical with `vertical`.
  */
 export function steps(
   items: { label: string; done: boolean; detail?: string; href?: string }[],
@@ -550,8 +613,8 @@ export function steps(
   return html`<ol class="steps ${direction} w-full">
     ${items.map(
       (item, i) =>
-        html`<li class="step ${o.horizontal ? 'min-w-0' : ''} ${item.done || (o.current !== undefined && i === current) ? 'step-primary' : ''}" ${item.done ? html`data-content="✓"` : ''} ${i === current ? html`aria-current="step"` : ''}>
-          <div class="pb-2 ${o.horizontal ? 'px-0.5 text-center' : `text-start ${responsive ? 'lg:px-1 lg:text-center' : ''}`}">
+        html`<li class="step ${o.horizontal ? 'min-w-0' : ''} ${item.done || i === current ? 'step-primary' : ''}" ${item.done ? html`data-content="✓"` : ''} ${i === current ? html`aria-current="step"` : ''}>
+          <div class="pb-2 ${o.horizontal ? 'px-1 text-center' : `text-start ${responsive ? 'lg:px-1 lg:text-center' : ''}`}">
             <span class="block ${o.horizontal ? 'text-xs sm:text-sm' : 'text-sm'} ${item.done || i === current ? 'font-semibold' : 'text-muted'}"
               >${item.href && i !== current ? html`<a class="link link-hover" href="${item.href}">${item.label}</a>` : item.label}<span class="sr-only"
                 >${item.done ? ' (done)' : ''}${i === current ? (o.current === undefined ? ' (next)' : ' (this step)') : ''}</span
@@ -584,8 +647,9 @@ const BUBBLE_TONE: Record<Tone, string> = { neutral: '', info: 'chat-bubble-info
 /**
  * One message in a conversation (daisyUI chat, https://daisyui.com/components/chat/).
  * Line breaks in `text` are kept; when it is a string, links in it can be
- * followed. Without a tone, `end` bubbles are the action colour and `start`
- * bubbles sit on the page colour.
+ * followed. Without a tone, `end` bubbles are Harbour with white text and `start`
+ * bubbles sit on Paper. Links in a bubble take its text colour, underlined, so
+ * they read on every fill.
  */
 export function chatBubble(o: { side: 'start' | 'end'; header: Html | string; text: Html | string; footer?: Html | string; tone?: Tone }): Html {
   const tone = o.tone ? BUBBLE_TONE[o.tone] : o.side === 'end' ? 'chat-bubble-primary' : '';
@@ -599,7 +663,8 @@ export function chatBubble(o: { side: 'start' | 'end'; header: Html | string; te
 /**
  * Links that switch between views of one page (daisyUI tabs, border style). They
  * are links, so they use aria-current, not the ARIA tab pattern. For the Mine/All
- * control in a page's top bar, use `segmented`.
+ * control in a page's top bar, use `segmented`. Count chips here are quiet: Wattle is
+ * for decisions only.
  */
 export function tabs(items: { label: string; href: string; active: boolean; count?: number }[], label = 'Views'): Html {
   return html`<nav class="tabs tabs-border" aria-label="${label}">
@@ -607,9 +672,22 @@ export function tabs(items: { label: string; href: string; active: boolean; coun
       (item) =>
         html`<a href="${item.href}" class="tab gap-2 ${item.active ? 'tab-active font-semibold' : ''}" ${item.active ? html`aria-current="page"` : ''}>
           ${item.label}
-          ${item.count !== undefined ? html`<span class="count-chip ${item.active ? 'is-decision' : ''}">${item.count}</span>` : ''}
+          ${item.count !== undefined ? html`<span class="count-chip">${item.count}</span>` : ''}
         </a>`,
     )}
+  </nav>`;
+}
+
+/**
+ * The same links as `tabs`, stacked down the left of a page with many sections
+ * (Settings). The current one is a white tab with the Wattle bar and aria-current.
+ * On phones the list becomes a row that scrolls sideways.
+ */
+export function sideTabs(items: { label: string; href: string; active: boolean }[], label = 'Sections'): Html {
+  return html`<nav class="side-tabs" aria-label="${label}">
+    <ul>
+      ${items.map((item) => html`<li><a href="${item.href}" class="side-tab" ${item.active ? html`aria-current="page"` : ''}>${item.label}</a></li>`)}
+    </ul>
   </nav>`;
 }
 
@@ -624,7 +702,7 @@ export function timeline(items: { at: string; title: string; detail?: string }[]
         html`<li>
           ${i > 0 ? html`<hr class="bg-line" />` : ''}
           <div class="timeline-middle text-primary">${ICON.dot}</div>
-          <div class="timeline-end min-w-0 ${i < items.length - 1 ? 'mb-5' : ''}">
+          <div class="timeline-end min-w-0 ${i < items.length - 1 ? 'mb-6' : ''}">
             <p class="text-xs text-muted">${item.at}</p>
             <p class="text-sm font-medium">${item.title}</p>
             ${item.detail ? html`<p class="text-sm whitespace-pre-line text-muted">${item.detail}</p>` : ''}
@@ -641,7 +719,7 @@ export function photoGrid(items: { src: string; caption?: Html | string; alt?: s
     ${items.map(
       (item, i) =>
         html`<li>
-          <figure class="flex flex-col items-stretch gap-1.5">
+          <figure class="flex flex-col items-stretch gap-2">
             <a href="${item.src}" target="_blank" rel="noopener" class="block overflow-hidden rounded-box border border-line bg-page">
               <img src="${item.src}" alt="${item.alt ?? `Photo ${i + 1} of ${items.length}`}" loading="lazy" decoding="async" class="aspect-square w-full object-cover" />
               <span class="sr-only">(opens full size in a new tab)</span>
@@ -658,7 +736,7 @@ export function dl(items: [string, Html | string][]): Html {
   return html`<dl class="divide-y divide-line text-sm">
     ${items.map(
       ([term, value]) =>
-        html`<div class="grid grid-cols-1 gap-0.5 py-2.5 first:pt-0 last:pb-0 sm:grid-cols-3 sm:gap-4">
+        html`<div class="grid grid-cols-1 gap-1 py-2 first:pt-0 last:pb-0 sm:grid-cols-3 sm:gap-4">
           <dt class="font-medium text-muted">${term}</dt>
           <dd class="min-w-0 break-words sm:col-span-2">${value}</dd>
         </div>`,
@@ -666,33 +744,59 @@ export function dl(items: [string, Html | string][]): Html {
   </dl>`;
 }
 
+/** Text clamped to `lines` lines, ending in an ellipsis; `title` gives the full text on hover. */
+function clipped(text: string, lines: 1 | 2 | 3, className = '', title = text): Html {
+  return html`<span class="line-clamp-${lines} ${className}" title="${title}">${text}</span>`;
+}
+
 /**
- * A Ticket as a work-order docket: the number and urgency word in a stub, a
- * dashed perforation, then the address, the issue and a meta row. The whole
- * docket is one link. `unread` adds the unread dot, with the words for screen readers.
+ * Text that wraps to at most `lines` lines (1 to 3) and then ends in an ellipsis, with
+ * the full text as its title. Use it instead of cutting text to fit: words are never
+ * cut mid-word without the ellipsis.
  */
-export function docket(o: { number: number; href: string; urgency: string; address: string; issue: string; meta: Html[]; unread?: number }): Html {
-  const stub = o.urgency === 'urgent' ? 'is-urgent' : o.urgency === 'high' ? 'is-high' : '';
-  return html`<a href="${o.href}" class="docket">
-    <span class="docket-stub ${stub}">
+export function clip(text: string, o: { lines?: 1 | 2 | 3 } = {}): Html {
+  return clipped(text, o.lines ?? 1);
+}
+
+/**
+ * A Ticket as a work-order docket: a stub with the number and the Urgency badge, a
+ * dashed perforation, then the address, the issue and a meta row. The whole docket
+ * is one link. `street` shows in place of the full address, and the issue may wrap
+ * to two lines. `size: 'large'` is the Ticket page's header (a 26px number).
+ * `unread` adds the unread dot, with the words for screen readers. Without `href`
+ * it is a picture of a docket, not a link (the landing page's workflow).
+ */
+export function docket(o: {
+  number: number;
+  href?: string;
+  urgency: string;
+  address: string;
+  street?: string;
+  issue: string;
+  meta: Html[];
+  unread?: number;
+  size?: 'default' | 'large';
+}): Html {
+  const inner = html`<span class="docket-stub">
       <span class="docket-number num">#${o.number}</span>
-      <span class="docket-urgency">${humanise(o.urgency)}</span>
+      ${urgencyBadge(o.urgency)}
     </span>
     <span class="docket-perf" aria-hidden="true"></span>
     <span class="docket-body">
-      <span class="docket-address">${o.address}</span>
-      <span class="docket-issue">${o.issue}</span>
+      ${clipped(o.street ?? o.address, 1, 'docket-address', o.address)}
+      ${clipped(o.issue, 2, 'docket-issue')}
       <span class="docket-meta">
         ${o.meta.map((item) => html`<span>${item}</span>`)}
         ${o.unread ? html`<span><span class="unread-dot" aria-hidden="true"></span><span class="sr-only">unread messages</span></span>` : ''}
       </span>
-    </span>
-  </a>`;
+    </span>`;
+  const cls = `docket${o.size === 'large' ? ' is-large' : ''}`;
+  return o.href ? html`<a href="${o.href}" class="${cls}">${inner}</a>` : html`<div class="${cls}">${inner}</div>`;
 }
 
 /**
- * The count strip: one 36px row of counts that link into the queues. Decision
- * counts take the hi-vis chip; the others a quiet one.
+ * The count strip: one row of counts that link into the queues. Decision counts
+ * take the Wattle chip; the others a quiet one.
  */
 export function countStrip(items: { label: string; count: number; href: string; decision?: boolean }[]): Html {
   return html`<nav aria-label="Counts">
@@ -706,19 +810,34 @@ export function countStrip(items: { label: string; count: number; href: string; 
 }
 
 /**
- * A compact queue row with the 4px hi-vis stripe on its left: an optional photo
- * thumbnail, the title (a link when `href` is given), a detail line, badges, a
- * meta line and actions such as Confirm and Review.
+ * A compact queue row: an optional photo thumbnail, then the title (a link when
+ * `href` is given) with the actions such as Confirm and Review beside it, a detail
+ * line, and the badges with the meta (an age) at the end of their row.
+ * `decision` (default false) marks a row that needs the Property Manager's decision:
+ * only those get the 4px Wattle stripe on the left.
  */
-export function queueRow(o: { href?: string; thumb?: Html; title: string; detail?: string; badges?: Html[]; meta?: string; actions?: Html }): Html {
-  return html`<article class="queue-row">
+export function queueRow(o: {
+  href?: string;
+  thumb?: Html;
+  title: string;
+  detail?: string;
+  badges?: Html[];
+  meta?: string;
+  actions?: Html;
+  decision?: boolean;
+}): Html {
+  const badges = o.badges && o.badges.length > 0;
+  return html`<article class="queue-row${o.decision ? ' is-decision' : ''}">
     ${o.thumb ? html`<div class="queue-thumb">${o.thumb}</div>` : ''}
     <div class="queue-main">
-      ${o.href ? html`<a href="${o.href}" class="queue-title">${o.title}</a>` : html`<p class="queue-title">${o.title}</p>`}
+      <div class="queue-head">
+        ${o.href ? html`<a href="${o.href}" class="queue-title">${o.title}</a>` : html`<p class="queue-title">${o.title}</p>`}
+        ${o.actions ? html`<div class="queue-actions">${o.actions}</div>` : ''}
+      </div>
       ${o.detail ? html`<p class="queue-detail">${o.detail}</p>` : ''}
-      ${o.badges && o.badges.length > 0 ? html`<div class="queue-badges">${o.badges}</div>` : ''}
-      ${o.meta ? html`<p class="queue-meta">${o.meta}</p>` : ''}
-      ${o.actions ? html`<div class="queue-actions">${o.actions}</div>` : ''}
+      ${badges || o.meta
+        ? html`<div class="queue-badges">${badges ? o.badges : ''}${o.meta ? html`<span class="queue-meta">${o.meta}</span>` : ''}</div>`
+        : ''}
     </div>
   </article>`;
 }
@@ -732,13 +851,14 @@ export function segmented(items: { label: string; href: string; active: boolean 
 
 /**
  * A board column (a lane): a heading with its count, and a body that scrolls
- * inside about 300px. The body is focusable so the keyboard can scroll it.
+ * inside about 300px. The body is focusable so the keyboard can scroll it. The
+ * lane is a Paper tray; the dockets in it are white.
  */
 export function lane(o: { title: string; count: number; body: Html }): Html {
   return html`<section class="lane">
     <div class="lane-head">
       <h3 class="lane-title">${o.title}</h3>
-      <span class="count-chip">${o.count}</span>
+      <span class="lane-count num">${o.count}</span>
     </div>
     <div class="lane-body" tabindex="0" role="region" aria-label="${o.title}">${o.body}</div>
   </section>`;
@@ -749,10 +869,59 @@ export function formatMoney(cents: number | null): string {
   return cents === null ? '—' : (cents / 100).toLocaleString('en-AU', { style: 'currency', currency: 'AUD' });
 }
 
-/** A timestamp in the Agency's time zone, such as "Fri 9 Oct, 2:05 pm". */
+/** Three-letter month names, written out here so ICU versions can't change them ("Sep", never "Sept"). */
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** The parts of a moment in a time zone, each read from Intl and written in our own words. */
+function zonedParts(iso: string, timeZone: string) {
+  const parts = new Intl.DateTimeFormat('en-AU', {
+    timeZone,
+    weekday: 'long',
+    day: 'numeric',
+    month: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).formatToParts(new Date(iso));
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? '';
+  return {
+    weekday: part('weekday').slice(0, 3),
+    day: part('day'),
+    month: MONTHS[Number(part('month')) - 1] ?? '',
+    time: `${part('hour')}:${part('minute')} ${part('dayPeriod').replace(/\./g, '').toLowerCase()}`,
+  };
+}
+
+/** A timestamp in the Agency's time zone, such as "Mon 12 Oct, 9:00 am". */
 export function formatWhen(iso: string | null, timeZone = 'Australia/Sydney'): string {
   if (!iso) return '—';
-  return new Intl.DateTimeFormat('en-AU', { timeZone, weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }).format(new Date(iso));
+  const p = zonedParts(iso, timeZone);
+  return `${p.weekday} ${p.day} ${p.month}, ${p.time}`;
+}
+
+/** The time of day in the Agency's time zone, such as "9:00 am". */
+export function formatTime(iso: string | null, timeZone = 'Australia/Sydney'): string {
+  if (!iso) return '—';
+  return zonedParts(iso, timeZone).time;
+}
+
+/** A day in the Agency's time zone, short form, such as "Wed 7 Oct". */
+export function formatDay(iso: string | null, timeZone = 'Australia/Sydney'): string {
+  if (!iso) return '—';
+  const p = zonedParts(iso, timeZone);
+  return `${p.weekday} ${p.day} ${p.month}`;
+}
+
+/** How long ago a moment was, against `now`: "2 days ago", "1 hour ago", "just now". */
+export function formatAge(iso: string | null, now: Date = new Date()): string {
+  if (!iso) return '—';
+  const minutes = Math.floor((now.getTime() - new Date(iso).getTime()) / 60_000);
+  if (minutes < 1) return 'just now';
+  const unit = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'} ago`;
+  if (minutes < 60) return unit(minutes, 'minute');
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return unit(hours, 'hour');
+  return unit(Math.floor(hours / 24), 'day');
 }
 
 /** "awaiting_owner" -> "Awaiting owner" */
@@ -761,23 +930,42 @@ export function humanise(value: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-/** Decorative icons (Heroicons outline, MIT, https://heroicons.com). Always aria-hidden: the text beside them carries the meaning. */
-const svg = (d: string, size = 'size-5') =>
-  html`<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" class="${size} shrink-0" aria-hidden="true" focusable="false"><path stroke-linecap="round" stroke-linejoin="round" d="${d}" /></svg>`;
-
+/**
+ * The app's icons (Phosphor, regular weight, via icon()). Always aria-hidden: the
+ * text beside them carries the meaning.
+ */
 const ICON = {
-  menu: svg('M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5', 'size-6'),
-  chevron: svg('m19.5 8.25-7.5 7.5-7.5-7.5', 'size-4'),
-  success: svg('M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z'),
-  error: svg('M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z'),
-  info: svg('m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z'),
-  dot: html`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-4" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="6" /></svg>`,
+  menu: icon('list', { size: 'size-6' }),
+  chevron: icon('caret-down', { size: 'size-4' }),
+  success: icon('check-circle'),
+  error: icon('warning-circle'),
+  info: icon('info'),
+  dot: icon('circle', { weight: 'fill', size: 'size-4' }),
 };
 
-/** The rail's icons, 18px, stroke 1.75. */
+/** The rail's icons, 18px (the Phone simulator's 16px, as it is quieter). */
 const NAV_ICON: Record<NavKey, Html> = {
-  dashboard: svg('M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z', 'size-[18px]'),
-  calendar: svg('M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5', 'size-[18px]'),
-  setup: svg('M11.42 15.17 17.25 21A2.652 2.652 0 0 0 21 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 1 1-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 0 0 4.486-6.336l-3.276 3.277a3.004 3.004 0 0 1-2.25-2.25l3.276-3.276a4.5 4.5 0 0 0-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437 1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008Z', 'size-[18px]'),
-  simulator: svg('M10.5 1.5H8.25A2.25 2.25 0 0 0 6 3.75v16.5a2.25 2.25 0 0 0 2.25 2.25h7.5A2.25 2.25 0 0 0 18 20.25V3.75a2.25 2.25 0 0 0-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3', 'size-[18px]'),
+  dashboard: icon('squares-four', { size: 'size-[18px]' }),
+  dispatch: icon('map-pin', { size: 'size-[18px]' }),
+  settings: icon('gear-six', { size: 'size-[18px]' }),
+  simulator: icon('device-mobile', { size: 'size-4' }),
 };
+
+/**
+ * The logo mark: the key tag. A house-shaped tag with the key ring's hole at the
+ * top and an 8 cut out of it, the tag every Agency hangs on its key board. One
+ * solid shape in one colour (currentColor), on a 256 grid, so it holds at 16px.
+ * favicon.svg is the same path.
+ */
+const LOGO_MARK =
+  'M128 14 L208 94 L208 232 Q208 244 196 244 L60 244 Q48 244 48 232 L48 94 Z M128 46 A12 12 0 1 0 128.01 46 Z M146.49 152.53 A34 34 0 1 0 109.51 152.53 A40 40 0 1 0 146.49 152.53 Z M128 106 A16 16 0 1 0 128.01 106 Z M128 170 A20 20 0 1 0 128.01 170 Z';
+
+/**
+ * The logo: the key tag beside the "myEST8" wordmark in Lexend, a light "my" and a
+ * bold "EST8". The mark is hidden from screen readers, so the logo's accessible
+ * name is "myEST8". Put it inside a link or heading; `sm` is a 20px mark, `md`
+ * (default) 28px. The mark is Harbour on light surfaces and Wattle in the rail.
+ */
+export function logo(o: { size?: 'sm' | 'md' } = {}): Html {
+  return html`<span class="logo is-${o.size ?? 'md'}"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" class="logo-mark" aria-hidden="true" focusable="false"><path fill-rule="evenodd" d="${LOGO_MARK}" /></svg><span class="logo-word"><span class="logo-my">my</span>EST8</span></span>`;
+}

@@ -68,7 +68,7 @@ describe('Work Orders', () => {
       status: 'scheduled',
       workOrder: { businessName: "Pete's Plumbing", start: TUE_9AM.toISOString(), visitConfirmed: false, rescheduleRequestedBy: null },
     });
-    const tracker = h.tracker(h.messenger.to(TOM).find((m) => m.template === 'tenant.confirmed')!.data.trackerLink as string);
+    const tracker = await h.tracker(h.messenger.to(TOM).find((m) => m.template === 'tenant.confirmed')!.data.trackerLink as string);
     expect(tracker.stages.find((s) => s.stage === 'booked')).toMatchObject({ reached: true, visitStart: TUE_9AM.toISOString() });
   });
 

@@ -7,11 +7,12 @@ import type { PropertyManagerActions } from '../../app.ts';
 import type { Trade } from '../../shared.ts';
 import { wallClock, zonedInstant } from '../../zoned-time.ts';
 import type { WebEnv } from '../env.ts';
+import { COLLEAGUES_ONLY, shareButton, shareUrl } from '../share.ts';
 import { shellInfo } from '../shell.ts';
 import { badge, emptyState, flashFrom, formatWhen, humanise, linkButton, page, type Html } from '../ui.ts';
 
 /** One booking as the calendar returns it. */
-export type Booking = ReturnType<PropertyManagerActions['calendar']>[number];
+export type Booking = Awaited<ReturnType<PropertyManagerActions['calendar']>>[number];
 
 type Day = { year: number; month: number; day: number };
 
@@ -19,25 +20,32 @@ type Day = { year: number; month: number; day: number };
 export function calendarPages() {
   const pages = new Hono<WebEnv>();
 
-  pages.get('/', (c) => {
+  pages.get('/', async (c) => {
     const { actions, pm } = c.var;
     const { timeZone } = actions.agency();
     const today = wallClock(actions.now(), timeZone);
     const monday = mondayOf(parseDay(c.req.query('week')) ?? today);
     const days = Array.from({ length: 7 }, (_, i) => addDays(monday, i));
-    const bookings = actions.calendar({ from: startOf(monday, timeZone), to: startOf(addDays(monday, 7), timeZone) });
-    const trades = bookingTrades(actions, bookings);
+    const bookings = await actions.calendar({ from: startOf(monday, timeZone), to: startOf(addDays(monday, 7), timeZone) });
+    const trades = await bookingTrades(actions, bookings);
     const byDay = groupByDay(bookings, monday, timeZone);
 
     return c.html(
       page({
         title: 'Calendar',
         pm,
-        active: 'calendar',
+        active: 'dispatch',
         shell: shellInfo(c),
         flash: flashFrom(c.req.url),
         subtitle: `Week of ${dayLabel(monday)} ${monday.year}`,
-        actions: weekNav(monday, today),
+        actions: html`${weekNav(monday, today)}${shareButton({
+          title: `Jobs booked, week of ${dayLabel(monday)} ${monday.year}`,
+          text: bookings.length
+            ? `${bookings.length} ${bookings.length === 1 ? 'Job' : 'Jobs'} booked in the week of ${dayLabel(monday)} across the Agency.`
+            : `Nothing booked yet in the week of ${dayLabel(monday)}.`,
+          url: shareUrl(c, `/calendar?week=${key(monday)}`),
+          note: COLLEAGUES_ONLY,
+        })}`,
         body: html`
           <div class="grid gap-3 lg:min-h-[calc(100dvh-12rem)] lg:grid-cols-[repeat(7,minmax(0,1fr))]">
             ${days.map((day) => dayColumn(day, byDay.get(key(day)) ?? [], key(day) === key(today), timeZone, trades))}
@@ -54,10 +62,10 @@ export function calendarPages() {
  * The Trade of each booked Job. Bookings don't carry their Trade, so it comes from
  * the Jobs already known (`known`), or else from each booking's Ticket.
  */
-export function bookingTrades(actions: PropertyManagerActions, bookings: Booking[], known: { jobId: number; trade: Trade }[] = []) {
+export async function bookingTrades(actions: PropertyManagerActions, bookings: Booking[], known: { jobId: number; trade: Trade }[] = []) {
   const trades = new Map(known.map((j) => [j.jobId, j.trade]));
   const ticketIds = new Set(bookings.filter((b) => !trades.has(b.jobId)).map((b) => b.ticketId));
-  for (const ticketId of ticketIds) for (const job of actions.ticket(ticketId).jobs) trades.set(job.jobId, job.trade);
+  for (const ticketId of ticketIds) for (const job of (await actions.ticket(ticketId)).jobs) trades.set(job.jobId, job.trade);
   return trades;
 }
 

@@ -73,7 +73,7 @@ export async function seedStories(input: {
   end?: Date;
 }): Promise<StoriesSummary> {
   const end = input.end ?? new Date();
-  const kit = createKit({ ...input, end });
+  const kit = await createKit({ ...input, end });
   for (const story of STORIES) story(kit);
   await kit.play();
   await kit.advanceTo(input.end ?? new Date());
@@ -90,7 +90,7 @@ function hanasBlockedShower(k: Kit) {
   let job: JobRef;
   s.on(0, '08:10', 'Hana reports it with a photo', async () => {
     const token = await k.report(ids.hana, text, ['Main bathroom', 'Yesterday', 'No', '4']);
-    await k.upload(token, [k.photo('basin-drain', k.takenAt(ids.kingSt, 6))]);
+    await k.upload(token, [k.photo('basin-drain', await k.takenAt(ids.kingSt, 6))]);
   });
   s.on(0, '11:00', 'Alice confirms it and asks Pete and Dana to quote', async () => {
     job = k.job(alice, await k.confirm(alice, text), 'plumbing');
@@ -116,7 +116,7 @@ function hanasHallwayLight(k: Kit) {
   let job: JobRef;
   s.on(6, '10:00', 'Hana reports it with a photo', async () => {
     const token = await k.report(ids.hana, text, ['Hallway', 'Two days ago', 'No', '2']);
-    await k.upload(token, [k.photo('light-switch', k.takenAt(ids.kingSt, 4))]);
+    await k.upload(token, [k.photo('light-switch', await k.takenAt(ids.kingSt, 4))]);
   });
   s.on(6, '13:00', 'Alice confirms it and asks Sam and Erin to quote', async () => {
     job = k.job(alice, await k.confirm(alice, text), 'electrical');
@@ -142,7 +142,7 @@ function weisLeakingTap(k: Kit) {
   let job: JobRef;
   s.on(0, '19:30', 'Wei reports it with a photo', async () => {
     const token = await k.report(ids.wei, text, ['Kitchen', 'This morning', "Yes, it's getting worse", '4']);
-    await k.upload(token, [k.photo('dripping-tap', k.takenAt(ids.wilsonSt, 5))]);
+    await k.upload(token, [k.photo('dripping-tap', await k.takenAt(ids.wilsonSt, 5))]);
   });
   s.on(1, '09:30', 'Alice confirms it and asks Nina and Finn to quote', async () => {
     job = k.job(alice, await k.confirm(alice, text), 'plumbing');
@@ -169,7 +169,7 @@ function priyasBlockedToilet(k: Kit) {
   let job: JobRef;
   s.on(1, '07:45', 'Priya reports it with a photo', async () => {
     const token = await k.report(ids.priya, text, ['Bathroom', 'Last night', 'No', '1']);
-    await k.upload(token, [k.photo('basin-drain', k.takenAt(ids.glebePointRd, 3))]);
+    await k.upload(token, [k.photo('basin-drain', await k.takenAt(ids.glebePointRd, 3))]);
   });
   s.on(1, '10:30', 'Bob confirms it and asks Quinn and Finn to quote', async () => {
     job = k.job(bob, await k.confirm(bob, text), 'plumbing');
@@ -197,7 +197,7 @@ function bellasOvenDoor(k: Kit) {
   let job: JobRef;
   s.on(0, '12:00', 'Bella emails it in with a photo', async () => {
     const token = await k.report(ids.bella, text, ['Kitchen', 'About a week ago', 'No', '3']);
-    await k.upload(token, [k.photo('oven', k.takenAt(ids.oceanAve, 8))]);
+    await k.upload(token, [k.photo('oven', await k.takenAt(ids.oceanAve, 8))]);
   });
   s.on(0, '15:00', 'Bob confirms it and asks Ally and Arlo to quote', async () => {
     job = k.job(bob, await k.confirm(bob, text), 'appliances');
@@ -238,7 +238,7 @@ function ethansLeakingRoof(k: Kit) {
   let job: JobRef;
   s.on(3, '20:00', 'Ethan reports it with a photo', async () => {
     const token = await k.report(ids.ethan, text, ['Back bedroom ceiling', 'During the storm last night', "Yes, it's getting worse", '4']);
-    await k.upload(token, [k.photo('water-stain', k.takenAt(ids.coogeeBayRd, 12))]);
+    await k.upload(token, [k.photo('water-stain', await k.takenAt(ids.coogeeBayRd, 12))]);
   });
   s.on(4, '09:30', 'Bob confirms it and asks Rhys and Tess to quote', async () => {
     job = k.job(bob, await k.confirm(bob, text), 'roofing');
@@ -249,7 +249,7 @@ function ethansLeakingRoof(k: Kit) {
   s.on(6, '12:00', 'Tess, still silent, was reminded', async () => k.expectSentSince(k.at(6, '08:00'), ids.tess, 'tradie.quote_reminder'));
   s.on(7, '18:30', 'Ethan chases it up', async () => {
     await k.say(ids.ethan, 'Any update on the roof? It rained again last night and the stain is getting bigger');
-    if (!job.pm.ticket(job.ticketId).unreadMessages) throw new Error("Ethan's follow-up wasn't left unread on his Ticket");
+    if (!(await job.pm.ticket(job.ticketId)).unreadMessages) throw new Error("Ethan's follow-up wasn't left unread on his Ticket");
   });
 }
 
@@ -261,7 +261,7 @@ function priyasHotWater(k: Kit) {
   let job: JobRef;
   s.on(4, '07:30', 'Priya reports it with a photo', async () => {
     const token = await k.report(ids.priya, text, ['Laundry', 'Yesterday', "Yes, it's getting worse", '1']);
-    await k.upload(token, [k.photo('hot-water-leak', k.takenAt(ids.glebePointRd, 4))]);
+    await k.upload(token, [k.photo('hot-water-leak', await k.takenAt(ids.glebePointRd, 4))]);
   });
   s.on(4, '11:00', 'Bob confirms it and asks Quinn and Dana to quote', async () => {
     job = k.job(bob, await k.confirm(bob, text), 'plumbing');
@@ -288,11 +288,11 @@ function kaisLeakUnderSink(k: Kit) {
   let carpentry: JobRef;
   s.on(5, '07:30', 'Kai reports it with a photo', async () => {
     const token = await k.report(ids.kai, text, ['Kitchen', 'Last week', "Yes, it's getting worse", '4']);
-    await k.upload(token, [k.photo('cupboard-leak', k.takenAt(ids.llewellynSt, 5))]);
+    await k.upload(token, [k.photo('cupboard-leak', await k.takenAt(ids.llewellynSt, 5))]);
   });
   s.on(5, '10:15', 'Alice confirms it, adds a carpentry Job, and asks for Quotes on both', async () => {
     const ticketId = await k.confirm(alice, text);
-    alice.addJob(ticketId, 'carpentry');
+    await alice.addJob(ticketId, 'carpentry');
     plumbing = k.job(alice, ticketId, 'plumbing');
     carpentry = k.job(alice, ticketId, 'carpentry');
     await k.requestQuotes(plumbing, [ids.dana, ids.pete]);
@@ -342,7 +342,7 @@ function mayasOven(k: Kit) {
   let job: JobRef;
   s.on(6, '19:00', 'Maya reports it with a photo', async () => {
     const token = await k.report(ids.maya, text, ['Kitchen', 'Two days ago', 'No', '2']);
-    await k.upload(token, [k.photo('oven', k.takenAt(ids.albionSt, 3))]);
+    await k.upload(token, [k.photo('oven', await k.takenAt(ids.albionSt, 3))]);
   });
   s.on(8, '09:00', 'Alice confirms it and asks Ally and Arlo to quote', async () => {
     job = k.job(alice, await k.confirm(alice, text), 'appliances');
@@ -366,7 +366,7 @@ function liamsLightSwitch(k: Kit) {
   let job: JobRef;
   s.on(7, '08:00', 'Liam reports it with a photo', async () => {
     const token = await k.report(ids.liam, text, ['Main bedroom', 'Two days ago', 'No', '4']);
-    await k.upload(token, [k.photo('light-switch', k.takenAt(ids.australiaSt, 7))]);
+    await k.upload(token, [k.photo('light-switch', await k.takenAt(ids.australiaSt, 7))]);
   });
   s.on(7, '12:00', 'Alice confirms it and asks Sam and Erin to quote', async () => {
     job = k.job(alice, await k.confirm(alice, text), 'electrical');
@@ -406,7 +406,7 @@ function weisRunningToilet(k: Kit) {
   s.on(8, '15:30', 'Wei confirms the visit', () => k.confirmVisit(ids.wei, job, 'Yes that works, thanks'));
   s.on(8, '20:00', 'Wei adds a note for the plumber', async () => {
     await k.say(ids.wei, 'Following up on the toilet: the plumber can park in the lane behind the house');
-    if (!job.pm.ticket(job.ticketId).unreadMessages) throw new Error("Wei's note wasn't left unread on his Ticket");
+    if (!(await job.pm.ticket(job.ticketId)).unreadMessages) throw new Error("Wei's note wasn't left unread on his Ticket");
   });
 }
 
@@ -416,7 +416,7 @@ function weisSlowBasin(k: Kit) {
   const s = k.story("Wei's slow basin");
   s.on(9, '08:20', 'Wei reports it with two photos', async () => {
     const token = await k.report(ids.wei, 'The bathroom basin is draining really slowly', ['Main bathroom', 'Last week', 'No', '2']);
-    await k.upload(token, [k.photo('basin-drain', k.takenAt(ids.wilsonSt, 3)), k.photo('dripping-tap', k.takenAt(ids.wilsonSt, 2))]);
+    await k.upload(token, [k.photo('basin-drain', await k.takenAt(ids.wilsonSt, 3)), k.photo('dripping-tap', await k.takenAt(ids.wilsonSt, 2))]);
   });
 }
 
@@ -429,7 +429,7 @@ function noahsLoosePalings(k: Kit) {
     await k.report(ids.noah, text, ['Back yard', 'After the wind on the weekend', 'No', '3']);
   });
   s.on(9, '08:00', 'It went ahead as a Maintenance Request without photos', async () => {
-    const request = alice.dashboard({ filter: 'all' }).maintenanceRequests.find((r) => r.description === text);
+    const request = (await alice.dashboard({ filter: 'all' })).maintenanceRequests.find((r) => r.description === text);
     if (!request?.noPhotos) throw new Error(`Noah's request should be waiting with no photos, not ${request ? 'with photos' : 'missing'}`);
   });
 }
@@ -441,13 +441,13 @@ function rubysMouldyWindow(k: Kit) {
   const text = "The bedroom window frame has mould around it and the window won't close properly";
   s.on(8, '19:00', 'Ruby reports it with two old or far-away photos', async () => {
     const token = await k.report(ids.ruby, text, ['Front bedroom', 'A few weeks ago', "Yes, it's getting worse", '4']);
-    const glenmoreRd = k.locationOf(ids.glenmoreRd);
+    const glenmoreRd = await k.locationOf(ids.glenmoreRd);
     await k.upload(token, [
       // Ruby moved in on 17 August 2026: this one is from July.
       k.photo('window-mould', { takenAt: '2026:07:26 16:40:12', ...(glenmoreRd ? { gps: glenmoreRd } : {}) }),
       k.photo('window-mould', { takenAt: exifTime(k.minutesAgo(25), DEMO_TIME_ZONE), gps: FAR_AWAY }),
     ]);
-    const request = bob.dashboard({ filter: 'all' }).maintenanceRequests.find((r) => r.description === text);
+    const request = (await bob.dashboard({ filter: 'all' })).maintenanceRequests.find((r) => r.description === text);
     if (!request?.photos.every((p) => p.metadata === 'flagged')) throw new Error("Ruby's photos should both be flagged");
   });
 }
@@ -460,7 +460,7 @@ function sofiasBuzzingPowerPoint(k: Kit) {
   s.on(9, '12:30', 'Sofia reports it with a screenshot', async () => {
     const token = await k.report(ids.sofia, text, ['Kitchen bench', 'This morning', 'No', '4']);
     await k.upload(token, [{ filename: 'screenshot.jpg', contentType: 'image/jpeg', content: k.sample('power-point') }]);
-    const request = bob.dashboard({ filter: 'all' }).maintenanceRequests.find((r) => r.description === text);
+    const request = (await bob.dashboard({ filter: 'all' })).maintenanceRequests.find((r) => r.description === text);
     if (!request?.checkUrgency) throw new Error("Sofia's request should be flagged to check its Urgency");
   });
 }
@@ -487,7 +487,7 @@ function omarsStiffLock(k: Kit) {
   });
   s.on(8, '19:10', 'Omar asks for another day', async () => {
     await k.say(ids.omar, "Sorry, I can't make that day, can we do another day?");
-    if (k.view(job).workOrder?.rescheduleRequestedBy !== 'tenant') throw new Error("Omar's reply should have asked to reschedule the visit");
+    if ((await k.view(job)).workOrder?.rescheduleRequestedBy !== 'tenant') throw new Error("Omar's reply should have asked to reschedule the visit");
   });
 }
 
@@ -592,17 +592,17 @@ interface JobRef {
 }
 
 type Step = { at: Date; story: string; what: string; run: () => Promise<unknown>; order: number };
-type Kit = ReturnType<typeof createKit>;
+type Kit = Awaited<ReturnType<typeof createKit>>;
 
 /** People who message by WhatsApp rather than SMS. */
 const ON_WHATSAPP = new Set<keyof DemoSeed['ids']>(['ruby']);
 
 /** The timeline, the people, and the moves the stories are made of: each checks it did what the story says. */
-function createKit({ app, simulator, seed, clock, end }: { app: App; simulator: Pick<DemoControls, 'sendAs' | 'outbox'>; seed: DemoSeed; clock: OffsetClock; end: Date }) {
+async function createKit({ app, simulator, seed, clock, end }: { app: App; simulator: Pick<DemoControls, 'sendAs' | 'outbox'>; seed: DemoSeed; clock: OffsetClock; end: Date }) {
   const { ids } = seed;
-  const alice = app.asPropertyManager(ids.aliceId);
-  const bob = app.asPropertyManager(ids.bobId);
-  const people = new Map(alice.people().map((p) => [p.id, p]));
+  const alice = await app.asPropertyManager(ids.aliceId);
+  const bob = await app.asPropertyManager(ids.bobId);
+  const people = new Map((await alice.people()).map((p) => [p.id, p]));
   const whatsapp = new Set([...ON_WHATSAPP].map((key) => ids[key]));
   const steps: Step[] = [];
   let photoNumber = 4810;
@@ -614,8 +614,8 @@ function createKit({ app, simulator, seed, clock, end }: { app: App; simulator: 
     return found;
   };
   const now = () => clock.now();
-  const outbox = (): Sent[] => simulator.outbox(ids.aliceId);
-  const inbox = () => alice.dashboard({ filter: 'all' }).inbox;
+  const outbox = (): Promise<Sent[]> => simulator.outbox(ids.aliceId);
+  const inbox = async () => (await alice.dashboard({ filter: 'all' })).inbox;
 
   /** Runs every background task that is due, and fails the seeding if one throws. */
   async function tick() {
@@ -640,18 +640,18 @@ function createKit({ app, simulator, seed, clock, end }: { app: App; simulator: 
 
   /** Sends a message in from any address, as the simulator does, and checks it went to the inbox only if `toInbox` says so. */
   async function sendFrom(who: string, from: string, channel: ChannelType, text: string, options: SayOptions = {}) {
-    const inboxBefore = new Set(inbox().map((i) => i.itemId));
-    const sentBefore = outbox().length;
+    const inboxBefore = new Set((await inbox()).map((i) => i.itemId));
+    const sentBefore = (await outbox()).length;
     await simulator.sendAs(ids.aliceId, from, channel, text, options.attachments ?? []);
     await tick();
-    const arrived = inbox().filter((i) => !inboxBefore.has(i.itemId));
+    const arrived = (await inbox()).filter((i) => !inboxBefore.has(i.itemId));
     if (options.toInbox && !arrived.some((i) => i.reason === options.toInbox)) {
       throw new Error(`"${text}" from ${who} should have gone to the inbox as ${options.toInbox}`);
     }
     if (!options.toInbox && arrived.length) {
       throw new Error(`"${text}" from ${who} went to the inbox (${arrived[0]!.reason}, best guess ${JSON.stringify(arrived[0]!.bestGuess)}) instead of being handled`);
     }
-    return outbox().slice(sentBefore);
+    return (await outbox()).slice(sentBefore);
   }
 
   /** A message from someone in the seed, on WhatsApp, SMS or email as they prefer. Returns what myEST8 sent in reply. */
@@ -673,9 +673,9 @@ function createKit({ app, simulator, seed, clock, end }: { app: App; simulator: 
   }
 
   /** Checks something the worker sent on its own, such as a reminder, since `from`. */
-  function expectSentSince(from: Date, personId: number, template: string) {
+  async function expectSentSince(from: Date, personId: number, template: string) {
     expectSent(
-      outbox().filter((m) => Date.parse(m.at) >= from.getTime()),
+      (await outbox()).filter((m) => Date.parse(m.at) >= from.getTime()),
       personId,
       template,
     );
@@ -707,10 +707,10 @@ function createKit({ app, simulator, seed, clock, end }: { app: App; simulator: 
   /** Uploads through a no-login link, as the Tenant's phone would. Returns what myEST8 sent as a result. */
   async function upload(token: string, files: Upload[]) {
     await wait(1);
-    const sentBefore = outbox().length;
+    const sentBefore = (await outbox()).length;
     await app.upload(token, files);
     await tick();
-    return outbox().slice(sentBefore);
+    return (await outbox()).slice(sentBefore);
   }
 
   const sample = (name: SamplePhoto) => new Uint8Array(readFileSync(new URL(`./sample-photos/${name}.jpg`, import.meta.url)));
@@ -721,11 +721,11 @@ function createKit({ app, simulator, seed, clock, end }: { app: App; simulator: 
   }
 
   const minutesAgo = (minutes: number) => new Date(now().getTime() - minutes * MINUTE_MS);
-  const locationOf = (propertyId: number) => alice.properties().find((p) => p.id === propertyId)?.location ?? null;
+  const locationOf = async (propertyId: number) => (await alice.properties()).find((p) => p.id === propertyId)?.location ?? null;
 
   /** Metadata for a photo taken at the Property a few minutes ago, a few metres from its geocoded point. */
-  function takenAt(propertyId: number, minutes: number): PhotoMetadata {
-    const location = locationOf(propertyId);
+  async function takenAt(propertyId: number, minutes: number): Promise<PhotoMetadata> {
+    const location = await locationOf(propertyId);
     return {
       takenAt: exifTime(minutesAgo(minutes), DEMO_TIME_ZONE),
       ...(location ? { gps: { lat: location.lat + 0.00012, lng: location.lng - 0.00009 } } : {}),
@@ -734,7 +734,7 @@ function createKit({ app, simulator, seed, clock, end }: { app: App; simulator: 
 
   /** The Property Manager confirms the waiting Maintenance Request with this description. Returns the new Ticket's id. */
   async function confirm(pm: PropertyManagerActions, description: string) {
-    const request = pm.dashboard({ filter: 'all' }).maintenanceRequests.find((r) => r.description === description);
+    const request = (await pm.dashboard({ filter: 'all' })).maintenanceRequests.find((r) => r.description === description);
     if (!request) throw new Error(`No Maintenance Request "${description}" is waiting to be confirmed`);
     const ticketId = await pm.confirmMaintenanceRequest(request.issueId);
     await tick();
@@ -743,21 +743,21 @@ function createKit({ app, simulator, seed, clock, end }: { app: App; simulator: 
 
   const job = (pm: PropertyManagerActions, ticketId: number, trade: Trade): JobRef => ({ pm, ticketId, trade });
 
-  function view(ref: JobRef) {
-    const found = ref.pm.ticket(ref.ticketId).jobs.find((j) => j.trade === ref.trade);
+  async function view(ref: JobRef) {
+    const found = (await ref.pm.ticket(ref.ticketId)).jobs.find((j) => j.trade === ref.trade);
     if (!found) throw new Error(`Ticket ${ref.ticketId} has no ${ref.trade} Job`);
     return found;
   }
 
   async function requestQuotes(ref: JobRef, tradieIds: number[]) {
-    await ref.pm.sendQuoteRequests(view(ref).jobId, tradieIds);
+    await ref.pm.sendQuoteRequests((await view(ref)).jobId, tradieIds);
     await tick();
   }
 
   /** A Tradie replies to a Quote Request; checks the Quote was read at `priceCents`. */
   async function quote(tradieId: number, ref: JobRef, text: string, priceCents: number) {
     await say(tradieId, text);
-    const read = view(ref).quotes.find((q) => q.tradieId === tradieId);
+    const read = (await view(ref)).quotes.find((q) => q.tradieId === tradieId);
     if (read?.priceCents !== priceCents) {
       throw new Error(`${person(tradieId).name}'s reply should be a $${priceCents / 100} Quote on the ${ref.trade} Job, not ${read ? `$${(read.priceCents ?? 0) / 100}` : 'missing'}`);
     }
@@ -765,46 +765,46 @@ function createKit({ app, simulator, seed, clock, end }: { app: App; simulator: 
 
   /** The Property Manager checks and confirms every Quote waiting on the Job, as read. */
   async function confirmQuotes(ref: JobRef) {
-    for (const q of view(ref).quotes.filter((q) => !q.confirmed && q.status === 'open')) ref.pm.confirmQuote(q.quoteId);
+    for (const q of (await view(ref)).quotes.filter((q) => !q.confirmed && q.status === 'open')) await ref.pm.confirmQuote(q.quoteId);
     await tick();
   }
 
   /** Confirms the Job's Quotes and chooses this Tradie's. Returns what myEST8 sent as a result. */
   async function choose(ref: JobRef, tradieId: number) {
     await confirmQuotes(ref);
-    const chosen = view(ref).quotes.find((q) => q.tradieId === tradieId);
+    const chosen = (await view(ref)).quotes.find((q) => q.tradieId === tradieId);
     if (!chosen) throw new Error(`${person(tradieId).name} has no Quote on the ${ref.trade} Job`);
-    const sentBefore = outbox().length;
+    const sentBefore = (await outbox()).length;
     await ref.pm.chooseQuote(chosen.quoteId);
     await tick();
-    return outbox().slice(sentBefore);
+    return (await outbox()).slice(sentBefore);
   }
 
   /** Sends the Work Order for a visit starting at `start`. */
   async function book(ref: JobRef, start: Date, minutes: number) {
-    await ref.pm.sendWorkOrder(view(ref).jobId, { start: start.toISOString(), durationMinutes: minutes });
+    await ref.pm.sendWorkOrder((await view(ref)).jobId, { start: start.toISOString(), durationMinutes: minutes });
     await tick();
   }
 
   async function confirmVisit(tenantId: number, ref: JobRef, text: string) {
     await say(tenantId, text);
-    if (!view(ref).workOrder?.visitConfirmed) throw new Error(`"${text}" should have confirmed the visit`);
+    if (!(await view(ref)).workOrder?.visitConfirmed) throw new Error(`"${text}" should have confirmed the visit`);
   }
 
   async function done(tradieId: number, ref: JobRef, text: string) {
     await say(tradieId, text);
-    if (view(ref).status !== 'done') throw new Error(`"${text}" should have marked the ${ref.trade} Job done`);
+    if ((await view(ref)).status !== 'done') throw new Error(`"${text}" should have marked the ${ref.trade} Job done`);
   }
 
   async function tenantRates(tenantId: number, ref: JobRef, text: string) {
     await say(tenantId, text);
-    const { jobId, workOrder } = view(ref);
-    const rated = ref.pm.tradie(workOrder!.tradieId).ratings.some((r) => r.jobId === jobId && r.source === 'tenant');
+    const { jobId, workOrder } = await view(ref);
+    const rated = (await ref.pm.tradie(workOrder!.tradieId)).ratings.some((r) => r.jobId === jobId && r.source === 'tenant');
     if (!rated) throw new Error(`"${text}" should have been the Tenant's rating`);
   }
 
   async function rateAndClose(ref: JobRef, score: number) {
-    ref.pm.rateTradie(view(ref).jobId, score);
+    await ref.pm.rateTradie((await view(ref)).jobId, score);
     await ref.pm.closeTicket(ref.ticketId);
     await tick();
     closedTickets++;
@@ -877,8 +877,8 @@ function createKit({ app, simulator, seed, clock, end }: { app: App; simulator: 
       }
     },
 
-    summary(): StoriesSummary {
-      const dashboard = alice.dashboard({ filter: 'all' });
+    async summary(): Promise<StoriesSummary> {
+      const dashboard = await alice.dashboard({ filter: 'all' });
       return {
         maintenanceRequests: dashboard.maintenanceRequests.length,
         openTickets: dashboard.tickets.length,

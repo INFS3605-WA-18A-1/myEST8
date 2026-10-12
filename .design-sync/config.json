@@ -1,0 +1,18 @@
+{
+  "projectId": "a77e6a19-fd2e-456e-8c10-1db6cac883d6",
+  "shape": "package",
+  "pkg": "myest8-design-system",
+  "globalName": "MyEST8",
+  "buildCmd": "npm --prefix .design-sync/react ci && npm --prefix .design-sync/react run build",
+  "overrides": {
+    "AppShell": {
+      "cardMode": "single",
+      "viewport": "1280x800"
+    },
+    "PublicShell": {
+      "cardMode": "column",
+      "viewport": "420x760"
+    }
+  },
+  "readmeHeader": ".design-sync/conventions.md"
+}

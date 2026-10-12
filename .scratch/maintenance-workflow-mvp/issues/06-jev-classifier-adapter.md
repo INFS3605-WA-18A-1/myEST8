@@ -14,10 +14,10 @@ A real `Classifier` (`src/ports.ts`) backed by Jev (TypeSafe AI): one call per i
 
 ## Acceptance criteria
 
-- [ ] Adapter maps `text` + `state` to Jev's JSON state and each question to a typed question with fixed answers.
-- [ ] An answer outside the options, or a missing answer, is returned with confidence 0 so intake sends the message to the inbox.
-- [ ] Jev errors and rate limits are thrown so the worker retries.
-- [ ] Nothing outside the adapter depends on Jev's API shape.
+- [x] Adapter maps `text` + `state` to Jev's JSON state and each question to a typed question with fixed answers.
+- [x] An answer outside the options, or a missing answer, is returned with confidence 0 so intake sends the message to the inbox.
+- [x] Jev errors and rate limits are thrown so the worker retries.
+- [x] Nothing outside the adapter depends on Jev's API shape.
 
 ## Needs a human
 

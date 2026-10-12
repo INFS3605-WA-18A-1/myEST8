@@ -1,24 +1,26 @@
 import { describe, expect, test } from 'vitest';
 import { createDemo } from '../../src/demo/runtime.ts';
+import { closeAfter, demoEnv } from '../support/db.ts';
 
 const HOUR = 3_600_000;
 
 /** The demo with every external API mocked, whatever this machine's env vars say. Task errors fail the test. */
 async function demoWorld() {
   const errors: Error[] = [];
-  const d = await createDemo({ now: new Date('2026-10-08T09:00:00+11:00'), env: {}, logError: (e) => errors.push(e) });
+  const d = await createDemo({ now: new Date('2026-10-08T09:00:00+11:00'), env: demoEnv(), logError: (e) => errors.push(e) });
+  closeAfter(d);
   return { ...d, errors };
 }
 
 describe('the demo', () => {
   test('starts with Harbour Realty seeded and every external API mocked', async () => {
     const { demo, app, seed, apis, errors } = await demoWorld();
-    expect(apis).toEqual({ classifier: 'mock', imageMatcher: 'mock', quoteReader: 'mock', places: 'mock' });
-    expect(app.login('alice@harbour.example', 'demo1234')).toBe(seed.ids.aliceId);
-    expect(app.login('bob@harbour.example', 'demo1234')).toBe(seed.ids.bobId);
+    expect(apis).toEqual({ classifier: 'mock', imageMatcher: 'mock', quoteReader: 'mock', places: 'mock', messenger: 'mock' });
+    expect(await app.login('alice@harbour.example', 'demo1234')).toBe(seed.ids.aliceId);
+    expect(await app.login('bob@harbour.example', 'demo1234')).toBe(seed.ids.bobId);
 
-    const alice = app.asPropertyManager(seed.ids.aliceId);
-    const properties = alice.properties();
+    const alice = await app.asPropertyManager(seed.ids.aliceId);
+    const properties = await alice.properties();
     expect(properties.map((p) => p.address)).toEqual(
       expect.arrayContaining([
         '12 King St, Newtown NSW 2042',
@@ -30,7 +32,7 @@ describe('the demo', () => {
     // Five Properties each for Alice and Bob.
     expect([seed.ids.aliceId, seed.ids.bobId].map((pm) => properties.filter((p) => p.propertyManagerId === pm).length)).toEqual([5, 5]);
 
-    const contacts = demo.contacts(seed.ids.aliceId);
+    const contacts = await demo.contacts(seed.ids.aliceId);
     const count = (role: string) => contacts.filter((c) => c.role === role).length;
     expect([count('tenant'), count('tradie'), count('owner'), count('building_manager')]).toEqual([13, 17, 6, 1]);
     expect(contacts.find((c) => c.name === 'Tom Tran')).toMatchObject({ role: 'tenant', mobile: '+61400000001', email: null });
@@ -43,26 +45,26 @@ describe('the demo', () => {
     const alice = seed.ids.aliceId;
     await demo.sendAs(alice, '+61400000001', 'sms', 'The kitchen tap is dripping');
 
-    expect(demo.inbound(alice)).toMatchObject([{ from: '+61400000001', to: '+61290000000', channel: 'sms', text: 'The kitchen tap is dripping' }]);
+    expect(await demo.inbound(alice)).toMatchObject([{ from: '+61400000001', to: '+61290000000', channel: 'sms', text: 'The kitchen tap is dripping' }]);
     expect(errors).toEqual([]);
-    const toTom = demo.outbox(alice).filter((m) => m.to === '+61400000001');
+    const toTom = (await demo.outbox(alice)).filter((m) => m.to === '+61400000001');
     expect(toTom[0]).toMatchObject({ channel: 'sms', from: '+61290000000', template: 'tenant.acknowledgement' });
   });
 
   test('an Agency that signs up gets its own simulator: its own people, channels and messages', async () => {
     const { app, demo, seed, errors } = await demoWorld();
-    const sam = app.signUp({ agencyName: 'Sunrise Realty', timeZone: 'Australia/Brisbane', name: 'Sam Sun', email: 'sam@sunrise.example', password: 'sunrise-2026' });
-    const sunrise = app.asPropertyManager(sam);
+    const sam = await app.signUp({ agencyName: 'Sunrise Realty', timeZone: 'Australia/Brisbane', name: 'Sam Sun', email: 'sam@sunrise.example', password: 'sunrise-2026' });
+    const sunrise = await app.asPropertyManager(sam);
     const TINA = '+61400000999';
 
-    expect(demo.contacts(sam)).toEqual([]);
-    expect(demo.outbox(sam)).toEqual([]);
+    expect(await demo.contacts(sam)).toEqual([]);
+    expect(await demo.outbox(sam)).toEqual([]);
     await expect(demo.sendAs(sam, TINA, 'sms', 'Hello')).rejects.toThrow('Connect SMS in Setup first');
 
-    sunrise.connectChannel('sms', '+61 2 9100 0002');
-    sunrise.connectChannel('whatsapp', '+61 2 9100 0002');
-    sunrise.connectChannel('email', 'inbox@sunrise-realty.example');
-    const owner = sunrise.addOwner({ name: 'Omar Owen', mobile: '+61400000998' });
+    await sunrise.connectChannel('sms', '+61 2 9100 0002');
+    await sunrise.connectChannel('whatsapp', '+61 2 9100 0002');
+    await sunrise.connectChannel('email', 'inbox@sunrise-realty.example');
+    const owner = await sunrise.addOwner({ name: 'Omar Owen', mobile: '+61400000998' });
     const property = await sunrise.addProperty({
       address: '3 Sun St, Newtown NSW 2042',
       suburb: 'Newtown',
@@ -71,16 +73,16 @@ describe('the demo', () => {
       maxRepairCostCents: 300_00,
       nominatedTradieIds: [],
     });
-    sunrise.addTenant({ name: 'Tina Tan', mobile: TINA, propertyId: property, tenancyStart: '2026-01-01' });
+    await sunrise.addTenant({ name: 'Tina Tan', mobile: TINA, propertyId: property, tenancyStart: '2026-01-01' });
 
-    expect(demo.contacts(sam).map((p) => p.name)).toEqual(['Omar Owen', 'Tina Tan']);
+    expect((await demo.contacts(sam)).map((p) => p.name)).toEqual(['Omar Owen', 'Tina Tan']);
     await demo.sendAs(sam, TINA, 'sms', 'The kitchen tap is dripping');
 
-    expect(demo.inbound(sam)).toMatchObject([{ from: TINA, to: '+61291000002' }]);
-    expect(demo.outbox(sam).filter((m) => m.to === TINA)[0]).toMatchObject({ from: '+61291000002', template: 'tenant.acknowledgement' });
-    expect(demo.inbound(seed.ids.aliceId)).toEqual([]);
-    expect(demo.outbox(seed.ids.aliceId).some((m) => m.to === TINA)).toBe(false);
-    expect(demo.contacts(seed.ids.aliceId).some((p) => p.name === 'Tina Tan')).toBe(false);
+    expect(await demo.inbound(sam)).toMatchObject([{ from: TINA, to: '+61291000002' }]);
+    expect((await demo.outbox(sam)).filter((m) => m.to === TINA)[0]).toMatchObject({ from: '+61291000002', template: 'tenant.acknowledgement' });
+    expect(await demo.inbound(seed.ids.aliceId)).toEqual([]);
+    expect((await demo.outbox(seed.ids.aliceId)).some((m) => m.to === TINA)).toBe(false);
+    expect((await demo.contacts(seed.ids.aliceId)).some((p) => p.name === 'Tina Tan')).toBe(false);
     expect(errors).toEqual([]);
   });
 

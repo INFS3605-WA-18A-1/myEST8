@@ -198,7 +198,7 @@ describe('Work Orders', () => {
     const sent = await submit(action, { start: '2026-10-13T10:00', hours: 3 });
 
     expect(sent.ok).toBe(`Work Order sent to Pete's Plumbing for ${formatWhen(sydney('2026-10-13T10:00:00').toISOString(), TIME_ZONE)}`);
-    expect(sent.page.text).toContain('Scheduled');
+    expect(sent.page.text).toContain('Booked');
     expect(sent.page.text).toContain(`Visit ${when(sydney('2026-10-13T10:00:00'))} – 1:00 pm`);
     expect(sent.page.text).toContain('Not confirmed yet');
     expect(sent.page.text).toContain("Work Order sent to Pete's Plumbing");

@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<title>myEST8 dispatch</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700&amp;family=Red+Hat+Text:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0;background:#f2f4f6}
+a{color:#1f5c8b}a:hover{color:#174a70}
+table{border-collapse:collapse}
+th,td{border:1px solid #d8dee4;text-align:left;vertical-align:top}
+button{cursor:pointer}
+</style>
+</helmet>
+<div style="display: flex; flex-wrap: wrap; min-height: 100vh; background: #f2f4f6; color: #13212e; font-family: 'Red Hat Text', system-ui, sans-serif; font-size: 14px; line-height: 1.45">
+  <nav aria-label="Main" style="flex: 1 1 220px; max-width: 220px; background: #13212e; color: #e6ebf0; padding: 20px 12px; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px">
+    <a href="Dashboard.dc.html" style="display: flex; align-items: center; gap: 8px; padding: 0 12px 20px; color: #e6ebf0; text-decoration: none">
+      <svg viewBox="0 0 256 256" fill="currentColor" style="width: 28px; height: 28px; color: #ffc233; flex: none" aria-hidden="true"><path fill-rule="evenodd" d="M128 14 L208 94 L208 232 Q208 244 196 244 L60 244 Q48 244 48 232 L48 94 Z M128 46 A12 12 0 1 0 128.01 46 Z M146.49 152.53 A34 34 0 1 0 109.51 152.53 A40 40 0 1 0 146.49 152.53 Z M128 106 A16 16 0 1 0 128.01 106 Z M128 170 A20 20 0 1 0 128.01 170 Z"></path></svg>
+      <span style="font-family: 'Lexend', system-ui, sans-serif; font-size: 22px; font-weight: 700"><span style="font-weight: 400">my</span>EST8</span>
+    </a>
+    <a href="Dashboard.dc.html" style="display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 12px; color: #e6ebf0; text-decoration: none; font-family: 'Lexend', system-ui, sans-serif; font-size: 16px; font-weight: 600">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" style="width: 18px; height: 18px" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1"></rect><rect x="14" y="4" width="6" height="6" rx="1"></rect><rect x="4" y="14" width="6" height="6" rx="1"></rect><rect x="14" y="14" width="6" height="6" rx="1"></rect></svg>Dashboard</a>
+    <a href="Dispatch.dc.html" aria-current="page" style="display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 12px; color: #e6ebf0; text-decoration: none; font-family: 'Lexend', system-ui, sans-serif; font-size: 16px; font-weight: 600; border-radius: 6px; background: rgba(255,255,255,0.08); box-shadow: inset 4px 0 0 {{hivis}}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" style="width: 18px; height: 18px" aria-hidden="true"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11Z"></path><circle cx="12" cy="10" r="2.3"></circle></svg>Dispatch</a>
+    <a href="Settings.dc.html" style="display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 12px; color: #e6ebf0; text-decoration: none; font-family: 'Lexend', system-ui, sans-serif; font-size: 16px; font-weight: 600">
+      <svg viewBox="0 0 256 256" fill="currentColor" style="width: 18px; height: 18px" aria-hidden="true"><path d="M128,80a48,48,0,1,0,48,48A48.05,48.05,0,0,0,128,80Zm0,80a32,32,0,1,1,32-32A32,32,0,0,1,128,160Zm109.94-52.79a8,8,0,0,0-3.89-5.4l-29.83-17-.12-33.62a8,8,0,0,0-2.83-6.08,111.91,111.91,0,0,0-36.72-20.67,8,8,0,0,0-6.46.59L128,41.85,97.88,25a8,8,0,0,0-6.47-.6A112.1,112.1,0,0,0,54.73,45.15a8,8,0,0,0-2.83,6.07l-.15,33.65-29.83,17a8,8,0,0,0-3.89,5.4,106.47,106.47,0,0,0,0,41.56,8,8,0,0,0,3.89,5.4l29.83,17,.12,33.62a8,8,0,0,0,2.83,6.08,111.91,111.91,0,0,0,36.72,20.67,8,8,0,0,0,6.46-.59L128,214.15,158.12,231a7.91,7.91,0,0,0,3.9,1,8.09,8.09,0,0,0,2.57-.42,112.1,112.1,0,0,0,36.68-20.73,8,8,0,0,0,2.83-6.07l.15-33.65,29.83-17a8,8,0,0,0,3.89-5.4A106.47,106.47,0,0,0,237.94,107.21Zm-15,34.91-28.57,16.25a8,8,0,0,0-3,3c-.58,1-1.19,2.06-1.81,3.06a7.94,7.94,0,0,0-1.22,4.21l-.15,32.25a95.89,95.89,0,0,1-25.37,14.3L134,199.13a8,8,0,0,0-3.91-1h-.19c-1.21,0-2.43,0-3.64,0a8.08,8.08,0,0,0-4.1,1l-28.84,16.1A96,96,0,0,1,67.88,201l-.11-32.2a8,8,0,0,0-1.22-4.22c-.62-1-1.23-2-1.8-3.06a8.09,8.09,0,0,0-3-3.06l-28.6-16.29a90.49,90.49,0,0,1,0-28.26L61.67,97.63a8,8,0,0,0,3-3c.58-1,1.19-2.06,1.81-3.06a7.94,7.94,0,0,0,1.22-4.21l.15-32.25a95.89,95.89,0,0,1,25.37-14.3L122,56.87a8,8,0,0,0,4.1,1c1.21,0,2.43,0,3.64,0a8.08,8.08,0,0,0,4.1-1l28.84-16.1A96,96,0,0,1,188.12,55l.11,32.2a8,8,0,0,0,1.22,4.22c.62,1,1.23,2,1.8,3.06a8.09,8.09,0,0,0,3,3.06l28.6,16.29A90.49,90.49,0,0,1,222.9,142.12Z"></path></svg>Settings</a>
+    <a href="Tracker.dc.html" style="margin-top: auto; display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 12px; color: #9aa8b4; text-decoration: none; font-size: 13px">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" style="width: 16px; height: 16px" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2"></rect><path d="M11 18.5h2"></path></svg>Phone simulator (demo)</a>
+    <span style="padding: 0 12px; color: #9aa8b4; font-size: 13px">Harbour Realty</span>
+  </nav>
+
+  <div style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column">
+    <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 14px 24px; background: #ffffff; border-bottom: 1px solid #d8dee4">
+      <h1 style="margin: 0; font-family: 'Lexend', system-ui, sans-serif; font-size: 22px; font-weight: 600">Dispatch</h1>
+      <span style="color: #55636f">Pick a Tradie for each Ticket, by location and availability</span>
+      <div style="margin-left: auto; display: flex; align-items: center; gap: 16px; flex-wrap: wrap">
+        <span style="color: #55636f">Sat 10 Oct</span>
+        <span style="font-weight: 500">Alice Archer</span>
+      </div>
+    </header>
+
+    <main style="padding: 16px 24px 32px; display: flex; flex-direction: column; gap: 16px">
+      <section aria-labelledby="queue" style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px">
+        <h2 id="queue" style="margin: 0 4px 0 0; font-family: 'Lexend', system-ui, sans-serif; font-size: 16px; font-weight: 600">3 Tickets to schedule</h2>
+        <button type="button" aria-pressed="true" style="min-height: 40px; padding: 0 14px; border: 2px solid #13212e; border-radius: 6px; background: {{hivis}}; color: #13212e; font-family: 'Lexend', system-ui, sans-serif; font-size: 15px; font-weight: 700; display: inline-flex; align-items: center; gap: 8px">#11 · 2/31 Australia St <span style="font-weight: 500">Ready to book</span></button><button type="button" aria-pressed="false" style="min-height: 40px; padding: 0 14px; border: 1px solid #7d8a95; border-radius: 6px; background: #ffffff; color: #13212e; font-family: 'Lexend', system-ui, sans-serif; font-size: 15px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px">#7 · 27 Llewellyn St <span style="font-weight: 500">Quoting</span></button><button type="button" aria-pressed="false" style="min-height: 40px; padding: 0 14px; border: 1px solid #7d8a95; border-radius: 6px; background: #ffffff; color: #13212e; font-family: 'Lexend', system-ui, sans-serif; font-size: 15px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px">#12 · 9 Albion St <span style="font-weight: 500">Quoting</span></button>
+      </section>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: stretch">
+        <section aria-label="Map" style="flex: 999 1 520px; min-width: 0; background: #ffffff; border: 1px solid #d8dee4; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 10px">
+          <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px">
+            <div role="group" aria-label="Which Tradies to show" style="display: inline-flex; padding: 3px; border: 1px solid #7d8a95; border-radius: 6px">
+              <button type="button" aria-pressed="true" style="min-height: 34px; padding: 0 12px; border: 0; border-radius: 4px; background: {{action}}; color: #ffffff; font-family: 'Lexend', system-ui, sans-serif; font-weight: 600">Electrical only</button>
+              <button type="button" aria-pressed="false" style="min-height: 34px; padding: 0 12px; border: 0; background: transparent; color: #13212e; font-family: 'Lexend', system-ui, sans-serif; font-weight: 600">All trades</button>
+            </div>
+            <span style="color: #55636f">Dashed ring: within 3 km of 2/31 Australia St</span>
+          </div>
+          <div style="position: relative; width: 100%; flex: 1 1 auto; min-height: 460px; border: 1px solid #d8dee4; border-radius: 6px; overflow: hidden; background: #e9edf0">
+      <svg viewBox="0 0 800 520" preserveAspectRatio="xMidYMid slice" style="position: absolute; inset: 0; width: 100%; height: 100%" role="img" aria-label="Schematic map of Newtown, Camperdown and Bondi Junction with Properties and Tradies plotted">
+        <rect width="800" height="520" fill="#e9edf0"></rect>
+        <path d="M560 0H800V230C760 250 720 215 690 170C660 120 600 100 560 0Z" fill="#d7e0e4"></path>
+        <path d="M600 520C640 470 700 450 740 470C770 485 790 500 800 520Z" fill="#d7e0e4"></path>
+        <rect x="90" y="330" width="90" height="70" rx="6" fill="#dfe8dc"></rect>
+        <rect x="470" y="150" width="70" height="56" rx="6" fill="#dfe8dc"></rect>
+        <g fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round">
+          <path d="M40 250L330 285L560 330L760 360"></path>
+          <path d="M270 40L300 250L330 500"></path>
+          <path d="M470 20L480 230L520 500"></path>
+          <path d="M60 140L420 130L600 170"></path>
+          <path d="M120 440L420 410L700 430"></path>
+        </g>
+        <g fill="none" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round">
+          <path d="M150 60L170 480"></path><path d="M380 30L400 490"></path><path d="M580 200L610 500"></path>
+          <path d="M40 330L300 340"></path><path d="M330 215L700 250"></path><path d="M60 60L260 80"></path><path d="M420 330L400 480"></path>
+        </g>
+        <g fill="#55636f" font-family="'Lexend', system-ui, sans-serif" font-size="12" font-weight="600" letter-spacing="1.5">
+          <text x="200" y="215">NEWTOWN</text><text x="395" y="95">CAMPERDOWN</text><text x="90" y="310">ENMORE</text><text x="420" y="455">ERSKINEVILLE</text><text x="600" y="395">BONDI JUNCTION</text><text x="640" y="60" fill="#5b7280">PORT JACKSON</text>
+        </g>
+      </svg>
+      <div aria-hidden="true" style="position: absolute; left: 45%; top: 62%; transform: translate(-50%, -50%); width: 260px; height: 260px; border-radius: 50%; border: 1.5px dashed #13212e; background: rgba(255,194,51,0.16); pointer-events: none"></div>
+      <button type="button" aria-label="Ticket 7, 27 Llewellyn St, needs a Tradie"  style="position: absolute; left: 34%; top: 40%; transform: translate(-50%, -50%); z-index: 4; display: grid; place-items: center; padding: 0; border-radius: 6px; font-family: 'Lexend', system-ui, sans-serif; font-weight: 700; background: #ffffff; border: 2px solid #13212e; width: 40px; height: 30px; font-size: 13px; color: #13212e">#7</button>
+      <span style="position: absolute; left: 34%; top: 40%; transform: translate(-50%, 14px); margin-top: 6px; z-index: 2; padding: 0 6px; background: rgba(255,255,255,0.92); border-radius: 3px; font-size: 12px; font-weight: 500; white-space: nowrap">27 Llewellyn St</span>
+      <button type="button" aria-label="Ticket 12, 9 Albion St, needs a Tradie"  style="position: absolute; left: 52%; top: 28%; transform: translate(-50%, -50%); z-index: 4; display: grid; place-items: center; padding: 0; border-radius: 6px; font-family: 'Lexend', system-ui, sans-serif; font-weight: 700; background: #ffffff; border: 2px solid #13212e; width: 40px; height: 30px; font-size: 13px; color: #13212e">#12</button>
+      <span style="position: absolute; left: 52%; top: 28%; transform: translate(-50%, 14px); margin-top: 6px; z-index: 2; padding: 0 6px; background: rgba(255,255,255,0.92); border-radius: 3px; font-size: 12px; font-weight: 500; white-space: nowrap">9 Albion St</span>
+      <button type="button" aria-label="Ticket 14, 7 Wilson St, booked"  style="position: absolute; left: 40%; top: 53%; transform: translate(-50%, -50%); z-index: 3; display: grid; place-items: center; padding: 0; border-radius: 6px; font-family: 'Lexend', system-ui, sans-serif; font-weight: 700; background: #13212e; border: 2px solid #13212e; width: 40px; height: 30px; font-size: 13px; color: #ffffff">#14</button>
+      <span style="position: absolute; left: 40%; top: 53%; transform: translate(-50%, 14px); margin-top: 6px; z-index: 2; padding: 0 6px; background: rgba(255,255,255,0.92); border-radius: 3px; font-size: 12px; font-weight: 500; white-space: nowrap">7 Wilson St</span>
+      <button type="button" aria-label="Ticket 10, 3/15 Bronte Rd, booked"  style="position: absolute; left: 82%; top: 70%; transform: translate(-50%, -50%); z-index: 3; display: grid; place-items: center; padding: 0; border-radius: 6px; font-family: 'Lexend', system-ui, sans-serif; font-weight: 700; background: #13212e; border: 2px solid #13212e; width: 40px; height: 30px; font-size: 13px; color: #ffffff">#10</button>
+      <span style="position: absolute; left: 82%; top: 70%; transform: translate(-50%, 14px); margin-top: 6px; z-index: 2; padding: 0 6px; background: rgba(255,255,255,0.92); border-radius: 3px; font-size: 12px; font-weight: 500; white-space: nowrap">3/15 Bronte Rd</span>
+      <button type="button" aria-label="Ticket 11, 2/31 Australia St, selected, ready to book" aria-pressed="true" style="position: absolute; left: 45%; top: 62%; transform: translate(-50%, -50%); z-index: 5; display: grid; place-items: center; padding: 0; border-radius: 6px; font-family: 'Lexend', system-ui, sans-serif; font-weight: 700; background: {{hivis}}; border: 3px solid #13212e; width: 46px; height: 36px; font-size: 15px; color: #13212e">#11</button>
+      <span style="position: absolute; left: 45%; top: 62%; transform: translate(-50%, 14px); margin-top: 10px; z-index: 2; padding: 0 6px; background: rgba(255,255,255,0.92); border-radius: 3px; font-size: 12px; font-weight: 600; white-space: nowrap">2/31 Australia St</span>
+      <button type="button" aria-label="Bright Spark Electrical, quoted" style="position: absolute; left: 38%; top: 74%; transform: translate(-50%, -50%); z-index: 4; width: 30px; height: 30px; padding: 0; border-radius: 999px; display: grid; place-items: center; font-family: 'Lexend', system-ui, sans-serif; font-size: 13px; font-weight: 700; background: #ffffff; border: 3px solid #2f5a3e; color: #13212e">B<span aria-hidden="true" style="position: absolute; right: -6px; top: -8px; min-width: 16px; height: 16px; border-radius: 999px; background: #2f5a3e; color: #ffffff; font-size: 11px; line-height: 16px; text-align: center">$</span></button>
+      <span style="position: absolute; left: 38%; top: 74%; transform: translate(-50%, 18px); z-index: 2; padding: 0 6px; background: rgba(255,255,255,0.92); border-radius: 3px; font-size: 12px; white-space: nowrap; color: #13212e">Bright Spark Electrical</span>
+      <button type="button" aria-label="Volt Bros Electrical, quoted" style="position: absolute; left: 58%; top: 50%; transform: translate(-50%, -50%); z-index: 4; width: 30px; height: 30px; padding: 0; border-radius: 999px; display: grid; place-items: center; font-family: 'Lexend', system-ui, sans-serif; font-size: 13px; font-weight: 700; background: #ffffff; border: 3px solid #2f5a3e; color: #13212e">V<span aria-hidden="true" style="position: absolute; right: -6px; top: -8px; min-width: 16px; height: 16px; border-radius: 999px; background: #2f5a3e; color: #ffffff; font-size: 11px; line-height: 16px; text-align: center">$</span></button>
+      <span style="position: absolute; left: 58%; top: 50%; transform: translate(-50%, 18px); z-index: 2; padding: 0 6px; background: rgba(255,255,255,0.92); border-radius: 3px; font-size: 12px; white-space: nowrap; color: #13212e">Volt Bros Electrical</span>
+      <button type="button" aria-label="Ampere &amp; Son" style="position: absolute; left: 20%; top: 38%; transform: translate(-50%, -50%); z-index: 4; width: 30px; height: 30px; padding: 0; border-radius: 999px; display: grid; place-items: center; font-family: 'Lexend', system-ui, sans-serif; font-size: 13px; font-weight: 700; background: #ffffff; border: 2px solid #13212e; color: #13212e">A</button>
+      <span style="position: absolute; left: 20%; top: 38%; transform: translate(-50%, 18px); z-index: 2; padding: 0 6px; background: rgba(255,255,255,0.92); border-radius: 3px; font-size: 12px; white-space: nowrap; color: #13212e">Ampere &amp; Son</span>
+      <button type="button" aria-label="Flow Bros Plumbing, other trade" style="position: absolute; left: 46%; top: 41%; transform: translate(-50%, -50%); z-index: 1; width: 30px; height: 30px; padding: 0; border-radius: 999px; display: grid; place-items: center; font-family: 'Lexend', system-ui, sans-serif; font-size: 13px; font-weight: 700; background: #f2f4f6; border: 1px solid #7d8a95; color: #55636f; opacity: 0.85">F</button>
+      <span style="position: absolute; left: 46%; top: 41%; transform: translate(-50%, 18px); z-index: 2; padding: 0 6px; background: rgba(255,255,255,0.92); border-radius: 3px; font-size: 12px; white-space: nowrap; color: #55636f">Flow Bros Plumbing</span>
+      <button type="button" aria-label="FixIt Carpentry, other trade" style="position: absolute; left: 64%; top: 20%; transform: translate(-50%, -50%); z-index: 1; width: 30px; height: 30px; padding: 0; border-radius: 999px; display: grid; place-items: center; font-family: 'Lexend', system-ui, sans-serif; font-size: 13px; font-weight: 700; background: #f2f4f6; border: 1px solid #7d8a95; color: #55636f; opacity: 0.85">X</button>
+      <span style="position: absolute; left: 64%; top: 20%; transform: translate(-50%, 18px); z-index: 2; padding: 0 6px; background: rgba(255,255,255,0.92); border-radius: 3px; font-size: 12px; white-space: nowrap; color: #55636f">FixIt Carpentry</span>
+      <button type="button" aria-label="Lucy’s Locksmiths, other trade" style="position: absolute; left: 72%; top: 60%; transform: translate(-50%, -50%); z-index: 1; width: 30px; height: 30px; padding: 0; border-radius: 999px; display: grid; place-items: center; font-family: 'Lexend', system-ui, sans-serif; font-size: 13px; font-weight: 700; background: #f2f4f6; border: 1px solid #7d8a95; color: #55636f; opacity: 0.85">L</button>
+      <span style="position: absolute; left: 72%; top: 60%; transform: translate(-50%, 18px); z-index: 2; padding: 0 6px; background: rgba(255,255,255,0.92); border-radius: 3px; font-size: 12px; white-space: nowrap; color: #55636f">Lucy’s Locksmiths</span>
+      </div>
+          <ul aria-label="Map key" style="margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: #13212e">
+            <li style="display: inline-flex; align-items: center; gap: 6px"><span aria-hidden="true" style="width: 22px; height: 16px; border-radius: 4px; background: {{hivis}}; border: 2px solid #13212e"></span>Selected Ticket</li>
+            <li style="display: inline-flex; align-items: center; gap: 6px"><span aria-hidden="true" style="width: 22px; height: 16px; border-radius: 4px; background: #ffffff; border: 2px solid #13212e"></span>Needs a Tradie</li>
+            <li style="display: inline-flex; align-items: center; gap: 6px"><span aria-hidden="true" style="width: 22px; height: 16px; border-radius: 4px; background: #13212e"></span>Booked</li>
+            <li style="display: inline-flex; align-items: center; gap: 6px"><span aria-hidden="true" style="width: 18px; height: 18px; border-radius: 999px; background: #ffffff; border: 3px solid #2f5a3e"></span>Tradie with a Quote ($)</li>
+            <li style="display: inline-flex; align-items: center; gap: 6px"><span aria-hidden="true" style="width: 18px; height: 18px; border-radius: 999px; background: #f2f4f6; border: 1px solid #7d8a95"></span>Other trade</li>
+          </ul>
+        </section>
+
+        <section aria-labelledby="cands" style="flex: 1 1 340px; max-width: 380px; background: #ffffff; border: 1px solid #d8dee4; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 10px">
+          <div style="display: flex; flex-direction: column; gap: 6px; padding: 10px 10px 10px 12px; border: 1px solid #d8dee4; border-left: 4px solid {{hivis}}; border-radius: 4px">
+            <strong>#11 · 2/31 Australia St</strong>
+            <span>The bedroom light switch</span>
+            <div style="display: flex; gap: 6px; flex-wrap: wrap"><span style="padding: 1px 8px; border: 1px solid #d8dee4; border-radius: 4px; color: #55636f; font-size: 13px">Routine</span><span style="padding: 1px 8px; border-radius: 4px; background: #f2f4f6; font-size: 13px">Electrical</span><span style="padding: 1px 8px; border-radius: 4px; background: #f2f4f6; font-size: 13px">2 Quotes</span></div>
+          </div>
+          <h2 id="cands" style="margin: 0; font-family: 'Lexend', system-ui, sans-serif; font-size: 16px; font-weight: 600">Tradies for this Ticket</h2>
+<sc-if value="{{bookedLine}}" hint-placeholder-val="{{ false }}">
+            <div role="status" style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 6px; background: #e8f1ea; color: #2f5a3e">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" style="width: 16px; height: 16px; flex: none; margin-top: 2px" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6.5"></path></svg>
+              <span style="flex: 1"><strong>{{bookedLine}}</strong><br>Work Order sent. The Tenant’s progress page now shows the time.</span>
+              <button type="button" onClick="{{undo}}" style="min-height: 32px; padding: 0 10px; border: 1px solid #2f5a3e; border-radius: 6px; background: #ffffff; color: #2f5a3e; font-family: 'Lexend', system-ui, sans-serif; font-weight: 600">Undo</button>
+            </div>
+          </sc-if>
+          <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px">
+            <sc-for list="{{tradies}}" as="t" hint-placeholder-count="3">
+              <li style="display: flex; flex-direction: column; gap: 12px; padding: 14px; border: 1px solid #d8dee4; border-radius: 8px; border-left: 4px solid {{t.edge}}">
+                <div style="display: flex; align-items: center; gap: 10px">
+                  <span aria-hidden="true" style="flex: none; width: 32px; height: 32px; border-radius: 999px; border: 2px solid #13212e; display: grid; place-items: center; font-family: 'Lexend', system-ui, sans-serif; font-weight: 700">{{t.initial}}</span>
+                  <div style="flex: 1; min-width: 0; display: flex; flex-direction: column"><strong style="font-size: 15px">{{t.name}}</strong><span style="color: #55636f; font-size: 13px">{{t.trade}}</span></div>
+                  <sc-if value="{{t.best}}" hint-placeholder-val="{{ false }}"><span style="padding: 1px 8px; border-radius: 4px; background: #e8f1ea; color: #2f5a3e; font-size: 12px; font-weight: 600">Best match</span></sc-if>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+                  <div style="display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 6px; background: #f2f4f6">
+                    <span style="color: #55636f; font-size: 12px">Rating</span>
+                    <span style="display: flex; align-items: center; gap: 6px"><svg viewBox="0 0 256 256" fill="#e0a100" style="width: 22px; height: 22px" aria-hidden="true"><path d="M234.29,114.85l-45,38.83L203,211.75a16.4,16.4,0,0,1-24.5,17.82L128,198.49,77.47,229.57A16.4,16.4,0,0,1,53,211.75l13.76-58.07-45-38.83A16.46,16.46,0,0,1,31.08,86l59-4.76,22.76-55.08a16.36,16.36,0,0,1,30.27,0l22.75,55.08,59,4.76a16.46,16.46,0,0,1,9.37,28.86Z"></path></svg><span style="font-family: 'Lexend', system-ui, sans-serif; font-size: 28px; line-height: 1; font-weight: 700">{{t.rating}}</span><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%)">out of 5</span></span>
+                    <span style="color: #55636f; font-size: 12px">{{t.jobs}}</span>
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 6px; background: {{t.timeBg}}; border: {{t.timeBorder}}">
+                    <span style="color: #55636f; font-size: 12px">Can come</span>
+                    <span style="font-family: 'Lexend', system-ui, sans-serif; font-size: 28px; line-height: 1; font-weight: 700">{{t.time}}</span>
+                    <span style="font-family: 'Lexend', system-ui, sans-serif; font-size: 14px; font-weight: 600">{{t.day}}</span>
+                  </div>
+                </div>
+                <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px">
+                  <span style="font-size: 13px">{{t.distance}}</span>
+                  <span style="font-size: 13px; font-weight: 600">{{t.quote}}</span>
+                  <span style="margin-left: auto"></span>
+                  <sc-if value="{{t.bookable}}" hint-placeholder-val="{{ true }}">
+                    <button type="button" onClick="{{t.book}}" style="min-height: 44px; min-width: 96px; padding: 0 20px; border: 0; border-radius: 6px; background: {{t.action}}; color: #ffffff; font-family: 'Lexend', system-ui, sans-serif; font-size: 16px; font-weight: 600">Book</button>
+                  </sc-if>
+                  <sc-if value="{{t.isBooked}}" hint-placeholder-val="{{ false }}">
+                    <span style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; border-radius: 6px; background: #e8f1ea; color: #2f5a3e; font-family: 'Lexend', system-ui, sans-serif; font-size: 15px; font-weight: 600">Booked</span>
+                  </sc-if>
+                  <sc-if value="{{t.needsQuote}}" hint-placeholder-val="{{ false }}">
+                    <span style="color: #55636f; font-size: 13px">Needs a Quote first</span>
+                    <button type="button" disabled style="min-height: 44px; min-width: 96px; padding: 0 20px; border: 1px solid #d8dee4; border-radius: 6px; background: #f2f4f6; color: #55636f; font-family: 'Lexend', system-ui, sans-serif; font-size: 16px; font-weight: 600; cursor: not-allowed">Book</button>
+                  </sc-if>
+                </div>
+              </li>
+            </sc-for>
+          </ul>
+        </section>
+      </div>
+
+      <section aria-labelledby="week" style="background: #ffffff; border: 1px solid #d8dee4; border-radius: 8px; padding: 12px 16px; display: flex; flex-direction: column; gap: 12px">
+        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px">
+          <h2 id="week" style="margin: 0; font-family: 'Lexend', system-ui, sans-serif; font-size: 16px; font-weight: 600">Tradie schedule</h2>
+          <span style="color: #55636f">Week of Monday 12 October 2026</span>
+          <div style="margin-left: auto; display: flex; gap: 8px">
+            <button type="button" style="min-height: 36px; padding: 0 12px; border: 1px solid #7d8a95; border-radius: 6px; background: #ffffff; color: #13212e; font-family: 'Lexend', system-ui, sans-serif; font-weight: 600">Previous week</button>
+            <button type="button" style="min-height: 36px; padding: 0 12px; border: 1px solid #7d8a95; border-radius: 6px; background: #ffffff; color: #13212e; font-family: 'Lexend', system-ui, sans-serif; font-weight: 600">Next week</button>
+            <button type="button" style="display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border: 1px solid #7d8a95; border-radius: 6px; background: #ffffff; color: #13212e; font-family: 'Lexend', system-ui, sans-serif; font-weight: 600"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" style="width: 16px; height: 16px" aria-hidden="true"><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="6" r="2.5"></circle><circle cx="18" cy="18" r="2.5"></circle><path d="m8.2 10.8 7.6-3.6M8.2 13.2l7.6 3.6"></path></svg>Share</button>
+          </div>
+        </div>
+        <div style="overflow-x: auto">
+        <table style="width: 100%; min-width: 960px; table-layout: fixed">
+          <thead><tr><td style="width: 200px; border: 0"></td><th scope="col" style="padding: 8px 10px; font-family: 'Lexend', system-ui, sans-serif; font-size: 14px">Mon 12</th><th scope="col" style="padding: 8px 10px; font-family: 'Lexend', system-ui, sans-serif; font-size: 14px">Tue 13</th><th scope="col" style="padding: 8px 10px; font-family: 'Lexend', system-ui, sans-serif; font-size: 14px">Wed 14</th><th scope="col" style="padding: 8px 10px; font-family: 'Lexend', system-ui, sans-serif; font-size: 14px">Thu 15</th><th scope="col" style="padding: 8px 10px; font-family: 'Lexend', system-ui, sans-serif; font-size: 14px">Fri 16</th><th scope="col" style="padding: 8px 10px; font-family: 'Lexend', system-ui, sans-serif; font-size: 14px">Sat 17</th><th scope="col" style="padding: 8px 10px; font-family: 'Lexend', system-ui, sans-serif; font-size: 14px">Sun 18</th></tr></thead>
+          <tbody>
+          <tr><th scope="row" style="width: 200px; padding: 8px 10px; font-family: 'Lexend', system-ui, sans-serif; font-size: 15px">Flow Bros Plumbing<br><span style="font-weight: 500; color: #55636f; font-size: 12px">Plumbing</span></th><td style="height: 64px; padding: 4px"><div style="height: 100%; box-sizing: border-box; padding: 4px 6px 4px 8px; border-left: 4px solid #13212e; background: #f2f4f6; border-radius: 4px; font-size: 12px; display: flex; flex-direction: column"><strong>9:00 am</strong><span>7 Wilson St</span></div></td><td style="height: 64px"></td><td style="height: 64px"></td><td style="height: 64px"></td><td style="height: 64px"></td><td style="height: 64px; background: #f2f4f6; color: #55636f; font-size: 12px; vertical-align: middle">Off</td><td style="height: 64px; background: #f2f4f6; color: #55636f; font-size: 12px; vertical-align: middle">Off</td></tr>
+          <tr><th scope="row" style="width: 200px; padding: 8px 10px; font-family: 'Lexend', system-ui, sans-serif; font-size: 15px">Lucy’s Locksmiths<br><span style="font-weight: 500; color: #55636f; font-size: 12px">Locksmith</span></th><td style="height: 64px"></td><td style="height: 64px; padding: 4px"><div style="height: 100%; box-sizing: border-box; padding: 4px 6px 4px 8px; border-left: 4px solid #13212e; background: #f2f4f6; border-radius: 4px; font-size: 12px; display: flex; flex-direction: column"><strong>1:00 pm</strong><span>3/15 Bronte Rd</span></div></td><td style="height: 64px"></td><td style="height: 64px"></td><td style="height: 64px"></td><td style="height: 64px; background: #f2f4f6; color: #55636f; font-size: 12px; vertical-align: middle">Off</td><td style="height: 64px; background: #f2f4f6; color: #55636f; font-size: 12px; vertical-align: middle">Off</td></tr>
+          <tr><th scope="row" style="width: 200px; padding: 8px 10px; font-family: 'Lexend', system-ui, sans-serif; font-size: 15px">Bright Spark Electrical<br><span style="font-weight: 500; color: #55636f; font-size: 12px">Electrical</span></th><td style="height: 64px"></td><td style="height: 64px; padding: 4px"><div style="height: 100%; box-sizing: border-box; padding: 4px 6px 4px 8px; border: 2px dashed #13212e; background: #fff3d1; border-radius: 4px; font-size: 12px; display: flex; flex-direction: column"><strong>8:00 am · Proposed</strong><span>#11 · 2/31 Australia St</span></div></td><td style="height: 64px"></td><td style="height: 64px"></td><td style="height: 64px"></td><td style="height: 64px; background: #f2f4f6; color: #55636f; font-size: 12px; vertical-align: middle">Off</td><td style="height: 64px; background: #f2f4f6; color: #55636f; font-size: 12px; vertical-align: middle">Off</td></tr>
+          <tr><th scope="row" style="width: 200px; padding: 8px 10px; font-family: 'Lexend', system-ui, sans-serif; font-size: 15px">Volt Bros Electrical<br><span style="font-weight: 500; color: #55636f; font-size: 12px">Electrical</span></th><td style="height: 64px"></td><td style="height: 64px"></td><td style="height: 64px; padding: 4px"><div style="height: 100%; box-sizing: border-box; padding: 4px 6px 4px 8px; border: 1px dashed #7d8a95; background: #ffffff; border-radius: 4px; font-size: 12px; display: flex; flex-direction: column"><strong>10:00 am · Offered</strong><span>#11 · 2/31 Australia St</span></div></td><td style="height: 64px"></td><td style="height: 64px"></td><td style="height: 64px; background: #f2f4f6; color: #55636f; font-size: 12px; vertical-align: middle">Off</td><td style="height: 64px; background: #f2f4f6; color: #55636f; font-size: 12px; vertical-align: middle">Off</td></tr>
+          <tr><th scope="row" style="width: 200px; padding: 8px 10px; font-family: 'Lexend', system-ui, sans-serif; font-size: 15px">Ampere &amp; Son<br><span style="font-weight: 500; color: #55636f; font-size: 12px">Electrical</span></th><td style="height: 64px"></td><td style="height: 64px"></td><td style="height: 64px"></td><td style="height: 64px"></td><td style="height: 64px"></td><td style="height: 64px; background: #f2f4f6; color: #55636f; font-size: 12px; vertical-align: middle">Off</td><td style="height: 64px; background: #f2f4f6; color: #55636f; font-size: 12px; vertical-align: middle">Off</td></tr>
+          </tbody>
+        </table>
+        </div>
+        <p style="margin: 0; color: #55636f; font-size: 13px">Dashed yellow is the slot you are about to book. Dashed grey is a slot a Tradie offered.</p>
+      </section>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"action":{"editor":"color","default":"#1f5c8b","options":["#1f5c8b","#13212e","#2f5a3e"]},"hivis":{"editor":"color","default":"#ffc233","options":["#ffc233","#f59e0b","#1f5c8b"]},"$preview":{"width":1366,"height":1200}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const booked = this.state && this.state.booked;
+    const data = [
+      { id: 'b', initial: 'B', name: 'Bright Spark Electrical', trade: 'Electrical, licensed', rating: '4.8', jobs: '31 Jobs for the Agency', time: '8:00 am', day: 'Tue 13 Oct', distance: '1.7 km away', quote: 'Quote $165', best: true, hasQuote: true },
+      { id: 'v', initial: 'V', name: 'Volt Bros Electrical', trade: 'Electrical, licensed', rating: '4.5', jobs: '18 Jobs for the Agency', time: '10:00 am', day: 'Wed 14 Oct', distance: '2.9 km away', quote: 'Quote $140', best: false, hasQuote: true },
+      { id: 'a', initial: 'A', name: 'Ampere & Son', trade: 'Electrical, licensed', rating: '4.6', jobs: '9 Jobs for the Agency', time: '7:30 am', day: 'Mon 12 Oct', distance: '5.9 km away, outside 3 km', quote: 'No Quote yet', best: false, hasQuote: false }
+    ];
+    const chosen = data.find((t) => t.id === booked);
+    return {
+      action: this.props.action ?? '#1f5c8b',
+      hivis: this.props.hivis ?? '#ffc233',
+      bookedLine: chosen ? 'Booked ' + chosen.name + ' for ' + chosen.day + ', ' + chosen.time : '',
+      undo: () => this.setState({ booked: null }),
+      tradies: data.map((t) => ({
+        ...t,
+        edge: t.id === booked ? '#2f5a3e' : t.best ? '#ffc233' : '#d8dee4',
+        timeBg: t.best ? '#fff3d1' : '#f2f4f6',
+        timeBorder: t.best ? '2px dashed #13212e' : '2px solid transparent',
+        isBooked: t.id === booked,
+        bookable: t.hasQuote && !booked,
+        needsQuote: !t.hasQuote && !booked,
+        action: this.props.action ?? '#1f5c8b',
+        book: () => this.setState({ booked: t.id })
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>

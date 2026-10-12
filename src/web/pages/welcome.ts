@@ -15,10 +15,12 @@
 import { Hono, type Context } from 'hono';
 import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
+import type { ImportKind } from '../../imports.ts';
 import type { ChannelType } from '../../ports.ts';
 import { ActionError, isEmail, normalizeAddress, type Role } from '../../shared.ts';
 import type { WebEnv } from '../env.ts';
 import { cents, list, text, type FormValues } from '../forms.ts';
+import { shareButton } from '../share.ts';
 import { shellInfo } from '../shell.ts';
 import {
   alert,
@@ -52,6 +54,8 @@ import {
   contactFrom,
   fieldGrid,
   googleSearchForm,
+  IMPORT_NOUNS,
+  importPanel,
   scoped,
   searchListings,
   tradieFields,
@@ -64,7 +68,7 @@ import {
 import { TIME_ZONES } from './signup.ts';
 
 type Actions = PropertyManagerActions;
-type Person = ReturnType<Actions['people']>[number];
+type Person = Awaited<ReturnType<Actions['people']>>[number];
 type WizardContext = Context<WebEnv>;
 
 const STEPS = [
@@ -90,16 +94,16 @@ const STILL_TO_DO: Record<(typeof NEEDED)[number], string> = {
 const ROLE_LABEL: Record<Role, string> = { tenant: 'Tenant', owner: 'Property Owner', tradie: 'Tradie', building_manager: 'Building Manager' };
 
 /** How far the Agency's setup has got, read from what it has. */
-export function setupProgress(actions: Actions) {
-  const channels = actions.channels();
+export async function setupProgress(actions: Actions) {
+  const channels = await actions.channels();
   return {
-    team: actions.propertyManagers().length > 1,
+    team: (await actions.propertyManagers()).length > 1,
     channels: CHANNELS.every((ch) => channels.some((c) => c.type === ch.type)),
-    property: actions.properties().length > 0,
-    tradies: actions.people('tradie').length > 0,
+    property: (await actions.properties()).length > 0,
+    tradies: (await actions.people('tradie')).length > 0,
   };
 }
-type Progress = ReturnType<typeof setupProgress>;
+type Progress = Awaited<ReturnType<typeof setupProgress>>;
 
 function isDone(key: StepKey, progress: Progress): boolean {
   if (key === 'welcome') return true; // the Agency's details come with sign-up
@@ -114,8 +118,8 @@ export function nextSetupStep(progress: Progress): string | null {
 }
 
 /** The dashboard's "Finish setting up" banner, or nothing once the Agency is set up. */
-export function finishSetupBanner(actions: Actions): Html {
-  const progress = setupProgress(actions);
+export async function finishSetupBanner(actions: Actions): Promise<Html> {
+  const progress = await setupProgress(actions);
   const next = nextSetupStep(progress);
   if (!next) return html``;
   const left = NEEDED.filter((k) => !progress[k]).map((k) => STILL_TO_DO[k]);
@@ -131,29 +135,29 @@ export function finishSetupBanner(actions: Actions): Html {
 export function welcomePages(o: { demo: boolean }) {
   const pages = new Hono<WebEnv>();
 
-  pages.get('/', (c) => c.html(welcomeStep(c)));
+  pages.get('/', async (c) => c.html(await welcomeStep(c)));
 
-  pages.get('/team', (c) => c.html(teamStep(c, {})));
+  pages.get('/team', async (c) => c.html(await teamStep(c, {})));
   pages.post('/team', async (c) => {
     const form = (await c.req.parseBody({ all: true })) as FormValues;
     const colleague = { name: text(form, 'name'), email: text(form, 'email') };
     try {
-      const { temporaryPassword } = c.var.actions.addColleague(colleague);
+      const { temporaryPassword } = await c.var.actions.addColleague(colleague);
       // The page shows a password: keep it out of every cache.
       c.header('Cache-Control', 'no-store');
-      return c.html(teamStep(c, { added: { ...colleague, temporaryPassword } }));
+      return c.html(await teamStep(c, { added: { ...colleague, temporaryPassword } }));
     } catch (error) {
       if (!(error instanceof ActionError)) throw error;
-      return c.html(teamStep(c, { values: valuesOf(form), errors: fieldErrors(error, 'email') }), 400);
+      return c.html(await teamStep(c, { values: valuesOf(form), errors: fieldErrors(error, 'email') }), 400);
     }
   });
 
-  pages.get('/channels', (c) => c.html(channelsStep(c, o.demo)));
+  pages.get('/channels', async (c) => c.html(await channelsStep(c, o.demo)));
   pages.post('/channels', (c) =>
-    channelAction(c, (form, channel) => {
+    channelAction(c, async (form, channel) => {
       const address = text(form, 'address');
       if (!address) throw new ActionError('invalid', `Enter the ${channel.addressLabel}`);
-      c.var.actions.connectChannel(channel.type, address);
+      await c.var.actions.connectChannel(channel.type, address);
       return `${channel.name} connected to ${address}. Now send a test message to check it works.`;
     }),
   );
@@ -185,12 +189,12 @@ export function welcomePages(o: { demo: boolean }) {
     }
   });
 
-  pages.get('/property', (c) => c.html(propertyStep(c, {})));
+  pages.get('/property', async (c) => c.html(await propertyStep(c, {})));
   pages.post('/property', async (c) => {
     const form = (await c.req.parseBody({ all: true })) as FormValues;
     const values = valuesOf(form);
-    const refused = (errors: Errors, message?: string) => c.html(propertyStep(c, { values, errors, message, showForm: true }), 400);
-    const read = readPropertyForm(c.var.actions, form, c.var.pm.id);
+    const refused = async (errors: Errors, message?: string) => c.html(await propertyStep(c, { values, errors, message, showForm: true }), 400);
+    const read = await readPropertyForm(c.var.actions, form, c.var.pm.id);
     if (!read.ok) return refused(read.errors);
     try {
       const propertyId = await addPropertyFrom(c.var.actions, read.input);
@@ -201,19 +205,19 @@ export function welcomePages(o: { demo: boolean }) {
     }
   });
 
-  pages.get('/done', (c) => c.html(doneStep(c, o.demo)));
+  pages.get('/done', async (c) => c.html(await doneStep(c, o.demo)));
 
   return pages;
 }
 
 // The frame around every step
 
-function wizardPage(
+async function wizardPage(
   c: WizardContext,
   o: { step: StepKey; title: string; body: Html; progress?: Progress; flash?: Flash | null },
-): Html {
+): Promise<Html> {
   const { actions, pm } = c.var;
-  const progress = o.progress ?? setupProgress(actions);
+  const progress = o.progress ?? (await setupProgress(actions));
   const index = STEPS.findIndex((s) => s.key === o.step);
   const back = STEPS[index - 1];
   const forward = STEPS[index + 1];
@@ -227,7 +231,7 @@ function wizardPage(
     title: o.title,
     subtitle: html`<span class="flex flex-wrap gap-x-4"><span>Step ${index + 1} of ${STEPS.length}</span><span>Setting up ${actions.agency().name}</span></span>`,
     pm,
-    active: 'setup',
+    active: 'settings',
     shell: shellInfo(c),
     flash: o.flash ?? null,
     body: html`<div class="mx-auto flex w-full max-w-[720px] flex-col gap-4">
@@ -248,7 +252,7 @@ function wizardPage(
 
 // 1 Welcome
 
-function welcomeStep(c: WizardContext): Html {
+async function welcomeStep(c: WizardContext): Promise<Html> {
   const { actions, pm } = c.var;
   const agency = actions.agency();
   const zone = TIME_ZONES.find((z) => z.value === agency.timeZone)?.label ?? agency.timeZone;
@@ -283,9 +287,9 @@ function welcomeStep(c: WizardContext): Html {
 
 // 2 Your team
 
-function teamStep(c: WizardContext, o: { added?: { name: string; email: string; temporaryPassword: string }; values?: Values; errors?: Errors }): Html {
+async function teamStep(c: WizardContext, o: { added?: { name: string; email: string; temporaryPassword: string }; values?: Values; errors?: Errors }): Promise<Html> {
   const { actions, pm } = c.var;
-  const team = actions.propertyManagers();
+  const team = await actions.propertyManagers();
   const origin = new URL(c.req.url).origin;
   return wizardPage(c, {
     step: 'team',
@@ -309,6 +313,17 @@ function teamStep(c: WizardContext, o: { added?: { name: string; email: string; 
             'success',
             { title: `${o.added.name} added as a Property Manager` },
           )
+        : ''}
+      ${o.added
+        ? shareButton({
+            title: `Send ${o.added.name} their sign-in link`,
+            label: `Send ${o.added.name} their sign-in link`,
+            // The temporary password never goes in a share: the link and the text end up in message histories.
+            text: `You're on myEST8 for ${actions.agency().name}. Sign in with ${o.added.email}. I'll give you your temporary password separately.`,
+            url: `${origin}/login`,
+            note: 'Give them the temporary password another way, in person or by phone.',
+            align: 'start',
+          })
         : ''}
       ${table(
         ['Name', 'Email'],
@@ -360,10 +375,10 @@ async function channelAction(c: WizardContext, action: (form: FormValues, channe
   }
 }
 
-function channelsStep(c: WizardContext, demo: boolean): Html {
+async function channelsStep(c: WizardContext, demo: boolean): Promise<Html> {
   const { actions, pm } = c.var;
   const agency = actions.agency();
-  const connected = actions.channels();
+  const connected = await actions.channels();
   const flash = flashFrom(c.req.url);
   const flashChannel = c.req.query('channel');
   const origin = new URL(c.req.url).origin;
@@ -441,7 +456,7 @@ function demoAddress(type: ChannelType, agency: { id: number; name: string }) {
 
 async function tradiesStep(c: WizardContext, o: { values?: Values; errors?: Errors; message?: string }): Promise<Html> {
   const { actions } = c.var;
-  const tradies = actions.people('tradie');
+  const tradies = await actions.people('tradie');
   const query = c.req.query('google')?.trim() ?? '';
   const { listings, problem } = await searchListings(actions, query);
   const unplaced = o.message && !Object.keys(o.errors ?? {}).length ? o.message : null;
@@ -454,7 +469,8 @@ async function tradiesStep(c: WizardContext, o: { values?: Values; errors?: Erro
         Add the Tradies ${actions.agency().name} already uses, with their Trades and how good they've been so far, so recommendations work from the first
         Job. Linking a Google listing shows their Google rating next to ours.
       </p>
-      ${tradiesTable(actions, tradies, 'No Tradies yet. Add the first one below.')}
+      ${(await tradiesTable(actions, tradies, 'No Tradies yet. Add the first one below.'))}
+      ${importCard(c, 'Add many Tradies from a spreadsheet', ['tradies'])}
       ${card({
         id: 'add-tradie',
         title: 'Add a Tradie',
@@ -489,7 +505,7 @@ type PropertyInput = {
  * Property Owner or Property half added. A Property Owner or Building Manager
  * whose mobile or email the Agency already has is reused, not added twice.
  */
-function readPropertyForm(actions: Actions, form: FormValues, myId: number): { ok: true; input: PropertyInput } | { ok: false; errors: Errors } {
+async function readPropertyForm(actions: Actions, form: FormValues, myId: number): Promise<{ ok: true; input: PropertyInput } | { ok: false; errors: Errors }> {
   const errors: Errors = {};
   const address = text(form, 'address');
   const suburb = text(form, 'suburb');
@@ -506,17 +522,17 @@ function readPropertyForm(actions: Actions, form: FormValues, myId: number): { o
     }
   }
 
-  const managers = actions.propertyManagers();
+  const managers = await actions.propertyManagers();
   const chosenManager = Number(text(form, 'propertyManagerId') || myId);
   if (!managers.some((m) => m.id === chosenManager)) errors.propertyManagerId = 'Choose a Property Manager in your Agency';
 
-  const tradies = actions.people('tradie');
+  const tradies = await actions.people('tradie');
   const nominatedTradieIds = list(form, 'nominatedTradieIds').map(Number);
   if (nominatedTradieIds.some((id) => !tradies.some((t) => t.id === id))) errors.nominatedTradieIds = 'Choose Tradies from the list';
 
   // Who already has each mobile and email, so nobody is added twice.
   const holders = new Map<string, Person>();
-  for (const person of actions.people()) {
+  for (const person of (await actions.people())) {
     for (const a of [person.mobile, person.email]) if (a) holders.set(normalizeAddress(a), person);
   }
   const usedInForm = new Map<string, string>();
@@ -576,11 +592,11 @@ function readPropertyForm(actions: Actions, form: FormValues, myId: number): { o
 /** Adds the Property Owner (unless reused), any Building Manager, the Property, then its Tenant. Returns the Property's id. */
 async function addPropertyFrom(actions: Actions, input: PropertyInput): Promise<number> {
   const { existing: owner, ...newOwner } = input.owner;
-  const ownerId = owner?.id ?? within('owner', () => actions.addOwner(newOwner));
+  const ownerId = owner?.id ?? (await within('owner', () => actions.addOwner(newOwner)));
   let buildingManagerId: number | undefined;
   if (input.buildingManager) {
     const { existing, ...newBuildingManager } = input.buildingManager;
-    buildingManagerId = existing?.id ?? within('buildingManager', () => actions.addBuildingManager(newBuildingManager));
+    buildingManagerId = existing?.id ?? (await within('buildingManager', () => actions.addBuildingManager(newBuildingManager)));
   }
   const propertyId = await actions
     .addProperty({
@@ -595,14 +611,14 @@ async function addPropertyFrom(actions: Actions, input: PropertyInput): Promise<
     .catch((error: unknown) => {
       throw renamed(error, { maxRepairCostCents: 'maxRepairCost' });
     });
-  within('tenant', () => actions.addTenant({ ...input.tenant, propertyId }), { tenancyStart: 'tenancyStart' });
+  await within('tenant', () => actions.addTenant({ ...input.tenant, propertyId }), { tenancyStart: 'tenancyStart' });
   return propertyId;
 }
 
 /** Runs one action for a person in the form, naming any refused field the way the form posts it ("ownerMobile"). */
-function within<T>(scope: string, action: () => T, keep: Record<string, string> = {}): T {
+async function within<T>(scope: string, action: () => T | Promise<T>, keep: Record<string, string> = {}): Promise<T> {
   try {
-    return action();
+    return await action();
   } catch (error) {
     throw renamed(error, { name: scoped(scope, 'name'), mobile: scoped(scope, 'mobile'), email: scoped(scope, 'email'), ...keep });
   }
@@ -614,10 +630,10 @@ function renamed(error: unknown, names: Record<string, string>): unknown {
   return new ActionError(error.code, error.message, fields);
 }
 
-function propertyStep(c: WizardContext, o: { values?: Values; errors?: Errors; message?: string; showForm?: boolean }): Html {
+async function propertyStep(c: WizardContext, o: { values?: Values; errors?: Errors; message?: string; showForm?: boolean }): Promise<Html> {
   const { actions, pm } = c.var;
-  const properties = actions.properties();
-  const people = actions.people();
+  const properties = await actions.properties();
+  const people = await actions.people();
   const nameOf = (id: number | null) => people.find((p) => p.id === id)?.name ?? '—';
   const tenantsOf = (propertyId: number) => people.filter((p) => p.role === 'tenant' && p.propertyId === propertyId).map((p) => p.name);
   const added = properties.find((p) => String(p.id) === c.req.query('added'));
@@ -626,6 +642,7 @@ function propertyStep(c: WizardContext, o: { values?: Values; errors?: Errors; m
   return wizardPage(c, {
     step: 'property',
     title: properties.length ? 'Your Properties' : 'Your first Property',
+    flash: flashFrom(c.req.url),
     body: html`
       <p>
         A Property is one rentable dwelling with its own lease. Add it with its Property Owner and Tenant, and the intake agent can act on their messages
@@ -651,17 +668,18 @@ function propertyStep(c: WizardContext, o: { values?: Values; errors?: Errors; m
             { caption: 'Properties' },
           )
         : ''}
+      ${importCard(c, 'Add many Properties from spreadsheets', ['owners', 'properties', 'tenants'])}
       ${showForm
-        ? propertyForm(actions, pm.id, o)
+        ? await propertyForm(actions, pm.id, o)
         : html`<p>${linkButton('Add another Property', '/welcome/property?another#add-property', { variant: 'secondary' })}</p>`}
     `,
   });
 }
 
-function propertyForm(actions: Actions, myId: number, o: { values?: Values; errors?: Errors; message?: string }): Html {
+async function propertyForm(actions: Actions, myId: number, o: { values?: Values; errors?: Errors; message?: string }): Promise<Html> {
   const { values, errors = {} } = o;
-  const managers = actions.propertyManagers();
-  const tradies = actions.people('tradie');
+  const managers = await actions.propertyManagers();
+  const tradies = await actions.people('tradie');
   const nominated = values?.nominatedTradieIds;
   // The Building Manager is optional, so its fields fold away unless they hold something or were refused.
   const buildingManagerShown =
@@ -756,6 +774,33 @@ function propertyForm(actions: Actions, myId: number, o: { values?: Values; erro
   });
 }
 
+/**
+ * Uploads for a step, in the order they must happen (Property Owners before the
+ * Properties they own, Properties before their Tenants). A refused upload's
+ * message shows inside its own panel, which opens.
+ */
+function importCard(c: WizardContext, title: string, kinds: ImportKind[]): Html {
+  const flash = flashFrom(c.req.url);
+  const refused = flash?.kind === 'error' ? c.req.query('form') : undefined;
+  const panel = (kind: ImportKind) =>
+    importPanel(kind, { from: 'welcome', compact: true, error: refused === `import-${kind}` && flash ? alert(flash.message, 'error') : undefined });
+  const open = kinds.some((k) => refused === `import-${k}`);
+  return html`<details class="import-details section" id="import" ${open ? 'open' : ''}>
+    <summary class="cursor-pointer font-semibold text-action">${title}</summary>
+    <div class="mt-3 flex flex-col gap-4">
+      <p class="text-sm">
+        Already have a list? Upload it as an Excel (.xlsx) or CSV file. Your column names can be anything: myEST8 matches them, and AI fills in
+        what's missing. You check every row before anything is added.
+      </p>
+      ${kinds.length > 1
+        ? html`<ol class="import-steps">
+            ${kinds.map((kind, i) => html`<li id="import-${kind}"><h3 class="import-step-title">${i + 1}. ${IMPORT_NOUNS[kind].many}</h3>${panel(kind)}</li>`)}
+          </ol>`
+        : html`<div id="import-${kinds[0]}">${panel(kinds[0]!)}</div>`}
+    </div>
+  </details>`;
+}
+
 /** A labelled group of fields in a form: a legend, an optional note, then the fields. */
 function group(legend: string, fields: Html, note?: string): Html {
   return html`<fieldset class="min-w-0 space-y-3">
@@ -767,15 +812,15 @@ function group(legend: string, fields: Html, note?: string): Html {
 
 // 6 Done
 
-function doneStep(c: WizardContext, demo: boolean): Html {
+async function doneStep(c: WizardContext, demo: boolean): Promise<Html> {
   const { actions } = c.var;
-  const progress = setupProgress(actions);
+  const progress = await setupProgress(actions);
   const agency = actions.agency();
-  const team = actions.propertyManagers();
-  const channels = actions.channels();
-  const properties = actions.properties();
-  const tenants = actions.people('tenant');
-  const tradies = actions.people('tradie');
+  const team = await actions.propertyManagers();
+  const channels = await actions.channels();
+  const properties = await actions.properties();
+  const tenants = await actions.people('tenant');
+  const tradies = await actions.people('tradie');
   const finished = isDone('done', progress);
 
   const items: { done: boolean; text: Html | string; fix?: [string, string] }[] = [

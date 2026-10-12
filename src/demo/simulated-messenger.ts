@@ -5,9 +5,9 @@ import type { DemoOutboundMessage } from './controls.ts';
 export class SimulatedMessenger implements Messenger {
   readonly #clock: Clock;
   readonly #messages: DemoOutboundMessage[] = [];
-  readonly #onSend: ((message: DemoOutboundMessage) => void) | undefined;
+  readonly #onSend: ((message: DemoOutboundMessage) => void | Promise<void>) | undefined;
 
-  constructor(clock: Clock, onSend?: (message: DemoOutboundMessage) => void) {
+  constructor(clock: Clock, onSend?: (message: DemoOutboundMessage) => void | Promise<void>) {
     this.#clock = clock;
     this.#onSend = onSend;
   }
@@ -25,7 +25,7 @@ export class SimulatedMessenger implements Messenger {
       attachments: message.attachments.map((a) => a.filename),
     };
     this.#messages.push(sent);
-    this.#onSend?.(sent);
+    await this.#onSend?.(sent);
   }
 
   /** Every message sent, oldest first. */

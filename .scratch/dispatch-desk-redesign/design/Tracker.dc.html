@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<title>Tenant tracker with the Share sheet open</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700&amp;family=Red+Hat+Text:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#1f5c8b}a:hover{color:#174a70}
+</style>
+</helmet>
+<div style="position: relative; width: 390px; height: 844px; overflow: hidden; background: #f2f4f6; color: #13212e; font-family: 'Red Hat Text', system-ui, sans-serif; font-size: 14px; line-height: 1.45">
+  <header style="display: flex; align-items: center; gap: 6px; padding: 12px 16px; background: #ffffff; border-bottom: 1px solid #d8dee4">
+    <svg viewBox="0 0 256 256" fill="currentColor" style="width: 20px; height: 20px; color: #1f5c8b; flex: none" aria-hidden="true"><path fill-rule="evenodd" d="M128 14 L208 94 L208 232 Q208 244 196 244 L60 244 Q48 244 48 232 L48 94 Z M128 46 A12 12 0 1 0 128.01 46 Z M146.49 152.53 A34 34 0 1 0 109.51 152.53 A40 40 0 1 0 146.49 152.53 Z M128 106 A16 16 0 1 0 128.01 106 Z M128 170 A20 20 0 1 0 128.01 170 Z"></path></svg>
+    <span style="font-family: 'Lexend', system-ui, sans-serif; font-size: 18px; font-weight: 700"><span style="font-weight: 400">my</span>EST8</span>
+  </header>
+  <main style="padding: 20px 16px; display: flex; flex-direction: column; gap: 16px">
+    <h1 style="margin: 0; font-family: 'Lexend', system-ui, sans-serif; font-size: 22px; font-weight: 600">Kitchen tap dripping</h1>
+    <p style="margin: 0; color: #55636f">12 King St, Newtown</p>
+    <section style="background: #ffffff; border: 1px solid #d8dee4; border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px">
+      <h2 style="margin: 0; font-family: 'Lexend', system-ui, sans-serif; font-size: 16px; font-weight: 600">Progress</h2>
+      <ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px">
+        <li style="display: flex; gap: 10px; align-items: center"><span style="display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 999px; background: #2f5a3e; color: #ffffff"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" style="width: 14px; height: 14px" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6.5"></path></svg></span>Reported</li>
+        <li style="display: flex; gap: 10px; align-items: center"><span style="display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 999px; background: #2f5a3e; color: #ffffff"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" style="width: 14px; height: 14px" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6.5"></path></svg></span>Confirmed by your Property Manager</li>
+        <li style="display: flex; gap: 10px; align-items: center; font-weight: 600"><span style="display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 999px; background: {{action}}; color: #ffffff; font-size: 12px">3</span>Tradie booked: Mon 12 Oct, 9:00 am</li>
+        <li style="display: flex; gap: 10px; align-items: center; color: #55636f"><span style="display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 999px; border: 1px solid #d8dee4; background: #ffffff; font-size: 12px">4</span>Done</li>
+      </ol>
+      <button type="button" aria-expanded="true" style="align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px; border: 1px solid #7d8a95; border-radius: 6px; background: #ffffff; font-family: 'Lexend', system-ui, sans-serif; font-size: 15px; font-weight: 600">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" style="width: 16px; height: 16px" aria-hidden="true"><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="6" r="2.5"></circle><circle cx="18" cy="18" r="2.5"></circle><path d="m8.2 10.8 7.6-3.6M8.2 13.2l7.6 3.6"></path></svg>Share</button>
+    </section>
+  </main>
+
+  <div style="position: absolute; inset: 0; background: rgba(19,33,46,0.45)" aria-hidden="true"></div>
+  <div role="group" aria-labelledby="sheet-title" style="position: absolute; left: 0; right: 0; bottom: 0; background: #ffffff; border-radius: 12px 12px 0 0; box-shadow: 0 8px 24px rgba(19,33,46,0.18); padding: 16px 16px 24px; display: flex; flex-direction: column; gap: 12px">
+    <div style="display: flex; align-items: flex-start; gap: 8px">
+      <div style="flex: 1; display: flex; flex-direction: column; gap: 2px">
+        <p id="sheet-title" style="margin: 0; font-family: 'Lexend', system-ui, sans-serif; font-size: 17px; font-weight: 600">Share this repair’s progress</p>
+        <p style="margin: 0; color: #55636f; font-size: 13px">Anyone with this link can see this page.</p>
+      </div>
+      <button type="button" aria-label="Close" style="width: 44px; height: 44px; border: 0; border-radius: 6px; background: transparent; display: grid; place-items: center">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 18px; height: 18px" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg>
+      </button>
+    </div>
+    <div style="display: flex; gap: 8px">
+      <label style="flex: 1; min-width: 0"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%)">Link</span><input type="text" readonly value="https://myest8.app/t/k3v9…" style="width: 100%; box-sizing: border-box; min-height: 44px; padding: 0 10px; border: 1px solid #7d8a95; border-radius: 4px; background: #f2f4f6; font: inherit"></label>
+      <button type="button" style="min-height: 44px; padding: 0 14px; border: 0; border-radius: 6px; background: {{action}}; color: #ffffff; font-family: 'Lexend', system-ui, sans-serif; font-size: 15px; font-weight: 600">Copy link</button>
+    </div>
+    <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column">
+      <li><a href="#" style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 4px; color: #13212e; text-decoration: none; border-bottom: 1px solid #d8dee4"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" style="width: 20px; height: 20px" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="m3 7 9 6 9-6"></path></svg>Email</a></li>
+      <li><a href="#" style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 4px; color: #13212e; text-decoration: none; border-bottom: 1px solid #d8dee4"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" style="width: 20px; height: 20px" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"></path></svg>SMS</a></li>
+      <li><a href="#" style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 4px; color: #13212e; text-decoration: none; border-bottom: 1px solid #d8dee4"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" style="width: 20px; height: 20px" aria-hidden="true"><path d="M5 19l1.2-3.6A8 8 0 1 1 9 18.3z"></path></svg>WhatsApp</a></li>
+      <li><a href="#" style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 4px; color: #13212e; text-decoration: none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" style="width: 20px; height: 20px" aria-hidden="true"><circle cx="6" cy="12" r="1.5"></circle><circle cx="12" cy="12" r="1.5"></circle><circle cx="18" cy="12" r="1.5"></circle></svg>More options…</a></li>
+    </ul>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"action":{"editor":"color","default":"#1f5c8b","options":["#1f5c8b","#13212e","#2f5a3e"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { action: this.props.action ?? '#1f5c8b' };
+  }
+}
+</script>
+</body>
+</html>

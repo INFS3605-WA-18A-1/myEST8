@@ -1,6 +1,6 @@
 import { createApp, type PropertyManagerActions } from '../../src/app.ts';
-import { openDb } from '../../src/db.ts';
 import type { ChannelType, InboundAttachment } from '../../src/ports.ts';
+import { testDb } from './db.ts';
 import { FakeClassifier, FakeClock, FakeImageMatcher, FakeMessenger, FakePlaces, FakeQuoteReader } from './fakes.ts';
 
 /** Thursday 8 October 2026, 9:00 am in Sydney. */
@@ -22,7 +22,7 @@ export async function createHarness() {
   const imageMatcher = new FakeImageMatcher();
   const quoteReader = new FakeQuoteReader();
   const places = new FakePlaces();
-  const db = openDb(':memory:');
+  const db = await testDb();
   const app = createApp({
     db,
     clock,
@@ -50,7 +50,7 @@ export async function createHarness() {
     options: { channel?: ChannelType; attachments?: InboundAttachment[] } = {},
   ) {
     const channelType = options.channel ?? (from.includes('@') ? 'email' : 'sms');
-    app.receiveInbound({
+    await app.receiveInbound({
       providerMessageId: `msg-${++messageCount}`,
       agencyChannel: channelType === 'email' ? AGENCY_INBOX : AGENCY_NUMBER,
       channelType,
@@ -104,11 +104,12 @@ export async function createHarness() {
 
     /** A Property Manager's actions; each one also lets the background worker catch up. */
     as(propertyManagerId: number): PropertyManagerActions {
-      const actions = app.asPropertyManager(propertyManagerId);
-      return new Proxy(actions, {
-        get(target, key) {
-          const action = target[key as keyof PropertyManagerActions] as (...args: unknown[]) => unknown;
+      // Each action signs in afresh (app.asPropertyManager), as each web request does.
+      return new Proxy({} as PropertyManagerActions, {
+        get(_, key) {
           return async (...args: unknown[]) => {
+            const actions = await app.asPropertyManager(propertyManagerId);
+            const action = actions[key as keyof PropertyManagerActions] as (...args: unknown[]) => unknown;
             const result = await action(...args);
             await drain();
             return result;

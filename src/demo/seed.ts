@@ -64,17 +64,18 @@ export type DemoSeed = Awaited<ReturnType<typeof seedDemo>>;
  */
 export async function seedDemo(app: App, options: { googleListings?: boolean } = {}) {
   const googleListings = options.googleListings ?? true;
-  const agencyId = app.setup.createAgency({ name: 'Harbour Realty', timeZone: DEMO_TIME_ZONE });
+  const agencyId = await app.setup.createAgency({ name: 'Harbour Realty', timeZone: DEMO_TIME_ZONE });
   const logins = [
     { name: 'Alice Archer', email: 'alice@harbour.example', password: DEMO_PASSWORD },
     { name: 'Bob Baker', email: 'bob@harbour.example', password: DEMO_PASSWORD },
   ];
-  const [aliceId, bobId] = logins.map((login) => app.setup.addPropertyManager(agencyId, login)) as [number, number];
-  const alice = app.asPropertyManager(aliceId);
-  const bob = app.asPropertyManager(bobId);
+  const aliceId = await app.setup.addPropertyManager(agencyId, logins[0]!);
+  const bobId = await app.setup.addPropertyManager(agencyId, logins[1]!);
+  const alice = await app.asPropertyManager(aliceId);
+  const bob = await app.asPropertyManager(bobId);
 
   for (const [channelType, address] of Object.entries(DEMO_CHANNELS) as [ChannelType, string][]) {
-    alice.connectChannel(channelType, address);
+    await alice.connectChannel(channelType, address);
   }
 
   /** Adds each Tradie, linked to their mock Google listing when there is one, and returns their ids by key. */
@@ -88,9 +89,9 @@ export async function seedDemo(app: App, options: { googleListings?: boolean } =
 
   const tradies = await addTradies(TRADIES);
 
-  const olivia = alice.addOwner({ name: 'Olivia Owens', mobile: '+61400000100', email: 'olivia@example.com' });
-  const oscar = bob.addOwner({ name: 'Oscar Ortiz', mobile: '+61400000101' });
-  const barry = bob.addBuildingManager({ name: 'Barry Strata', email: 'barry@strata.example' });
+  const olivia = await alice.addOwner({ name: 'Olivia Owens', mobile: '+61400000100', email: 'olivia@example.com' });
+  const oscar = await bob.addOwner({ name: 'Oscar Ortiz', mobile: '+61400000101' });
+  const barry = await bob.addBuildingManager({ name: 'Barry Strata', email: 'barry@strata.example' });
 
   const kingSt = await alice.addProperty({
     address: '12 King St, Newtown NSW 2042',
@@ -127,11 +128,11 @@ export async function seedDemo(app: App, options: { googleListings?: boolean } =
   });
 
   const tenants = {
-    tom: alice.addTenant({ name: 'Tom Tran', mobile: '+61400000001', propertyId: kingSt, tenancyStart: '2025-01-01' }),
-    hana: alice.addTenant({ name: 'Hana Ho', mobile: '+61400000002', propertyId: kingSt, tenancyStart: '2025-01-01' }),
-    bella: bob.addTenant({ name: 'Bella Bui', email: 'bella@example.com', propertyId: oceanAve, tenancyStart: '2026-03-01' }),
-    wei: alice.addTenant({ name: 'Wei Zhang', mobile: '+61400000003', propertyId: wilsonSt, tenancyStart: '2025-07-01' }),
-    priya: bob.addTenant({ name: 'Priya Patel', mobile: '+61400000004', email: 'priya@example.com', propertyId: glebePointRd, tenancyStart: '2024-11-01' }),
+    tom: await alice.addTenant({ name: 'Tom Tran', mobile: '+61400000001', propertyId: kingSt, tenancyStart: '2025-01-01' }),
+    hana: await alice.addTenant({ name: 'Hana Ho', mobile: '+61400000002', propertyId: kingSt, tenancyStart: '2025-01-01' }),
+    bella: await bob.addTenant({ name: 'Bella Bui', email: 'bella@example.com', propertyId: oceanAve, tenancyStart: '2026-03-01' }),
+    wei: await alice.addTenant({ name: 'Wei Zhang', mobile: '+61400000003', propertyId: wilsonSt, tenancyStart: '2025-07-01' }),
+    priya: await bob.addTenant({ name: 'Priya Patel', mobile: '+61400000004', email: 'priya@example.com', propertyId: glebePointRd, tenancyStart: '2024-11-01' }),
   };
 
   // Everything below came later, so the records above keep their ids.
@@ -163,13 +164,13 @@ export async function seedDemo(app: App, options: { googleListings?: boolean } =
  * Bronte Rd are strata units with no Building Manager on file.
  */
 async function seedMore(app: App, { aliceId, bobId, tradies }: { aliceId: number; bobId: number; tradies: Record<keyof typeof TRADIES | keyof typeof MORE_TRADIES, number> }) {
-  const alice = app.asPropertyManager(aliceId);
-  const bob = app.asPropertyManager(bobId);
+  const alice = await app.asPropertyManager(aliceId);
+  const bob = await app.asPropertyManager(bobId);
 
-  const grace = alice.addOwner({ name: 'Grace Green', mobile: '+61400000102', email: 'grace@example.com' });
-  const henry = alice.addOwner({ name: 'Henry Hill', mobile: '+61400000103', email: 'henry@example.com' });
-  const isla = bob.addOwner({ name: 'Isla Irwin', mobile: '+61400000104', email: 'isla@example.com' });
-  const jack = bob.addOwner({ name: 'Jack Jones', mobile: '+61400000105' });
+  const grace = await alice.addOwner({ name: 'Grace Green', mobile: '+61400000102', email: 'grace@example.com' });
+  const henry = await alice.addOwner({ name: 'Henry Hill', mobile: '+61400000103', email: 'henry@example.com' });
+  const isla = await bob.addOwner({ name: 'Isla Irwin', mobile: '+61400000104', email: 'isla@example.com' });
+  const jack = await bob.addOwner({ name: 'Jack Jones', mobile: '+61400000105' });
 
   const australiaSt = await alice.addProperty({
     address: '2/31 Australia St, Camperdown NSW 2050',
@@ -221,14 +222,14 @@ async function seedMore(app: App, { aliceId, bobId, tradies }: { aliceId: number
   });
 
   const tenants = {
-    liam: alice.addTenant({ name: 'Liam Lee', mobile: '+61400000005', propertyId: australiaSt, tenancyStart: '2025-09-01' }),
-    maya: alice.addTenant({ name: 'Maya Morris', mobile: '+61400000006', email: 'maya@example.com', propertyId: albionSt, tenancyStart: '2024-06-15' }),
-    noah: alice.addTenant({ name: 'Noah Nair', mobile: '+61400000007', propertyId: llewellynSt, tenancyStart: '2025-03-01' }),
-    kai: alice.addTenant({ name: 'Kai Kelly', mobile: '+61400000008', propertyId: llewellynSt, tenancyStart: '2025-03-01' }),
-    ruby: bob.addTenant({ name: 'Ruby Russo', mobile: '+61400000009', propertyId: glenmoreRd, tenancyStart: '2026-08-17' }),
-    ethan: bob.addTenant({ name: 'Ethan Evans', mobile: '+61400000010', propertyId: coogeeBayRd, tenancyStart: '2025-11-01' }),
-    sofia: bob.addTenant({ name: 'Sofia Silva', mobile: '+61400000011', email: 'sofia@example.com', propertyId: coogeeBayRd, tenancyStart: '2025-11-01' }),
-    omar: bob.addTenant({ name: 'Omar Odeh', mobile: '+61400000012', propertyId: bronteRd, tenancyStart: '2026-02-01' }),
+    liam: await alice.addTenant({ name: 'Liam Lee', mobile: '+61400000005', propertyId: australiaSt, tenancyStart: '2025-09-01' }),
+    maya: await alice.addTenant({ name: 'Maya Morris', mobile: '+61400000006', email: 'maya@example.com', propertyId: albionSt, tenancyStart: '2024-06-15' }),
+    noah: await alice.addTenant({ name: 'Noah Nair', mobile: '+61400000007', propertyId: llewellynSt, tenancyStart: '2025-03-01' }),
+    kai: await alice.addTenant({ name: 'Kai Kelly', mobile: '+61400000008', propertyId: llewellynSt, tenancyStart: '2025-03-01' }),
+    ruby: await bob.addTenant({ name: 'Ruby Russo', mobile: '+61400000009', propertyId: glenmoreRd, tenancyStart: '2026-08-17' }),
+    ethan: await bob.addTenant({ name: 'Ethan Evans', mobile: '+61400000010', propertyId: coogeeBayRd, tenancyStart: '2025-11-01' }),
+    sofia: await bob.addTenant({ name: 'Sofia Silva', mobile: '+61400000011', email: 'sofia@example.com', propertyId: coogeeBayRd, tenancyStart: '2025-11-01' }),
+    omar: await bob.addTenant({ name: 'Omar Odeh', mobile: '+61400000012', propertyId: bronteRd, tenancyStart: '2026-02-01' }),
   };
 
   return {

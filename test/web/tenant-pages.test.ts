@@ -44,6 +44,7 @@ describe('the upload page', () => {
     expect(page).toContain('accept="image/*,application/pdf"');
     expect(page).toContain('Up to 10 files at a time, each under 10 MB');
     expect(page).toContain('Photos straight from your camera keep their details');
+    expect(page.match(/btn-primary/g)).toHaveLength(1);
 
     const sent = await postFiles(w, path, [jpeg('tap-1.jpg', '2026:10:08 08:30:00'), jpeg('tap-2.jpg')]);
     expect(sent.status).toBe(303);
@@ -136,10 +137,10 @@ describe("the Tenant's progress tracker", () => {
     const page = await res.text();
     expect(page).toContain('The kitchen tap is dripping');
     for (const stage of ['Reported', 'Confirmed', 'Getting quotes', 'Approved', 'Booked', 'Done', 'Closed']) expect(page).toContain(stage);
-    expect(page).toContain('Now: <strong>Confirmed</strong>');
+    expect(page).toContain('Now: Confirmed');
   });
 
-  test('shows the booked visit time in Sydney time, and never a price, Quote or rating', async () => {
+  test("shows the booked visit time in the Agency's time zone, and never a price, Quote or rating", async () => {
     const w = await webWorld();
     const job = await tomsTapTicket(w);
     const tuesday9am = new Date('2026-10-13T09:00:00+11:00');
@@ -150,8 +151,9 @@ describe("the Tenant's progress tracker", () => {
 
     const page = await (await w.get(path)).text();
 
-    expect(page).toContain('Now: <strong>Booked</strong>');
-    expect(page).toContain(`Visit ${formatWhen(tuesday9am.toISOString())}`);
+    expect(page).toContain('Now: Booked');
+    expect(page).toContain(`Visit ${formatWhen(tuesday9am.toISOString(), 'Australia/Sydney')}`);
+    expect(page).not.toContain('Sydney time');
     expect(page).not.toMatch(/\$\s?\d/);
     expect(page).not.toContain('180');
     expect(page).not.toMatch(/rating/i);

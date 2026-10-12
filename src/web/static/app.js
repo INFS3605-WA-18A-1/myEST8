@@ -98,3 +98,128 @@
     }
   });
 })();
+
+// === share ===
+// The Share panel (src/web/share.ts) is a <details> that works without this:
+// here it gains Copy link (with a fallback that selects the link), the phone's
+// own share sheet where there is one, a close button, and closing on Escape, a
+// click elsewhere or after picking a channel. Only one panel is open at a time.
+(() => {
+  const shares = [...document.querySelectorAll('details[data-share]')];
+  if (!shares.length) return;
+
+  const close = (share, returnFocus = false) => {
+    share.open = false;
+    if (returnFocus) share.querySelector('summary')?.focus();
+  };
+
+  for (const share of shares) {
+    const input = share.querySelector('[data-share-url]');
+    const status = share.querySelector('[data-share-status]');
+    const copy = share.querySelector('[data-share-copy]');
+    const native = share.querySelector('[data-share-native]');
+    const closeButton = share.querySelector('[data-share-close]');
+    let clear;
+
+    const say = (message) => {
+      status.textContent = message;
+      clearTimeout(clear);
+      clear = setTimeout(() => (status.textContent = ''), 5000);
+    };
+    const selectLink = () => {
+      input.focus();
+      input.select();
+      input.setSelectionRange(0, input.value.length);
+    };
+
+    if (copy) {
+      copy.hidden = false;
+      copy.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(input.value);
+          say('Link copied');
+        } catch {
+          selectLink();
+          say('The link is selected: copy it with Ctrl+C, or Cmd+C on a Mac.');
+        }
+      });
+    }
+
+    if (native && typeof navigator.share === 'function') {
+      native.hidden = false;
+      native.querySelector('button')?.addEventListener('click', async () => {
+        try {
+          await navigator.share({ title: share.dataset.shareTitle, text: share.dataset.shareText, url: input.value });
+          close(share, true);
+        } catch (error) {
+          if (error?.name !== 'AbortError') say("Your device's share options didn't open. Copy the link instead.");
+        }
+      });
+    }
+
+    if (closeButton) {
+      closeButton.hidden = false;
+      closeButton.addEventListener('click', () => close(share, true));
+    }
+
+    input.addEventListener('focus', () => input.select());
+    for (const link of share.querySelectorAll('[data-share-channel]')) link.addEventListener('click', () => close(share));
+
+    share.addEventListener('toggle', () => {
+      if (!share.open) {
+        status.textContent = '';
+        return;
+      }
+      for (const other of shares) if (other !== share) other.open = false;
+      // A panel opened near the bottom of a long page is brought into view.
+      if (!window.matchMedia('(max-width: 39.99rem)').matches) share.querySelector('.share-panel')?.scrollIntoView({ block: 'nearest' });
+    });
+  }
+
+  document.addEventListener('click', (event) => {
+    for (const share of shares) if (share.open && !share.contains(event.target)) close(share);
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    for (const share of shares) if (share.open) close(share, share.contains(document.activeElement));
+  });
+})();
+
+// === landing ===
+// The landing page's workflow loops, so it gets a pause button (WCAG 2.2.2). The
+// button is hidden in the markup and only shown here, where it can work; with
+// less motion asked for there is nothing moving, so it stays hidden.
+(() => {
+  const flow = document.querySelector('[data-flow]');
+  const pause = flow?.querySelector('[data-flow-pause]');
+  if (!flow || !pause) return;
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const label = pause.querySelector('[data-flow-pause-label]');
+  pause.hidden = false;
+  pause.addEventListener('click', () => {
+    const paused = !flow.hasAttribute('data-paused');
+    flow.toggleAttribute('data-paused', paused);
+    if (label) label.textContent = paused ? 'Play' : 'Pause';
+  });
+})();
+
+// === import ===
+// The review page's "Add N Properties" button counts the ticked rows as they're
+// ticked. Without this file the count is the one the page was drawn with.
+(() => {
+  const form = document.querySelector('[data-import-rows]');
+  const add = form?.querySelector('[data-import-add]');
+  if (!form || !add) return;
+  const status = form.querySelector('[data-import-count]');
+  const { nounOne, nounMany } = form.dataset;
+  const update = () => {
+    const ticked = [...form.querySelectorAll('input[name="include"]:checked')];
+    const ready = ticked.filter((box) => box.closest('tr')?.dataset.status !== 'needs_fix').length;
+    const fixing = ticked.length - ready;
+    add.textContent = `Add ${ready} ${ready === 1 ? nounOne : nounMany}`;
+    if (status) status.textContent = fixing ? `Plus ${fixing} ticked ${fixing === 1 ? 'row that needs' : 'rows that need'} a fix: fill in the flagged cells to add ${fixing === 1 ? 'it' : 'them'} too.` : '';
+  };
+  form.addEventListener('change', (event) => {
+    if (event.target instanceof HTMLInputElement && event.target.name === 'include') update();
+  });
+})();

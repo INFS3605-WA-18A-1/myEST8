@@ -46,9 +46,13 @@ const QUICK_REPLIES: Record<Role, string[]> = {
 
 const CLOCK_STEPS = [1, 24, 48, 72];
 
-/** The phone: 380px wide on laptops, full width below, 28px radius, one allowed shadow. */
+/**
+ * The phone: 380px wide on laptops, full width below, 28px radius, one allowed shadow.
+ * On phone it is sized to end inside the first frame, below the clock, the picker
+ * and the page's top bar, so the composer and Send stay visible without scrolling.
+ */
 const PHONE_FRAME =
-  'flex min-h-[560px] h-[min(720px,calc(100dvh_-_140px))] w-full min-w-0 flex-col overflow-hidden rounded-[28px] border border-control bg-surface shadow-[0_8px_24px_rgb(50_50_51/0.18)] lg:w-[380px] lg:shrink-0';
+  'flex min-h-[560px] h-[calc(100dvh_-_200px)] w-full min-w-0 flex-col overflow-hidden rounded-[28px] border border-control bg-surface shadow-[0_8px_24px_rgb(50_50_51/0.18)] lg:h-[min(720px,calc(100dvh_-_140px))] lg:w-[380px] lg:shrink-0';
 
 /** A message on a contact's phone or in their inbox: from myEST8, or sent by them through the simulator. */
 type ThreadMessage = {
@@ -65,36 +69,14 @@ type ThreadMessage = {
 export function simulatorPages(demo: DemoControls) {
   const pages = new Hono<WebEnv>();
 
-  pages.get('/', (c) => {
+  pages.get('/', async (c) => {
     const timeZone = agencyTimeZone(c);
     const me = c.get('pm').id;
-    const contacts = demo.contacts(me);
-    const outbox = demo.outbox(me);
-    const inbound = demo.inbound(me);
-    const connected = c.get('actions').channels().map((ch) => ch.type);
+    const contacts = await demo.contacts(me);
+    const connected = (await c.get('actions').channels()).map((ch) => ch.type);
     const missing = (Object.keys(CHANNEL_LABEL) as ChannelType[]).filter((ch) => !connected.includes(ch));
     const selected = contacts.find((p) => String(p.personId) === c.req.query('contact')) ?? null;
     const query = (c.req.query('q') ?? '').trim();
-    const showAll = c.req.query('all') === '1';
-    const limit = feedLimit(c.req.query('feed'));
-    const listed = query ? contacts.filter((p) => matchesQuery(p, query)) : contacts;
-    const sent = sentCounts(contacts, outbox);
-    const thread = selected ? threadOf(selected, outbox, inbound) : [];
-
-    // The feed: newest first, for the selected contact unless "All contacts" is on.
-    const scoped = selected && !showAll ? outbox.filter((m) => addressed(selected, m)) : outbox;
-    const newest = scoped.toReversed();
-    const feed = { total: newest.length, items: newest.slice(0, limit), limit, selected, showAll, query };
-
-    const body = html`${missing.length ? unconnectedNotice(missing) : ''}
-      <div class="grid gap-4 lg:grid-cols-[240px_380px_minmax(0,1fr)] lg:items-start">
-        <aside class="hidden lg:sticky lg:top-4 lg:block lg:max-h-[calc(100dvh_-_96px)] lg:overflow-y-auto">${contactList(contacts, listed, selected, sent, query)}</aside>
-        <div class="flex min-w-0 flex-col gap-3">
-          ${contactPicker(contacts, selected)}
-          ${selected ? phone(selected, thread, timeZone) : pickPrompt(contacts)}
-        </div>
-        <div class="flex min-w-0 flex-col gap-4">${sentFeed(feed, contacts, timeZone)}</div>
-      </div>`;
 
     return c.html(
       page({
@@ -104,7 +86,17 @@ export function simulatorPages(demo: DemoControls) {
         flash: flashFrom(c.req.url),
         shell: shellInfo(c),
         controls: clockControls(demo.now(), timeZone, selected),
-        body,
+        body: simulatorBody({
+          contacts,
+          outbox: await demo.outbox(me),
+          inbound: await demo.inbound(me),
+          selected,
+          query,
+          showAll: c.req.query('all') === '1',
+          limit: feedLimit(c.req.query('feed')),
+          missing,
+          timeZone,
+        }),
       }),
     );
   });
@@ -112,7 +104,7 @@ export function simulatorPages(demo: DemoControls) {
   pages.post('/send', bodyLimit({ maxSize: 40 * MB }), async (c) => {
     const form = (await c.req.parseBody({ all: true })) as FormValues;
     const me = c.get('pm').id;
-    const contact = demo.contacts(me).find((p) => String(p.personId) === text(form, 'contact'));
+    const contact = (await demo.contacts(me)).find((p) => String(p.personId) === text(form, 'contact'));
     return refusable(c, contact ? threadPath(contact.personId) : '/demo', async () => {
       if (!contact) throw new ActionError('not_found', 'Pick someone to act as');
       const asked = text(form, 'channel');
@@ -148,6 +140,45 @@ export function simulatorPages(demo: DemoControls) {
   });
 
   return pages;
+}
+
+/**
+ * The simulator's three columns: the contact list, the phone and the feed. On
+ * phone the channel notice comes after them, so the phone and its composer are
+ * in the first frame.
+ */
+function simulatorBody(o: {
+  contacts: DemoContact[];
+  outbox: DemoOutboundMessage[];
+  inbound: DemoInboundMessage[];
+  selected: DemoContact | null;
+  query: string;
+  showAll: boolean;
+  limit: number;
+  missing: ChannelType[];
+  timeZone: string;
+}): Html {
+  const { contacts, selected, query, timeZone } = o;
+  const listed = query ? contacts.filter((p) => matchesQuery(p, query)) : contacts;
+  const sent = sentCounts(contacts, o.outbox);
+  const thread = selected ? threadOf(selected, o.outbox, o.inbound) : [];
+
+  // The feed: newest first, for the selected contact unless "All contacts" is on.
+  const scoped = selected && !o.showAll ? o.outbox.filter((m) => addressed(selected, m)) : o.outbox;
+  const newest = scoped.toReversed();
+  const feed = { total: newest.length, items: newest.slice(0, o.limit), limit: o.limit, selected, showAll: o.showAll, query };
+
+  return html`<div class="flex flex-col gap-4">
+    <div class="grid gap-4 lg:grid-cols-[240px_380px_minmax(0,1fr)] lg:items-start">
+      <aside class="hidden lg:sticky lg:top-4 lg:block lg:max-h-[calc(100dvh_-_96px)] lg:overflow-y-auto">${contactList(contacts, listed, selected, sent, query)}</aside>
+      <div class="flex min-w-0 flex-col gap-3">
+        ${contactPicker(contacts, selected)}
+        ${selected ? phone(selected, thread, timeZone) : pickPrompt(contacts)}
+      </div>
+      <div class="flex min-w-0 flex-col gap-4">${sentFeed(feed, contacts, timeZone)}</div>
+    </div>
+    ${o.missing.length ? html`<div class="order-last lg:order-first">${unconnectedNotice(o.missing)}</div>` : ''}
+  </div>`;
 }
 
 /** Runs `action`; redirects to `back` with its message, or with the reason it was refused. */
@@ -281,12 +312,12 @@ function contactList(contacts: DemoContact[], listed: DemoContact[], selected: D
                 const isSelected = p === selected;
                 const count = sent.get(p.personId) ?? 0;
                 return html`<li>
-                  <a href="${demoUrl({ contact: p.personId, q: query })}" class="flex items-center gap-2 rounded-[6px] px-3 py-2 ${isSelected ? 'bg-[var(--action)] text-white' : 'text-ink hover:bg-page'}" ${isSelected ? html`aria-current="page"` : ''}>
+                  <a href="${demoUrl({ contact: p.personId, q: query })}" class="flex items-center gap-2 rounded-md px-3 py-2 ${isSelected ? 'bg-action text-[var(--surface)]' : 'text-ink hover:bg-page'}" ${isSelected ? html`aria-current="page"` : ''}>
                     <span class="min-w-0 flex-1">
                       <span class="block font-semibold">${p.name}</span>
                       ${[p.mobile, p.email].filter((d): d is string => Boolean(d)).map((detail) => html`<span class="block truncate text-sm ${isSelected ? '' : 'text-muted'}">${detail}</span>`)}
                     </span>
-                    ${count ? html`<span class="count-chip shrink-0" title="Messages from myEST8"><span class="sr-only">Messages from myEST8: </span>${count}</span>` : ''}
+                    ${count ? html`<span class="shrink-0 text-sm ${isSelected ? '' : 'text-muted'}">${count} sent</span>` : ''}
                   </a>
                 </li>`;
               })}

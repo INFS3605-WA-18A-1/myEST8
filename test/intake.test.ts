@@ -75,7 +75,7 @@ describe('a Routine issue', () => {
     expect(dashboard.tickets).toMatchObject([
       { ticketId, propertyAddress: KING_ST, urgency: 'routine', jobs: [{ trade: 'plumbing', status: 'quoting' }] },
     ]);
-    expect(h.tracker(confirmed.data.trackerLink as string).stages.map((s) => [s.stage, s.reached])).toEqual([
+    expect((await h.tracker(confirmed.data.trackerLink as string)).stages.map((s) => [s.stage, s.reached])).toEqual([
       ['reported', true],
       ['confirmed', true],
       ['getting_quotes', false],

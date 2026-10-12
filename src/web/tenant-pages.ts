@@ -10,12 +10,14 @@ import { html } from 'hono/html';
 import type { App, Upload } from '../app.ts';
 import { ActionError } from '../shared.ts';
 import { files, type FormValues } from './forms.ts';
+import { shareButton, shareUrl } from './share.ts';
+import { icon } from './icons.ts';
 import { alert, button, card, formatWhen, publicPage, type Html } from './ui.ts';
 
 const MB = 1024 * 1024;
 const MAX_FILES = 10;
 const STATUS = { not_found: 404, invalid: 400, conflict: 409 } as const;
-const TRACKER_FOOTER = 'Times are Sydney time. Questions? Reply to any of our messages.';
+const TRACKER_FOOTER = 'Questions? Reply to any of our messages.';
 
 /** Tracker stages in the words a Tenant sees. */
 const STAGE_LABEL: Record<string, string> = {
@@ -70,10 +72,10 @@ export function tenantPages(app: App) {
     },
   );
 
-  pages.get('/t/:token', (c) => {
-    let progress: ReturnType<App['tracker']>;
+  pages.get('/t/:token', async (c) => {
+    let progress: Awaited<ReturnType<App['tracker']>>;
     try {
-      progress = app.tracker(c.req.param('token'));
+      progress = await app.tracker(c.req.param('token'));
     } catch (error) {
       if (!(error instanceof ActionError) || error.code !== 'not_found') throw error;
       return c.html(
@@ -84,7 +86,7 @@ export function tenantPages(app: App) {
         404,
       );
     }
-    return c.html(trackerPage(progress));
+    return c.html(trackerPage(progress, shareUrl(c)));
   });
 
   return pages;
@@ -133,9 +135,10 @@ function uploadPage(token: string, o: { error?: string; thanks?: string } = {}):
  * focus ring when the input has focus.
  */
 function dropZone(): Html {
-  return html`<label for="field-files" class="block cursor-pointer rounded-lg border-2 border-dashed border-control bg-page p-4 text-center has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-action">
+  // A secondary control, so the page's one primary button is Upload.
+  return html`<label for="field-files" class="block cursor-pointer rounded-lg border border-control bg-page p-4 text-center has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-action">
     <span class="block text-base font-semibold text-ink">Photos or receipt</span>
-    <span class="mt-3 flex min-h-14 items-center justify-center rounded-md bg-action px-4 text-base font-semibold text-white">Choose photos or a PDF</span>
+    <span class="mt-3 flex min-h-14 items-center justify-center rounded-md border border-control bg-surface px-4 text-base font-semibold text-ink">Choose photos or a PDF</span>
     <span id="field-files-hint" class="field-hint mt-3 block">Up to 10 files at a time, each under 10 MB.</span>
     <input id="field-files" name="files" type="file" multiple required accept="image/*,application/pdf" aria-describedby="field-files-hint" class="sr-only" />
   </label>`;
@@ -146,42 +149,55 @@ function doneBox(message: string): Html {
   return html`<div role="status" class="rounded-lg border border-done bg-done-bg p-4 text-base font-semibold text-done">${message}</div>`;
 }
 
-function trackerPage(progress: ReturnType<App['tracker']>): Html {
+function trackerPage(progress: Awaited<ReturnType<App['tracker']>>, link: string): Html {
   const last = progress.stages.findLastIndex((s) => s.reached);
   const current = progress.stages[last];
   return publicPage({
     title: progress.description,
     footer: TRACKER_FOOTER,
     body: html`
-      ${current ? html`<p class="text-2xl leading-snug font-semibold">Now: <strong>${STAGE_LABEL[current.stage] ?? current.stage}</strong></p>` : ''}
-      ${card({ title: 'Progress', body: progressList(progress.stages, last) })}
+      ${current ? html`<p class="text-2xl leading-snug font-semibold">Now: ${STAGE_LABEL[current.stage] ?? current.stage}</p>` : ''}
+      ${card({ title: 'Progress', body: progressList(progress.stages, last, progress.timeZone) })}
+      <aside class="tracker-share" aria-label="Share this page">
+        <p>Live with someone? Send them this page so they can follow the repair too.</p>
+        ${shareButton({
+          title: 'Follow our repair',
+          text: `Here’s where our repair is up to: ${progress.description}`,
+          url: link,
+          label: 'Share this page',
+          note: 'Anyone with this link can see this page, so only send it to people you live with.',
+          align: 'start',
+        })}
+      </aside>
     `,
   });
 }
 
 /**
- * The stages as a vertical list: a circle per stage (ticked when reached, the
- * current one filled in the action colour, the rest numbered), joined by a line
- * that is coloured up to the last reached stage. Written here rather than with
- * ui.ts `steps`, whose fixed row heights clip stages that have a detail line.
+ * The stages as a vertical list. Done stages are a --done circle with a tick, the
+ * current stage is an --action ring with its number, and stages still to come are
+ * muted numbers. A line is coloured up to the current stage. Times are in the
+ * Agency's zone. Written here rather than with ui.ts `steps`, whose fixed row
+ * heights clip stages that have a detail line.
  */
-function progressList(stages: ReturnType<App['tracker']>['stages'], current: number): Html {
+function progressList(stages: Awaited<ReturnType<App['tracker']>>['stages'], current: number, timeZone: string): Html {
   return html`<ol class="m-0 list-none p-0">
     ${stages.map((s, i) => {
       const label = STAGE_LABEL[s.stage] ?? s.stage;
-      const detail = s.visitStart ? `Visit ${formatWhen(s.visitStart)}` : s.at ? formatWhen(s.at) : '';
+      const detail = s.visitStart ? `Visit ${formatWhen(s.visitStart, timeZone)}` : s.at ? formatWhen(s.at, timeZone) : '';
       const reached = s.reached;
       const isCurrent = i === current;
       const lineDone = i < current;
       const circle = isCurrent
-        ? 'border-action bg-action text-white'
+        ? 'border-action bg-surface text-action'
         : reached
-          ? 'border-done bg-done text-white'
+          ? 'border-done bg-done text-[var(--surface)]'
           : 'border-control bg-surface text-muted';
       const status = isCurrent ? 'Now' : reached ? 'Done' : 'To come';
+      const mark = reached && !isCurrent ? CHECK : i + 1;
       return html`<li class="relative flex gap-3 pb-6 last:pb-0" ${isCurrent ? html`aria-current="step"` : ''}>
         ${i < stages.length - 1 ? html`<span aria-hidden="true" class="absolute top-6 bottom-0 left-[11px] w-0.5 ${lineDone ? 'bg-done' : 'bg-line'}"></span>` : ''}
-        <span aria-hidden="true" class="relative z-10 flex size-6 shrink-0 items-center justify-center rounded-full border-2 text-xs font-semibold ${circle}">${reached ? CHECK : i + 1}</span>
+        <span aria-hidden="true" class="relative z-10 flex size-6 shrink-0 items-center justify-center rounded-full border-2 text-xs font-semibold ${circle}">${mark}</span>
         <div class="min-w-0 pt-0.5">
           <p class="${reached ? 'font-semibold text-ink' : 'text-muted'}">${label}<span class="sr-only"> (${status})</span></p>
           ${detail ? html`<p class="text-sm text-muted">${detail}</p>` : ''}
@@ -191,4 +207,4 @@ function progressList(stages: ReturnType<App['tracker']>['stages'], current: num
   </ol>`;
 }
 
-const CHECK = html`<svg viewBox="0 0 16 16" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-6.5" /></svg>`;
+const CHECK = icon('check', { weight: 'bold', size: 'size-3.5' });

@@ -11,6 +11,7 @@ Review the two no-login pages and the data they collect. The user deferred this 
 - Upload and tracker links carry a 24-byte random token (`newToken` in `src/shared.ts`); there is no expiry beyond the issue's status, and no rate limit.
 - Uploads are validated for count (10), size (10 MB each) and type in `src/intake.ts`.
 - Photos, receipts and PDFs are stored as blobs in SQLite (`src/files.ts`); photo GPS metadata stays in the stored file.
+- Attachments sent by SMS or WhatsApp go to Twilio as `GET /media/:id?expires=&signature=` links (`src/file-links.ts`): HMAC-SHA256 with `FILE_LINK_SECRET` over the file id and expiry, valid for one hour, served with `no-store`, `nosniff` and a sandboxing CSP. Anyone holding a live link can fetch the file, GPS metadata included.
 
 ## To review
 

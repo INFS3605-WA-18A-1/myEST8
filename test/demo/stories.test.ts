@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, test } from 'vitest';
 import { createDemo, type Demo } from '../../src/demo/runtime.ts';
+import { closeAfter, demoEnv } from '../support/db.ts';
 import { DEMO_TIME_ZONE } from '../../src/demo/seed.ts';
 import { wallClock } from '../../src/zoned-time.ts';
 
@@ -14,11 +15,12 @@ describe('the demo stories', () => {
   const errors: Error[] = [];
 
   beforeAll(async () => {
-    d = await createDemo({ stories: true, env: {}, logError: (e) => errors.push(e) });
-  }, 60_000);
+    d = await createDemo({ stories: true, env: demoEnv(), logError: (e) => errors.push(e) });
+    closeAfter(d);
+  }, 180_000);
 
   const alice = () => d.app.asPropertyManager(d.seed.ids.aliceId);
-  const dashboard = () => alice().dashboard({ filter: 'all' });
+  const dashboard = async () => (await alice()).dashboard({ filter: 'all' });
 
   test('play without a task error and leave the clock at the real time', () => {
     expect(errors).toEqual([]);
@@ -26,8 +28,8 @@ describe('the demo stories', () => {
     expect(d.stories).toMatchObject({ maintenanceRequests: 4, openTickets: 9, closedTickets: 5, urgentRepairs: 2, inbox: 4, alerts: 3 });
   });
 
-  test('leave Maintenance Requests with clean photos, flagged photos, no photos, and an Urgency to check', () => {
-    const requests = dashboard().maintenanceRequests;
+  test('leave Maintenance Requests with clean photos, flagged photos, no photos, and an Urgency to check', async () => {
+    const requests = (await dashboard()).maintenanceRequests;
     expect(requests.length).toBeGreaterThanOrEqual(3);
     expect(requests.some((r) => r.photos.length > 0 && r.photos.every((p) => p.metadata === 'ok'))).toBe(true);
     expect(requests.some((r) => r.photos.some((p) => p.metadata === 'flagged'))).toBe(true);
@@ -35,16 +37,16 @@ describe('the demo stories', () => {
     expect(requests.some((r) => r.checkUrgency && r.urgency === 'high')).toBe(true);
   });
 
-  test('give each Property Manager their own work', () => {
+  test('give each Property Manager their own work', async () => {
     for (const pm of [d.seed.ids.aliceId, d.seed.ids.bobId]) {
-      const mine = d.app.asPropertyManager(pm).dashboard({ filter: 'mine' });
+      const mine = await (await d.app.asPropertyManager(pm)).dashboard({ filter: 'mine' });
       expect(mine.maintenanceRequests.length).toBeGreaterThanOrEqual(2);
       expect(mine.tickets.length).toBeGreaterThanOrEqual(3);
     }
   });
 
-  test('leave open Tickets at every stage of their Jobs', () => {
-    const tickets = dashboard().tickets.map((t) => alice().ticket(t.ticketId));
+  test('leave open Tickets at every stage of their Jobs', async () => {
+    const tickets = await Promise.all((await dashboard()).tickets.map(async (t) => (await alice()).ticket(t.ticketId)));
     const jobs = tickets.flatMap((t) => t.jobs);
     const statuses = new Set(jobs.map((j) => j.status));
     for (const status of ['quoting', 'awaiting_owner', 'approved', 'scheduled', 'done']) expect(statuses).toContain(status);
@@ -58,16 +60,16 @@ describe('the demo stories', () => {
     expect(new Set(tickets.map((t) => t.urgency))).toEqual(new Set(['high', 'routine']));
   });
 
-  test('raise every kind of alert, Urgent Repairs in both states, and every kind of inbox message', () => {
-    const { alerts, urgentRepairs, inbox } = dashboard();
+  test('raise every kind of alert, Urgent Repairs in both states, and every kind of inbox message', async () => {
+    const { alerts, urgentRepairs, inbox } = await dashboard();
     expect(new Set(alerts.map((a) => a.kind))).toEqual(new Set(['invite_more_tradies', 'owner_no_reply', 'rating_due']));
     expect(new Set(urgentRepairs.map((u) => u.status))).toEqual(new Set(['reminder_sent', 'receipt_forwarded']));
     expect(new Set(inbox.map((i) => i.reason))).toEqual(new Set(['unknown_sender', 'other', 'low_confidence', 'common_area_no_building_manager']));
     expect(inbox.find((i) => i.reason === 'low_confidence')?.bestGuess).toBeTruthy();
   });
 
-  test('book visits on several days for both Property Managers', () => {
-    const upcoming = dashboard().calendar.filter((b) => b.status === 'active');
+  test('book visits on several days for both Property Managers', async () => {
+    const upcoming = (await dashboard()).calendar.filter((b) => b.status === 'active');
     const day = (iso: string) => {
       const w = wallClock(new Date(iso), DEMO_TIME_ZONE);
       return `${w.year}-${w.month}-${w.day}`;
@@ -76,29 +78,29 @@ describe('the demo stories', () => {
     expect(new Set(upcoming.map((b) => b.propertyManager))).toEqual(new Set(['Alice Archer', 'Bob Baker']));
   });
 
-  test('close older Tickets with both ratings, so Tradies and Properties have a history', () => {
-    const pete = alice().tradie(d.seed.ids.pete);
+  test('close older Tickets with both ratings, so Tradies and Properties have a history', async () => {
+    const pete = await (await alice()).tradie(d.seed.ids.pete);
     expect(new Set(pete.ratings.map((r) => r.source))).toEqual(new Set(['tenant', 'property_manager']));
     expect(pete.previousQuotes.length).toBeGreaterThanOrEqual(2);
-    const glebe = dashboard().tickets.find((t) => t.propertyAddress.startsWith('21 Glebe Point Rd'))!;
-    expect(alice().ticket(glebe.ticketId).frequentIssues).toContainEqual({ trade: 'plumbing', tickets: 2 });
+    const glebe = (await dashboard()).tickets.find((t) => t.propertyAddress.startsWith('21 Glebe Point Rd'))!;
+    expect((await (await alice()).ticket(glebe.ticketId)).frequentIssues).toContainEqual({ trade: 'plumbing', tickets: 2 });
   });
 
-  test('upload real images, so photos and receipts show', () => {
-    const photo = dashboard().maintenanceRequests.flatMap((r) => r.photos)[0]!;
-    const file = alice().file(photo.fileId)!;
+  test('upload real images, so photos and receipts show', async () => {
+    const photo = (await dashboard()).maintenanceRequests.flatMap((r) => r.photos)[0]!;
+    const file = (await (await alice()).file(photo.fileId))!;
     expect(file.contentType).toBe('image/jpeg');
     expect(file.content.byteLength).toBeGreaterThan(2_000);
   });
 
   test('leave Tom Tran free for the walkthrough, which still starts as docs/demo.md says', async () => {
-    const { maintenanceRequests, tickets, urgentRepairs, inbox } = dashboard();
+    const { maintenanceRequests, tickets, urgentRepairs, inbox } = await dashboard();
     expect([...maintenanceRequests, ...tickets, ...urgentRepairs].filter((item) => item.tenantName === 'Tom Tran')).toEqual([]);
     expect(inbox.filter((i) => i.personName === 'Tom Tran')).toEqual([]);
-    expect(d.demo.outbox(d.seed.ids.aliceId).filter((m) => m.to === TOM)).toEqual([]);
+    expect((await d.demo.outbox(d.seed.ids.aliceId)).filter((m) => m.to === TOM)).toEqual([]);
 
     await d.demo.sendAs(d.seed.ids.aliceId, TOM, 'sms', 'The kitchen tap is dripping');
-    const toTom = d.demo.outbox(d.seed.ids.aliceId).filter((m) => m.to === TOM);
+    const toTom = (await d.demo.outbox(d.seed.ids.aliceId)).filter((m) => m.to === TOM);
     expect(toTom.map((m) => m.template)).toEqual(['tenant.acknowledgement', 'tenant.guided_question']);
     expect(errors).toEqual([]);
   });

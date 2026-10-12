@@ -11,6 +11,7 @@ import { AVAILABILITY_LABELS, templates, type TemplateName } from '../../templat
 import type { WebEnv } from '../env.ts';
 import { PHOTO_FLAG } from './dashboard.ts';
 import { cents, formAction, int, isoToLocal, list, localToIso, text, type FormValues } from '../forms.ts';
+import { COLLEAGUES_ONLY, shareButton, shareUrl } from '../share.ts';
 import { shellInfo } from '../shell.ts';
 import {
   alert,
@@ -38,7 +39,7 @@ import {
   type Html,
 } from '../ui.ts';
 
-type TicketView = ReturnType<PropertyManagerActions['ticket']>;
+type TicketView = Awaited<ReturnType<PropertyManagerActions['ticket']>>;
 type JobView = TicketView['jobs'][number];
 type QuoteView = JobView['quotes'][number];
 type WorkOrderView = NonNullable<JobView['workOrder']>;
@@ -71,10 +72,10 @@ const nothing = html``;
 export function ticketPages() {
   const pages = new Hono<WebEnv>();
 
-  pages.get('/:id', (c) => {
+  pages.get('/:id', async (c) => {
     const { actions, pm } = c.var;
     const flash = flashFrom(c.req.url);
-    const ticket = findTicket(actions, c.req.param('id'));
+    const ticket = await findTicket(actions, c.req.param('id'));
     if (!ticket) {
       const body = emptyState('There is no such Ticket in your Agency.', linkButton('Back to the dashboard', '/'));
       return c.html(page({ title: 'Ticket not found', pm, active: 'dashboard', flash, body, shell: shellInfo(c) }), 404);
@@ -82,14 +83,19 @@ export function ticketPages() {
     const { timeZone } = actions.agency();
     const extras: Extras = {
       timeZone,
-      suggest: suggestionsFor(actions, ticket, c.req.query('suggest')),
-      freeSlots: freeSlotsFor(actions, ticket),
+      suggest: await suggestionsFor(actions, ticket, c.req.query('suggest')),
+      freeSlots: await freeSlotsFor(actions, ticket),
       now: actions.now(),
     };
     return c.html(
       page({
         title: `Ticket ${ticket.ticketId}`,
-        actions: closeControl(ticket),
+        actions: html`${shareButton({
+          title: `Ticket ${ticket.ticketId}: ${ticket.description}`,
+          text: `Ticket ${ticket.ticketId} at ${ticket.propertyAddress}: ${ticket.description}`,
+          url: shareUrl(c, `/tickets/${ticket.ticketId}`),
+          note: COLLEAGUES_ONLY,
+        })}${closeControl(ticket)}`,
         shell: shellInfo(c),
         pm,
         active: 'dashboard',
@@ -110,21 +116,21 @@ export function ticketPages() {
     return 'Ticket closed. The Tenant and Property Owner have been told.';
   });
 
-  onPost(pages, '/:id/read', ({ actions, ticket }) => {
-    actions.markTicketRead(ticket.ticketId);
+  onPost(pages, '/:id/read', async ({ actions, ticket }) => {
+    await actions.markTicketRead(ticket.ticketId);
     return 'Messages marked read';
   });
 
-  onPost(pages, '/:id/jobs', ({ actions, ticket, form }) => {
+  onPost(pages, '/:id/jobs', async ({ actions, ticket, form }) => {
     const trade = tradeFrom(form);
-    actions.addJob(ticket.ticketId, trade);
+    await actions.addJob(ticket.ticketId, trade);
     return `${humanise(trade)} Job added`;
   });
 
-  onPost(pages, '/:id/jobs/:jobId/trade', ({ actions, ticket, form, params }) => {
+  onPost(pages, '/:id/jobs/:jobId/trade', async ({ actions, ticket, form, params }) => {
     const job = jobIn(ticket, params.jobId);
     const trade = tradeFrom(form);
-    actions.setJobTrade(job.jobId, trade);
+    await actions.setJobTrade(job.jobId, trade);
     return `Trade changed to ${humanise(trade)}`;
   });
 
@@ -142,21 +148,21 @@ export function ticketPages() {
     return `Quote ${plural(n, 'Request')} sent to ${n} ${plural(n, 'Tradie')}`;
   });
 
-  onPost(pages, '/:id/quotes/:quoteId/confirm', ({ actions, ticket, form, params, timeZone }) => {
+  onPost(pages, '/:id/quotes/:quoteId/confirm', async ({ actions, ticket, form, params, timeZone }) => {
     const { quote } = quoteIn(ticket, params.quoteId);
     const time = text(form, 'proposedTime');
-    actions.confirmQuote(quote.quoteId, {
+    await actions.confirmQuote(quote.quoteId, {
       ...(text(form, 'price') ? { priceCents: cents(form, 'price', 'the price') } : {}),
       proposedTime: time ? localToIso(time, timeZone) : null,
     });
-    const confirmed = quoteIn(actions.ticket(ticket.ticketId), params.quoteId).quote;
+    const confirmed = quoteIn(await actions.ticket(ticket.ticketId), params.quoteId).quote;
     return `Quote from ${confirmed.businessName} confirmed at ${formatMoney(confirmed.priceCents)}`;
   });
 
   onPost(pages, '/:id/quotes/:quoteId/choose', async ({ actions, ticket, form, params }) => {
     const { quote } = quoteIn(ticket, params.quoteId);
     await actions.chooseQuote(quote.quoteId, text(form, 'reason') || undefined);
-    const chosen = quoteIn(actions.ticket(ticket.ticketId), params.quoteId).quote;
+    const chosen = quoteIn(await actions.ticket(ticket.ticketId), params.quoteId).quote;
     return chosen.status === 'awaiting_owner'
       ? `Quote from ${chosen.businessName} chosen. It takes the Repair Cost over the Max Repair Cost, so the Property Owner has been asked to approve it.`
       : `Quote from ${chosen.businessName} chosen and approved`;
@@ -169,7 +175,7 @@ export function ticketPages() {
       ...(start ? { start: localToIso(start, timeZone) } : {}),
       durationMinutes: visitMinutes(form),
     });
-    const booked = jobIn(actions.ticket(ticket.ticketId), params.jobId).workOrder!;
+    const booked = jobIn(await actions.ticket(ticket.ticketId), params.jobId).workOrder!;
     return `Work Order sent to ${booked.businessName} for ${formatWhen(booked.start, timeZone)}`;
   });
 
@@ -188,10 +194,10 @@ export function ticketPages() {
     (params) => `?suggest=${encodeURIComponent(params.workOrderId ?? '')}`,
   );
 
-  onPost(pages, '/:id/jobs/:jobId/rate', ({ actions, ticket, form, params }) => {
+  onPost(pages, '/:id/jobs/:jobId/rate', async ({ actions, ticket, form, params }) => {
     const job = jobIn(ticket, params.jobId);
     const score = int(form, 'score', 'the rating');
-    actions.rateTradie(job.jobId, score);
+    await actions.rateTradie(job.jobId, score);
     return `${job.workOrder?.businessName ?? 'The Tradie'} rated ${score} out of 5`;
   });
 
@@ -223,22 +229,22 @@ function onPost(
     const ticketPath = `/tickets/${encodeURIComponent(params.id ?? '')}`;
     return formAction(c, `${ticketPath}${backQuery?.(params) ?? ''}`, async (form) => {
       const actions = c.var.actions;
-      const ticket = loadTicket(actions, params.id);
+      const ticket = await loadTicket(actions, params.id);
       const ok = await run({ actions, ticket, timeZone: actions.agency().timeZone, form, params });
       return { ok, redirect: ticketPath };
     });
   });
 }
 
-function loadTicket(actions: PropertyManagerActions, raw: string | undefined): TicketView {
+async function loadTicket(actions: PropertyManagerActions, raw: string | undefined): Promise<TicketView> {
   const ticketId = Number(raw);
   if (!Number.isInteger(ticketId)) notFound('Ticket');
   return actions.ticket(ticketId);
 }
 
-function findTicket(actions: PropertyManagerActions, raw: string | undefined): TicketView | null {
+async function findTicket(actions: PropertyManagerActions, raw: string | undefined): Promise<TicketView | null> {
   try {
-    return loadTicket(actions, raw);
+    return await loadTicket(actions, raw);
   } catch (error) {
     if (error instanceof ActionError && error.code === 'not_found') return null;
     throw error;
@@ -280,24 +286,24 @@ function visitMinutes(form: FormValues): number {
   return Math.round(hours * 60);
 }
 
-function suggestionsFor(actions: PropertyManagerActions, ticket: TicketView, raw: string | undefined): Extras['suggest'] {
+async function suggestionsFor(actions: PropertyManagerActions, ticket: TicketView, raw: string | undefined): Promise<Extras['suggest']> {
   const workOrderId = Number(raw);
   const active = ticket.jobs.some((j) => j.workOrder?.workOrderId === workOrderId && j.workOrder.status === 'active');
   if (!raw || !active) return null;
   try {
-    return { workOrderId, slots: actions.suggestTimes(workOrderId), error: null };
+    return { workOrderId, slots: await actions.suggestTimes(workOrderId), error: null };
   } catch (error) {
     if (error instanceof ActionError) return { workOrderId, slots: [], error: error.message };
     throw error;
   }
 }
 
-function freeSlotsFor(actions: PropertyManagerActions, ticket: TicketView): Map<number, Slot[]> {
+async function freeSlotsFor(actions: PropertyManagerActions, ticket: TicketView): Promise<Map<number, Slot[]>> {
   const slots = new Map<number, Slot[]>();
   for (const job of ticket.jobs) {
     if (job.status !== 'approved' || job.workOrder) continue;
     const approved = job.quotes.find((q) => q.status === 'approved');
-    if (approved) slots.set(job.jobId, actions.freeSlots(approved.tradieId).slice(0, FREE_SLOTS_SHOWN));
+    if (approved) slots.set(job.jobId, (await actions.freeSlots(approved.tradieId)).slice(0, FREE_SLOTS_SHOWN));
   }
   return slots;
 }

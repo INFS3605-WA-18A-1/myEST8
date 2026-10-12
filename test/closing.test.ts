@@ -30,7 +30,7 @@ describe('closing a Ticket', () => {
     expect(h.messenger.last(TOM)).toMatchObject({ template: 'tenant.ticket_closed' });
     expect(h.messenger.last(OLIVIA)).toMatchObject({ template: 'owner.ticket_closed', data: { description: 'The kitchen tap is dripping' } });
     expect((await alice.dashboard()).tickets).toEqual([]);
-    const tracker = h.tracker(h.messenger.to(TOM).find((m) => m.template === 'tenant.confirmed')!.data.trackerLink as string);
+    const tracker = await h.tracker(h.messenger.to(TOM).find((m) => m.template === 'tenant.confirmed')!.data.trackerLink as string);
     expect(tracker.stages.map((s) => [s.stage, s.reached])).toEqual([
       ['reported', true],
       ['confirmed', true],

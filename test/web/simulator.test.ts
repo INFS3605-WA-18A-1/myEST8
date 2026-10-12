@@ -74,15 +74,15 @@ function fakeDemo(o: { noWhatsApp?: boolean; extra?: number } = {}) {
     { at: '2026-10-07T22:00:01.000Z', from: TOM, to: AGENCY_NUMBER, channel: 'sms', text: 'The kitchen tap is dripping', attachments: [] },
   ];
   const demo: DemoControls = {
-    contacts: (id) =>
+    contacts: async (id) =>
       ours(id, [
         { personId: TOM_ID, name: 'Tom Tran', role: 'tenant', mobile: TOM, email: null },
         { personId: PETE_ID, name: 'Pete Park', role: 'tradie', mobile: PETE, email: null },
         { personId: OLIVIA_ID, name: 'Olivia Owens', role: 'owner', mobile: OLIVIA, email: OLIVIA_EMAIL },
         { personId: BARRY_ID, name: 'Barry Strata', role: 'building_manager', mobile: null, email: BARRY },
       ]),
-    outbox: (id) => ours(id, outbox),
-    inbound: (id) => ours(id, inbound),
+    outbox: async (id) => ours(id, outbox),
+    inbound: async (id) => ours(id, inbound),
     async sendAs(id, from, channel, text, attachments) {
       if (o.noWhatsApp && channel === 'whatsapp') throw new ActionError('invalid', 'Connect WhatsApp in Setup first');
       sent.push({ as: id, from, channel, text, attachments });

@@ -11,10 +11,13 @@
 import { Hono, type Context } from 'hono';
 import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
+import type { ImportKind } from '../../imports.ts';
 import { ActionError } from '../../shared.ts';
 import type { WebEnv } from '../env.ts';
 import { cents, formAction, list, text } from '../forms.ts';
+import { icon } from '../icons.ts';
 import { shellInfo } from '../shell.ts';
+import { importPages } from './import.ts';
 import { alert, button, emptyState, field, flashFrom, formatMoney, humanise, linkButton, page, section, table, type Flash, type Html } from '../ui.ts';
 import {
   addTradieFrom,
@@ -29,16 +32,17 @@ import {
   contactFrom,
   fieldGrid,
   googleSearchForm,
+  importPanel,
   searchListings,
   tradieFields,
   tradiesTable,
 } from './onboarding-forms.ts';
 
-type Person = ReturnType<PropertyManagerActions['people']>[number];
-type Property = ReturnType<PropertyManagerActions['properties']>[number];
-type PropertyManager = ReturnType<PropertyManagerActions['propertyManagers']>[number];
-type AgencyChannel = ReturnType<PropertyManagerActions['channels']>[number];
-type FormKey = 'channels' | 'owner' | 'building-manager' | 'tradie' | 'property' | 'tenant';
+type Person = Awaited<ReturnType<PropertyManagerActions['people']>>[number];
+type Property = Awaited<ReturnType<PropertyManagerActions['properties']>>[number];
+type PropertyManager = Awaited<ReturnType<PropertyManagerActions['propertyManagers']>>[number];
+type AgencyChannel = Awaited<ReturnType<PropertyManagerActions['channels']>>[number];
+type FormKey = 'channels' | 'owner' | 'building-manager' | 'tradie' | 'property' | 'tenant' | `import-${ImportKind}`;
 
 /** Everything the guide lists, read once per page. */
 type Agency = {
@@ -65,6 +69,7 @@ const AREAS = [
 /** Onboarding under /setup: channels and test messages, Properties, people and Tradies. */
 export function setupPages() {
   const pages = new Hono<WebEnv>();
+  pages.route('/', importPages());
 
   pages.get('/', async (c) => {
     const { actions, pm } = c.var;
@@ -73,22 +78,22 @@ export function setupPages() {
     const shownFor = (key: FormKey): Shown => ({ error: refusedForm === key && flash ? formError(flash) : html``, open: refusedForm === key });
     const googleQuery = c.req.query('google')?.trim() ?? '';
     const agency: Agency = {
-      owners: actions.people('owner'),
-      buildingManagers: actions.people('building_manager'),
-      tenants: actions.people('tenant'),
-      tradies: actions.people('tradie'),
-      properties: actions.properties(),
-      propertyManagers: actions.propertyManagers(),
+      owners: await actions.people('owner'),
+      buildingManagers: await actions.people('building_manager'),
+      tenants: await actions.people('tenant'),
+      tradies: await actions.people('tradie'),
+      properties: await actions.properties(),
+      propertyManagers: await actions.propertyManagers(),
     };
     const origin = new URL(c.req.url).origin;
     const { timeZone } = actions.agency();
-    const channels = actions.channels();
+    const channels = await actions.channels();
 
     return c.html(
       page({
         title: 'Set up myEST8',
         pm,
-        active: 'setup',
+        active: 'settings',
         flash,
         shell: shellInfo(c),
         subtitle: 'Work through these areas once. Come back any time to add more.',
@@ -99,20 +104,20 @@ export function setupPages() {
           </nav>
           ${section({ id: 'channels', title: 'Channels', body: channelsArea(origin, channels, timeZone, shownFor('channels')) })}
           ${section({ id: 'people', title: 'Property Owners and Building Managers', body: peopleArea(agency, shownFor) })}
-          ${section({ id: 'tradies', title: 'Tradies', body: await tradiesArea(c, agency, googleQuery, shownFor('tradie')) })}
-          ${section({ id: 'properties', title: 'Properties', body: propertiesArea(agency, pm.id, shownFor('property')) })}
-          ${section({ id: 'tenants', title: 'Tenants', body: tenantsArea(agency, shownFor('tenant')) })}
+          ${section({ id: 'tradies', title: 'Tradies', body: html`${await tradiesArea(c, agency, googleQuery, shownFor('tradie'))}${importForm('tradies', shownFor('import-tradies'))}` })}
+          ${section({ id: 'properties', title: 'Properties', body: html`${propertiesArea(agency, pm.id, shownFor('property'))}${importForm('properties', shownFor('import-properties'))}` })}
+          ${section({ id: 'tenants', title: 'Tenants', body: html`${tenantsArea(agency, shownFor('tenant'))}${importForm('tenants', shownFor('import-tenants'))}` })}
         `,
       }),
     );
   });
 
   pages.post('/channels', (c) =>
-    formAction(c, '/setup?form=channels', (form) => {
+    formAction(c, '/setup?form=channels', async (form) => {
       const channel = channelOf(form);
       const address = text(form, 'address');
       if (!address) throw new ActionError('invalid', `Enter the ${channel.addressLabel}`);
-      c.var.actions.connectChannel(channel.type, address);
+      await c.var.actions.connectChannel(channel.type, address);
       return { ok: `${channel.name} connected to ${address}. Now send a test message.` };
     }),
   );
@@ -134,17 +139,17 @@ export function setupPages() {
   );
 
   pages.post('/owners', (c) =>
-    formAction(c, '/setup?form=owner', (form) => {
+    formAction(c, '/setup?form=owner', async (form) => {
       const contact = contactFrom(form);
-      c.var.actions.addOwner(contact);
+      await c.var.actions.addOwner(contact);
       return { ok: `${contact.name} added as a Property Owner` };
     }),
   );
 
   pages.post('/building-managers', (c) =>
-    formAction(c, '/setup?form=building-manager', (form) => {
+    formAction(c, '/setup?form=building-manager', async (form) => {
       const contact = contactFrom(form);
-      c.var.actions.addBuildingManager(contact);
+      await c.var.actions.addBuildingManager(contact);
       return { ok: `${contact.name} added as a Building Manager` };
     }),
   );
@@ -177,9 +182,9 @@ export function setupPages() {
   );
 
   pages.post('/tenants', (c) =>
-    formAction(c, '/setup?form=tenant', (form) => {
+    formAction(c, '/setup?form=tenant', async (form) => {
       const contact = contactFrom(form);
-      c.var.actions.addTenant({
+      await c.var.actions.addTenant({
         ...contact,
         propertyId: chosenId(form, 'propertyId', 'the Property'),
         tenancyStart: text(form, 'tenancyStart'),
@@ -209,6 +214,14 @@ function addForm(title: string, open: boolean, body: Html): Html {
   return html`<details class="mt-4" ${open ? 'open' : ''}>
     <summary class="cursor-pointer font-semibold text-action">${title}</summary>
     <div class="mt-3">${body}</div>
+  </details>`;
+}
+
+/** "Add many from a spreadsheet", folded away unless its upload was refused. */
+function importForm(kind: ImportKind, shown: Shown): Html {
+  return html`<details class="import-details" id="import-${kind}" ${shown.open ? 'open' : ''}>
+    <summary class="cursor-pointer font-semibold text-action">${icon('file-xls', { size: 'size-4' })}<span>Add many from a spreadsheet</span></summary>
+    <div class="mt-3">${importPanel(kind, { error: shown.error })}</div>
   </details>`;
 }
 
@@ -276,7 +289,8 @@ function peopleArea(agency: Agency, shownFor: (key: FormKey) => Shown): Html {
               ${fieldGrid(contactFields('owner'))}
               <div class="mt-3">${button('Add Property Owner', { size: 'sm' })}</div>
             </form>`,
-        )}`,
+        )}
+        ${importForm('owners', shownFor('import-owners'))}`,
     })}
     ${subsection({
       title: 'Building Managers',
@@ -290,7 +304,8 @@ function peopleArea(agency: Agency, shownFor: (key: FormKey) => Shown): Html {
               ${fieldGrid(contactFields('building-manager'))}
               <div class="mt-3">${button('Add Building Manager', { size: 'sm' })}</div>
             </form>`,
-        )}`,
+        )}
+        ${importForm('building-managers', shownFor('import-building-managers'))}`,
     })}
   </div>`;
 }
@@ -302,7 +317,7 @@ async function tradiesArea(c: Context<WebEnv>, agency: Agency, googleQuery: stri
 
   return html`
     <p class="text-sm">Add the Tradies the Agency already uses. They're shared by every Property Manager.</p>
-    ${tradiesTable(actions, agency.tradies)}
+    ${(await tradiesTable(actions, agency.tradies))}
     ${addForm(
       'Add a Tradie',
       shown.open || googleQuery !== '',

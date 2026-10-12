@@ -14,10 +14,10 @@ A real `Messenger` (`src/ports.ts`) that sends SMS and WhatsApp through Twilio P
 
 ## Acceptance criteria
 
-- [ ] SMS and WhatsApp via the Twilio Messages API (`whatsapp:` prefix for WhatsApp). Attachments go as `MediaUrl`, which needs a signed, expiring no-login URL serving the stored file (`src/files.ts`).
-- [ ] Email via SendGrid with `reply-to` set to the Agency's Inbound Parse address, so replies come back in; `cc` and attachments supported.
-- [ ] Provider errors are thrown so the worker retries (`src/worker.ts`); a permanently invalid recipient is logged clearly.
-- [ ] Credentials come from configuration, never from code.
+- [x] SMS and WhatsApp via the Twilio Messages API (`whatsapp:` prefix for WhatsApp). Attachments go as `MediaUrl`, which needs a signed, expiring no-login URL serving the stored file (`src/files.ts`).
+- [x] Email via SendGrid with `reply-to` set to the Agency's Inbound Parse address, so replies come back in; `cc` and attachments supported.
+- [x] Provider errors are thrown so the worker retries (`src/worker.ts`); a permanently invalid recipient is logged clearly.
+- [x] Credentials come from configuration, never from code.
 
 ## Needs a human
 

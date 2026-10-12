@@ -9,6 +9,7 @@ import { MIN_PASSWORD_LENGTH } from '../../profiles.ts';
 import { ActionError } from '../../shared.ts';
 import { SIGNED_OUT_FOOTER, sameOrigin, signedInId, startSession, type Sessions } from '../auth.ts';
 import { text, type FormValues } from '../forms.ts';
+import { shareButton, shareUrl } from '../share.ts';
 import { button, field, publicPage, type Flash } from '../ui.ts';
 import { valueOf, valuesOf, type Errors, type Values } from './onboarding-forms.ts';
 
@@ -29,9 +30,9 @@ const DEFAULT_TIME_ZONE = 'Australia/Sydney';
 export function signupRoutes(app: App, sessions: Sessions) {
   const routes = new Hono();
 
-  routes.get('/signup', (c) => {
-    if (signedInId(app, sessions, c) !== null) return c.redirect('/', 303);
-    return c.html(signUpPage({}));
+  routes.get('/signup', async (c) => {
+    if ((await signedInId(app, sessions, c)) !== null) return c.redirect('/', 303);
+    return c.html(signUpPage({ shareLink: shareUrl(c, '/signup') }));
   });
 
   routes.post('/signup', async (c) => {
@@ -40,7 +41,10 @@ export function signupRoutes(app: App, sessions: Sessions) {
     const values = valuesOf(form);
     const password = rawText(form, 'password');
     const refused = (errors: Errors) =>
-      c.html(signUpPage({ values, errors, flash: { kind: 'error', message: 'Check the highlighted fields and try again.' } }), 400);
+      c.html(
+        signUpPage({ values, errors, flash: { kind: 'error', message: 'Check the highlighted fields and try again.' }, shareLink: shareUrl(c, '/signup') }),
+        400,
+      );
 
     const timeZone = text(form, 'timeZone');
     if (!TIME_ZONES.some((z) => z.value === timeZone)) return refused({ timeZone: 'Choose a time zone' });
@@ -50,7 +54,7 @@ export function signupRoutes(app: App, sessions: Sessions) {
 
     let propertyManagerId: number;
     try {
-      propertyManagerId = app.signUp({
+      propertyManagerId = await app.signUp({
         agencyName: text(form, 'agencyName'),
         timeZone,
         name: text(form, 'name'),
@@ -61,7 +65,7 @@ export function signupRoutes(app: App, sessions: Sessions) {
       if (error instanceof ActionError) return refused(Object.keys(error.fields).length ? { ...error.fields } : { email: error.message });
       throw error;
     }
-    startSession(c, sessions, propertyManagerId);
+    await startSession(c, sessions, propertyManagerId);
     return c.redirect('/welcome', 303);
   });
 
@@ -75,18 +79,18 @@ function rawText(form: FormValues, name: string) {
   return typeof first === 'string' ? first : '';
 }
 
-function signUpPage(o: { values?: Values; errors?: Errors; flash?: Flash }) {
+function signUpPage(o: { values?: Values; errors?: Errors; flash?: Flash; shareLink: string }) {
   const { values, errors = {} } = o;
   return publicPage({
-    title: "Create your Agency's account",
+    title: 'Create your Agency’s account',
     subtitle: 'You become its first Property Manager. A short guide then helps you set up the rest.',
     flash: o.flash ?? null,
     headerActions: html`<a class="link text-sm" href="/">Home</a>`,
     footer: SIGNED_OUT_FOOTER,
-    body: html`<form method="post" action="/signup" class="space-y-6">
-        <fieldset class="space-y-4">
+    body: html`<form method="post" action="/signup" class="space-y-4">
+        <fieldset class="space-y-3 md:space-y-4">
           <legend class="text-base font-semibold">About you</legend>
-          <div class="grid items-start gap-x-4 gap-y-4 md:grid-cols-2">
+          <div class="grid items-start gap-x-4 gap-y-3 md:gap-y-4 md:grid-cols-2">
             ${field({ label: 'Your name', name: 'name', required: true, autocomplete: 'name', value: valueOf(values, 'name'), error: errors.name })}
             ${field({
               label: 'Work email',
@@ -99,7 +103,7 @@ function signUpPage(o: { values?: Values; errors?: Errors; flash?: Flash }) {
               error: errors.email,
             })}
           </div>
-          <div class="grid items-start gap-x-4 gap-y-4 md:grid-cols-2">
+          <div class="grid items-start gap-x-4 gap-y-3 md:gap-y-4 md:grid-cols-2">
             ${field({
               label: 'Password',
               name: 'password',
@@ -112,9 +116,9 @@ function signUpPage(o: { values?: Values; errors?: Errors; flash?: Flash }) {
             ${field({ label: 'Confirm password', name: 'confirmPassword', type: 'password', required: true, autocomplete: 'new-password', error: errors.confirmPassword })}
           </div>
         </fieldset>
-        <fieldset class="space-y-4">
+        <fieldset class="space-y-3 md:space-y-4">
           <legend class="text-base font-semibold">Your Agency</legend>
-          <div class="grid items-start gap-x-4 gap-y-4 md:grid-cols-2">
+          <div class="grid items-start gap-x-4 gap-y-3 md:gap-y-4 md:grid-cols-2">
             ${field({
               label: 'Agency name',
               name: 'agencyName',
@@ -139,6 +143,16 @@ function signUpPage(o: { values?: Values; errors?: Errors; flash?: Flash }) {
           ${button('Create account', { block: true })}
           <p class="text-center text-sm">Already have an account? <a class="link" href="/login">Sign in</a></p>
         </div>
-      </form>`,
+      </form>
+      <aside class="signup-share" aria-label="Someone else setting up the Agency">
+        <p class="text-sm text-muted">One Property Manager creates the account, then adds the rest of the Agency from the setup guide. Is someone else doing that?</p>
+        ${shareButton({
+          title: 'Set up myEST8 for our Agency',
+          text: 'Here’s the sign-up page for myEST8. One of us creates the Agency’s account, then adds the rest of us as Property Managers.',
+          url: o.shareLink,
+          label: 'Send this page to them',
+          align: 'start',
+        })}
+      </aside>`,
   });
 }

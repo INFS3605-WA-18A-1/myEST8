@@ -4,6 +4,7 @@
 
 import type { ClassifierAnswer } from '../ports.ts';
 import { AVAILABILITY, type Availability } from '../shared.ts';
+import { mockImportAnswer } from './mock-import.ts';
 
 interface Item {
   ref: string;
@@ -311,7 +312,7 @@ export function mockClassify(body: unknown) {
   const answers = questions
     .filter((q): q is { id: string; options: string[] } => isObject(q) && typeof q.id === 'string' && Array.isArray(q.options) && q.options.length > 0)
     .map(({ id, options }) => {
-      const given = ruleFor(id)?.(r, options);
+      const given = mockImportAnswer(id, state, options) ?? ruleFor(id)?.(r, options);
       const { answer: value, confidence } = given && options.includes(given.answer) ? given : answer(options[0]!, UNSURE);
       return { questionId: id, answer: value, confidence };
     });

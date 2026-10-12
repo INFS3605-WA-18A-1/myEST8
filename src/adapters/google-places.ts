@@ -4,7 +4,8 @@
 // - Geocoding API: GET {geocodeBaseUrl}/maps/api/geocode/json?address=...&key=...
 // The Places API takes the key in X-Goog-Api-Key and requires an X-Goog-FieldMask
 // naming the fields to return (and to bill for). Geocoding takes the key as a query
-// parameter and reports failures in `status` with HTTP 200.
+// parameter and reports failures in `status` with HTTP 200. Geocoding is biased to
+// `region` (Australia by default), so "12 King St, Newtown" is the one in Sydney.
 
 import type { PlacesLookup } from '../ports.ts';
 import { callJson, isObject, malformed } from './json-api.ts';
@@ -18,11 +19,14 @@ export function createGooglePlaces({
   fetch: fetchImpl = fetch,
   placesBaseUrl = 'https://places.googleapis.com',
   geocodeBaseUrl = 'https://maps.googleapis.com',
+  region = 'au',
 }: {
   apiKey: string;
   fetch?: typeof fetch;
   placesBaseUrl?: string;
   geocodeBaseUrl?: string;
+  /** The ccTLD region code ambiguous addresses are resolved in. */
+  region?: string;
 }): PlacesLookup {
   const placesHeaders = (fieldMask: string) => ({ 'x-goog-api-key': apiKey, 'x-goog-fieldmask': fieldMask });
 
@@ -62,17 +66,21 @@ export function createGooglePlaces({
       // Google answers a blank address with INVALID_REQUEST; it has no location either way.
       if (!address.trim()) return null;
       const service = 'Google Geocoding';
-      const params = new URLSearchParams({ address, key: apiKey });
+      const params = new URLSearchParams({ address, region, key: apiKey });
       const body = await callJson(fetchImpl, service, `${geocodeBaseUrl}/maps/api/geocode/json?${params}`, { headers: {} });
       if (!isObject(body) || typeof body.status !== 'string') malformed(service, 'no status', body);
       if (body.status === 'ZERO_RESULTS') return null;
       if (body.status !== 'OK') {
         throw new Error(`${service} returned ${body.status}${typeof body.error_message === 'string' ? `: ${body.error_message}` : ''}`);
       }
-      const location = Array.isArray(body.results) && isObject(body.results[0]) && isObject(body.results[0].geometry) ? body.results[0].geometry.location : undefined;
+      const geometry = Array.isArray(body.results) && isObject(body.results[0]) && isObject(body.results[0].geometry) ? body.results[0].geometry : undefined;
+      const location = geometry?.location;
       if (!isObject(location) || typeof location.lat !== 'number' || typeof location.lng !== 'number') {
         malformed(service, 'no geometry.location on the first result', body);
       }
+      // APPROXIMATE is a suburb or postcode, not the street address: a point that
+      // could be kilometres out would wrongly flag photos as taken elsewhere.
+      if (geometry?.location_type === 'APPROXIMATE') return null;
       return { lat: location.lat, lng: location.lng };
     },
   };
