@@ -24,12 +24,13 @@ import { shellInfo } from '../shell.ts';
 import { alert, badge, button, flashFrom, humanise, page, section, type Html, type Tone } from '../ui.ts';
 import { IMPORT_NOUNS, templatePath, type ImportFrom } from './onboarding-forms.ts';
 
-const SETUP_AREA: Record<ImportKind, string> = {
-  owners: 'people',
-  'building-managers': 'people',
-  tradies: 'tradies',
-  properties: 'properties',
-  tenants: 'tenants',
+/** The page each kind of import belongs to. */
+const SETUP_HOME: Record<ImportKind, { path: string; label: string; area?: string }> = {
+  owners: { path: '/setup', label: 'Setup', area: 'people' },
+  'building-managers': { path: '/setup', label: 'Setup', area: 'people' },
+  tradies: { path: '/tradies', label: 'Tradies' },
+  properties: { path: '/properties', label: 'Properties' },
+  tenants: { path: '/setup', label: 'Setup', area: 'tenants' },
 };
 
 const WELCOME_STEP: Record<ImportKind, string> = {
@@ -51,7 +52,7 @@ const fromOf = (value: string | undefined): ImportFrom => (value === 'welcome' ?
 
 /** Where an upload starts and ends: its area of /setup, or its step of the guide. */
 function homeOf(kind: ImportKind, from: ImportFrom) {
-  return from === 'welcome' ? `${WELCOME_STEP[kind]}?form=import-${kind}` : `/setup?form=import-${kind}`;
+  return from === 'welcome' ? `${WELCOME_STEP[kind]}?form=import-${kind}` : `${SETUP_HOME[kind].path}?form=import-${kind}`;
 }
 
 /** `path` showing a flash message, keeping any #fragment at the end. */
@@ -109,7 +110,7 @@ export function importPages() {
     const from = fromOf(c.req.query('from'));
     try {
       const preview = await c.var.actions.importPreview(c.req.param('token'));
-      return c.html(reviewPage(c, preview, from));
+      return c.html(await reviewPage(c, preview, from));
     } catch (error) {
       if (!(error instanceof ActionError)) throw error;
       return c.redirect(flashTo(from === 'welcome' ? '/welcome' : '/setup', 'error', error.message), 303);
@@ -162,8 +163,8 @@ export function importPages() {
       const result = await c.var.actions.confirmImport(token, changes);
       const added = result.added ? `Added ${count(result.added, result.kind)}.` : `No ${IMPORT_NOUNS[result.kind].many} added.`;
       if (result.finished) {
-        const home = from === 'welcome' ? WELCOME_STEP[result.kind] : '/setup';
-        return c.redirect(flashTo(home, 'ok', added, from === 'welcome' ? '' : `#${SETUP_AREA[result.kind]}`), 303);
+        const home = from === 'welcome' ? WELCOME_STEP[result.kind] : SETUP_HOME[result.kind].path;
+        return c.redirect(flashTo(home, 'ok', added, from === 'welcome' || !SETUP_HOME[result.kind].area ? '' : `#${SETUP_HOME[result.kind].area}`), 303);
       }
       const left = result.failed.length;
       const message = `${added} ${left === 1 ? '1 row needs' : `${left} rows need`} a fix: see below.`;
@@ -190,7 +191,7 @@ function changesFrom(form: FormValues) {
 
 // The review page
 
-function reviewPage(c: Context<WebEnv>, preview: ImportPreview, from: ImportFrom): Html {
+async function reviewPage(c: Context<WebEnv>, preview: ImportPreview, from: ImportFrom): Promise<Html> {
   const { kind, rows } = preview;
   const nouns = IMPORT_NOUNS[kind];
   const counts = {
@@ -199,18 +200,18 @@ function reviewPage(c: Context<WebEnv>, preview: ImportPreview, from: ImportFrom
     duplicate: rows.filter((r) => r.status === 'duplicate').length,
   };
   const adding = rows.filter((r) => r.included && r.status !== 'needs_fix').length;
-  const home = from === 'welcome' ? WELCOME_STEP[kind] : `/setup#${SETUP_AREA[kind]}`;
+  const home = from === 'welcome' ? WELCOME_STEP[kind] : SETUP_HOME[kind].path;
 
   return page({
     title: `Review ${nouns.many}`,
     pm: c.var.pm,
-    active: 'settings',
-    shell: shellInfo(c),
+    active: from === 'welcome' ? 'settings' : kind === 'tradies' ? 'tradies' : kind === 'properties' ? 'properties' : 'settings',
+    shell: await shellInfo(c),
     flash: flashFrom(c.req.url),
     subtitle: html`<span class="flex flex-wrap gap-x-4"><span>From ${preview.filename}</span>${preview.added
         ? html`<span>${count(preview.added, kind)} added so far</span>`
         : ''}</span>`,
-    actions: html`<a class="link text-sm" href="${home}">Back to ${from === 'welcome' ? 'the guide' : 'Setup'}</a>`,
+    actions: html`<a class="link text-sm" href="${home}">Back to ${from === 'welcome' ? 'the guide' : SETUP_HOME[kind].label}</a>`,
     body: html`
       <p class="import-summary" role="status">
         <span>${rows.length} ${rows.length === 1 ? 'row' : 'rows'} to review:</span>

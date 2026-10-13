@@ -1,4 +1,4 @@
-// The shared calendar: every booked visit across the Agency, a week at a time and
+// The Schedule: every booked visit across the Agency, a week at a time and
 // grouped by day in the Agency's time zone, so nobody double-books a Tradie.
 
 import { Hono } from 'hono';
@@ -9,14 +9,14 @@ import { wallClock, zonedInstant } from '../../zoned-time.ts';
 import type { WebEnv } from '../env.ts';
 import { COLLEAGUES_ONLY, shareButton, shareUrl } from '../share.ts';
 import { shellInfo } from '../shell.ts';
-import { badge, emptyState, flashFrom, formatWhen, humanise, linkButton, page, type Html } from '../ui.ts';
+import { emptyState, flashFrom, formatWhen, humanise, linkButton, page, type Html } from '../ui.ts';
 
 /** One booking as the calendar returns it. */
 export type Booking = Awaited<ReturnType<PropertyManagerActions['calendar']>>[number];
 
 type Day = { year: number; month: number; day: number };
 
-/** The shared calendar under /calendar. */
+/** The Schedule, mounted at /dispatch. */
 export function calendarPages() {
   const pages = new Hono<WebEnv>();
 
@@ -32,22 +32,22 @@ export function calendarPages() {
 
     return c.html(
       page({
-        title: 'Calendar',
+        title: 'Schedule',
         pm,
         active: 'dispatch',
-        shell: shellInfo(c),
+        shell: await shellInfo(c),
         flash: flashFrom(c.req.url),
-        subtitle: `Week of ${dayLabel(monday)} ${monday.year}`,
+        subtitle: `Week of ${dateLabel(monday)} ${monday.year}`,
         actions: html`${weekNav(monday, today)}${shareButton({
-          title: `Jobs booked, week of ${dayLabel(monday)} ${monday.year}`,
+          title: `Jobs booked, week of ${dateLabel(monday)} ${monday.year}`,
           text: bookings.length
-            ? `${bookings.length} ${bookings.length === 1 ? 'Job' : 'Jobs'} booked in the week of ${dayLabel(monday)} across the Agency.`
-            : `Nothing booked yet in the week of ${dayLabel(monday)}.`,
-          url: shareUrl(c, `/calendar?week=${key(monday)}`),
+            ? `${bookings.length} ${bookings.length === 1 ? 'Job' : 'Jobs'} booked in the week of ${dateLabel(monday)} across the Agency.`
+            : `Nothing booked yet in the week of ${dateLabel(monday)}.`,
+          url: shareUrl(c, `/dispatch?week=${key(monday)}`),
           note: COLLEAGUES_ONLY,
         })}`,
         body: html`
-          <div class="grid gap-3 lg:min-h-[calc(100dvh-12rem)] lg:grid-cols-[repeat(7,minmax(0,1fr))]">
+          <div class="schedule-week grid gap-3 lg:min-h-[calc(100dvh-12rem)] lg:[grid-template-columns:var(--cols)]" style="--cols:${days.map((d) => ((byDay.get(key(d))?.length ?? 0) ? 'minmax(0,1fr)' : 'minmax(0,0.5fr)')).join(' ')}">
             ${days.map((day) => dayColumn(day, byDay.get(key(day)) ?? [], key(day) === key(today), timeZone, trades))}
           </div>
         `,
@@ -92,8 +92,8 @@ export function bookingItem(booking: Booking, timeZone: string, trade?: Trade): 
   return html`<li class="relative min-w-0 rounded border border-line bg-surface p-2 text-sm ${reschedule && !done ? 'border-l-4 border-l-high' : ''} ${done ? 'text-muted' : ''}">
     <a href="/tickets/${booking.ticketId}" class="absolute inset-0 rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-action" title="${full}"><span class="sr-only">Open Ticket: ${full}</span></a>
     <p class="num font-medium leading-snug"><time datetime="${booking.start}">${timeOf(booking.start, timeZone)}</time> – <time datetime="${booking.end}">${timeOf(booking.end, timeZone)}</time></p>
-    <p class="relative z-10 min-w-0"><a class="link block truncate" href="/tradies/${booking.tradieId}" title="${booking.businessName}">${booking.businessName}</a></p>
-    <p class="truncate text-muted" title="${booking.propertyAddress}">${booking.propertyAddress}</p>
+    <p class="relative z-10 min-w-0"><a class="link block" href="/tradies/${booking.tradieId}" title="${booking.businessName}">${booking.businessName}</a></p>
+    <p class="text-muted">${booking.propertyAddress}</p>
     <p class="mt-1 flex min-w-0 items-center gap-2 text-xs text-muted">
       ${trade ? html`<span class="min-w-0 truncate" title="Trade: ${humanise(trade)}">${humanise(trade)}</span>` : ''}
       <span class="ml-auto shrink-0" title="Property Manager: ${booking.propertyManager}"><span class="sr-only">Property Manager: </span>${initialsOf(booking.propertyManager)}</span>
@@ -123,24 +123,34 @@ export function bookingList(bookings: Booking[], timeZone: string, trades: Map<n
 function weekNav(monday: Day, today: Day): Html {
   const thisWeek = key(mondayOf(today)) === key(monday);
   return html`<nav aria-label="Weeks" class="flex flex-wrap items-center gap-2 text-sm">
-    ${linkButton('Previous week', `/calendar?week=${key(addDays(monday, -7))}`, { size: 'sm' })}
-    ${thisWeek ? '' : linkButton('This week', '/calendar', { size: 'sm', variant: 'ghost' })}
-    ${linkButton('Next week', `/calendar?week=${key(addDays(monday, 7))}`, { size: 'sm' })}
+    ${linkButton('Previous week', `/dispatch?week=${key(addDays(monday, -7))}`, { size: 'sm' })}
+    ${thisWeek ? '' : linkButton('This week', '/dispatch', { size: 'sm', variant: 'ghost' })}
+    ${linkButton('Next week', `/dispatch?week=${key(addDays(monday, 7))}`, { size: 'sm' })}
   </nav>`;
 }
 
-/** One day: its date (underlined when it is today), then its bookings or "Nothing booked". */
+/** One day: its date, then its bookings or "Nothing booked". Today is marked once, in words. */
 function dayColumn(day: Day, bookings: Booking[], isToday: boolean, timeZone: string, trades: Map<number, Trade>): Html {
-  const label = dayLabel(day);
-  return html`<section aria-label="${label}" class="flex min-w-0 flex-col gap-2 rounded-lg border border-line p-2 ${isToday ? 'bg-page' : 'bg-surface'}">
-    <div class="flex flex-wrap items-center gap-2">
-      <h2 class="section-title ${isToday ? 'underline decoration-action decoration-2 underline-offset-4' : ''}">${label}</h2>
-      ${isToday ? badge('Today', 'info') : ''}
+  const label = shortDay(day);
+  return html`<section aria-label="${dayLabel(day)}" class="flex min-w-0 flex-col gap-2 rounded-lg border border-line p-2 ${isToday ? 'bg-page' : 'bg-surface'}">
+    <div class="flex flex-wrap items-baseline gap-x-2">
+      <h2 class="section-title">${label}</h2>
+      ${isToday ? html`<span class="text-xs font-semibold text-action">Today</span>` : ''}
     </div>
     ${bookings.length
       ? html`<ul class="grid gap-2">${bookings.map((b) => bookingItem(b, timeZone, trades.get(b.jobId)))}</ul>`
       : html`<p class="text-sm text-muted">Nothing booked</p>`}
   </section>`;
+}
+
+/** "12 Oct" */
+function dateLabel(d: Day) {
+  return new Intl.DateTimeFormat('en-AU', { timeZone: 'UTC', day: 'numeric', month: 'short' }).format(new Date(Date.UTC(d.year, d.month - 1, d.day)));
+}
+
+/** "Mon 12 Oct" */
+function shortDay(d: Day) {
+  return new Intl.DateTimeFormat('en-AU', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' }).format(new Date(Date.UTC(d.year, d.month - 1, d.day)));
 }
 
 /** Bookings by the day they start on in the Agency's time zone; one that started before the week shows on its first day. */

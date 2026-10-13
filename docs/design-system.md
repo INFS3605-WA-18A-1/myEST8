@@ -27,7 +27,7 @@ The first draft was a white SaaS kit: identical rounded cards with soft grey sha
 | `--control` | | `#7D8A95` | Input, select, checkbox and secondary button borders | 3.5:1 on white, 3.2:1 on Paper (UI component minimum 3:1) |
 | `--action` | Harbour | `#1F5C8B` | Primary buttons, links, focus ring, selected state | white on it 7.1:1; as text 7.1:1 on white, 6.4:1 on Paper |
 | `--action-hover` | | `#174A70` | Primary button and link hover | white on it 9.3:1 |
-| `--hivis` | Wattle | `#FFC233` | The decision stripe, the current rail item's bar, decision count chips, the logo on Night | Night on it 10.1:1 |
+| `--hivis` | Wattle | `#FFC233` | The decision stripe, the current rail item's bar, the count-strip chips, the logo on Night | Night on it 10.1:1 |
 | `--info-bg` | | `#E8F0F7` | Info badges and alerts, "Filled in by AI" | Harbour on it 6.2:1, Night 14.2:1 |
 | `--urgent` / `--urgent-bg` | | `#B42318` / `#FDECEA` | Urgent, errors, destructive actions | 5.8:1 on its tint, 6.6:1 on white |
 | `--high` / `--high-bg` | | `#9A4A0B` / `#FDF1E3` | High Urgency, warnings, flags | 5.6:1 on its tint, 6.3:1 on white |
@@ -70,7 +70,13 @@ The first draft was a white SaaS kit: identical rounded cards with soft grey sha
 │ [tag] myEST8 │ Dashboard          [Mine | All]        Sat 10 Oct  Alice ▾ │ 60px top bar
 │              ├───────────────────────────────────────────────────────────┤
 │▌Dashboard    │                                                           │
-│ Dispatch     │  page content (max-width 1280px, 24px gutters, 16 phone)  │
+│ Requests   3 │  page content (max-width 1280px, 24px gutters, 16 phone)  │
+│ Tickets      │                                                           │
+│ Approvals  2 │                                                           │
+│ Schedule     │                                                           │
+│              │                                                           │
+│ Properties   │                                                           │
+│ Tradies      │                                                           │
 │ Settings     │                                                           │
 │              │                                                           │
 │ Phone        │                                                           │
@@ -81,35 +87,36 @@ The first draft was a white SaaS kit: identical rounded cards with soft grey sha
  220px rail (Night)
 ```
 
-- Left rail 220 px on Night, the logo at the top (the key tag in Wattle, the wordmark in `--rail-text`) linking home. Three places: **Dashboard** (`/`), **Dispatch** (`/dispatch`) and **Settings** (`/settings`), Lexend 600 16 px, 40 px tall with an icon (Phosphor regular, 18 px) and an optional count. The current item is a lighter band with a 4 px Wattle bar on its left edge (an inset shadow, so it follows the 6 px radius) and `aria-current="page"`.
+- Left rail 220 px on Night, the logo at the top (the key tag in Wattle, the wordmark in `--rail-text`) linking home. Two groups separated by a 16 px gap, not a heading. The work: **Dashboard** (`/`), **Requests** (`/requests`), **Tickets** (`/tickets`), **Approvals** (`/approvals`) and **Schedule** (`/dispatch`). The records: **Properties** (`/properties`), **Tradies** (`/tradies`) and **Settings** (`/settings`). Lexend 600 16 px, 40 px tall with an icon (Phosphor regular, 18 px). Requests and Approvals show a muted count for the Property Manager's own Properties (`shellInfo` reads `navCounts`), only when it is above zero. The current item is a lighter band with a 4 px Wattle bar on its left edge (an inset shadow, so it follows the 6 px radius) and `aria-current="page"`.
 - At the foot of the rail, quieter (Red Hat Text 13 px, `--rail-muted`): the demo's **Phone simulator (demo)** link (`/demo`, demo deployments only) and the Agency's name.
 - Top bar 60 px on `--surface` with a bottom hairline. It holds the page title (22 px Lexend 600, the page's only `<h1>`), optional page controls passed by the page (the Mine/All segmented control on the dashboard: links with `aria-current`, the current one filled with Harbour), today's date in the Agency's time zone, and the Property Manager's name opening a menu with Sign out.
 - Under 1024 px the rail becomes an off-canvas drawer opened by a menu button in the top bar. Content is single-column with 16 px gutters and never scrolls horizontally.
 - Flash messages appear directly under the top bar as one line: `--done` for ok, `--urgent` for errors, `role="status"` or `role="alert"`.
-- Old places: `/calendar` and `/setup` still work and highlight Dispatch and Settings; the redesign's phase 2 moves their content into those pages and redirects them.
+- Old places: `/calendar` redirects to `/dispatch`. `/setup` keeps channels, Property Owners, Building Managers and Tenants under Settings; Properties and Tradies have their own pages.
 
-### Dashboard: the dispatch board
+### Dashboard: the overview
 
-The first frame at 1366×768 must show the decision queue, the Ticket pipeline and the next 7 days of bookings without scrolling.
+The dashboard answers "what needs me now?" and links out; the long lists live on their own pages.
 
 ```
-┌ count strip: 4 Maintenance Requests to review   9 open Tickets   3 alerts   4 in the inbox   2 Urgent Repairs ┐  36px
-├────────────────────────────┬─────────────────────────────────────────────────────────────────────────────┤
-│ Needs your decision        │ Tickets by stage                                                            │
-│▌[photo] 7 Wilson St        │ Quoting (3)        With Property Owner (1)   Ready to book (1)   Booked (3)  Done (1) │
-│  Toilet keeps running      │ ┌#12┊docket┐       ┌#9┊docket┐               ┌#7┊docket┐          ...        │
-│  High  Plumbing  2d   Review│ └──────────┘       └─────────┘               └─────────┘                     │
-│▌Owner hasn't replied 52h   │                                                                             │
-│▌Rate Drip Doctors          ├─────────────────────────────────────────────────────────────────────────────┤
-│▌Inbox: unknown sender      │ Next 7 days  today first, then the following six days (bookings as rows)  │
-└────────────────────────────┴─────────────────────────────────────────────────────────────────────────────┘
- below the fold: Urgent Repairs table, Inbox detail with link/route/dismiss, all open Tickets table
+┌ count strip: 2 Maintenance Requests to confirm   5 open Tickets   1 alert   0 Urgent Repairs needing a receipt ┐
+├──────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Needs your decision                                                                                          │
+│  Maintenance Requests to confirm                                                         See all requests   │
+│▌[photo] 27 Llewellyn St, Marrickville NSW 2204           Confirm  Review                                     │
+│  Alerts                                                                                                      │
+│▌9 Albion St: FixIt Carpentry finished the Job. Rate the Tradie.                                              │
+├──────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Next 7 days                                                                               Open the schedule  │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-- Left column (360 px) "Needs your decision": one list of compact rows, each with a 4 px Wattle left stripe. Order: Maintenance Requests (oldest first), then alerts, then inbox items. A Maintenance Request row: 56 px photo thumbnail (or a "No photos" tile), address, one-line description, Urgency and Trade badges plus "Check urgency", "Flagged photos" or "No photos" flags, age, and two actions: **Confirm** (POST) and **Review** (link to `/requests/:issueId`).
-- Right column, top: "Tickets by stage", five lanes in workflow order: Quoting, With Property Owner, Ready to book, Booked, Done. A lane is a Paper tray (6 px radius, hairline) with its title and a muted count, holding white dockets. A Ticket sits in the lane of its least advanced open Job. Lanes scroll vertically inside a fixed height (about 300 px) so the board never pushes the bookings off the first frame.
-- Right column, bottom: "Next 7 days": today and the six days after it in the Agency's time zone, bookings for both Property Managers, empty days collapsed into one muted line, linking to `/calendar`. A rolling window always shows the coming work, where a Monday-to-Sunday week is often empty.
-- Phone: one column in priority order: count strip (wrapping), Needs your decision, Tickets as a list grouped by stage, Next 7 days.
+- Each count links to its page: Requests, Tickets, Approvals, Requests#urgent-repairs.
+- "Needs your decision" is full width, so addresses are never clipped. It shows at most 5 Maintenance Requests and 5 alerts, each row with the Wattle stripe.
+- **Requests** (`/requests`): Maintenance Requests to confirm, the inbox (best guess in a `<details>`), and Urgent Repairs.
+- **Tickets** (`/tickets`): the open Tickets as a table, or `?view=stage` for the five-lane board (Quoting, With Property Owner, Ready to book, Booked, Done) at full width.
+- **Approvals** (`/approvals`): Ready for a Work Order, Waiting on the Property Owner, Collecting Quotes and Rate the Tradie. Each row's button names its next step.
+- **Schedule** (`/dispatch`): the week of bookings. Empty days are narrow.
 
 ### Landing page (`/` signed out)
 
@@ -193,7 +200,7 @@ All of these are in `src/web/ui.ts`; pages use them instead of hand-building mar
 - **Icons** come from [Phosphor](https://phosphoricons.com) (MIT) through `icon(name, { weight?, size? })` in `src/web/icons.ts`, rendered inline in `currentColor` and always `aria-hidden`. The word beside an icon carries the meaning. Don't add another icon set or hand-draw icons.
 - **One weight: regular.** The only exception is the 14 px tick inside a done step circle, which uses bold so it doesn't thin out at that size.
 - Sizes: 18 px in the rail (`size-[18px]`), 16 px for the Phone simulator link, 20 px in alerts and flash messages (the default), 24 px for the menu button, 16 px for the user menu caret and timeline dots.
-- The app's icons: Dashboard `squares-four`, Dispatch `map-pin`, Settings `gear-six`, Phone simulator `device-mobile`, menu `list`, user menu `caret-down`, done `check-circle`, warning and error `warning-circle`, note `info`, timeline dot `circle` (fill).
+- The app's icons: Dashboard `squares-four`, Requests `tray`, Tickets `ticket`, Approvals `seal-check`, Schedule `calendar-blank`, Properties `house-line`, Tradies `wrench`, Settings `gear-six`, Phone simulator `device-mobile`, menu `list`, user menu `caret-down`, done `check-circle`, warning and error `warning-circle`, note `info`, timeline dot `circle` (fill).
 - **The logo** is `logo({ size })` in `src/web/ui.ts`: the key tag beside the wordmark. The rail and the public bar both use it; nothing else hand-builds it.
   - **The key tag:** a house-shaped tag with the key ring's hole at the top and an 8 cut out, the tag every Agency hangs on its key board. One solid shape (an even-odd path on a 256 grid, `currentColor`), so it holds at 16 px and works as an app icon as it is. It is Harbour on the white public bar and Wattle on the Night rail; Night on Wattle for an app tile.
   - **The wordmark:** "myEST8" in Lexend, "my" at 400 and "EST8" at 700, so the pun reads without decoration. Night on light, `--rail-text` on the rail.
@@ -300,7 +307,7 @@ A machine check never stands in for what a person said:
 - **One-Quote rule.** The rule is visible on the Ticket page next to Choose: "Choose once two Quotes are confirmed, or give a reason to go ahead with one." Choose stays enabled. Without a reason, the server's message explains what's missing.
 - **Phone gutters.** 16 px below 1024 px.
 - **Literal colours.** No literal colour values outside the token block in `app.css`, including white. Use `var(--surface)`.
-- **Navigation (2026-10-10).** Dashboard, Dispatch and Settings, plus the demo's Phone simulator at the foot of the rail. Calendar's bookings move into Dispatch's Tradie schedule and the dashboard's week strip; the Setup pages move into Settings tabs.
+- **Navigation (2026-10-12, replaces 2026-10-10).** The rail grew to the places a Property Manager actually goes: Dashboard, Requests, Tickets, Approvals, Schedule, Properties, Tradies and Settings, plus the demo's Phone simulator at the foot. The dashboard is now an overview; its long lists moved to Requests and Tickets. Tenants, Property Owners, Messages and Reports are candidates for later. Previously: Dashboard, Dispatch and Settings. Calendar's bookings move into Dispatch's Tradie schedule and the dashboard's week strip; the Setup pages move into Settings tabs.
 - **The Tenant's progress tracker.** The Ticket page links to it, so a Property Manager can see what the Tenant sees.
 
 ## Copy

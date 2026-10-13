@@ -112,6 +112,8 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
         dashboard: ({ filter = 'mine' }: { filter?: 'mine' | 'all' } = {}) => views.dashboard(agencyId, propertyManagerId, filter),
         ticket: (ticketId: number) => views.ticket(agencyId, ticketId),
         tradie: (tradieId: number) => views.tradie(agencyId, tradieId),
+        /** The counts beside Requests and Approvals in the rail. */
+        navCounts: () => views.navCounts(agencyId, propertyManagerId),
 
         // Onboarding
         /** The Agency's connected channels, with when each last passed a test message. */

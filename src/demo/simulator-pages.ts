@@ -84,7 +84,7 @@ export function simulatorPages(demo: DemoControls) {
         pm: c.get('pm'),
         active: 'simulator',
         flash: flashFrom(c.req.url),
-        shell: shellInfo(c),
+        shell: await shellInfo(c),
         controls: clockControls(demo.now(), timeZone, selected),
         body: simulatorBody({
           contacts,

@@ -8,7 +8,7 @@ export type Tone = 'neutral' | 'info' | 'success' | 'warning' | 'error';
 /** primary: the one main action. secondary: outlined. danger: destructive. ghost: quiet. */
 export type Variant = 'primary' | 'secondary' | 'danger' | 'ghost';
 /** A rail section. */
-export type NavKey = 'dashboard' | 'calendar' | 'setup' | 'simulator';
+export type NavKey = 'dashboard' | 'requests' | 'tickets' | 'approvals' | 'dispatch' | 'properties' | 'tradies' | 'settings' | 'simulator';
 export type FieldType =
   | 'text'
   | 'email'

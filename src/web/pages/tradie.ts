@@ -7,14 +7,71 @@ import type { PropertyManagerActions } from '../../app.ts';
 import { ActionError } from '../../shared.ts';
 import type { WebEnv } from '../env.ts';
 import { shellInfo } from '../shell.ts';
-import { badge, emptyState, flashFrom, formatMoney, formatWhen, humanise, linkButton, page, sectionHeader, stat, statGroup, table, type Html } from '../ui.ts';
+import { alert, badge, button, emptyState, flashFrom, formatMoney, formatWhen, humanise, linkButton, page, section, sectionHeader, stat, statGroup, table, type Html } from '../ui.ts';
+import { icon } from '../icons.ts';
 import { timeRange } from './calendar.ts';
+import { googleSearchForm, importPanel, searchListings, tradieFields } from './onboarding-forms.ts';
 
 type TradieView = Awaited<ReturnType<PropertyManagerActions['tradie']>>;
 
-/** A Tradie's profile under /tradies/:id. */
+/** The Tradies list under /tradies and a Tradie's profile under /tradies/:id. */
 export function tradiePages() {
   const pages = new Hono<WebEnv>();
+
+  pages.get('/', async (c) => {
+    const { actions, pm } = c.var;
+    const flash = flashFrom(c.req.url);
+    const refused = flash?.kind === 'error' ? c.req.query('form') : undefined;
+    const errorFor = (key: string): Html => (refused === key && flash ? alert(flash.message, 'error') : html``);
+    const googleQuery = c.req.query('google')?.trim() ?? '';
+    const tradies = await actions.people('tradie');
+    const ratings = await Promise.all(tradies.map(async (t) => (await actions.tradie(t.id)).myEst8Rating));
+    const rows = tradies.map((t, i) => {
+      const { average, count } = ratings[i]!;
+      return [
+        html`<a class="link font-medium" href="/tradies/${t.id}">${t.businessName ?? t.name}</a>`,
+        html`${t.trades.map(humanise).join(', ') || '—'}`,
+        html`${average.toFixed(1)} <span class="text-muted">(${count})</span>`,
+        html`${t.googlePlaceId ? `${t.googleRating?.toFixed(1) ?? '—'} (${t.googleReviewCount ?? 0} reviews)` : 'Not on Google'}`,
+        html`${t.mobile ?? '—'}`,
+      ];
+    });
+    const { listings, problem } = await searchListings(actions, googleQuery);
+    const formAction = `/setup/tradies${googleQuery ? `?google=${encodeURIComponent(googleQuery)}` : ''}`;
+
+    return c.html(
+      page({
+        title: 'Tradies',
+        pm,
+        active: 'tradies',
+        flash,
+        shell: await shellInfo(c),
+        subtitle: 'The Tradies your Agency uses, shared by every Property Manager.',
+        body: html`
+          ${section({
+            title: 'Tradies',
+            body: tradies.length ? table(['Business', 'Trades', 'myEST8 rating', 'Google rating', 'Mobile'], rows, { caption: 'Tradies' }) : emptyState('Tradies appear here once you add them. Add the first one below.'),
+          })}
+          ${section({
+            id: 'add-tradie',
+            title: 'Add a Tradie',
+            body: html`
+              ${googleSearchForm('/tradies#add-tradie', googleQuery, problem, listings.length)}
+              <form method="post" action="${formAction}" class="mt-4">
+                ${errorFor('tradie')}
+                ${tradieFields({ listings })}
+                <div class="mt-3">${button('Add Tradie', { variant: 'primary' })}</div>
+              </form>
+              <details class="import-details mt-4 border-t border-line pt-3" id="import-tradies" ${refused === 'import-tradies' ? 'open' : ''}>
+                <summary class="cursor-pointer font-semibold text-action">${icon('file-xls', { size: 'size-4' })}<span>Add many from a spreadsheet</span></summary>
+                <div class="mt-3">${importPanel('tradies', { error: errorFor('import-tradies') })}</div>
+              </details>
+            `,
+          })}
+        `,
+      }),
+    );
+  });
 
   pages.get('/:id{[0-9]+}', async (c) => {
     const { actions, pm } = c.var;
@@ -27,8 +84,9 @@ export function tradiePages() {
         page({
           title: 'Tradie not found',
           pm,
-          shell: shellInfo(c),
-          body: html`<p>There's no such Tradie in your Agency.</p>${linkButton('Back to setup', '/setup#tradies')}`,
+          active: 'tradies',
+          shell: await shellInfo(c),
+          body: html`<p>There's no such Tradie in your Agency.</p>${linkButton('Back to Tradies', '/tradies')}`,
         }),
         404,
       );
@@ -38,7 +96,8 @@ export function tradiePages() {
       page({
         title: tradie.businessName ?? tradie.name,
         pm,
-        shell: shellInfo(c),
+        active: 'tradies',
+        shell: await shellInfo(c),
         flash: flashFrom(c.req.url),
         subtitle: tradie.businessName ? tradie.name : undefined,
         body: html`${header(tradie)}

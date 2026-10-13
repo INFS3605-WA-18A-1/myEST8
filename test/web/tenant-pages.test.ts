@@ -43,7 +43,7 @@ describe('the upload page', () => {
     expect(page).toContain('enctype="multipart/form-data"');
     expect(page).toContain('accept="image/*,application/pdf"');
     expect(page).toContain('Up to 10 files at a time, each under 10 MB');
-    expect(page).toContain('Photos straight from your camera keep their details');
+    expect(page).toContain('Send photos straight from your camera');
     expect(page.match(/btn-primary/g)).toHaveLength(1);
 
     const sent = await postFiles(w, path, [jpeg('tap-1.jpg', '2026:10:08 08:30:00'), jpeg('tap-2.jpg')]);

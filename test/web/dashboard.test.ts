@@ -27,7 +27,7 @@ async function tomsTapRequest(w: Web) {
   await tomReportsTap(w);
   await w.h.advance(48 * HOUR);
   const cookie = await w.signIn();
-  return { cookie, issueId: match(await page(w, '/', cookie), /action="\/requests\/(\d+)\/confirm"/) };
+  return { cookie, issueId: match(await page(w, '/requests', cookie), /action="\/requests\/(\d+)\/confirm"/) };
 }
 
 async function page(w: Web, path: string, cookie: string) {
@@ -48,12 +48,12 @@ function match(text: string, pattern: RegExp) {
   return found[1]!;
 }
 
-describe('Maintenance Requests on the dashboard', () => {
+describe('Maintenance Requests page', () => {
   test('a waiting Maintenance Request shows its answers and flags, and confirming it opens the new Ticket', async () => {
     const w = await webWorld();
     const { cookie } = await tomsTapRequest(w);
 
-    const dashboard = await page(w, '/', cookie);
+    const dashboard = await page(w, '/requests', cookie);
     for (const text of ['The kitchen tap is dripping', KING_ST, 'No photos', 'Plumbing']) {
       expect(dashboard).toContain(text);
     }
@@ -68,9 +68,8 @@ describe('Maintenance Requests on the dashboard', () => {
     expect(res.status).toBe(303);
     const ticketId = match(res.headers.get('location')!, /^\/tickets\/(\d+)\?ok=/);
 
-    const after = await page(w, '/', cookie);
-    expect(after).toContain('No Maintenance Requests waiting for you.');
-    expect(after).toContain(`href="/tickets/${ticketId}"`);
+    expect(await page(w, '/requests', cookie)).toContain('No Maintenance Requests waiting for you.');
+    expect(await page(w, '/tickets', cookie)).toContain(`href="/tickets/${ticketId}"`);
   });
 
   test('rejecting needs a reason for the Tenant', async () => {
@@ -78,7 +77,7 @@ describe('Maintenance Requests on the dashboard', () => {
     const { cookie, issueId } = await tomsTapRequest(w);
 
     const refused = await w.post(`/requests/${issueId}/reject`, { reason: '  ' }, cookie);
-    expect(refused.headers.get('location')).toMatch(/^\/\?error=/);
+    expect(refused.headers.get('location')).toMatch(/^\/requests\?error=/);
     expect(await follow(w, refused, cookie)).toContain('Give the Tenant a reason');
 
     const rejected = await w.post(`/requests/${issueId}/reject`, { reason: 'A new washer fixes this, see your lease' }, cookie);
@@ -103,7 +102,7 @@ describe('Maintenance Requests on the dashboard', () => {
     const cookie = await w.signIn();
     await w.h.upload(await tomReportsTap(w), [upload('tap.jpg')]);
 
-    const dashboard = await page(w, '/', cookie);
+    const dashboard = await page(w, '/requests', cookie);
     const fileId = match(dashboard, /src="\/files\/(\d+)"/);
 
     const review = await page(w, `/requests/${match(dashboard, /href="\/requests\/(\d+)"/)}`, cookie);
@@ -131,13 +130,13 @@ describe('Maintenance Request review', () => {
   });
 });
 
-describe('Tickets on the dashboard', () => {
+describe('Tickets page', () => {
   test('a Ticket with a Job being quoted sits in the Quoting lane', async () => {
     const w = await webWorld();
     const { ticketId } = await tomsTapTicket(w);
     const cookie = await w.signIn();
 
-    const board = await page(w, '/', cookie);
+    const board = await page(w, '/tickets?view=stage', cookie);
     const start = board.indexOf('<h3 class="lane-title">Quoting</h3>');
     const next = board.indexOf('<h3 class="lane-title">With Property Owner</h3>', start);
     expect(start).toBeGreaterThan(-1);
@@ -149,11 +148,11 @@ describe('Tickets on the dashboard', () => {
     const { ticketId } = await tomsTapTicket(w);
     const bob = await w.signIn('bob@harbour.example');
 
-    const mine = await page(w, '/', bob);
+    const mine = await page(w, '/tickets', bob);
     expect(mine).not.toContain(`href="/tickets/${ticketId}"`);
     expect(mine).toContain('No open Tickets on your Properties.');
 
-    const all = await page(w, '/?filter=all', bob);
+    const all = await page(w, '/tickets?filter=all', bob);
     expect(all).toContain(`href="/tickets/${ticketId}"`);
     expect(all).toContain('Alice Archer');
   });
@@ -165,7 +164,7 @@ describe('the Agency inbox', () => {
     const cookie = await w.signIn();
     await w.h.receive(STRANGER, 'Hi, this is Tom on my work phone');
 
-    const inbox = await page(w, '/', cookie);
+    const inbox = await page(w, '/requests', cookie);
     expect(inbox).toContain('Unknown sender');
     expect(inbox).toContain(STRANGER);
     expect(inbox).toContain('Hi, this is Tom on my work phone');
@@ -195,10 +194,10 @@ describe('the calendar and Tradie profiles', () => {
     await w.alice.sendWorkOrder(job.jobId);
     const cookie = await w.signIn();
 
-    const week = await page(w, '/calendar?week=2026-10-14', cookie);
-    expect(week).toContain('Week of Monday 12 October 2026');
-    expect(week).toContain('/calendar?week=2026-10-05');
-    expect(week).toContain('/calendar?week=2026-10-19');
+    const week = await page(w, '/dispatch?week=2026-10-14', cookie);
+    expect(week).toContain('Week of 12 Oct 2026');
+    expect(week).toContain('/dispatch?week=2026-10-05');
+    expect(week).toContain('/dispatch?week=2026-10-19');
     const booking = week.indexOf(`href="/tickets/${job.ticketId}"`);
     expect(week.indexOf('Tuesday 13 October')).toBeLessThan(booking);
     expect(week.indexOf('Wednesday 14 October')).toBeGreaterThan(booking);
@@ -206,7 +205,7 @@ describe('the calendar and Tradie profiles', () => {
     expect(week).toContain(KING_ST);
     expect(week).toContain('Plumbing');
 
-    expect(await page(w, '/calendar?week=2026-10-19', cookie)).not.toContain(KING_ST);
+    expect(await page(w, '/dispatch?week=2026-10-19', cookie)).not.toContain(KING_ST);
     expect(await page(w, '/', cookie)).toContain(`href="/tradies/${w.tradies.pete.id}"`);
 
     const pete = await page(w, `/tradies/${w.tradies.pete.id}`, cookie);

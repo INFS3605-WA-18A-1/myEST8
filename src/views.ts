@@ -71,6 +71,22 @@ export function createViews({ clock, modules }: Context) {
       };
     },
 
+    /**
+     * The rail's counts for a Property Manager's own Properties: Requests is the
+     * Maintenance Requests to confirm plus the Agency's inbox; Approvals is the Jobs
+     * ready for a Work Order plus the alerts (Quotes short, Property Owner silent, rating due).
+     */
+    async navCounts(agencyId: number, propertyManagerId: number) {
+      const propertyIds = await profiles.propertyIdsOf(propertyManagerId);
+      const open = await tickets.openTickets(agencyId, propertyIds);
+      const readyToBook = (await Promise.all(open.map((t) => tickets.jobsOf(t.id)))).flat().filter((j) => j.status === 'approved').length;
+      const alerts = [...(await modules.quotes.alerts(agencyId, propertyIds)), ...(await modules.scheduling.alerts(agencyId, propertyIds))];
+      return {
+        requests: (await tickets.maintenanceRequests(agencyId, propertyIds)).length + (await intake.inbox(agencyId)).length,
+        approvals: readyToBook + alerts.length,
+      };
+    },
+
     /** A Tradie's profile: both ratings, every rating given, previous Quotes and bookings. */
     async tradie(agencyId: number, tradieId: number) {
       const tradie = await profiles.personInAgency(agencyId, tradieId, 'tradie');

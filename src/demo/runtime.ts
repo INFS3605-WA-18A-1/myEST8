@@ -9,10 +9,12 @@ import { createGooglePlaces } from '../adapters/google-places.ts';
 import { createImageMatcher } from '../adapters/image-matcher.ts';
 import { createJevClassifier } from '../adapters/jev.ts';
 import { messengersFromEnv } from '../adapters/messenger.ts';
+import { metaFetchMedia } from '../adapters/meta-whatsapp.ts';
 import { createQuoteReader } from '../adapters/quote-reader.ts';
 import { twilioFetchMedia } from '../adapters/twilio.ts';
 import { createApp } from '../app.ts';
 import { all, ident, LOCAL_DATABASE_URL, one, openDb, run, type Db } from '../db.ts';
+import { createGmailMailboxes } from '../mailboxes.ts';
 import { migrate } from '../migrate.ts';
 import type { ChannelType, Clock, Messenger } from '../ports.ts';
 import { ActionError, normalizeAddress } from '../shared.ts';
@@ -43,7 +45,7 @@ export type DemoDatabase =
   | { schema: string; kept: true; reused: true; seededAt: string; storiesPlayed: boolean };
 
 /** What the demo keeps about itself so a database can be reopened. */
-type SavedDemo = { seed: DemoSeed; seededAt: string; storiesPlayed: boolean };
+type SavedDemo = { seed: DemoSeed | null; seededAt: string; storiesPlayed: boolean };
 
 /**
  * The demo's own records, kept beside the app's tables: what the seed created,
@@ -101,7 +103,7 @@ async function openDemoDb(env: Env) {
  * Builds the demo: app, web app, simulator controls and seeded data. Nothing
  * listens on a port; `main.ts` serves `web` and starts the worker loop.
  */
-export async function createDemo(
+export async function createDemo<Seeded extends boolean = true>(
   options: {
     /** Where the demo clock starts. Defaults to the real time. */
     now?: Date;
@@ -118,6 +120,12 @@ export async function createDemo(
      * DATABASE_SCHEMA reopens a schema seeded by an earlier start.
      */
     stories?: boolean;
+    /**
+     * Adds the demo Agency (Harbour Realty, with sign-ins whose passwords are
+     * public). Defaults to true; `npm start` passes false, so an Agency signs up
+     * instead and the landing page shows no demo sign-ins.
+     */
+    seedAgency?: Seeded;
   } = {},
 ) {
   const env = options.env ?? process.env;
@@ -125,7 +133,8 @@ export async function createDemo(
   // DATABASE_SCHEMA unset: a fresh schema, dropped on close. Set: a schema that is
   // seeded on the first start and reopened as it was on every start after.
   const { db, store, saved, schema, kept } = await openDemoDb(env);
-  const storiesEnd = !saved && options.stories && !env.JEV_API_URL && !env.QUOTES_API_URL ? (options.now ?? new Date()) : null;
+  const seedAgency = options.seedAgency !== false;
+  const storiesEnd = !saved && seedAgency && options.stories && !env.JEV_API_URL && !env.QUOTES_API_URL ? (options.now ?? new Date()) : null;
   // A reopened database carries on from where its clock was moved to; the stories start ten days back.
   const savedOffsetMs = (await store.get<number>('clockOffsetMs')) ?? 0;
   const clock = new OffsetClock(saved ? new Date(Date.now() + savedOffsetMs) : storiesEnd ? storiesStart(storiesEnd) : options.now);
@@ -148,7 +157,7 @@ export async function createDemo(
     imageMatcher: env.VISION_API_URL ? 'real' : 'mock',
     quoteReader: env.QUOTES_API_URL ? 'real' : 'mock',
     places: env.GOOGLE_MAPS_API_KEY ? 'real' : 'mock',
-    messenger: env.TWILIO_ACCOUNT_SID || env.SENDGRID_API_KEY ? 'real' : 'mock',
+    messenger: env.TWILIO_ACCOUNT_SID || env.SENDGRID_API_KEY || env.GOOGLE_CLIENT_ID || env.META_WHATSAPP_PHONE_NUMBER_ID ? 'real' : 'mock',
   };
 
   const messenger = new SimulatedMessenger(clock, async (message) => {
@@ -161,6 +170,10 @@ export async function createDemo(
   // message once it's sent. File links run on real time, as Twilio fetches them in
   // real time however far the demo clock has moved.
   const providers = messengersFromEnv(env, { clock: { now: () => new Date() } });
+  // Gmail (ADR 0004): each Agency connects its own mailbox by OAuth, so its
+  // Messenger and reader need the database, not just env vars.
+  const mailboxes = gmailFromEnv(env, db, baseUrl);
+  if (mailboxes) providers.channels.email = mailboxes.messenger;
   const sendTo = new Set((env.DEMO_SEND_TO ?? '').split(',').map((a) => a.trim()).filter(Boolean).map((a) => (a === '*' ? a : normalizeAddress(a))));
   const reallySends = (to: string) => sendTo.has('*') || sendTo.has(normalizeAddress(to));
   const outbound: Messenger = {
@@ -180,23 +193,24 @@ export async function createDemo(
     imageMatcher: createImageMatcher({ ...vision, apiKey: env.VISION_API_KEY ?? 'demo' }),
     quoteReader: createQuoteReader({ ...quotes, apiKey: env.QUOTES_API_KEY ?? 'demo', clock, timeZone }),
     places: createGooglePlaces(google),
-    fetchMedia:
-      twilioAccountSid && twilioAuthToken
-        ? twilioFetchMedia(twilioAccountSid, twilioAuthToken)
-        : async (url) => {
-            throw new Error(`The demo has no media to fetch at ${url}: the simulator sends attachments directly`);
-          },
+    fetchMedia: mediaFetcher(env),
     settings: { baseUrl },
   });
 
   // Worker runs never overlap: each call waits for the one before.
   let tail: Promise<void> = Promise.resolve();
+  let lastMailPoll = 0;
   let queued = 0;
   /** Runs every task that is due, after any run already in progress. Errors are logged, never thrown. */
   function runWorker(): Promise<void> {
     queued++;
     const next = tail.then(async () => {
       try {
+        // New Gmail mail is read at most every 30 seconds, on real time.
+        if (mailboxes && Date.now() - lastMailPoll >= MAIL_POLL_MS) {
+          lastMailPoll = Date.now();
+          for (const error of await mailboxes.poll((message) => app.receiveInbound(message))) logError(error);
+        }
         for (const error of await app.runWorker()) logError(error);
       } catch (e) {
         logError(e instanceof Error ? e : new Error(String(e)));
@@ -216,7 +230,7 @@ export async function createDemo(
     return () => clearInterval(timer);
   }
 
-  const seed = saved ? saved.seed : await seedDemo(app, { googleListings: apis.places === 'mock' });
+  const seed = (saved ? saved.seed : seedAgency ? await seedDemo(app, { googleListings: apis.places === 'mock' }) : null) as Seeded extends false ? null : DemoSeed;
   await runWorker();
 
   // The simulator is limited to the Agency of the Property Manager using it, so
@@ -268,7 +282,7 @@ export async function createDemo(
   };
 
   // The stories play the clock forward to `options.now`, or to the real time.
-  const stories = storiesEnd ? await seedStories({ app, simulator: demo, seed, clock, ...(options.now ? { end: options.now } : {}) }) : null;
+  const stories = storiesEnd && seed ? await seedStories({ app, simulator: demo, seed, clock, ...(options.now ? { end: options.now } : {}) }) : null;
   await saveClock();
   // Saved last, so a start-up stopped part-way is caught on the next start rather than half-reused.
   if (!saved) await store.set('saved', { seed, seededAt: clock.now().toISOString(), storiesPlayed: stories !== null } satisfies SavedDemo);
@@ -299,9 +313,49 @@ export async function createDemo(
       generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).publicKey.export({ format: 'der', type: 'spki' }).toString('base64'),
     fileLinks: providers.fileLinks,
     demo,
+    demoSignIns: seed !== null,
+    whatsapp: env.META_APP_SECRET?.trim() && env.META_WEBHOOK_VERIFY_TOKEN?.trim() ? { appSecret: env.META_APP_SECRET.trim(), verifyToken: env.META_WEBHOOK_VERIFY_TOKEN.trim() } : null,
+    connectors: { gmail: mailboxes?.connector ?? null, whatsappNumber: env.META_WHATSAPP_NUMBER?.trim() || null },
   });
 
   return { app, web, demo, sessions, clock, messenger, seed, stories, database, baseUrl, apis, runWorker, startWorkerLoop, close };
 }
 
-export type Demo = Awaited<ReturnType<typeof createDemo>>;
+const MAIL_POLL_MS = 30_000;
+
+/**
+ * Gmail as the email channel, when GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are
+ * set: also needs TOKEN_ENCRYPTION_KEY (base64 of 32 bytes) for the stored
+ * refresh tokens. Google redirects back to PUBLIC_URL/oauth/google/callback.
+ */
+function gmailFromEnv(env: Env, db: Db, baseUrl: string) {
+  const clientId = env.GOOGLE_CLIENT_ID?.trim();
+  const clientSecret = env.GOOGLE_CLIENT_SECRET?.trim();
+  if (!clientId && !clientSecret) return null;
+  if (!clientId || !clientSecret) throw new Error('Set both GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET, or neither');
+  const encryptionKey = env.TOKEN_ENCRYPTION_KEY?.trim();
+  if (!encryptionKey || Buffer.from(encryptionKey, 'base64').length !== 32) {
+    throw new Error('Gmail stores refresh tokens encrypted: set TOKEN_ENCRYPTION_KEY to 32 random bytes in base64 (`openssl rand -base64 32`)');
+  }
+  return createGmailMailboxes({ db, clock: { now: () => new Date() }, clientId, clientSecret, redirectUri: `${baseUrl}/oauth/google/callback`, encryptionKey });
+}
+
+/**
+ * Fetches an inbound attachment by its URL: Meta media ids (`meta-media:<id>`)
+ * through the WhatsApp Cloud API, other URLs through Twilio when it's configured.
+ * The simulator sends attachments directly, so it never needs this.
+ */
+function mediaFetcher(env: Env): (url: string) => Promise<Uint8Array> {
+  const metaToken = env.META_WHATSAPP_ACCESS_TOKEN?.trim();
+  const twilioSid = env.TWILIO_ACCOUNT_SID?.trim();
+  const twilioToken = env.TWILIO_AUTH_TOKEN?.trim();
+  const meta = metaToken ? metaFetchMedia({ accessToken: metaToken }) : null;
+  const twilio = twilioSid && twilioToken ? twilioFetchMedia(twilioSid, twilioToken) : null;
+  return async (url) => {
+    if (url.startsWith('meta-media:') && meta) return meta(url);
+    if (!url.startsWith('meta-media:') && twilio) return twilio(url);
+    throw new Error(`No provider is configured to fetch the attachment at ${url}`);
+  };
+}
+
+export type Demo = Awaited<ReturnType<typeof createDemo<true>>>;

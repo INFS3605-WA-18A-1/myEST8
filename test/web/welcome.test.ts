@@ -149,7 +149,7 @@ describe('the onboarding wizard', () => {
     const another = await page(w, '/welcome/property?another', sam);
     expect(another).toContain('action="/welcome/property"');
     await submit(w, '/welcome/property', propertyFields({ address: '5 Sun St, Newtown NSW 2042', ownerName: 'Omar', tenantName: 'Uma Ung', tenantMobile: '0400 000 996' }), sam);
-    expect((await page(w, '/setup', sam)).match(/>Omar Owen<\/option>/g)).toHaveLength(1);
+    expect((await page(w, '/properties', sam)).match(/>Omar Owen<\/option>/g)).toHaveLength(1);
 
     const clash = await w.post('/welcome/property', propertyFields({ address: '7 Sun St, Newtown NSW 2042', ownerMobile: '0400 000 999', tenantName: 'Vic Vo', tenantMobile: '0400 000 995' }), sam);
     expect(clash.status).toBe(400);
@@ -211,7 +211,7 @@ describe('a new Agency', () => {
     const w = await webWorld();
     const sam = await w.signUp();
 
-    for (const path of ['/?filter=all', '/setup', '/calendar', '/welcome/property', '/welcome/tradies', '/welcome/team', '/welcome/done']) {
+    for (const path of ['/?filter=all', '/setup', '/dispatch', '/welcome/property', '/welcome/tradies', '/welcome/team', '/welcome/done']) {
       const text = visible(await page(w, path, sam));
       for (const harbour of ['Harbour Realty', 'Alice Archer', 'Olivia Owens', 'Tom Tran', "Pete's Plumbing", KING_ST]) expect(text, path).not.toContain(harbour);
     }

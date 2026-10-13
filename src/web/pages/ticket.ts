@@ -17,7 +17,6 @@ import {
   alert,
   badge,
   button,
-  card,
   chatBubble,
   dl,
   emptyState,
@@ -30,13 +29,14 @@ import {
   page,
   photoGrid,
   postButton,
-  sectionHeader,
+  section,
   statusBadge,
   steps,
   table,
   timeline,
   urgencyBadge,
   type Html,
+  type Tone,
 } from '../ui.ts';
 
 type TicketView = Awaited<ReturnType<PropertyManagerActions['ticket']>>;
@@ -67,6 +67,24 @@ const FREE_SLOTS_SHOWN = 3;
 const DEFAULT_VISIT_HOURS = 2;
 const CHANNELS = { sms: 'SMS', whatsapp: 'WhatsApp', email: 'Email' } as const;
 const nothing = html``;
+const IMAGE_CHECK: Record<string, [string, Tone]> = {
+  matches: ['Photos match the description', 'success'],
+  does_not_match: ["Photos don't match the description", 'error'],
+  unclear: ['Photo check unclear', 'warning'],
+};
+
+/** "any time" as "Any time", for display. */
+function sentence(value: string): string {
+  return value ? value.charAt(0).toUpperCase() + value.slice(1) : value;
+}
+
+/** A heading for a group inside a section. */
+function subHead(title: string, actions?: Html): Html {
+  return html`<div class="flex flex-wrap items-center justify-between gap-2">
+    <h3 class="section-title">${title}</h3>
+    ${actions ?? nothing}
+  </div>`;
+}
 
 /** The Ticket view under /tickets/:id and every Job action on it. */
 export function ticketPages() {
@@ -77,8 +95,8 @@ export function ticketPages() {
     const flash = flashFrom(c.req.url);
     const ticket = await findTicket(actions, c.req.param('id'));
     if (!ticket) {
-      const body = emptyState('There is no such Ticket in your Agency.', linkButton('Back to the dashboard', '/'));
-      return c.html(page({ title: 'Ticket not found', pm, active: 'dashboard', flash, body, shell: shellInfo(c) }), 404);
+      const body = emptyState('There is no such Ticket in your Agency.', linkButton('Back to Tickets', '/tickets'));
+      return c.html(page({ title: 'Ticket not found', pm, active: 'tickets', flash, body, shell: await shellInfo(c) }), 404);
     }
     const { timeZone } = actions.agency();
     const extras: Extras = {
@@ -89,16 +107,16 @@ export function ticketPages() {
     };
     return c.html(
       page({
-        title: `Ticket ${ticket.ticketId}`,
+        title: `Ticket #${ticket.ticketId}`,
         actions: html`${shareButton({
-          title: `Ticket ${ticket.ticketId}: ${ticket.description}`,
-          text: `Ticket ${ticket.ticketId} at ${ticket.propertyAddress}: ${ticket.description}`,
+          title: `Ticket #${ticket.ticketId}: ${ticket.description}`,
+          text: `Ticket #${ticket.ticketId} at ${ticket.propertyAddress}: ${ticket.description}`,
           url: shareUrl(c, `/tickets/${ticket.ticketId}`),
           note: COLLEAGUES_ONLY,
         })}${closeControl(ticket)}`,
-        shell: shellInfo(c),
+        shell: await shellInfo(c),
         pm,
-        active: 'dashboard',
+        active: 'tickets',
         flash,
         body: ticketBody(ticket, extras),
       }),
@@ -327,16 +345,10 @@ function ticketBody(t: TicketView, x: Extras): Html {
 /** The Ticket as a large docket: number and urgency word in the stub, then the address, the Tenant, status and age, the Repair Cost against the Max Repair Cost, and the Urgency change. */
 function ticketHeader(t: TicketView, x: Extras): Html {
   const overMax = t.repairCostCents > t.maxRepairCostCents;
-  const stub = t.urgency === 'high' ? 'bg-high-bg text-high' : 'bg-page text-ink';
   const maxLine = overMax
     ? `Over the Max Repair Cost of ${formatMoney(t.maxRepairCostCents)}, with the Property Owner's approval`
     : `Max Repair Cost ${formatMoney(t.maxRepairCostCents)}`;
   return html`<header class="flex overflow-hidden rounded-[4px] border border-line bg-surface">
-    <div class="flex w-24 shrink-0 flex-col items-center justify-center gap-1 px-1 py-4 ${stub}">
-      <span class="num text-[26px] leading-none font-bold [font-family:var(--font-head)]">#${t.ticketId}</span>
-      <span class="text-sm font-semibold [font-family:var(--font-head)]">${humanise(t.urgency)}</span>
-    </div>
-    <div aria-hidden="true" class="my-3 shrink-0 border-l border-dashed border-control"></div>
     <div class="grid min-w-0 flex-1 gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_auto]">
       <div class="min-w-0 space-y-3">
         <div class="space-y-1">
@@ -373,7 +385,7 @@ function reportedAgo(iso: string, now: Date): string {
 }
 
 function detailsCard(t: TicketView): Html {
-  return card({
+  return section({
     title: 'Ticket details',
     body: dl([
       ['Property Manager', t.propertyManager],
@@ -385,7 +397,7 @@ function detailsCard(t: TicketView): Html {
 /** Close Ticket, or why it can't be closed yet. */
 function closeControl(t: TicketView): Html {
   const openJobs = t.jobs.filter(isOpen).length;
-  if (t.status !== 'open') return badge('Closed', 'success');
+  if (t.status !== 'open') return nothing;
   if (openJobs === 0) {
     return postButton(`/tickets/${t.ticketId}/close`, 'Close Ticket', {
       confirm: 'Close this Ticket? The Tenant and Property Owner will be told.',
@@ -417,7 +429,7 @@ function urgencyForm(t: TicketView): Html {
 
 /** The photos the Tenant sent, each with what its metadata check said. */
 function photosCard(t: TicketView): Html {
-  return card({
+  return section({
     title: 'Photos',
     body: t.photos.length
       ? photoGrid(t.photos.map((p) => ({ src: `/files/${p.fileId}`, caption: photoCaption(p) })))
@@ -428,16 +440,22 @@ function photosCard(t: TicketView): Html {
 /** The Tenant's guided answers, and what the intake agent made of the photos. */
 function reportCard(t: TicketView): Html {
   const a = t.answers;
-  return card({
+  return section({
     title: 'What the Tenant reported',
     body: html`${dl([
-        ['Where', a.location ?? '—'],
-        ['Started', a.started ?? '—'],
-        ['Getting worse', a.worsening ? humanise(a.worsening) : '—'],
-        ['Usually home', a.availability ? AVAILABILITY_LABELS[a.availability] : '—'],
+        ['Where', a.location ? sentence(a.location) : '—'],
+        ['Started', a.started ? sentence(a.started) : '—'],
+        ['Getting worse', a.worsening ? sentence(humanise(a.worsening)) : '—'],
+        ['Usually home', a.availability ? sentence(AVAILABILITY_LABELS[a.availability]) : '—'],
       ])}
-      ${t.imageMatch ? html`<p>Image match: ${humanise(t.imageMatch.result)}. ${t.imageMatch.reason}</p>` : nothing}`,
+      ${imageCheck(t)}`,
   });
+}
+
+function imageCheck(t: TicketView): Html {
+  if (!t.imageMatch) return nothing;
+  const [label, tone] = IMAGE_CHECK[t.imageMatch.result] ?? ['Photo check unclear', 'warning' as Tone];
+  return html`<p class="mt-3">${badge(label, tone)}</p>`;
 }
 
 function photoCaption(p: Photo): Html {
@@ -448,13 +466,15 @@ function photoCaption(p: Photo): Html {
 /** One Job: where it is, the one next action, and the details below it. A cancelled Job is collapsed. */
 function jobCard(t: TicketView, job: JobView, x: Extras): Html {
   if (job.status === 'cancelled') return cancelledJob(t, job, x);
-  return card({
+  return section({
     id: `job-${job.jobId}`,
     title: jobLabel(t, job.jobId),
     actions: html`${statusBadge(job.status)} ${job.checkTrade ? badge('Check Trade', 'warning') : nothing}`,
-    body: html`${jobSteps(job)}
+    body: html`<div class="space-y-5">
+      ${jobSteps(job)}
       ${nextAction(t, job, x)}
-      ${jobMore(t, job, x)}`,
+      ${jobMore(t, job, x)}
+    </div>`,
   });
 }
 
@@ -533,9 +553,9 @@ function jobMore(t: TicketView, job: JobView, x: Extras): Html {
     : nothing;
   return html`<details class="group">
     <summary class="cursor-pointer text-sm font-medium text-action">More about this Job</summary>
-    <div class="mt-3 space-y-6">
+    <div class="mt-3 space-y-5 border-t border-line pt-3">
       ${trade} ${requests} ${quotes} ${approval} ${workOrder}
-      <div>${cancel}</div>
+      ${cancel}
     </div>
   </details>`;
 }
@@ -560,16 +580,16 @@ function tradeForm(t: TicketView, job: JobView): Html {
 }
 
 function recommendationsSection(t: TicketView, job: JobView, x: Extras): Html {
-  const header = sectionHeader('Recommended Tradies');
+  const header = subHead('Recommended Tradies');
   if (!job.recommendations.length) {
     const none = `No Tradies in the Agency do ${humanise(job.trade).toLowerCase()} work yet.`;
-    return html`<section class="space-y-3">${header} ${emptyState(none, linkButton('Add a Tradie', '/setup', { size: 'sm' }))}</section>`;
+    return html`<div class="space-y-3">${header} ${emptyState(none, linkButton('Add a Tradie', '/setup', { size: 'sm' }))}</div>`;
   }
   const firstRound = job.quoteRequests.length === 0;
   const ticked = new Set(firstRound ? job.recommendations.slice(0, FIRST_ROUND).map((r) => r.tradieId) : []);
   const anyLeft = job.recommendations.some((r) => !r.requested);
   const rows = job.recommendations.map((r, i) => recommendationRow(job, r, i + 1, ticked.has(r.tradieId), x));
-  return html`<section class="space-y-3">
+  return html`<div class="space-y-3">
     ${header}
     <p class="text-muted">
       Ranked by myEST8 rating, then Google rating, then median previous Quote.
@@ -579,7 +599,7 @@ function recommendationsSection(t: TicketView, job: JobView, x: Extras): Html {
       ${compactTable(['Tradie', 'Rating', 'Google', 'Median Quote', 'Ask'], rows, `Recommended Tradies for the ${humanise(job.trade)} Job`)}
       ${anyLeft ? button('Send Quote Requests', { block: true }) : html`<p>Every recommended Tradie has been asked.</p>`}
     </form>
-  </section>`;
+  </div>`;
 }
 
 /** A table with no minimum cell width, so a Tradie list fits the main column; it still scrolls inside its frame if it must. */
@@ -643,7 +663,7 @@ function quoteRequestsSection(job: JobView, x: Extras): Html {
     html`${formatWhen(r.sentAt, x.timeZone)}`,
     statusBadge(r.status),
   ]);
-  return html`<section class="space-y-3">${sectionHeader('Quote Requests')} ${table(['Tradie', 'Sent', 'Status'], rows)}</section>`;
+  return html`<div class="space-y-3">${subHead('Quote Requests')} ${table(['Tradie', 'Sent', 'Status'], rows)}</div>`;
 }
 
 function quotesSection(t: TicketView, job: JobView, x: Extras): Html {
@@ -652,18 +672,18 @@ function quotesSection(t: TicketView, job: JobView, x: Extras): Html {
     confirmed < MIN_QUOTES
       ? 'myEST8 needs two confirmed Quotes before you choose one. To go ahead with fewer, record why.'
       : 'Compare them side by side and choose one.';
-  return html`<section class="space-y-3">
-    ${sectionHeader('Quotes')}
+  return html`<div class="space-y-3">
+    ${subHead('Quotes')}
     ${job.status === 'quoting' ? html`<p class="text-muted">${confirmed} confirmed. ${advice}</p>` : nothing}
-    <ul role="list" class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-      ${job.quotes.map((q) => html`<li class="min-w-0">${quoteCard(t, job, q, confirmed, x)}</li>`)}
+    <ul role="list" class="divide-y divide-line">
+      ${job.quotes.map((q) => html`<li class="min-w-0 py-3 first:pt-0 last:pb-0">${quoteCard(t, job, q, confirmed, x)}</li>`)}
     </ul>
-  </section>`;
+  </div>`;
 }
 
 function quoteCard(t: TicketView, job: JobView, q: QuoteView, confirmed: number, x: Extras): Html {
   const open = q.status === 'open';
-  return html`<article class="h-full space-y-2 rounded-[8px] border bg-surface p-3 ${q.status === 'approved' ? 'border-done' : 'border-line'}">
+  return html`<article class="space-y-2">
     <header class="flex flex-wrap items-start justify-between gap-2">${tradieLink(q.tradieId, q.businessName)} ${statusBadge(q.status)}</header>
     <p class="num text-xl font-semibold">${formatMoney(q.priceCents)}</p>
     <p>Proposed time: ${q.proposedTime ? formatWhen(q.proposedTime, x.timeZone) : 'none given'}</p>
@@ -723,8 +743,8 @@ function approvalSection(t: TicketView, job: JobView, approval: NonNullable<JobV
   const asked = lastEvent(t, 'approval_requested', job.jobId);
   const repairCost = typeof asked?.repairCostCents === 'number' ? asked.repairCostCents : null;
   const waiting = approval.status === 'requested' || approval.status === 'reminded';
-  return html`<section class="space-y-3">
-    ${sectionHeader('Property Owner approval', statusBadge(approval.status))}
+  return html`<div class="space-y-3">
+    ${subHead('Property Owner approval', statusBadge(approval.status))}
     <p>
       Asked ${formatWhen(approval.requestedAt, x.timeZone)} to approve ${quote ? `${quote.businessName}'s` : 'the'} Quote of
       ${formatMoney(quote?.priceCents ?? null)}, which takes the Repair Cost to ${formatMoney(repairCost)}, over the Max Repair Cost of
@@ -736,14 +756,14 @@ function approvalSection(t: TicketView, job: JobView, approval: NonNullable<JobV
           You'll get an alert if there's no reply after 48 hours.
         </p>`
       : nothing}
-  </section>`;
+  </div>`;
 }
 
 function workOrderForm(t: TicketView, job: JobView, x: Extras): Html {
   const approved = job.quotes.find((q) => q.status === 'approved');
   const free = x.freeSlots.get(job.jobId) ?? [];
-  return html`<section class="space-y-3">
-    ${sectionHeader('Work Order')}
+  return html`<div class="space-y-3">
+    ${subHead('Work Order')}
     <p>
       ${approved ? `${approved.businessName}'s Quote of ${formatMoney(approved.priceCents)} is approved.` : ''}
       Send the Work Order to book the visit: the Tradie gets the address, and the Tenant and Property Owner are told the time.
@@ -769,7 +789,7 @@ function workOrderForm(t: TicketView, job: JobView, x: Extras): Html {
           ${approved.businessName} is free from ${free.map((s) => badge(formatWhen(s.start, x.timeZone)))}
         </p>`
       : nothing}
-  </section>`;
+  </div>`;
 }
 
 function workOrderDetails(t: TicketView, wo: WorkOrderView, x: Extras): Html {
@@ -785,8 +805,8 @@ function workOrderDetails(t: TicketView, wo: WorkOrderView, x: Extras): Html {
       ? badge('Not confirmed yet', 'warning')
       : html`—`;
   const asker = wo.rescheduleRequestedBy === 'tenant' ? 'Tenant' : 'Tradie';
-  return html`<section class="space-y-3">
-    ${sectionHeader('Work Order', active && !suggesting ? suggest : undefined)}
+  return html`<div class="space-y-3">
+    ${subHead('Work Order', active && !suggesting ? suggest : undefined)}
     ${active && wo.rescheduleRequestedBy ? alert(`The ${asker} asked for another time.`, 'warning') : nothing}
     ${dl([
       ['Visit', formatRange(wo.start, wo.end, x.timeZone)],
@@ -795,7 +815,7 @@ function workOrderDetails(t: TicketView, wo: WorkOrderView, x: Extras): Html {
       ...(wo.status === 'done' ? [['Done', 'The Tradie replied DONE'] as [string, string]] : []),
     ])}
     ${suggesting && x.suggest ? suggestionsPanel(t, wo, x.suggest, x) : nothing}
-  </section>`;
+  </div>`;
 }
 
 function suggestionsPanel(t: TicketView, wo: WorkOrderView, suggest: NonNullable<Extras['suggest']>, x: Extras): Html {
@@ -812,8 +832,8 @@ function suggestionsPanel(t: TicketView, wo: WorkOrderView, suggest: NonNullable
           )}
         </ul>`
       : emptyState('No suggested time fits in the next 14 days. Pick another time below.');
-  return html`<div class="space-y-3 rounded-[8px] bg-page p-3">
-    <h3 class="font-semibold">New times</h3>
+  return html`<div class="space-y-3 border-t border-line pt-3">
+    <h4 class="font-semibold">New times</h4>
     <p class="text-muted">
       Free for ${wo.businessName}, inside the Tenant's availability and as long as the current visit, over the next 14 days. The Tradie
       and the Tenant are told the new time.
@@ -846,15 +866,15 @@ function ratingSection(t: TicketView, job: JobView): Html {
       ${[1, 2, 3, 4, 5].map((n) => button(String(n), { name: 'score', value: String(n), variant: 'secondary' }))}
     </div>
   </form>`;
-  return html`<section class="space-y-3">
-    ${sectionHeader('Rating')}
+  return html`<div class="space-y-3">
+    ${subHead('Rating')}
     <p>${tenant ? `The Tenant rated the fix ${String(tenant.score)} out of 5.` : 'Waiting for the Tenant to say if it was fixed properly.'}</p>
     ${rated ? html`<p>${tradie} was rated ${String(rated.score)} out of 5.</p>` : form}
-  </section>`;
+  </div>`;
 }
 
 function addJobCard(t: TicketView): Html {
-  return card({
+  return section({
     title: 'Add another Job',
     body: html`<form method="post" action="/tickets/${t.ticketId}/jobs" class="flex flex-wrap items-end gap-3">
       <div class="min-w-48 flex-1">
@@ -890,7 +910,7 @@ function describeEvent(t: TicketView, event: TimelineEvent, x: Extras): { title:
   const tradie = typeof d.tradie === 'string' ? d.tradie : 'The Tradie';
   const price = typeof d.priceCents === 'number' ? formatMoney(d.priceCents) : undefined;
   const visit = typeof d.visitStart === 'string' && typeof d.visitEnd === 'string' ? formatRange(d.visitStart, d.visitEnd, x.timeZone) : undefined;
-  const details = (...parts: (string | undefined)[]) => parts.filter(Boolean).join(' · ') || undefined;
+  const details = (...parts: (string | undefined)[]) => parts.filter(Boolean).join('; ') || undefined;
   switch (event.kind) {
     case 'reported':
       return { title: 'Reported by the Tenant' };
@@ -956,12 +976,14 @@ function messagesCard(t: TicketView, x: Extras): Html {
 
 /** Inbound messages on the left, what myEST8 sent on the right; unread ones stand out. */
 function messageBubble(m: Message, x: Extras): Html {
-  const subject = m.template ? ` · ${templateSubject(m.template)}` : '';
   return chatBubble({
     side: m.direction === 'in' ? 'start' : 'end',
-    header: `${m.direction === 'in' ? 'From' : 'To'} ${m.address} · ${CHANNELS[m.channel]}${subject}`,
+    header: html`<span class="flex flex-wrap gap-x-3"
+      ><span>${m.direction === 'in' ? 'From' : 'To'} ${m.address}</span><span>${CHANNELS[m.channel]}</span
+      >${m.template ? html`<span>${templateSubject(m.template)}</span>` : nothing}</span
+    >`,
     text: m.text,
-    footer: `${formatWhen(m.at, x.timeZone)}${m.unread ? ' · Unread' : ''}`,
+    footer: html`<span class="flex flex-wrap gap-x-3"><span>${formatWhen(m.at, x.timeZone)}</span>${m.unread ? html`<span>Unread</span>` : nothing}</span>`,
     tone: m.unread ? 'warning' : undefined,
   });
 }

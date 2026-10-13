@@ -122,7 +122,7 @@ describe('the demo script', () => {
     expect((await d.lastTo('barry@strata.example')).template).toBe('building_manager.common_area_issue');
     expect((await d.lastTo('bella@example.com')).template).toBe('tenant.common_area_passed_on');
 
-    expect(await d.page('/?filter=all')).toContain('There is a gas smell in the kitchen');
+    expect(await d.page('/requests?filter=all')).toContain('There is a gas smell in the kitchen');
     expect(d.errors).toEqual([]);
   });
 });

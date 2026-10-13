@@ -18,7 +18,9 @@ import type { PropertyManagerActions } from '../../app.ts';
 import type { ImportKind } from '../../imports.ts';
 import type { ChannelType } from '../../ports.ts';
 import { ActionError, isEmail, normalizeAddress, type Role } from '../../shared.ts';
+import { NO_CONNECTORS, type ChannelConnectors } from '../connectors.ts';
 import type { WebEnv } from '../env.ts';
+import { gmailControls, whatsappControls } from './oauth-google.ts';
 import { cents, list, text, type FormValues } from '../forms.ts';
 import { shareButton } from '../share.ts';
 import { shellInfo } from '../shell.ts';
@@ -132,7 +134,7 @@ export async function finishSetupBanner(actions: Actions): Promise<Html> {
 }
 
 /** The wizard, mounted at /welcome behind requirePropertyManager. `demo` suggests made-up channel addresses for the phone simulator. */
-export function welcomePages(o: { demo: boolean }) {
+export function welcomePages(o: { demo: boolean; connectors?: ChannelConnectors }) {
   const pages = new Hono<WebEnv>();
 
   pages.get('/', async (c) => c.html(await welcomeStep(c)));
@@ -152,7 +154,7 @@ export function welcomePages(o: { demo: boolean }) {
     }
   });
 
-  pages.get('/channels', async (c) => c.html(await channelsStep(c, o.demo)));
+  pages.get('/channels', async (c) => c.html(await channelsStep(c, o.demo, o.connectors ?? NO_CONNECTORS)));
   pages.post('/channels', (c) =>
     channelAction(c, async (form, channel) => {
       const address = text(form, 'address');
@@ -232,7 +234,7 @@ async function wizardPage(
     subtitle: html`<span class="flex flex-wrap gap-x-4"><span>Step ${index + 1} of ${STEPS.length}</span><span>Setting up ${actions.agency().name}</span></span>`,
     pm,
     active: 'settings',
-    shell: shellInfo(c),
+    shell: await shellInfo(c),
     flash: o.flash ?? null,
     body: html`<div class="mx-auto flex w-full max-w-[720px] flex-col gap-4">
       <nav aria-label="Setup steps">
@@ -261,11 +263,10 @@ async function welcomeStep(c: WizardContext): Promise<Html> {
     title: `Welcome to myEST8, ${firstName(pm.name)}`,
     body: html`
       <p>
-        Let's get ${agency.name} ready for its first maintenance message. It takes about 5 minutes. You can skip any step and come back to it: what
-        you add is saved as you go.
+        This takes about 5 minutes. You can skip any step and come back to it. What you add is saved as you go.
       </p>
       ${card({
-        title: "What we'll set up",
+        title: 'Steps ahead',
         body: html`<ol class="ml-5 list-decimal space-y-2">
           <li><strong>Your team.</strong> Add the other Property Managers so each has their own sign-in. Optional.</li>
           <li><strong>Channels.</strong> Connect the SMS number, WhatsApp and email inbox Tenants already use, and test each one.</li>
@@ -347,7 +348,7 @@ async function teamStep(c: WizardContext, o: { added?: { name: string; email: st
               error: o.errors?.email,
             })}
           `)}
-          <div>${button('Add colleague')}</div>
+          <div>${button('Add colleague', { variant: team.length > 1 ? 'secondary' : 'primary' })}</div>
         </form>`,
       })}
     `,
@@ -375,7 +376,7 @@ async function channelAction(c: WizardContext, action: (form: FormValues, channe
   }
 }
 
-async function channelsStep(c: WizardContext, demo: boolean): Promise<Html> {
+async function channelsStep(c: WizardContext, demo: boolean, connectors: ChannelConnectors): Promise<Html> {
   const { actions, pm } = c.var;
   const agency = actions.agency();
   const connected = await actions.channels();
@@ -384,6 +385,7 @@ async function channelsStep(c: WizardContext, demo: boolean): Promise<Html> {
   const origin = new URL(c.req.url).origin;
   const tested = connected.filter((ch) => ch.testedAt).length;
   const rowForm = 'mt-2 grid items-end gap-3 md:grid-cols-[minmax(0,1fr)_auto]';
+  const gmailBlock = connectors.gmail ? await gmailControls(connectors.gmail, agency.id, 'welcome') : null;
   return wizardPage(c, {
     step: 'channels',
     title: 'Channels',
@@ -398,6 +400,8 @@ async function channelsStep(c: WizardContext, demo: boolean): Promise<Html> {
         ${CHANNELS.map((channel) => {
           const current = connected.find((ch) => ch.type === channel.type);
           const suggestion = demo ? demoAddress(channel.type, agency) : '';
+          const viaGmail = channel.type === 'email' && gmailBlock !== null;
+          const viaWhatsapp = channel.type === 'whatsapp' && connectors.whatsappNumber !== null;
           return html`<div id="${channel.type}" class="grid gap-2 border-t border-line pt-4 first:border-t-0 first:pt-0 md:grid-cols-[9rem_minmax(0,1fr)]">
             <div>
               <h2 class="section-title">${channel.name}</h2>
@@ -406,7 +410,13 @@ async function channelsStep(c: WizardContext, demo: boolean): Promise<Html> {
             <div class="min-w-0">
               ${flash && flashChannel === channel.type ? flashMessage(flash) : ''}
               ${current ? channelLine(current, agency.timeZone) : ''}
-              <form method="post" action="/welcome/channels" class="${rowForm}">
+              ${viaGmail
+                ? gmailBlock
+                : viaWhatsapp
+                  ? current?.address === connectors.whatsappNumber
+                    ? ''
+                    : whatsappControls(connectors.whatsappNumber!, '/welcome/channels')
+                  : html`<form method="post" action="/welcome/channels" class="${rowForm}">
                 <input type="hidden" name="type" value="${channel.type}" />
                 ${field({
                   label: channel.addressLabel,
@@ -417,8 +427,8 @@ async function channelsStep(c: WizardContext, demo: boolean): Promise<Html> {
                   value: current?.address ?? suggestion,
                   placeholder: channel.placeholder,
                 })}
-                ${button(current ? `Change ${channel.name}` : `Connect ${channel.name}`, { size: 'sm', variant: current ? 'secondary' : 'primary' })}
-              </form>
+                ${button(current ? `Change ${channel.name}` : `Connect ${channel.name}`, { size: 'sm', variant: 'secondary' })}
+              </form>`}
               ${current
                 ? html`<form method="post" action="/welcome/channels/test" class="${rowForm}">
                     <input type="hidden" name="type" value="${channel.type}" />
@@ -431,10 +441,10 @@ async function channelsStep(c: WizardContext, demo: boolean): Promise<Html> {
                       value: channel.type === 'email' ? pm.email : '',
                       placeholder: channel.type === 'email' ? 'you@youragency.com.au' : 'Your mobile, like 0412 345 678',
                     })}
-                    ${button('Send a test message', { variant: current.testedAt ? 'secondary' : 'primary', size: 'sm' })}
+                    ${button('Send a test message', { variant: 'secondary', size: 'sm' })}
                   </form>`
                 : ''}
-              <div class="mt-2">${channelGuide(channel.type, origin)}</div>
+              ${viaGmail || viaWhatsapp ? '' : html`<div class="mt-2">${channelGuide(channel.type, origin)}</div>`}
             </div>
           </div>`;
         })}
@@ -479,7 +489,7 @@ async function tradiesStep(c: WizardContext, o: { values?: Values; errors?: Erro
           <form method="post" action="/welcome/tradies${query ? `?google=${encodeURIComponent(query)}` : ''}" class="mt-4 space-y-3">
             ${unplaced ? alert(unplaced, 'error') : ''}
             ${tradieFields({ listings, values: o.values, errors: o.errors })}
-            <div>${button('Add Tradie')}</div>
+            <div>${button('Add Tradie', { variant: tradies.length ? 'secondary' : 'primary' })}</div>
           </form>
         `,
       })}
@@ -670,13 +680,13 @@ async function propertyStep(c: WizardContext, o: { values?: Values; errors?: Err
         : ''}
       ${importCard(c, 'Add many Properties from spreadsheets', ['owners', 'properties', 'tenants'])}
       ${showForm
-        ? await propertyForm(actions, pm.id, o)
+        ? await propertyForm(actions, pm.id, { ...o, first: !properties.length })
         : html`<p>${linkButton('Add another Property', '/welcome/property?another#add-property', { variant: 'secondary' })}</p>`}
     `,
   });
 }
 
-async function propertyForm(actions: Actions, myId: number, o: { values?: Values; errors?: Errors; message?: string }): Promise<Html> {
+async function propertyForm(actions: Actions, myId: number, o: { values?: Values; errors?: Errors; message?: string; first?: boolean }): Promise<Html> {
   const { values, errors = {} } = o;
   const managers = await actions.propertyManagers();
   const tradies = await actions.people('tradie');
@@ -769,7 +779,7 @@ async function propertyForm(actions: Actions, myId: number, o: { values?: Values
             error: errors.nominatedTradieIds,
           })
         : html`<p class="text-sm text-muted">Add Tradies in the Tradies step to nominate them for Urgent Repairs.</p>`}
-      <div>${button('Add the Property')}</div>
+      <div>${button('Add the Property', { variant: o.first ? 'primary' : 'secondary' })}</div>
     </form>`,
   });
 }
@@ -850,13 +860,13 @@ async function doneStep(c: WizardContext, demo: boolean): Promise<Html> {
 
   return wizardPage(c, {
     step: 'done',
-    title: finished ? "You're set up" : 'Nearly there',
+    title: finished ? "You're set up" : 'Setup is not finished',
     progress,
     body: html`
       <p>
         ${finished
-          ? `${agency.name} is ready for its first maintenance message. Here's what's set up.`
-          : `A few things are still to do before Tenants' messages can reach you. You can finish them now or come back later.`}
+          ? `${agency.name} is ready for its first maintenance message.`
+          : `Tenants' messages can't reach you until the items below are done. You can finish them now or come back later.`}
       </p>
       ${card({
         title: 'Your setup',
@@ -872,7 +882,7 @@ async function doneStep(c: WizardContext, demo: boolean): Promise<Html> {
         </ul>`,
       })}
       ${card({
-        title: 'Try it',
+        title: 'Try a message',
         body: demo
           ? html`<p>
                 Open the phone simulator and act as ${firstTenant ? firstTenant.name : 'a Tenant'}. Send "The kitchen tap is dripping", answer the questions,

@@ -13,7 +13,7 @@ import type { ShellInfo } from './shell.ts';
 
 export type Html = HtmlEscapedString | Promise<HtmlEscapedString>;
 export type Flash = { kind: 'ok' | 'error'; message: string };
-export type NavKey = 'dashboard' | 'dispatch' | 'settings' | 'simulator';
+export type NavKey = 'dashboard' | 'requests' | 'tickets' | 'approvals' | 'dispatch' | 'properties' | 'tradies' | 'settings' | 'simulator';
 export type Variant = 'primary' | 'secondary' | 'danger' | 'ghost';
 export type Tone = 'neutral' | 'info' | 'success' | 'warning' | 'error';
 export type FieldType =
@@ -100,11 +100,24 @@ function head(title: string): Html {
     <script src="/assets/app.js" defer></script>`;
 }
 
-/** The three places a Property Manager works. */
-const NAV: { key: NavKey; label: string; href: string }[] = [
-  { key: 'dashboard', label: 'Dashboard', href: '/' },
-  { key: 'dispatch', label: 'Dispatch', href: '/dispatch' },
-  { key: 'settings', label: 'Settings', href: '/settings' },
+/**
+ * Where a Property Manager works, in two groups the rail separates with a gap: the
+ * work that moves (from a Tenant's report to a booked visit), then the records it
+ * draws on and the Agency's settings.
+ */
+const NAV: { key: NavKey; label: string; href: string }[][] = [
+  [
+    { key: 'dashboard', label: 'Dashboard', href: '/' },
+    { key: 'requests', label: 'Requests', href: '/requests' },
+    { key: 'tickets', label: 'Tickets', href: '/tickets' },
+    { key: 'approvals', label: 'Approvals', href: '/approvals' },
+    { key: 'dispatch', label: 'Schedule', href: '/dispatch' },
+  ],
+  [
+    { key: 'properties', label: 'Properties', href: '/properties' },
+    { key: 'tradies', label: 'Tradies', href: '/tradies' },
+    { key: 'settings', label: 'Settings', href: '/settings' },
+  ],
 ];
 
 /** The demo's Phone simulator: not a place to work, so it sits quietly at the bottom of the rail. */
@@ -116,18 +129,20 @@ function railLink(item: { key: NavKey; label: string; href: string }, active: Na
 }
 
 /**
- * The rail: the logo, Dashboard, Dispatch and Settings with their icons (the
- * current one gets the Wattle bar and aria-current), then at the bottom the demo's
- * Phone simulator and the Agency's name. On phones it is a drawer when JavaScript
+ * The rail: the logo, then NAV's two groups with their icons (the current link gets
+ * the Wattle bar and aria-current, and a count shows only when it is above zero),
+ * then at the bottom the demo's Phone simulator and the Agency's name. On phones it is a drawer when JavaScript
  * is on, and a block above the page otherwise.
  */
 function rail(active: NavKey | undefined, agencyName: string | undefined, counts: Partial<Record<NavKey, number>>, demo: boolean): Html {
   return html`<aside id="rail" class="rail" aria-label="Sections">
     <a href="/" class="rail-logo">${logo()}</a>
     <nav aria-label="Main" class="rail-menu">
-      <ul class="rail-nav">
-        ${NAV.map((item) => html`<li>${railLink(item, active, counts[item.key])}</li>`)}
-      </ul>
+      ${NAV.map(
+        (group) => html`<ul class="rail-nav">
+          ${group.map((item) => html`<li>${railLink(item, active, counts[item.key] || undefined)}</li>`)}
+        </ul>`,
+      )}
       ${demo ? html`<ul class="rail-nav rail-foot"><li>${railLink(SIMULATOR, active, counts.simulator, 'rail-link is-quiet')}</li></ul>` : ''}
     </nav>
     ${agencyName ? html`<p class="rail-agency">${agencyName}</p>` : ''}
@@ -205,7 +220,7 @@ export function page(o: {
       <body>
         <a href="#main" class="skip-link">Skip to content</a>
         <div class="app-shell ${signedIn ? 'has-rail' : ''}" data-shell>
-          ${signedIn ? rail(o.active, o.shell?.agencyName, o.navCounts ?? {}, o.demo ?? true) : ''}
+          ${signedIn ? rail(o.active, o.shell?.agencyName, o.navCounts ?? o.shell?.counts ?? {}, o.demo ?? true) : ''}
           <div class="app-main">
             ${topBar(o.title, { menu: signedIn, controls: o.controls, today: o.shell?.today, pm: o.pm })}
             ${o.flash ? html`<div class="app-flash">${flashMessage(o.flash)}</div>` : ''}
@@ -798,12 +813,12 @@ export function docket(o: {
  * The count strip: one row of counts that link into the queues. Decision counts
  * take the Wattle chip; the others a quiet one.
  */
-export function countStrip(items: { label: string; count: number; href: string; decision?: boolean }[]): Html {
+export function countStrip(items: { label: string; count: number; href: string }[]): Html {
   return html`<nav aria-label="Counts">
     <ul class="count-strip">
       ${items.map(
         (item) =>
-          html`<li><a href="${item.href}" class="count-item"><span class="count-chip ${item.decision ? 'is-decision' : ''}">${item.count}</span><span class="count-label">${item.label}</span></a></li>`,
+          html`<li><a href="${item.href}" class="count-item"><span class="count-chip">${item.count}</span><span class="count-label">${item.label}</span></a></li>`,
       )}
     </ul>
   </nav>`;
@@ -946,7 +961,12 @@ const ICON = {
 /** The rail's icons, 18px (the Phone simulator's 16px, as it is quieter). */
 const NAV_ICON: Record<NavKey, Html> = {
   dashboard: icon('squares-four', { size: 'size-[18px]' }),
-  dispatch: icon('map-pin', { size: 'size-[18px]' }),
+  requests: icon('tray', { size: 'size-[18px]' }),
+  tickets: icon('ticket', { size: 'size-[18px]' }),
+  approvals: icon('seal-check', { size: 'size-[18px]' }),
+  dispatch: icon('calendar-blank', { size: 'size-[18px]' }),
+  properties: icon('house-line', { size: 'size-[18px]' }),
+  tradies: icon('wrench', { size: 'size-[18px]' }),
   settings: icon('gear-six', { size: 'size-[18px]' }),
   simulator: icon('device-mobile', { size: 'size-4' }),
 };

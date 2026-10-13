@@ -241,3 +241,24 @@ Manual checklist with real providers:
 2. Demo with Twilio set and `DEMO_SEND_TO=<your mobile>`, and a Tenant added in Setup with your mobile: text the Agency's Twilio number from your phone, get the acknowledgement by SMS, reply, and see the reply land.
 3. Add a Property Owner with your mobile and no email, and a Tenant at their Property: report an Urgent Repair as the Tenant and upload a receipt photo. The Owner's SMS arrives as an MMS with the receipt (WhatsApp in the sandbox shows it too); its `/media/...` link stops working after an hour. (Quote Requests only attach photos on email.)
 4. With SendGrid set, a Tradie on email gets the Quote Request with the photos attached; replying lands in the Ticket through Inbound Parse.
+
+## Running it for real on a home server
+
+`npm start` runs myEST8 without the demo Agency, for people who sign up (`src/main.ts`, ADR 0004). Email goes through each Agency's own Gmail, WhatsApp through Meta's WhatsApp Cloud API, and SMS stays on the phone simulator.
+
+1. **Database.** `npm run db:start` (Docker) on the server. Data is kept in the schema `myest8`. Alternatively, set `SUPABASE_DB_URL` to a Postgres connection string.
+2. **Public address.** Create a Cloudflare named tunnel to a hostname you own, pointing at `http://localhost:$PORT`. A quick tunnel's random URL changes on every start and breaks the webhooks and the OAuth redirect. Set `PUBLIC_URL` to `https://<that hostname>`.
+3. **Gmail.**
+   - In Google Cloud, enable the Gmail API.
+   - Create an OAuth client (Web application) with the redirect URI `https://<hostname>/oauth/google/callback`.
+   - Keep the consent screen in Testing, and add each Gmail account that will connect as a test user.
+   - Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `TOKEN_ENCRYPTION_KEY`.
+4. **WhatsApp.**
+   - In Meta for Developers, create an app with WhatsApp.
+   - On API Setup, note the test number and its Phone number ID, and add your phone as a recipient.
+   - Set the four `META_*` values.
+   - Add the webhook `https://<hostname>/webhooks/whatsapp` with your verify token, and subscribe to `messages`.
+5. **Classifier.** Set `JEV_API_URL` and `JEV_API_KEY`. Anything else left on a mock needs `ALLOW_MOCKS=1`.
+6. **Start.** Export the variables, run `npm start`, then sign up at the public address. On the channels step, connect Gmail and the WhatsApp number, then send a test message.
+
+Keep secrets out of the repo: load them from a git-ignored `.env`, or the server's service manager (for example a systemd `EnvironmentFile`). `npm start` runs TypeScript through `tsx`, so install with dev dependencies (`npm ci`).

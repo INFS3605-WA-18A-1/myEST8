@@ -37,8 +37,8 @@ export function landingPage(o: { demo: boolean }): Html {
     footer: SIGNED_OUT_FOOTER,
     body: html`<div class="landing-intro">
         <p class="landing-lead">
-          For Property Managers at small Agencies. Tenants text the way they already do, and myEST8 turns each message into a Maintenance
-          Request for you to confirm, then gets the Quotes and books the Tradie.
+          For Property Managers at small Agencies. Tenants text as they already do. myEST8 turns each message into a Maintenance Request for
+          you to confirm, collects Quotes and books the Tradie.
         </p>
         <div class="landing-actions">
           ${linkButton('Create your Agency’s account', '/signup', { variant: 'primary', size: 'lg' })} ${linkButton('Sign in', '/login', { size: 'lg' })}

@@ -106,14 +106,15 @@ describe('ui', () => {
     expect(out.match(/aria-current="page"/g)).toHaveLength(1);
   });
 
-  it('lists Dashboard, Dispatch and Settings in the rail, with the Phone simulator at its foot only in the demo', async () => {
+  it('lists the work, then the records and Settings, in the rail, with the Phone simulator at its foot only in the demo', async () => {
     const out = await render(page({ title: 'Dashboard', pm: { name: 'Alice' }, active: 'dashboard', body: html`<p>x</p>` }));
     const links = [...out.matchAll(/<a href="([^"]+)" class="rail-link[^"]*"/g)].map((m) => m[1]);
-    expect(links).toEqual(['/', '/dispatch', '/settings', '/demo']);
+    expect(links).toEqual(['/', '/requests', '/tickets', '/approvals', '/dispatch', '/properties', '/tradies', '/settings', '/demo']);
     expect(out).toMatch(/<ul class="rail-nav rail-foot"><li><a href="\/demo" class="rail-link is-quiet"/);
     expect(out).toContain('Phone simulator (demo)');
     expect(out).not.toContain('href="/calendar"');
     expect(out).not.toContain('href="/setup"');
+    expect(out.match(/<ul class="rail-nav">/g)).toHaveLength(2);
 
     const live = await render(page({ title: 'Dashboard', pm: { name: 'Alice' }, active: 'dashboard', body: html`<p>x</p>`, demo: false }));
     expect(live).not.toContain('href="/demo"');
@@ -128,16 +129,17 @@ describe('ui', () => {
     expect(out).toMatch(/<details class="user-menu" data-menu>[\s\S]*action="\/logout"/);
   });
 
-  it('builds the Agency name and today in the Agency time zone', () => {
+  it('builds the Agency name, today in the Agency time zone and the rail counts', async () => {
     const c = {
       var: {
         actions: {
           agency: () => ({ name: 'Harbour Realty', timeZone: 'Australia/Sydney' }),
           now: () => new Date('2026-10-08T23:30:00Z'),
+          navCounts: async () => ({ requests: 3, approvals: 0 }),
         },
       },
     };
-    expect(shellInfo(c as never)).toEqual({ agencyName: 'Harbour Realty', today: 'Fri 9 Oct' });
+    expect(await shellInfo(c as never)).toEqual({ agencyName: 'Harbour Realty', today: 'Fri 9 Oct', counts: { requests: 3, approvals: 0 } });
   });
 
   it('pairs a field’s label with its control and hint', async () => {
@@ -337,8 +339,8 @@ describe('ui', () => {
   it('draws the rail, menu and message icons from Phosphor', async () => {
     const out = await render(page({ title: 'Dashboard', pm: { name: 'Alice' }, active: 'dashboard', body: alert('Check the photo', 'warning') }));
     const phosphor = /<svg (?![^>]*logo-mark)[^>]*viewBox="0 0 256 256"/g;
-    // four rail links, the menu button, the user menu caret, the alert (the logo's key tag is our own)
-    expect(out.match(phosphor)).toHaveLength(7);
+    // nine rail links, the menu button, the user menu caret, the alert (the logo's key tag is our own)
+    expect(out.match(phosphor)).toHaveLength(12);
     expect(out).not.toContain('viewBox="0 0 24 24"');
     expect(out).toMatch(/class="rail-link" aria-current="page"><svg [^>]*class="size-\[18px\] shrink-0"/);
     expect(await render(flashMessage({ kind: 'ok', message: 'Saved' }))).toMatch(/<svg [^>]*viewBox="0 0 256 256"/);

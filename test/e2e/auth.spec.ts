@@ -19,7 +19,7 @@ test('a demo Property Manager signs in and sees the dashboard', async ({ page })
 
   await expect(page.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible();
   await expect(page.getByText('Harbour Realty').first()).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Maintenance Requests to review' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Maintenance Requests to confirm' })).toBeVisible();
 });
 
 test('a wrong password is refused with a message', async ({ page }) => {

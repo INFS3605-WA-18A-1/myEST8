@@ -403,7 +403,7 @@
       text-decoration: underline;
     }
 
-    /* Count chips: round counts. Decisions get the Wattle fill; the rest are Paper. */
+    /* Count chips: round counts on Paper; in the count strip they take the Wattle fill. */
     .count-chip {
       display: inline-flex;
       align-items: center;
@@ -420,9 +420,8 @@
       line-height: 1;
       font-variant-numeric: tabular-nums;
     }
-    .count-chip.is-decision {
+    .count-strip .count-chip {
       background: var(--hivis);
-      color: var(--ink);
     }
 
     /* ----- Forms: label above the control, 40px controls (44px on phones), hints and errors under them. */
@@ -570,6 +569,21 @@
     }
     .table tbody tr:last-child :where(th, td) {
       border-bottom: 0;
+    }
+    /* Inside a section the table runs to the section's edges under a hairline, not in a second box. */
+    .section-body > .table-frame {
+      margin: 0 -16px;
+      border: 0;
+      border-block: 1px solid var(--line);
+      border-radius: 0;
+    }
+    .section-body > .table-frame:last-child {
+      margin-bottom: -16px;
+      border-bottom: 0;
+      border-radius: 0 0 8px 8px;
+    }
+    .section-body > .table-frame :where(th, td):first-child {
+      padding-left: 16px;
     }
 
     /* ----- Steps: 24px circles. Done is --done with a tick, current is Harbour with its
@@ -764,6 +778,11 @@
       padding: 16px;
       border: 1px solid var(--line);
       border-radius: 8px;
+    }
+    /* Inside a section the section is the frame. */
+    .section-body > .empty-state {
+      padding: 0;
+      border: 0;
     }
     .empty-state p {
       margin: 0;
@@ -1118,6 +1137,10 @@
       margin: 0;
       padding: 0;
       list-style: none;
+    }
+    /* A gap, not a heading, between the work and the records. */
+    .rail-nav + .rail-nav:not(.rail-foot) {
+      margin-top: 16px;
     }
     .rail-foot {
       margin-top: auto;

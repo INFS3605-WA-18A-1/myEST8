@@ -178,3 +178,46 @@ describe('the no-login links', () => {
     expect((await http.request('/api/t/not-a-real-token')).status).toBe(404);
   });
 });
+
+describe('the Meta WhatsApp webhook', () => {
+  const SECRET = 'meta-app-secret';
+  function whatsappServer(enabled = true) {
+    const received: unknown[] = [];
+    const http = createHttpApp({ receiveInbound: async (m: unknown) => void received.push(m) } as never, {
+      publicUrl: PUBLIC_URL,
+      twilioAuthToken: TWILIO_TOKEN,
+      sendgridPublicKey: '',
+      clock: { now: () => new Date('2026-10-13T00:00:00Z') },
+      whatsapp: enabled ? { appSecret: SECRET, verifyToken: 'verify-me' } : null,
+    });
+    return { http, received };
+  }
+  const body = JSON.stringify({
+    entry: [{ changes: [{ field: 'messages', value: { metadata: { display_phone_number: '61290000000' }, messages: [{ from: '61400000001', id: 'wamid.A', timestamp: '1760313600', type: 'text', text: { body: 'hi' } }] } }] }],
+  });
+  const sign = (text: string) => 'sha256=' + createHmac('sha256', SECRET).update(text).digest('hex');
+
+  test('the handshake echoes the challenge for the right token only', async () => {
+    const { http } = whatsappServer();
+    const good = await http.request('/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=verify-me&hub.challenge=1234');
+    expect(good.status).toBe(200);
+    expect(await good.text()).toBe('1234');
+    expect((await http.request('/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=nope&hub.challenge=1')).status).toBe(403);
+  });
+
+  test('a signed POST is passed to receiveInbound and a bad signature is refused', async () => {
+    const { http, received } = whatsappServer();
+    const bad = await http.request('/webhooks/whatsapp', { method: 'POST', headers: { 'x-hub-signature-256': 'sha256=00' }, body });
+    expect(bad.status).toBe(403);
+    expect(received).toEqual([]);
+    const good = await http.request('/webhooks/whatsapp', { method: 'POST', headers: { 'x-hub-signature-256': sign(body) }, body });
+    expect(good.status).toBe(200);
+    expect(received).toMatchObject([{ providerMessageId: 'wa-wamid.A', from: '+61400000001', text: 'hi', agencyChannel: '+61290000000' }]);
+  });
+
+  test('without configuration both routes are 404', async () => {
+    const { http } = whatsappServer(false);
+    expect((await http.request('/webhooks/whatsapp?hub.mode=subscribe')).status).toBe(404);
+    expect((await http.request('/webhooks/whatsapp', { method: 'POST', body })).status).toBe(404);
+  });
+});

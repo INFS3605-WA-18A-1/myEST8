@@ -215,7 +215,7 @@ describe('Work Orders', () => {
 
     const asked = await open();
     expect(asked.text).toContain('The Tradie asked for another time.');
-    expect(asked.text).toContain(`From ${PETE} · SMS`);
+    expect(asked.text).toContain(`From ${PETE}`);
     expect(asked.text).toContain('Unread');
     const suggestions = await open(`${path}?suggest=${workOrderId}`);
     expect(suggestions.text).toContain('New times');

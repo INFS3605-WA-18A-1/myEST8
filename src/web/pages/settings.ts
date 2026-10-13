@@ -1,24 +1,29 @@
-// Settings: the Agency, channels, Quotes, approvals, messages, the team and
-// imports, in tabs. A placeholder until the page is built (dispatch-desk redesign,
-// phase 2): it points to Setup, where those settings live for now.
+// Settings: a short page that points to where the Agency is set up.
 
 import { Hono } from 'hono';
+import { html } from 'hono/html';
 import type { WebEnv } from '../env.ts';
 import { shellInfo } from '../shell.ts';
-import { emptyState, flashFrom, linkButton, page } from '../ui.ts';
+import { flashFrom, page, section } from '../ui.ts';
 
 /** Settings under /settings. */
 export function settingsPages() {
   const pages = new Hono<WebEnv>();
-  pages.get('/', (c) =>
+  pages.get('/', async (c) =>
     c.html(
       page({
         title: 'Settings',
         pm: c.var.pm,
         active: 'settings',
-        shell: shellInfo(c),
+        shell: await shellInfo(c),
         flash: flashFrom(c.req.url),
-        body: emptyState('Your Agency’s settings are moving here. Until then, add Properties, Tradies and your team on the Setup page.', linkButton('Open Setup', '/setup')),
+        body: section({
+          title: 'Your Agency',
+          body: html`<ul class="flex flex-col gap-2 text-sm">
+            <li><a class="link" href="/setup">Setup</a> <span class="text-muted">for channels, Property Owners, Building Managers and Tenants</span></li>
+            <li><a class="link" href="/welcome">Step-by-step guide</a> <span class="text-muted">to set the Agency up from the start</span></li>
+          </ul>`,
+        }),
       }),
     ),
   );

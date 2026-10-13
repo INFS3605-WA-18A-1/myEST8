@@ -112,16 +112,16 @@ function uploadPage(token: string, o: { error?: string; thanks?: string } = {}):
         title: sent ? 'Add more' : 'Choose your files',
         body: html`${o.error ? alert(o.error, 'error') : ''}
           <form method="post" action="/u/${encodeURIComponent(token)}" enctype="multipart/form-data" class="space-y-4">
-            <p>No account needed: this link is just for the issue you told us about.</p>
+            <p>This link is only for the repair you told us about. You don't need an account.</p>
             ${dropZone()}
             ${button(sent ? 'Upload more' : 'Upload', { block: true })}
           </form>`,
       })}
       ${card({
-        title: 'Tips',
+        title: 'Photo tips',
         body: html`<ul class="list-disc space-y-2 pl-5">
           <li>Take photos from a few angles, and one from further back so we can see where it is.</li>
-          <li>Photos straight from your camera keep their details, like when they were taken, which helps us act faster.</li>
+          <li>Send photos straight from your camera if you can. They show when they were taken.</li>
           <li>For an Urgent Repair receipt, send a photo or a PDF of it.</li>
         </ul>`,
       })}
@@ -159,7 +159,7 @@ function trackerPage(progress: Awaited<ReturnType<App['tracker']>>, link: string
       ${current ? html`<p class="text-2xl leading-snug font-semibold">Now: ${STAGE_LABEL[current.stage] ?? current.stage}</p>` : ''}
       ${card({ title: 'Progress', body: progressList(progress.stages, last, progress.timeZone) })}
       <aside class="tracker-share" aria-label="Share this page">
-        <p>Live with someone? Send them this page so they can follow the repair too.</p>
+        <p>Share this page with anyone you live with so they can follow the repair.</p>
         ${shareButton({
           title: 'Follow our repair',
           text: `Here’s where our repair is up to: ${progress.description}`,
