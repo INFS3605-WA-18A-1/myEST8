@@ -1,0 +1,13 @@
+[Unit]
+Description=myEST8 Cloudflare quick tunnel
+After=network-online.target
+
+[Service]
+ExecStart=%h/apps/myEST8/deploy/tunnel.sh
+# The app bakes the tunnel's URL into its links, so it restarts whenever the tunnel does.
+ExecStartPost=/usr/bin/systemctl --user restart --no-block myest8.service
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

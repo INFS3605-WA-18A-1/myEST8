@@ -26,3 +26,7 @@ ds-bundle/
 .design-sync/react/node_modules/
 .design-sync/react/dist/
 .design-sync/react/.cache/
+
+# Local tooling: agent worktrees, settings, cloud CLI installer
+.claude/
+google-cloud-cli-*.tar.gz
