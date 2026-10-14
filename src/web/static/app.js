@@ -223,3 +223,26 @@
     if (event.target instanceof HTMLInputElement && event.target.name === 'include') update();
   });
 })();
+
+// === copy ===
+// A button with data-copy-for="<input id>" copies that field. Without this file
+// the field is still there to copy by hand.
+(() => {
+  for (const button of document.querySelectorAll('[data-copy-for]')) {
+    button.addEventListener('click', async () => {
+      const input = document.getElementById(button.getAttribute('data-copy-for'));
+      if (!(input instanceof HTMLInputElement)) return;
+      const label = button.textContent;
+      try {
+        await navigator.clipboard.writeText(input.value);
+        button.textContent = 'Copied';
+        setTimeout(() => {
+          button.textContent = label;
+        }, 2000);
+      } catch {
+        input.focus();
+        input.select();
+      }
+    });
+  }
+})();

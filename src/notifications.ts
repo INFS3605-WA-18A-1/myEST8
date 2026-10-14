@@ -114,6 +114,29 @@ export function createNotifications({ clock, ports, files, modules }: Context) {
       if (!(await modules.profiles.channelAddress(agencyId, channelType))) invalid(`Connect the ${channelType} channel first`);
       await deliver(agencyId, channelType, to, [], 'onboarding.test_message', {}, []);
     },
+
+    /**
+     * Texts or emails a one-time code. Unlike every other send, the Agency need
+     * not have this channel connected yet: the code is how they prove the address.
+     * The code is not written to the message log.
+     */
+    async sendVerificationCode(agencyId: number, channelType: ChannelType, to: string, code: string) {
+      const { profiles } = modules;
+      const agency = await profiles.agency(agencyId);
+      const from = (await profiles.channelAddress(agencyId, channelType)) ?? 'myEST8';
+      const template = templates['onboarding.verification_code'];
+      await ports.messenger.send({
+        channelType,
+        from,
+        to,
+        cc: [],
+        subject: template.subject,
+        text: template.text({ code }, agency),
+        template: 'onboarding.verification_code',
+        data: { code },
+        attachments: [],
+      });
+    },
   };
 }
 

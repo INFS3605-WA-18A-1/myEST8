@@ -1,6 +1,6 @@
-// Setup: connect and test the Agency's channels, and add Property Owners, Building
-// Managers and Tenants. Properties and Tradies have their own pages (/properties,
-// /tradies); their forms still post here.
+// Setup: verify the Agency's phone numbers, show its inbound email address, and add
+// Property Owners, Building Managers and Tenants. Properties and Tradies have their
+// own pages (/properties, /tradies); their forms still post here.
 //
 // Several forms share field names ("name", "mobile"), so each control's id is
 // prefixed with its form ("owner-name") to keep every label pointing at its own
@@ -11,7 +11,7 @@ import { Hono } from 'hono';
 import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
 import type { ImportKind } from '../../imports.ts';
-import { ActionError } from '../../shared.ts';
+import { ActionError, normalizeAddress } from '../../shared.ts';
 import { NO_CONNECTORS, type ChannelConnectors } from '../connectors.ts';
 import type { WebEnv } from '../env.ts';
 import { gmailControls, whatsappControls } from './oauth-google.ts';
@@ -27,6 +27,8 @@ import {
   channelGuide,
   channelLine,
   channelOf,
+  inboundEmailField,
+  phoneChannelForm,
   chosenId,
   contactFields,
   contactFrom,
@@ -57,7 +59,7 @@ const AREAS = [
   ['tenants', 'Tenants'],
 ] as const;
 
-/** Onboarding under /setup: channels and test messages, Properties, people and Tradies. */
+/** Onboarding under /setup: channels, Properties, people and Tradies. */
 export function setupPages(o: { connectors?: ChannelConnectors } = {}) {
   const connectors = o.connectors ?? NO_CONNECTORS;
   const pages = new Hono<WebEnv>();
@@ -76,7 +78,9 @@ export function setupPages(o: { connectors?: ChannelConnectors } = {}) {
     };
     const origin = new URL(c.req.url).origin;
     const { timeZone } = actions.agency();
+    const email = await actions.ensureInboundEmail();
     const channels = await actions.channels();
+    const pending = await actions.pendingChannelVerifications();
 
     return c.html(
       page({
@@ -91,7 +95,7 @@ export function setupPages(o: { connectors?: ChannelConnectors } = {}) {
           <nav aria-label="Setup areas">
             <ul class="flex flex-wrap gap-x-4 gap-y-1 text-sm">${AREAS.map(([id, title]) => html`<li><a class="link" href="#${id}">${title}</a></li>`)}</ul>
           </nav>
-          ${section({ id: 'channels', title: 'Channels', body: await channelsArea(origin, channels, timeZone, shownFor('channels'), connectors, actions.agency().id) })}
+          ${section({ id: 'channels', title: 'Channels', body: await channelsArea(origin, channels, timeZone, shownFor('channels'), connectors, actions.agency().id, email, pending) })}
           ${section({ id: 'people', title: 'Property Owners and Building Managers', body: peopleArea(agency, shownFor) })}
           ${section({ id: 'tenants', title: 'Tenants', body: html`${tenantsArea(agency, shownFor('tenant'))}${importForm('tenants', shownFor('import-tenants'))}` })}
         `,
@@ -102,26 +106,22 @@ export function setupPages(o: { connectors?: ChannelConnectors } = {}) {
   pages.post('/channels', (c) =>
     formAction(c, '/setup?form=channels', async (form) => {
       const channel = channelOf(form);
+      if (channel.type === 'email') return { ok: 'Forward the Agency inbox to the inbound address on this page.' };
       const address = text(form, 'address');
       if (!address) throw new ActionError('invalid', `Enter the ${channel.addressLabel}`);
-      await c.var.actions.connectChannel(channel.type, address);
-      return { ok: `${channel.name} connected to ${address}. Now send a test message.` };
+      await c.var.actions.startChannelVerification(channel.type, address);
+      return { ok: `We sent a 6-digit code to ${normalizeAddress(address)}. It expires in 10 minutes.` };
     }),
   );
 
-  pages.post('/channels/test', (c) =>
+  pages.post('/channels/confirm', (c) =>
     formAction(c, '/setup?form=channels', async (form) => {
       const channel = channelOf(form);
-      const to = text(form, 'to');
-      if (!to) throw new ActionError('invalid', 'Enter where to send the test message');
-      try {
-        await c.var.actions.sendTestMessage(channel.type, to);
-      } catch (error) {
-        // The point of a test is to see what's wrong, so a channel or provider failure is shown, not hidden.
-        if (error instanceof ActionError) throw error;
-        throw new ActionError('invalid', `The ${channel.name} test message didn't send: ${error instanceof Error ? error.message : String(error)}`);
-      }
-      return { ok: `Test message sent to ${to} by ${channel.name}. Check that it arrived.` };
+      const address = text(form, 'address');
+      const code = text(form, 'code');
+      if (!code) throw new ActionError('invalid', 'Enter the 6-digit code');
+      await c.var.actions.confirmChannelVerification(channel.type, address, code);
+      return { ok: `${channel.name} verified.` };
     }),
   );
 
@@ -201,72 +201,62 @@ function importForm(kind: ImportKind, shown: Shown): Html {
   </details>`;
 }
 
-async function channelsArea(origin: string, connected: AgencyChannel[], timeZone: string, shown: Shown, connectors: ChannelConnectors, agencyId: number): Promise<Html> {
+async function channelsArea(
+  origin: string,
+  connected: AgencyChannel[],
+  timeZone: string,
+  shown: Shown,
+  connectors: ChannelConnectors,
+  agencyId: number,
+  email: { address: string; state: 'waiting' | 'verified' | 'connected' },
+  pending: { channelType: AgencyChannel['type']; address: string }[],
+): Promise<Html> {
   const gmailBlock = connectors.gmail ? await gmailControls(connectors.gmail, agencyId, 'setup') : null;
   return html`
-    <p class="text-sm">Tenants, Tradies and Property Owners reach the Agency by SMS, WhatsApp and email. Connect each channel, then send a test message.</p>
+    <p class="text-sm">Tenants, Tradies and Property Owners reach the Agency by SMS, WhatsApp and email. Verify a phone number with a code. Forward the Agency inbox to the email address below.</p>
     ${shown.error}
-    ${CHANNELS.map((channel) => channelRow(channel, connected.find((c) => c.type === channel.type), timeZone, origin, { gmailBlock, whatsappNumber: connectors.whatsappNumber }))}
+    ${CHANNELS.map((channel) => channelRow(channel, connected.find((c) => c.type === channel.type), timeZone, origin, { gmailBlock, whatsappNumber: connectors.whatsappNumber }, email, pending.find((row) => row.channelType === channel.type)))}
   `;
 }
 
-/** One channel: its name and status, setup notes on the left, the two forms on the right. */
+/** One channel: its name and status, setup notes on the left, the form on the right. */
 function channelRow(
   channel: (typeof CHANNELS)[number],
   connected: AgencyChannel | undefined,
   timeZone: string,
   origin: string,
   via: { gmailBlock: Html | null; whatsappNumber: string | null },
+  email: { address: string; state: 'waiting' | 'verified' | 'connected' },
+  pending: { address: string } | undefined,
 ): Html {
-  const viaGmail = channel.type === 'email' && via.gmailBlock !== null;
   const viaWhatsapp = channel.type === 'whatsapp' && via.whatsappNumber !== null;
+  const waiting = channel.type === 'email' && email.state === 'waiting';
+  const emailVerified = channel.type === 'email' && email.state === 'verified';
+  const rowForm = 'mt-3 flex flex-wrap items-end gap-3';
   return html`<div class="mt-4 grid gap-4 border-t border-line pt-4 lg:grid-cols-2" id="${channel.type}">
     <div class="min-w-0">
       <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
         <h3 class="section-title">${channel.name}</h3>
-        ${channelChip(connected)}
+        ${channelChip(connected, { waiting, verified: emailVerified })}
       </div>
-      ${connected ? channelLine(connected, timeZone) : ''}
-      ${viaGmail || viaWhatsapp ? '' : channelGuide(channel.type, origin)}
+      ${connected ? channelLine(connected, timeZone, { waiting }) : ''}
+      ${channel.type === 'email' || !viaWhatsapp ? channelGuide(channel.type, origin) : ''}
     </div>
     <div class="min-w-0">
-      ${viaGmail
-        ? via.gmailBlock
+      ${channel.type === 'email'
+        ? html`${inboundEmailField(email.address)}${via.gmailBlock ?? ''}`
         : viaWhatsapp
           ? connected?.address === via.whatsappNumber
             ? ''
             : whatsappControls(via.whatsappNumber!, '/setup/channels')
-          : html`<form method="post" action="/setup/channels" class="flex flex-wrap items-end gap-3">
-        <input type="hidden" name="type" value="${channel.type}" />
-        <div class="min-w-56 flex-1">
-          ${field({
-            label: channel.addressLabel,
-            name: 'address',
-            id: `${channel.type}-address`,
-            type: channel.inputType,
-            required: true,
-            value: connected?.address ?? '',
-            placeholder: channel.placeholder,
-          })}
-        </div>
-        ${button(connected ? `Change ${channel.name}` : `Connect ${channel.name}`, { size: 'sm', variant: connected ? 'secondary' : 'primary' })}
-      </form>`}
-      ${connected
-        ? html`<form method="post" action="/setup/channels/test" class="mt-3 flex flex-wrap items-end gap-3">
-            <input type="hidden" name="type" value="${channel.type}" />
-            <div class="min-w-56 flex-1">
-              ${field({
-                label: channel.type === 'email' ? 'Send a test email to' : 'Send a test message to',
-                name: 'to',
-                id: `${channel.type}-to`,
-                type: channel.inputType,
-                required: true,
-                placeholder: channel.type === 'email' ? 'you@youragency.com.au' : 'Your mobile',
-              })}
-            </div>
-            ${button('Send test message', { variant: 'secondary', size: 'sm' })}
-          </form>`
-        : ''}
+          : phoneChannelForm({
+              channel,
+              postTo: '/setup/channels',
+              confirmTo: '/setup/channels/confirm',
+              pending,
+              current: connected?.address,
+              className: rowForm,
+            })}
     </div>
   </div>`;
 }

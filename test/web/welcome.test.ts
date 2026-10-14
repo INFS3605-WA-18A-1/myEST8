@@ -64,17 +64,30 @@ describe('the onboarding wizard', () => {
     expect(visible(await page(w, '/welcome/team', casey))).toContain('Sam Sun');
     expect(await page(w, '/welcome/team', sam)).not.toContain(temporaryPassword);
 
-    // 3 Channels: connected, then tested.
+    // 3 Channels: a code verifies a typed number. Email is the allocated inbound address.
+    const before = visible(await page(w, '/welcome/channels', sam));
+    expect(before).toContain('sunrise-realty@mail.example.test');
+    expect(before).toContain('Waiting for your first message');
+    expect(before).toContain('Copy');
+    expect(before).toContain('Forward');
+    expect(before).not.toContain('WhatsApp sandbox');
+    expect(before).not.toContain('SendGrid');
+
     const sms = await submit(w, '/welcome/channels', { type: 'sms', address: '+61 2 9100 0002' }, sam);
     expect(sms.location).toMatch(/^\/welcome\/channels\?channel=sms&ok=.*#sms$/);
-    expect(visible(sms.page)).toContain('SMS connected to +61 2 9100 0002');
-    expect(visible(sms.page)).toContain('Connected, not tested yet');
-    const tested = await submit(w, '/welcome/channels/test', { type: 'sms', to: '0412 345 678' }, sam);
-    expect(visible(tested.page)).toContain('Test message sent to 0412 345 678 by SMS');
-    expect(visible(tested.page)).toContain('Connected and tested');
+    expect(visible(sms.page)).toContain('We sent a 6-digit code to +61291000002');
+    expect(visible(sms.page)).not.toContain('SMS verified');
+    const smsCode = String(w.h.messenger.last('+61291000002')?.data.code);
+    const verified = await submit(w, '/welcome/channels/confirm', { type: 'sms', address: '+61 2 9100 0002', code: smsCode }, sam);
+    expect(visible(verified.page)).toContain('SMS verified');
+
     await submit(w, '/welcome/channels', { type: 'whatsapp', address: '+61 2 9100 0002' }, sam);
-    const email = await submit(w, '/welcome/channels', { type: 'email', address: 'inbox@sunrise.example' }, sam);
-    expect(visible(email.page)).toContain('3 of 3 connected, 1 tested');
+    const whatsappCode = String(w.h.messenger.last('+61291000002')?.data.code);
+    const channels = await submit(w, '/welcome/channels/confirm', { type: 'whatsapp', address: '+61 2 9100 0002', code: whatsappCode }, sam);
+    expect(visible(channels.page)).toContain('3 of 3 connected, 2 verified');
+    const typed = await w.post('/welcome/channels', { type: 'email', address: 'inbox@sunrise.example' }, sam);
+    expect(decodeURIComponent(typed.headers.get('location')!)).not.toContain('inbox@sunrise.example');
+    expect(visible(await page(w, '/welcome/channels', sam))).not.toContain('inbox@sunrise.example');
 
     // 4 First Property, with its Property Owner and Tenant in one form.
     const property = await submit(w, '/welcome/property', propertyFields(), sam);
@@ -96,8 +109,9 @@ describe('the onboarding wizard', () => {
     for (const item of [
       'Done: Sunrise Realty created',
       'Done: 2 Property Managers on the team',
-      'Done: SMS connected to +61291000002 and tested',
-      'To do: WhatsApp connected to +61291000002, not tested yet',
+      'Done: SMS verified at +61291000002',
+      'Done: WhatsApp verified at +61291000002',
+      'To do: Email is sunrise-realty@mail.example.test, waiting for your first message',
       'Done: 1 Property with 1 Tenant',
       'Done: 1 Tradie',
     ]) {
@@ -182,7 +196,9 @@ describe('the onboarding wizard', () => {
     const channels = await page(w, '/welcome/channels', sam);
 
     expect(channels).toMatch(/id="sms-address"[^>]*value="\+61 2 9100 \d{4}"/);
-    expect(channels).toMatch(/id="email-address"[^>]*value="inbox@sunrise-realty-\d+\.example"/);
+    expect(channels).toMatch(/id="email-address"[^>]*value="sunrise-realty@mail\.example\.test"/);
+    expect(channels).toContain('>Copy<');
+    expect(visible(channels)).toContain('Waiting for your first message');
     expect(visible(channels)).toContain('phone simulator');
   });
 });
@@ -197,8 +213,12 @@ describe('a new Agency', () => {
     expect(visible(dashboard)).toContain('connect SMS, WhatsApp and email, add the Tradies you use and add your first Property');
     expect(dashboard).toMatch(/data-banner="finish-setup"[\s\S]*href="\/welcome\/channels"/);
 
-    for (const type of ['sms', 'whatsapp']) await w.post('/welcome/channels', { type, address: '+61 2 9100 0002' }, sam);
-    await w.post('/welcome/channels', { type: 'email', address: 'inbox@sunrise.example' }, sam);
+    await page(w, '/welcome/channels', sam);
+    for (const type of ['sms', 'whatsapp'] as const) {
+      await w.post('/welcome/channels', { type, address: '+61 2 9100 0002' }, sam);
+      const code = String(w.h.messenger.last('+61291000002')?.data.code);
+      await w.post('/welcome/channels/confirm', { type, address: '+61 2 9100 0002', code }, sam);
+    }
     expect(await page(w, '/', sam)).toMatch(/data-banner="finish-setup"[\s\S]*href="\/welcome\/tradies"/);
   });
 

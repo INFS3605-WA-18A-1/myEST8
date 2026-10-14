@@ -1,5 +1,6 @@
 import type { Context, Modules, Ports } from './context.ts';
 import type { Db } from './db.ts';
+import { createChannelVerification } from './channel-verification.ts';
 import { createFiles } from './files.ts';
 import { createGoogleRatingRefresh } from './google-ratings.ts';
 import { createImports, type ImportChanges, type ImportKind } from './imports.ts';
@@ -51,6 +52,7 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
   modules.scheduling = createScheduling(ctx);
   createGoogleRatingRefresh(ctx);
   const onboarding = createOnboarding(ctx);
+  const verification = createChannelVerification(ctx);
   const imports = createImports(ctx, onboarding);
   const views = createViews(ctx);
   const { profiles, tickets, intake, quotes, scheduling } = modules;
@@ -75,6 +77,9 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
 
     /** Called by the webhooks: stores the message and returns straight away. */
     receiveInbound: (message: InboundMessage) => intake.receive(message),
+
+    /** A WhatsApp delivery failure from Meta, recorded on the outbound message. */
+    recordDeliveryFailure: (failure: { to: string; code: number; title: string }) => tickets.recordDeliveryFailure(failure),
 
     /** An upload through a no-login link: issue photos or an Urgent Repair receipt. */
     upload: (token: string, uploads: Upload[]) => intake.upload(token, uploads),
@@ -116,11 +121,17 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
         navCounts: () => views.navCounts(agencyId, propertyManagerId),
 
         // Onboarding
-        /** The Agency's connected channels, with when each last passed a test message. */
+        /** The Agency's connected channels. `testedAt` is when a code or a first inbound email verified the address. */
         channels: () => profiles.channels(agencyId),
         /** Adds a colleague as a Property Manager. Returns their id and a temporary password to pass on, shown once. */
         addColleague: (input: { name: string; email: string }) => profiles.addColleague(agencyId, input),
+        /** Stores an address the caller has already proved: the demo seed, Gmail OAuth, or a confirmed code. */
         connectChannel: (channelType: ChannelType, address: string) => onboarding.connectChannel(agencyId, channelType, address),
+        /** Sends a 6-digit code. The typed address is not stored until confirmChannelVerification. */
+        startChannelVerification: (channelType: ChannelType, address: string) => verification.start(agencyId, channelType, address),
+        confirmChannelVerification: (channelType: ChannelType, address: string, code: string) => verification.confirm(agencyId, channelType, address, code),
+        pendingChannelVerifications: () => verification.pending(agencyId),
+        ensureInboundEmail: () => verification.ensureInboundEmail(agencyId),
         sendTestMessage: (channelType: ChannelType, to: string) => onboarding.sendTestMessage(agencyId, channelType, to),
         addOwner: (input: Parameters<typeof onboarding.addOwner>[1]) => onboarding.addOwner(agencyId, input),
         addBuildingManager: (input: Parameters<typeof onboarding.addBuildingManager>[1]) => onboarding.addBuildingManager(agencyId, input),

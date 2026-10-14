@@ -155,6 +155,11 @@ export const templates = {
     'Test message',
     (_, a) => `This is a test message from ${a.name} on myEST8. This channel is working.`,
   ),
+
+  'onboarding.verification_code': template<{ code: string }>(
+    'Your myEST8 code',
+    (d, a) => `${a.name}: your myEST8 code is ${d.code}. It expires in 10 minutes.`,
+  ),
 };
 
 export type TemplateName = keyof typeof templates;
