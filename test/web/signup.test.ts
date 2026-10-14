@@ -79,7 +79,7 @@ describe('signing up', () => {
     const welcome = visible(await (await w.get('/welcome', cookie.split(';')[0])).text());
     expect(welcome).toContain('Welcome to myEST8, Sam');
     expect(welcome).toContain('Sunrise Realty');
-    expect(welcome).toContain("First, connect the Agency's email");
+    expect(welcome).toContain('Brisbane (QLD)');
 
     // The new account signs in like any other.
     expect(await w.signIn('sam@sunrise.example', 'sunrise-2026')).toMatch(/^myest8_session=/);

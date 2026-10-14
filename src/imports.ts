@@ -17,7 +17,7 @@
 
 import type { Context } from './context.ts';
 import { one, run } from './db.ts';
-import { contactHolders, holderOf, type Onboarding } from './onboarding.ts';
+import type { Onboarding } from './onboarding.ts';
 import type { ClassifierAnswer } from './ports.ts';
 import type { Person, Property } from './profiles.ts';
 import { ActionError, addMs, dollars, HOUR_MS, isEmail, iso, newToken, normalizeAddress, TRADES, type Role, type Trade } from './shared.ts';
@@ -213,6 +213,8 @@ export function importTemplate(kind: ImportKind): string {
 }
 
 // --- Reading values ---
+
+const ROLE_LABEL: Record<Role, string> = { tenant: 'Tenant', owner: 'Property Owner', tradie: 'Tradie', building_manager: 'Building Manager' };
 
 const TRADE_LABEL: Record<Trade, string> = {
   plumbing: 'Plumbing',
@@ -504,8 +506,8 @@ export function createImports({ db, clock, settings, ports, modules }: Context, 
     const people = await profiles.people(agencyId);
     const properties = await profiles.properties(agencyId);
     const managers = await profiles.propertyManagers(agencyId);
-    // The same duplicate check as the Add forms (onboarding.holderOf).
-    const holders = contactHolders(people);
+    const holders = new Map<string, Person>();
+    for (const p of people) for (const a of [p.mobile, p.email]) if (a) holders.set(normalizeAddress(a), p);
     /** Contacts and addresses earlier rows use, to spot a row repeated in the sheet. */
     const seen = new Map<string, number>();
     const me = await profiles.propertyManager(propertyManagerId);
@@ -556,9 +558,9 @@ export function createImports({ db, clock, settings, ports, modules }: Context, 
       const checkHolders = (role: Role, contactInfo: { mobile?: string; email?: string }, fields: { mobile: string; email: string }) => {
         for (const [kind, address] of [['mobile', contactInfo.mobile], ['email', contactInfo.email]] as const) {
           if (!address) continue;
-          const held = holderOf(holders, address, role);
-          if (held?.sameRole) duplicateOf ??= held.holder.businessName ?? held.holder.name;
-          else if (held) problem(fields[kind], held.message);
+          const holder = holders.get(address);
+          if (holder && holder.role === role) duplicateOf ??= holder.businessName ?? holder.name;
+          else if (holder) problem(fields[kind], `${address} already belongs to ${holder.name}, a ${ROLE_LABEL[holder.role]}`);
           const earlier = seen.get(address);
           if (earlier !== undefined && earlier !== sheetRow.line) duplicateOf ??= `Row ${earlier} of this sheet`;
           else seen.set(address, sheetRow.line);
@@ -652,9 +654,9 @@ export function createImports({ db, clock, settings, ports, modules }: Context, 
           const ownerContact = tidyContact('ownerMobile', 'ownerEmail');
           let owner: Person | undefined;
           for (const [field, address] of [['ownerMobile', ownerContact.mobile], ['ownerEmail', ownerContact.email]] as const) {
-            const held = address ? holderOf(holders, address, 'owner') : null;
-            if (held?.sameRole) owner ??= held.holder;
-            else if (held) problem(field, held.message);
+            const holder = address ? holders.get(address) : undefined;
+            if (holder?.role === 'owner') owner ??= holder;
+            else if (holder) problem(field, `${address} already belongs to ${holder.name}, a ${ROLE_LABEL[holder.role]}`);
           }
           if (!owner && ownerName) {
             const named = people.filter((p) => p.role === 'owner' && sameName(p.name, ownerName));

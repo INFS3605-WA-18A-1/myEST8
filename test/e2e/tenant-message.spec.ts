@@ -23,14 +23,14 @@ test('a Tenant texting from the phone simulator becomes a Maintenance Request th
   const uploadUrl = (await uploadLink.getAttribute('href'))!;
   const tenant = await browser.newPage();
   await tenant.goto(uploadUrl);
-  await expect(tenant.getByRole('heading', { level: 1 })).toContainText('Send photos');
-  await tenant.getByLabel('Photos of the issue').setInputFiles({
+  await expect(tenant.getByRole('heading', { level: 1 })).toContainText('Upload');
+  await tenant.getByLabel('Photos or receipt').setInputFiles({
     name: 'shower.jpg',
     mimeType: 'image/jpeg',
     buffer: Buffer.from(fixtureJpeg({ takenAt: '2026:10:08 08:30:00' })),
   });
   await tenant.getByRole('button', { name: 'Upload' }).click();
-  await expect(tenant.getByRole('status')).toContainText(/has your photo/i);
+  await expect(tenant.getByRole('status')).toContainText(/got your file/i);
   await tenant.close();
 
   // The background worker turns it into a Maintenance Request on Alice's dashboard.

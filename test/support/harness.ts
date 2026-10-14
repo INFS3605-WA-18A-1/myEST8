@@ -1,6 +1,5 @@
 import { createApp, type PropertyManagerActions } from '../../src/app.ts';
-import { createGmailCredentials } from '../../src/gmail-credentials.ts';
-import type { ChannelType, InboundAttachment, SmsNumbers } from '../../src/ports.ts';
+import type { ChannelType, InboundAttachment } from '../../src/ports.ts';
 import { testDb } from './db.ts';
 import { FakeClassifier, FakeClock, FakeImageMatcher, FakeMessenger, FakePlaces, FakeQuoteReader } from './fakes.ts';
 
@@ -16,16 +15,7 @@ export const AGENCY_INBOX = 'inbox@harbour.example';
 export type Harness = Awaited<ReturnType<typeof createHarness>>;
 
 /** Drives the app through its boundary: inbound messages, uploads, Property Manager actions and the clock. */
-export const TEST_SECRET_KEY = Buffer.alloc(32, 7).toString('base64');
-
-export interface HarnessOptions {
-  /** Connects Gmail to this stand-in for Google's APIs (test/support/fake-gmail.ts). Without it Gmail is unavailable. */
-  gmailFetch?: typeof fetch;
-  /** Buys SMS numbers. Without it SMS numbers are unavailable. */
-  smsNumbers?: SmsNumbers;
-}
-
-export async function createHarness(options: HarnessOptions = {}) {
+export async function createHarness() {
   const clock = new FakeClock(START);
   const messenger = new FakeMessenger();
   const classifier = new FakeClassifier();
@@ -33,14 +23,9 @@ export async function createHarness(options: HarnessOptions = {}) {
   const quoteReader = new FakeQuoteReader();
   const places = new FakePlaces();
   const db = await testDb();
-  const gmail = options.gmailFetch
-    ? createGmailCredentials({ db, clock, config: { clientId: 'client-id', clientSecret: 'client-secret', secretKey: TEST_SECRET_KEY, fetch: options.gmailFetch } })
-    : null;
   const app = createApp({
     db,
     clock,
-    gmail,
-    smsNumbers: options.smsNumbers ?? null,
     messenger,
     classifier,
     imageMatcher,
@@ -80,7 +65,6 @@ export async function createHarness(options: HarnessOptions = {}) {
   return {
     app,
     db,
-    gmail,
     clock,
     messenger,
     classifier,

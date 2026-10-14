@@ -7,7 +7,7 @@ export const Dashboard = () => (
     active="dashboard"
     agencyName="Coogee Bay Realty"
     today="Sat 10 Oct"
-    navCounts={{ dashboard: 5 }}
+    navCounts={{ requests: 3, approvals: 2 }}
     controls={
       <Segmented
         items={[
@@ -20,8 +20,8 @@ export const Dashboard = () => (
   >
     <CountStrip
       items={[
-        { label: 'Requests to confirm', count: 3, href: '#', decision: true },
-        { label: 'Quotes to approve', count: 2, href: '#', decision: true },
+        { label: 'Requests to confirm', count: 3, href: '#' },
+        { label: 'Quotes to approve', count: 2, href: '#' },
         { label: 'Quoting', count: 2, href: '#' },
         { label: 'Booked', count: 1, href: '#' },
       ]}

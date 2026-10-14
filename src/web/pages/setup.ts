@@ -1,24 +1,25 @@
-// The onboarding guide: connect and test the Agency's channels, then add the people,
-// Tradies, Properties and Tenants the agent acts for. Steps run in dependency order:
-// a Property needs its Property Owner (and any Nominated Tradies) first, and a Tenant
-// needs their Property.
+// Setup: connect and test the Agency's channels, and add Property Owners, Building
+// Managers and Tenants. Properties and Tradies have their own pages (/properties,
+// /tradies); their forms still post here.
 //
 // Several forms share field names ("name", "mobile"), so each control's id is
 // prefixed with its form ("owner-name") to keep every label pointing at its own
 // control. A refused form comes back with `?form=<form>`: its error shows next to
 // its fields, and it opens, while the other "Add" forms stay folded away.
 
-import { Hono, type Context } from 'hono';
+import { Hono } from 'hono';
 import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
 import type { ImportKind } from '../../imports.ts';
 import { ActionError } from '../../shared.ts';
-import type { ChannelModes, WebEnv } from '../env.ts';
+import { NO_CONNECTORS, type ChannelConnectors } from '../connectors.ts';
+import type { WebEnv } from '../env.ts';
+import { gmailControls, whatsappControls } from './oauth-google.ts';
 import { cents, formAction, list, text } from '../forms.ts';
 import { icon } from '../icons.ts';
 import { shellInfo } from '../shell.ts';
 import { importPages } from './import.ts';
-import { alert, button, emptyState, field, flashFrom, formatMoney, humanise, linkButton, page, section, table, type Flash, type Html } from '../ui.ts';
+import { alert, button, emptyState, field, flashFrom, linkButton, page, section, table, type Flash, type Html } from '../ui.ts';
 import {
   addTradieFrom,
   CHANNELS,
@@ -26,23 +27,15 @@ import {
   channelGuide,
   channelLine,
   channelOf,
-  choiceGroup,
   chosenId,
   contactFields,
   contactFrom,
   fieldGrid,
-  getSmsNumber,
-  googleSearchForm,
   importPanel,
-  modeChannelBody,
-  searchListings,
-  tradieFields,
-  tradiesTable,
 } from './onboarding-forms.ts';
 
 type Person = Awaited<ReturnType<PropertyManagerActions['people']>>[number];
 type Property = Awaited<ReturnType<PropertyManagerActions['properties']>>[number];
-type PropertyManager = Awaited<ReturnType<PropertyManagerActions['propertyManagers']>>[number];
 type AgencyChannel = Awaited<ReturnType<PropertyManagerActions['channels']>>[number];
 type FormKey = 'channels' | 'owner' | 'building-manager' | 'tradie' | 'property' | 'tenant' | `import-${ImportKind}`;
 
@@ -51,9 +44,7 @@ type Agency = {
   owners: Person[];
   buildingManagers: Person[];
   tenants: Person[];
-  tradies: Person[];
   properties: Property[];
-  propertyManagers: PropertyManager[];
 };
 
 /** A form's own refusal: the message to show in it, and whether it starts open. */
@@ -63,13 +54,12 @@ type Shown = { error: Html; open: boolean };
 const AREAS = [
   ['channels', 'Channels'],
   ['people', 'Property Owners and Building Managers'],
-  ['tradies', 'Tradies'],
-  ['properties', 'Properties'],
   ['tenants', 'Tenants'],
 ] as const;
 
 /** Onboarding under /setup: channels and test messages, Properties, people and Tradies. */
-export function setupPages(o: { channels?: ChannelModes | undefined } = {}) {
+export function setupPages(o: { connectors?: ChannelConnectors } = {}) {
+  const connectors = o.connectors ?? NO_CONNECTORS;
   const pages = new Hono<WebEnv>();
   pages.route('/', importPages());
 
@@ -78,37 +68,31 @@ export function setupPages(o: { channels?: ChannelModes | undefined } = {}) {
     const flash = flashFrom(c.req.url);
     const refusedForm = flash?.kind === 'error' ? c.req.query('form') : undefined;
     const shownFor = (key: FormKey): Shown => ({ error: refusedForm === key && flash ? formError(flash) : html``, open: refusedForm === key });
-    const googleQuery = c.req.query('google')?.trim() ?? '';
     const agency: Agency = {
       owners: await actions.people('owner'),
       buildingManagers: await actions.people('building_manager'),
       tenants: await actions.people('tenant'),
-      tradies: await actions.people('tradie'),
       properties: await actions.properties(),
-      propertyManagers: await actions.propertyManagers(),
     };
     const origin = new URL(c.req.url).origin;
     const { timeZone } = actions.agency();
     const channels = await actions.channels();
-    const gmail = o.channels?.gmail ? await actions.gmailStatus() : 'unavailable';
 
     return c.html(
       page({
-        title: 'Set up myEST8',
+        title: 'Setup',
         pm,
         active: 'settings',
         flash,
-        shell: shellInfo(c),
-        subtitle: 'Work through these areas once. Come back any time to add more.',
+        shell: await shellInfo(c),
+        subtitle: html`Channels, Property Owners, Building Managers and Tenants. Properties and Tradies have their own pages: <a class="link" href="/properties">Properties</a>, <a class="link" href="/tradies">Tradies</a>.`,
         actions: linkButton('Use the step-by-step guide', '/welcome', { variant: 'secondary', size: 'sm' }),
         body: html`
           <nav aria-label="Setup areas">
             <ul class="flex flex-wrap gap-x-4 gap-y-1 text-sm">${AREAS.map(([id, title]) => html`<li><a class="link" href="#${id}">${title}</a></li>`)}</ul>
           </nav>
-          ${section({ id: 'channels', title: 'Channels', body: channelsArea(origin, channels, timeZone, shownFor('channels'), o.channels ? { modes: o.channels, gmail, pmEmail: pm.email } : undefined) })}
+          ${section({ id: 'channels', title: 'Channels', body: await channelsArea(origin, channels, timeZone, shownFor('channels'), connectors, actions.agency().id) })}
           ${section({ id: 'people', title: 'Property Owners and Building Managers', body: peopleArea(agency, shownFor) })}
-          ${section({ id: 'tradies', title: 'Tradies', body: html`${await tradiesArea(c, agency, googleQuery, shownFor('tradie'))}${importForm('tradies', shownFor('import-tradies'))}` })}
-          ${section({ id: 'properties', title: 'Properties', body: html`${propertiesArea(agency, pm.id, shownFor('property'))}${importForm('properties', shownFor('import-properties'))}` })}
           ${section({ id: 'tenants', title: 'Tenants', body: html`${tenantsArea(agency, shownFor('tenant'))}${importForm('tenants', shownFor('import-tenants'))}` })}
         `,
       }),
@@ -122,25 +106,6 @@ export function setupPages(o: { channels?: ChannelModes | undefined } = {}) {
       if (!address) throw new ActionError('invalid', `Enter the ${channel.addressLabel}`);
       await c.var.actions.connectChannel(channel.type, address);
       return { ok: `${channel.name} connected to ${address}. Now send a test message.` };
-    }),
-  );
-
-  // The one WhatsApp number this server has (Meta's Cloud API) goes to the Agency that connects it first.
-  pages.post('/channels/whatsapp', (c) =>
-    formAction(c, '/setup?form=channels', async () => {
-      const number = o.channels?.whatsappNumber;
-      if (!number) throw new ActionError('not_found', 'WhatsApp is not set up on this server');
-      await c.var.actions.connectChannel('whatsapp', number);
-      return { ok: `WhatsApp connected to ${number}. Now send a test message.` };
-    }),
-  );
-
-  // myEST8 buys the Agency an Australian mobile number on Twilio and points its texts here.
-  pages.post('/channels/sms', (c) =>
-    formAction(c, '/setup?form=channels', async () => {
-      if (!o.channels?.smsNumbers) throw new ActionError('not_found', 'SMS numbers are not set up on this server');
-      const number = await getSmsNumber(c.var.actions);
-      return { ok: `The Agency's SMS number is ${number}. Now send a test message.` };
     }),
   );
 
@@ -178,28 +143,26 @@ export function setupPages(o: { channels?: ChannelModes | undefined } = {}) {
 
   pages.post('/tradies', (c) => {
     const google = c.req.query('google');
-    const back = `/setup?form=tradie${google ? `&google=${encodeURIComponent(google)}` : ''}`;
+    const back = `/tradies?form=tradie${google ? `&google=${encodeURIComponent(google)}` : ''}`;
     return formAction(c, back, async (form) => {
       const businessName = await addTradieFrom(c.var.actions, form);
-      return { ok: `${businessName} added as a Tradie`, redirect: '/setup?form=tradie' };
+      return { ok: `${businessName} added as a Tradie`, redirect: '/tradies' };
     });
   });
 
   pages.post('/properties', (c) =>
-    formAction(c, '/setup?form=property', async (form) => {
+    formAction(c, '/properties?form=property', async (form) => {
       if (!text(form, 'maxRepairCost')) throw new ActionError('invalid', 'Enter the Max Repair Cost');
       const buildingManager = text(form, 'buildingManagerId');
       const address = text(form, 'address');
-      // The same action as the welcome guide's, with people the Agency already has and the Tenants added after.
-      await c.var.actions.addPropertyWithPeople({
+      await c.var.actions.addProperty({
         address,
         suburb: text(form, 'suburb'),
-        owner: { id: chosenId(form, 'ownerId', 'the Property Owner') },
+        ownerId: chosenId(form, 'ownerId', 'the Property Owner'),
         propertyManagerId: chosenId(form, 'propertyManagerId', 'the Property Manager'),
         maxRepairCostCents: cents(form, 'maxRepairCost', 'the Max Repair Cost'),
         nominatedTradieIds: list(form, 'nominatedTradieIds').map(Number),
-        buildingManager: buildingManager ? { id: Number(buildingManager) } : null,
-        tenants: [],
+        buildingManagerId: buildingManager ? Number(buildingManager) : undefined,
       });
       return { ok: `${address} added. Now add its Tenants.` };
     }),
@@ -222,17 +185,6 @@ export function setupPages(o: { channels?: ChannelModes | undefined } = {}) {
 
 // Areas
 
-/** A group inside an area: a surface with its own heading, an optional chip and its body. */
-function subsection(o: { title: string; id?: string; actions?: Html; body: Html }): Html {
-  return html`<div class="section" ${o.id ? html`id="${o.id}"` : ''}>
-    <div class="section-head">
-      <h3 class="section-title">${o.title}</h3>
-      ${o.actions ? html`<div class="section-actions">${o.actions}</div>` : ''}
-    </div>
-    <div class="section-body">${o.body}</div>
-  </div>`;
-}
-
 /** An "Add" form, folded away unless `open` (when it was refused, so its errors show). */
 function addForm(title: string, open: boolean, body: Html): Html {
   return html`<details class="mt-4" ${open ? 'open' : ''}>
@@ -249,210 +201,110 @@ function importForm(kind: ImportKind, shown: Shown): Html {
   </details>`;
 }
 
-function channelsArea(origin: string, connected: AgencyChannel[], timeZone: string, shown: Shown, mode?: { modes: ChannelModes; gmail: Parameters<typeof modeChannelBody>[0]['gmail']; pmEmail: string }): Html {
+async function channelsArea(origin: string, connected: AgencyChannel[], timeZone: string, shown: Shown, connectors: ChannelConnectors, agencyId: number): Promise<Html> {
+  const gmailBlock = connectors.gmail ? await gmailControls(connectors.gmail, agencyId, 'setup') : null;
   return html`
-    <p class="text-sm">Tenants, Tradies and Property Owners reach the Agency by SMS, WhatsApp and email.${mode ? ' Channels with no real provider on this server are simulated.' : ' Connect each channel, then send a test message.'}</p>
+    <p class="text-sm">Tenants, Tradies and Property Owners reach the Agency by SMS, WhatsApp and email. Connect each channel, then send a test message.</p>
     ${shown.error}
-    <div class="mt-4 grid gap-4 md:grid-cols-3">
-      ${CHANNELS.map((channel) => channelCard(channel, connected.find((c) => c.type === channel.type), timeZone, origin, mode))}
-    </div>
+    ${CHANNELS.map((channel) => channelRow(channel, connected.find((c) => c.type === channel.type), timeZone, origin, { gmailBlock, whatsappNumber: connectors.whatsappNumber }))}
   `;
 }
 
-function channelCard(channel: (typeof CHANNELS)[number], connected: AgencyChannel | undefined, timeZone: string, origin: string, mode?: { modes: ChannelModes; gmail: Parameters<typeof modeChannelBody>[0]['gmail']; pmEmail: string }): Html {
-  if (mode) {
-    return subsection({
-      id: channel.type,
-      title: channel.name,
-      actions: channelChip(connected),
-      body: modeChannelBody({ channel, current: connected, modes: mode.modes, gmail: mode.gmail, pmEmail: mode.pmEmail, returnTo: '/setup', whatsappAction: '/setup/channels/whatsapp', smsAction: '/setup/channels/sms', testAction: '/setup/channels/test', timeZone }),
-    });
-  }
-  return subsection({
-    id: channel.type,
-    title: channel.name,
-    actions: channelChip(connected),
-    body: html`
+/** One channel: its name and status, setup notes on the left, the two forms on the right. */
+function channelRow(
+  channel: (typeof CHANNELS)[number],
+  connected: AgencyChannel | undefined,
+  timeZone: string,
+  origin: string,
+  via: { gmailBlock: Html | null; whatsappNumber: string | null },
+): Html {
+  const viaGmail = channel.type === 'email' && via.gmailBlock !== null;
+  const viaWhatsapp = channel.type === 'whatsapp' && via.whatsappNumber !== null;
+  return html`<div class="mt-4 grid gap-4 border-t border-line pt-4 lg:grid-cols-2" id="${channel.type}">
+    <div class="min-w-0">
+      <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <h3 class="section-title">${channel.name}</h3>
+        ${channelChip(connected)}
+      </div>
       ${connected ? channelLine(connected, timeZone) : ''}
-      ${channelGuide(channel.type, origin)}
-      <form method="post" action="/setup/channels" class="mt-3 grid items-end gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+      ${viaGmail || viaWhatsapp ? '' : channelGuide(channel.type, origin)}
+    </div>
+    <div class="min-w-0">
+      ${viaGmail
+        ? via.gmailBlock
+        : viaWhatsapp
+          ? connected?.address === via.whatsappNumber
+            ? ''
+            : whatsappControls(via.whatsappNumber!, '/setup/channels')
+          : html`<form method="post" action="/setup/channels" class="flex flex-wrap items-end gap-3">
         <input type="hidden" name="type" value="${channel.type}" />
-        ${field({
-          label: channel.addressLabel,
-          name: 'address',
-          id: `${channel.type}-address`,
-          type: channel.inputType,
-          required: true,
-          value: connected?.address ?? '',
-          placeholder: channel.placeholder,
-        })}
+        <div class="min-w-56 flex-1">
+          ${field({
+            label: channel.addressLabel,
+            name: 'address',
+            id: `${channel.type}-address`,
+            type: channel.inputType,
+            required: true,
+            value: connected?.address ?? '',
+            placeholder: channel.placeholder,
+          })}
+        </div>
         ${button(connected ? `Change ${channel.name}` : `Connect ${channel.name}`, { size: 'sm', variant: connected ? 'secondary' : 'primary' })}
-      </form>
+      </form>`}
       ${connected
-        ? html`<form method="post" action="/setup/channels/test" class="mt-3 grid items-end gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+        ? html`<form method="post" action="/setup/channels/test" class="mt-3 flex flex-wrap items-end gap-3">
             <input type="hidden" name="type" value="${channel.type}" />
-            ${field({
-              label: channel.type === 'email' ? 'Send a test email to' : 'Send a test message to',
-              name: 'to',
-              id: `${channel.type}-to`,
-              type: channel.inputType,
-              required: true,
-              placeholder: channel.type === 'email' ? 'you@youragency.com.au' : 'Your mobile',
-            })}
-            ${button('Send test message', { variant: connected.testedAt ? 'secondary' : 'primary', size: 'sm' })}
+            <div class="min-w-56 flex-1">
+              ${field({
+                label: channel.type === 'email' ? 'Send a test email to' : 'Send a test message to',
+                name: 'to',
+                id: `${channel.type}-to`,
+                type: channel.inputType,
+                required: true,
+                placeholder: channel.type === 'email' ? 'you@youragency.com.au' : 'Your mobile',
+              })}
+            </div>
+            ${button('Send test message', { variant: 'secondary', size: 'sm' })}
           </form>`
         : ''}
-    `,
-  });
+    </div>
+  </div>`;
 }
 
 function peopleArea(agency: Agency, shownFor: (key: FormKey) => Shown): Html {
   const owner = shownFor('owner');
   const buildingManager = shownFor('building-manager');
-  return html`<div class="grid gap-4 md:grid-cols-2">
-    ${subsection({
-      title: 'Property Owners',
-      body: html`${peopleTable(agency.owners, 'No Property Owners yet.')}
-        ${addForm(
-          'Add a Property Owner',
-          owner.open,
-          html`${owner.error}
-            <form method="post" action="/setup/owners">
-              ${fieldGrid(contactFields('owner'))}
-              <div class="mt-3">${button('Add Property Owner', { size: 'sm' })}</div>
-            </form>`,
-        )}
-        ${importForm('owners', shownFor('import-owners'))}`,
-    })}
-    ${subsection({
-      title: 'Building Managers',
-      body: html`<p class="text-sm text-muted">For strata Properties: Common Area issues go to the Building Manager.</p>
-        ${peopleTable(agency.buildingManagers, 'No Building Managers yet.')}
-        ${addForm(
-          'Add a Building Manager',
-          buildingManager.open,
-          html`${buildingManager.error}
-            <form method="post" action="/setup/building-managers">
-              ${fieldGrid(contactFields('building-manager'))}
-              <div class="mt-3">${button('Add Building Manager', { size: 'sm' })}</div>
-            </form>`,
-        )}
-        ${importForm('building-managers', shownFor('import-building-managers'))}`,
-    })}
+  return html`<div class="grid gap-6 lg:grid-cols-2">
+    <div class="min-w-0">
+      <h3 class="section-title mb-2">Property Owners</h3>
+      ${peopleTable(agency.owners, 'Property Owners appear here once you add them.')}
+      ${addForm(
+        'Add a Property Owner',
+        owner.open,
+        html`${owner.error}
+          <form method="post" action="/setup/owners">
+            ${fieldGrid(contactFields('owner'))}
+            <div class="mt-3">${button('Add Property Owner', { size: 'sm', variant: 'secondary' })}</div>
+          </form>`,
+      )}
+      ${importForm('owners', shownFor('import-owners'))}
+    </div>
+    <div class="min-w-0 border-t border-line pt-4 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+      <h3 class="section-title mb-2">Building Managers</h3>
+      <p class="mb-2 text-sm text-muted">For strata Properties: Common Area issues go to the Building Manager.</p>
+      ${peopleTable(agency.buildingManagers, 'Building Managers appear here once you add them.')}
+      ${addForm(
+        'Add a Building Manager',
+        buildingManager.open,
+        html`${buildingManager.error}
+          <form method="post" action="/setup/building-managers">
+            ${fieldGrid(contactFields('building-manager'))}
+            <div class="mt-3">${button('Add Building Manager', { size: 'sm', variant: 'secondary' })}</div>
+          </form>`,
+      )}
+      ${importForm('building-managers', shownFor('import-building-managers'))}
+    </div>
   </div>`;
-}
-
-async function tradiesArea(c: Context<WebEnv>, agency: Agency, googleQuery: string, shown: Shown): Promise<Html> {
-  const { actions } = c.var;
-  const { listings, problem } = await searchListings(actions, googleQuery);
-  const action = `/setup/tradies${googleQuery ? `?google=${encodeURIComponent(googleQuery)}` : ''}`;
-
-  return html`
-    <p class="text-sm">Add the Tradies the Agency already uses. They're shared by every Property Manager.</p>
-    ${(await tradiesTable(actions, agency.tradies))}
-    ${addForm(
-      'Add a Tradie',
-      shown.open || googleQuery !== '',
-      html`
-        ${googleSearchForm('/setup#tradies', googleQuery, problem, listings.length)}
-        <form method="post" action="${action}" class="mt-4">
-          ${shown.error}
-          ${tradieFields({ listings })}
-          <div class="mt-3">${button('Add Tradie', { size: 'sm' })}</div>
-        </form>
-      `,
-    )}
-  `;
-}
-
-function propertiesArea(agency: Agency, myId: number, shown: Shown): Html {
-  const nameOf = (people: Person[], id: number | null) => {
-    const person = people.find((p) => p.id === id);
-    return person ? (person.businessName ?? person.name) : '—';
-  };
-  const rows = agency.properties.map((p) => [
-    html`${p.address}`,
-    html`${agency.propertyManagers.find((m) => m.id === p.propertyManagerId)?.name ?? '—'}`,
-    html`${nameOf(agency.owners, p.ownerId)}`,
-    html`${formatMoney(p.maxRepairCostCents)}`,
-    html`${
-      agency.tenants
-        .filter((t) => t.propertyId === p.id)
-        .map((t) => t.name)
-        .join(', ') || '—'
-    }`,
-    html`${p.nominatedTradieIds.map((id) => nameOf(agency.tradies, id)).join(', ') || 'None'}`,
-    html`${nameOf(agency.buildingManagers, p.buildingManagerId)}`,
-  ]);
-
-  return html`
-    <p class="text-sm">Each Property has one Property Owner and is assigned to one Property Manager.</p>
-    ${agency.properties.length
-      ? table(['Address', 'Property Manager', 'Property Owner', 'Max Repair Cost', 'Tenants', 'Nominated Tradies', 'Building Manager'], rows, {
-          caption: 'Properties',
-        })
-      : emptyState('No Properties yet.')}
-    ${addForm(
-      'Add a Property',
-      shown.open,
-      html`${agency.owners.length ? '' : html`<p class="mb-3 text-sm text-high">Add a Property Owner first.</p>`}
-        <form method="post" action="/setup/properties">
-          ${shown.error}
-          ${fieldGrid(html`
-            ${field({ label: 'Address', name: 'address', id: 'property-address', required: true, placeholder: '12 King St, Newtown NSW 2042' })}
-            ${field({ label: 'Suburb', name: 'suburb', id: 'property-suburb', required: true })}
-            ${field({
-              label: 'Property Owner',
-              name: 'ownerId',
-              id: 'property-owner',
-              type: 'select',
-              required: true,
-              placeholder: 'Choose the Property Owner',
-              options: agency.owners.map((o) => ({ value: String(o.id), label: o.name })),
-            })}
-            ${field({
-              label: 'Property Manager',
-              name: 'propertyManagerId',
-              id: 'property-manager',
-              type: 'select',
-              required: true,
-              value: String(myId),
-              options: agency.propertyManagers.map((m) => ({ value: String(m.id), label: m.name })),
-            })}
-            ${field({
-              label: 'Max Repair Cost ($)',
-              name: 'maxRepairCost',
-              id: 'property-max',
-              type: 'number',
-              step: '0.01',
-              min: 0,
-              required: true,
-              placeholder: '500',
-              hint: "The most a Ticket's Repair Cost can reach before the Property Owner must approve.",
-            })}
-            ${field({
-              label: 'Building Manager (strata only)',
-              name: 'buildingManagerId',
-              id: 'property-building-manager',
-              type: 'select',
-              options: [{ value: '', label: 'None' }, ...agency.buildingManagers.map((b) => ({ value: String(b.id), label: b.name }))],
-            })}
-          `)}
-          <div class="mt-3">
-            ${agency.tradies.length
-              ? choiceGroup({
-                  legend: 'Nominated Tradies',
-                  name: 'nominatedTradieIds',
-                  type: 'checkbox',
-                  options: agency.tradies.map((t) => ({ value: String(t.id), label: `${t.businessName ?? t.name} (${t.trades.map(humanise).join(', ')})` })),
-                  hint: 'Who the Tenant can call for an Urgent Repair.',
-                })
-              : html`<p class="text-sm text-muted">Add Tradies above to nominate them for Urgent Repairs.</p>`}
-          </div>
-          <div class="mt-3">${button('Add Property', { size: 'sm' })}</div>
-        </form>`,
-    )}
-  `;
 }
 
 function tenantsArea(agency: Agency, shown: Shown): Html {
@@ -470,11 +322,11 @@ function tenantsArea(agency: Agency, shown: Shown): Html {
           ]),
           { caption: 'Tenants' },
         )
-      : emptyState('No Tenants yet.')}
+      : emptyState('Tenants appear here once you add them. Add a Property first.')}
     ${addForm(
       'Add a Tenant',
       shown.open,
-      html`${agency.properties.length ? '' : html`<p class="mb-3 text-sm text-high">Add a Property first.</p>`}
+      html`${agency.properties.length ? '' : html`<p class="mb-3 text-sm text-high">Add a Property on the Properties page first.</p>`}
         <form method="post" action="/setup/tenants">
           ${shown.error}
           ${fieldGrid(html`
@@ -490,7 +342,7 @@ function tenantsArea(agency: Agency, shown: Shown): Html {
             })}
             ${field({ label: 'Tenancy start date', name: 'tenancyStart', id: 'tenant-start', type: 'date', required: true, hint: 'Photos taken before this date are flagged.' })}
           `)}
-          <div class="mt-3">${button('Add Tenant', { size: 'sm' })}</div>
+          <div class="mt-3">${button('Add Tenant', { size: 'sm', variant: 'secondary' })}</div>
         </form>`,
     )}
   `;

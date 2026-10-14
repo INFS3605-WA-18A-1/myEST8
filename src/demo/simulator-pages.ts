@@ -6,14 +6,13 @@
 
 import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
-import { html, raw } from 'hono/html';
+import { html } from 'hono/html';
 import type { ChannelType } from '../ports.ts';
 import { ActionError, type Role } from '../shared.ts';
 import type { WebEnv } from '../web/env.ts';
 import { files, int, text, type FormValues } from '../web/forms.ts';
-import { icon } from '../web/icons.ts';
 import { shellInfo } from '../web/shell.ts';
-import { ROLE_LABEL, alert, badge, button, chatBubble, emptyState, flashFrom, formatWhen, humanise, linkButton, page, section, segmented, withFlash, type Html } from '../web/ui.ts';
+import { alert, badge, button, chatBubble, emptyState, flashFrom, formatWhen, humanise, linkButton, page, section, segmented, withFlash, type Html } from '../web/ui.ts';
 import type { DemoContact, DemoControls, DemoInboundMessage, DemoOutboundMessage } from './controls.ts';
 
 const MB = 1024 * 1024;
@@ -27,6 +26,13 @@ const GROUPS: [Role, string][] = [
   ['owner', 'Property Owners'],
   ['building_manager', 'Building Managers'],
 ];
+
+const ROLE_LABEL: Record<Role, string> = {
+  tenant: 'Tenant',
+  tradie: 'Tradie',
+  owner: 'Property Owner',
+  building_manager: 'Building Manager',
+};
 
 const CHANNEL_LABEL: Record<ChannelType, string> = { sms: 'SMS', whatsapp: 'WhatsApp', email: 'Email' };
 
@@ -42,13 +48,11 @@ const CLOCK_STEPS = [1, 24, 48, 72];
 
 /**
  * The phone: 380px wide on laptops, full width below, 28px radius, one allowed shadow.
- * On laptops it is as tall as the window allows under the top bar, up to 760px. On
- * phone it is sized to end inside the first frame, below the clock, the picker and
- * the page's top bar, so the composer and Send stay visible without scrolling. The
- * conversation is the main thing in it: the header and composer stay compact.
+ * On phone it is sized to end inside the first frame, below the clock, the picker
+ * and the page's top bar, so the composer and Send stay visible without scrolling.
  */
 const PHONE_FRAME =
-  'flex min-h-[560px] h-[calc(100dvh_-_200px)] w-full min-w-0 flex-col overflow-hidden rounded-[28px] border border-control bg-surface shadow-[0_8px_24px_rgb(50_50_51/0.18)] lg:h-[min(760px,calc(100dvh_-_108px))] lg:w-[380px] lg:shrink-0';
+  'flex min-h-[560px] h-[calc(100dvh_-_200px)] w-full min-w-0 flex-col overflow-hidden rounded-[28px] border border-control bg-surface shadow-[0_8px_24px_rgb(50_50_51/0.18)] lg:h-[min(720px,calc(100dvh_-_140px))] lg:w-[380px] lg:shrink-0';
 
 /** A message on a contact's phone or in their inbox: from myEST8, or sent by them through the simulator. */
 type ThreadMessage = {
@@ -80,7 +84,7 @@ export function simulatorPages(demo: DemoControls) {
         pm: c.get('pm'),
         active: 'simulator',
         flash: flashFrom(c.req.url),
-        shell: shellInfo(c),
+        shell: await shellInfo(c),
         controls: clockControls(demo.now(), timeZone, selected),
         body: simulatorBody({
           contacts,
@@ -359,10 +363,12 @@ function phone(contact: DemoContact, thread: ThreadMessage[], timeZone: string):
   const defaultChannel = lastChannel && channels.includes(lastChannel) ? lastChannel : channels[0];
   const label = `${contact.name}'s ${channels.length === 1 && channels[0] === 'email' ? 'inbox' : 'phone'}`;
   return html`<section class="${PHONE_FRAME}" aria-label="${label}">
-    <header class="flex shrink-0 items-center gap-2 border-b border-line px-4 py-2">
-      <h2 class="section-title min-w-0 flex-1 truncate">${contact.name}</h2>
-      ${badge(ROLE_LABEL[contact.role])}
-      ${channels.map((ch) => channelBadge(ch))}
+    <header class="flex shrink-0 flex-col gap-2 border-b border-line px-4 py-3">
+      <div class="flex items-center justify-between gap-2">
+        <h2 class="section-title min-w-0 truncate">${contact.name}</h2>
+        ${badge(ROLE_LABEL[contact.role])}
+      </div>
+      <div class="flex flex-wrap items-center gap-2">${channels.map((ch) => channelBadge(ch))}</div>
     </header>
     <div class="flex min-h-0 flex-1 flex-col-reverse overflow-y-auto bg-surface px-3 py-3" role="region" tabindex="0" aria-label="${`Messages with ${contact.name}`}">
       <div class="flex flex-col gap-3">
@@ -392,47 +398,35 @@ function footer(m: ThreadMessage): Html | undefined {
   return notes.length ? html`<span class="flex flex-wrap gap-x-3 gap-y-1">${notes}</span>` : undefined;
 }
 
-/**
- * The composer pinned to the foot of the phone, kept compact so the thread has the
- * room: the quick replies in one row that scrolls sideways, the message, then the
- * channel, Attach and Send on one line. A few lines of script name what was attached.
- */
+/** The composer pinned to the foot of the phone: channel, attachments, quick replies, message, Send. */
 function composer(contact: DemoContact, channels: ChannelType[], defaultChannel: ChannelType): Html {
-  return html`<form method="post" action="/demo/send" enctype="multipart/form-data" class="flex shrink-0 flex-col gap-2 border-t border-line bg-surface px-3 pt-2 pb-3">
+  return html`<form method="post" action="/demo/send" enctype="multipart/form-data" class="flex shrink-0 flex-col gap-2 border-t border-line bg-surface px-3 py-3">
     <input type="hidden" name="contact" value="${contact.personId}" />
-    <div class="-mx-3 flex gap-1 overflow-x-auto px-3 pb-1" role="group" aria-label="Quick replies">
-      ${QUICK_REPLIES[contact.role].map((reply) => html`<button type="submit" name="quick" value="${reply}" class="btn btn-outline btn-sm shrink-0 font-normal">${reply}</button>`)}
+    <div class="flex items-end gap-2">
+      <div class="flex shrink-0 flex-col">
+        <label for="field-channel" class="field-label">Send by</label>
+        <select id="field-channel" name="channel" class="select select-bordered select-sm">
+          ${channels.map((ch) => html`<option value="${ch}" ${ch === defaultChannel ? 'selected' : ''}>${CHANNEL_LABEL[ch]}</option>`)}
+        </select>
+      </div>
+      <div class="flex min-w-0 flex-1 flex-col">
+        <label for="field-attachments" class="field-label">Attachments</label>
+        <input id="field-attachments" name="attachments" type="file" multiple class="file-input file-input-bordered file-input-sm w-full" />
+      </div>
     </div>
-    <label for="field-text" class="sr-only">Message</label>
-    <textarea id="field-text" name="text" rows="2" class="textarea textarea-bordered min-h-0 w-full resize-none" placeholder="Type as ${contact.name}"></textarea>
-    <div class="flex items-center gap-2">
-      <label for="field-channel" class="sr-only">Send by</label>
-      <select id="field-channel" name="channel" class="select select-bordered select-sm w-auto shrink-0">
-        ${channels.map((ch) => html`<option value="${ch}" ${ch === defaultChannel ? 'selected' : ''}>${CHANNEL_LABEL[ch]}</option>`)}
-      </select>
-      <label class="btn btn-ghost btn-sm min-w-0 has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-action">
-        ${icon('paperclip', { size: 'size-4' })}<span id="attach-label" class="truncate">Attach</span>
-        <input id="field-attachments" name="attachments" type="file" multiple class="sr-only" />
-      </label>
-      <button type="submit" class="btn btn-primary btn-sm ml-auto shrink-0">Send<span class="sr-only"> as ${contact.name}</span></button>
+    <div>
+      <p id="quick-replies-label" class="field-label">Quick replies</p>
+      <div class="flex flex-wrap gap-1" role="group" aria-labelledby="quick-replies-label">
+        ${QUICK_REPLIES[contact.role].map((reply) => button(reply, { variant: 'secondary', size: 'sm', name: 'quick', value: reply }))}
+      </div>
     </div>
-    ${ATTACH_SCRIPT}
+    <div>
+      <label for="field-text" class="field-label">Message</label>
+      <textarea id="field-text" name="text" rows="2" class="textarea textarea-bordered w-full" placeholder="Type as ${contact.name}"></textarea>
+    </div>
+    <div class="flex justify-end">${button(`Send as ${contact.name}`)}</div>
   </form>`;
 }
-
-/** Shows how many files are attached ("2 files"), with their names on hover, in place of "Attach". */
-const ATTACH_SCRIPT = raw(`<script>
-(() => {
-  const input = document.getElementById('field-attachments');
-  const label = document.getElementById('attach-label');
-  if (!input || !label) return;
-  input.addEventListener('change', () => {
-    const chosen = Array.from(input.files || []);
-    label.textContent = chosen.length ? chosen.length + (chosen.length === 1 ? ' file' : ' files') : 'Attach';
-    label.title = chosen.map((f) => f.name).join(', ');
-  });
-})();
-</script>`);
 
 /** The demo clock, in the top bar: the Agency's time and steps forward that POST /demo/advance. */
 function clockControls(now: Date, timeZone: string, selected: DemoContact | null): Html {

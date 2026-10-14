@@ -150,23 +150,6 @@ describe('the phone simulator', () => {
     expect(page).toContain('name="quick" value="Any time"');
   });
 
-  test('the composer posts the same fields to /demo/send: contact, channel, attachments, a quick reply or the text', async () => {
-    const { get, cookie } = await simulator();
-
-    const page = await (await get(`/demo?contact=${TOM_ID}`, cookie)).text();
-    const start = page.indexOf('action="/demo/send"');
-    const form = page.slice(start, page.indexOf('</form>', start));
-
-    expect(form).toContain(`name="contact" value="${TOM_ID}"`);
-    expect(form).toMatch(/<select id="field-channel" name="channel"/);
-    expect(form).toMatch(/<input id="field-attachments" name="attachments" type="file" multiple/);
-    expect(form).toMatch(/<textarea id="field-text" name="text" rows="2"/);
-    expect(form.match(/name="quick"/g)).toHaveLength(7);
-    // Every control keeps a name a screen reader can say, though the labels are hidden to save room.
-    for (const label of ['for="field-text"', 'for="field-channel"', 'aria-label="Quick replies"']) expect(form).toContain(label);
-    expect(form).toContain('Send<span class="sr-only"> as Tom Tran</span>');
-  });
-
   test("an email thread shows the subject and the attachments", async () => {
     const { get, cookie } = await simulator();
 
@@ -228,20 +211,17 @@ describe('the phone simulator', () => {
   });
 
   test("shows only the signed-in Property Manager's Agency, and says which channels it still has to connect", async () => {
-    const { web, get, connectEmail } = await simulator();
+    const { web, get } = await simulator();
     const signUp = await web.request('/signup', {
       method: 'POST',
       body: new URLSearchParams({ name: 'Sam Sun', email: 'sam@sunrise.example', password: 'sunrise-2026', confirmPassword: 'sunrise-2026', agencyName: 'Sunrise Realty', timeZone: 'Australia/Sydney' }),
     });
     const sam = signUp.headers.get('set-cookie')!.split(';')[0]!;
-    // Email comes first: until it is connected the simulator, like every page, leads to it.
-    expect((await get('/demo', sam)).headers.get('location')).toBe('/welcome');
-    await connectEmail(sam);
 
     const page = await (await get('/demo', sam)).text();
 
     for (const name of ['Tom Tran', 'Pete Park', 'Olivia Owens', 'Approve a repair at 12 King St']) expect(page).not.toContain(name);
-    expect(page).toContain('SMS and WhatsApp not connected yet');
+    expect(page).toContain('SMS, WhatsApp and Email not connected yet');
     expect(page).toContain('href="/welcome/channels"');
     expect(page).toContain('No people to act as yet');
   });

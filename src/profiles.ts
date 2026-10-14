@@ -35,9 +35,6 @@ export interface Person {
   googlePlaceId: string | null;
   googleRating: number | null;
   googleReviewCount: number | null;
-  /** Tradies only: where they work from, and the point it geocodes to (null until found). */
-  businessAddress: string | null;
-  location: { lat: number; lng: number } | null;
   lastInbound: { channelType: ChannelType; address: string; at: string } | null;
 }
 
@@ -75,9 +72,6 @@ export const MIN_PASSWORD_LENGTH = 10;
 
 const CHANNEL_ORDER: ChannelType[] = ['sms', 'whatsapp', 'email'];
 
-/** How many Properties, and how many Tradies, one geocodeMissing call looks up. */
-const MAX_GEOCODES_AT_ONCE = 10;
-
 /** Letters and digits that can't be mistaken for each other when read off a screen. */
 const READABLE = 'abcdefghjkmnpqrstuvwxyz23456789';
 
@@ -96,8 +90,6 @@ export type NewPerson = {
 
 export type NewProperty = Omit<Property, 'id' | 'agencyId' | 'location' | 'buildingManagerId'> & {
   buildingManagerId?: number | null;
-  /** Where the address is on the map, when already looked up (so addProperty can run inside a transaction). Looked up when missing. */
-  location?: { lat: number; lng: number } | null;
 };
 
 type PersonRow = {
@@ -116,9 +108,6 @@ type PersonRow = {
   google_place_id: string | null;
   google_rating: number | null;
   google_review_count: number | null;
-  business_address: string | null;
-  lat: number | null;
-  lng: number | null;
   last_inbound_channel: ChannelType | null;
   last_inbound_address: string | null;
   last_inbound_at: string | null;
@@ -189,8 +178,6 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
       googlePlaceId: row.google_place_id,
       googleRating: row.google_rating,
       googleReviewCount: row.google_review_count,
-      businessAddress: row.business_address,
-      location: row.lat !== null && row.lng !== null ? { lat: row.lat, lng: row.lng } : null,
       lastInbound:
         row.last_inbound_channel && row.last_inbound_address && row.last_inbound_at
           ? { channelType: row.last_inbound_channel, address: row.last_inbound_address, at: row.last_inbound_at }
@@ -270,15 +257,6 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
 
   async function googleRating(placeId: string) {
     return ports.places.getRating(placeId);
-  }
-
-  /** An address's point on the map, or null when the lookup finds nothing or fails (it can be retried later). */
-  async function geocode(address: string) {
-    try {
-      return await ports.places.geocode(address);
-    } catch {
-      return null;
-    }
   }
 
   return {
@@ -500,7 +478,7 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
     },
 
     async addProperty(agencyId: number, input: NewProperty) {
-      const location = input.location !== undefined ? input.location : await ports.places.geocode(input.address);
+      const location = await ports.places.geocode(input.address);
       return transaction(db, async () => {
         const id = await run(
           db,
@@ -521,51 +499,6 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
         }
         return id;
       });
-    },
-
-    /**
-     * Sets where a Tradie works from and looks it up on the map. The address is kept
-     * even when the lookup finds nothing or fails: geocodeMissing tries it again.
-     * A blank address clears the address and the location.
-     */
-    async setTradieAddress(agencyId: number, tradieId: number, address: string) {
-      await this.personInAgency(agencyId, tradieId, 'tradie');
-      const trimmed = address.trim();
-      const location = trimmed ? await geocode(trimmed) : null;
-      await run(db, 'UPDATE people SET business_address = ?, lat = ?, lng = ? WHERE id = ?', trimmed || null, location?.lat ?? null, location?.lng ?? null, tradieId);
-    },
-
-    /**
-     * Tries the map lookup again for the Agency's Properties without a location and
-     * its Tradies with an address but no location, at most MAX_GEOCODES_AT_ONCE of
-     * each so opening a page stays quick. A lookup that finds nothing or fails leaves
-     * the record as it was. Returns how many were placed.
-     */
-    async geocodeMissing(agencyId: number): Promise<number> {
-      const properties = await all<{ id: number; address: string }>(
-        db,
-        'SELECT id, address FROM properties WHERE agency_id = ? AND (lat IS NULL OR lng IS NULL) ORDER BY id LIMIT ?',
-        agencyId,
-        MAX_GEOCODES_AT_ONCE,
-      );
-      const tradies = await all<{ id: number; address: string }>(
-        db,
-        `SELECT id, business_address AS address FROM people
-         WHERE agency_id = ? AND role = 'tradie' AND business_address IS NOT NULL AND (lat IS NULL OR lng IS NULL) ORDER BY id LIMIT ?`,
-        agencyId,
-        MAX_GEOCODES_AT_ONCE,
-      );
-      const found = await Promise.all([
-        ...properties.map(async ({ id, address }) => ({ table: 'properties', id, location: await geocode(address) })),
-        ...tradies.map(async ({ id, address }) => ({ table: 'people', id, location: await geocode(address) })),
-      ]);
-      let placed = 0;
-      for (const { table, id, location } of found) {
-        if (!location) continue;
-        await run(db, `UPDATE ${table} SET lat = ?, lng = ? WHERE id = ?`, location.lat, location.lng, id);
-        placed++;
-      }
-      return placed;
     },
 
     async property(id: number): Promise<Property> {

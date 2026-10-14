@@ -1,8 +1,6 @@
 import { generateKeyPairSync } from 'node:crypto';
 import type { DemoControls } from '../../src/demo/controls.ts';
-import type { SmsNumbers } from '../../src/ports.ts';
 import { createSessions } from '../../src/web/auth.ts';
-import type { ChannelModes } from '../../src/web/env.ts';
 import { createWebApp } from '../../src/web/server.ts';
 import { PASSWORD, world } from './world.ts';
 
@@ -33,8 +31,8 @@ export function visible(page: string) {
 }
 
 /** The standard world behind the web app, with helpers to sign in and click through pages. */
-export async function webWorld(options: { demo?: DemoControls; gmailFetch?: typeof fetch; smsNumbers?: SmsNumbers; channels?: ChannelModes } = {}) {
-  const w = await world({ ...(options.gmailFetch ? { gmailFetch: options.gmailFetch } : {}), ...(options.smsNumbers ? { smsNumbers: options.smsNumbers } : {}) });
+export async function webWorld(options: { demo?: DemoControls } = {}) {
+  const w = await world();
   const web = createWebApp({
     app: w.h.app,
     sessions: createSessions(w.h.db, w.h.clock),
@@ -43,7 +41,6 @@ export async function webWorld(options: { demo?: DemoControls; gmailFetch?: type
     twilioAuthToken: 'test-token',
     sendgridPublicKey: generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).publicKey.export({ format: 'der', type: 'spki' }).toString('base64'),
     demo: options.demo,
-    channels: options.channels,
   });
 
   /** Signs in and returns the session cookie to pass to `get` and `post`. */
@@ -77,11 +74,5 @@ export async function webWorld(options: { demo?: DemoControls; gmailFetch?: type
     return cookie;
   }
 
-  /** Connects the signed-up Agency's email by typing its address, as the wizard's first step asks: until then every other page leads there. */
-  async function connectEmail(cookie: string, address = 'inbox@sunrise.example') {
-    const res = await post('/welcome/email', { address }, cookie);
-    if (res.status !== 303 || res.headers.get('location')?.includes('error=')) throw new Error(`Connecting email failed: ${res.status} ${res.headers.get('location')}`);
-  }
-
-  return { ...w, web, signIn, signUp, connectEmail, get, post };
+  return { ...w, web, signIn, signUp, get, post };
 }

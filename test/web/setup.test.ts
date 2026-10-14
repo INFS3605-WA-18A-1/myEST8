@@ -26,8 +26,14 @@ describe('the onboarding guide', () => {
     const setup = await page(w, '/setup', cookie);
 
     for (const text of ['id="channels"', 'id="tenants"', '/webhooks/twilio', 'WhatsApp sandbox', 'Inbound Parse', '/webhooks/sendgrid']) expect(setup).toContain(text);
-    for (const text of ['Olivia Owens', 'Barry Strata', 'Flow Bros', 'Not on Google', KING_ST, '$500.00', 'Tom Tran']) expect(setup).toContain(text);
-    expect(setup).toContain(`href="/tradies/${w.tradies.finn.id}"`);
+    for (const text of ['Olivia Owens', 'Barry Strata', KING_ST, 'Tom Tran']) expect(setup).toContain(text);
+
+    const properties = await page(w, '/properties', cookie);
+    for (const text of [KING_ST, '$500.00', 'Tom Tran', 'Olivia Owens']) expect(properties).toContain(text);
+
+    const tradies = await page(w, '/tradies', cookie);
+    for (const text of ['Flow Bros', 'Not on Google']) expect(tradies).toContain(text);
+    expect(tradies).toContain(`href="/tradies/${w.tradies.finn.id}"`);
   });
 
   test('connects a channel and sends a test message on it', async () => {
@@ -58,7 +64,7 @@ describe('the onboarding guide', () => {
 
     expect(added.page).toContain('Tina Test added as a Tenant');
     expect(added.page).toContain('2026-09-01');
-    expect(added.page).toContain('Hana Ho, Tina Test, Tom Tran');
+    expect(await page(w, '/properties', cookie)).toContain('Hana Ho, Tina Test, Tom Tran');
   });
 
   test('a Tenant with no mobile or email is refused, with the reason next to the form', async () => {
@@ -78,7 +84,7 @@ describe('the onboarding guide', () => {
 
     const owner = await submit(w, '/setup/owners', { name: 'Priya Patel', email: 'priya@example.com' }, cookie);
     expect(owner.page).toContain('Priya Patel added as a Property Owner');
-    const ownerId = /<option value="(\d+)"[^>]*>Priya Patel<\/option>/.exec(owner.page)?.[1];
+    const ownerId = /<option value="(\d+)"[^>]*>Priya Patel<\/option>/.exec(await page(w, '/properties', cookie))?.[1];
     expect(ownerId).toBeDefined();
 
     const property = await submit(
@@ -107,7 +113,7 @@ describe('the onboarding guide', () => {
     const tradie = { businessName: 'Lucky Locks', name: 'Lou Lucky', mobile: '0412 999 000', trades: ['locksmith'], startingRating: 4 };
 
     const refused = await submit(w, '/setup/tradies?google=lucky', tradie, cookie);
-    expect(refused.location).toMatch(/^\/setup\?form=tradie&google=lucky&error=/);
+    expect(refused.location).toMatch(/^\/tradies\?form=tradie&google=lucky&error=/);
     expect(refused.page).toContain('Link the Tradie to their Google listing, or mark them as not on Google');
     expect(refused.page).toContain('value="place-lucky"');
     expect(refused.page).toContain('Lucky Locks, Surry Hills');

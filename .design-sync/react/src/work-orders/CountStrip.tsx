@@ -5,10 +5,10 @@ import type { HostEvents } from '../types.ts';
 
 export interface CountStripProps extends HostEvents {
   /** Each count links into its queue. decision: needs the PM's decision (the hi-vis chip). */
-  items: { label: string; count: number; href: string; decision?: boolean }[];
+  items: { label: string; count: number; href: string }[];
 }
 
-/** The dashboard's count strip: one 36px row of counts that link into the queues. Decision counts take the hi-vis chip. */
+/** The dashboard's count strip: one 36px row of counts that link into the queues. Every count takes the hi-vis chip. */
 export function CountStrip({ items, onClick }: CountStripProps): ReactElement {
   return <HtmlHost onClick={onClick} render={() => ui.countStrip(items)} />;
 }

@@ -5,8 +5,6 @@ import { invalid, iso, newToken, notFound, TRADES, URGENCIES, type Availability,
 
 export type IssueStatus = 'gathering' | 'awaiting_photos' | 'checking' | 'maintenance_request' | 'confirmed' | 'rejected' | 'urgent';
 export const IN_INTAKE: IssueStatus[] = ['gathering', 'awaiting_photos', 'checking', 'maintenance_request'];
-/** An issue's photo link takes photos only while the issue is in these statuses (the same rule as intake.upload). */
-export const TAKES_PHOTOS: IssueStatus[] = ['awaiting_photos', 'checking', 'maintenance_request'];
 
 export type JobStatus = 'quoting' | 'awaiting_owner' | 'approved' | 'scheduled' | 'done' | 'cancelled';
 export type UrgentRepairStatus = 'reminder_sent' | 'receipt_received' | 'receipt_forwarded';
@@ -330,18 +328,6 @@ export function createTickets({ db, clock, settings, modules }: Context) {
 
     issue,
 
-    /** Many issues in one query, with how many unread messages each has, by issue id. */
-    async issuesWithUnread(issueIds: number[]) {
-      if (!issueIds.length) return new Map<number, Issue & { unreadMessages: number }>();
-      const rows = await all<IssueRow & { unread_messages: number }>(
-        db,
-        `SELECT issues.*, (SELECT count(*) FROM messages WHERE messages.issue_id = issues.id AND messages.unread = 1) AS unread_messages
-         FROM issues WHERE id IN (SELECT value::bigint FROM jsonb_array_elements_text(?::text::jsonb) AS ids (value))`,
-        JSON.stringify(issueIds),
-      );
-      return new Map(rows.map((r) => [r.id, { ...toIssue(r), unreadMessages: r.unread_messages }]));
-    },
-
     async updateIssue(id: number, patch: IssuePatch) {
       const entries = Object.entries(patch).filter(([, value]) => value !== undefined);
       if (!entries.length) return;
@@ -353,26 +339,6 @@ export function createTickets({ db, clock, settings, modules }: Context) {
     async issueByPhotosToken(token: string): Promise<Issue | null> {
       const row = await one<IssueRow>(db, 'SELECT * FROM issues WHERE photos_token = ?', token);
       return row ? toIssue(row) : null;
-    },
-
-    /**
-     * What a no-login upload link is, for the page that opens it: issue photos or an
-     * Urgent Repair receipt, whether it still takes files, and who and where it is
-     * from. Null for a token that is neither. Reads only; intake.upload still decides.
-     */
-    async uploadLink(token: string) {
-      const photos = await this.issueByPhotosToken(token);
-      const receipt = photos ? null : await this.urgentRepairByToken(token);
-      if (!photos && !receipt) return null;
-      const about = photos ?? (await issue(receipt!.issueId));
-      return {
-        kind: photos ? ('photos' as const) : ('receipt' as const),
-        // A receipt link stays open: a Tenant may send a second page or a better photo.
-        open: photos ? TAKES_PHOTOS.includes(photos.status) : true,
-        description: about.description,
-        agencyName: (await modules.profiles.agency(about.agencyId)).name,
-        address: (await modules.profiles.property(about.propertyId)).address,
-      };
     },
 
     async addPhoto(issueId: number, fileId: number, metadata: PhotoMetadata, reasons: string[]) {
@@ -517,16 +483,6 @@ export function createTickets({ db, clock, settings, modules }: Context) {
     job,
     jobInAgency,
     jobsOf,
-
-    /** The Jobs of many Tickets in one query, each Ticket's in the order they were added. */
-    async jobsOfTickets(ticketIds: number[]) {
-      if (!ticketIds.length) return [];
-      return (await all<JobRow>(
-        db,
-        'SELECT * FROM jobs WHERE ticket_id IN (SELECT value::bigint FROM jsonb_array_elements_text(?::text::jsonb) AS ids (value)) ORDER BY ticket_id, id',
-        JSON.stringify(ticketIds),
-      )).map(toJob);
-    },
 
     async setJobStatus(jobId: number, status: JobStatus) {
       await run(db, 'UPDATE jobs SET status = ? WHERE id = ?', status, jobId);
@@ -724,18 +680,6 @@ export function createTickets({ db, clock, settings, modules }: Context) {
       )).map(toTicket);
     },
 
-    /** Every Ticket, open or closed: Urgent before High before Routine, then the earliest reported first. */
-    async list(agencyId: number, propertyIds: number[] | null) {
-      const [filter, params] = propertyFilter(propertyIds);
-      return (await all<TicketRow>(
-        db,
-        `SELECT * FROM tickets WHERE agency_id = ?${filter}
-         ORDER BY CASE urgency WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 ELSE 2 END, reported_at, id`,
-        agencyId,
-        ...params,
-      )).map(toTicket);
-    },
-
     async urgentRepairs(agencyId: number, propertyIds: number[] | null) {
       const [filter, params] = propertyFilter(propertyIds);
       return Promise.all(
@@ -748,42 +692,29 @@ export function createTickets({ db, clock, settings, modules }: Context) {
       );
     },
 
-    /**
-     * The Tenant's progress tracker. Built from statuses only: no prices, Quotes or
-     * ratings. It names the Agency and the Property, and the booked stage names the
-     * Tradie's business and Trade, because the Tenant needs to know who is coming.
-     */
+    /** The Tenant's progress tracker. Built from statuses only: no prices, Quotes or ratings. */
     async tracker(token: string) {
       const tracked = await this.ticketByTrackerToken(token);
       if (!tracked) notFound('Ticket');
       const events = await timeline(tracked.id);
       const first = (kind: string) => events.find((e) => e.kind === kind)?.at ?? null;
+      const visits = events.filter((e) => e.kind === 'work_order_sent' || e.kind === 'visit_moved') as { visitStart?: string }[];
       const jobs = (await jobsOf(tracked.id)).filter((j) => j.status !== 'cancelled');
       const allDone = jobs.length > 0 && jobs.every((j) => j.status === 'done');
       const doneAt = allDone ? (events.filter((e) => e.kind === 'job_done').at(-1)?.at ?? null) : null;
-      // The latest visit, preferring a Job that is still going ahead.
-      type VisitEvent = { kind: string; jobId?: number; tradie?: string; visitStart?: string };
-      const visits = events.filter((e) => e.kind === 'work_order_sent' || e.kind === 'visit_moved') as VisitEvent[];
-      const visit = visits.findLast((e) => jobs.some((j) => j.id === e.jobId)) ?? visits.at(-1);
-      const tradie = visits.findLast((e) => e.kind === 'work_order_sent' && e.jobId === visit?.jobId)?.tradie;
-      const trade = jobs.find((j) => j.id === visit?.jobId)?.trade;
-      const booked = visit?.visitStart ? { visitStart: visit.visitStart, ...(tradie ? { tradie } : {}), ...(trade ? { trade } : {}) } : {};
-      const stages: { stage: string; at: string | null; visitStart?: string; tradie?: string; trade?: Trade }[] = [
+      const stages: { stage: string; at: string | null; visitStart?: string }[] = [
         { stage: 'reported', at: tracked.reportedAt },
         { stage: 'confirmed', at: first('confirmed') },
         { stage: 'getting_quotes', at: first('quote_requests_sent') },
         { stage: 'approved', at: first('quote_approved') },
-        { stage: 'booked', at: first('work_order_sent'), ...booked },
+        { stage: 'booked', at: first('work_order_sent'), ...(visits.length ? { visitStart: visits.at(-1)!.visitStart } : {}) },
         { stage: 'done', at: doneAt },
         { stage: 'closed', at: tracked.closedAt },
       ];
-      const agency = await modules.profiles.agency(tracked.agencyId);
       return {
         description: (await issue(tracked.issueId)).description,
-        agencyName: agency.name,
-        address: (await modules.profiles.property(tracked.propertyId)).address,
         // The Agency's zone, so the Tenant sees times as the Agency does.
-        timeZone: agency.timeZone,
+        timeZone: (await modules.profiles.agency(tracked.agencyId)).timeZone,
         stages: stages.map((s) => ({ ...s, reached: s.at !== null })),
       };
     },

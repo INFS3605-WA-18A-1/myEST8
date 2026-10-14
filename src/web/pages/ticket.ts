@@ -17,13 +17,11 @@ import {
   alert,
   badge,
   button,
-  card,
   chatBubble,
   dl,
   emptyState,
   field,
   flashFrom,
-  formatAge,
   formatMoney,
   formatWhen,
   humanise,
@@ -31,13 +29,14 @@ import {
   page,
   photoGrid,
   postButton,
-  sectionHeader,
+  section,
   statusBadge,
   steps,
   table,
   timeline,
   urgencyBadge,
   type Html,
+  type Tone,
 } from '../ui.ts';
 
 type TicketView = Awaited<ReturnType<PropertyManagerActions['ticket']>>;
@@ -68,6 +67,24 @@ const FREE_SLOTS_SHOWN = 3;
 const DEFAULT_VISIT_HOURS = 2;
 const CHANNELS = { sms: 'SMS', whatsapp: 'WhatsApp', email: 'Email' } as const;
 const nothing = html``;
+const IMAGE_CHECK: Record<string, [string, Tone]> = {
+  matches: ['Photos match the description', 'success'],
+  does_not_match: ["Photos don't match the description", 'error'],
+  unclear: ['Photo check unclear', 'warning'],
+};
+
+/** "any time" as "Any time", for display. */
+function sentence(value: string): string {
+  return value ? value.charAt(0).toUpperCase() + value.slice(1) : value;
+}
+
+/** A heading for a group inside a section. */
+function subHead(title: string, actions?: Html): Html {
+  return html`<div class="flex flex-wrap items-center justify-between gap-2">
+    <h3 class="section-title">${title}</h3>
+    ${actions ?? nothing}
+  </div>`;
+}
 
 /** The Ticket view under /tickets/:id and every Job action on it. */
 export function ticketPages() {
@@ -79,7 +96,7 @@ export function ticketPages() {
     const ticket = await findTicket(actions, c.req.param('id'));
     if (!ticket) {
       const body = emptyState('There is no such Ticket in your Agency.', linkButton('Back to Tickets', '/tickets'));
-      return c.html(page({ title: 'Ticket not found', pm, active: 'tickets', flash, body, shell: shellInfo(c) }), 404);
+      return c.html(page({ title: 'Ticket not found', pm, active: 'tickets', flash, body, shell: await shellInfo(c) }), 404);
     }
     const { timeZone } = actions.agency();
     const extras: Extras = {
@@ -90,14 +107,14 @@ export function ticketPages() {
     };
     return c.html(
       page({
-        title: `Ticket ${ticket.ticketId}`,
+        title: `Ticket #${ticket.ticketId}`,
         actions: html`${shareButton({
-          title: `Ticket ${ticket.ticketId}: ${ticket.description}`,
-          text: `Ticket ${ticket.ticketId} at ${ticket.propertyAddress}: ${ticket.description}`,
+          title: `Ticket #${ticket.ticketId}: ${ticket.description}`,
+          text: `Ticket #${ticket.ticketId} at ${ticket.propertyAddress}: ${ticket.description}`,
           url: shareUrl(c, `/tickets/${ticket.ticketId}`),
           note: COLLEAGUES_ONLY,
-        })}${urgencyMenu(ticket)}${closeControl(ticket)}`,
-        shell: shellInfo(c),
+        })}${closeControl(ticket)}`,
+        shell: await shellInfo(c),
         pm,
         active: 'tickets',
         flash,
@@ -311,11 +328,7 @@ async function freeSlotsFor(actions: PropertyManagerActions, ticket: TicketView)
 
 // The page
 
-/**
- * The header with the Next step first in reading order after the issue; then the
- * Jobs (where the next action is) in the main column, and what the Tenant reported,
- * the Ticket's details and the logs beside them. On phones the Jobs come first.
- */
+/** The Jobs (where the next action is) in the main column; the Tenant's answers, photos and the logs beside them. */
 function ticketBody(t: TicketView, x: Extras): Html {
   return html`${ticketHeader(t, x)}
     <div class="grid items-start gap-4 lg:grid-cols-3">
@@ -324,127 +337,43 @@ function ticketBody(t: TicketView, x: Extras): Html {
         ${t.status === 'open' ? addJobCard(t) : nothing}
       </div>
       <div class="min-w-0 space-y-4">
-        ${reportCard(t)} ${detailsCard(t)} ${timelineCard(t, x)} ${messagesCard(t, x)}
+        ${photosCard(t)} ${reportCard(t)} ${detailsCard(t)} ${timelineCard(t, x)} ${messagesCard(t, x)}
       </div>
     </div>`;
 }
 
-/**
- * The Ticket's header, hand-built in the docket's shape (number and Urgency in the
- * stub, a dashed perforation) because it reads the issue first and links the
- * address: the issue, the address, the Tenant, status and age, the Max Repair Cost,
- * the Repair Cost once there is one, and the one Next step.
- */
+/** The Ticket as a large docket: number and urgency word in the stub, then the address, the Tenant, status and age, the Repair Cost against the Max Repair Cost, and the Urgency change. */
 function ticketHeader(t: TicketView, x: Extras): Html {
   const overMax = t.repairCostCents > t.maxRepairCostCents;
-  const stub = t.urgency === 'high' ? 'bg-high-bg text-high' : 'bg-page text-ink';
-  const address = html`<a class="link" href="/properties/${t.propertyId}">${t.propertyAddress}</a>`;
-  return html`<header class="ticket-head">
-    <div class="ticket-stub ${stub}">
-      <span class="num text-[26px] leading-none font-bold [font-family:var(--font-head)]">#${t.ticketId}</span>
-      <span class="text-sm font-semibold [font-family:var(--font-head)]">${humanise(t.urgency)}<span class="sr-only"> Urgency</span></span>
-    </div>
-    <div aria-hidden="true" class="ticket-perf"></div>
-    <div class="min-w-0 flex-1 space-y-3 p-4">
-      <div class="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
-        <div class="min-w-0 flex-1 basis-80 space-y-1">
-          <h2 class="text-xl leading-tight font-semibold break-words [font-family:var(--font-head)]">${t.description}</h2>
-          <p class="break-words font-medium">${address}</p>
+  const maxLine = overMax
+    ? `Over the Max Repair Cost of ${formatMoney(t.maxRepairCostCents)}, with the Property Owner's approval`
+    : `Max Repair Cost ${formatMoney(t.maxRepairCostCents)}`;
+  return html`<header class="flex overflow-hidden rounded-[4px] border border-line bg-surface">
+    <div class="grid min-w-0 flex-1 gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_auto]">
+      <div class="min-w-0 space-y-3">
+        <div class="space-y-1">
+          <h2 class="text-xl leading-tight font-semibold break-words [font-family:var(--font-head)]">${t.propertyAddress}</h2>
+          <p class="break-words">${t.description}</p>
         </div>
-        ${t.repairCostCents > 0
-          ? html`<div class="shrink-0 sm:text-right">
-              <p class="text-xs text-muted">Repair Cost</p>
-              <p class="num text-[22px] leading-tight font-semibold [font-family:var(--font-head)] ${overMax ? 'text-high' : ''}">${formatMoney(t.repairCostCents)}</p>
-              ${overMax ? html`<p class="text-xs text-high">Over the Max Repair Cost, with the Property Owner's approval</p>` : nothing}
-            </div>`
-          : nothing}
+        <p class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
+          <span>Tenant ${t.tenantName}</span>
+          <span>${statusBadge(t.status)}</span>
+          <time datetime="${t.reportedAt}">${reportedAgo(t.reportedAt, x.now)}</time>
+        </p>
+        <div class="flex flex-wrap items-end gap-3">
+          ${t.status === 'open' ? urgencyForm(t) : urgencyBadge(t.urgency)}
+          ${t.checkUrgency ? html`<p class="flex items-center gap-2 text-xs">${badge('Check Urgency', 'warning')} The intake agent wasn't sure.</p>` : nothing}
+        </div>
       </div>
-      <p class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
-        <span>Tenant ${t.tenantName}</span>
-        <span>${statusBadge(t.status)}</span>
-        <time datetime="${t.reportedAt}">${reportedAgo(t.reportedAt, x.now)}</time>
-        <span class="num">Max Repair Cost ${formatMoney(t.maxRepairCostCents)}</span>
-        ${t.checkUrgency ? html`<span class="flex items-center gap-2">${badge('Check Urgency', 'warning')} The intake agent wasn't sure.</span>` : nothing}
-      </p>
-      ${nextStepLine(t, x)}
+      <div class="flex flex-wrap items-end gap-x-8 gap-y-2 lg:flex-col lg:items-end lg:text-right">
+        <div>
+          <p class="text-xs text-muted">Repair Cost</p>
+          <p class="num text-[26px] leading-tight font-semibold [font-family:var(--font-head)] ${overMax ? 'text-high' : ''}">${formatMoney(t.repairCostCents)}</p>
+        </div>
+        <p class="text-xs ${overMax ? 'text-high' : 'text-muted'}">${maxLine}</p>
+      </div>
     </div>
   </header>`;
-}
-
-type NextStep = { text: string; href: string; decision: boolean; job?: JobView };
-
-/**
- * The one thing to do next on the Ticket: the first Job waiting on the Property
- * Manager's decision, else the first Job waiting on someone else, else closing.
- * A decision gets the Wattle stripe.
- */
-function nextStepLine(t: TicketView, x: Extras): Html {
-  const step = nextStep(t, x);
-  if (!step) return nothing;
-  const job = step.job && t.jobs.length > 1 ? html` <span class="text-sm text-muted">${jobLabel(t, step.job.jobId)}</span>` : nothing;
-  return html`<p class="ticket-next ${step.decision ? 'is-decision' : ''}" data-next-step>
-    <span class="ticket-next-label">Next step</span>
-    <a class="link font-semibold" href="${step.href}">${step.text}</a>${job}
-  </p>`;
-}
-
-function nextStep(t: TicketView, x: Extras): NextStep | null {
-  if (t.status !== 'open') return null;
-  const steps = t.jobs.map((job) => jobStep(t, job, x)).filter((s): s is NextStep => s !== null);
-  const step = steps.find((s) => s.decision) ?? steps[0];
-  if (step) return step;
-  if (t.jobs.some(isOpen)) return null;
-  const done = t.jobs.some((j) => j.status === 'done');
-  return { text: done ? 'Close the Ticket: every Job is done' : 'Close the Ticket: every Job is cancelled', href: '#close-ticket', decision: true };
-}
-
-/** What a Job waits on, and whether that is the Property Manager. */
-function jobStep(t: TicketView, job: JobView, x: Extras): NextStep | null {
-  const at = (section: string) => `#job-${job.jobId}-${section}`;
-  const decide = (text: string, section: string): NextStep => ({ text, href: at(section), decision: true, job });
-  const wait = (text: string, section: string): NextStep => ({ text, href: at(section), decision: false, job });
-  switch (job.status) {
-    case 'quoting': {
-      const open = job.quotes.filter((q) => q.status === 'open');
-      const unchecked = open.filter((q) => !q.confirmed);
-      const confirmed = open.filter((q) => q.confirmed);
-      const waiting = job.quoteRequests.filter((r) => r.status === 'sent' || r.status === 'reminded');
-      if (!job.quoteRequests.length) return decide(job.checkTrade ? 'Check the Trade, then send Quote Requests' : 'Send Quote Requests', 'tradies');
-      if (unchecked.length) {
-        const names = andList(unchecked.map((q) => q.businessName));
-        return decide(`Check ${unchecked.length} ${plural(unchecked.length, 'Quote')} from ${names}`, 'quotes');
-      }
-      if (confirmed.length >= MIN_QUOTES) return decide(`Choose a Quote: ${confirmed.length} confirmed`, 'quotes');
-      if (waiting.length) {
-        const oldest = waiting.reduce((a, b) => (a.sentAt < b.sentAt ? a : b));
-        const names = andList(waiting.map((r) => r.businessName));
-        return wait(`Waiting on ${plural(waiting.length, 'a Quote', 'Quotes')} from ${names}, asked ${formatAge(oldest.sentAt, x.now)}`, 'requests');
-      }
-      if (confirmed.length === 1) return decide(`Choose ${confirmed[0]!.businessName}'s Quote with a reason, or ask more Tradies`, 'quotes');
-      return decide('Ask more Tradies to quote', 'tradies');
-    }
-    case 'awaiting_owner': {
-      const quote = job.quotes.find((q) => q.quoteId === job.approval?.quoteId);
-      return wait(`Waiting on the Property Owner to approve ${formatMoney(quote?.priceCents ?? null)}`, 'approval');
-    }
-    case 'approved': {
-      const approved = job.quotes.find((q) => q.status === 'approved');
-      if (job.workOrder) return null;
-      return decide(approved ? `Send the Work Order to ${approved.businessName}` : 'Send the Work Order', 'work-order');
-    }
-    case 'scheduled': {
-      const wo = job.workOrder;
-      if (!wo) return null;
-      if (wo.status === 'active' && wo.rescheduleRequestedBy) {
-        return decide(`Find a new time: the ${wo.rescheduleRequestedBy === 'tenant' ? 'Tenant' : 'Tradie'} asked for another`, 'work-order');
-      }
-      return wait(`Visit ${formatWhen(wo.start, x.timeZone)} with ${wo.businessName}`, 'work-order');
-    }
-    case 'done':
-      return lastEvent(t, 'tradie_rated', job.jobId) ? null : decide(`Rate ${job.workOrder?.businessName ?? 'the Tradie'}`, 'rating');
-    default:
-      return null;
-  }
 }
 
 /** "Reported 2 days ago", in the Agency's clock's hours and days. */
@@ -455,16 +384,12 @@ function reportedAgo(iso: string, now: Date): string {
   return `Reported ${days} ${plural(days, 'day')} ago`;
 }
 
-/** Who looks after the Ticket, what else goes wrong at the Property, and what the intake agent's photo check said. */
 function detailsCard(t: TicketView): Html {
-  return card({
+  return section({
     title: 'Ticket details',
     body: dl([
       ['Property Manager', t.propertyManager],
       ['Frequent issues here', frequentIssues(t)],
-      ...(t.imageMatch
-        ? [['Photo check', html`${badge(humanise(t.imageMatch.result), t.imageMatch.result === 'matches' ? 'success' : 'warning')} <span class="text-muted">${t.imageMatch.reason}</span>`] as [string, Html]]
-        : []),
     ]),
   });
 }
@@ -472,13 +397,13 @@ function detailsCard(t: TicketView): Html {
 /** Close Ticket, or why it can't be closed yet. */
 function closeControl(t: TicketView): Html {
   const openJobs = t.jobs.filter(isOpen).length;
-  if (t.status !== 'open') return badge('Closed', 'success');
+  if (t.status !== 'open') return nothing;
   if (openJobs === 0) {
-    return html`<div id="close-ticket">
-      ${postButton(`/tickets/${t.ticketId}/close`, 'Close Ticket', { confirm: 'Close this Ticket? The Tenant and Property Owner will be told.' })}
-    </div>`;
+    return postButton(`/tickets/${t.ticketId}/close`, 'Close Ticket', {
+      confirm: 'Close this Ticket? The Tenant and Property Owner will be told.',
+    });
   }
-  return html`<div id="close-ticket" class="flex flex-col items-start gap-1 sm:items-end">
+  return html`<div class="flex flex-col items-start gap-1 sm:items-end">
     ${button('Close Ticket', { type: 'button', variant: 'secondary', size: 'sm', disabled: true })}
     <p class="text-xs text-muted">Close once every Job is done or cancelled (${openJobs} still open).</p>
   </div>`;
@@ -489,42 +414,48 @@ function frequentIssues(t: TicketView): string {
   return t.frequentIssues.map((f) => `${humanise(f.trade)} (${f.tickets} ${plural(f.tickets, 'Ticket')})`).join(', ');
 }
 
-/** Change Urgency, folded into a small menu beside Share and Close Ticket while the Ticket is open. */
-function urgencyMenu(t: TicketView): Html {
-  if (t.status !== 'open') return nothing;
+function urgencyForm(t: TicketView): Html {
   const options = [
     { value: 'high', label: 'High' },
     { value: 'routine', label: 'Routine' },
   ];
-  return html`<details class="ticket-menu" data-menu>
-    <summary class="btn btn-outline btn-sm">Change Urgency</summary>
-    <div class="ticket-menu-panel">
-      <form method="post" action="/tickets/${t.ticketId}/urgency" class="space-y-3">
-        ${field({ label: 'Urgency', name: 'urgency', type: 'select', value: t.urgency, options, hint: 'Urgent issues never become Tickets.' })}
-        ${button('Save Urgency', { size: 'sm', block: true })}
-      </form>
+  return html`<form method="post" action="/tickets/${t.ticketId}/urgency" class="flex flex-wrap items-end gap-2">
+    <div class="min-w-40">
+      ${field({ label: 'Change Urgency', name: 'urgency', type: 'select', value: t.urgency, options, hint: 'Urgent issues never become Tickets.' })}
     </div>
-  </details>`;
+    ${button('Save Urgency', { variant: 'secondary', size: 'sm' })}
+  </form>`;
 }
 
-/** The photos the Tenant sent first, each with what its metadata check said, then their guided answers. */
+/** The photos the Tenant sent, each with what its metadata check said. */
+function photosCard(t: TicketView): Html {
+  return section({
+    title: 'Photos',
+    body: t.photos.length
+      ? photoGrid(t.photos.map((p) => ({ src: `/files/${p.fileId}`, caption: photoCaption(p) })))
+      : emptyState(t.noPhotos ? 'No photos arrived within 48 hours.' : 'No photos.'),
+  });
+}
+
+/** The Tenant's guided answers, and what the intake agent made of the photos. */
 function reportCard(t: TicketView): Html {
   const a = t.answers;
-  const photos = t.photos.length
-    ? photoGrid(t.photos.map((p) => ({ src: `/files/${p.fileId}`, caption: photoCaption(p) })))
-    : html`<p class="text-sm text-muted">${t.noPhotos ? 'No photos arrived within 48 hours.' : 'No photos.'}</p>`;
-  return card({
+  return section({
     title: 'What the Tenant reported',
-    body: html`<div class="space-y-4">
-      ${photos}
-      ${dl([
-        ['Where', a.location ?? '—'],
-        ['Started', a.started ?? '—'],
-        ['Getting worse', a.worsening ? humanise(a.worsening) : '—'],
-        ['Usually home', a.availability ? AVAILABILITY_LABELS[a.availability] : '—'],
+    body: html`${dl([
+        ['Where', a.location ? sentence(a.location) : '—'],
+        ['Started', a.started ? sentence(a.started) : '—'],
+        ['Getting worse', a.worsening ? sentence(humanise(a.worsening)) : '—'],
+        ['Usually home', a.availability ? sentence(AVAILABILITY_LABELS[a.availability]) : '—'],
       ])}
-    </div>`,
+      ${imageCheck(t)}`,
   });
+}
+
+function imageCheck(t: TicketView): Html {
+  if (!t.imageMatch) return nothing;
+  const [label, tone] = IMAGE_CHECK[t.imageMatch.result] ?? ['Photo check unclear', 'warning' as Tone];
+  return html`<p class="mt-3">${badge(label, tone)}</p>`;
 }
 
 function photoCaption(p: Photo): Html {
@@ -535,13 +466,15 @@ function photoCaption(p: Photo): Html {
 /** One Job: where it is, the one next action, and the details below it. A cancelled Job is collapsed. */
 function jobCard(t: TicketView, job: JobView, x: Extras): Html {
   if (job.status === 'cancelled') return cancelledJob(t, job, x);
-  return card({
+  return section({
     id: `job-${job.jobId}`,
     title: jobLabel(t, job.jobId),
     actions: html`${statusBadge(job.status)} ${job.checkTrade ? badge('Check Trade', 'warning') : nothing}`,
-    body: html`${jobSteps(job)}
+    body: html`<div class="space-y-5">
+      ${jobSteps(job)}
       ${nextAction(t, job, x)}
-      ${jobMore(t, job, x)}`,
+      ${jobMore(t, job, x)}
+    </div>`,
   });
 }
 
@@ -592,24 +525,14 @@ function nextAction(t: TicketView, job: JobView, x: Extras): Html {
   }
 }
 
-/**
- * While quoting: the Trade if the intake agent wasn't sure, the Quotes compared
- * side by side, who has been asked and who hasn't replied, then the Tradies to ask
- * (folded away once the first round has gone).
- */
+/** While quoting: the Trade if the intake agent wasn't sure, the Tradies to ask, then the Quotes side by side. */
 function quotingAction(t: TicketView, job: JobView, x: Extras): Html {
   const declined = job.approval?.status === 'declined';
-  return html`<div class="space-y-6">
+  return html`<div class="space-y-4">
     ${declined ? alert('The Property Owner said NO. Choose another Quote.', 'warning') : nothing}
     ${job.checkTrade && !job.quoteRequests.length ? tradeForm(t, job) : nothing}
+    ${recommendationsSection(t, job, x)}
     ${job.quotes.length ? quotesSection(t, job, x) : nothing}
-    ${job.quoteRequests.length ? quoteRequestsWaiting(job, x) : nothing}
-    ${job.quoteRequests.length
-      ? html`<details class="group" id="job-${job.jobId}-tradies">
-          <summary class="cursor-pointer text-sm font-medium text-action">Ask more Tradies</summary>
-          <div class="mt-3">${recommendationsSection(t, job, x)}</div>
-        </details>`
-      : html`<div id="job-${job.jobId}-tradies">${recommendationsSection(t, job, x)}</div>`}
   </div>`;
 }
 
@@ -617,7 +540,7 @@ function quotingAction(t: TicketView, job: JobView, x: Extras): Html {
 function jobMore(t: TicketView, job: JobView, x: Extras): Html {
   const quoting = job.status === 'quoting';
   const trade = quoting && !job.quoteRequests.length && !job.checkTrade ? tradeForm(t, job) : nothing;
-  const requests = !quoting && job.quoteRequests.length ? quoteRequestsSection(job, x) : nothing;
+  const requests = job.quoteRequests.length ? quoteRequestsSection(job, x) : nothing;
   const quotes = !quoting && job.quotes.length ? quotesSection(t, job, x) : nothing;
   const approval = job.approval && job.status !== 'awaiting_owner' ? approvalSection(t, job, job.approval, x) : nothing;
   const workOrder = job.workOrder && job.status === 'done' ? workOrderDetails(t, job.workOrder, x) : nothing;
@@ -630,9 +553,9 @@ function jobMore(t: TicketView, job: JobView, x: Extras): Html {
     : nothing;
   return html`<details class="group">
     <summary class="cursor-pointer text-sm font-medium text-action">More about this Job</summary>
-    <div class="mt-3 space-y-6">
+    <div class="mt-3 space-y-5 border-t border-line pt-3">
       ${trade} ${requests} ${quotes} ${approval} ${workOrder}
-      <div>${cancel}</div>
+      ${cancel}
     </div>
   </details>`;
 }
@@ -657,16 +580,16 @@ function tradeForm(t: TicketView, job: JobView): Html {
 }
 
 function recommendationsSection(t: TicketView, job: JobView, x: Extras): Html {
-  const header = sectionHeader('Recommended Tradies');
+  const header = subHead('Recommended Tradies');
   if (!job.recommendations.length) {
     const none = `No Tradies in the Agency do ${humanise(job.trade).toLowerCase()} work yet.`;
-    return html`<section class="space-y-3">${header} ${emptyState(none, linkButton('Add a Tradie', '/setup', { size: 'sm' }))}</section>`;
+    return html`<div class="space-y-3">${header} ${emptyState(none, linkButton('Add a Tradie', '/setup', { size: 'sm' }))}</div>`;
   }
   const firstRound = job.quoteRequests.length === 0;
   const ticked = new Set(firstRound ? job.recommendations.slice(0, FIRST_ROUND).map((r) => r.tradieId) : []);
   const anyLeft = job.recommendations.some((r) => !r.requested);
   const rows = job.recommendations.map((r, i) => recommendationRow(job, r, i + 1, ticked.has(r.tradieId), x));
-  return html`<section class="space-y-3">
+  return html`<div class="space-y-3">
     ${header}
     <p class="text-muted">
       Ranked by myEST8 rating, then Google rating, then median previous Quote.
@@ -676,7 +599,7 @@ function recommendationsSection(t: TicketView, job: JobView, x: Extras): Html {
       ${compactTable(['Tradie', 'Rating', 'Google', 'Median Quote', 'Ask'], rows, `Recommended Tradies for the ${humanise(job.trade)} Job`)}
       ${anyLeft ? button('Send Quote Requests', { block: true }) : html`<p>Every recommended Tradie has been asked.</p>`}
     </form>
-  </section>`;
+  </div>`;
 }
 
 /** A table with no minimum cell width, so a Tradie list fits the main column; it still scrolls inside its frame if it must. */
@@ -697,6 +620,7 @@ function compactTable(headers: string[], rows: Html[][], caption: string): Html 
 /** One recommended Tradie as a table row. The two ratings sit in their own columns, never combined; bookings sit under the name. */
 function recommendationRow(job: JobView, r: Recommendation, rank: number, ticked: boolean, x: Extras): Html[] {
   const id = `job-${job.jobId}-tradie-${r.tradieId}`;
+  const { average, count } = r.myEst8Rating;
   return [
     html`<div class="space-y-1">
       <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -710,7 +634,7 @@ function recommendationRow(job: JobView, r: Recommendation, rank: number, ticked
           </ul>`
         : nothing}
     </div>`,
-    html`<span class="num whitespace-nowrap">${myEst8Rating(r)}</span>`,
+    html`<span class="num whitespace-nowrap">myEST8 ${average.toFixed(1)} (${count} ${plural(count, 'rating')})</span>`,
     html`<span class="whitespace-nowrap">${googleRating(r.googleRating)}</span>`,
     html`<span class="num">${
       r.medianQuoteCents === null ? 'No previous Quotes' : `Median Quote ${formatMoney(r.medianQuoteCents)} (${r.previousQuotes.length} previous)`
@@ -733,145 +657,68 @@ function googleRating(g: Recommendation['googleRating']): string {
   return `Google ${g.rating.toFixed(1)} (${g.reviewCount ?? 0} reviews)`;
 }
 
-function myEst8Rating(r: Recommendation): string {
-  const { average, count } = r.myEst8Rating;
-  return `myEST8 ${average.toFixed(1)} (${count} ${plural(count, 'rating')})`;
-}
-
-/** Every Quote Request on the Job, with when it went and what came back. */
 function quoteRequestsSection(job: JobView, x: Extras): Html {
   const rows = job.quoteRequests.map((r) => [
     tradieLink(r.tradieId, r.businessName),
     html`${formatWhen(r.sentAt, x.timeZone)}`,
     statusBadge(r.status),
   ]);
-  return html`<section class="space-y-3">${sectionHeader('Quote Requests')} ${table(['Tradie', 'Sent', 'Status'], rows)}</section>`;
+  return html`<div class="space-y-3">${subHead('Quote Requests')} ${table(['Tradie', 'Sent', 'Status'], rows)}</div>`;
 }
 
-const REPLY: Record<string, string> = {
-  sent: 'No reply yet',
-  reminded: 'No reply after a reminder',
-  quoted: 'Quoted',
-  declined: 'Declined',
-  closed: 'Closed',
-};
-
-/** While quoting: who has been asked, who hasn't replied yet and how long ago they were asked. */
-function quoteRequestsWaiting(job: JobView, x: Extras): Html {
-  const waiting = job.quoteRequests.filter((r) => r.status === 'sent' || r.status === 'reminded').length;
-  const quoted = job.quoteRequests.filter((r) => r.status === 'quoted').length;
-  const asked = job.quoteRequests.length;
-  return html`<section class="space-y-2" id="job-${job.jobId}-requests">
-    ${sectionHeader('Quote Requests')}
-    <p class="text-sm text-muted">${asked} asked: ${quoted} quoted, ${waiting} waiting on a reply.</p>
-    <ul role="list" class="divide-y divide-line rounded-[4px] border border-line text-sm">
-      ${job.quoteRequests.map((r) => {
-        const open = r.status === 'sent' || r.status === 'reminded';
-        return html`<li class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-3 py-2">
-          ${tradieLink(r.tradieId, r.businessName)}
-          <span class="${open ? '' : 'text-muted'}"
-            >${REPLY[r.status] ?? humanise(r.status)}, <span class="text-muted"
-              >asked <time datetime="${r.sentAt}" title="${formatWhen(r.sentAt, x.timeZone)}">${formatAge(r.sentAt, x.now)}</time></span
-            ></span
-          >
-        </li>`;
-      })}
-    </ul>
-  </section>`;
-}
-
-/**
- * The Job's Quotes compared: one column per Quote (Tradie, price, proposed time,
- * both ratings, whether it is confirmed) with its action at the foot. A Quote that
- * still needs checking folds its correct-and-confirm form under the column. On a
- * narrow screen each Quote is a compact block instead.
- */
 function quotesSection(t: TicketView, job: JobView, x: Extras): Html {
   const confirmed = job.quotes.filter((q) => q.confirmed).length;
-  const quoting = job.status === 'quoting';
-  const unchecked = job.quotes.filter((q) => q.status === 'open' && !q.confirmed).length;
   const advice =
     confirmed < MIN_QUOTES
       ? 'myEST8 needs two confirmed Quotes before you choose one. To go ahead with fewer, record why.'
-      : 'Compare them and choose one.';
-  const ratings = new Map(job.recommendations.map((r) => [r.tradieId, r]));
-  const showRatings = job.quotes.some((q) => ratings.has(q.tradieId));
-  const rows = showRatings ? 6 : 5;
-  return html`<section class="space-y-3" id="job-${job.jobId}-quotes">
-    ${sectionHeader('Quotes')}
-    ${quoting
-      ? html`<p class="text-sm text-muted">
-          ${confirmed} confirmed${unchecked ? `, ${unchecked} to check` : ''}. ${advice}
-        </p>`
-      : nothing}
-    <div class="quote-compare-frame">
-      <ul role="list" class="quote-compare" style="--quote-rows: ${rows}">
-        ${job.quotes.map((q) => quoteColumn(t, job, q, confirmed, showRatings ? (ratings.get(q.tradieId) ?? null) : undefined, x))}
-      </ul>
-    </div>
-  </section>`;
+      : 'Compare them side by side and choose one.';
+  return html`<div class="space-y-3">
+    ${subHead('Quotes')}
+    ${job.status === 'quoting' ? html`<p class="text-muted">${confirmed} confirmed. ${advice}</p>` : nothing}
+    <ul role="list" class="divide-y divide-line">
+      ${job.quotes.map((q) => html`<li class="min-w-0 py-3 first:pt-0 last:pb-0">${quoteCard(t, job, q, confirmed, x)}</li>`)}
+    </ul>
+  </div>`;
 }
 
-/** One Quote's column. `rating` is undefined when no Quote on the Job has ratings to show. */
-function quoteColumn(t: TicketView, job: JobView, q: QuoteView, confirmed: number, rating: Recommendation | null | undefined, x: Extras): Html {
+function quoteCard(t: TicketView, job: JobView, q: QuoteView, confirmed: number, x: Extras): Html {
   const open = q.status === 'open';
-  const cell = (label: string, value: Html | string) =>
-    html`<div class="quote-cell"><span class="quote-label">${label}</span><span class="quote-value">${value}</span></div>`;
-  const action =
-    open && !q.confirmed
-      ? confirmForm(t, q, x)
-      : open && q.confirmed && job.status === 'quoting'
-        ? chooseForm(t, q, confirmed)
-        : open
-          ? nothing
-          : statusBadge(q.status);
-  return html`<li class="quote-column ${q.status === 'approved' ? 'is-approved' : ''}">
-    <div class="quote-tradie">${tradieLink(q.tradieId, q.businessName)}</div>
-    <p class="quote-price num">${formatMoney(q.priceCents)}</p>
-    ${cell('Proposed time', q.proposedTime ? formatWhen(q.proposedTime, x.timeZone) : 'None given')}
-    ${rating === undefined
-      ? nothing
-      : cell(
-          'Ratings',
-          rating
-            ? html`<span class="quote-ratings"><span class="num">${myEst8Rating(rating)}</span><span>${googleRating(rating.googleRating)}</span></span>`
-            : '—',
-        )}
-    <div class="quote-state">
+  return html`<article class="space-y-2">
+    <header class="flex flex-wrap items-start justify-between gap-2">${tradieLink(q.tradieId, q.businessName)} ${statusBadge(q.status)}</header>
+    <p class="num text-xl font-semibold">${formatMoney(q.priceCents)}</p>
+    <p>Proposed time: ${q.proposedTime ? formatWhen(q.proposedTime, x.timeZone) : 'none given'}</p>
+    <p class="flex flex-wrap gap-1">
       ${q.confirmed ? badge('Confirmed', 'success') : badge('Needs checking', 'warning')}
       ${q.hasPdf ? badge('PDF attached', 'info') : nothing}
-      ${q.reason ? html`<span class="block w-full text-sm">Chosen with one Quote: ${q.reason}</span>` : nothing}
-    </div>
-    <div class="quote-action">${action}</div>
-  </li>`;
+    </p>
+    ${q.reason ? html`<p>Chosen with one Quote: ${q.reason}</p>` : nothing}
+    ${open && !q.confirmed ? confirmForm(t, q, x) : nothing}
+    ${open && q.confirmed && job.status === 'quoting' ? chooseForm(t, q, confirmed) : nothing}
+  </article>`;
 }
 
-/** The fields read from the Tradie's reply, folded under "Check and confirm" until the Property Manager opens them. */
 function confirmForm(t: TicketView, q: QuoteView, x: Extras): Html {
-  return html`<details class="quote-check">
-    <summary class="btn btn-primary btn-sm btn-block">Check and confirm</summary>
-    <form method="post" action="/tickets/${t.ticketId}/quotes/${q.quoteId}/confirm" class="mt-3 space-y-2">
-      <p class="text-xs text-muted">
-        Check what was read from the reply${q.hasPdf ? ' and its PDF' : ''} and correct anything wrong. Only confirmed Quotes count.
-      </p>
-      ${field({
-        id: `quote-${q.quoteId}-price`,
-        label: 'Price ($)',
-        name: 'price',
-        value: q.priceCents === null ? '' : (q.priceCents / 100).toFixed(2),
-        required: true,
-      })}
-      ${field({
-        id: `quote-${q.quoteId}-time`,
-        label: 'Proposed time',
-        name: 'proposedTime',
-        type: 'datetime-local',
-        value: q.proposedTime ? isoToLocal(q.proposedTime, x.timeZone) : '',
-        hint: `${x.timeZone} time. Leave empty if the Tradie gave none.`,
-      })}
-      ${button('Confirm Quote', { size: 'sm', block: true })}
-    </form>
-  </details>`;
+  return html`<form method="post" action="/tickets/${t.ticketId}/quotes/${q.quoteId}/confirm" class="space-y-2">
+    <p class="text-xs text-muted">
+      Check what was read from the reply${q.hasPdf ? ' and its PDF' : ''} and correct anything wrong. Only confirmed Quotes count.
+    </p>
+    ${field({
+      id: `quote-${q.quoteId}-price`,
+      label: 'Price ($)',
+      name: 'price',
+      value: q.priceCents === null ? '' : (q.priceCents / 100).toFixed(2),
+      required: true,
+    })}
+    ${field({
+      id: `quote-${q.quoteId}-time`,
+      label: 'Proposed time',
+      name: 'proposedTime',
+      type: 'datetime-local',
+      value: q.proposedTime ? isoToLocal(q.proposedTime, x.timeZone) : '',
+      hint: `${x.timeZone} time. Leave empty if the Tradie gave none.`,
+    })}
+    ${button('Confirm Quote', { size: 'sm', block: true })}
+  </form>`;
 }
 
 function chooseForm(t: TicketView, q: QuoteView, confirmed: number): Html {
@@ -896,8 +743,8 @@ function approvalSection(t: TicketView, job: JobView, approval: NonNullable<JobV
   const asked = lastEvent(t, 'approval_requested', job.jobId);
   const repairCost = typeof asked?.repairCostCents === 'number' ? asked.repairCostCents : null;
   const waiting = approval.status === 'requested' || approval.status === 'reminded';
-  return html`<section class="space-y-3" id="job-${job.jobId}-approval">
-    ${sectionHeader('Property Owner approval', statusBadge(approval.status))}
+  return html`<div class="space-y-3">
+    ${subHead('Property Owner approval', statusBadge(approval.status))}
     <p>
       Asked ${formatWhen(approval.requestedAt, x.timeZone)} to approve ${quote ? `${quote.businessName}'s` : 'the'} Quote of
       ${formatMoney(quote?.priceCents ?? null)}, which takes the Repair Cost to ${formatMoney(repairCost)}, over the Max Repair Cost of
@@ -909,14 +756,14 @@ function approvalSection(t: TicketView, job: JobView, approval: NonNullable<JobV
           You'll get an alert if there's no reply after 48 hours.
         </p>`
       : nothing}
-  </section>`;
+  </div>`;
 }
 
 function workOrderForm(t: TicketView, job: JobView, x: Extras): Html {
   const approved = job.quotes.find((q) => q.status === 'approved');
   const free = x.freeSlots.get(job.jobId) ?? [];
-  return html`<section class="space-y-3" id="job-${job.jobId}-work-order">
-    ${sectionHeader('Work Order')}
+  return html`<div class="space-y-3">
+    ${subHead('Work Order')}
     <p>
       ${approved ? `${approved.businessName}'s Quote of ${formatMoney(approved.priceCents)} is approved.` : ''}
       Send the Work Order to book the visit: the Tradie gets the address, and the Tenant and Property Owner are told the time.
@@ -942,7 +789,7 @@ function workOrderForm(t: TicketView, job: JobView, x: Extras): Html {
           ${approved.businessName} is free from ${free.map((s) => badge(formatWhen(s.start, x.timeZone)))}
         </p>`
       : nothing}
-  </section>`;
+  </div>`;
 }
 
 function workOrderDetails(t: TicketView, wo: WorkOrderView, x: Extras): Html {
@@ -958,8 +805,8 @@ function workOrderDetails(t: TicketView, wo: WorkOrderView, x: Extras): Html {
       ? badge('Not confirmed yet', 'warning')
       : html`—`;
   const asker = wo.rescheduleRequestedBy === 'tenant' ? 'Tenant' : 'Tradie';
-  return html`<section class="space-y-3" id="job-${wo.jobId}-work-order">
-    ${sectionHeader('Work Order', active && !suggesting ? suggest : undefined)}
+  return html`<div class="space-y-3">
+    ${subHead('Work Order', active && !suggesting ? suggest : undefined)}
     ${active && wo.rescheduleRequestedBy ? alert(`The ${asker} asked for another time.`, 'warning') : nothing}
     ${dl([
       ['Visit', formatRange(wo.start, wo.end, x.timeZone)],
@@ -968,7 +815,7 @@ function workOrderDetails(t: TicketView, wo: WorkOrderView, x: Extras): Html {
       ...(wo.status === 'done' ? [['Done', 'The Tradie replied DONE'] as [string, string]] : []),
     ])}
     ${suggesting && x.suggest ? suggestionsPanel(t, wo, x.suggest, x) : nothing}
-  </section>`;
+  </div>`;
 }
 
 function suggestionsPanel(t: TicketView, wo: WorkOrderView, suggest: NonNullable<Extras['suggest']>, x: Extras): Html {
@@ -985,8 +832,8 @@ function suggestionsPanel(t: TicketView, wo: WorkOrderView, suggest: NonNullable
           )}
         </ul>`
       : emptyState('No suggested time fits in the next 14 days. Pick another time below.');
-  return html`<div class="space-y-3 rounded-[8px] bg-page p-3">
-    <h3 class="font-semibold">New times</h3>
+  return html`<div class="space-y-3 border-t border-line pt-3">
+    <h4 class="font-semibold">New times</h4>
     <p class="text-muted">
       Free for ${wo.businessName}, inside the Tenant's availability and as long as the current visit, over the next 14 days. The Tradie
       and the Tenant are told the new time.
@@ -1019,15 +866,15 @@ function ratingSection(t: TicketView, job: JobView): Html {
       ${[1, 2, 3, 4, 5].map((n) => button(String(n), { name: 'score', value: String(n), variant: 'secondary' }))}
     </div>
   </form>`;
-  return html`<section class="space-y-3" id="job-${job.jobId}-rating">
-    ${sectionHeader('Rating')}
+  return html`<div class="space-y-3">
+    ${subHead('Rating')}
     <p>${tenant ? `The Tenant rated the fix ${String(tenant.score)} out of 5.` : 'Waiting for the Tenant to say if it was fixed properly.'}</p>
     ${rated ? html`<p>${tradie} was rated ${String(rated.score)} out of 5.</p>` : form}
-  </section>`;
+  </div>`;
 }
 
 function addJobCard(t: TicketView): Html {
-  return card({
+  return section({
     title: 'Add another Job',
     body: html`<form method="post" action="/tickets/${t.ticketId}/jobs" class="flex flex-wrap items-end gap-3">
       <div class="min-w-48 flex-1">
@@ -1038,68 +885,10 @@ function addJobCard(t: TicketView): Html {
   });
 }
 
-/** The Ticket's history, in a collapsible side panel that starts open, with runs of like events told once. */
+/** The Ticket's history, in a collapsible side panel that starts open. */
 function timelineCard(t: TicketView, x: Extras): Html {
-  const events = timelineGroups(t.timeline).map((group) => describeGroup(t, group, x));
+  const events = t.timeline.map((e) => ({ at: formatWhen(e.at, x.timeZone), ...describeEvent(t, e, x) }));
   return collapsible('Timeline', events.length ? timeline(events) : emptyState('Nothing has happened yet.'));
-}
-
-/** Events that read as one line when they come one after another: "Quotes received from Drip Doctors and Pete's Plumbing". */
-const GROUPED = new Set(['quote_requests_sent', 'quote_received', 'tradie_declined']);
-
-/** The timeline in runs: consecutive events of a grouped kind, and a Quote chosen then approved straight away. */
-function timelineGroups(events: TimelineEvent[]): TimelineEvent[][] {
-  const groups: TimelineEvent[][] = [];
-  for (const event of events) {
-    const group = groups.at(-1);
-    const first = group?.[0] as Record<string, unknown> | undefined;
-    const d = event as Record<string, unknown>;
-    const sameRun = first !== undefined && first.kind === event.kind && GROUPED.has(event.kind);
-    const approvedOutright =
-      group?.length === 1 && first?.kind === 'quote_chosen' && event.kind === 'quote_approved' && first.jobId === d.jobId && first.tradie === d.tradie;
-    if (group && (sameRun || approvedOutright)) group.push(event);
-    else groups.push([event]);
-  }
-  return groups;
-}
-
-/** A run of events in words, dated from its first to its last. */
-function describeGroup(t: TicketView, group: TimelineEvent[], x: Extras): { at: string; title: string; detail?: string } {
-  const first = group[0]!;
-  const last = group.at(-1)!;
-  const from = formatWhen(first.at, x.timeZone);
-  const at = from === formatWhen(last.at, x.timeZone) ? from : formatRange(first.at, last.at, x.timeZone);
-  if (group.length === 1) return { at, ...describeEvent(t, first, x) };
-  const d = group as Record<string, unknown>[];
-  if (last.kind === 'quote_approved') {
-    const chosen = describeEvent(t, first, x);
-    return { at, title: `Quote from ${String(d[0]!.tradie)} chosen and approved`, ...(chosen.detail ? { detail: chosen.detail } : {}) };
-  }
-  // Per Job, the Tradies each event names, when the Ticket has several Jobs.
-  const tradiesOf = (e: Record<string, unknown>) => (Array.isArray(e.tradies) ? e.tradies.map(String) : typeof e.tradie === 'string' ? [e.tradie] : []);
-  const names = d.flatMap(tradiesOf);
-  const byJob = t.jobs.length > 1 ? jobLines(t, d, tradiesOf) : undefined;
-  switch (first.kind) {
-    case 'quote_requests_sent':
-      return { at, title: `Quote Requests sent to ${names.length} Tradies`, detail: byJob ?? names.join(', ') };
-    case 'quote_received':
-      return byJob ? { at, title: `${names.length} Quotes received`, detail: byJob } : { at, title: `Quotes received from ${andList(names)}` };
-    default:
-      return byJob
-        ? { at, title: `${names.length} Tradies declined their Quote Requests`, detail: byJob }
-        : { at, title: `${andList(names)} declined their Quote Requests` };
-  }
-}
-
-/** "Job 1: Plumbing: Drip Doctors, Pete's Plumbing", one line per Job, in the order the Jobs were added. */
-function jobLines(t: TicketView, events: Record<string, unknown>[], tradiesOf: (e: Record<string, unknown>) => string[]): string {
-  return t.jobs
-    .map((job) => {
-      const names = events.filter((e) => e.jobId === job.jobId).flatMap(tradiesOf);
-      return names.length ? `${jobLabel(t, job.jobId)}: ${names.join(', ')}` : '';
-    })
-    .filter(Boolean)
-    .join('\n');
 }
 
 /** A section whose heading opens and closes its body. */
@@ -1114,15 +903,14 @@ function collapsible(title: string, body: Html): Html {
   </section>`;
 }
 
-/** A timeline event in words, with the Tradie, price or visit it was about, and its Job when the Ticket has several. */
+/** A timeline event in words, with the Tradie, price or visit it was about. */
 function describeEvent(t: TicketView, event: TimelineEvent, x: Extras): { title: string; detail?: string } {
   const d = event as Record<string, unknown>;
-  const job = typeof d.jobId === 'number' && t.jobs.length > 1 ? jobLabel(t, d.jobId) : undefined;
+  const job = typeof d.jobId === 'number' ? jobLabel(t, d.jobId) : undefined;
   const tradie = typeof d.tradie === 'string' ? d.tradie : 'The Tradie';
   const price = typeof d.priceCents === 'number' ? formatMoney(d.priceCents) : undefined;
   const visit = typeof d.visitStart === 'string' && typeof d.visitEnd === 'string' ? formatRange(d.visitStart, d.visitEnd, x.timeZone) : undefined;
-  // One fact per line.
-  const details = (...parts: (string | undefined)[]) => parts.filter(Boolean).join('\n') || undefined;
+  const details = (...parts: (string | undefined)[]) => parts.filter(Boolean).join('; ') || undefined;
   switch (event.kind) {
     case 'reported':
       return { title: 'Reported by the Tenant' };
@@ -1178,67 +966,26 @@ function describeEvent(t: TicketView, event: TimelineEvent, x: Extras): { title:
   }
 }
 
-/** How many of the latest messages show before "Show all". */
-const LATEST_MESSAGES = 6;
-
-/**
- * The message log, as a collapsible side panel, with the mark-read control when
- * something is unread. The latest few show; the older ones open above them, and
- * start open when one of them is unread.
- */
+/** The message log, as a collapsible side panel, with the mark-read control when something is unread. */
 function messagesCard(t: TicketView, x: Extras): Html {
   const unread = t.messages.filter((m) => m.unread).length;
   const read = unread ? postButton(`/tickets/${t.ticketId}/read`, 'Mark messages read', { variant: 'secondary', size: 'sm' }) : nothing;
-  const older = t.messages.slice(0, -LATEST_MESSAGES);
-  const latest = t.messages.slice(-LATEST_MESSAGES);
-  const log = t.messages.length
-    ? html`${older.length
-          ? html`<details class="ticket-older" ${older.some((m) => m.unread) ? 'open' : ''}>
-              <summary class="cursor-pointer text-sm font-medium text-action">Show all ${t.messages.length} messages</summary>
-              <div>${older.map((m) => messageBubble(m, x))}</div>
-            </details>`
-          : nothing}
-        <div>${latest.map((m) => messageBubble(m, x))}</div>`
-    : emptyState('No messages yet.');
+  const log = t.messages.length ? html`<div>${t.messages.map((m) => messageBubble(m, x))}</div>` : emptyState('No messages yet.');
   return collapsible(unread ? `Messages (${unread} unread)` : 'Messages', html`${read} ${log}`);
 }
 
 /** Inbound messages on the left, what myEST8 sent on the right; unread ones stand out. */
 function messageBubble(m: Message, x: Extras): Html {
-  const subject = m.template ? html`: <span class="font-medium">${templateSubject(m.template)}</span>` : nothing;
   return chatBubble({
     side: m.direction === 'in' ? 'start' : 'end',
-    header: html`${m.direction === 'in' ? 'From' : 'To'} ${m.address} by ${CHANNELS[m.channel]}${subject}`,
-    text: shortLinks(m.text),
-    footer: html`${formatWhen(m.at, x.timeZone)}${m.unread ? html` ${badge('Unread', 'warning')}` : nothing}`,
+    header: html`<span class="flex flex-wrap gap-x-3"
+      ><span>${m.direction === 'in' ? 'From' : 'To'} ${m.address}</span><span>${CHANNELS[m.channel]}</span
+      >${m.template ? html`<span>${templateSubject(m.template)}</span>` : nothing}</span
+    >`,
+    text: m.text,
+    footer: html`<span class="flex flex-wrap gap-x-3"><span>${formatWhen(m.at, x.timeZone)}</span>${m.unread ? html`<span>Unread</span>` : nothing}</span>`,
     tone: m.unread ? 'warning' : undefined,
   });
-}
-
-const URL_IN_TEXT = /https?:\/\/[^\s<>"']*[^\s<>"'.,;:!?)\]]/g;
-
-/** A message's text with each link shortened to what it is ("progress link", "upload link"); the link itself is the full URL. */
-function shortLinks(text: string): Html {
-  const parts: (Html | string)[] = [];
-  let last = 0;
-  for (const match of text.matchAll(URL_IN_TEXT)) {
-    parts.push(text.slice(last, match.index));
-    parts.push(html`<a class="link" href="${match[0]}" title="${match[0]}" target="_blank" rel="noopener noreferrer">${linkName(match[0])}</a>`);
-    last = match.index + match[0].length;
-  }
-  parts.push(text.slice(last));
-  return html`${parts}`;
-}
-
-function linkName(url: string): string {
-  try {
-    const { hostname, pathname } = new URL(url);
-    if (pathname.startsWith('/t/')) return 'progress link';
-    if (pathname.startsWith('/u/')) return 'upload link';
-    return `${hostname} link`;
-  } catch {
-    return 'link';
-  }
 }
 
 // Small helpers
@@ -1280,11 +1027,6 @@ function formatRange(start: string, end: string, timeZone: string): string {
   return `${formatWhen(start, timeZone)} – ${until}`;
 }
 
-function plural(n: number, word: string, many = `${word}s`) {
-  return n === 1 ? word : many;
-}
-
-/** "A", "A and B", "A, B and C". */
-function andList(items: string[]): string {
-  return items.length < 2 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
+function plural(n: number, word: string) {
+  return n === 1 ? word : `${word}s`;
 }

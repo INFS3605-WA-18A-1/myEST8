@@ -117,37 +117,6 @@ describe('Work Orders', () => {
   });
 });
 
-describe('the calendar read', () => {
-  test('each booking says what the visit is for, whose Property it is and how the visit stands, without loading the Ticket', async () => {
-    const w = await world();
-    const { h, alice, bob, tradies, ids } = w;
-    const job = await approvedTapJob(w, tradies.pete, TUE_9AM);
-    await alice.sendWorkOrder(job.jobId);
-    const week = { from: MON_9AM.toISOString(), to: sydney('2026-10-19T00:00:00').toISOString() };
-
-    const [booking] = await bob.calendar(week);
-    expect(booking).toMatchObject({
-      ticketId: job.ticketId,
-      jobId: job.jobId,
-      trade: 'plumbing',
-      issue: 'The kitchen tap is dripping',
-      propertyId: ids.kingSt,
-      propertyAddress: KING_ST,
-      suburb: 'Newtown',
-      propertyManagerId: ids.aliceId,
-      propertyManager: 'Alice Archer',
-      visit: 'not_confirmed',
-    });
-
-    await h.answer(TOM, 'I have work on Tuesday, can we do another day?', 'reschedule');
-    expect((await alice.calendar(week))[0]!.visit).toBe('reschedule_requested');
-
-    await alice.acceptTime(booking!.workOrderId, sydney('2026-10-14T14:00:00').toISOString());
-    await h.answer(TOM, 'Yes Wednesday works', 'confirm');
-    expect((await alice.calendar(week))[0]!.visit).toBe('confirmed');
-  });
-});
-
 describe('rescheduling', () => {
   test("a Tradie asks for another time; suggestions fit the Tradie's calendar and the Tenant's weekday-morning availability", async () => {
     const w = await world();

@@ -6,7 +6,6 @@ import { json, stubFetch } from './stub-fetch.ts';
 const PDF = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d]);
 
 const message = (overrides: Partial<OutboundMessage> = {}): OutboundMessage => ({
-  agencyId: 1,
   channelType: 'email',
   from: 'inbox@harbour.example',
   to: 'quotes@quickpipes.example',

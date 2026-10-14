@@ -33,8 +33,6 @@ export interface OutboundAttachment {
 }
 
 export interface OutboundMessage {
-  /** The Agency sending it. Providers with credentials per Agency (Gmail) look them up with it. */
-  agencyId: number;
   channelType: ChannelType;
   /** The Agency channel address to send from. Email replies come back to it. */
   from: string;
@@ -46,12 +44,6 @@ export interface OutboundMessage {
   template: string;
   data: object;
   attachments: OutboundAttachment[];
-}
-
-/** Gets an Agency a phone number of its own for SMS (docs/adr/0005). */
-export interface SmsNumbers {
-  /** The Agency's number in E.164: the one it was given before, or a new one. */
-  provision(agencyId: number): Promise<string>;
 }
 
 export interface Messenger {

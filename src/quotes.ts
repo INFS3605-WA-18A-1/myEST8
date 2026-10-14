@@ -7,8 +7,7 @@ const QUOTE_REMINDER_MS = 48 * HOUR_MS;
 const MORE_QUOTES_PROMPT_MS = 72 * HOUR_MS;
 const OWNER_REMINDER_MS = 24 * HOUR_MS;
 const OWNER_ALERT_MS = 48 * HOUR_MS;
-/** Confirmed Quotes a Job needs before a Quote can be chosen without a reason. */
-export const MIN_QUOTES = 2;
+const MIN_QUOTES = 2;
 
 type QuoteRequestStatus = 'sent' | 'reminded' | 'quoted' | 'declined' | 'closed';
 type QuoteStatus = 'open' | 'awaiting_owner' | 'approved' | 'declined_by_owner' | 'not_chosen';
@@ -419,80 +418,6 @@ export function createQuotes({ db, clock, worker, ports, files, modules }: Conte
           ? { approvalId: approval.id, quoteId: approval.quote_id, status: approval.status, requestedAt: approval.requested_at }
           : null,
       };
-    },
-
-    /** How many Quotes a Tradie has given that a Property Manager confirmed. */
-    async quoteCount(tradieId: number) {
-      return (await one<{ n: number }>(db, 'SELECT count(*) AS n FROM quotes WHERE tradie_id = ? AND confirmed = 1', tradieId))!.n;
-    },
-
-    /**
-     * For many Jobs in two queries, by Job id: Quote Requests not declined (`asked`),
-     * Quotes in (`received`), and how many of those the Property Manager confirmed.
-     * A Job with neither is left out.
-     */
-    async quotingOf(jobIds: number[]) {
-      const counts = new Map<number, { asked: number; received: number; confirmed: number }>();
-      if (!jobIds.length) return counts;
-      const ids = JSON.stringify(jobIds);
-      const inJobs = 'job_id IN (SELECT value::bigint FROM jsonb_array_elements_text(?::text::jsonb) AS ids (value))';
-      const of = (jobId: number) => counts.get(jobId) ?? counts.set(jobId, { asked: 0, received: 0, confirmed: 0 }).get(jobId)!;
-      for (const r of await all<{ job_id: number; asked: number }>(
-        db,
-        `SELECT job_id, count(*) AS asked FROM quote_requests WHERE ${inJobs} AND status != 'declined' GROUP BY job_id`,
-        ids,
-      )) {
-        of(r.job_id).asked = r.asked;
-      }
-      for (const r of await all<{ job_id: number; received: number; confirmed: number }>(
-        db,
-        `SELECT job_id, count(*) AS received, count(*) FILTER (WHERE confirmed = 1) AS confirmed FROM quotes WHERE ${inJobs} GROUP BY job_id`,
-        ids,
-      )) {
-        Object.assign(of(r.job_id), { received: r.received, confirmed: r.confirmed });
-      }
-      return counts;
-    },
-
-    /**
-     * The Quotes waiting on a Property Owner because approving them would take the
-     * Ticket's Repair Cost over the Property's Max Repair Cost, longest waiting first.
-     * Each says by how much, and whether the Owner has been reminded or has stayed silent
-     * long enough to alert the Property Manager.
-     */
-    async waitingOnOwner(agencyId: number, propertyIds: number[] | null) {
-      const now = clock.now();
-      const waiting = [];
-      for (const a of await all<ApprovalRow>(
-        db,
-        `SELECT * FROM approvals WHERE agency_id = ? AND status IN ('requested', 'reminded') ORDER BY requested_at, id`,
-        agencyId,
-      )) {
-        const { job, ticket, property } = await jobPlace(a.job_id);
-        if (propertyIds !== null && !propertyIds.includes(property.id)) continue;
-        const quote = (await one<QuoteRow>(db, 'SELECT * FROM quotes WHERE id = ?', a.quote_id))!;
-        const owner = await profiles.person(a.owner_id);
-        const repairCostCents = (await repairCost(ticket.id)) + quote.price_cents!;
-        waiting.push({
-          approvalId: a.id,
-          ticketId: ticket.id,
-          jobId: job.id,
-          trade: job.trade,
-          propertyId: property.id,
-          propertyAddress: property.address,
-          ownerName: owner.name,
-          ownerMobile: owner.mobile,
-          tradieBusinessName: await businessName(quote.tradie_id),
-          quotePriceCents: quote.price_cents!,
-          repairCostCents,
-          maxRepairCostCents: property.maxRepairCostCents,
-          overByCents: repairCostCents - property.maxRepairCostCents,
-          requestedAt: a.requested_at,
-          reminded: a.status === 'reminded',
-          silent: addMs(a.requested_at, OWNER_ALERT_MS) <= now,
-        });
-      }
-      return waiting;
     },
 
     /** Jobs short of Quotes 72 hours after the first Quote Requests, and Property Owners silent for 48 hours. */

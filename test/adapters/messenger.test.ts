@@ -8,7 +8,6 @@ const clock = new FakeClock(new Date('2026-10-08T09:00:00+11:00'));
 const SECRET = 'a-test-secret-that-is-long-enough-1234';
 
 const message = (channelType: OutboundMessage['channelType'], to: string): OutboundMessage => ({
-  agencyId: 1,
   channelType,
   from: channelType === 'email' ? 'inbox@harbour.example' : '+61290000000',
   to,

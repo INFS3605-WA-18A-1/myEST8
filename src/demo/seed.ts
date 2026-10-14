@@ -53,27 +53,6 @@ const MORE_TRADIES = {
   kev: { name: 'Kev Keyes', businessName: 'Keystone Locksmiths', mobile: '+61400000215', trades: ['locksmith'], startingRating: 3, googlePlaceId: null },
 } satisfies Record<string, TradieSeed>;
 
-/** Where each demo Tradie works from, by seed key: Inner West and Eastern Suburbs streets, so the Dispatch map has Tradies near the Properties. */
-const TRADIE_ADDRESSES: Record<string, string> = {
-  pete: '31 Illawarra Rd, Marrickville NSW 2204',
-  quinn: '12 Cleveland St, Redfern NSW 2016',
-  dana: '8 Crystal St, Petersham NSW 2049',
-  finn: '5 Enmore Rd, Newtown NSW 2042',
-  nina: '210 King St, Newtown NSW 2042',
-  sam: '14 Glebe Point Rd, Glebe NSW 2037',
-  carl: '3 Victoria Rd, Rozelle NSW 2039',
-  ally: '20 Bronte Rd, Bondi Junction NSW 2022',
-  lucy: '6 Oxford St, Paddington NSW 2021',
-  erin: '44 Parramatta Rd, Annandale NSW 2038',
-  rhys: '9 Addison Rd, Marrickville NSW 2204',
-  tess: '17 Botany Rd, Alexandria NSW 2015',
-  arlo: '2 Coogee Bay Rd, Coogee NSW 2034',
-  harry: '30 Albion St, Annandale NSW 2038',
-  bea: '11 Regent St, Redfern NSW 2016',
-  mo: '25 Princes Hwy, St Peters NSW 2044',
-  kev: '7 Campbell St, Surry Hills NSW 2010',
-};
-
 /** What the seed created: the Agency, who can sign in, and the ids a test or script may need. */
 export type DemoSeed = Awaited<ReturnType<typeof seedDemo>>;
 
@@ -104,8 +83,6 @@ export async function seedDemo(app: App, options: { googleListings?: boolean } =
     const ids = {} as Record<K, number>;
     for (const [key, { googlePlaceId, ...tradie }] of Object.entries(list) as [K, TradieSeed][]) {
       ids[key] = await alice.addTradie(googlePlaceId && googleListings ? { ...tradie, googlePlaceId } : { ...tradie, notOnGoogle: true });
-      const address = TRADIE_ADDRESSES[key];
-      if (address) await alice.setTradieAddress(ids[key], address);
     }
     return ids;
   }

@@ -4,6 +4,7 @@
 
 import { createFileLinks, type FileLinks } from '../file-links.ts';
 import type { ChannelType, Clock, Messenger } from '../ports.ts';
+import { createMetaWhatsApp } from './meta-whatsapp.ts';
 import { createSendgridMailer } from './sendgrid-mailer.ts';
 import { createTwilioMessenger } from './twilio-messenger.ts';
 
@@ -58,6 +59,12 @@ export function messengersFromEnv(
     channels.sms = twilio;
     channels.whatsapp = twilio;
   }
+
+  // Meta's WhatsApp Cloud API (ADR 0004) takes WhatsApp over from Twilio when set.
+  const metaNumberId = set('META_WHATSAPP_PHONE_NUMBER_ID');
+  const metaToken = set('META_WHATSAPP_ACCESS_TOKEN');
+  if (!!metaNumberId !== !!metaToken) throw new Error('Set both META_WHATSAPP_PHONE_NUMBER_ID and META_WHATSAPP_ACCESS_TOKEN, or neither');
+  if (metaNumberId && metaToken) channels.whatsapp = createMetaWhatsApp({ phoneNumberId: metaNumberId, accessToken: metaToken, fetch: fetchImpl });
 
   const sendgridKey = set('SENDGRID_API_KEY');
   if (sendgridKey) {

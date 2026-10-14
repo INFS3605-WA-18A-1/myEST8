@@ -1,14 +1,14 @@
 // The thin HTTP layer: provider webhooks, the JSON behind the two no-login links
 // (/api/u/:token and /api/t/:token; the HTML pages own /u/:token and /t/:token),
 // and signed file links (/media/:id, src/file-links.ts) that Twilio fetches media from.
+// WhatsApp through Meta's Cloud API has its own webhook (/webhooks/whatsapp), served only when configured.
 // Webhooks only store the message and return; the background worker does the rest.
 
 import { Hono, type Context as HonoContext } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
-import { HTTPException } from 'hono/http-exception';
+import { metaStatusFailures, metaToInbound, verifyMetaSignature } from './adapters/meta-whatsapp.ts';
 import { sendgridToInbound, verifySendgridSignature } from './adapters/sendgrid.ts';
 import { twilioToInbound, verifyTwilioSignature } from './adapters/twilio.ts';
-import { verifyWhatsAppSignature, whatsappChallenge, whatsappFailures, whatsappToInbound, type MediaDownloader } from './adapters/whatsapp-cloud.ts';
 import type { App } from './app.ts';
 import type { FileLinks } from './file-links.ts';
 import type { Clock } from './ports.ts';
@@ -26,10 +26,10 @@ export function createHttpApp(
     /** SendGrid's verification key (base64 DER). Every email webhook must be signed with it. */
     sendgridPublicKey: string;
     clock: Clock;
-    /** Meta's WhatsApp Cloud API webhook (docs/adr/0004). Without it /webhooks/whatsapp does not exist. */
-    whatsapp?: { appSecret: string; verifyToken: string; download: MediaDownloader } | undefined;
     /** Checks signed file links. Without it, /media/:id serves nothing. */
     fileLinks?: FileLinks | null;
+    /** Meta's WhatsApp Cloud API: the app secret that signs webhooks, and the verify token for its handshake. */
+    whatsapp?: { appSecret: string; verifyToken: string } | null;
   },
 ) {
   const http = new Hono();
@@ -47,6 +47,32 @@ export function createHttpApp(
     }
     await app.receiveInbound(twilioToInbound(params, config.clock.now()));
     return c.body('<Response/>', 200, { 'content-type': 'text/xml' });
+  });
+
+  http.get('/webhooks/whatsapp', (c) => {
+    if (!config.whatsapp) return c.notFound();
+    const { 'hub.mode': mode, 'hub.verify_token': token, 'hub.challenge': challenge } = c.req.query();
+    if (mode === 'subscribe' && token === config.whatsapp.verifyToken) return c.text(challenge ?? '', 200);
+    return c.text('Invalid verify token', 403);
+  });
+
+  http.post('/webhooks/whatsapp', bodyLimit({ maxSize: MB }), async (c) => {
+    if (!config.whatsapp) return c.notFound();
+    const raw = new Uint8Array(await c.req.arrayBuffer());
+    if (!verifyMetaSignature(config.whatsapp.appSecret, raw, c.req.header('x-hub-signature-256') ?? '')) {
+      return c.text('Invalid signature', 403);
+    }
+    let body: unknown;
+    try {
+      body = JSON.parse(new TextDecoder().decode(raw));
+    } catch {
+      return c.text('Invalid JSON', 400);
+    }
+    for (const message of metaToInbound(body, config.clock.now())) await app.receiveInbound(message);
+    for (const failure of metaStatusFailures(body)) {
+      console.warn(`WhatsApp message to ${failure.to} failed (${failure.code}): ${failure.title}`);
+    }
+    return c.text('ok', 200);
   });
 
   http.post('/webhooks/sendgrid', bodyLimit({ maxSize: 40 * MB }), async (c) => {
@@ -68,30 +94,6 @@ export function createHttpApp(
     await app.receiveInbound(await sendgridToInbound(form, config.clock.now()));
     return c.body(null, 200);
   });
-
-  const whatsapp = config.whatsapp;
-  if (whatsapp) {
-    // Meta calls this once, with the verify token chosen in its dashboard, when the webhook is set up.
-    http.get('/webhooks/whatsapp', (c) => {
-      const challenge = whatsappChallenge(whatsapp.verifyToken, { mode: c.req.query('hub.mode'), token: c.req.query('hub.verify_token'), challenge: c.req.query('hub.challenge') });
-      return challenge === null ? c.text('Invalid verify token', 403) : c.text(challenge);
-    });
-
-    http.post('/webhooks/whatsapp', bodyLimit({ maxSize: MB }), async (c) => {
-      // The signature covers the raw bytes. Photos are downloaded before answering: a failure is a 500, so Meta delivers it again.
-      const raw = new Uint8Array(await c.req.arrayBuffer());
-      if (!verifyWhatsAppSignature(whatsapp.appSecret, raw, c.req.header('x-hub-signature-256'))) return c.text('Invalid signature', 403);
-      let payload: unknown;
-      try {
-        payload = JSON.parse(new TextDecoder().decode(raw));
-      } catch {
-        return c.text('Expected JSON', 400);
-      }
-      for (const message of await whatsappToInbound(payload, whatsapp.download)) await app.receiveInbound(message);
-      for (const failure of whatsappFailures(payload)) console.error(`WhatsApp could not deliver to ${failure.to}: ${failure.reason}`);
-      return c.body(null, 200);
-    });
-  }
 
   http.post('/api/u/:token', bodyLimit({ maxSize: 105 * MB }), async (c) => {
     const form = await c.req.formData().catch(() => null);
@@ -125,8 +127,6 @@ export function createHttpApp(
 
   http.onError((error, c) => {
     if (error instanceof ActionError) return c.json({ error: error.message }, STATUS[error.code]);
-    // A refusal Hono raised itself, such as a body over its limit (413).
-    if (error instanceof HTTPException) return error.getResponse();
     console.error(error);
     return c.json({ error: 'Something went wrong' }, 500);
   });

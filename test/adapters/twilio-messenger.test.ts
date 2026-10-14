@@ -13,7 +13,6 @@ const fileLinks = createFileLinks({ secret: 'a-test-secret-that-is-long-enough-1
 const queued = () => json({ sid: 'SM00000000000000000000000000000001', status: 'queued' }, 201);
 
 const message = (overrides: Partial<OutboundMessage> = {}): OutboundMessage => ({
-  agencyId: 1,
   channelType: 'sms',
   from: '+61290000000',
   to: '+61400000001',

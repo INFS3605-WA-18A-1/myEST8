@@ -1,39 +1,74 @@
-// The Agency's Tradies: the directory at /tradies, and a Tradie's profile at
-// /tradies/:id with contact details, Trades, the myEST8 rating next to the Google
-// rating, upcoming bookings, previous Quotes (each with its Ticket and whether it was
-// chosen) and every rating given, Property Managers' and Tenants' apart.
+// A Tradie's profile: contact details, Trades, the myEST8 rating next to the Google
+// rating, every rating given, previous Quotes and upcoming bookings.
 
 import { Hono } from 'hono';
 import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
-import { ActionError, TRADES, type Trade } from '../../shared.ts';
+import { ActionError } from '../../shared.ts';
 import type { WebEnv } from '../env.ts';
 import { shellInfo } from '../shell.ts';
-import { badge, button, dl, emptyState, field, flashFrom, formatMoney, formatWhen, humanise, linkButton, page, sectionHeader, stat, statGroup, table, ticketCell, type Html } from '../ui.ts';
+import { alert, badge, button, emptyState, flashFrom, formatMoney, formatWhen, humanise, linkButton, page, section, sectionHeader, stat, statGroup, table, type Html } from '../ui.ts';
+import { icon } from '../icons.ts';
 import { timeRange } from './calendar.ts';
+import { googleSearchForm, importPanel, searchListings, tradieFields } from './onboarding-forms.ts';
 
 type TradieView = Awaited<ReturnType<PropertyManagerActions['tradie']>>;
-type DirectoryEntry = Awaited<ReturnType<PropertyManagerActions['tradieDirectory']>>[number];
 
-/** A Tradie's profile under /tradies/:id. */
+/** The Tradies list under /tradies and a Tradie's profile under /tradies/:id. */
 export function tradiePages() {
   const pages = new Hono<WebEnv>();
 
   pages.get('/', async (c) => {
     const { actions, pm } = c.var;
-    const trade = TRADES.find((t) => t === c.req.query('trade')) ?? null;
-    const everyone = await actions.tradieDirectory();
-    const tradies = trade ? everyone.filter((t) => t.trades.includes(trade)) : everyone;
+    const flash = flashFrom(c.req.url);
+    const refused = flash?.kind === 'error' ? c.req.query('form') : undefined;
+    const errorFor = (key: string): Html => (refused === key && flash ? alert(flash.message, 'error') : html``);
+    const googleQuery = c.req.query('google')?.trim() ?? '';
+    const tradies = await actions.people('tradie');
+    const ratings = await Promise.all(tradies.map(async (t) => (await actions.tradie(t.id)).myEst8Rating));
+    const rows = tradies.map((t, i) => {
+      const { average, count } = ratings[i]!;
+      return [
+        html`<a class="link font-medium" href="/tradies/${t.id}">${t.businessName ?? t.name}</a>`,
+        html`${t.trades.map(humanise).join(', ') || '—'}`,
+        html`${average.toFixed(1)} <span class="text-muted">(${count})</span>`,
+        html`${t.googlePlaceId ? `${t.googleRating?.toFixed(1) ?? '—'} (${t.googleReviewCount ?? 0} reviews)` : 'Not on Google'}`,
+        html`${t.mobile ?? '—'}`,
+      ];
+    });
+    const { listings, problem } = await searchListings(actions, googleQuery);
+    const formAction = `/setup/tradies${googleQuery ? `?google=${encodeURIComponent(googleQuery)}` : ''}`;
+
     return c.html(
       page({
         title: 'Tradies',
         pm,
         active: 'tradies',
-        flash: flashFrom(c.req.url),
-        shell: shellInfo(c),
-        subtitle: 'Best myEST8 rating first. The two ratings are shown side by side, never combined.',
-        actions: linkButton('Add a Tradie', '/setup#tradies', { variant: 'primary', size: 'sm' }),
-        body: html`${tradeFilter(trade)}${directory(tradies, trade)}`,
+        flash,
+        shell: await shellInfo(c),
+        subtitle: 'The Tradies your Agency uses, shared by every Property Manager.',
+        body: html`
+          ${section({
+            title: 'Tradies',
+            body: tradies.length ? table(['Business', 'Trades', 'myEST8 rating', 'Google rating', 'Mobile'], rows, { caption: 'Tradies' }) : emptyState('Tradies appear here once you add them. Add the first one below.'),
+          })}
+          ${section({
+            id: 'add-tradie',
+            title: 'Add a Tradie',
+            body: html`
+              ${googleSearchForm('/tradies#add-tradie', googleQuery, problem, listings.length)}
+              <form method="post" action="${formAction}" class="mt-4">
+                ${errorFor('tradie')}
+                ${tradieFields({ listings })}
+                <div class="mt-3">${button('Add Tradie', { variant: 'primary' })}</div>
+              </form>
+              <details class="import-details mt-4 border-t border-line pt-3" id="import-tradies" ${refused === 'import-tradies' ? 'open' : ''}>
+                <summary class="cursor-pointer font-semibold text-action">${icon('file-xls', { size: 'size-4' })}<span>Add many from a spreadsheet</span></summary>
+                <div class="mt-3">${importPanel('tradies', { error: errorFor('import-tradies') })}</div>
+              </details>
+            `,
+          })}
+        `,
       }),
     );
   });
@@ -50,8 +85,8 @@ export function tradiePages() {
           title: 'Tradie not found',
           pm,
           active: 'tradies',
-          shell: shellInfo(c),
-          body: emptyState("There's no such Tradie in your Agency.", linkButton('Back to Tradies', '/tradies')),
+          shell: await shellInfo(c),
+          body: html`<p>There's no such Tradie in your Agency.</p>${linkButton('Back to Tradies', '/tradies')}`,
         }),
         404,
       );
@@ -62,54 +97,17 @@ export function tradiePages() {
         title: tradie.businessName ?? tradie.name,
         pm,
         active: 'tradies',
-        shell: shellInfo(c),
+        shell: await shellInfo(c),
         flash: flashFrom(c.req.url),
         subtitle: tradie.businessName ? tradie.name : undefined,
-        actions: linkButton('Back to Tradies', '/tradies', { variant: 'ghost', size: 'sm' }),
-        body: html`${header(tradie)} ${bookings(tradie, timeZone)} ${quotes(tradie, timeZone)} ${ratings(tradie, timeZone)}`,
+        body: html`${header(tradie)}
+          <div class="grid gap-6 lg:grid-cols-2">${ratings(tradie, timeZone)}${quotes(tradie, timeZone)}</div>
+          ${bookings(tradie, timeZone)}`,
       }),
     );
   });
 
   return pages;
-}
-
-/**
- * A GET form, so it works without JavaScript: pick a Trade and Filter. With
- * JavaScript the list narrows as soon as a Trade is picked (`data-autosubmit` in
- * app.js); the Filter button stays, secondary, for when JavaScript is off.
- */
-function tradeFilter(selected: Trade | null): Html {
-  return html`<form method="get" action="/tradies" class="flex flex-wrap items-end gap-2" aria-label="Filter Tradies" data-autosubmit>
-    <div class="w-full max-w-xs">
-      ${field({ label: 'Trade', name: 'trade', type: 'select', value: selected, placeholder: 'All Trades', options: TRADES.map((t) => ({ value: t, label: humanise(t) })) })}
-    </div>
-    <div class="pb-1">${button('Filter', { variant: 'secondary', size: 'sm' })}</div>
-    ${selected ? html`<div class="pb-1">${linkButton('Show all Trades', '/tradies', { variant: 'ghost', size: 'sm' })}</div>` : ''}
-  </form>`;
-}
-
-/** Every Tradie with both ratings next to each other and the number of Quotes they have given. */
-function directory(tradies: DirectoryEntry[], trade: Trade | null): Html {
-  if (!tradies.length) {
-    return emptyState(trade ? `No Tradie does ${humanise(trade).toLowerCase()}.` : 'No Tradies yet. Add the Tradies you already use.', linkButton('Add a Tradie', '/setup#tradies', { variant: 'primary', size: 'sm' }));
-  }
-  return table(
-    ['Tradie', 'Trades', 'myEST8 rating', 'Google rating', 'Previous Quotes'],
-    tradies.map((t) => {
-      const { average, count } = t.myEst8Rating;
-      return [
-        html`<a class="link font-medium" href="/tradies/${t.tradieId}">${t.businessName ?? t.name}</a>${t.businessName ? html`<br /><span class="text-sm text-muted">${t.name}</span>` : ''}`,
-        html`<span class="flex flex-wrap gap-1">${t.trades.map((x) => badge(humanise(x), 'info'))}</span>`,
-        html`<span class="num font-medium">${average.toFixed(1)}</span> <span class="text-sm text-muted">from ${count}</span>`,
-        t.googleRating
-          ? html`<span class="num font-medium">${t.googleRating.rating === null ? '—' : t.googleRating.rating.toFixed(1)}</span> <span class="text-sm text-muted">${t.googleRating.reviewCount ?? 0} reviews</span>`
-          : html`<span class="text-muted">Not on Google</span>`,
-        html`${t.quotes}`,
-      ];
-    }),
-    { caption: trade ? `${humanise(trade)} Tradies` : 'Tradies', align: ['left', 'left', 'left', 'left', 'right'] },
-  );
 }
 
 /** The Trades, the contact details, and the two ratings side by side (two columns from 1024 px). */
@@ -118,11 +116,14 @@ function header(t: TradieView): Html {
   return html`<section class="section" aria-label="Tradie details">
     <div class="flex flex-wrap items-center gap-2">${t.trades.map((trade) => badge(humanise(trade), 'info'))}</div>
     <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-      ${dl([
-        ['Name', t.name],
-        ['Mobile', t.mobile ? html`<a class="link num" href="tel:${t.mobile}">${t.mobile}</a>` : '—'],
-        ['Email', t.email ? html`<a class="link break-all" href="mailto:${t.email}">${t.email}</a>` : '—'],
-      ])}
+      <dl class="grid grid-cols-[auto_minmax(0,1fr)] content-start gap-x-6 gap-y-2 text-sm">
+        <dt class="text-muted">Name</dt>
+        <dd class="min-w-0 break-words">${t.name}</dd>
+        <dt class="text-muted">Mobile</dt>
+        <dd class="min-w-0 break-words">${t.mobile ? html`<a class="link" href="tel:${t.mobile}">${t.mobile}</a>` : '—'}</dd>
+        <dt class="text-muted">Email</dt>
+        <dd class="min-w-0 break-all">${t.email ? html`<a class="link" href="mailto:${t.email}">${t.email}</a>` : '—'}</dd>
+      </dl>
       ${statGroup([
         stat({
           label: 'myEST8 rating',
@@ -141,67 +142,48 @@ function header(t: TradieView): Html {
   </section>`;
 }
 
-/** Every rating given, the Property Managers' and the Tenants' in groups of their own. */
 function ratings(t: TradieView, timeZone: string): Html {
-  const group = (title: string, source: TradieView['ratings'][number]['source']) => {
-    const given = t.ratings.filter((r) => r.source === source);
-    return html`<div class="grid min-w-0 content-start gap-2">
-      <h3 class="text-sm font-semibold [font-family:var(--font-head)]">${title}</h3>
-      ${given.length
-        ? table(
-            ['Score', 'Date'],
-            given.map((r) => [html`<span class="num">${r.score} / 5</span>`, html`${formatWhen(r.at, timeZone)}`]),
-            { caption: title },
-          )
-        : html`<p class="text-sm text-muted">None yet.</p>`}
-    </div>`;
-  };
-  return html`<section class="section" aria-label="Ratings">
+  return html`<section class="section min-w-0" aria-label="Ratings">
     ${sectionHeader('Ratings')}
-    <div class="grid gap-4 md:grid-cols-2">${group('From Property Managers', 'property_manager')}${group('From Tenants', 'tenant')}</div>
+    ${t.ratings.length
+      ? table(
+          ['From', 'Score', 'Date'],
+          t.ratings.map((r) => [
+            html`${r.source === 'property_manager' ? 'Property Manager' : 'Tenant'}`,
+            html`<span class="num">${r.score} / 5</span>`,
+            html`${formatWhen(r.at, timeZone)}`,
+          ]),
+          { caption: 'Ratings' },
+        )
+      : emptyState('No ratings yet beyond the starting rating.')}
   </section>`;
 }
 
-const OUTCOME: Record<TradieView['previousQuotes'][number]['outcome'], Html> = {
-  chosen: badge('Chosen', 'success'),
-  not_chosen: badge('Not chosen', 'neutral'),
-  waiting: badge('Not decided yet', 'info'),
-};
-
-/** The Quotes a Property Manager confirmed, newest first, each with the Ticket it was for and whether it was chosen. */
 function quotes(t: TradieView, timeZone: string): Html {
-  const newestFirst = [...t.previousQuotes].sort((a, b) => b.at.localeCompare(a.at));
-  return html`<section class="section" aria-label="Previous Quotes">
+  return html`<section class="section min-w-0" aria-label="Previous Quotes">
     ${sectionHeader('Previous Quotes')}
-    ${newestFirst.length
+    ${t.previousQuotes.length
       ? table(
-          ['Ticket', 'Trade', 'Price', 'Received', 'Outcome'],
-          newestFirst.map((q) => [
-            ticketCell({ ticketId: q.ticketId, issue: q.description, address: q.propertyAddress }),
+          ['Trade', 'Price', 'Received'],
+          t.previousQuotes.map((q) => [
             html`${humanise(q.trade)}`,
-            html`${formatMoney(q.priceCents)}`,
-            html`<span class="text-muted whitespace-nowrap">${formatWhen(q.at, timeZone)}</span>`,
-            OUTCOME[q.outcome],
+            html`<span class="num">${formatMoney(q.priceCents)}</span>`,
+            html`${formatWhen(q.at, timeZone)}`,
           ]),
-          { caption: 'Previous Quotes, newest first', align: ['left', 'left', 'right', 'left', 'left'], stack: true },
+          { caption: 'Previous Quotes' },
         )
       : emptyState('No Quotes yet.')}
   </section>`;
 }
 
-/** Visits to come, each with the Ticket it is for. */
 function bookings(t: TradieView, timeZone: string): Html {
   return html`<section class="section" aria-label="Upcoming bookings">
     ${sectionHeader('Upcoming bookings')}
     ${t.bookings.length
       ? table(
-          ['Ticket', 'When', 'Property Manager'],
-          t.bookings.map((b) => [
-            ticketCell({ ticketId: b.ticketId, issue: b.description, address: b.propertyAddress }),
-            html`<span class="num whitespace-nowrap">${timeRange(b.start, b.end, timeZone)}</span>`,
-            html`<span class="text-muted">${b.propertyManager}</span>`,
-          ]),
-          { caption: 'Upcoming bookings', stack: true },
+          ['When', 'Property', 'Property Manager'],
+          t.bookings.map((b) => [html`<span class="num">${timeRange(b.start, b.end, timeZone)}</span>`, html`${b.propertyAddress}`, html`${b.propertyManager}`]),
+          { caption: 'Upcoming bookings' },
         )
       : emptyState('Nothing booked.')}
   </section>`;

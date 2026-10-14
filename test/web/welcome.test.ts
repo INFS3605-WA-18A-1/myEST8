@@ -48,17 +48,9 @@ describe('the onboarding wizard', () => {
     const w = await webWorld();
     const sam = await w.signUp();
 
-    // 1 Email comes first, and nothing else opens until it's connected.
     const welcome = visible(await page(w, '/welcome', sam));
     expect(welcome).toContain('Step 1 of 6');
     expect(welcome).toContain('about 5 minutes');
-    expect(welcome).toContain("First, connect the Agency's email");
-    expect((await w.get('/welcome/team', sam)).headers.get('location')).toBe('/welcome');
-    const email = await submit(w, '/welcome/email', { address: 'inbox@sunrise.example' }, sam);
-    expect(email.location).toMatch(/^\/welcome\?channel=email&ok=.*#email$/);
-    expect(visible(email.page)).toContain('Email connected to inbox@sunrise.example');
-    const emailTested = await submit(w, '/welcome/email/test', { to: 'sam@sunrise.example' }, sam);
-    expect(visible(emailTested.page)).toContain('Test message sent to sam@sunrise.example by Email');
 
     // 2 Your team: the colleague's temporary password is shown once, and works.
     const added = await w.post('/welcome/team', { name: 'Casey Cole', email: 'casey@sunrise.example' }, sam);
@@ -80,8 +72,9 @@ describe('the onboarding wizard', () => {
     const tested = await submit(w, '/welcome/channels/test', { type: 'sms', to: '0412 345 678' }, sam);
     expect(visible(tested.page)).toContain('Test message sent to 0412 345 678 by SMS');
     expect(visible(tested.page)).toContain('Connected and tested');
-    const whatsapp = await submit(w, '/welcome/channels', { type: 'whatsapp', address: '+61 2 9100 0002' }, sam);
-    expect(visible(whatsapp.page)).toContain('2 of 2 connected, 1 tested');
+    await submit(w, '/welcome/channels', { type: 'whatsapp', address: '+61 2 9100 0002' }, sam);
+    const email = await submit(w, '/welcome/channels', { type: 'email', address: 'inbox@sunrise.example' }, sam);
+    expect(visible(email.page)).toContain('3 of 3 connected, 1 tested');
 
     // 4 First Property, with its Property Owner and Tenant in one form.
     const property = await submit(w, '/welcome/property', propertyFields(), sam);
@@ -103,7 +96,6 @@ describe('the onboarding wizard', () => {
     for (const item of [
       'Done: Sunrise Realty created',
       'Done: 2 Property Managers on the team',
-      'Done: Email connected to inbox@sunrise.example and tested',
       'Done: SMS connected to +61291000002 and tested',
       'To do: WhatsApp connected to +61291000002, not tested yet',
       'Done: 1 Property with 1 Tenant',
@@ -115,27 +107,9 @@ describe('the onboarding wizard', () => {
     expect(visible(await page(w, '/', sam))).not.toContain('Finish setting up');
   });
 
-  test('fills the page with no rail, and email can be neither skipped nor left for later', async () => {
-    const w = await webWorld();
-    const sam = await w.signUp();
-    for (const path of ['/', '/tickets', '/setup', '/welcome/channels']) expect((await w.get(path, sam)).headers.get('location'), path).toBe('/welcome');
-
-    const before = await page(w, '/welcome', sam);
-    expect(before).not.toContain('has-rail');
-    expect(before).not.toContain('data-drawer-toggle');
-    expect(visible(before)).not.toMatch(/Skip for now|Set up later|Continue/);
-
-    await w.connectEmail(sam);
-    const after = await page(w, '/welcome', sam);
-    expect(visible(after)).toContain('Continue');
-    expect(visible(after)).toContain('Set up later');
-    expect((await w.get('/tickets', sam)).status).toBe(200);
-  });
-
   test('shows where the Agency is up to: each step offers "Skip for now" until it is done, then "Continue"', async () => {
     const w = await webWorld();
     const sam = await w.signUp();
-    await w.connectEmail(sam);
 
     const before = await page(w, '/welcome/team', sam);
     expect(before).toContain('aria-current="step"');
@@ -152,7 +126,6 @@ describe('the onboarding wizard', () => {
   test('a refused Property form keeps what was typed, says what is wrong next to each field, and adds nothing', async () => {
     const w = await webWorld();
     const sam = await w.signUp();
-    await w.connectEmail(sam);
 
     const res = await w.post('/welcome/property', propertyFields({ tenantMobile: '', tenancyStart: 'last year', maxRepairCost: 'lots' }), sam);
 
@@ -171,13 +144,12 @@ describe('the onboarding wizard', () => {
   test('a Property Owner already added is reused for another Property, but a Tenant\'s number cannot be the Property Owner\'s', async () => {
     const w = await webWorld();
     const sam = await w.signUp();
-    await w.connectEmail(sam);
     await submit(w, '/welcome/property', propertyFields(), sam);
 
     const another = await page(w, '/welcome/property?another', sam);
     expect(another).toContain('action="/welcome/property"');
     await submit(w, '/welcome/property', propertyFields({ address: '5 Sun St, Newtown NSW 2042', ownerName: 'Omar', tenantName: 'Uma Ung', tenantMobile: '0400 000 996' }), sam);
-    expect((await page(w, '/setup', sam)).match(/>Omar Owen<\/option>/g)).toHaveLength(1);
+    expect((await page(w, '/properties', sam)).match(/>Omar Owen<\/option>/g)).toHaveLength(1);
 
     const clash = await w.post('/welcome/property', propertyFields({ address: '7 Sun St, Newtown NSW 2042', ownerMobile: '0400 000 999', tenantName: 'Vic Vo', tenantMobile: '0400 000 995' }), sam);
     expect(clash.status).toBe(400);
@@ -187,7 +159,6 @@ describe('the onboarding wizard', () => {
   test('a colleague with an email that already has an account, or a Tradie with no Trades, is refused with the form kept', async () => {
     const w = await webWorld();
     const sam = await w.signUp();
-    await w.connectEmail(sam);
 
     const colleague = await w.post('/welcome/team', { name: 'Alice Again', email: 'alice@harbour.example' }, sam);
     expect(colleague.status).toBe(400);
@@ -208,11 +179,10 @@ describe('the onboarding wizard', () => {
     const w = await webWorld({ demo });
     const sam = await w.signUp();
 
-    expect(await page(w, '/welcome', sam)).toMatch(/id="email-address"[^>]*value="inbox@sunrise-realty-\d+\.example"/);
-    await w.connectEmail(sam);
     const channels = await page(w, '/welcome/channels', sam);
 
     expect(channels).toMatch(/id="sms-address"[^>]*value="\+61 2 9100 \d{4}"/);
+    expect(channels).toMatch(/id="email-address"[^>]*value="inbox@sunrise-realty-\d+\.example"/);
     expect(visible(channels)).toContain('phone simulator');
   });
 });
@@ -221,14 +191,14 @@ describe('a new Agency', () => {
   test('sees a "Finish setting up" banner on its dashboard, pointing at the next step it needs', async () => {
     const w = await webWorld();
     const sam = await w.signUp();
-    await w.connectEmail(sam);
 
     const dashboard = await page(w, '/', sam);
     expect(visible(dashboard)).toContain('Finish setting up Sunrise Realty');
-    expect(visible(dashboard)).toContain('connect SMS and WhatsApp, add the Tradies you use and add your first Property');
+    expect(visible(dashboard)).toContain('connect SMS, WhatsApp and email, add the Tradies you use and add your first Property');
     expect(dashboard).toMatch(/data-banner="finish-setup"[\s\S]*href="\/welcome\/channels"/);
 
     for (const type of ['sms', 'whatsapp']) await w.post('/welcome/channels', { type, address: '+61 2 9100 0002' }, sam);
+    await w.post('/welcome/channels', { type: 'email', address: 'inbox@sunrise.example' }, sam);
     expect(await page(w, '/', sam)).toMatch(/data-banner="finish-setup"[\s\S]*href="\/welcome\/tradies"/);
   });
 
@@ -240,9 +210,8 @@ describe('a new Agency', () => {
   test("can't see or use Harbour Realty's Properties, people, Tradies or channels", async () => {
     const w = await webWorld();
     const sam = await w.signUp();
-    await w.connectEmail(sam);
 
-    for (const path of ['/?filter=all', '/setup', '/calendar', '/requests?filter=all', '/tickets?filter=all', '/tickets?filter=all&status=closed', '/approvals?filter=all', '/properties', '/tradies', '/settings?tab=team', '/welcome/property', '/welcome/tradies', '/welcome/team', '/welcome/done']) {
+    for (const path of ['/?filter=all', '/setup', '/dispatch', '/welcome/property', '/welcome/tradies', '/welcome/team', '/welcome/done']) {
       const text = visible(await page(w, path, sam));
       for (const harbour of ['Harbour Realty', 'Alice Archer', 'Olivia Owens', 'Tom Tran', "Pete's Plumbing", KING_ST]) expect(text, path).not.toContain(harbour);
     }
@@ -260,7 +229,6 @@ describe('inviting a colleague', () => {
   test('after adding a colleague, the guide offers to send them the sign-in link, never the temporary password', async () => {
     const w = await webWorld();
     const sam = await w.signUp();
-    await w.connectEmail(sam);
     const added = await (await w.post('/welcome/team', { name: 'Casey Cole', email: 'casey@sunrise.example' }, sam)).text();
     const temporaryPassword = /data-temporary-password>([^<]+)</.exec(added)![1]!;
 

@@ -40,8 +40,7 @@ describe('closing a Ticket', () => {
       ['done', true],
       ['closed', true],
     ]);
-    // The Tradie's business is named for the visit; their price and ratings never are.
-    expect(JSON.stringify(tracker)).not.toMatch(/150|Cents|rating/i);
+    expect(JSON.stringify(tracker)).not.toMatch(/150|Cents|rating|Pete/i);
     expect((await alice.ticket(job.ticketId)).frequentIssues).toEqual([{ trade: 'plumbing', tickets: 1 }]);
     await expect(alice.addJob(job.ticketId, 'electrical')).rejects.toThrow(/closed/);
   });

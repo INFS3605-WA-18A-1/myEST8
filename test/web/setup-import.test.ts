@@ -44,12 +44,18 @@ describe('spreadsheet templates', () => {
   test('every bulk step on Setup and in the guide offers the template and an upload', async () => {
     const w = await webWorld();
     const cookie = await w.signIn();
-    const setup = await (await w.get('/setup', cookie)).text();
-    for (const kind of ['owners', 'building-managers', 'tradies', 'properties', 'tenants']) {
+    const pages: Record<string, string> = {
+      setup: await (await w.get('/setup', cookie)).text(),
+      properties: await (await w.get('/properties', cookie)).text(),
+      tradies: await (await w.get('/tradies', cookie)).text(),
+    };
+    const home = { owners: 'setup', 'building-managers': 'setup', tenants: 'setup', tradies: 'tradies', properties: 'properties' } as const;
+    for (const kind of ['owners', 'building-managers', 'tradies', 'properties', 'tenants'] as const) {
+      const setup = pages[home[kind]]!;
       expect(setup).toContain(`href="/setup/templates/${kind}.csv"`);
       expect(setup).toContain(`action="/setup/import/${kind}"`);
     }
-    expect(setup).toContain('enctype="multipart/form-data"');
+    expect(pages.setup).toContain('enctype="multipart/form-data"');
 
     const tradies = await (await w.get('/welcome/tradies', cookie)).text();
     expect(tradies).toContain('action="/setup/import/tradies?from=welcome"');

@@ -6,15 +6,12 @@
 import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
 import { MAX_IMPORT_ROWS, type ImportKind } from '../../imports.ts';
-import { isSimulatedNumber } from '../../onboarding.ts';
 import type { ChannelType } from '../../ports.ts';
 import { MAX_SHEET_BYTES } from '../../spreadsheet.ts';
 import { ActionError, TRADES, type Trade } from '../../shared.ts';
 import { int, list, optional, text, type FormValues } from '../forms.ts';
-import type { GmailStatus } from '../../gmail-credentials.ts';
-import type { ChannelModes } from '../env.ts';
 import { icon } from '../icons.ts';
-import { alert, badge, button, emptyState, field, formatWhen, humanise, linkButton, table, type Html } from '../ui.ts';
+import { badge, button, emptyState, field, formatWhen, humanise, table, type Html } from '../ui.ts';
 
 type Person = Awaited<ReturnType<PropertyManagerActions['people']>>[number];
 type Listing = Awaited<ReturnType<PropertyManagerActions['findGoogleListings']>>[number];
@@ -34,89 +31,6 @@ export const CHANNELS: { type: ChannelType; name: string; addressLabel: string; 
   { type: 'whatsapp', name: 'WhatsApp', addressLabel: 'WhatsApp sandbox number', inputType: 'tel', placeholder: '+1 415 523 8886' },
   { type: 'email', name: 'Email', addressLabel: 'Address the Agency inbox forwards to', inputType: 'email', placeholder: 'maintenance@parse.youragency.com.au' },
 ];
-
-/**
- * One channel's row when channels connect as `modes` says (docs/adr/0004, 0005): Gmail by signing in to
- * Google, WhatsApp and an SMS number by one button each, anything else simulated. No provider setup is
- * shown: the Agency never sets up Twilio, Meta or a webhook.
- */
-export function modeChannelBody(o: {
-  channel: (typeof CHANNELS)[number];
-  current: AgencyChannel | undefined;
-  modes: ChannelModes;
-  gmail: GmailStatus | 'unavailable';
-  /** Where to come back to after Google, and where the WhatsApp and SMS buttons post. */
-  returnTo: string;
-  whatsappAction: string;
-  smsAction: string;
-  testAction: string;
-  /** The signed-in Property Manager's email: where a test email goes unless they change it. */
-  pmEmail: string;
-  timeZone: string;
-}): Html {
-  const { channel, current } = o;
-  const line = current ? channelLine(current, o.timeZone) : html``;
-  if (channel.type === 'email' && o.modes.gmail) {
-    const to = `/oauth/google/start?return=${o.returnTo}`;
-    if (current && o.gmail === 'connected') {
-      return html`${line}<p class="mt-1 text-sm">New mail to ${current.address} reaches myEST8 within a minute, and myEST8 replies from that address. It never changes or deletes mail.</p>
-        ${testForm(o, 'email', { value: o.pmEmail, hint: `Sent from ${current.address}. Use any inbox you can check.` })}
-        <div class="mt-2">${linkButton('Reconnect Gmail', to, { variant: 'secondary', size: 'sm' })}</div>`;
-    }
-    if (o.gmail === 'needs_reconnect') {
-      return html`${alert('Gmail needs reconnecting: Google no longer accepts the saved sign-in. Mail is not being read or sent until you connect again.', 'warning')}
-        <div class="mt-2">${linkButton('Reconnect Gmail', to, { variant: 'primary', size: 'sm' })}</div>`;
-    }
-    return html`<p class="text-sm">Sign in with the Google account that receives the Agency’s maintenance email. myEST8 reads new mail there and replies from the same address. It never changes or deletes mail.</p>
-      <div class="mt-2">${linkButton('Connect Gmail', to, { variant: 'primary', size: 'sm' })}</div>`;
-  }
-  if (channel.type === 'whatsapp' && o.modes.whatsappNumber) {
-    if (!current) {
-      return html`<p class="text-sm">Tenants message ${o.modes.whatsappNumber} on WhatsApp. Connect it to this Agency, then send a test message.</p>
-        <form method="post" action="${o.whatsappAction}" class="mt-2">${button('Connect WhatsApp', { size: 'sm' })}</form>`;
-    }
-    return html`${line}${testForm(o, 'whatsapp', { hint: 'The phone gets WhatsApp’s “Hello World” sample message. While WhatsApp runs on Meta’s test number, only phones on its allowed list receive anything.' })}`;
-  }
-  if (channel.type === 'sms' && o.modes.smsNumbers) {
-    if (!current || isSimulatedNumber(current.address)) {
-      return html`<p class="text-sm">Tenants text the Agency on an Australian mobile number of its own. myEST8 gets the number and sets it up: there is nothing to type.</p>
-        <form method="post" action="${o.smsAction}" class="mt-2">${button('Get an SMS number', { size: 'sm' })}</form>`;
-    }
-    return html`${line}${testForm(o, 'sms', {})}`;
-  }
-  return html`<p class="text-sm">Simulated: messages show in the phone simulator, and nothing is sent to a real phone or inbox.</p>${current
-      ? html`<p class="text-sm"><strong class="break-all">${current.address}</strong> is a made-up ${channel.type === 'email' ? 'address' : 'number'} for the simulator, not a real one.</p>`
-      : ''}`;
-}
-
-/** Gets the Agency its SMS number. A Twilio failure (no bundle, no balance) is shown, not hidden. */
-export async function getSmsNumber(actions: PropertyManagerActions): Promise<string> {
-  try {
-    return await actions.getSmsNumber();
-  } catch (error) {
-    if (error instanceof ActionError) throw error;
-    throw new ActionError('invalid', `myEST8 couldn't get an SMS number: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-/** Sending a test message on a connected channel, to an address the Property Manager types. */
-function testForm(o: { current: AgencyChannel | undefined; testAction: string }, type: ChannelType, f: { value?: string; hint?: string }): Html {
-  const email = type === 'email';
-  return html`<form method="post" action="${o.testAction}" class="mt-3 grid items-end gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
-    <input type="hidden" name="type" value="${type}" />
-    ${field({
-      label: email ? 'Send a test email to' : 'Send a test message to',
-      name: 'to',
-      id: `${type}-to`,
-      type: email ? 'email' : 'tel',
-      required: true,
-      value: f.value ?? '',
-      placeholder: email ? 'you@youragency.com.au' : 'Your mobile, like 0412 345 678',
-      hint: f.hint,
-    })}
-    ${button('Send a test message', { variant: o.current?.testedAt ? 'secondary' : 'primary', size: 'sm' })}
-  </form>`;
-}
 
 /** The posted form's text values, to show again after a refusal. Passwords are left out. */
 export function valuesOf(form: FormValues): Values {
