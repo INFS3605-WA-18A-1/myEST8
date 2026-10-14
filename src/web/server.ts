@@ -31,6 +31,8 @@ export function createWebApp(deps: {
   fileLinks?: FileLinks | null;
   /** Meta's WhatsApp Cloud API webhook secrets, when WhatsApp runs on it. */
   whatsapp?: { appSecret: string; verifyToken: string } | null;
+  /** Resend inbound email, when both RESEND_WEBHOOK_SECRET and RESEND_API_KEY are set. */
+  resend?: { webhookSecret: string; apiKey: string; fetch?: typeof fetch } | null;
   /** What onboarding can connect (Gmail, the WhatsApp number). */
   connectors?: ChannelConnectors;
   demo?: DemoControls;
