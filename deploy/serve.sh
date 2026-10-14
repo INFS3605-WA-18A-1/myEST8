@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# Runs the live app: the demo runtime on port 4000 with its data kept in the
-# Postgres schema "live", and PUBLIC_URL set to the tunnel's URL. See docs/hosting.md.
+# Runs the live app via src/main.ts (npm start) on port 4000, data in the Postgres
+# schema "live". PUBLIC_URL is the named tunnel's address from live.env, or the
+# quick tunnel's URL. src/main.ts delivers through real providers: DEMO_SEND_TO
+# defaults to "*" when unset, and the process exits while any API is mocked
+# unless ALLOW_MOCKS=1. src/demo/main.ts does neither. See docs/hosting.md.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -20,4 +23,4 @@ export DATABASE_SCHEMA=live
 export NODE_ENV=production
 
 node_modules/.bin/tsx scripts/db.ts start --quiet
-exec node_modules/.bin/tsx src/demo/main.ts
+exec node_modules/.bin/tsx src/main.ts

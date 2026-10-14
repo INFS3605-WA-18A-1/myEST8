@@ -1,6 +1,8 @@
 # Free channel providers: Gmail by OAuth and Meta's WhatsApp Cloud API
 
-For running myEST8 for real on a course budget, email goes through the Agency's own Gmail, connected by OAuth, and WhatsApp goes through Meta's WhatsApp Cloud API directly. SMS stays on the phone simulator. This supersedes ADR 0003 for the running system. The Twilio and SendGrid adapters stay in the code for when there's money for them, behind the same `Messenger` port.
+For running myEST8 for real on a course budget, email goes through the Agency's own Gmail, connected by OAuth, and WhatsApp goes through Meta's WhatsApp Cloud API directly. SMS stays on the phone simulator unless `TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN` are set. This supersedes ADR 0003 for the running system. The email half is superseded by [ADR 0006](0006-resend-email-and-claude-haiku.md) (Resend; Gmail stays in the code, dormant). [ADR 0005](0005-twilio-sms-number-per-agency.md) is not built: the code does not read `TWILIO_BUNDLE_SID` or `TWILIO_ADDRESS_SID`. The Twilio and SendGrid adapters stay in the code, behind the same `Messenger` port.
+
+WhatsApp reads `META_WHATSAPP_PHONE_NUMBER_ID` and `META_WHATSAPP_ACCESS_TOKEN` together or not at all, `META_APP_SECRET` and `META_WEBHOOK_VERIFY_TOKEN` for the webhook, and `META_WHATSAPP_NUMBER` as the number shown on the channels page. It does not read `WHATSAPP_TOKEN` or the other `WHATSAPP_*` names. Gmail, while dormant, reads `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `TOKEN_ENCRYPTION_KEY`, not `GOOGLE_OAUTH_*` or `CHANNEL_SECRET_KEY`.
 
 We dropped Twilio because its trial can't buy Australian numbers (they need a paid regulatory bundle) or register WhatsApp senders. We dropped SendGrid because its free plan was retired in May 2025.
 
@@ -14,4 +16,4 @@ We dropped Twilio because its trial can't buy Australian numbers (they need a pa
   - A real launch needs Meta business verification and approved templates.
 - **SMS:** a phone's texts can't be read by any web service. iOS gives apps no access to them, and providers only see numbers they host.
   - The free route is an Android phone running SMS Gateway for Android (sms-gate.app), which forwards its texts to a webhook. That phone's plan then carries the Agency's texts, and consumer SIM terms forbid bulk sending.
-  - Until such a phone exists, SMS runs on the simulator.
+  - Until such a phone exists, SMS runs on the simulator, or on one shared Twilio number when `TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN` are set. A number purchased per Agency is not built.

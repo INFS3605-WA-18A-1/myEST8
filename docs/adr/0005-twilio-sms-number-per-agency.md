@@ -1,5 +1,7 @@
 # A Twilio SMS number bought for each Agency
 
+**Not built.** Nothing in the app buys a number, and nothing reads `TWILIO_BUNDLE_SID` or `TWILIO_ADDRESS_SID`. SMS stays on the phone simulator unless `TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN` are both set, in which case one shared Twilio number sends (`TWILIO_SMS_FROM` when set). The text below is the decision as it was written; it is not what the code does.
+
 Amends the SMS part of [ADR 0004](0004-gmail-and-whatsapp-cloud-api.md).
 
 An Agency gets real SMS with one button, "Get an SMS number". myEST8 buys an Australian mobile number on the server's Twilio account, points its incoming texts at `/webhooks/twilio`, and connects it as the Agency's SMS channel. The Agency types nothing. An Agency can't connect a mobile it already has, because something has to send and receive the texts for that number. Porting or hosting the Agency's own number on Twilio is possible later, but it means paperwork for the Agency.
