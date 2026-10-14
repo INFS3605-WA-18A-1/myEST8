@@ -11,6 +11,7 @@ import { createJevClassifier } from '../adapters/jev.ts';
 import { messengersFromEnv } from '../adapters/messenger.ts';
 import { metaFetchMedia } from '../adapters/meta-whatsapp.ts';
 import { createQuoteReader } from '../adapters/quote-reader.ts';
+import { resendInboundConfig } from '../adapters/resend.ts';
 import { twilioFetchMedia } from '../adapters/twilio.ts';
 import { createApp } from '../app.ts';
 import { all, ident, LOCAL_DATABASE_URL, one, openDb, run, type Db } from '../db.ts';
@@ -129,6 +130,7 @@ export async function createDemo<Seeded extends boolean = true>(
   } = {},
 ) {
   const env = options.env ?? process.env;
+  const resend = resendInboundConfig(env);
   const logError = options.logError ?? ((error: Error) => console.error('[worker]', error));
   // DATABASE_SCHEMA unset: a fresh schema, dropped on close. Set: a schema that is
   // seeded on the first start and reopened as it was on every start after.
@@ -315,6 +317,7 @@ export async function createDemo<Seeded extends boolean = true>(
     demo,
     demoSignIns: seed !== null,
     whatsapp: env.META_APP_SECRET?.trim() && env.META_WEBHOOK_VERIFY_TOKEN?.trim() ? { appSecret: env.META_APP_SECRET.trim(), verifyToken: env.META_WEBHOOK_VERIFY_TOKEN.trim() } : null,
+    resend,
     connectors: { gmail: mailboxes?.connector ?? null, whatsappNumber: env.META_WHATSAPP_NUMBER?.trim() || null },
   });
 

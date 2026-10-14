@@ -3,6 +3,9 @@
 // an injectable `fetch`; storing tokens and mapping mail to messages is src/mailboxes.ts.
 
 import type { OutboundAttachment } from '../ports.ts';
+import { htmlToText, withoutQuotedReply } from './email-text.ts';
+
+export { withoutQuotedReply };
 
 export const GMAIL_SCOPES = ['openid', 'email', 'https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/gmail.send'];
 
@@ -184,31 +187,6 @@ export function buildRawMessage(m: { from: string; to: string; cc: string[]; sub
 
 export const header = (part: GmailPart | undefined, name: string) =>
   part?.headers?.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value ?? '';
-
-function htmlToText(html: string) {
-  return html
-    .replace(/<(style|script)[^>]*>[\s\S]*?<\/\1>/gi, '')
-    .replace(/<(br|\/p|\/div)[^>]*>/gi, '\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&amp;/g, '&');
-}
-
-/** Drops the quoted message under a reply, so "YES" isn't read alongside the request it answers. */
-export function withoutQuotedReply(text: string) {
-  // Gmail wraps "On Tue, 6 Oct 2026 at 9:00, Name <a@b> wrote:" over two lines when it's long.
-  const quoteStart = /^On [^\n]*(?:\n[^\n]*)?wrote:\s*$/m.exec(text);
-  const reply = quoteStart ? text.slice(0, quoteStart.index) : text;
-  return reply
-    .split('\n')
-    .filter((line) => !line.startsWith('>'))
-    .join('\n')
-    .trim();
-}
 
 function find(part: GmailPart, mimeType: string): GmailPart | undefined {
   if (part.mimeType === mimeType && !part.filename && part.body?.data) return part;

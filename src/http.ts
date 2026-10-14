@@ -6,7 +6,9 @@
 
 import { Hono, type Context as HonoContext } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
+import { HTTPException } from 'hono/http-exception';
 import { metaStatusFailures, metaToInbound, verifyMetaSignature } from './adapters/meta-whatsapp.ts';
+import { resendToInbound, verifyResendSignature } from './adapters/resend.ts';
 import { sendgridToInbound, verifySendgridSignature } from './adapters/sendgrid.ts';
 import { twilioToInbound, verifyTwilioSignature } from './adapters/twilio.ts';
 import type { App } from './app.ts';
@@ -30,6 +32,8 @@ export function createHttpApp(
     fileLinks?: FileLinks | null;
     /** Meta's WhatsApp Cloud API: the app secret that signs webhooks, and the verify token for its handshake. */
     whatsapp?: { appSecret: string; verifyToken: string } | null;
+    /** Resend inbound email. Absent unless both the webhook secret and the API key are set. */
+    resend?: { webhookSecret: string; apiKey: string; fetch?: typeof fetch } | null;
   },
 ) {
   const http = new Hono();
@@ -95,6 +99,39 @@ export function createHttpApp(
     return c.body(null, 200);
   });
 
+  http.post('/webhooks/resend', bodyLimit({ maxSize: MB }), async (c) => {
+    if (!config.resend) return c.notFound();
+    // The signature covers the raw bytes, so check it before parsing JSON.
+    const raw = new Uint8Array(await c.req.arrayBuffer());
+    if (
+      !verifyResendSignature(
+        config.resend.webhookSecret,
+        raw,
+        {
+          id: c.req.header('svix-id') ?? '',
+          timestamp: c.req.header('svix-timestamp') ?? '',
+          signature: c.req.header('svix-signature') ?? '',
+        },
+        config.clock.now(),
+      )
+    ) {
+      return c.text('Invalid signature', 403);
+    }
+    let event: unknown;
+    try {
+      event = JSON.parse(new TextDecoder().decode(raw));
+    } catch {
+      return c.text('Invalid JSON', 400);
+    }
+    const message = await resendToInbound(event, {
+      apiKey: config.resend.apiKey,
+      fetch: config.resend.fetch ?? fetch,
+      receivedAt: config.clock.now(),
+    });
+    if (message) await app.receiveInbound(message);
+    return c.text('ok', 200);
+  });
+
   http.post('/api/u/:token', bodyLimit({ maxSize: 105 * MB }), async (c) => {
     const form = await c.req.formData().catch(() => null);
     if (!form) return c.json({ error: 'Expected multipart/form-data' }, 400);
@@ -126,6 +163,7 @@ export function createHttpApp(
   });
 
   http.onError((error, c) => {
+    if (error instanceof HTTPException) return error.getResponse();
     if (error instanceof ActionError) return c.json({ error: error.message }, STATUS[error.code]);
     console.error(error);
     return c.json({ error: 'Something went wrong' }, 500);

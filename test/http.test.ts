@@ -1,6 +1,7 @@
-import { createHmac, generateKeyPairSync, sign } from 'node:crypto';
+import { createHmac, generateKeyPairSync, randomBytes, sign } from 'node:crypto';
 import { describe, expect, test } from 'vitest';
 import { createHttpApp } from '../src/http.ts';
+import { json, stubFetch } from './adapters/stub-fetch.ts';
 import { AGENCY_INBOX, AGENCY_NUMBER } from './support/harness.ts';
 import { photo } from './support/photos.ts';
 import { BELLA, TOM, tomsTapTicket, world } from './support/world.ts';
@@ -219,5 +220,104 @@ describe('the Meta WhatsApp webhook', () => {
     const { http } = whatsappServer(false);
     expect((await http.request('/webhooks/whatsapp?hub.mode=subscribe')).status).toBe(404);
     expect((await http.request('/webhooks/whatsapp', { method: 'POST', body })).status).toBe(404);
+  });
+});
+
+describe('the Resend webhook', () => {
+  const secretBytes = randomBytes(24);
+  const SECRET = `whsec_${secretBytes.toString('base64')}`;
+  const API_KEY = 're_test_not_a_real_key';
+  const NOW = new Date('2026-10-13T00:00:00Z');
+  const EMAIL_ID = '4ef9a417-02e9-4d39-ad75-9611e0fcc33c';
+  const MB = 1024 * 1024;
+
+  function svix(body: string, timestamp = String(Math.floor(NOW.getTime() / 1000)), id = 'msg_resend_test') {
+    const signature = createHmac('sha256', secretBytes).update(`${id}.${timestamp}.${body}`).digest('base64');
+    return { 'svix-id': id, 'svix-timestamp': timestamp, 'svix-signature': `v1,${signature}` };
+  }
+
+  function resendServer(enabled = true, fetchImpl: typeof fetch = async () => json({})) {
+    const received: unknown[] = [];
+    const http = createHttpApp({ receiveInbound: async (m: unknown) => void received.push(m) } as never, {
+      publicUrl: PUBLIC_URL,
+      twilioAuthToken: TWILIO_TOKEN,
+      sendgridPublicKey: '',
+      clock: { now: () => NOW },
+      resend: enabled ? { webhookSecret: SECRET, apiKey: API_KEY, fetch: fetchImpl } : null,
+    });
+    return { http, received };
+  }
+
+  const payload = JSON.stringify({
+    type: 'email.received',
+    data: { email_id: EMAIL_ID, from: 'bella@example.com', to: ['inbox@harbour.example'] },
+  });
+
+  test('without configuration the route is 404', async () => {
+    const { http, received } = resendServer(false);
+    expect((await http.request('/webhooks/resend', { method: 'POST', headers: svix(payload), body: payload })).status).toBe(404);
+    expect(received).toEqual([]);
+  });
+
+  test('a signed email is fetched and passed to receiveInbound; a bad or stale signature is refused', async () => {
+    const stub = stubFetch(() =>
+      json({
+        id: EMAIL_ID,
+        from: 'Bella <bella@example.com>',
+        to: ['Inbox@Harbour.example'],
+        text: 'The shower drain is blocked\n\nOn Tue, 6 Oct 2026 at 9:00, Harbour <inbox@harbour.example> wrote:\n> old',
+        attachments: [],
+      }),
+    );
+    const { http, received } = resendServer(true, stub.fetch);
+    const bad = await http.request('/webhooks/resend', { method: 'POST', headers: { ...svix(payload), 'svix-signature': 'v1,bm90LXRoaXM=' }, body: payload });
+    expect(bad.status).toBe(403);
+    expect(received).toEqual([]);
+    expect(stub.requests).toEqual([]);
+
+    const staleAt = String(Math.floor(NOW.getTime() / 1000) - 301);
+    const stale = await http.request('/webhooks/resend', { method: 'POST', headers: svix(payload, staleAt), body: payload });
+    expect(stale.status).toBe(403);
+
+    const pretty = JSON.stringify(JSON.parse(payload), null, 2);
+    const reformatted = await http.request('/webhooks/resend', { method: 'POST', headers: svix(payload), body: pretty });
+    expect(reformatted.status).toBe(403);
+    expect(stub.requests).toEqual([]);
+
+    const good = await http.request('/webhooks/resend', { method: 'POST', headers: svix(payload), body: payload });
+    expect(good.status).toBe(200);
+    expect(await good.text()).toBe('ok');
+    expect(received).toMatchObject([{ providerMessageId: `re-${EMAIL_ID}`, agencyChannel: 'inbox@harbour.example', from: 'bella@example.com', text: 'The shower drain is blocked' }]);
+    expect(stub.requests[0]?.headers.get('authorization')).toBe(`Bearer ${API_KEY}`);
+  });
+
+  test('an event that is not email.received is acknowledged and not fetched', async () => {
+    const body = JSON.stringify({ type: 'email.sent', data: { email_id: EMAIL_ID } });
+    const stub = stubFetch(() => json({}));
+    const { http, received } = resendServer(true, stub.fetch);
+    const response = await http.request('/webhooks/resend', { method: 'POST', headers: svix(body), body });
+    expect(response.status).toBe(200);
+    expect(received).toEqual([]);
+    expect(stub.requests).toEqual([]);
+  });
+
+  test('signed JSON that does not parse is 400', async () => {
+    const body = '{"type":';
+    const { http, received } = resendServer();
+    const response = await http.request('/webhooks/resend', { method: 'POST', headers: svix(body), body });
+    expect(response.status).toBe(400);
+    expect(received).toEqual([]);
+  });
+
+  test('a body over 1MB is refused', async () => {
+    const { http, received } = resendServer();
+    const body = 'x'.repeat(MB + 1);
+    const response = await http.request('/webhooks/resend', {
+      method: 'POST',
+      headers: { ...svix(body), 'content-length': String(body.length) },
+      body,
+    });
+    expect(response.status).toBe(413);
+    expect(received).toEqual([]);
   });
 });
