@@ -46,6 +46,7 @@ export function createNotifications({ clock, ports, files, modules }: Context) {
     const template = templates[name] as { subject: string; text: (d: TemplateData<K>, a: typeof agency) => string };
     const text = template.text(data, agency);
     await ports.messenger.send({
+      agencyId,
       channelType,
       from,
       to,

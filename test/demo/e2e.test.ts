@@ -107,7 +107,7 @@ describe('the demo script', () => {
     expect((await d.lastTo(TOM)).template).toBe('tenant.ticket_closed');
     const trackerLink = (await d.demo.outbox(d.seed.ids.aliceId)).find((m) => m.to === TOM && m.template === 'tenant.confirmed')!.text;
     const tracker = await (await d.web.request(`/t/${d.tokenOf(trackerLink)}`)).text();
-    expect(tracker).toContain('Closed');
+    expect(tracker).toContain('Fixed');
     expect(tracker).not.toContain('$');
     expect(d.errors).toEqual([]);
   });

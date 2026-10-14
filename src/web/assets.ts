@@ -1,7 +1,7 @@
 // The design system's static files, served from this server so the demo works
-// offline: Tailwind's browser build and daisyUI from node_modules, the app's
-// own CSS, JS and favicon from ./static, and the self-hosted Lexend and Red Hat
-// Text fonts. Each file is read once, on first request.
+// offline: Tailwind's browser build, daisyUI and Leaflet (the Dispatch map) from
+// node_modules, the app's own CSS, JS and favicon from ./static, and the
+// self-hosted Lexend and Red Hat Text fonts. Each file is read once, on first request.
 
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -14,12 +14,21 @@ const JS = 'text/javascript; charset=utf-8';
 const CSS = 'text/css; charset=utf-8';
 const WOFF2 = 'font/woff2';
 const SVG = 'image/svg+xml';
+const PNG = 'image/png';
+
+/** Leaflet's built files, in its package's dist/ folder. */
+const leaflet = (...path: string[]) => join(dirname(require.resolve('leaflet/package.json')), 'dist', ...path);
 
 const ASSETS: Record<string, { file: () => string; type: string }> = {
   'tailwind.js': { file: () => require.resolve('@tailwindcss/browser'), type: JS },
   'daisyui.css': { file: () => require.resolve('daisyui/daisyui.css'), type: CSS },
   'app.css': { file: () => fileURLToPath(new URL('./static/app.css', import.meta.url)), type: CSS },
+  'landing.css': { file: () => fileURLToPath(new URL('./static/landing.css', import.meta.url)), type: CSS },
+  'auth.css': { file: () => fileURLToPath(new URL('./static/auth.css', import.meta.url)), type: CSS },
   'app.js': { file: () => fileURLToPath(new URL('./static/app.js', import.meta.url)), type: JS },
+  'leaflet.js': { file: () => leaflet('leaflet.js'), type: JS },
+  'leaflet.css': { file: () => leaflet('leaflet.css'), type: CSS },
+  'dispatch-map.js': { file: () => fileURLToPath(new URL('./static/dispatch-map.js', import.meta.url)), type: JS },
   'favicon.svg': { file: () => fileURLToPath(new URL('./static/favicon.svg', import.meta.url)), type: SVG },
 };
 
@@ -33,6 +42,12 @@ const FONTS: Record<string, string> = {
   'red-hat-text-latin-500-normal.woff2': '@fontsource/red-hat-text',
   'red-hat-text-latin-600-normal.woff2': '@fontsource/red-hat-text',
 };
+
+/**
+ * The images leaflet.css refers to (`url(images/layers.png)`, resolved against /assets/leaflet.css,
+ * so they are served from /assets/images/). Only these are served there.
+ */
+const LEAFLET_IMAGES = ['layers.png', 'layers-2x.png', 'marker-icon.png', 'marker-icon-2x.png', 'marker-shadow.png'];
 
 const cache = new Map<string, Uint8Array<ArrayBuffer>>();
 
@@ -52,8 +67,9 @@ function fontFile(name: string) {
 }
 
 /**
- * Serves /assets/*: Tailwind's browser build, daisyUI, the app's own CSS, JS and favicon,
- * and the Lexend and Red Hat Text fonts under /assets/fonts/. Anything else there is a 404.
+ * Serves /assets/*: Tailwind's browser build, daisyUI, Leaflet and its images, the app's own
+ * CSS, JS and favicon, and the Lexend and Red Hat Text fonts under /assets/fonts/. Anything
+ * else there is a 404.
  */
 export function assetRoutes() {
   const routes = new Hono();
@@ -63,6 +79,15 @@ export function assetRoutes() {
     return c.body(read(`fonts/${name}`, () => fontFile(name)), 200, {
       'content-type': WOFF2,
       'cache-control': 'public, max-age=31536000, immutable',
+      'x-content-type-options': 'nosniff',
+    });
+  });
+  routes.get('/assets/images/:name', (c, next) => {
+    const name = c.req.param('name');
+    if (!LEAFLET_IMAGES.includes(name)) return next();
+    return c.body(read(`images/${name}`, () => leaflet('images', name)), 200, {
+      'content-type': PNG,
+      'cache-control': 'public, max-age=3600',
       'x-content-type-options': 'nosniff',
     });
   });

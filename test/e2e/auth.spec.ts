@@ -5,8 +5,10 @@ test('a new Agency signs up and lands signed in', async ({ page }) => {
   const id = unique();
   await signUp(page, { agencyName: `Sunrise Realty ${id}`, name: 'Sam Sun', email: `sam-${id}@sunrise.example`, password: 'sunrise-2026' });
 
-  await expect(page).not.toHaveURL(/\/signup/);
-  await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible();
+  // The setup guide fills the page: no rail until setup is done.
+  await expect(page).toHaveURL(/\/welcome$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Welcome to myEST8, Sam' })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Main' })).toHaveCount(0);
   await expect(page.getByText(`Sunrise Realty ${id}`).first()).toBeVisible();
 
   // Signed in, the sign-in page sends them straight back in.

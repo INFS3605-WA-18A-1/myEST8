@@ -71,6 +71,14 @@ The first draft was a white SaaS kit: identical rounded cards with soft grey sha
 │              ├───────────────────────────────────────────────────────────┤
 │▌Dashboard    │                                                           │
 │ Dispatch     │  page content (max-width 1280px, 24px gutters, 16 phone)  │
+│ Requests   2 │                                                           │
+│ Tickets      │                                                           │
+│ Approvals  1 │                                                           │
+│ Schedule     │                                                           │
+│              │                                                           │
+│ Properties   │                                                           │
+│ Tradies      │                                                           │
+│              │                                                           │
 │ Settings     │                                                           │
 │              │                                                           │
 │ Phone        │                                                           │
@@ -81,62 +89,83 @@ The first draft was a white SaaS kit: identical rounded cards with soft grey sha
  220px rail (Night)
 ```
 
-- Left rail 220 px on Night, the logo at the top (the key tag in Wattle, the wordmark in `--rail-text`) linking home. Three places: **Dashboard** (`/`), **Dispatch** (`/dispatch`) and **Settings** (`/settings`), Lexend 600 16 px, 40 px tall with an icon (Phosphor regular, 18 px) and an optional count. The current item is a lighter band with a 4 px Wattle bar on its left edge (an inset shadow, so it follows the 6 px radius) and `aria-current="page"`.
+- Left rail 220 px on Night, the logo at the top (the key tag in Wattle, the wordmark in `--rail-text`) linking home. Nine places in three groups with a 12 px gap between them: **Dashboard** (`/`), **Dispatch** (`/dispatch`), **Requests** (`/requests`), **Tickets** (`/tickets`), **Approvals** (`/approvals`) and **Schedule** (`/schedule`, which leads to the calendar at `/calendar`); then **Properties** (`/properties`) and **Tradies** (`/tradies`); then **Settings** (`/settings`). Lexend 600 16 px, 40 px tall with an icon (Phosphor regular, 18 px) and an optional count (Requests: Maintenance Requests waiting for review; Approvals: Quotes waiting on a Property Owner. Both are the Property Manager's own Properties, and are worked out once per request by `loadNavCounts` in `src/web/shell.ts`, so every signed-in page shows them; a count of zero is not shown). A page under a place keeps it current: a Ticket under Tickets, a Tradie's profile under Tradies, Setup and its imports under Settings. The current item is a lighter band with a 4 px Wattle bar on its left edge (an inset shadow, so it follows the 6 px radius) and `aria-current="page"`.
 - At the foot of the rail, quieter (Red Hat Text 13 px, `--rail-muted`): the demo's **Phone simulator (demo)** link (`/demo`, demo deployments only) and the Agency's name.
 - Top bar 60 px on `--surface` with a bottom hairline. It holds the page title (22 px Lexend 600, the page's only `<h1>`), optional page controls passed by the page (the Mine/All segmented control on the dashboard: links with `aria-current`, the current one filled with Harbour), today's date in the Agency's time zone, and the Property Manager's name opening a menu with Sign out.
+- **Collapse menu** (from 1024 px, JavaScript only): a quiet button at the foot of the rail folds it to a 64 px strip of icons (`--rail-collapsed-width`; the open rail is `--rail-width`). Each label stays its link's accessible name and shows as a tooltip on hover or keyboard focus (Night, `--rail-text`, `--shadow-lift`); a waiting count becomes a 6 px Wattle dot on the icon, with the number in the tooltip; the wordmark and the Agency's name hide. The choice is remembered in this browser (`localStorage`), and `head()` applies it before the first paint so pages don't jump.
 - Under 1024 px the rail becomes an off-canvas drawer opened by a menu button in the top bar. Content is single-column with 16 px gutters and never scrolls horizontally.
 - Flash messages appear directly under the top bar as one line: `--done` for ok, `--urgent` for errors, `role="status"` or `role="alert"`.
-- Old places: `/calendar` and `/setup` still work and highlight Dispatch and Settings; the redesign's phase 2 moves their content into those pages and redirects them.
+- Old places: `/calendar` still works and highlights Schedule, `/setup` and its imports highlight Settings; the redesign's phase 2 moves Setup's content into Settings tabs and redirects it. Settings today has side tabs for Agency, Channels, Team and Import that show what is set and lead into Setup's forms.
 
 ### Dashboard: the dispatch board
 
-The first frame at 1366×768 must show the decision queue, the Ticket pipeline and the next 7 days of bookings without scrolling.
+The first frame at 1366×768 shows the Ticket pipeline across the full width, with the decision queue and the next 7 days starting under it.
 
 ```
 ┌ count strip: 4 Maintenance Requests to review   9 open Tickets   3 alerts   4 in the inbox   2 Urgent Repairs ┐  36px
+├──────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ Tickets by stage                                                                                          │
+│ Quoting 3          With Property Owner 1   Ready to book 1      Booked 3            Done 1                 │
+│ ┌────────────────┐ ┌────────────────┐      ┌────────────────┐   ┌────────────────┐  ┌────────────────┐     │
+│ │Roof leaking in │ │Hot water system│      │Bedroom light   │   │Dishwasher won't│  │Door handle has │     │
+│ │the back bedroom│ │is leaking      │      │switch is broken│   │drain           │  │come off        │     │
+│ │42 Coogee Bay Rd│ │21 Glebe Point  │      │2/31 Australia  │   │5/40 Ocean Ave  │  │9 Albion St     │     │
+│ │┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄│ │┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄│      │┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄│   │┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄│  │┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄│     │
+│ │High Roofing    │ │High Plumbing   │      │Routine Electr. │   │Visit Thu 22 Oct│  │Routine         │     │
+│ │1 of 2 Quotes in│ │#6     6 days ago│     │#11   3 days ago│   │#10   5 days ago│  │#8    6 days ago│     │
 ├────────────────────────────┬─────────────────────────────────────────────────────────────────────────────┤
-│ Needs your decision        │ Tickets by stage                                                            │
-│▌[photo] 7 Wilson St        │ Quoting (3)        With Property Owner (1)   Ready to book (1)   Booked (3)  Done (1) │
-│  Toilet keeps running      │ ┌#12┊docket┐       ┌#9┊docket┐               ┌#7┊docket┐          ...        │
-│  High  Plumbing  2d   Review│ └──────────┘       └─────────┘               └─────────┘                     │
-│▌Owner hasn't replied 52h   │                                                                             │
-│▌Rate Drip Doctors          ├─────────────────────────────────────────────────────────────────────────────┤
-│▌Inbox: unknown sender      │ Next 7 days  today first, then the following six days (bookings as rows)  │
+│ Needs your decision        │ Next 7 days  today first, then the following six days (bookings as rows)  │
+│▌[photo] 7 Wilson St        │                                                                             │
+│  Toilet keeps running      │                                                                             │
 └────────────────────────────┴─────────────────────────────────────────────────────────────────────────────┘
  below the fold: Urgent Repairs table, Inbox detail with link/route/dismiss, all open Tickets table
 ```
 
-- Left column (360 px) "Needs your decision": one list of compact rows, each with a 4 px Wattle left stripe. Order: Maintenance Requests (oldest first), then alerts, then inbox items. A Maintenance Request row: 56 px photo thumbnail (or a "No photos" tile), address, one-line description, Urgency and Trade badges plus "Check urgency", "Flagged photos" or "No photos" flags, age, and two actions: **Confirm** (POST) and **Review** (link to `/requests/:issueId`).
-- Right column, top: "Tickets by stage", five lanes in workflow order: Quoting, With Property Owner, Ready to book, Booked, Done. A lane is a Paper tray (6 px radius, hairline) with its title and a muted count, holding white dockets. A Ticket sits in the lane of its least advanced open Job. Lanes scroll vertically inside a fixed height (about 300 px) so the board never pushes the bookings off the first frame.
-- Right column, bottom: "Next 7 days": today and the six days after it in the Agency's time zone, bookings for both Property Managers, empty days collapsed into one muted line, linking to `/calendar`. A rolling window always shows the coming work, where a Monday-to-Sunday week is often empty.
-- Phone: one column in priority order: count strip (wrapping), Needs your decision, Tickets as a list grouped by stage, Next 7 days.
+- Top, full width: "Tickets by stage", five lanes in workflow order: Quoting, With Property Owner, Ready to book, Booked, Done. A lane is a Paper tray (6 px radius, hairline) with its title and a muted count, holding white dockets. A Ticket sits in the lane of its least advanced open Job; within a lane, Urgency then reported time. From 1024 px lanes scroll vertically inside 22 rem; with no open Tickets the board is one empty state.
+- A board docket is read in the order the Property Manager reads it: the **issue** (Red Hat Text 600, 15 px, up to three lines), the **address** (13 px Slate, street and suburb on one line, the full address in its title), the perforation, then the **status**: the Urgency badge, the Trades and what the Ticket waits on ("No Quote Requests yet", "1 of 3 Quotes in", "2 Quotes to check", "Ready to choose" in Quoting; the visit time in Booked). A foot holds the number, the unread dot and the age. "2 Quotes to check" (unconfirmed Quotes in) and "Ready to choose" (two or more confirmed) get the 4 px Wattle stripe, as they wait on the Property Manager. The core works these out (`views.dashboard`); the page only renders them. On phones "Needs your decision" comes before the board.
+- Under it, left (360 px) "Needs your decision": one list of compact rows, each with a 4 px Wattle left stripe. Order: Maintenance Requests (oldest first), then alerts, then inbox items. A Maintenance Request row: 56 px photo thumbnail (or a "No photos" tile), address, one-line description, Urgency and Trade badges plus "Check urgency", "Flagged photos" or "No photos" flags, age, and two actions: **Confirm** (POST) and **Review** (link to `/requests/:issueId`).
+- Under it, right: "Next 7 days": today and the six days after it in the Agency's time zone, bookings for both Property Managers, empty days collapsed into one muted line, linking to `/calendar`. A rolling window always shows the coming work, where a Monday-to-Sunday week is often empty.
+- Phone: one column: count strip (wrapping), Tickets as a list grouped by stage (lanes stacked, no inner scroll), Needs your decision, Next 7 days.
+
+### Dispatch: the map
+
+`/dispatch` (`src/web/pages/dispatch.ts`, `static/dispatch-map.js`) shows where the Agency's Properties and Tradies are, so a Property Manager can see which Tradies are near a Property with work waiting. Leaflet 1.9.4 draws OpenStreetMap tiles; Leaflet's JS, CSS and images are served from `/assets` (`assets.ts` allowlists each file by name) so the map works offline apart from the tiles.
+
+```
+┌ pin key: ▲ Urgent  ◆ High  ● Routine  ○ No open Tickets  ■ Tradie ┐
+├──────────────────────────────────────────────┬────────────────────┤
+│ map  (24rem tall, 32rem from 1024px)         │ panel: the picked  │
+│                                              │ Property or Tradie │
+├──────────────────────────────────────────────┴────────────────────┤
+│ Properties: Address  Suburb  Open Tickets  Worst urgency           │
+├────────────────────────────────────────────────────────────────────┤
+│ Tradie schedule: Tradie × today and the next six days              │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+- **Pins.** A Property is a 32 px pin: the shape is the worst open Ticket's Urgency (triangle Urgent, diamond High, filled circle Routine, open circle none) and the number inside is how many open Tickets it has. Colours are tokens (`--urgent`, `--high`, `--muted`, `--surface` with a `--muted` outline), so colour only backs up the shape. A Tradie is a 26 px `--ink` square with the initial of the business, drawn under the Property pins. The pin key above the map names each shape in words. The picked pin gets a 3 px Harbour ring and a Harbour dashed ring of the Tradie search radius (`TRADIE_SEARCH_RADIUS_KM`, 15, in `src/geo.ts`; the Settings page will make it the Agency's own). The map fits the ring when a Property is picked.
+- **Panel, not a tooltip.** Beside the map from 1024 px, under it on phones. It shows the street address, the open Tickets (each links to `/tickets/:id`) and up to five nearest Tradies within the radius, nearest first, with distance, Trades and both ratings (myEST8 and Google, never combined). A Tradie's panel shows their ratings and bookings. Opening it moves focus to its heading; Close or Escape closes it and puts the focus back on the pin or link that opened it.
+- **Table.** The map is not usable with a keyboard or a screen reader on its own, so the table is the same information: every Property (most urgent first) with the address as a link that picks it, the suburb, the open Tickets and the worst urgency. A Property the map could not place says **Address not found** (a warning badge) and its panel says why it lists no Tradies; its address is looked up again each time the page opens (`geocodeMissing`, at most 10 Properties and 10 Tradies per visit, a failing lookup never stops the page).
+- **Keyboard.** Every pin is a focusable `role="button"` named by its address and tickets (or the Tradie's name and Trades): Tab to it, Enter or Space picks it. The map itself takes arrow keys and + / -. The scroll wheel zooms only after the map has been clicked or focused, so the page still scrolls.
+- **Without JavaScript.** The map's place says it needs JavaScript. The table and a panel per Property work: a row's link goes to its panel (`:target`). The pin key is hidden.
+- **Tradie schedule.** Rows are Tradies, columns today and the next six days in the Agency's time zone, from the same `calendar` bookings as the Calendar page. Each visit links to its Ticket and says Done, Reschedule requested or Not confirmed yet in words. Empty cells say "Nothing booked" to screen readers. There is no routing.
+- **Pin data.** The page writes one `<script type="application/json" id="dispatch-data">` block with the tile source, the radius and the pins. `<`, `>`, `&` and U+2028/9 are written as `\uXXXX`, so an address cannot close the script or open a comment. The script builds every pin with DOM calls and `textContent`, never `innerHTML`; there are no inline handlers.
+- **Tiles.** The tile URL template, attribution and maximum zoom are one value, `MAP_TILES` in `src/web/map-config.ts`, defaulting to OpenStreetMap's public tile server. OSM's tile policy is not for heavy production use: before wider use, change that one value to a provider the Agency has an account with.
+- **Where Tradies are.** A Tradie's business address is set with `setTradieAddress` and geocoded like a Property's. There is no form for it yet (the Tradie forms are owned by onboarding); the demo seed sets them.
 
 ### Landing page (`/` signed out)
 
-The front door says one thing and shows it once. A headline (Lexend 700, `clamp(36px, 5vw, 52px)`, line height 1.08, at most 620 px wide), one lead line naming who it is for, and two large (44 px) actions with the sign-up page's wording: **Create your Agency's account** (primary) and **Sign in**. No stat blocks, no feature cards, no gradients. In demo mode, the demo sign-ins sit under a hairline as plain text.
+The front door is the dispatch desk at an editorial scale, built from the same tokens (`pages/landing.ts`, styles in `static/landing.css`, loaded only there). A three-line Lexend headline: "Tenants text the problem. / You decide. / myEST8 does the chasing.", where only "You decide." carries the Wattle stripe, because Wattle means "needs your decision" everywhere. Beside it, the one bold element: a Tenant's SMS thread with the words the intake agent used for the Trade and Urgency marked in Harbour's tint (the "Filled in by AI" colour), and the resulting Maintenance Request as a decision card. Two large (44 px) actions with the sign-up page's wording: **Create your Agency's account** (primary) and **Sign in**. Then the workflow as a dispatch log (weekday times, a numbered track, a Wattle "You" chip on the Property Manager's decisions), what waits for you against what myEST8 handles, and a closing Night band like the rail. The only motion is a "now" marker stepping down the workflow, with a Pause button; under reduced motion nothing moves. No stat blocks, no gradients.
 
-```
-From a Tenant's first text to
-the finished repair.                                  headline, left aligned
-For Property Managers at small Agencies. ...          lead, 60ch
-[Create your Agency's account] [Sign in]
+**No plain text with an inline link on any public page.** Every link is a real button (`linkButton`) or sits in a nav bar. The public bar's `headerActions` are ghost small buttons: the landing page's bar has **Sign in** (ghost) and, from 640 px, **Create your Agency's account** (primary); `/login` and `/signup` carry only **Home**, so the sign-in page has exactly one control named Sign in. The sentence around a button ("Already have an account?") is plain text above it.
 
-One repair, start to finish                  [Pause]
- 1 A Tenant texts the problem       ┌───────────────────────────┐
- 2 It becomes a Maintenance Request │                           │
-▌3 The Property Manager confirms ◀──│   the stage's picture     │  band moves down
- 4 It becomes a Ticket              │   (chat bubble, row,      │  the titles
- 5 Quote Requests go to Tradies     │    docket, Quote ...)     │
- 6 A Quote comes back               │                           │
- 7 The Work Order goes out          └───────────────────────────┘
- 8 The Job is done, and the Tenant sees it
-```
+**Demo sign-ins** (demo deployments only) sit under the workflow, below a hairline, as a bordered list with one row per demo Property Manager: name and email as text, and a secondary button "Sign in as Alice Archer" (or Bob Baker). Each button is a `<form method="post" action="/login">` with hidden email, password and next fields, so one click signs in. The password is also written out as text, and none of it appears outside demo mode.
 
-- **The workflow is the page's one moving thing,** and the one exception to "motion only answers an action". It is a server-rendered `<ol>` of eight stages, so it reads in order with no CSS, no JS and in a screen reader. Each stage has a title and a small picture built from the real components (`chatBubble`, `urgencyBadge`, `docket` without `href`, `steps`). Pictures hold no links or buttons.
-- CSS plays it: each stage gets 2.6 s of a 20.8 s loop (`--i` sets its delay). A white band (4 px radius, hairline) slides down the titles; the current number fills with Harbour; the picture fades into the pane (white, 8 px radius, at least 360 px tall). At "The Property Manager confirms" the band's left edge becomes the 4 px Wattle stripe and the picture is a decision row with Confirm: the same signal a decision row has on the dashboard, so Wattle still only means "needs your decision".
-- Phones (under 768 px): the pane sits above the titles.
-- **Pause:** the loop runs longer than 5 s, so a Pause/Play button (WCAG 2.2.2) sits beside the heading. It is `hidden` in the markup and shown by app.js, which also holds the paused state (`data-paused` on the section).
-- **Less motion:** under `prefers-reduced-motion: reduce` nothing moves. Every stage shows with its picture, in two columns from 768 px, and the Pause button stays hidden.
+### Sign-in and sign-up pages (`/login`, `/signup`)
+
+Both fill the viewport (`authPage()` in `src/web/auth-card.ts`, styles in `static/auth.css`, loaded only there). From 1024 px the page splits: a full-height Night panel on the left (5/12), where the rail will sit after sign-in, with the logo in the rail's colours, the landing page's three-line thesis (Wattle stripe on "You decide.") and "What happens next" as a numbered track, one step showing a Maintenance Request decision card; the form on white on the right (7/12), in a centred column 400 px wide on sign-in and 600 px on sign-up, under a Lexend 700 h1. The panel is sticky while the sign-up form scrolls. On phones and tablets it is one column: bar, form, Night panel, Night footer. The card fading in once is the only motion, and not under reduced motion. Under the form's 44 px submit button a hairline divides it from the other way in: a muted sentence and a full-width secondary button (**Create your Agency's account** on sign-in, **Sign in** on sign-up). The sign-up page's Share sentence and button sit under that.
+
+After sign-up the onboarding wizard (`/welcome`) also fills the page, with no rail (`page({ fullPage: true })`). Its first step, connecting the Agency's email, can't be skipped: until email is connected every Property Manager page leads there (`requireEmailFirst`).
 
 ### The docket (Tickets only)
 
@@ -193,7 +222,7 @@ All of these are in `src/web/ui.ts`; pages use them instead of hand-building mar
 - **Icons** come from [Phosphor](https://phosphoricons.com) (MIT) through `icon(name, { weight?, size? })` in `src/web/icons.ts`, rendered inline in `currentColor` and always `aria-hidden`. The word beside an icon carries the meaning. Don't add another icon set or hand-draw icons.
 - **One weight: regular.** The only exception is the 14 px tick inside a done step circle, which uses bold so it doesn't thin out at that size.
 - Sizes: 18 px in the rail (`size-[18px]`), 16 px for the Phone simulator link, 20 px in alerts and flash messages (the default), 24 px for the menu button, 16 px for the user menu caret and timeline dots.
-- The app's icons: Dashboard `squares-four`, Dispatch `map-pin`, Settings `gear-six`, Phone simulator `device-mobile`, menu `list`, user menu `caret-down`, done `check-circle`, warning and error `warning-circle`, note `info`, timeline dot `circle` (fill).
+- The app's icons: Dashboard `squares-four`, Dispatch `map-pin`, Requests `tray`, Tickets `ticket`, Approvals `seal-check`, Schedule `calendar-blank`, Properties `house-line`, Tradies `wrench`, Settings `gear-six`, Phone simulator `device-mobile`, menu `list`, user menu `caret-down`, done `check-circle`, warning and error `warning-circle`, note `info`, timeline dot `circle` (fill).
 - **The logo** is `logo({ size })` in `src/web/ui.ts`: the key tag beside the wordmark. The rail and the public bar both use it; nothing else hand-builds it.
   - **The key tag:** a house-shaped tag with the key ring's hole at the top and an 8 cut out, the tag every Agency hangs on its key board. One solid shape (an even-odd path on a 256 grid, `currentColor`), so it holds at 16 px and works as an app icon as it is. It is Harbour on the white public bar and Wattle on the Night rail; Night on Wattle for an app tile.
   - **The wordmark:** "myEST8" in Lexend, "my" at 400 and "EST8" at 700, so the pun reads without decoration. Night on light, `--rail-text` on the rail.
@@ -294,13 +323,13 @@ A machine check never stands in for what a person said:
 
 ### Decisions made after the first build
 
-- **Ticket page header.** It uses `docket()` at a large size: a 26 px number in the stub. It is never hand-built, so the dashboard docket and the header stay one object at two sizes.
+- **Ticket page header.** It keeps the docket's stub, perforation and 26 px number, but it is built on the Ticket page rather than with `docket()`. It reads issue first, then the address (linked to the Property), then Tenant, status, reported and Max Repair Cost. Repair Cost shows only once it is above $0. One **Next step** line names what the Ticket waits on and links to that Job. It gets the Wattle stripe only when the step is the Property Manager's decision. Change Urgency is a small menu beside Share, not a form in the header.
 - **Routine Urgency.** Routine shows as `--muted` text with a `--line` border. Ink text would read as more urgent than it is.
 - **Decision rows.** Only rows that need a decision get the Wattle stripe. A row component takes `decision: boolean`; the stripe is never hard-coded.
 - **One-Quote rule.** The rule is visible on the Ticket page next to Choose: "Choose once two Quotes are confirmed, or give a reason to go ahead with one." Choose stays enabled. Without a reason, the server's message explains what's missing.
 - **Phone gutters.** 16 px below 1024 px.
 - **Literal colours.** No literal colour values outside the token block in `app.css`, including white. Use `var(--surface)`.
-- **Navigation (2026-10-10).** Dashboard, Dispatch and Settings, plus the demo's Phone simulator at the foot of the rail. Calendar's bookings move into Dispatch's Tradie schedule and the dashboard's week strip; the Setup pages move into Settings tabs.
+- **Navigation (2026-10-13, replacing the three-item rail of 2026-10-10).** Dashboard, Dispatch, Requests, Tickets, Approvals, Schedule, a gap, Properties, Tradies, a gap, Settings, plus the demo's Phone simulator at the foot of the rail. The user asked for each queue to have its own place, so Calendar is Schedule again rather than moving into Dispatch's Tradie schedule; the Setup pages still move into Settings tabs.
 - **The Tenant's progress tracker.** The Ticket page links to it, so a Property Manager can see what the Tenant sees.
 
 ## Copy

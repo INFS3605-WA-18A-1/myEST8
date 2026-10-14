@@ -193,7 +193,8 @@ Each external API can be pointed at a real endpoint with env vars. Anything not 
 | `VISION_API_URL`, `VISION_API_KEY`    | The photo matcher                                     |
 | `QUOTES_API_URL`, `QUOTES_API_KEY`    | The quote reader                                      |
 | `GOOGLE_MAPS_API_KEY`                 | Google Places (New) and the Geocoding API             |
-| `TWILIO_*`, `SENDGRID_*`, `FILE_LINK_SECRET`, `DEMO_SEND_TO` | Real SMS, WhatsApp and email. See [Sending real messages](#sending-real-messages) |
+| `GOOGLE_OAUTH_*`, `CHANNEL_SECRET_KEY`, `WHATSAPP_*` | Real email (Gmail) and WhatsApp. See [channels-setup.md](channels-setup.md) |
+| `TWILIO_*`, `SENDGRID_*`, `FILE_LINK_SECRET`, `DEMO_SEND_TO` | The older Twilio and SendGrid route. See [Sending real messages](#sending-real-messages) |
 | `PORT`                                | The port to listen on (default 3000)                  |
 | `PUBLIC_URL`                          | The address used in upload and tracker links (default `http://localhost:$PORT`) |
 | `SUPABASE_DB_URL`                     | The Postgres to use (default: the local one from `npm run db:start`). See [The database](#the-database) |
@@ -211,6 +212,8 @@ The stories are skipped when the classifier or quote reader is real: they rely o
 To open upload and tracker links on a real phone, set `PUBLIC_URL` to an address the phone can reach, such as your machine's LAN address (`PUBLIC_URL=http://192.168.1.20:3000`) or a tunnel.
 
 ## Sending real messages
+
+**Gmail and WhatsApp are the current route** ([ADR 0004](adr/0004-gmail-and-whatsapp-cloud-api.md)): [channels-setup.md](channels-setup.md) lists every key and account. With neither set, every channel is simulated and a new Agency is connected to the phone simulator when it signs up. The rest of this section is the older Twilio and SendGrid route, kept until it is removed.
 
 With Twilio and/or SendGrid configured, the demo really sends on those channels (`src/adapters/messenger.ts`), and still shows every message in the phone simulator. **It only really messages the addresses in `DEMO_SEND_TO`** (comma-separated phone numbers and emails, or `*` for anyone): the seeded people's numbers are made up and could belong to real people. Everyone else is simulated only.
 

@@ -63,6 +63,7 @@ async function step(name: string, fn: () => Promise<unknown>) {
 await step(`Twilio SMS to ${to} from ${from}`, async () => {
   const twilio = createTwilioMessenger({ accountSid: env('TWILIO_ACCOUNT_SID')!, authToken: env('TWILIO_AUTH_TOKEN')! });
   await twilio.send({
+    agencyId: 0,
     channelType: 'sms',
     from: from!,
     to,

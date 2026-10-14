@@ -1,12 +1,14 @@
 import type { Context, Modules, Ports } from './context.ts';
 import type { Db } from './db.ts';
 import { createFiles } from './files.ts';
+import { createGmailChannel } from './gmail-channel.ts';
+import type { GmailCredentials } from './gmail-credentials.ts';
 import { createGoogleRatingRefresh } from './google-ratings.ts';
 import { createImports, type ImportChanges, type ImportKind } from './imports.ts';
 import { createIntake } from './intake.ts';
 import { createNotifications } from './notifications.ts';
 import { createOnboarding } from './onboarding.ts';
-import type { ChannelType, Clock, InboundMessage } from './ports.ts';
+import type { ChannelType, Clock, InboundMessage, SmsNumbers } from './ports.ts';
 import { createProfiles, type SignUp } from './profiles.ts';
 import { createQuotes } from './quotes.ts';
 import { createScheduling } from './scheduling.ts';
@@ -21,7 +23,17 @@ export type Upload = { filename: string; contentType: string; content: Uint8Arra
  * The whole app behind its boundary: inbound messages, uploads through links,
  * Property Manager actions and the background worker.
  */
-export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partial<Settings> & Pick<Settings, 'baseUrl'> }) {
+export function createApp(
+  deps: Ports & {
+    db: Db;
+    clock: Clock;
+    settings: Partial<Settings> & Pick<Settings, 'baseUrl'>;
+    /** The Agencies' Gmail connections. Without them Gmail is unavailable (docs/adr/0004). */
+    gmail?: GmailCredentials | null;
+    /** Buys each Agency an SMS number. Without it SMS stays simulated (docs/adr/0005). */
+    smsNumbers?: SmsNumbers | null;
+  },
+) {
   const { db, clock } = deps;
   const settings: Settings = { ...DEFAULT_SETTINGS, ...deps.settings };
   const worker = createWorker(db, clock);
@@ -50,7 +62,8 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
   modules.quotes = createQuotes(ctx);
   modules.scheduling = createScheduling(ctx);
   createGoogleRatingRefresh(ctx);
-  const onboarding = createOnboarding(ctx);
+  const gmail = createGmailChannel(ctx, deps.gmail ?? null);
+  const onboarding = createOnboarding(ctx, deps.smsNumbers ?? null);
   const imports = createImports(ctx, onboarding);
   const views = createViews(ctx);
   const { profiles, tickets, intake, quotes, scheduling } = modules;
@@ -78,6 +91,9 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
 
     /** An upload through a no-login link: issue photos or an Urgent Repair receipt. */
     upload: (token: string, uploads: Upload[]) => intake.upload(token, uploads),
+
+    /** What a no-login upload link is for and whether it still takes files, or null for an unknown link. */
+    uploadLink: (token: string) => tickets.uploadLink(token),
 
     /** The Tenant's progress tracker, reached by its no-login link. */
     tracker: (token: string) => tickets.tracker(token),
@@ -110,8 +126,28 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
         /** A photo, receipt or PDF Quote stored for the Agency, or null. */
         file: (fileId: number) => files.getInAgency(agencyId, fileId),
         dashboard: ({ filter = 'mine' }: { filter?: 'mine' | 'all' } = {}) => views.dashboard(agencyId, propertyManagerId, filter),
+        /** The Maintenance Requests waiting for review: the Property Manager's own, or all of the Agency's. */
+        requests: ({ filter = 'mine' }: { filter?: 'mine' | 'all' } = {}) => views.requests(agencyId, propertyManagerId, filter),
+        /** One Maintenance Request waiting for review, or null. */
+        request: (issueId: number) => views.request(agencyId, issueId),
+        /** The counts on the rail, worked out once per request: Maintenance Requests to review and Quotes waiting on a Property Owner. */
+        navCounts: () => views.navCounts(agencyId, propertyManagerId),
+        /** Tickets by status (open by default) and optionally Urgency, most urgent first then oldest, with the counts for the filters. */
+        tickets: (o: { filter?: 'mine' | 'all'; status?: 'open' | 'closed'; urgency?: Urgency | null } = {}) =>
+          views.tickets(agencyId, propertyManagerId, { filter: o.filter ?? 'mine', status: o.status ?? 'open', urgency: o.urgency ?? null }),
+        /** Quotes waiting on a Property Owner over the Max Repair Cost, and Urgent Repairs waiting on a receipt. */
+        approvals: ({ filter = 'mine' }: { filter?: 'mine' | 'all' } = {}) => views.approvals(agencyId, propertyManagerId, filter),
+        propertyOverviews: () => views.propertyOverviews(agencyId),
+        property: (propertyId: number) => views.property(agencyId, propertyId),
+        tradieDirectory: () => views.tradies(agencyId),
         ticket: (ticketId: number) => views.ticket(agencyId, ticketId),
         tradie: (tradieId: number) => views.tradie(agencyId, tradieId),
+        /** The Dispatch map: the Agency's Properties with their open Tickets and its Tradies, each with where they are. */
+        dispatch: () => views.dispatch(agencyId),
+        /** Looks up again the Properties and Tradies the map couldn't place. Returns how many it placed. */
+        geocodeMissing: () => profiles.geocodeMissing(agencyId),
+        /** Sets where a Tradie works from, and places them on the map when the address is found. */
+        setTradieAddress: (tradieId: number, address: string) => profiles.setTradieAddress(agencyId, tradieId, address),
 
         // Onboarding
         /** The Agency's connected channels, with when each last passed a test message. */
@@ -119,12 +155,22 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
         /** Adds a colleague as a Property Manager. Returns their id and a temporary password to pass on, shown once. */
         addColleague: (input: { name: string; email: string }) => profiles.addColleague(agencyId, input),
         connectChannel: (channelType: ChannelType, address: string) => onboarding.connectChannel(agencyId, channelType, address),
+        /** Whether the Agency's Gmail is connected, needs reconnecting, or Gmail isn't set up on this server. */
+        gmailStatus: () => gmail.status(agencyId),
+        beginGmail: (redirectUri: string) => gmail.begin(redirectUri),
+        /** Finishes the Google sign-in and connects the Agency's email channel to that Gmail address. */
+        connectGmail: (o: Parameters<typeof gmail.connect>[1]) => gmail.connect(agencyId, o),
+        /** Gets the Agency an SMS number of its own and connects it. Returns the number. */
+        getSmsNumber: () => onboarding.getSmsNumber(agencyId),
         sendTestMessage: (channelType: ChannelType, to: string) => onboarding.sendTestMessage(agencyId, channelType, to),
+        connectSimulatedChannels: (types: ChannelType[]) => onboarding.connectSimulatedChannels(agencyId, types),
         addOwner: (input: Parameters<typeof onboarding.addOwner>[1]) => onboarding.addOwner(agencyId, input),
         addBuildingManager: (input: Parameters<typeof onboarding.addBuildingManager>[1]) => onboarding.addBuildingManager(agencyId, input),
         addTenant: (input: Parameters<typeof onboarding.addTenant>[1]) => onboarding.addTenant(agencyId, input),
         addTradie: (input: Parameters<typeof onboarding.addTradie>[1]) => onboarding.addTradie(agencyId, input),
         addProperty: (input: Parameters<typeof onboarding.addProperty>[1]) => onboarding.addProperty(agencyId, input),
+        /** Adds a Property with its Property Owner, any Building Manager and its Tenants, all or nothing. Returns their ids. */
+        addPropertyWithPeople: (input: Parameters<typeof onboarding.addPropertyWithPeople>[1]) => onboarding.addPropertyWithPeople(agencyId, input),
         findGoogleListings: (query: string) => onboarding.findGoogleListings(query),
 
         // Importing from a spreadsheet: upload, review, then add

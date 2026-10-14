@@ -1,0 +1,17 @@
+[Unit]
+Description=myEST8 live app (demo runtime, schema "live")
+After=network-online.target docker.service
+
+[Service]
+WorkingDirectory=%h/apps/myEST8
+# Real channels and the fixed PUBLIC_URL (docs/channels-setup.md). Optional: without it everything is simulated.
+EnvironmentFile=-%h/.config/myest8/live.env
+ExecStart=%h/apps/myEST8/deploy/serve.sh
+Restart=on-failure
+RestartSec=5
+# Let the app finish in-flight requests and drop its connections on stop.
+TimeoutStopSec=15
+
+# Started by the quick tunnel's unit. With the named tunnel, enable this unit too.
+[Install]
+WantedBy=default.target

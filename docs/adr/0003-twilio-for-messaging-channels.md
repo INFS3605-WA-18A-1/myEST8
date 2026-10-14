@@ -1,3 +1,5 @@
 # Twilio for all messaging channels
 
+Superseded by [ADR 0004](0004-gmail-and-whatsapp-cloud-api.md).
+
 myEST8 connects to email, SMS and WhatsApp through one provider, Twilio: Programmable Messaging for SMS and WhatsApp, and Twilio SendGrid Inbound Parse for email, where the Agency forwards its inbox. One provider means one webhook format, one account and one bill instead of three separate integrations, which matters on a 4-week timeline. The demo uses Twilio's WhatsApp sandbox, which needs no Meta business verification but only allows three pre-set templates for messages myEST8 sends first; production requires each Agency to register a WhatsApp sender and its own templates, which the onboarding guide walks them through. Because of that template limit, messages myEST8 sends outside WhatsApp's 24-hour reply window (Quote Requests, Work Orders, approval requests, reminders) go by SMS, or by email when there's no mobile number.

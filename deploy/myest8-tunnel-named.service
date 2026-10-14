@@ -1,0 +1,11 @@
+[Unit]
+Description=myEST8 Cloudflare named tunnel (fixed address)
+After=network-online.target
+
+[Service]
+ExecStart=/usr/bin/cloudflared --no-autoupdate --config %h/apps/myEST8/deploy/cloudflared.yml tunnel run
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { HOUR } from '../support/harness.ts';
 import { upload } from '../support/photos.ts';
 import { webWorld } from '../support/web.ts';
-import { confirmedQuotes, KING_ST, STRANGER, TOM, tomsTapTicket, type World } from '../support/world.ts';
+import { confirmedQuotes, jobView, KING_ST, STRANGER, TOM, tomsTapTicket, tradieQuotes, type World } from '../support/world.ts';
 
 type Web = Awaited<ReturnType<typeof webWorld>>;
 
@@ -54,9 +54,11 @@ describe('Maintenance Requests on the dashboard', () => {
     const { cookie } = await tomsTapRequest(w);
 
     const dashboard = await page(w, '/', cookie);
-    for (const text of ['The kitchen tap is dripping', KING_ST, 'No photos', 'Plumbing']) {
+    for (const text of ['The kitchen tap is dripping', '12 King St', 'No photos', 'Plumbing']) {
       expect(dashboard).toContain(text);
     }
+    // On phones the decisions come first: they are first in the page, and the board is placed above them from 1024px.
+    expect(dashboard.indexOf('id="decisions"')).toBeLessThan(dashboard.indexOf('id="tickets"'));
     const issueId = match(dashboard, /action="\/requests\/(\d+)\/confirm"/);
 
     const review = await page(w, `/requests/${issueId}`, cookie);
@@ -85,6 +87,21 @@ describe('Maintenance Requests on the dashboard', () => {
     const after = await follow(w, rejected, cookie);
     expect(after).toContain('Rejected. The Tenant has been told why.');
     expect(after).toContain('No Maintenance Requests waiting for you.');
+  });
+
+  test('an action taken on the review page or Requests list goes back there, and anywhere else goes to the dashboard', async () => {
+    const w = await webWorld();
+    const { cookie, issueId } = await tomsTapRequest(w);
+
+    const fromReview = await w.post(`/requests/${issueId}/reject`, { reason: '', return: `/requests/${issueId}` }, cookie);
+    expect(fromReview.headers.get('location')).toMatch(new RegExp(`^/requests/${issueId}\\?error=`));
+    const elsewhere = await w.post(`/requests/${issueId}/reject`, { reason: '', return: '//evil.example/requests' }, cookie);
+    expect(elsewhere.headers.get('location')).toMatch(/^\/\?error=/);
+    const sideways = await w.post(`/requests/${issueId}/reject`, { reason: '', return: '/requests/1/../../settings' }, cookie);
+    expect(sideways.headers.get('location')).toMatch(/^\/\?error=/);
+
+    const fromList = await w.post(`/requests/${issueId}/urgency`, { urgency: 'high', return: '/requests' }, cookie);
+    expect(fromList.headers.get('location')).toMatch(/^\/requests\?ok=/);
   });
 
   test('changing the Urgency to Urgent turns it into an Urgent Repair', async () => {
@@ -132,16 +149,32 @@ describe('Maintenance Request review', () => {
 });
 
 describe('Tickets on the dashboard', () => {
-  test('a Ticket with a Job being quoted sits in the Quoting lane', async () => {
+  test('a Quoting docket says what the Property Manager has to do: check the Quotes in, then choose', async () => {
     const w = await webWorld();
-    const { ticketId } = await tomsTapTicket(w);
+    const job = await tomsTapTicket(w);
     const cookie = await w.signIn();
+    const docketOf = (board: string) => board.slice(board.indexOf(`href="/tickets/${job.ticketId}"`), board.indexOf('</a>', board.indexOf(`href="/tickets/${job.ticketId}"`)));
 
     const board = await page(w, '/', cookie);
-    const start = board.indexOf('<h3 class="lane-title">Quoting</h3>');
-    const next = board.indexOf('<h3 class="lane-title">With Property Owner</h3>', start);
-    expect(start).toBeGreaterThan(-1);
-    expect(board.slice(start, next)).toContain(`href="/tickets/${ticketId}" class="docket"`);
+    expect(board).toContain('<h3 class="lane-title">Quoting</h3>');
+    expect(board).toContain('href="/tickets"');
+    expect(board).not.toContain('All open Tickets');
+    const asked = docketOf(board);
+    expect(asked).toContain('class="docket"');
+    expect(asked).toContain('No Quote Requests yet');
+    expect(asked.indexOf('The kitchen tap is dripping')).toBeLessThan(asked.indexOf(KING_ST.split(',')[0]!));
+
+    await w.alice.sendQuoteRequests(job.jobId, [w.tradies.pete.id, w.tradies.dana.id]);
+    await tradieQuotes(w, job, w.tradies.pete, '$150 Tuesday', { priceCents: 150_00 });
+    await tradieQuotes(w, job, w.tradies.dana, '$180 Tuesday', { priceCents: 180_00 });
+    const toCheck = docketOf(await page(w, '/', cookie));
+    expect(toCheck).toContain('class="docket is-decision"');
+    expect(toCheck).toContain('2 Quotes to check');
+
+    for (const quote of (await jobView(w, job)).quotes) await w.alice.confirmQuote(quote.quoteId);
+    const ready = docketOf(await page(w, '/', cookie));
+    expect(ready).toContain('class="docket is-decision"');
+    expect(ready).toContain('Ready to choose');
   });
 
   test("Bob's own list leaves out Alice's Tickets, and \"all\" shows them", async () => {
@@ -155,7 +188,7 @@ describe('Tickets on the dashboard', () => {
 
     const all = await page(w, '/?filter=all', bob);
     expect(all).toContain(`href="/tickets/${ticketId}"`);
-    expect(all).toContain('Alice Archer');
+    expect(all).toContain('href="/tickets?filter=all"');
   });
 });
 
@@ -167,6 +200,8 @@ describe('the Agency inbox', () => {
 
     const inbox = await page(w, '/', cookie);
     expect(inbox).toContain('Unknown sender');
+    // The brief row in Needs your decision points at the item and its actions below.
+    expect(inbox).toMatch(/href="#inbox-(\d+)"[\s\S]*id="inbox-\1"/);
     expect(inbox).toContain(STRANGER);
     expect(inbox).toContain('Hi, this is Tom on my work phone');
     const itemId = match(inbox, /action="\/inbox\/(\d+)\/link"/);
@@ -197,13 +232,11 @@ describe('the calendar and Tradie profiles', () => {
 
     const week = await page(w, '/calendar?week=2026-10-14', cookie);
     expect(week).toContain('Week of Monday 12 October 2026');
-    expect(week).toContain('/calendar?week=2026-10-05');
-    expect(week).toContain('/calendar?week=2026-10-19');
     const booking = week.indexOf(`href="/tickets/${job.ticketId}"`);
     expect(week.indexOf('Tuesday 13 October')).toBeLessThan(booking);
     expect(week.indexOf('Wednesday 14 October')).toBeGreaterThan(booking);
     expect(week).toContain(`href="/tradies/${w.tradies.pete.id}"`);
-    expect(week).toContain(KING_ST);
+    expect(week).toContain('12 King St');
     expect(week).toContain('Plumbing');
 
     expect(await page(w, '/calendar?week=2026-10-19', cookie)).not.toContain(KING_ST);

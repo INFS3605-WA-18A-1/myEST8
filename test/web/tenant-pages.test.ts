@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { formatWhen } from '../../src/web/ui.ts';
 import { photo } from '../support/photos.ts';
 import { webWorld } from '../support/web.ts';
-import { confirmedQuotes, OLIVIA_EMAIL, TOM, tomsTapTicket } from '../support/world.ts';
+import { confirmedQuotes, KING_ST, OLIVIA_EMAIL, TOM, tomsTapTicket } from '../support/world.ts';
 
 type WebWorld = Awaited<ReturnType<typeof webWorld>>;
 
@@ -39,9 +39,15 @@ describe('the upload page', () => {
     const form = await w.get(path);
     expect(form.status).toBe(200);
     const page = await readable(form);
-    expect(page).toContain('Upload photos or your receipt');
+    expect(page).toContain('Send photos of the issue');
+    expect(page).toContain('<span class="public-brand">Harbour Realty</span>');
+    expect(page).toContain(KING_ST);
+    expect(page).toContain('The kitchen tap is dripping');
+    expect(page).toContain('Take or choose photos');
     expect(page).toContain('enctype="multipart/form-data"');
-    expect(page).toContain('accept="image/*,application/pdf"');
+    // An issue link takes photos only, so the picker doesn't offer PDFs.
+    expect(page).toContain('accept="image/*"');
+    expect(page).toContain('id="files-chosen"');
     expect(page).toContain('Up to 10 files at a time, each under 10 MB');
     expect(page).toContain('Photos straight from your camera keep their details');
     expect(page.match(/btn-primary/g)).toHaveLength(1);
@@ -52,7 +58,7 @@ describe('the upload page', () => {
     expect((await w.alice.dashboard()).maintenanceRequests).toMatchObject([{ photos: [{ metadata: 'ok' }, { metadata: 'no_metadata' }] }]);
 
     const thanks = await readable(await w.get(`${path}?ok=2`));
-    expect(thanks).toContain("Thanks, we've got your 2 files");
+    expect(thanks).toContain('Thanks, Harbour Realty has your 2 photos');
     expect(thanks).toContain('Upload more');
 
     expect((await postFiles(w, path, [jpeg('tap-3.jpg')])).status).toBe(303);
@@ -61,9 +67,10 @@ describe('the upload page', () => {
 
   test('the thank-you state never repeats text from the address bar', async () => {
     const w = await webWorld();
-    const page = await readable(await w.get('/u/anything?ok=Your%20account%20is%20locked'));
+    const path = await tomsUploadPath(w);
+    const page = await readable(await w.get(`${path}?ok=Your%20account%20is%20locked`));
 
-    expect(page).toContain("Thanks, we've got your upload");
+    expect(page).toContain('Thanks, Harbour Realty has your upload');
     expect(page).not.toContain('Your account is locked');
   });
 
@@ -97,8 +104,12 @@ describe('the upload page', () => {
 
     const res = await postFiles(w, path, [jpeg('more.jpg')]);
 
-    expect(res.status).toBe(400);
-    expect(await res.text()).toContain('This upload link has expired');
+    expect(res.status).toBe(410);
+    const refused = await readable(res);
+    expect(refused).toContain('This link has expired');
+    expect(refused).toContain('reply to the message you got from Harbour Realty');
+    expect((await w.get(path)).status).toBe(410);
+    expect(await readable(await w.get(path))).not.toContain('enctype="multipart/form-data"');
   });
 
   test('an Urgent Repair receipt can be sent as a PDF and reaches the Property Owner', async () => {
@@ -108,20 +119,32 @@ describe('the upload page', () => {
     await h.receive(TOM, 'Water is pouring through the ceiling');
     const path = new URL(h.messenger.last(TOM)!.data.receiptLink as string).pathname;
 
-    expect((await w.get(path)).status).toBe(200);
+    const form = await w.get(path);
+    expect(form.status).toBe(200);
+    const page = await readable(form);
+    expect(page).toContain('Send your Urgent Repair receipt');
+    expect(page).toContain('Photos, or a PDF receipt');
+    expect(page).toContain('accept="image/*,application/pdf"');
+    expect(page).toContain(KING_ST);
     const res = await postFiles(w, path, [new File([new Uint8Array([1, 2])], 'receipt.pdf', { type: 'application/pdf' })]);
 
     expect(res.status).toBe(303);
     expect(h.messenger.to(OLIVIA_EMAIL)).toMatchObject([{ template: 'owner.urgent_repair_receipt', attachments: ['receipt.pdf'] }]);
   });
 
-  test('an unknown link is not found when the Tenant submits', async () => {
+  test('an unknown link says so as soon as it opens, without a form, and when submitted to', async () => {
     const w = await webWorld();
 
-    const res = await postFiles(w, '/u/not-a-real-token', [jpeg('tap.jpg')]);
+    const opened = await w.get('/u/expired-token-xyz');
+    expect(opened.status).toBe(404);
+    const page = await readable(opened);
+    expect(page).toContain("This link has expired or isn't right");
+    expect(page).toContain('ask for a new link');
+    expect(page).not.toContain('enctype="multipart/form-data"');
 
+    const res = await postFiles(w, '/u/not-a-real-token', [jpeg('tap.jpg')]);
     expect(res.status).toBe(404);
-    expect(await readable(res)).toContain("This upload link doesn't work");
+    expect(await readable(res)).toContain("This link has expired or isn't right");
   });
 });
 
@@ -134,10 +157,16 @@ describe("the Tenant's progress tracker", () => {
     const res = await w.get(path);
 
     expect(res.status).toBe(200);
-    const page = await res.text();
+    const page = await readable(res);
     expect(page).toContain('The kitchen tap is dripping');
-    for (const stage of ['Reported', 'Confirmed', 'Getting quotes', 'Approved', 'Booked', 'Done', 'Closed']) expect(page).toContain(stage);
-    expect(page).toContain('Now: Confirmed');
+    expect(page).toContain('<span class="public-brand">Harbour Realty</span>');
+    expect(page).toContain(KING_ST);
+    for (const stage of ['Reported', 'Confirmed', 'Getting quotes', 'Repair approved', 'Booked', 'Fixed']) expect(page).toContain(`${stage}<span class="sr-only">`);
+    // Done and Closed are one step for the Tenant, and the current step isn't repeated as a heading.
+    expect(page).not.toContain('>Done<span');
+    expect(page).not.toContain('>Closed<span');
+    expect(page).not.toContain('Now:');
+    expect(page).toContain('Harbour Realty has confirmed the repair and is arranging a tradie.');
   });
 
   test("shows the booked visit time in the Agency's time zone, and never a price, Quote or rating", async () => {
@@ -149,14 +178,32 @@ describe("the Tenant's progress tracker", () => {
     await w.alice.sendWorkOrder(job.jobId);
     const path = new URL(w.h.messenger.to(TOM).find((m) => m.template === 'tenant.confirmed')!.data.trackerLink as string).pathname;
 
-    const page = await (await w.get(path)).text();
+    const page = await readable(await w.get(path));
 
-    expect(page).toContain('Now: Booked');
-    expect(page).toContain(`Visit ${formatWhen(tuesday9am.toISOString(), 'Australia/Sydney')}`);
+    const when = formatWhen(tuesday9am.toISOString(), 'Australia/Sydney');
+    expect(page).toContain(`A plumber from Pete's Plumbing is booked for ${when}.`);
+    expect(page).toContain(`<p class="text-sm text-muted">Pete's Plumbing</p>`);
+    expect(page).toContain(`Visit ${when}`);
+    expect(page).toContain('Harbour Realty');
+    expect(page).toContain(KING_ST);
     expect(page).not.toContain('Sydney time');
     expect(page).not.toMatch(/\$\s?\d/);
     expect(page).not.toContain('180');
     expect(page).not.toMatch(/rating/i);
+  });
+
+  test('its read model names the Agency, the Property and who is coming, and nothing about money', async () => {
+    const w = await webWorld();
+    const job = await tomsTapTicket(w);
+    const [quote] = await confirmedQuotes(w, job, [[w.tradies.pete, 180_00, new Date('2026-10-13T09:00:00+11:00')]]);
+    await w.alice.chooseQuote(quote!.quoteId, 'Usual plumber');
+    await w.alice.sendWorkOrder(job.jobId);
+
+    const tracker = await w.h.tracker(w.h.messenger.to(TOM).find((m) => m.template === 'tenant.confirmed')!.data.trackerLink as string);
+
+    expect(tracker).toMatchObject({ agencyName: 'Harbour Realty', address: KING_ST });
+    expect(tracker.stages.find((s) => s.stage === 'booked')).toMatchObject({ reached: true, tradie: "Pete's Plumbing", trade: 'plumbing' });
+    expect(JSON.stringify(tracker)).not.toMatch(/180|Cents|rating/i);
   });
 
   test('an unknown link is not found', async () => {

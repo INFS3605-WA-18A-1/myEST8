@@ -6,6 +6,7 @@ import {
   alert,
   chatBubble,
   docket,
+  dl,
   field,
   formatAge,
   flashMessage,
@@ -20,6 +21,7 @@ import {
   steps,
   statusBadge,
   table,
+  ticketCell,
   urgencyBadge,
   type Html,
 } from '../../src/web/ui.ts';
@@ -100,16 +102,27 @@ describe('ui', () => {
     expect(out).toContain('aria-current="page"');
   });
 
+  it('gives the rail a Collapse menu button, and keeps each label as its link\'s name for the folded rail', async () => {
+    const out = await render(page({ title: 'Dashboard', pm: { name: 'Alice' }, active: 'dashboard', body: html`<p>x</p>` }));
+    expect(out).toMatch(/<button type="button" class="rail-toggle" data-rail-toggle aria-controls="rail" aria-expanded="true">/);
+    expect(out).toContain('<span class="rail-label">Collapse menu</span>');
+    expect(out).toContain('<span class="rail-label">Dashboard</span>');
+    // The folded state is set before the first paint, from this browser's choice.
+    expect(out).toContain("localStorage.getItem('rail')==='collapsed'");
+  });
+
   it('marks only the active rail link with aria-current', async () => {
     const out = await render(page({ title: 'Dispatch', pm: { name: 'Alice' }, active: 'dispatch', body: html`<p>x</p>` }));
     expect(out).toMatch(/<a href="\/dispatch" class="rail-link" aria-current="page">/);
     expect(out.match(/aria-current="page"/g)).toHaveLength(1);
   });
 
-  it('lists Dashboard, Dispatch and Settings in the rail, with the Phone simulator at its foot only in the demo', async () => {
+  it('lists every place in the rail in three groups, with the Phone simulator at its foot only in the demo', async () => {
     const out = await render(page({ title: 'Dashboard', pm: { name: 'Alice' }, active: 'dashboard', body: html`<p>x</p>` }));
     const links = [...out.matchAll(/<a href="([^"]+)" class="rail-link[^"]*"/g)].map((m) => m[1]);
-    expect(links).toEqual(['/', '/dispatch', '/settings', '/demo']);
+    expect(links).toEqual(['/', '/dispatch', '/requests', '/tickets', '/approvals', '/schedule', '/properties', '/tradies', '/settings', '/demo']);
+    expect(out.match(/<ul class="rail-nav[ "]/g)).toHaveLength(4);
+    expect(out.match(/<ul class="rail-nav rail-gap">/g)).toHaveLength(2);
     expect(out).toMatch(/<ul class="rail-nav rail-foot"><li><a href="\/demo" class="rail-link is-quiet"/);
     expect(out).toContain('Phone simulator (demo)');
     expect(out).not.toContain('href="/calendar"');
@@ -117,6 +130,14 @@ describe('ui', () => {
 
     const live = await render(page({ title: 'Dashboard', pm: { name: 'Alice' }, active: 'dashboard', body: html`<p>x</p>`, demo: false }));
     expect(live).not.toContain('href="/demo"');
+  });
+
+  it('shows a count beside a rail link only when something is waiting', async () => {
+    const out = await render(
+      page({ title: 'Dashboard', pm: { name: 'Alice' }, active: 'dashboard', body: html`<p>x</p>`, shell: { agencyName: 'Harbour Realty', today: 'Fri 9 Oct', counts: { requests: 3, approvals: 0 } } }),
+    );
+    expect(out).toMatch(/href="\/requests" class="rail-link"[^>]*>(?:(?!<\/a>)[\s\S])*rail-count num">3</);
+    expect(out).not.toMatch(/href="\/approvals" class="rail-link"[^>]*>(?:(?!<\/a>)[\s\S])*rail-count/);
   });
 
   it('shows the Agency and today in the shell, and Sign out inside the user menu', async () => {
@@ -184,6 +205,29 @@ describe('ui', () => {
     expect(out).toContain('unread messages');
     expect(out).toContain('aria-hidden="true"');
     expect(out.match(/<a /g)).toHaveLength(1);
+  });
+
+  it('reads a board docket issue first, then the address, then the status and number under the perforation', async () => {
+    const out = await render(
+      docket({
+        number: 12,
+        href: '/tickets/12',
+        urgency: 'high',
+        address: '7 Wilson St, Newtown NSW 2042',
+        issue: 'Toilet keeps running',
+        meta: [html`Plumbing`, html`Ready to choose`],
+        age: '2 days ago',
+        decision: true,
+      }),
+    );
+    expect(out.startsWith('<a href="/tickets/12" class="docket is-decision">')).toBe(true);
+    const at = (text: string) => out.indexOf(text);
+    expect(at('Toilet keeps running')).toBeLessThan(at('7 Wilson St'));
+    expect(at('7 Wilson St')).toBeLessThan(at('docket-perf'));
+    expect(at('docket-perf')).toBeLessThan(at('High'));
+    expect(at('Ready to choose')).toBeLessThan(at('#12'));
+    expect(out).toContain('line-clamp-3 docket-issue');
+    expect(out).toContain('2 days ago');
   });
 
   it('a primary link button carries the primary class, so its text stays white on the action colour', async () => {
@@ -312,6 +356,37 @@ describe('ui', () => {
     expect(out).not.toContain('align-top');
   });
 
+  it('stacks a table on phones only when asked, leaving the cell widths to app.css', async () => {
+    const out = await render(table(['Issue', 'Price'], [[html`Leak`, html`$420.00`]], { align: ['left', 'right'], stack: true }));
+    expect(out).toContain('<div class="table-frame is-stacked">');
+    expect(out).toContain('<td>Leak</td>');
+    expect(out).toContain('<td class="num text-right">$420.00</td>');
+    expect(await render(table(['Issue'], [[html`Leak`]]))).toContain('<div class="table-frame">');
+  });
+
+  it('pairs each label with its value in a facts list, escaping both', async () => {
+    const out = await render(dl([['Max Repair Cost', '$500.00'], ['Property Owner', HOSTILE]]));
+    expect(out).toMatch(/^<dl class="facts">/);
+    const rows = out.split('<div class="facts-row">').slice(1);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatch(/<dt class="facts-term">Max Repair Cost<\/dt>\s*<dd class="facts-value">\$500\.00<\/dd>/);
+    expect(out).not.toContain('<script>');
+    expect(out).toContain('&lt;script&gt;');
+  });
+
+  it('reads a Ticket cell issue first, linking to the Ticket, with a quiet number, the unread count and the address linking to the Property', async () => {
+    const out = await render(ticketCell({ ticketId: 7, issue: 'The tap drips', address: '12 King St', propertyHref: '/properties/1', unread: 2 }));
+    const issue = out.indexOf('<a href="/tickets/7" class="ticket-cell-issue">The tap drips</a>');
+    expect(issue).toBeGreaterThan(-1);
+    expect(out.indexOf('#7')).toBeGreaterThan(issue);
+    expect(out).toContain('2 unread');
+    expect(out.indexOf('<a href="/properties/1" class="ticket-cell-address">12 King St</a>')).toBeGreaterThan(issue);
+
+    const quiet = await render(ticketCell({ ticketId: 7, issue: 'The tap drips', address: '12 King St' }));
+    expect(quiet).toContain('<p class="ticket-cell-address">12 King St</p>');
+    expect(quiet).not.toContain('unread');
+  });
+
   it('renders the logo as a hidden key tag beside the wordmark, so its name is "myEST8"', async () => {
     const out = await render(logo());
     expect(out).toMatch(/^<span class="logo is-md">/);
@@ -337,8 +412,8 @@ describe('ui', () => {
   it('draws the rail, menu and message icons from Phosphor', async () => {
     const out = await render(page({ title: 'Dashboard', pm: { name: 'Alice' }, active: 'dashboard', body: alert('Check the photo', 'warning') }));
     const phosphor = /<svg (?![^>]*logo-mark)[^>]*viewBox="0 0 256 256"/g;
-    // four rail links, the menu button, the user menu caret, the alert (the logo's key tag is our own)
-    expect(out.match(phosphor)).toHaveLength(7);
+    // ten rail links (nine places and the Phone simulator), Collapse menu, the menu button, the user menu caret, the alert (the logo's key tag is our own)
+    expect(out.match(phosphor)).toHaveLength(14);
     expect(out).not.toContain('viewBox="0 0 24 24"');
     expect(out).toMatch(/class="rail-link" aria-current="page"><svg [^>]*class="size-\[18px\] shrink-0"/);
     expect(await render(flashMessage({ kind: 'ok', message: 'Saved' }))).toMatch(/<svg [^>]*viewBox="0 0 256 256"/);

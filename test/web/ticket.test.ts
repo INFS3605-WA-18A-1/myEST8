@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { formatWhen } from '../../src/web/ui.ts';
 import { webWorld } from '../support/web.ts';
-import { KING_ST, PETE, TOM, tomsTapTicket, tradieQuotes, type JobRef, type TradieRef } from '../support/world.ts';
+import { confirmedQuotes, KING_ST, PETE, TOM, tomsTapTicket, tradieQuotes, type JobRef, type TradieRef } from '../support/world.ts';
 
 const sydney = (local: string) => new Date(`${local}+11:00`);
 const TUE_9AM = sydney('2026-10-13T09:00:00');
@@ -32,6 +32,13 @@ function formPosting(page: string, pattern: RegExp) {
   const action = [...page.matchAll(/<form\b[^>]*\baction="([^"]+)"/g)].map((m) => m[1]!).find((a) => pattern.test(a));
   if (!action) throw new Error(`No form on the page posts to ${pattern}`);
   return action;
+}
+
+/** The header's Next step: its words, where it links, and whether it waits on the Property Manager. */
+function nextStepOf(page: string) {
+  const m = /<p class="ticket-next ?(is-decision)?" data-next-step>([\s\S]*?)<\/p>/.exec(page);
+  if (!m) return null;
+  return { text: visibleText(m[2]!).trim(), href: /href="([^"]+)"/.exec(m[2]!)?.[1], decision: m[1] === 'is-decision' };
 }
 
 /** Alice, signed in, looking at Tom's dripping tap Ticket. */
@@ -91,6 +98,8 @@ describe('the Ticket view', () => {
     expect(text).toContain('Routine');
     expect(text).toContain('Plumbing Job');
     expect(text).toContain('Max Repair Cost $500.00');
+    // No Repair Cost until a Quote is approved.
+    expect(text).not.toContain('Repair Cost $0.00');
     // Ranked by myEST8 rating, then Google rating, then name; the electrician isn't recommended for plumbing.
     const ranked = ['1. Drip Doctors', "2. Pete's Plumbing", "3. Nina's Plumbing", '4. Quick Pipes', '5. Flow Bros'].map((t) => text.indexOf(t));
     expect(ranked.every((at, i) => at > -1 && (i === 0 || at > ranked[i - 1]!))).toBe(true);
@@ -123,7 +132,8 @@ describe('Quote Requests', () => {
 
     expect(sent.ok).toBe('Quote Requests sent to 3 Tradies');
     expect(sent.page.text).toContain('Quote Requests sent to 3 Tradies');
-    expect(sent.page.text).toMatch(/Tradie Sent Status Pete's Plumbing .*Sent Quick Pipes .*Sent Drip Doctors .*Sent/);
+    expect(sent.page.text).toContain('3 asked: 0 quoted, 3 waiting on a reply.');
+    expect(sent.page.text).toMatch(/Pete's Plumbing No reply yet, asked just now Quick Pipes No reply yet, asked just now Drip Doctors No reply yet, asked just now/);
     expect(sent.page.text.match(/Already asked/g)).toHaveLength(3);
     expect(sent.page.text).toContain("Pete's Plumbing, Quick Pipes, Drip Doctors");
   });
@@ -154,7 +164,7 @@ describe('Quotes', () => {
     const confirmed = await submit(formPosting(read.html, /\/confirm$/), { price: '180', proposedTime: '2026-10-13T10:00' });
     expect(confirmed.ok).toBe("Quote from Pete's Plumbing confirmed at $180.00");
     expect(confirmed.page.text).toContain('Confirmed');
-    expect(confirmed.page.text).toContain(`Proposed time: ${when(sydney('2026-10-13T10:00:00'))}`);
+    expect(confirmed.page.text).toContain(`Proposed time ${when(sydney('2026-10-13T10:00:00'))}`);
     expect(confirmed.page.text).toContain('myEST8 needs two confirmed Quotes before you choose one');
 
     const choose = formPosting(confirmed.page.html, /\/choose$/);
@@ -165,7 +175,8 @@ describe('Quotes', () => {
     expect(approved.ok).toBe("Quote from Pete's Plumbing chosen and approved");
     expect(approved.page.text).toContain('Approved');
     expect(approved.page.text).toContain('Chosen with one Quote: Only plumber free this week');
-    expect(approved.page.text).toContain("Quote from Pete's Plumbing approved");
+    // Chosen and approved in one step reads as one line in the timeline.
+    expect(approved.page.text).toContain("Quote from Pete's Plumbing chosen and approved");
     expect(approved.page.text).toContain('Repair Cost $180.00');
   });
 
@@ -215,7 +226,7 @@ describe('Work Orders', () => {
 
     const asked = await open();
     expect(asked.text).toContain('The Tradie asked for another time.');
-    expect(asked.text).toContain(`From ${PETE} · SMS`);
+    expect(asked.text).toContain(`From ${PETE} by SMS`);
     expect(asked.text).toContain('Unread');
     const suggestions = await open(`${path}?suggest=${workOrderId}`);
     expect(suggestions.text).toContain('New times');
@@ -293,5 +304,103 @@ describe('changing the Ticket', () => {
     expect(closed.ok).toBe('Ticket closed. The Tenant and Property Owner have been told.');
     expect(closed.page.text).toContain('Ticket closed');
     expect(closed.page.text).not.toContain('Add another Job');
+  });
+});
+
+describe('the Next step', () => {
+  test('asks for Quote Requests first, then says who has not replied yet', async () => {
+    const { w, job, open, submit } = await tapTicket();
+
+    const fresh = await open();
+    expect(nextStepOf(fresh.html)).toEqual({ text: 'Next step Send Quote Requests', href: `#job-${job.jobId}-tradies`, decision: true });
+
+    const sent = await submit(formPosting(fresh.html, /\/quote-requests$/), { tradieIds: [w.tradies.pete.id, w.tradies.dana.id] });
+    expect(nextStepOf(sent.page.html)).toEqual({
+      text: "Next step Waiting on Quotes from Pete's Plumbing and Drip Doctors, asked just now",
+      href: `#job-${job.jobId}-requests`,
+      decision: false,
+    });
+  });
+
+  test('while Quotes need checking, names them and links to the comparison', async () => {
+    const { w, job, open, quoteFrom } = await tapTicket();
+    await quoteFrom(w.tradies.pete, 'Pete can do $150', { priceCents: 150_00 });
+    await quoteFrom(w.tradies.dana, 'Dana can do $180', { priceCents: 180_00 });
+
+    const page = await open();
+
+    expect(nextStepOf(page.html)).toEqual({
+      text: "Next step Check 2 Quotes from Pete's Plumbing and Drip Doctors",
+      href: `#job-${job.jobId}-quotes`,
+      decision: true,
+    });
+    expect(page.html).toContain(`id="job-${job.jobId}-quotes"`);
+    // Each unchecked Quote folds its correct-and-confirm form under "Check and confirm".
+    expect(page.html.match(/<details class="quote-check">\s*<summary[^>]*>Check and confirm<\/summary>/g)).toHaveLength(2);
+    expect(page.text).toContain('0 confirmed, 2 to check.');
+  });
+
+  test('with two confirmed Quotes, asks for a choice and compares them with both ratings', async () => {
+    const { w, job, open } = await tapTicket();
+    await confirmedQuotes(w, job, [
+      [w.tradies.pete, 150_00],
+      [w.tradies.dana, 180_00],
+    ]);
+
+    const page = await open();
+
+    expect(nextStepOf(page.html)).toEqual({ text: 'Next step Choose a Quote: 2 confirmed', href: `#job-${job.jobId}-quotes`, decision: true });
+    expect(page.text).toMatch(
+      /Pete's Plumbing \$150\.00 Proposed time None given Ratings myEST8 4\.0 \(1 rating\) Google 4\.8 \(120 reviews\) Confirmed Choose this Quote/,
+    );
+    expect(page.text.match(/Choose this Quote/g)).toHaveLength(2);
+    // The Quotes that came in one after another are one line in the timeline.
+    expect(page.text).toContain("Quotes received from Pete's Plumbing and Drip Doctors");
+    expect(page.text).not.toContain("Quote received from Pete's Plumbing");
+  });
+
+  test('waits on the Property Owner while they decide, then on the booked visit', async () => {
+    const owner = await tapTicket();
+    await owner.approvePete(600_00);
+    expect(nextStepOf((await owner.open()).html)).toEqual({
+      text: 'Next step Waiting on the Property Owner to approve $600.00',
+      href: `#job-${owner.job.jobId}-approval`,
+      decision: false,
+    });
+
+    const { job, open, submit, approvePete } = await tapTicket();
+    await approvePete(150_00, TUE_9AM);
+    expect(nextStepOf((await open()).html)?.text).toBe("Next step Send the Work Order to Pete's Plumbing");
+    const booked = await submit(formPosting((await open()).html, /\/work-order$/), { start: '2026-10-13T09:00', hours: 2 });
+
+    expect(nextStepOf(booked.page.html)).toEqual({
+      text: `Next step Visit ${when(TUE_9AM)} with Pete's Plumbing`,
+      href: `#job-${job.jobId}-work-order`,
+      decision: false,
+    });
+    // Once a Quote is approved the Repair Cost shows.
+    expect(booked.page.text).toContain('Repair Cost $150.00');
+  });
+
+  test('says to close the Ticket once no Job is open', async () => {
+    const { open, submit } = await tapTicket();
+
+    const cancelled = await submit(formPosting((await open()).html, /\/cancel$/));
+
+    expect(nextStepOf(cancelled.page.html)).toEqual({ text: 'Next step Close the Ticket: every Job is cancelled', href: '#close-ticket', decision: true });
+    expect(cancelled.page.html).toContain('id="close-ticket"');
+  });
+});
+
+describe('the message log', () => {
+  test('shows the latest messages with the older ones folded, and links by what they are', async () => {
+    const { open } = await tapTicket();
+
+    const { html, text } = await open();
+
+    const total = Number(/Show all (\d+) messages/.exec(text)?.[1]);
+    expect(total).toBeGreaterThan(6);
+    expect(html).toMatch(/<a class="link" href="https?:\/\/[^"]+\/u\/[^"]+"[^>]*>upload link<\/a>/);
+    expect(text).not.toMatch(/https?:\/\/\S+\/u\//);
   });
 });

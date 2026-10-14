@@ -7,10 +7,12 @@ import { html } from 'hono/html';
 import type { App } from '../../app.ts';
 import { MIN_PASSWORD_LENGTH } from '../../profiles.ts';
 import { ActionError } from '../../shared.ts';
+import { authPage, otherWay } from '../auth-card.ts';
 import { SIGNED_OUT_FOOTER, sameOrigin, signedInId, startSession, type Sessions } from '../auth.ts';
+import { simulatedChannels, type ChannelModes } from '../env.ts';
 import { text, type FormValues } from '../forms.ts';
 import { shareButton, shareUrl } from '../share.ts';
-import { button, field, publicPage, type Flash } from '../ui.ts';
+import { button, field, linkButton, type Flash } from '../ui.ts';
 import { valueOf, valuesOf, type Errors, type Values } from './onboarding-forms.ts';
 
 /** The time zones an Australian Agency can choose, by IANA name. */
@@ -27,7 +29,7 @@ export const TIME_ZONES: { value: string; label: string }[] = [
 const DEFAULT_TIME_ZONE = 'Australia/Sydney';
 
 /** GET/POST /signup. */
-export function signupRoutes(app: App, sessions: Sessions) {
+export function signupRoutes(app: App, sessions: Sessions, o: { channels?: ChannelModes | undefined } = {}) {
   const routes = new Hono();
 
   routes.get('/signup', async (c) => {
@@ -65,6 +67,8 @@ export function signupRoutes(app: App, sessions: Sessions) {
       if (error instanceof ActionError) return refused(Object.keys(error.fields).length ? { ...error.fields } : { email: error.message });
       throw error;
     }
+    // A channel with no real provider is already connected, to the phone simulator, so there is nothing to set up for it.
+    if (o.channels) await (await app.asPropertyManager(propertyManagerId)).connectSimulatedChannels(simulatedChannels(o.channels));
     await startSession(c, sessions, propertyManagerId);
     return c.redirect('/welcome', 303);
   });
@@ -81,16 +85,16 @@ function rawText(form: FormValues, name: string) {
 
 function signUpPage(o: { values?: Values; errors?: Errors; flash?: Flash; shareLink: string }) {
   const { values, errors = {} } = o;
-  return publicPage({
+  return authPage({
     title: 'Create your Agency’s account',
     subtitle: 'You become its first Property Manager. A short guide then helps you set up the rest.',
     flash: o.flash ?? null,
-    headerActions: html`<a class="link text-sm" href="/">Home</a>`,
+    size: 'signup',
     footer: SIGNED_OUT_FOOTER,
-    body: html`<form method="post" action="/signup" class="space-y-4">
-        <fieldset class="space-y-3 md:space-y-4">
-          <legend class="text-base font-semibold">About you</legend>
-          <div class="grid items-start gap-x-4 gap-y-3 md:gap-y-4 md:grid-cols-2">
+    form: html`<form method="post" action="/signup" class="au-form">
+        <fieldset class="au-fieldset">
+          <legend class="au-legend">About you</legend>
+          <div class="au-pair">
             ${field({ label: 'Your name', name: 'name', required: true, autocomplete: 'name', value: valueOf(values, 'name'), error: errors.name })}
             ${field({
               label: 'Work email',
@@ -103,7 +107,7 @@ function signUpPage(o: { values?: Values; errors?: Errors; flash?: Flash; shareL
               error: errors.email,
             })}
           </div>
-          <div class="grid items-start gap-x-4 gap-y-3 md:gap-y-4 md:grid-cols-2">
+          <div class="au-pair">
             ${field({
               label: 'Password',
               name: 'password',
@@ -116,9 +120,9 @@ function signUpPage(o: { values?: Values; errors?: Errors; flash?: Flash; shareL
             ${field({ label: 'Confirm password', name: 'confirmPassword', type: 'password', required: true, autocomplete: 'new-password', error: errors.confirmPassword })}
           </div>
         </fieldset>
-        <fieldset class="space-y-3 md:space-y-4">
-          <legend class="text-base font-semibold">Your Agency</legend>
-          <div class="grid items-start gap-x-4 gap-y-3 md:gap-y-4 md:grid-cols-2">
+        <fieldset class="au-fieldset">
+          <legend class="au-legend">Your Agency</legend>
+          <div class="au-pair">
             ${field({
               label: 'Agency name',
               name: 'agencyName',
@@ -139,13 +143,11 @@ function signUpPage(o: { values?: Values; errors?: Errors; flash?: Flash; shareL
             })}
           </div>
         </fieldset>
-        <div class="space-y-4">
-          ${button('Create account', { block: true })}
-          <p class="text-center text-sm">Already have an account? <a class="link" href="/login">Sign in</a></p>
-        </div>
+        ${button('Create account', { size: 'lg', block: true })}
       </form>
-      <aside class="signup-share" aria-label="Someone else setting up the Agency">
-        <p class="text-sm text-muted">One Property Manager creates the account, then adds the rest of the Agency from the setup guide. Is someone else doing that?</p>
+      ${otherWay({ text: 'Already have an account?', button: linkButton('Sign in', '/login', { variant: 'secondary', block: true }) })}
+      <aside class="au-share" aria-label="Someone else setting up the Agency">
+        <p class="au-other-text">One Property Manager creates the account, then adds the rest of the Agency from the setup guide. Is someone else doing that?</p>
         ${shareButton({
           title: 'Set up myEST8 for our Agency',
           text: 'Here’s the sign-up page for myEST8. One of us creates the Agency’s account, then adds the rest of us as Property Managers.',
@@ -154,5 +156,10 @@ function signUpPage(o: { values?: Values; errors?: Errors; flash?: Flash; shareL
           align: 'start',
         })}
       </aside>`,
+    steps: [
+      { text: 'Your account and your Agency are created, and you are signed in.' },
+      { text: 'The setup guide connects your Agency’s email first, then adds your team, SMS and WhatsApp, your Tradies and your first Property.' },
+      { text: 'Tenants can then text in a repair, and it reaches you as a Maintenance Request to confirm.', request: true },
+    ],
   });
 }

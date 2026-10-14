@@ -11,9 +11,22 @@ import type { HtmlEscapedString } from 'hono/utils/html';
 import { icon } from './icons.ts';
 import type { ShellInfo } from './shell.ts';
 
+/** What each role is called on screen ("Property Owner"): the same words the core uses in its refusals. */
+export { ROLE_LABEL } from '../onboarding.ts';
+
 export type Html = HtmlEscapedString | Promise<HtmlEscapedString>;
 export type Flash = { kind: 'ok' | 'error'; message: string };
-export type NavKey = 'dashboard' | 'dispatch' | 'settings' | 'simulator';
+export type NavKey =
+  | 'dashboard'
+  | 'dispatch'
+  | 'requests'
+  | 'tickets'
+  | 'approvals'
+  | 'schedule'
+  | 'properties'
+  | 'tradies'
+  | 'settings'
+  | 'simulator';
 export type Variant = 'primary' | 'secondary' | 'danger' | 'ghost';
 export type Tone = 'neutral' | 'info' | 'success' | 'warning' | 'error';
 export type FieldType =
@@ -85,26 +98,41 @@ const TAILWIND_THEME = html`<style type="text/tailwindcss">
  * The document's head. The inline script marks the page as having JavaScript
  * before the first paint, so the rail can become a drawer only when it can open.
  */
-function head(title: string): Html {
+export function head(title: string, o: { css?: string[] } = {}): Html {
   return html`<meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${title} - myEST8</title>
     <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
-    <script>document.documentElement.classList.add('js')</script>
+    <script>document.documentElement.classList.add('js');try{if(localStorage.getItem('rail')==='collapsed')document.documentElement.classList.add('rail-collapsed')}catch(e){}</script>
     <link rel="preload" href="/assets/fonts/red-hat-text-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/assets/fonts/lexend-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="/assets/daisyui.css" />
     <link rel="stylesheet" href="/assets/app.css" />
+    ${(o.css ?? []).map((file) => html`<link rel="stylesheet" href="/assets/${file}" />`)}
     <script src="/assets/tailwind.js"></script>
     ${TAILWIND_THEME}
     <script src="/assets/app.js" defer></script>`;
 }
 
-/** The three places a Property Manager works. */
-const NAV: { key: NavKey; label: string; href: string }[] = [
-  { key: 'dashboard', label: 'Dashboard', href: '/' },
-  { key: 'dispatch', label: 'Dispatch', href: '/dispatch' },
-  { key: 'settings', label: 'Settings', href: '/settings' },
+/**
+ * The places a Property Manager works, in three groups with a gap between them: the
+ * day's work (Dashboard to Schedule), what the Agency looks after (Properties and
+ * Tradies), then Settings.
+ */
+const NAV: { key: NavKey; label: string; href: string }[][] = [
+  [
+    { key: 'dashboard', label: 'Dashboard', href: '/' },
+    { key: 'dispatch', label: 'Dispatch', href: '/dispatch' },
+    { key: 'requests', label: 'Requests', href: '/requests' },
+    { key: 'tickets', label: 'Tickets', href: '/tickets' },
+    { key: 'approvals', label: 'Approvals', href: '/approvals' },
+    { key: 'schedule', label: 'Schedule', href: '/schedule' },
+  ],
+  [
+    { key: 'properties', label: 'Properties', href: '/properties' },
+    { key: 'tradies', label: 'Tradies', href: '/tradies' },
+  ],
+  [{ key: 'settings', label: 'Settings', href: '/settings' }],
 ];
 
 /** The demo's Phone simulator: not a place to work, so it sits quietly at the bottom of the rail. */
@@ -112,24 +140,33 @@ const SIMULATOR = { key: 'simulator', label: 'Phone simulator (demo)', href: '/d
 
 /** One rail link with its icon, aria-current when it is the page shown, and an optional count. */
 function railLink(item: { key: NavKey; label: string; href: string }, active: NavKey | undefined, count: number | undefined, cls = 'rail-link'): Html {
-  return html`<a href="${item.href}" class="${cls}" ${item.key === active ? html`aria-current="page"` : ''}>${NAV_ICON[item.key]}<span>${item.label}</span>${count !== undefined ? html`<span class="rail-count num">${count}</span>` : ''}</a>`;
+  return html`<a href="${item.href}" class="${cls}" ${item.key === active ? html`aria-current="page"` : ''}>${NAV_ICON[item.key]}<span class="rail-label">${item.label}${count ? html`<span class="rail-count num">${count}<span class="sr-only"> waiting</span></span>` : ''}</span></a>`;
 }
 
 /**
- * The rail: the logo, Dashboard, Dispatch and Settings with their icons (the
- * current one gets the Wattle bar and aria-current), then at the bottom the demo's
- * Phone simulator and the Agency's name. On phones it is a drawer when JavaScript
- * is on, and a block above the page otherwise.
+ * The rail: the logo and the places in NAV with their icons (the current one gets
+ * the Wattle bar and aria-current; Requests and Approvals carry a count when
+ * something is waiting), then at the bottom the demo's Phone simulator, the
+ * Collapse menu button and the Agency's name. From 1024px the button folds the
+ * rail to a strip of icons whose labels show as tooltips (app.js remembers the
+ * choice in this browser). On phones it is a drawer when JavaScript is on, and a
+ * block above the page otherwise.
  */
 function rail(active: NavKey | undefined, agencyName: string | undefined, counts: Partial<Record<NavKey, number>>, demo: boolean): Html {
   return html`<aside id="rail" class="rail" aria-label="Sections">
     <a href="/" class="rail-logo">${logo()}</a>
     <nav aria-label="Main" class="rail-menu">
       <ul class="rail-nav">
-        ${NAV.map((item) => html`<li>${railLink(item, active, counts[item.key])}</li>`)}
+        ${NAV[0]!.map((item) => html`<li>${railLink(item, active, counts[item.key])}</li>`)}
       </ul>
+      ${NAV.slice(1).map(
+        (group) => html`<ul class="rail-nav rail-gap">
+          ${group.map((item) => html`<li>${railLink(item, active, counts[item.key])}</li>`)}
+        </ul>`,
+      )}
       ${demo ? html`<ul class="rail-nav rail-foot"><li>${railLink(SIMULATOR, active, counts.simulator, 'rail-link is-quiet')}</li></ul>` : ''}
     </nav>
+    <button type="button" class="rail-toggle" data-rail-toggle aria-controls="rail" aria-expanded="true">${ICON.sidebar}<span class="rail-label">Collapse menu</span></button>
     ${agencyName ? html`<p class="rail-agency">${agencyName}</p>` : ''}
   </aside>`;
 }
@@ -195,8 +232,10 @@ export function page(o: {
   navCounts?: Partial<Record<NavKey, number>>;
   /** Whether the rail shows the Simulator link (demo deployments only). Defaults to true. */
   demo?: boolean;
+  /** Fills the page with no rail, for the onboarding wizard: the rest of the app comes after setup. */
+  fullPage?: boolean;
 }): Html {
-  const signedIn = Boolean(o.pm);
+  const withRail = Boolean(o.pm) && !o.fullPage;
   return html`<!doctype html>
     <html lang="en-AU" data-theme="${THEME}">
       <head>
@@ -204,17 +243,17 @@ export function page(o: {
       </head>
       <body>
         <a href="#main" class="skip-link">Skip to content</a>
-        <div class="app-shell ${signedIn ? 'has-rail' : ''}" data-shell>
-          ${signedIn ? rail(o.active, o.shell?.agencyName, o.navCounts ?? {}, o.demo ?? true) : ''}
+        <div class="app-shell ${withRail ? 'has-rail' : ''}" data-shell>
+          ${withRail ? rail(o.active, o.shell?.agencyName, o.navCounts ?? o.shell?.counts ?? {}, o.demo ?? true) : ''}
           <div class="app-main">
-            ${topBar(o.title, { menu: signedIn, controls: o.controls, today: o.shell?.today, pm: o.pm })}
+            ${topBar(o.title, { menu: withRail, controls: o.controls, today: o.shell?.today, pm: o.pm })}
             ${o.flash ? html`<div class="app-flash">${flashMessage(o.flash)}</div>` : ''}
             <main id="main" class="app-content">
               ${contentHead(o.subtitle, o.actions)}
               <div class="app-body-stack">${o.body}</div>
             </main>
           </div>
-          ${signedIn ? html`<div class="drawer-scrim" data-drawer-scrim></div>` : ''}
+          ${withRail ? html`<div class="drawer-scrim" data-drawer-scrim></div>` : ''}
         </div>
       </body>
     </html>`;
@@ -242,6 +281,10 @@ export function publicPage(o: {
   titleSize?: 'page' | 'hero';
   headerActions?: Html;
   footer?: Html | string;
+  /** Extra stylesheets under /assets/ for this page, after app.css: "landing.css" or "auth.css". */
+  css?: string[];
+  /** Who the page is from (a Tenant's Agency): its name leads the bar and the logo goes small at the right. */
+  brand?: string;
 }): Html {
   const width = o.width ?? (o.wide ? 'wide' : 'default');
   const widthClass = width === 'default' ? '' : `is-${width}`;
@@ -249,13 +292,15 @@ export function publicPage(o: {
   return html`<!doctype html>
     <html lang="en-AU" data-theme="${THEME}">
       <head>
-        ${head(o.title)}
+        ${head(o.title, { css: o.css ?? [] })}
       </head>
       <body>
         <a href="#main" class="skip-link">Skip to content</a>
         <header class="public-bar">
           <div class="public-bar-inner ${widthClass}">
-            <span class="logotype">${logo()}</span>
+            ${o.brand
+              ? html`<span class="public-brand">${o.brand}</span><span class="logotype ml-auto">${logo({ size: 'sm' })}</span>`
+              : html`<span class="logotype">${logo()}</span>`}
             ${o.headerActions ? html`<div class="ml-auto flex items-center gap-2">${o.headerActions}</div>` : ''}
           </div>
         </header>
@@ -490,10 +535,14 @@ export function emptyState(text: string, action?: Html): Html {
  * A data table (daisyUI table). It scrolls sideways inside its own frame on
  * phones, never the page. `caption` names it for screen readers. `align` gives each
  * column 'left' (the default) or 'right'; right-aligned figures get the tabular `num` class.
+ * `stack: true` turns each row into a block on phones (under 640px), its cells one
+ * under the other and the header hidden, for lists read row by row (the Tickets list).
  */
-export function table(headers: string[], rows: Html[][], o: { caption?: string; align?: ('left' | 'right')[] } = {}): Html {
+export function table(headers: string[], rows: Html[][], o: { caption?: string; align?: ('left' | 'right')[]; stack?: boolean } = {}): Html {
   const right = (i: number) => o.align?.[i] === 'right';
-  return html`<div class="table-frame">
+  // A stacked table sets its cells' widths in app.css, as they become blocks on phones.
+  const cellClass = (i: number) => [o.stack ? '' : 'min-w-28', right(i) ? 'num text-right' : ''].filter(Boolean).join(' ');
+  return html`<div class="table-frame${o.stack ? ' is-stacked' : ''}">
     <table class="table table-sm">
       ${o.caption ? html`<caption class="sr-only">${o.caption}</caption>` : ''}
       <thead>
@@ -502,7 +551,7 @@ export function table(headers: string[], rows: Html[][], o: { caption?: string; 
         </tr>
       </thead>
       <tbody>
-        ${rows.map((row) => html`<tr>${row.map((cell, i) => html`<td class="min-w-28${right(i) ? ' num text-right' : ''}">${cell}</td>`)}</tr>`)}
+        ${rows.map((row) => html`<tr>${row.map((cell, i) => html`<td${cellClass(i) ? html` class="${cellClass(i)}"` : ''}>${cell}</td>`)}</tr>`)}
       </tbody>
     </table>
   </div>`;
@@ -731,14 +780,19 @@ export function photoGrid(items: { src: string; caption?: Html | string; alt?: s
   </ul>`;
 }
 
-/** Label and value pairs (layout adapted from HyperUI's details lists, https://hyperui.dev/components/application/details-list). */
+/**
+ * Label and value pairs. The label column has a fixed, readable width (8 to 12rem)
+ * whatever the box's width, so a value sits next to its label rather than across a
+ * wide card; in a box narrower than about 480px the label stacks over its value.
+ * The box decides, not the screen (a container query on `.facts` in app.css).
+ */
 export function dl(items: [string, Html | string][]): Html {
-  return html`<dl class="divide-y divide-line text-sm">
+  return html`<dl class="facts">
     ${items.map(
       ([term, value]) =>
-        html`<div class="grid grid-cols-1 gap-1 py-2 first:pt-0 last:pb-0 sm:grid-cols-3 sm:gap-4">
-          <dt class="font-medium text-muted">${term}</dt>
-          <dd class="min-w-0 break-words sm:col-span-2">${value}</dd>
+        html`<div class="facts-row">
+          <dt class="facts-term">${term}</dt>
+          <dd class="facts-value">${value}</dd>
         </div>`,
     )}
   </dl>`;
@@ -759,12 +813,38 @@ export function clip(text: string, o: { lines?: 1 | 2 | 3 } = {}): Html {
 }
 
 /**
- * A Ticket as a work-order docket: a stub with the number and the Urgency badge, a
- * dashed perforation, then the address, the issue and a meta row. The whole docket
- * is one link. `street` shows in place of the full address, and the issue may wrap
- * to two lines. `size: 'large'` is the Ticket page's header (a 26px number).
- * `unread` adds the unread dot, with the words for screen readers. Without `href`
- * it is a picture of a docket, not a link (the landing page's workflow).
+ * A Ticket in a table row, read in the docket's order: the issue, which links to the
+ * Ticket, with its number quiet beside it and the unread messages as a dot and words;
+ * then the address, muted, linking to the Property when `propertyHref` is given. In a
+ * `stack` table the issue's link covers the whole row (the address stays its own link).
+ */
+export function ticketCell(o: { ticketId: number; issue: string; address?: string; propertyHref?: string; unread?: number }): Html {
+  return html`<div class="ticket-cell">
+    <p class="ticket-cell-head">
+      <a href="/tickets/${o.ticketId}" class="ticket-cell-issue">${o.issue}</a>
+      <span class="ticket-cell-number num">#${o.ticketId}</span>
+      ${o.unread ? html`<span class="ticket-cell-unread"><span class="unread-dot" aria-hidden="true"></span>${o.unread} unread</span>` : ''}
+    </p>
+    ${o.address
+      ? o.propertyHref
+        ? html`<a href="${o.propertyHref}" class="ticket-cell-address">${o.address}</a>`
+        : html`<p class="ticket-cell-address">${o.address}</p>`
+      : ''}
+  </div>`;
+}
+
+/**
+ * A Ticket as a work-order docket, read in the order a Property Manager reads it:
+ * the issue (up to three lines), the address, a dashed perforation, then the
+ * tear-off stub with the status (the Urgency badge and `meta`, such as Trades and
+ * what the Ticket waits on) and a foot with the number, the unread dot and `age`. The whole docket
+ * is one link. `street` shows in place of the full address. `decision` adds the
+ * Wattle stripe of anything waiting on the Property Manager. `unread` adds the
+ * unread dot, with the words for screen readers. Without `href` it is a picture of
+ * a docket, not a link (the landing page's workflow).
+ *
+ * `size: 'large'` is the Ticket page's header: the stub with a 26px number first,
+ * then the address and the issue, as the page is already about that one Ticket.
  */
 export function docket(o: {
   number: number;
@@ -774,23 +854,41 @@ export function docket(o: {
   street?: string;
   issue: string;
   meta: Html[];
+  age?: string;
   unread?: number;
+  decision?: boolean;
   size?: 'default' | 'large';
 }): Html {
-  const inner = html`<span class="docket-stub">
-      <span class="docket-number num">#${o.number}</span>
-      ${urgencyBadge(o.urgency)}
-    </span>
-    <span class="docket-perf" aria-hidden="true"></span>
-    <span class="docket-body">
-      ${clipped(o.street ?? o.address, 1, 'docket-address', o.address)}
-      ${clipped(o.issue, 2, 'docket-issue')}
-      <span class="docket-meta">
-        ${o.meta.map((item) => html`<span>${item}</span>`)}
-        ${o.unread ? html`<span><span class="unread-dot" aria-hidden="true"></span><span class="sr-only">unread messages</span></span>` : ''}
-      </span>
-    </span>`;
-  const cls = `docket${o.size === 'large' ? ' is-large' : ''}`;
+  const unread = o.unread
+    ? html`<span><span class="unread-dot" aria-hidden="true"></span><span class="sr-only">unread messages</span></span>`
+    : '';
+  const perf = html`<span class="docket-perf" aria-hidden="true"></span>`;
+  const inner =
+    o.size === 'large'
+      ? html`<span class="docket-stub">
+            <span class="docket-number num">#${o.number}</span>
+            ${urgencyBadge(o.urgency)}
+          </span>
+          ${perf}
+          <span class="docket-body">
+            ${clipped(o.street ?? o.address, 1, 'docket-address', o.address)}
+            ${clipped(o.issue, 2, 'docket-issue')}
+            <span class="docket-meta">${o.meta.map((item) => html`<span>${item}</span>`)}${unread}</span>
+          </span>`
+      : html`<span class="docket-body">
+            ${clipped(o.issue, 3, 'docket-issue')}
+            ${clipped(o.street ?? o.address, 1, 'docket-address', o.address)}
+          </span>
+          ${perf}
+          <span class="docket-status">
+            ${urgencyBadge(o.urgency)}
+            ${o.meta.map((item) => html`<span>${item}</span>`)}
+          </span>
+          <span class="docket-foot">
+            <span class="docket-number num">#${o.number}</span>${unread}
+            ${o.age ? html`<span class="ml-auto">${o.age}</span>` : ''}
+          </span>`;
+  const cls = `docket${o.size === 'large' ? ' is-large' : ''}${o.decision ? ' is-decision' : ''}`;
   return o.href ? html`<a href="${o.href}" class="${cls}">${inner}</a>` : html`<div class="${cls}">${inner}</div>`;
 }
 
@@ -941,12 +1039,19 @@ const ICON = {
   error: icon('warning-circle'),
   info: icon('info'),
   dot: icon('circle', { weight: 'fill', size: 'size-4' }),
+  sidebar: icon('sidebar-simple', { size: 'size-[18px]' }),
 };
 
 /** The rail's icons, 18px (the Phone simulator's 16px, as it is quieter). */
 const NAV_ICON: Record<NavKey, Html> = {
   dashboard: icon('squares-four', { size: 'size-[18px]' }),
   dispatch: icon('map-pin', { size: 'size-[18px]' }),
+  requests: icon('tray', { size: 'size-[18px]' }),
+  tickets: icon('ticket', { size: 'size-[18px]' }),
+  approvals: icon('seal-check', { size: 'size-[18px]' }),
+  schedule: icon('calendar-blank', { size: 'size-[18px]' }),
+  properties: icon('house-line', { size: 'size-[18px]' }),
+  tradies: icon('wrench', { size: 'size-[18px]' }),
   settings: icon('gear-six', { size: 'size-[18px]' }),
   simulator: icon('device-mobile', { size: 'size-4' }),
 };

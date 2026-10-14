@@ -13,7 +13,7 @@ import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
 import type { ImportKind } from '../../imports.ts';
 import { ActionError } from '../../shared.ts';
-import type { WebEnv } from '../env.ts';
+import type { ChannelModes, WebEnv } from '../env.ts';
 import { cents, formAction, list, text } from '../forms.ts';
 import { icon } from '../icons.ts';
 import { shellInfo } from '../shell.ts';
@@ -31,8 +31,10 @@ import {
   contactFields,
   contactFrom,
   fieldGrid,
+  getSmsNumber,
   googleSearchForm,
   importPanel,
+  modeChannelBody,
   searchListings,
   tradieFields,
   tradiesTable,
@@ -67,7 +69,7 @@ const AREAS = [
 ] as const;
 
 /** Onboarding under /setup: channels and test messages, Properties, people and Tradies. */
-export function setupPages() {
+export function setupPages(o: { channels?: ChannelModes | undefined } = {}) {
   const pages = new Hono<WebEnv>();
   pages.route('/', importPages());
 
@@ -88,6 +90,7 @@ export function setupPages() {
     const origin = new URL(c.req.url).origin;
     const { timeZone } = actions.agency();
     const channels = await actions.channels();
+    const gmail = o.channels?.gmail ? await actions.gmailStatus() : 'unavailable';
 
     return c.html(
       page({
@@ -102,7 +105,7 @@ export function setupPages() {
           <nav aria-label="Setup areas">
             <ul class="flex flex-wrap gap-x-4 gap-y-1 text-sm">${AREAS.map(([id, title]) => html`<li><a class="link" href="#${id}">${title}</a></li>`)}</ul>
           </nav>
-          ${section({ id: 'channels', title: 'Channels', body: channelsArea(origin, channels, timeZone, shownFor('channels')) })}
+          ${section({ id: 'channels', title: 'Channels', body: channelsArea(origin, channels, timeZone, shownFor('channels'), o.channels ? { modes: o.channels, gmail, pmEmail: pm.email } : undefined) })}
           ${section({ id: 'people', title: 'Property Owners and Building Managers', body: peopleArea(agency, shownFor) })}
           ${section({ id: 'tradies', title: 'Tradies', body: html`${await tradiesArea(c, agency, googleQuery, shownFor('tradie'))}${importForm('tradies', shownFor('import-tradies'))}` })}
           ${section({ id: 'properties', title: 'Properties', body: html`${propertiesArea(agency, pm.id, shownFor('property'))}${importForm('properties', shownFor('import-properties'))}` })}
@@ -119,6 +122,25 @@ export function setupPages() {
       if (!address) throw new ActionError('invalid', `Enter the ${channel.addressLabel}`);
       await c.var.actions.connectChannel(channel.type, address);
       return { ok: `${channel.name} connected to ${address}. Now send a test message.` };
+    }),
+  );
+
+  // The one WhatsApp number this server has (Meta's Cloud API) goes to the Agency that connects it first.
+  pages.post('/channels/whatsapp', (c) =>
+    formAction(c, '/setup?form=channels', async () => {
+      const number = o.channels?.whatsappNumber;
+      if (!number) throw new ActionError('not_found', 'WhatsApp is not set up on this server');
+      await c.var.actions.connectChannel('whatsapp', number);
+      return { ok: `WhatsApp connected to ${number}. Now send a test message.` };
+    }),
+  );
+
+  // myEST8 buys the Agency an Australian mobile number on Twilio and points its texts here.
+  pages.post('/channels/sms', (c) =>
+    formAction(c, '/setup?form=channels', async () => {
+      if (!o.channels?.smsNumbers) throw new ActionError('not_found', 'SMS numbers are not set up on this server');
+      const number = await getSmsNumber(c.var.actions);
+      return { ok: `The Agency's SMS number is ${number}. Now send a test message.` };
     }),
   );
 
@@ -168,14 +190,16 @@ export function setupPages() {
       if (!text(form, 'maxRepairCost')) throw new ActionError('invalid', 'Enter the Max Repair Cost');
       const buildingManager = text(form, 'buildingManagerId');
       const address = text(form, 'address');
-      await c.var.actions.addProperty({
+      // The same action as the welcome guide's, with people the Agency already has and the Tenants added after.
+      await c.var.actions.addPropertyWithPeople({
         address,
         suburb: text(form, 'suburb'),
-        ownerId: chosenId(form, 'ownerId', 'the Property Owner'),
+        owner: { id: chosenId(form, 'ownerId', 'the Property Owner') },
         propertyManagerId: chosenId(form, 'propertyManagerId', 'the Property Manager'),
         maxRepairCostCents: cents(form, 'maxRepairCost', 'the Max Repair Cost'),
         nominatedTradieIds: list(form, 'nominatedTradieIds').map(Number),
-        buildingManagerId: buildingManager ? Number(buildingManager) : undefined,
+        buildingManager: buildingManager ? { id: Number(buildingManager) } : null,
+        tenants: [],
       });
       return { ok: `${address} added. Now add its Tenants.` };
     }),
@@ -225,17 +249,25 @@ function importForm(kind: ImportKind, shown: Shown): Html {
   </details>`;
 }
 
-function channelsArea(origin: string, connected: AgencyChannel[], timeZone: string, shown: Shown): Html {
+function channelsArea(origin: string, connected: AgencyChannel[], timeZone: string, shown: Shown, mode?: { modes: ChannelModes; gmail: Parameters<typeof modeChannelBody>[0]['gmail']; pmEmail: string }): Html {
   return html`
-    <p class="text-sm">Tenants, Tradies and Property Owners reach the Agency by SMS, WhatsApp and email. Connect each channel, then send a test message.</p>
+    <p class="text-sm">Tenants, Tradies and Property Owners reach the Agency by SMS, WhatsApp and email.${mode ? ' Channels with no real provider on this server are simulated.' : ' Connect each channel, then send a test message.'}</p>
     ${shown.error}
     <div class="mt-4 grid gap-4 md:grid-cols-3">
-      ${CHANNELS.map((channel) => channelCard(channel, connected.find((c) => c.type === channel.type), timeZone, origin))}
+      ${CHANNELS.map((channel) => channelCard(channel, connected.find((c) => c.type === channel.type), timeZone, origin, mode))}
     </div>
   `;
 }
 
-function channelCard(channel: (typeof CHANNELS)[number], connected: AgencyChannel | undefined, timeZone: string, origin: string): Html {
+function channelCard(channel: (typeof CHANNELS)[number], connected: AgencyChannel | undefined, timeZone: string, origin: string, mode?: { modes: ChannelModes; gmail: Parameters<typeof modeChannelBody>[0]['gmail']; pmEmail: string }): Html {
+  if (mode) {
+    return subsection({
+      id: channel.type,
+      title: channel.name,
+      actions: channelChip(connected),
+      body: modeChannelBody({ channel, current: connected, modes: mode.modes, gmail: mode.gmail, pmEmail: mode.pmEmail, returnTo: '/setup', whatsappAction: '/setup/channels/whatsapp', smsAction: '/setup/channels/sms', testAction: '/setup/channels/test', timeZone }),
+    });
+  }
   return subsection({
     id: channel.type,
     title: channel.name,

@@ -3,22 +3,25 @@
 // now". Progress is read from what the Agency already has (its Property
 // Managers, channels, Properties and Tradies), never from a stored flag, so the
 // wizard can be left and picked up again, and an Agency set up through /setup
-// shows as done here too.
+// shows as done here too. The wizard fills the page, with no rail: the rest of
+// the app comes after setup.
 //
-//   1 Welcome          what we'll set up, and the Agency's details
+//   1 Email            the Agency's email inbox, with a test message (required: every
+//                      other page leads here until it is connected; see requireEmailFirst)
 //   2 Your team        colleagues as Property Managers (optional)
-//   3 Channels         SMS, WhatsApp and email, each with a test message
+//   3 Channels         SMS and WhatsApp, each with a test message
 //   4 Tradies          the Tradies the Agency already uses, so a Property can nominate them
 //   5 First Property   address, Max Repair Cost, Property Owner, Tenant, Building Manager
 //   6 Done             what's set up, and where to go next
 
-import { Hono, type Context } from 'hono';
+import { Hono, type Context, type MiddlewareHandler } from 'hono';
 import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
 import type { ImportKind } from '../../imports.ts';
 import type { ChannelType } from '../../ports.ts';
-import { ActionError, isEmail, normalizeAddress, type Role } from '../../shared.ts';
-import type { WebEnv } from '../env.ts';
+import { simulatedAddress, type PropertyWithPeopleInput } from '../../onboarding.ts';
+import { ActionError } from '../../shared.ts';
+import type { ChannelModes, WebEnv } from '../env.ts';
 import { cents, list, text, type FormValues } from '../forms.ts';
 import { shareButton } from '../share.ts';
 import { shellInfo } from '../shell.ts';
@@ -53,9 +56,11 @@ import {
   contactFields,
   contactFrom,
   fieldGrid,
+  getSmsNumber,
   googleSearchForm,
   IMPORT_NOUNS,
   importPanel,
+  modeChannelBody,
   scoped,
   searchListings,
   tradieFields,
@@ -68,13 +73,12 @@ import {
 import { TIME_ZONES } from './signup.ts';
 
 type Actions = PropertyManagerActions;
-type Person = Awaited<ReturnType<Actions['people']>>[number];
 type WizardContext = Context<WebEnv>;
 
 const STEPS = [
-  { key: 'welcome', label: 'Welcome', path: '/welcome' },
+  { key: 'email', label: 'Email', path: '/welcome' },
   { key: 'team', label: 'Your team', path: '/welcome/team' },
-  { key: 'channels', label: 'Channels', path: '/welcome/channels' },
+  { key: 'channels', label: 'SMS and WhatsApp', path: '/welcome/channels' },
   { key: 'tradies', label: 'Tradies', path: '/welcome/tradies' },
   { key: 'property', label: 'First Property', path: '/welcome/property' },
   { key: 'done', label: 'Done', path: '/welcome/done' },
@@ -82,31 +86,50 @@ const STEPS = [
 type StepKey = (typeof STEPS)[number]['key'];
 
 /** What a new Agency needs before Tenants' messages can be handled, in guide order. Adding colleagues is optional. */
-const NEEDED = ['channels', 'tradies', 'property'] as const;
+const NEEDED = ['email', 'channels', 'tradies', 'property'] as const;
 
 /** Each needed step as the "Finish setting up" banner says it. */
 const STILL_TO_DO: Record<(typeof NEEDED)[number], string> = {
-  channels: 'connect SMS, WhatsApp and email',
+  email: "connect the Agency's email",
+  channels: 'connect SMS and WhatsApp',
   property: 'add your first Property',
   tradies: 'add the Tradies you use',
 };
-
-const ROLE_LABEL: Record<Role, string> = { tenant: 'Tenant', owner: 'Property Owner', tradie: 'Tradie', building_manager: 'Building Manager' };
 
 /** How far the Agency's setup has got, read from what it has. */
 export async function setupProgress(actions: Actions) {
   const channels = await actions.channels();
   return {
+    email: channels.some((c) => c.type === 'email'),
     team: (await actions.propertyManagers()).length > 1,
-    channels: CHANNELS.every((ch) => channels.some((c) => c.type === ch.type)),
+    channels: PHONE_CHANNELS.every((ch) => channels.some((c) => c.type === ch.type)),
     property: (await actions.properties()).length > 0,
     tradies: (await actions.people('tradie')).length > 0,
   };
 }
 type Progress = Awaited<ReturnType<typeof setupProgress>>;
 
+const EMAIL = CHANNELS.find((ch) => ch.type === 'email')!;
+/** The channels on the Channels step: email has a step of its own. */
+const PHONE_CHANNELS = CHANNELS.filter((ch) => ch.type !== 'email');
+
+/** What a Property Manager may open before the Agency's email is connected: the email step and Google's sign-in. */
+const BEFORE_EMAIL = [/^\/welcome\/?$/, /^\/welcome\/email(\/|$)/, /^\/oauth\/google(\/|$)/];
+
+/**
+ * Email is not optional: until the Agency's email is connected, every Property Manager page leads to
+ * the first setup step. Mounted behind requirePropertyManager.
+ */
+export function requireEmailFirst(): MiddlewareHandler<WebEnv> {
+  return async (c, next) => {
+    const path = new URL(c.req.url).pathname;
+    if (BEFORE_EMAIL.some((allowed) => allowed.test(path))) return next();
+    if ((await c.var.actions.channels()).some((ch) => ch.type === 'email')) return next();
+    return c.redirect('/welcome', 303);
+  };
+}
+
 function isDone(key: StepKey, progress: Progress): boolean {
-  if (key === 'welcome') return true; // the Agency's details come with sign-up
   if (key === 'done') return NEEDED.every((k) => progress[k]);
   return progress[key];
 }
@@ -132,10 +155,12 @@ export async function finishSetupBanner(actions: Actions): Promise<Html> {
 }
 
 /** The wizard, mounted at /welcome behind requirePropertyManager. `demo` suggests made-up channel addresses for the phone simulator. */
-export function welcomePages(o: { demo: boolean }) {
+export function welcomePages(o: { demo: boolean; channels?: ChannelModes | undefined }) {
   const pages = new Hono<WebEnv>();
 
-  pages.get('/', async (c) => c.html(await welcomeStep(c)));
+  pages.get('/', async (c) => c.html(await emailStep(c, o)));
+  pages.post('/email', (c) => channelAction(c, connectChannel, EMAIL));
+  pages.post('/email/test', (c) => channelAction(c, sendTest, EMAIL));
 
   pages.get('/team', async (c) => c.html(await teamStep(c, {})));
   pages.post('/team', async (c) => {
@@ -152,30 +177,51 @@ export function welcomePages(o: { demo: boolean }) {
     }
   });
 
-  pages.get('/channels', async (c) => c.html(await channelsStep(c, o.demo)));
-  pages.post('/channels', (c) =>
-    channelAction(c, async (form, channel) => {
-      const address = text(form, 'address');
-      if (!address) throw new ActionError('invalid', `Enter the ${channel.addressLabel}`);
-      await c.var.actions.connectChannel(channel.type, address);
-      return `${channel.name} connected to ${address}. Now send a test message to check it works.`;
-    }),
-  );
-  pages.post('/channels/test', (c) =>
-    channelAction(c, async (form, channel) => {
-      const to = text(form, 'to');
-      if (!to) throw new ActionError('invalid', 'Enter where to send the test message');
-      try {
-        await c.var.actions.sendTestMessage(channel.type, to);
-      } catch (error) {
-        // The point of a test is to see what's wrong, so a channel or provider failure is shown, not hidden.
-        if (error instanceof ActionError) throw error;
-        throw new ActionError('invalid', `The ${channel.name} test message didn't send: ${error instanceof Error ? error.message : String(error)}`);
-      }
-      const where = o.demo ? ' In the demo it shows under "What myEST8 sent" in the phone simulator.' : ' Check that it arrived.';
-      return `Test message sent to ${to} by ${channel.name}.${where}`;
-    }),
-  );
+  pages.get('/channels', async (c) => c.html(await channelsStep(c, o)));
+  const connectChannel: ChannelFormAction = async (c, form, channel) => {
+    const address = text(form, 'address');
+    if (!address) throw new ActionError('invalid', `Enter the ${channel.addressLabel}`);
+    await c.var.actions.connectChannel(channel.type, address);
+    return `${channel.name} connected to ${address}. Now send a test message to check it works.`;
+  };
+  const sendTest: ChannelFormAction = async (c, form, channel) => {
+    const to = text(form, 'to');
+    if (!to) throw new ActionError('invalid', 'Enter where to send the test message');
+    try {
+      await c.var.actions.sendTestMessage(channel.type, to);
+    } catch (error) {
+      // The point of a test is to see what's wrong, so a channel or provider failure is shown, not hidden.
+      if (error instanceof ActionError) throw error;
+      throw new ActionError('invalid', `The ${channel.name} test message didn't send: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    const where = o.demo ? ' In the demo it shows under "What myEST8 sent" in the phone simulator.' : ' Check that it arrived.';
+    return `Test message sent to ${to} by ${channel.name}.${where}`;
+  };
+  pages.post('/channels', (c) => channelAction(c, connectChannel));
+  // The one WhatsApp number this server has (Meta's Cloud API) goes to the Agency that connects it first.
+  pages.post('/channels/whatsapp', async (c) => {
+    const number = o.channels?.whatsappNumber;
+    if (!number) return c.text('WhatsApp is not set up on this server.', 404);
+    try {
+      await c.var.actions.connectChannel('whatsapp', number);
+      return c.redirect(withFlash('/welcome/channels?channel=whatsapp', 'ok', `WhatsApp connected to ${number}. Now send a test message to check it works.`), 303);
+    } catch (error) {
+      if (!(error instanceof ActionError)) throw error;
+      return c.redirect(withFlash('/welcome/channels?channel=whatsapp', 'error', error.message), 303);
+    }
+  });
+  // myEST8 buys the Agency an Australian mobile number on Twilio and points its texts here.
+  pages.post('/channels/sms', async (c) => {
+    if (!o.channels?.smsNumbers) return c.text('SMS numbers are not set up on this server.', 404);
+    try {
+      const number = await getSmsNumber(c.var.actions);
+      return c.redirect(withFlash('/welcome/channels?channel=sms', 'ok', `The Agency's SMS number is ${number}. Now send a test message to check it works.`), 303);
+    } catch (error) {
+      if (!(error instanceof ActionError)) throw error;
+      return c.redirect(withFlash('/welcome/channels?channel=sms', 'error', error.message), 303);
+    }
+  });
+  pages.post('/channels/test', (c) => channelAction(c, sendTest));
 
   pages.get('/tradies', async (c) => c.html(await tradiesStep(c, {})));
   pages.post('/tradies', async (c) => {
@@ -193,15 +239,17 @@ export function welcomePages(o: { demo: boolean }) {
   pages.post('/property', async (c) => {
     const form = (await c.req.parseBody({ all: true })) as FormValues;
     const values = valuesOf(form);
-    const refused = async (errors: Errors, message?: string) => c.html(await propertyStep(c, { values, errors, message, showForm: true }), 400);
-    const read = await readPropertyForm(c.var.actions, form, c.var.pm.id);
-    if (!read.ok) return refused(read.errors);
+    const read = readPropertyForm(form, c.var.pm.id);
     try {
-      const propertyId = await addPropertyFrom(c.var.actions, read.input);
+      // Checks everything, then adds the Property Owner, any Building Manager, the Property and its Tenant together, or none of them.
+      const { propertyId } = await c.var.actions.addPropertyWithPeople(read.input);
       return c.redirect(`/welcome/property?added=${propertyId}`, 303);
     } catch (error) {
       if (!(error instanceof ActionError)) throw error;
-      return refused(error.fields, error.message);
+      const errors: Errors = { ...Object.fromEntries(Object.entries(error.fields).map(([f, message]) => [formField(f), message])), ...read.errors };
+      // Each refusal shows next to its field; only one about no field shows above the form.
+      const message = Object.keys(errors).length ? undefined : error.message;
+      return c.html(await propertyStep(c, { values, errors, message, showForm: true }), 400);
     }
   });
 
@@ -221,17 +269,22 @@ async function wizardPage(
   const index = STEPS.findIndex((s) => s.key === o.step);
   const back = STEPS[index - 1];
   const forward = STEPS[index + 1];
-  // A step not done yet moves on with "Skip for now"; a done one with "Continue".
+  // A step not done yet moves on with "Skip for now"; a done one with "Continue". Email can't be skipped.
+  const done = isDone(o.step, progress);
   const onward = forward
-    ? isDone(o.step, progress)
-      ? linkButton(o.step === 'welcome' ? "Let's start" : 'Continue', forward.path, { variant: 'primary' })
-      : linkButton('Skip for now', forward.path, { variant: 'ghost' })
+    ? done
+      ? linkButton('Continue', forward.path, { variant: 'primary' })
+      : o.step === 'email'
+        ? ''
+        : linkButton('Skip for now', forward.path, { variant: 'ghost' })
     : '';
+  // Leaving for the dashboard waits for email too.
+  const leave = progress.email ? linkButton('Set up later', '/', { variant: 'ghost' }) : '';
   return page({
     title: o.title,
     subtitle: html`<span class="flex flex-wrap gap-x-4"><span>Step ${index + 1} of ${STEPS.length}</span><span>Setting up ${actions.agency().name}</span></span>`,
     pm,
-    active: 'settings',
+    fullPage: true,
     shell: shellInfo(c),
     flash: o.flash ?? null,
     body: html`<div class="mx-auto flex w-full max-w-[720px] flex-col gap-4">
@@ -243,44 +296,42 @@ async function wizardPage(
       </nav>
       ${o.body}
       <div class="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
-        ${back ? linkButton('Back', back.path, { variant: 'secondary' }) : html`<a class="link text-sm" href="/">Set up later</a>`}
+        ${back ? linkButton('Back', back.path, { variant: 'secondary' }) : leave}
         <div class="flex flex-wrap items-center gap-2">${onward}</div>
       </div>
     </div>`,
   });
 }
 
-// 1 Welcome
+// 1 Email
 
-async function welcomeStep(c: WizardContext): Promise<Html> {
+async function emailStep(c: WizardContext, o: { demo: boolean; channels?: ChannelModes | undefined }): Promise<Html> {
   const { actions, pm } = c.var;
   const agency = actions.agency();
-  const zone = TIME_ZONES.find((z) => z.value === agency.timeZone)?.label ?? agency.timeZone;
+  const progress = await setupProgress(actions);
+  const flash = flashFrom(c.req.url);
   return wizardPage(c, {
-    step: 'welcome',
+    step: 'email',
     title: `Welcome to myEST8, ${firstName(pm.name)}`,
+    progress,
     body: html`
       <p>
-        Let's get ${agency.name} ready for its first maintenance message. It takes about 5 minutes. You can skip any step and come back to it: what
-        you add is saved as you go.
+        Let's get ${agency.name} ready for its first maintenance message. It takes about 5 minutes, and what you add is saved as you go.
+        ${progress.email
+          ? html`Email is connected: carry on with the rest, or skip any of it and come back later.`
+          : html`<strong>First, connect the Agency's email.</strong> Tenants, Tradies and Property Owners reach you there, and myEST8 replies from it, so
+              it comes before everything else.`}
       </p>
-      ${card({
-        title: "What we'll set up",
-        body: html`<ol class="ml-5 list-decimal space-y-2">
-          <li><strong>Your team.</strong> Add the other Property Managers so each has their own sign-in. Optional.</li>
-          <li><strong>Channels.</strong> Connect the SMS number, WhatsApp and email inbox Tenants already use, and test each one.</li>
+      <div id="email">${card({ title: 'Email', body: await channelRow(c, o, EMAIL, flash, true) })}</div>
+      <details class="text-sm">
+        <summary class="cursor-pointer font-semibold">What comes after email</summary>
+        <ol class="mt-2 ml-5 list-decimal space-y-1">
+          <li><strong>Your team.</strong> The other Property Managers, each with their own sign-in. Optional.</li>
+          <li><strong>SMS and WhatsApp.</strong> The numbers Tenants text and message, each with a test message.</li>
           <li><strong>Tradies.</strong> The Tradies you already use, with their Trades and a starting rating.</li>
           <li><strong>Your first Property.</strong> Its address, Max Repair Cost, Property Owner and Tenant.</li>
-        </ol>`,
-      })}
-      ${card({
-        title: 'Your Agency',
-        body: dl([
-          ['Agency', agency.name],
-          ['Time zone', zone],
-          ['First Property Manager', html`${pm.name} <span class="text-muted">(${pm.email})</span>`],
-        ]),
-      })}
+        </ol>
+      </details>
     `,
   });
 }
@@ -356,100 +407,121 @@ async function teamStep(c: WizardContext, o: { added?: { name: string; email: st
 
 // 3 Channels
 
-/** Runs a channel form's action; back to its card with the result. */
-async function channelAction(c: WizardContext, action: (form: FormValues, channel: (typeof CHANNELS)[number]) => string | Promise<string>) {
+type Channel = (typeof CHANNELS)[number];
+type ChannelFormAction = (c: WizardContext, form: FormValues, channel: Channel) => string | Promise<string>;
+
+/** Runs a channel form's action; back to its row with the result. `only` is the email step's channel, which isn't posted. */
+async function channelAction(c: WizardContext, action: ChannelFormAction, only?: Channel) {
   const form = (await c.req.parseBody({ all: true })) as FormValues;
-  let channel: (typeof CHANNELS)[number];
+  let channel: Channel;
   try {
-    channel = channelOf(form);
+    channel = only ?? channelOf(form);
   } catch (error) {
     if (error instanceof ActionError) return c.redirect(withFlash('/welcome/channels', 'error', error.message), 303);
     throw error;
   }
-  const back = `/welcome/channels?channel=${channel.type}`;
+  const back = channel.type === 'email' ? '/welcome?channel=email' : `/welcome/channels?channel=${channel.type}`;
   try {
-    return c.redirect(`${withFlash(back, 'ok', await action(form, channel))}#${channel.type}`, 303);
+    return c.redirect(`${withFlash(back, 'ok', await action(c, form, channel))}#${channel.type}`, 303);
   } catch (error) {
     if (error instanceof ActionError) return c.redirect(`${withFlash(back, 'error', error.message)}#${channel.type}`, 303);
     throw error;
   }
 }
 
-async function channelsStep(c: WizardContext, demo: boolean): Promise<Html> {
-  const { actions, pm } = c.var;
-  const agency = actions.agency();
-  const connected = await actions.channels();
+async function channelsStep(c: WizardContext, o: { demo: boolean; channels?: ChannelModes | undefined }): Promise<Html> {
+  const { demo, channels: modes } = o;
+  const agency = c.var.actions.agency();
+  const connected = (await c.var.actions.channels()).filter((ch) => ch.type !== 'email');
   const flash = flashFrom(c.req.url);
   const flashChannel = c.req.query('channel');
-  const origin = new URL(c.req.url).origin;
   const tested = connected.filter((ch) => ch.testedAt).length;
-  const rowForm = 'mt-2 grid items-end gap-3 md:grid-cols-[minmax(0,1fr)_auto]';
   return wizardPage(c, {
     step: 'channels',
-    title: 'Channels',
+    title: 'SMS and WhatsApp',
     // A channel's own result shows in its row; anything else at the top.
     flash: flash && !CHANNELS.some((ch) => ch.type === flashChannel) ? flash : null,
     body: html`
       <p>
-        Tenants, Tradies and Property Owners reach ${agency.name} by SMS, WhatsApp and email. Connect each one, then send yourself a test message.${demo ? ' In the demo nothing is really sent, and the addresses work with the phone simulator.' : ''}
+        Tenants, Tradies and Property Owners also reach ${agency.name} by SMS and WhatsApp.${modes ? ' Channels with no real provider on this server are simulated, and work with the phone simulator.' : ' Connect each one, then send yourself a test message.'}${demo && !modes ? ' In the demo nothing is really sent, and the addresses work with the phone simulator.' : ''}
       </p>
-      <p class="text-sm text-muted">${connected.length} of ${CHANNELS.length} connected, ${tested} tested.</p>
+      <p class="text-sm text-muted">${connected.length} of ${PHONE_CHANNELS.length} connected, ${tested} tested.</p>
       <div class="flex flex-col gap-4">
-        ${CHANNELS.map((channel) => {
-          const current = connected.find((ch) => ch.type === channel.type);
-          const suggestion = demo ? demoAddress(channel.type, agency) : '';
-          return html`<div id="${channel.type}" class="grid gap-2 border-t border-line pt-4 first:border-t-0 first:pt-0 md:grid-cols-[9rem_minmax(0,1fr)]">
-            <div>
-              <h2 class="section-title">${channel.name}</h2>
-              <p class="mt-1">${channelBadge(current)}</p>
-            </div>
-            <div class="min-w-0">
-              ${flash && flashChannel === channel.type ? flashMessage(flash) : ''}
-              ${current ? channelLine(current, agency.timeZone) : ''}
-              <form method="post" action="/welcome/channels" class="${rowForm}">
-                <input type="hidden" name="type" value="${channel.type}" />
-                ${field({
-                  label: channel.addressLabel,
-                  name: 'address',
-                  id: `${channel.type}-address`,
-                  type: channel.inputType,
-                  required: true,
-                  value: current?.address ?? suggestion,
-                  placeholder: channel.placeholder,
-                })}
-                ${button(current ? `Change ${channel.name}` : `Connect ${channel.name}`, { size: 'sm', variant: current ? 'secondary' : 'primary' })}
-              </form>
-              ${current
-                ? html`<form method="post" action="/welcome/channels/test" class="${rowForm}">
-                    <input type="hidden" name="type" value="${channel.type}" />
-                    ${field({
-                      label: channel.type === 'email' ? 'Send a test email to' : 'Send a test message to',
-                      name: 'to',
-                      id: `${channel.type}-to`,
-                      type: channel.inputType,
-                      required: true,
-                      value: channel.type === 'email' ? pm.email : '',
-                      placeholder: channel.type === 'email' ? 'you@youragency.com.au' : 'Your mobile, like 0412 345 678',
-                    })}
-                    ${button('Send a test message', { variant: current.testedAt ? 'secondary' : 'primary', size: 'sm' })}
-                  </form>`
-                : ''}
-              <div class="mt-2">${channelGuide(channel.type, origin)}</div>
-            </div>
-          </div>`;
-        })}
+        ${await Promise.all(
+          PHONE_CHANNELS.map(
+            async (channel) => html`<div id="${channel.type}" class="grid gap-2 border-t border-line pt-4 first:border-t-0 first:pt-0 md:grid-cols-[9rem_minmax(0,1fr)]">
+              <div>
+                <h2 class="section-title">${channel.name}</h2>
+                <p class="mt-1">${channelBadge(connected.find((ch) => ch.type === channel.type))}</p>
+              </div>
+              <div class="min-w-0">${await channelRow(c, o, channel, flashChannel === channel.type ? flash : null)}</div>
+            </div>`,
+          ),
+        )}
       </div>
     `,
   });
 }
 
-/** A made-up channel address for a demo Agency, unique to it: channel addresses can belong to only one Agency. */
-function demoAddress(type: ChannelType, agency: { id: number; name: string }) {
-  if (type === 'email') {
-    const slug = agency.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'agency';
-    return `inbox@${slug}-${agency.id}.example`;
+/**
+ * One channel's controls: its result, then connecting it (as the server's channel modes say, or by typing
+ * the address) and sending a test message. Email's forms post to the email step's own routes.
+ */
+async function channelRow(c: WizardContext, o: { demo: boolean; channels?: ChannelModes | undefined }, channel: Channel, flash: Flash | null, badge = false): Promise<Html> {
+  const { actions, pm } = c.var;
+  const modes = o.channels;
+  const agency = actions.agency();
+  const current = (await actions.channels()).find((ch) => ch.type === channel.type);
+  const email = channel.type === 'email';
+  const connectAction = email ? '/welcome/email' : '/welcome/channels';
+  const testAction = email ? '/welcome/email/test' : '/welcome/channels/test';
+  const rowForm = 'mt-2 grid items-end gap-3 md:grid-cols-[minmax(0,1fr)_auto]';
+  const result = html`${badge ? html`<p class="mb-2">${channelBadge(current)}</p>` : ''}${flash ? flashMessage(flash) : ''}`;
+  if (modes) {
+    const gmail = modes.gmail ? await actions.gmailStatus() : 'unavailable';
+    return html`${result}${modeChannelBody({
+      channel,
+      current,
+      modes,
+      gmail,
+      pmEmail: pm.email,
+      returnTo: email ? '/welcome' : '/welcome/channels',
+      whatsappAction: '/welcome/channels/whatsapp',
+      smsAction: '/welcome/channels/sms',
+      testAction,
+      timeZone: agency.timeZone,
+    })}`;
   }
-  return `+61 2 9100 ${String(agency.id).padStart(4, '0')}`;
+  return html`${result}${current ? channelLine(current, agency.timeZone) : ''}
+    <form method="post" action="${connectAction}" class="${rowForm}">
+      <input type="hidden" name="type" value="${channel.type}" />
+      ${field({
+        label: channel.addressLabel,
+        name: 'address',
+        id: `${channel.type}-address`,
+        type: channel.inputType,
+        required: true,
+        value: current?.address ?? (o.demo ? simulatedAddress(channel.type, agency) : ''),
+        placeholder: channel.placeholder,
+      })}
+      ${button(current ? `Change ${channel.name}` : `Connect ${channel.name}`, { size: 'sm', variant: current ? 'secondary' : 'primary' })}
+    </form>
+    ${current
+      ? html`<form method="post" action="${testAction}" class="${rowForm}">
+          <input type="hidden" name="type" value="${channel.type}" />
+          ${field({
+            label: email ? 'Send a test email to' : 'Send a test message to',
+            name: 'to',
+            id: `${channel.type}-to`,
+            type: channel.inputType,
+            required: true,
+            value: email ? pm.email : '',
+            placeholder: email ? 'you@youragency.com.au' : 'Your mobile, like 0412 345 678',
+          })}
+          ${button('Send a test message', { variant: current.testedAt ? 'secondary' : 'primary', size: 'sm' })}
+        </form>`
+      : ''}
+    <div class="mt-2">${channelGuide(channel.type, new URL(c.req.url).origin)}</div>`;
 }
 
 // 4 Tradies
@@ -489,30 +561,14 @@ async function tradiesStep(c: WizardContext, o: { values?: Values; errors?: Erro
 
 // 5 First Property
 
-type PropertyInput = {
-  address: string;
-  suburb: string;
-  maxRepairCostCents: number;
-  propertyManagerId: number;
-  nominatedTradieIds: number[];
-  owner: { name: string; mobile?: string; email?: string; existing: Person | null };
-  tenant: { name: string; mobile?: string; email?: string; tenancyStart: string };
-  buildingManager: { name: string; mobile?: string; email?: string; existing: Person | null } | null;
-};
-
 /**
- * Checks the whole form before anything is created, so a refusal never leaves a
- * Property Owner or Property half added. A Property Owner or Building Manager
- * whose mobile or email the Agency already has is reused, not added twice.
+ * The form as the core's addPropertyWithPeople takes it, with the one check the
+ * core can't make: reading the Max Repair Cost as dollars. An unreadable amount
+ * goes in as NaN, so the core refuses it too and every other field is still checked.
  */
-async function readPropertyForm(actions: Actions, form: FormValues, myId: number): Promise<{ ok: true; input: PropertyInput } | { ok: false; errors: Errors }> {
+function readPropertyForm(form: FormValues, myId: number): { input: PropertyWithPeopleInput; errors: Errors } {
   const errors: Errors = {};
-  const address = text(form, 'address');
-  const suburb = text(form, 'suburb');
-  if (!address) errors.address = 'Enter the address';
-  if (!suburb) errors.suburb = 'Enter the suburb';
-
-  let maxRepairCostCents = 0;
+  let maxRepairCostCents = Number.NaN;
   if (!text(form, 'maxRepairCost')) errors.maxRepairCost = 'Enter the Max Repair Cost';
   else {
     try {
@@ -521,113 +577,29 @@ async function readPropertyForm(actions: Actions, form: FormValues, myId: number
       errors.maxRepairCost = 'Enter the Max Repair Cost in dollars, like 500';
     }
   }
-
-  const managers = await actions.propertyManagers();
-  const chosenManager = Number(text(form, 'propertyManagerId') || myId);
-  if (!managers.some((m) => m.id === chosenManager)) errors.propertyManagerId = 'Choose a Property Manager in your Agency';
-
-  const tradies = await actions.people('tradie');
-  const nominatedTradieIds = list(form, 'nominatedTradieIds').map(Number);
-  if (nominatedTradieIds.some((id) => !tradies.some((t) => t.id === id))) errors.nominatedTradieIds = 'Choose Tradies from the list';
-
-  // Who already has each mobile and email, so nobody is added twice.
-  const holders = new Map<string, Person>();
-  for (const person of (await actions.people())) {
-    for (const a of [person.mobile, person.email]) if (a) holders.set(normalizeAddress(a), person);
-  }
-  const usedInForm = new Map<string, string>();
-
-  /** Checks one person's contact; returns the existing person to reuse, if any. */
-  function checkContact(scope: string, label: string, role: Role, reuse: boolean): Person | null {
-    const contact = contactFrom(form, scope);
-    const at = (f: string) => scoped(scope, f);
-    if (!contact.name) errors[at('name')] = `Enter the ${label}'s name`;
-    if (!contact.mobile && !contact.email) errors[at('mobile')] = 'Enter a mobile number or email address';
-    if (contact.mobile && !/^\+?\d{8,15}$/.test(normalizeAddress(contact.mobile))) errors[at('mobile')] = 'Enter a mobile number, like 0412 345 678';
-    if (contact.email && !isEmail(contact.email)) errors[at('email')] = `${contact.email} isn't an email address`;
-    let existing: Person | null = null;
-    for (const [f, value] of [['mobile', contact.mobile], ['email', contact.email]] as const) {
-      if (!value || errors[at(f)]) continue;
-      const key = normalizeAddress(value);
-      const other = usedInForm.get(key);
-      if (other) {
-        errors[at(f)] = `${value} is also the ${other}'s. Each person needs their own.`;
-        continue;
-      }
-      usedInForm.set(key, label);
-      const holder = holders.get(key);
-      if (!holder) continue;
-      if (reuse && holder.role === role && (!existing || existing.id === holder.id)) existing = holder;
-      else errors[at(f)] = `${value} already belongs to ${holder.name}, a ${ROLE_LABEL[holder.role]}`;
-    }
-    return existing;
-  }
-
-  const ownerExisting = checkContact('owner', 'Property Owner', 'owner', true);
-  const tenantContact = contactFrom(form, 'tenant');
-  checkContact('tenant', 'Tenant', 'tenant', false);
-  const tenancyStart = text(form, 'tenancyStart');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(tenancyStart) || Number.isNaN(Date.parse(tenancyStart))) errors.tenancyStart = 'Enter the date the tenancy started';
-
-  const bm = contactFrom(form, 'buildingManager');
-  const hasBuildingManager = !!(bm.name || bm.mobile || bm.email);
-  const bmExisting = hasBuildingManager ? checkContact('buildingManager', 'Building Manager', 'building_manager', true) : null;
-
-  if (Object.keys(errors).length) return { ok: false, errors };
+  const buildingManager = contactFrom(form, 'buildingManager');
   return {
-    ok: true,
+    errors,
     input: {
-      address,
-      suburb,
+      address: text(form, 'address'),
+      suburb: text(form, 'suburb'),
       maxRepairCostCents,
-      propertyManagerId: chosenManager,
-      nominatedTradieIds,
-      owner: { ...contactFrom(form, 'owner'), existing: ownerExisting },
-      tenant: { ...tenantContact, tenancyStart },
-      buildingManager: hasBuildingManager ? { ...bm, existing: bmExisting } : null,
+      propertyManagerId: Number(text(form, 'propertyManagerId') || myId),
+      nominatedTradieIds: list(form, 'nominatedTradieIds').map(Number),
+      owner: contactFrom(form, 'owner'),
+      // The Building Manager is optional: left blank, there is none.
+      buildingManager: buildingManager.name || buildingManager.mobile || buildingManager.email ? buildingManager : null,
+      tenants: [{ ...contactFrom(form, 'tenant'), tenancyStart: text(form, 'tenancyStart') }],
     },
   };
 }
 
-/** Adds the Property Owner (unless reused), any Building Manager, the Property, then its Tenant. Returns the Property's id. */
-async function addPropertyFrom(actions: Actions, input: PropertyInput): Promise<number> {
-  const { existing: owner, ...newOwner } = input.owner;
-  const ownerId = owner?.id ?? (await within('owner', () => actions.addOwner(newOwner)));
-  let buildingManagerId: number | undefined;
-  if (input.buildingManager) {
-    const { existing, ...newBuildingManager } = input.buildingManager;
-    buildingManagerId = existing?.id ?? (await within('buildingManager', () => actions.addBuildingManager(newBuildingManager)));
-  }
-  const propertyId = await actions
-    .addProperty({
-      address: input.address,
-      suburb: input.suburb,
-      ownerId,
-      propertyManagerId: input.propertyManagerId,
-      maxRepairCostCents: input.maxRepairCostCents,
-      nominatedTradieIds: input.nominatedTradieIds,
-      buildingManagerId,
-    })
-    .catch((error: unknown) => {
-      throw renamed(error, { maxRepairCostCents: 'maxRepairCost' });
-    });
-  await within('tenant', () => actions.addTenant({ ...input.tenant, propertyId }), { tenancyStart: 'tenancyStart' });
-  return propertyId;
-}
-
-/** Runs one action for a person in the form, naming any refused field the way the form posts it ("ownerMobile"). */
-async function within<T>(scope: string, action: () => T | Promise<T>, keep: Record<string, string> = {}): Promise<T> {
-  try {
-    return await action();
-  } catch (error) {
-    throw renamed(error, { name: scoped(scope, 'name'), mobile: scoped(scope, 'mobile'), email: scoped(scope, 'email'), ...keep });
-  }
-}
-
-function renamed(error: unknown, names: Record<string, string>): unknown {
-  if (!(error instanceof ActionError)) return error;
-  const fields = Object.fromEntries(Object.entries(error.fields).map(([f, message]) => [names[f] ?? f, message]));
-  return new ActionError(error.code, error.message, fields);
+/** The form's name for a field the core names: "owner.mobile" -> "ownerMobile", "tenants.0.name" -> "tenantName". */
+function formField(field: string): string {
+  if (field === 'maxRepairCostCents') return 'maxRepairCost';
+  const [scope, ...rest] = field.split('.');
+  if (scope === 'tenants') return rest[1] === 'tenancyStart' ? 'tenancyStart' : scoped('tenant', rest[1] ?? 'name');
+  return rest[0] ? scoped(scope, rest[0]) : field;
 }
 
 async function propertyStep(c: WizardContext, o: { values?: Values; errors?: Errors; message?: string; showForm?: boolean }): Promise<Html> {
@@ -835,7 +807,7 @@ async function doneStep(c: WizardContext, demo: boolean): Promise<Html> {
       return {
         done: !!current?.testedAt,
         text: current ? (current.testedAt ? `${ch.name} connected to ${current.address} and tested` : `${ch.name} connected to ${current.address}, not tested yet`) : `${ch.name} not connected`,
-        fix: [current ? 'Send a test message' : `Connect ${ch.name}`, `/welcome/channels#${ch.type}`] as [string, string],
+        fix: [current ? 'Send a test message' : `Connect ${ch.name}`, ch.type === 'email' ? '/welcome#email' : `/welcome/channels#${ch.type}`] as [string, string],
       };
     }),
     { done: progress.tradies, text: progress.tradies ? count(tradies.length, 'Tradie') : 'No Tradies yet', fix: ['Add Tradies', '/welcome/tradies'] },
@@ -862,11 +834,11 @@ async function doneStep(c: WizardContext, demo: boolean): Promise<Html> {
         title: 'Your setup',
         body: html`<ul class="space-y-1" aria-label="Setup checklist">
           ${items.map(
-            (item) => html`<li class="flex items-start gap-3 text-sm">
+            (item) => html`<li class="flex items-center gap-3 text-sm">
               <span class="${item.done ? 'text-done' : 'text-muted'} w-4 shrink-0 text-center font-semibold" aria-hidden="true">${item.done ? '✓' : '–'}</span>
               <span class="sr-only">${item.done ? 'Done: ' : 'To do: '}</span>
               <span class="min-w-0 flex-1">${item.text}</span>
-              ${!item.done && item.fix ? html`<a class="link text-sm" href="${item.fix[1]}">${item.fix[0]}</a>` : ''}
+              ${!item.done && item.fix ? linkButton(item.fix[0], item.fix[1], { size: 'sm' }) : ''}
             </li>`,
           )}
         </ul>`,

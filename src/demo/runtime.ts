@@ -1,18 +1,22 @@
 // The whole app wired for a demo: a database (a throwaway Postgres schema, or
 // the schema named by DATABASE_SCHEMA so it survives restarts), the in-process mock APIs (or real
 // ones, from env vars), a simulated messenger (that also sends for real through
-// Twilio and SendGrid when their env vars are set), a movable clock, and the
-// seeded Agency.
+// Gmail, WhatsApp, Twilio and SendGrid when their env vars are set), a movable
+// clock, and the seeded Agency.
 
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
+import { createGmailMessenger } from '../adapters/gmail-mailer.ts';
 import { createGooglePlaces } from '../adapters/google-places.ts';
 import { createImageMatcher } from '../adapters/image-matcher.ts';
 import { createJevClassifier } from '../adapters/jev.ts';
 import { messengersFromEnv } from '../adapters/messenger.ts';
 import { createQuoteReader } from '../adapters/quote-reader.ts';
 import { twilioFetchMedia } from '../adapters/twilio.ts';
+import { createTwilioNumbers } from '../adapters/twilio-numbers.ts';
+import { createWhatsAppMediaFetcher, createWhatsAppMessenger } from '../adapters/whatsapp-cloud.ts';
 import { createApp } from '../app.ts';
 import { all, ident, LOCAL_DATABASE_URL, one, openDb, run, type Db } from '../db.ts';
+import { createGmailCredentials } from '../gmail-credentials.ts';
 import { migrate } from '../migrate.ts';
 import type { ChannelType, Clock, Messenger } from '../ports.ts';
 import { ActionError, normalizeAddress } from '../shared.ts';
@@ -143,12 +147,54 @@ export async function createDemo(
   const google = env.GOOGLE_MAPS_API_KEY
     ? { apiKey: env.GOOGLE_MAPS_API_KEY, fetch }
     : { apiKey: 'demo', fetch: mockFetch, placesBaseUrl: `${MOCK}/google/places`, geocodeBaseUrl: `${MOCK}/google` }; // the adapter adds /maps/api/geocode/json
+  // Gmail (docs/adr/0004): every Agency connects its own mailbox by signing in to Google. All three or none.
+  const gmailEnv = [env.GOOGLE_OAUTH_CLIENT_ID, env.GOOGLE_OAUTH_CLIENT_SECRET, env.CHANNEL_SECRET_KEY].map((v) => v?.trim() ?? '');
+  if (gmailEnv.some(Boolean) && !gmailEnv.every(Boolean)) {
+    throw new Error('Set GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET and CHANNEL_SECRET_KEY together, or none of them (see docs/channels-setup.md).');
+  }
+  // Tokens expire in real time, however far the demo clock has been moved.
+  const gmail = gmailEnv.every(Boolean)
+    ? createGmailCredentials({ db, clock: { now: () => new Date() }, config: { clientId: gmailEnv[0]!, clientSecret: gmailEnv[1]!, secretKey: gmailEnv[2]! } })
+    : null;
+  const gmailMessenger = gmail ? createGmailMessenger({ accessToken: (agencyId) => gmail.accessToken(agencyId) }) : null;
+
+  // WhatsApp Cloud API: one number for this server, which the first Agency to connect it gets. All five or none.
+  const whatsappEnv = [env.WHATSAPP_TOKEN, env.WHATSAPP_APP_SECRET, env.WHATSAPP_VERIFY_TOKEN, env.WHATSAPP_PHONE_NUMBER_ID, env.WHATSAPP_DISPLAY_NUMBER].map((v) => v?.trim() ?? '');
+  if (whatsappEnv.some(Boolean) && !whatsappEnv.every(Boolean)) {
+    throw new Error('Set WHATSAPP_TOKEN, WHATSAPP_APP_SECRET, WHATSAPP_VERIFY_TOKEN, WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_DISPLAY_NUMBER together, or none of them (see docs/channels-setup.md).');
+  }
+  const whatsapp = whatsappEnv.every(Boolean)
+    ? {
+        appSecret: whatsappEnv[1]!,
+        verifyToken: whatsappEnv[2]!,
+        number: normalizeAddress(whatsappEnv[4]!),
+        messenger: createWhatsAppMessenger({ token: whatsappEnv[0]!, phoneNumberId: whatsappEnv[3]! }),
+        download: createWhatsAppMediaFetcher({ token: whatsappEnv[0]! }),
+      }
+    : null;
+
+  // Twilio SMS numbers, one bought for each Agency that asks (docs/adr/0005). Australian numbers need an
+  // approved regulatory bundle, so TWILIO_BUNDLE_SID turns this on; it also needs the account and PUBLIC_URL.
+  const bundleSid = env.TWILIO_BUNDLE_SID?.trim();
+  if (bundleSid && !(env.TWILIO_ACCOUNT_SID?.trim() && env.TWILIO_AUTH_TOKEN?.trim() && env.PUBLIC_URL?.trim())) {
+    throw new Error('TWILIO_BUNDLE_SID needs TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and PUBLIC_URL too (see docs/channels-setup.md).');
+  }
+  const smsNumbers = bundleSid
+    ? createTwilioNumbers({
+        accountSid: env.TWILIO_ACCOUNT_SID!.trim(),
+        authToken: env.TWILIO_AUTH_TOKEN!.trim(),
+        smsUrl: `${env.PUBLIC_URL!.trim().replace(/\/$/, '')}/webhooks/twilio`,
+        bundleSid,
+        addressSid: env.TWILIO_ADDRESS_SID?.trim() || undefined,
+      })
+    : null;
+
   const apis: ApiChoice = {
     classifier: env.JEV_API_URL ? 'real' : 'mock',
     imageMatcher: env.VISION_API_URL ? 'real' : 'mock',
     quoteReader: env.QUOTES_API_URL ? 'real' : 'mock',
     places: env.GOOGLE_MAPS_API_KEY ? 'real' : 'mock',
-    messenger: env.TWILIO_ACCOUNT_SID || env.SENDGRID_API_KEY ? 'real' : 'mock',
+    messenger: env.TWILIO_ACCOUNT_SID || env.SENDGRID_API_KEY || gmail || whatsapp ? 'real' : 'mock',
   };
 
   const messenger = new SimulatedMessenger(clock, async (message) => {
@@ -165,8 +211,19 @@ export async function createDemo(
   const reallySends = (to: string) => sendTo.has('*') || sendTo.has(normalizeAddress(to));
   const outbound: Messenger = {
     async send(message) {
-      const provider = providers.channels[message.channelType];
-      if (provider && reallySends(message.to)) await provider.send({ ...message, cc: message.cc.filter(reallySends) });
+      // An Agency's own Gmail, its own Twilio SMS number and the server's WhatsApp number really send, to
+      // anyone: the Agency owns the mailbox, the number and its people, and Meta limits who a test number can
+      // message. The older Twilio and SendGrid channels still send only to DEMO_SEND_TO.
+      if (message.channelType === 'email' && gmailMessenger && (await gmail!.status(message.agencyId)) === 'connected') {
+        await gmailMessenger.send(message);
+      } else if (message.channelType === 'sms' && smsNumbers && providers.channels.sms && (await smsNumbers.owns(message.from))) {
+        await providers.channels.sms.send(message);
+      } else if (message.channelType === 'whatsapp' && whatsapp && normalizeAddress(message.from) === whatsapp.number) {
+        await whatsapp.messenger.send(message);
+      } else {
+        const provider = providers.channels[message.channelType];
+        if (provider && reallySends(message.to)) await provider.send({ ...message, cc: message.cc.filter(reallySends) });
+      }
       await messenger.send(message);
     },
   };
@@ -175,6 +232,7 @@ export async function createDemo(
   const app = createApp({
     db,
     clock,
+    gmail,
     messenger: outbound,
     classifier: createJevClassifier({ ...jev, apiKey: env.JEV_API_KEY ?? 'demo' }),
     imageMatcher: createImageMatcher({ ...vision, apiKey: env.VISION_API_KEY ?? 'demo' }),
@@ -186,6 +244,7 @@ export async function createDemo(
         : async (url) => {
             throw new Error(`The demo has no media to fetch at ${url}: the simulator sends attachments directly`);
           },
+    smsNumbers,
     settings: { baseUrl },
   });
 
@@ -298,6 +357,8 @@ export async function createDemo(
       env.SENDGRID_INBOUND_PUBLIC_KEY?.trim() ||
       generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).publicKey.export({ format: 'der', type: 'spki' }).toString('base64'),
     fileLinks: providers.fileLinks,
+    whatsapp: whatsapp ? { appSecret: whatsapp.appSecret, verifyToken: whatsapp.verifyToken, download: whatsapp.download } : undefined,
+    channels: { gmail: !!gmail, whatsappNumber: whatsapp?.number, smsNumbers: !!smsNumbers },
     demo,
   });
 

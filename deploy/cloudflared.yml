@@ -1,0 +1,12 @@
+# The named tunnel for a fixed address (docs/hosting.md). Replace the hostname with one
+# on a domain in your Cloudflare account, then
+#   cloudflared tunnel route dns mytunnel <that hostname>
+# This file is separate from ~/.cloudflared/config.yml on purpose: that one belongs to
+# another site.
+tunnel: 95e2a98a-0c86-4839-9277-fc39b5a5ebd9
+credentials-file: /home/kevin_he/.cloudflared/95e2a98a-0c86-4839-9277-fc39b5a5ebd9.json
+
+ingress:
+  - hostname: myest8.kevinhe.pro
+    service: http://127.0.0.1:4000
+  - service: http_status:404
