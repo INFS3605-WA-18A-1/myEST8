@@ -28,8 +28,8 @@ export const NOT_ON_GOOGLE = 'none';
 /** The Agency's three channels, as the forms describe them. */
 export const CHANNELS: { type: ChannelType; name: string; addressLabel: string; inputType: 'tel' | 'email'; placeholder: string }[] = [
   { type: 'sms', name: 'SMS', addressLabel: 'Agency SMS number', inputType: 'tel', placeholder: '+61 2 9000 0000' },
-  { type: 'whatsapp', name: 'WhatsApp', addressLabel: 'WhatsApp sandbox number', inputType: 'tel', placeholder: '+1 415 523 8886' },
-  { type: 'email', name: 'Email', addressLabel: 'Address the Agency inbox forwards to', inputType: 'email', placeholder: 'maintenance@parse.youragency.com.au' },
+  { type: 'whatsapp', name: 'WhatsApp', addressLabel: 'Agency WhatsApp number', inputType: 'tel', placeholder: '+61 400 000 000' },
+  { type: 'email', name: 'Email', addressLabel: 'Inbound email address', inputType: 'email', placeholder: 'agency@mail.example.test' },
 ];
 
 /** The posted form's text values, to show again after a refusal. Passwords are left out. */
@@ -64,58 +64,123 @@ export function chosenId(form: FormValues, name: string, label: string) {
   return Number(value);
 }
 
-/** A channel's state as a short chip: not connected, connected, or tested. */
-export function channelChip(channel: AgencyChannel | undefined): Html {
-  if (!channel) return badge('Not connected', 'warning');
-  return channel.testedAt ? badge('Tested', 'success') : badge('Connected', 'info');
+/** How a channel should read: missing, waiting on a first email, verified by code or inbound mail, or connected without that. */
+export function channelState(channel: AgencyChannel | undefined, o: { waiting?: boolean; verified?: boolean } = {}) {
+  if (!channel) return 'missing' as const;
+  if (o.waiting) return 'waiting' as const;
+  if (o.verified || channel.testedAt) return 'verified' as const;
+  return 'connected' as const;
 }
 
-/** A channel's state in words: not connected, connected, or connected and tested. */
-export function channelBadge(channel: AgencyChannel | undefined): Html {
-  if (!channel) return badge('Not connected', 'warning');
-  return channel.testedAt ? badge('Connected and tested', 'success') : badge('Connected, not tested yet', 'info');
+/** A channel's state as a short chip. `testedAt` means the address was verified. */
+export function channelChip(channel: AgencyChannel | undefined, o: { waiting?: boolean; verified?: boolean } = {}): Html {
+  switch (channelState(channel, o)) {
+    case 'missing':
+      return badge('Not connected', 'warning');
+    case 'waiting':
+      return badge('Waiting for your first message', 'info');
+    case 'verified':
+      return badge('Verified', 'success');
+    case 'connected':
+      return badge('Connected', 'info');
+  }
 }
 
-/** The address a connected channel uses, and when its test message was sent. */
-export function channelLine(channel: AgencyChannel, timeZone: string): Html {
-  return html`<p class="text-sm">Connected to <strong class="break-all">${channel.address}</strong>${channel.testedAt
-      ? html`. Test message sent ${formatWhen(channel.testedAt, timeZone)}`
-      : ''}.</p>`;
+/** A channel's state in words, same meanings as `channelChip`. */
+export function channelBadge(channel: AgencyChannel | undefined, o: { waiting?: boolean; verified?: boolean } = {}): Html {
+  return channelChip(channel, o);
 }
 
-/** How to create the channel, folded away. `origin` is this site, for the webhook addresses. */
-export function channelGuide(type: ChannelType, origin: string, o: { open?: boolean } = {}): Html {
+/** The address a connected channel uses. */
+export function channelLine(channel: AgencyChannel, timeZone: string, o: { waiting?: boolean } = {}): Html {
+  if (o.waiting) return html`<p class="text-sm">Waiting for your first message at <strong class="break-all">${channel.address}</strong>.</p>`;
+  if (channel.testedAt) return html`<p class="text-sm">Verified ${formatWhen(channel.testedAt, timeZone)}. Tenants reach the Agency at <strong class="break-all">${channel.address}</strong>.</p>`;
+  return html`<p class="text-sm">Connected to <strong class="break-all">${channel.address}</strong>.</p>`;
+}
+
+/** The number form and, once a code has been sent, the code form. A typed number is not saved until the code matches. */
+export function phoneChannelForm(o: {
+  channel: (typeof CHANNELS)[number];
+  postTo: string;
+  confirmTo: string;
+  pending?: { address: string };
+  suggestion?: string;
+  current?: string;
+  className: string;
+}): Html {
+  const value = o.pending?.address || o.current || o.suggestion || '';
+  return html`<form method="post" action="${o.postTo}" class="${o.className}">
+      <input type="hidden" name="type" value="${o.channel.type}" />
+      ${field({
+        label: o.channel.addressLabel,
+        name: 'address',
+        id: `${o.channel.type}-address`,
+        type: o.channel.inputType,
+        required: true,
+        value,
+        placeholder: o.channel.placeholder,
+      })}
+      ${button(o.current || o.pending ? 'Send a new code' : 'Send code', { size: 'sm', variant: o.current ? 'secondary' : 'primary' })}
+    </form>
+    ${o.pending
+      ? html`<form method="post" action="${o.confirmTo}" class="${o.className}">
+          <input type="hidden" name="type" value="${o.channel.type}" />
+          <input type="hidden" name="address" value="${o.pending.address}" />
+          ${field({
+            label: '6-digit code',
+            name: 'code',
+            id: `${o.channel.type}-code`,
+            required: true,
+            autocomplete: 'one-time-code',
+            placeholder: '123456',
+            hint: `Sent to ${o.pending.address}. It expires in 10 minutes.`,
+          })}
+          ${button(`Verify ${o.channel.name}`, { size: 'sm' })}
+        </form>`
+      : ''}`;
+}
+
+/** The Agency's inbound address, with a button that copies it (app.js). The field can be copied by hand without JavaScript. */
+export function inboundEmailField(address: string): Html {
+  return html`<div class="flex flex-wrap items-end gap-3">
+    <div class="min-w-56 flex-1">
+      <label class="field-label" for="email-address">Inbound email address</label>
+      <input id="email-address" class="input w-full" type="email" readonly value="${address}" />
+    </div>
+    <button type="button" class="btn btn-secondary btn-sm" data-copy-for="email-address">Copy</button>
+  </div>`;
+}
+
+/** How to set the channel up, folded away. */
+export function channelGuide(type: ChannelType, _origin: string, o: { open?: boolean } = {}): Html {
   const open = o.open ? 'open' : '';
   switch (type) {
     case 'sms':
       return html`<details class="text-sm" ${open}>
-          <summary>No Twilio number yet?</summary>
+          <summary>How SMS verification works</summary>
           <ol class="mt-2 ml-5 list-decimal space-y-1">
-            <li>In the Twilio Console, buy an Australian number that can send and receive SMS.</li>
-            <li>In the number's Messaging settings, set "A message comes in" to <code class="break-all">${origin}/webhooks/twilio</code>, HTTP POST.</li>
-            <li>Connect the number here, then send a test message.</li>
+            <li>Enter the mobile number the Agency uses for SMS.</li>
+            <li>myEST8 texts a 6-digit code to that number. The code lasts 10 minutes.</li>
+            <li>Enter the code here. The number is saved only after the code matches.</li>
           </ol>
         </details>`;
     case 'whatsapp':
       return html`<details class="text-sm" ${open}>
-          <summary>Set up the WhatsApp sandbox</summary>
-          <p class="mt-2">For now myEST8 uses the Twilio WhatsApp sandbox. A sender of your own, approved by Meta, comes later.</p>
+          <summary>How WhatsApp verification works</summary>
           <ol class="mt-2 ml-5 list-decimal space-y-1">
-            <li>In the Twilio Console, open Messaging, then Try it out, then Send a WhatsApp message.</li>
-            <li>Set "When a message comes in" to <code class="break-all">${origin}/webhooks/twilio</code>, HTTP POST.</li>
-            <li>Each Tenant joins the sandbox once by sending it the join code from their phone.</li>
-            <li>Connect the sandbox number here, then send a test message.</li>
+            <li>Enter the Agency's WhatsApp number.</li>
+            <li>myEST8 sends a 6-digit code to it. Enter the code here. The number is saved only after the code matches.</li>
+            <li>WhatsApp only delivers a free-form reply within 24 hours of the person's last message. Outside that window, use SMS or email.</li>
           </ol>
         </details>`;
     case 'email':
       return html`<details class="text-sm" ${open}>
-          <summary>Set up SendGrid Inbound Parse</summary>
-          <p class="mt-2">Email reaches myEST8 through SendGrid Inbound Parse. Replies go out from the same address.</p>
+          <summary>Forward mail to myEST8</summary>
+          <p class="mt-2">myEST8 gives the Agency an address on its inbound domain. Forward the Agency inbox to that address. Resend receives the mail and turns it into Maintenance Requests.</p>
           <ol class="mt-2 ml-5 list-decimal space-y-1">
-            <li>In SendGrid, authenticate your domain so email can be sent from it.</li>
-            <li>Add an MX record for a receiving subdomain, such as parse.youragency.com.au, pointing to mx.sendgrid.net.</li>
-            <li>In Settings, Inbound Parse, add that subdomain with the URL <code class="break-all">${origin}/webhooks/sendgrid</code>.</li>
-            <li>Forward the Agency inbox to an address on that subdomain, then connect that address here.</li>
+            <li>Copy the inbound address shown here.</li>
+            <li>In the Agency's email, add a forwarding rule to that address.</li>
+            <li>Send one message to the Agency inbox so it is forwarded on. This row stays on waiting for your first message until that mail arrives, then it shows Verified.</li>
           </ol>
         </details>`;
   }

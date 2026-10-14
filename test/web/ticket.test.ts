@@ -294,4 +294,28 @@ describe('changing the Ticket', () => {
     expect(closed.page.text).toContain('Ticket closed');
     expect(closed.page.text).not.toContain('Add another Job');
   });
+
+  test('shows when WhatsApp could not deliver a message', async () => {
+    const w = await webWorld();
+    w.h.classifier.when('The kitchen tap is dripping', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });
+    await w.h.receive(TOM, 'The kitchen tap is dripping', { channel: 'whatsapp' });
+    await w.h.answer(TOM, 'Kitchen sink', 'answer', { channel: 'whatsapp' });
+    await w.h.answer(TOM, 'Since Monday', 'answer', { channel: 'whatsapp' });
+    await w.h.answer(TOM, 'No', 'no', { channel: 'whatsapp' });
+    await w.h.answer(TOM, 'Mornings', 'weekday_mornings', { channel: 'whatsapp' });
+    await w.h.advance(48 * 3_600_000);
+    await w.h.app.recordDeliveryFailure({ to: TOM, code: 131047, title: 'Re-engagement message' });
+    const [request] = (await w.alice.dashboard()).maintenanceRequests;
+    const ticketId = await w.alice.confirmMaintenanceRequest(request!.issueId);
+
+    const { text } = await (async () => {
+      const cookie = await w.signIn();
+      const res = await w.get(`/tickets/${ticketId}`, cookie);
+      expect(res.status).toBe(200);
+      const html = await res.text();
+      return { text: visibleText(html) };
+    })();
+
+    expect(text).toContain("WhatsApp couldn't deliver this message (131047): Re-engagement message");
+  });
 });

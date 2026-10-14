@@ -73,6 +73,11 @@ export function createOnboarding({ ports, modules }: Context) {
   }
 
   return {
+    /**
+     * Stores an address the caller has already proved (the demo seed, Gmail
+     * OAuth, or confirmChannelVerification). A number typed into the channels
+     * form goes through startChannelVerification and is not stored here.
+     */
     async connectChannel(agencyId: number, channelType: ChannelType, address: string) {
       if (!CHANNEL_TYPES.includes(channelType)) invalid(`Unknown channel ${channelType}`);
       await profiles.connectChannel(agencyId, channelType, address);

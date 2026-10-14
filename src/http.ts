@@ -69,9 +69,7 @@ export function createHttpApp(
       return c.text('Invalid JSON', 400);
     }
     for (const message of metaToInbound(body, config.clock.now())) await app.receiveInbound(message);
-    for (const failure of metaStatusFailures(body)) {
-      console.warn(`WhatsApp message to ${failure.to} failed (${failure.code}): ${failure.title}`);
-    }
+    for (const failure of metaStatusFailures(body)) await app.recordDeliveryFailure(failure);
     return c.text('ok', 200);
   });
 

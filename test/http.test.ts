@@ -220,4 +220,24 @@ describe('the Meta WhatsApp webhook', () => {
     expect((await http.request('/webhooks/whatsapp?hub.mode=subscribe')).status).toBe(404);
     expect((await http.request('/webhooks/whatsapp', { method: 'POST', body })).status).toBe(404);
   });
+
+  test('a failed delivery status is recorded against the message', async () => {
+    const failures: unknown[] = [];
+    const http = createHttpApp(
+      { receiveInbound: async () => {}, recordDeliveryFailure: async (failure: unknown) => void failures.push(failure) } as never,
+      {
+        publicUrl: PUBLIC_URL,
+        twilioAuthToken: TWILIO_TOKEN,
+        sendgridPublicKey: '',
+        clock: { now: () => new Date('2026-10-13T00:00:00Z') },
+        whatsapp: { appSecret: SECRET, verifyToken: 'verify-me' },
+      },
+    );
+    const status = JSON.stringify({
+      entry: [{ changes: [{ field: 'messages', value: { statuses: [{ id: 'w2', status: 'failed', recipient_id: '61400000001', errors: [{ code: 131047, title: 'Re-engagement message' }] }] } }] }],
+    });
+    const res = await http.request('/webhooks/whatsapp', { method: 'POST', headers: { 'x-hub-signature-256': sign(status) }, body: status });
+    expect(res.status).toBe(200);
+    expect(failures).toEqual([{ to: '+61400000001', code: 131047, title: 'Re-engagement message' }]);
+  });
 });

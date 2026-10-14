@@ -983,8 +983,8 @@ function messageBubble(m: Message, x: Extras): Html {
       >${m.template ? html`<span>${templateSubject(m.template)}</span>` : nothing}</span
     >`,
     text: m.text,
-    footer: html`<span class="flex flex-wrap gap-x-3"><span>${formatWhen(m.at, x.timeZone)}</span>${m.unread ? html`<span>Unread</span>` : nothing}</span>`,
-    tone: m.unread ? 'warning' : undefined,
+    footer: html`<span class="flex flex-wrap gap-x-3"><span>${formatWhen(m.at, x.timeZone)}</span>${m.unread ? html`<span>Unread</span>` : nothing}${m.deliveryError ? html`<span>${m.deliveryError}</span>` : nothing}</span>`,
+    tone: m.deliveryError ? 'error' : m.unread ? 'warning' : undefined,
   });
 }
 
