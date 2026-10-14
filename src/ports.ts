@@ -44,6 +44,11 @@ export interface OutboundMessage {
   template: string;
   data: object;
   attachments: OutboundAttachment[];
+  /**
+   * Stable id for this send, when the caller has one. Providers that support
+   * idempotency (Resend) send it so a retry does not deliver the message twice.
+   */
+  id?: string;
 }
 
 export interface Messenger {
