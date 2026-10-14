@@ -7,7 +7,26 @@ import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 
 /** Env vars that would switch the demo to a real external API: blanked so tests never call one. */
-export const MOCKED_APIS = { JEV_API_URL: '', VISION_API_URL: '', QUOTES_API_URL: '', GOOGLE_MAPS_API_KEY: '' };
+export const MOCKED_APIS = {
+  JEV_API_URL: '',
+  ANTHROPIC_API_KEY: '',
+  VISION_API_URL: '',
+  QUOTES_API_URL: '',
+  GOOGLE_MAPS_API_KEY: '',
+  GOOGLE_CLIENT_ID: '',
+  GOOGLE_CLIENT_SECRET: '',
+  META_WHATSAPP_PHONE_NUMBER_ID: '',
+  META_WHATSAPP_ACCESS_TOKEN: '',
+  META_WHATSAPP_NUMBER: '',
+  META_APP_SECRET: '',
+  META_WEBHOOK_VERIFY_TOKEN: '',
+  TWILIO_ACCOUNT_SID: '',
+  TWILIO_AUTH_TOKEN: '',
+  TWILIO_SMS_FROM: '',
+  TWILIO_WHATSAPP_FROM: '',
+  SENDGRID_API_KEY: '',
+  RESEND_API_KEY: '',
+};
 
 /** The command that serves the demo; tsx runs the TypeScript directly. */
 export const DEMO_COMMAND = [process.execPath, '--import', 'tsx', 'src/demo/main.ts'] as const;

@@ -6,13 +6,32 @@ const HOUR = 3_600_000;
 
 /** The demo with every external API mocked, whatever this machine's env vars say. Task errors fail the test. */
 async function demoWorld() {
+  return demoWorldWith();
+}
+
+async function demoWorldWith(extra: Record<string, string> = {}) {
   const errors: Error[] = [];
-  const d = await createDemo({ now: new Date('2026-10-08T09:00:00+11:00'), env: demoEnv(), logError: (e) => errors.push(e) });
+  const d = await createDemo({ now: new Date('2026-10-08T09:00:00+11:00'), env: demoEnv(extra), logError: (e) => errors.push(e) });
   closeAfter(d);
   return { ...d, errors };
 }
 
 describe('the demo', () => {
+  test('ANTHROPIC_API_KEY counts the classifier as real without a Jev URL', async () => {
+    const { apis } = await demoWorldWith({ ANTHROPIC_API_KEY: 'test-anthropic-key' });
+    expect(apis.classifier).toBe('real');
+  });
+
+  test('a Jev URL still counts the classifier as real when no Anthropic key is set', async () => {
+    const { apis } = await demoWorldWith({ JEV_API_URL: 'https://jev.example/api' });
+    expect(apis.classifier).toBe('real');
+  });
+
+  test('a blank Anthropic key stays on the mock classifier', async () => {
+    const { apis } = await demoWorldWith({ ANTHROPIC_API_KEY: '   ' });
+    expect(apis.classifier).toBe('mock');
+  });
+
   test('starts with Harbour Realty seeded and every external API mocked', async () => {
     const { demo, app, seed, apis, errors } = await demoWorld();
     expect(apis).toEqual({ classifier: 'mock', imageMatcher: 'mock', quoteReader: 'mock', places: 'mock', messenger: 'mock' });

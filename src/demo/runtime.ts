@@ -5,6 +5,7 @@
 // seeded Agency.
 
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
+import { createClaudeClassifier } from '../adapters/claude-classifier.ts';
 import { createGooglePlaces } from '../adapters/google-places.ts';
 import { createImageMatcher } from '../adapters/image-matcher.ts';
 import { createJevClassifier } from '../adapters/jev.ts';
@@ -136,7 +137,9 @@ export async function createDemo<Seeded extends boolean = true>(
   // seeded on the first start and reopened as it was on every start after.
   const { db, store, saved, schema, kept } = await openDemoDb(env);
   const seedAgency = options.seedAgency !== false;
-  const storiesEnd = !saved && seedAgency && options.stories && !env.JEV_API_URL && !env.QUOTES_API_URL ? (options.now ?? new Date()) : null;
+  const anthropicKey = env.ANTHROPIC_API_KEY?.trim();
+  // Stories need the mock classifier. An Anthropic key or a Jev URL means the real one.
+  const storiesEnd = !saved && seedAgency && options.stories && !anthropicKey && !env.JEV_API_URL && !env.QUOTES_API_URL ? (options.now ?? new Date()) : null;
   // A reopened database carries on from where its clock was moved to; the stories start ten days back.
   const savedOffsetMs = (await store.get<number>('clockOffsetMs')) ?? 0;
   const clock = new OffsetClock(saved ? new Date(Date.now() + savedOffsetMs) : storiesEnd ? storiesStart(storiesEnd) : options.now);
@@ -155,7 +158,7 @@ export async function createDemo<Seeded extends boolean = true>(
     ? { apiKey: env.GOOGLE_MAPS_API_KEY, fetch }
     : { apiKey: 'demo', fetch: mockFetch, placesBaseUrl: `${MOCK}/google/places`, geocodeBaseUrl: `${MOCK}/google` }; // the adapter adds /maps/api/geocode/json
   const apis: ApiChoice = {
-    classifier: env.JEV_API_URL ? 'real' : 'mock',
+    classifier: anthropicKey || env.JEV_API_URL ? 'real' : 'mock',
     imageMatcher: env.VISION_API_URL ? 'real' : 'mock',
     quoteReader: env.QUOTES_API_URL ? 'real' : 'mock',
     places: env.GOOGLE_MAPS_API_KEY ? 'real' : 'mock',
@@ -191,7 +194,7 @@ export async function createDemo<Seeded extends boolean = true>(
     db,
     clock,
     messenger: outbound,
-    classifier: createJevClassifier({ ...jev, apiKey: env.JEV_API_KEY ?? 'demo' }),
+    classifier: anthropicKey ? createClaudeClassifier({ apiKey: anthropicKey, fetch }) : createJevClassifier({ ...jev, apiKey: env.JEV_API_KEY ?? 'demo' }),
     imageMatcher: createImageMatcher({ ...vision, apiKey: env.VISION_API_KEY ?? 'demo' }),
     quoteReader: createQuoteReader({ ...quotes, apiKey: env.QUOTES_API_KEY ?? 'demo', clock, timeZone }),
     places: createGooglePlaces(google),
