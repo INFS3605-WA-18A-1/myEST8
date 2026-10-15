@@ -28,4 +28,11 @@ describe('rateLimit', () => {
     for (let i = 0; i < 3; i++) await app.request('/t/abc', from('1.1.1.1'));
     expect((await app.request('/t/abc', from('2.2.2.2'))).status).toBe(200);
   });
+
+  it("takes the client from Vercel's header, which a request can't forge with cf-connecting-ip", async () => {
+    const app = build(() => 0);
+    const vercel = (ip: string, forged: string) => ({ headers: { 'x-vercel-forwarded-for': ip, 'cf-connecting-ip': forged } });
+    for (let i = 0; i < 3; i++) await app.request('/t/abc', vercel('1.1.1.1', `9.9.9.${i}`));
+    expect((await app.request('/t/abc', vercel('1.1.1.1', '8.8.8.8'))).status).toBe(429);
+  });
 });

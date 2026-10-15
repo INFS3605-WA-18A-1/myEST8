@@ -12,5 +12,5 @@
     "verbatimModuleSyntax": true,
     "skipLibCheck": true
   },
-  "include": ["src", "test", "scripts", "vitest.config.ts", "playwright.config.ts"]
+  "include": ["api", "src", "test", "scripts", "vitest.config.ts", "playwright.config.ts"]
 }

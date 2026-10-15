@@ -15,10 +15,10 @@ import { createQuoteReader } from '../adapters/quote-reader.ts';
 import { resendInboundConfig } from '../adapters/resend.ts';
 import { twilioFetchMedia } from '../adapters/twilio.ts';
 import { createApp } from '../app.ts';
-import { all, ident, LOCAL_DATABASE_URL, one, openDb, run, type Db } from '../db.ts';
+import { all, ident, LOCAL_DATABASE_URL, one, openDb, requireDatabaseUrl, run, type Db } from '../db.ts';
 import { createGmailMailboxes } from '../mailboxes.ts';
 import { migrate } from '../migrate.ts';
-import type { ChannelType, Clock, Messenger } from '../ports.ts';
+import { UndeliverableError, type ChannelType, type Clock, type Messenger } from '../ports.ts';
 import { ActionError, normalizeAddress } from '../shared.ts';
 import { createSessions } from '../web/auth.ts';
 import { createWebApp } from '../web/server.ts';
@@ -76,8 +76,17 @@ function demoStore(db: Db) {
  * one, LOCAL_DATABASE_URL), in the schema DATABASE_SCHEMA names (kept across
  * restarts) or in a fresh schema thrown away on close. Applies the migrations,
  * so it only works on a local Postgres (src/migrate.ts refuses any other).
+ *
+ * Hosted (Vercel + Supabase): SUPABASE_DB_URL is required, the schema defaults to
+ * `public`, the pool is small (every function instance keeps its own), and the
+ * migrations are not applied here: `supabase db push` owns them (docs/vercel.md).
  */
-async function openDemoDb(env: Env) {
+async function openDemoDb(env: Env, hosted: boolean) {
+  if (hosted) {
+    const schema = env.DATABASE_SCHEMA || 'public';
+    const db = openDb(requireDatabaseUrl(env), { schema, max: Number(env.DB_POOL_MAX) || 2 });
+    return { db, store: demoStore(db), saved: undefined, schema, kept: true };
+  }
   const url = env.SUPABASE_DB_URL || LOCAL_DATABASE_URL;
   const kept = !!env.DATABASE_SCHEMA;
   const schema = env.DATABASE_SCHEMA || `demo_${randomUUID().replaceAll('-', '').slice(0, 12)}`;
@@ -128,6 +137,12 @@ export async function createDemo<Seeded extends boolean = true>(
      * instead and the landing page shows no demo sign-ins.
      */
     seedAgency?: Seeded;
+    /**
+     * Runs as the hosted app (src/hosted.ts): no migrations, no demo seed, simulator
+     * or clock offset, no worker run at start-up, and a channel with no provider
+     * is undeliverable instead of landing in the phone simulator.
+     */
+    hosted?: boolean;
   } = {},
 ) {
   const env = options.env ?? process.env;
@@ -135,13 +150,14 @@ export async function createDemo<Seeded extends boolean = true>(
   const logError = options.logError ?? ((error: Error) => console.error('[worker]', error));
   // DATABASE_SCHEMA unset: a fresh schema, dropped on close. Set: a schema that is
   // seeded on the first start and reopened as it was on every start after.
-  const { db, store, saved, schema, kept } = await openDemoDb(env);
-  const seedAgency = options.seedAgency !== false;
+  const hosted = options.hosted === true;
+  const { db, store, saved, schema, kept } = await openDemoDb(env, hosted);
+  const seedAgency = !hosted && options.seedAgency !== false;
   const anthropicKey = env.ANTHROPIC_API_KEY?.trim();
   // Stories need the mock classifier. An Anthropic key or a Jev URL means the real one.
   const storiesEnd = !saved && seedAgency && options.stories && !anthropicKey && !env.JEV_API_URL && !env.QUOTES_API_URL ? (options.now ?? new Date()) : null;
   // A reopened database carries on from where its clock was moved to; the stories start ten days back.
-  const savedOffsetMs = (await store.get<number>('clockOffsetMs')) ?? 0;
+  const savedOffsetMs = hosted ? 0 : ((await store.get<number>('clockOffsetMs')) ?? 0);
   const clock = new OffsetClock(saved ? new Date(Date.now() + savedOffsetMs) : storiesEnd ? storiesStart(storiesEnd) : options.now);
   const saveClock = () => store.set('clockOffsetMs', clock.now().getTime() - Date.now());
   const timeZone = 'Australia/Sydney';
@@ -162,7 +178,7 @@ export async function createDemo<Seeded extends boolean = true>(
     imageMatcher: env.VISION_API_URL ? 'real' : 'mock',
     quoteReader: env.QUOTES_API_URL ? 'real' : 'mock',
     places: env.GOOGLE_MAPS_API_KEY ? 'real' : 'mock',
-    messenger: env.TWILIO_ACCOUNT_SID || env.SENDGRID_API_KEY || env.GOOGLE_CLIENT_ID || env.META_WHATSAPP_PHONE_NUMBER_ID ? 'real' : 'mock',
+    messenger: env.TWILIO_ACCOUNT_SID || env.SENDGRID_API_KEY || env.RESEND_API_KEY || env.GOOGLE_CLIENT_ID || env.META_WHATSAPP_PHONE_NUMBER_ID ? 'real' : 'mock',
   };
 
   const messenger = new SimulatedMessenger(clock, async (message) => {
@@ -180,12 +196,14 @@ export async function createDemo<Seeded extends boolean = true>(
   const mailboxes = gmailFromEnv(env, db, baseUrl);
   if (mailboxes) providers.channels.email = mailboxes.messenger;
   const sendTo = new Set((env.DEMO_SEND_TO ?? '').split(',').map((a) => a.trim()).filter(Boolean).map((a) => (a === '*' ? a : normalizeAddress(a))));
-  const reallySends = (to: string) => sendTo.has('*') || sendTo.has(normalizeAddress(to));
+  const reallySends = (to: string) => hosted || sendTo.has('*') || sendTo.has(normalizeAddress(to));
   const outbound: Messenger = {
     async send(message) {
       const provider = providers.channels[message.channelType];
       if (provider && reallySends(message.to)) await provider.send({ ...message, cc: message.cc.filter(reallySends) });
-      await messenger.send(message);
+      // Hosted, nothing records into the phone simulator: no provider means it can't be sent.
+      else if (hosted) throw new UndeliverableError(message.channelType, message.to, `no ${message.channelType} provider is configured`);
+      if (!hosted) await messenger.send(message);
     },
   };
   const twilioAccountSid = env.TWILIO_ACCOUNT_SID?.trim();
@@ -207,7 +225,7 @@ export async function createDemo<Seeded extends boolean = true>(
   let lastMailPoll = 0;
   let queued = 0;
   /** Runs every task that is due, after any run already in progress. Errors are logged, never thrown. */
-  function runWorker(): Promise<void> {
+  function runWorker(options?: { budgetMs?: number }): Promise<void> {
     queued++;
     const next = tail.then(async () => {
       try {
@@ -216,7 +234,7 @@ export async function createDemo<Seeded extends boolean = true>(
           lastMailPoll = Date.now();
           for (const error of await mailboxes.poll((message) => app.receiveInbound(message))) logError(error);
         }
-        for (const error of await app.runWorker()) logError(error);
+        for (const error of await app.runWorker(options)) logError(error);
       } catch (e) {
         logError(e instanceof Error ? e : new Error(String(e)));
       } finally {
@@ -236,7 +254,7 @@ export async function createDemo<Seeded extends boolean = true>(
   }
 
   const seed = (saved ? saved.seed : seedAgency ? await seedDemo(app, { googleListings: apis.places === 'mock' }) : null) as Seeded extends false ? null : DemoSeed;
-  await runWorker();
+  if (!hosted) await runWorker();
 
   // The simulator is limited to the Agency of the Property Manager using it, so
   // each Agency that signs up to the demo sees only its own people and messages.
@@ -288,9 +306,9 @@ export async function createDemo<Seeded extends boolean = true>(
 
   // The stories play the clock forward to `options.now`, or to the real time.
   const stories = storiesEnd && seed ? await seedStories({ app, simulator: demo, seed, clock, ...(options.now ? { end: options.now } : {}) }) : null;
-  await saveClock();
+  if (!hosted) await saveClock();
   // Saved last, so a start-up stopped part-way is caught on the next start rather than half-reused.
-  if (!saved) await store.set('saved', { seed, seededAt: clock.now().toISOString(), storiesPlayed: stories !== null } satisfies SavedDemo);
+  if (!saved && !hosted) await store.set('saved', { seed, seededAt: clock.now().toISOString(), storiesPlayed: stories !== null } satisfies SavedDemo);
   const database: DemoDatabase = saved
     ? { schema, kept: true, reused: true, seededAt: saved.seededAt, storiesPlayed: saved.storiesPlayed }
     : { schema, kept, reused: false };
@@ -317,7 +335,7 @@ export async function createDemo<Seeded extends boolean = true>(
       env.SENDGRID_INBOUND_PUBLIC_KEY?.trim() ||
       generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).publicKey.export({ format: 'der', type: 'spki' }).toString('base64'),
     fileLinks: providers.fileLinks,
-    demo,
+    ...(hosted ? {} : { demo }),
     demoSignIns: seed !== null,
     whatsapp: env.META_APP_SECRET?.trim() && env.META_WEBHOOK_VERIFY_TOKEN?.trim() ? { appSecret: env.META_APP_SECRET.trim(), verifyToken: env.META_WEBHOOK_VERIFY_TOKEN.trim() } : null,
     resend,

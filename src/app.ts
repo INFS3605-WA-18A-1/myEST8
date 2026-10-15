@@ -88,7 +88,7 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
     tracker: (token: string) => tickets.tracker(token),
 
     /** Runs every background task that is due. */
-    runWorker: () => worker.runDue(),
+    runWorker: (options?: { budgetMs?: number }) => worker.runDue(options),
 
     /** A stored file, for a signed file link (src/file-links.ts): the checked signature is the access control. */
     linkedFile: (fileId: number) => files.get(fileId),
