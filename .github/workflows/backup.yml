@@ -1,0 +1,138 @@
+# Weekly encrypted backup of the production database (docs/backup-restore.md).
+#
+# pg_dump of the `public` schema, encrypted with age to a public key, uploaded as
+# a workflow artifact for 30 days. This repository is public, so artifacts are
+# readable by anyone: the dump is piped straight into `age` and the plaintext
+# never reaches the disk or an artifact. Only the age-encrypted file is uploaded.
+# The private key stays offline with the owner; GitHub never sees it.
+#
+# Needs two repository secrets:
+#   SUPABASE_DB_URL         the session pooler address (port 5432), as for migrate-prod in ci.yml
+#   BACKUP_AGE_RECIPIENT    the public recipient (`age1...`) from `age-keygen`
+#
+# Storage bucket files are not part of this backup (docs/backup-restore.md).
+#
+# Actions are pinned to a commit (the version is in the comment), the same pins as
+# ci.yml, and kept current by Dependabot.
+name: Backup
+
+on:
+  schedule:
+    # Sundays 16:17 UTC (Monday 03:17 in Sydney), off the busy top of the hour.
+    - cron: '17 16 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      BACKUP_DIR: ${{ runner.temp }}/backup
+    steps:
+      # Fail before touching the database if either secret is missing or wrong.
+      - name: Check the secrets are set
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          AGE_RECIPIENT: ${{ secrets.BACKUP_AGE_RECIPIENT }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$DB_URL" ]; then
+            echo "::error::Set the SUPABASE_DB_URL secret (session pooler address, port 5432)."
+            exit 1
+          fi
+          if [ -z "$AGE_RECIPIENT" ]; then
+            echo "::error::Set the BACKUP_AGE_RECIPIENT secret to the public age recipient (age1...). The backup refuses to run unencrypted."
+            exit 1
+          fi
+          case "$AGE_RECIPIENT" in
+            age1*) ;;
+            *)
+              echo "::error::BACKUP_AGE_RECIPIENT must be a public age recipient starting with age1. Never store the private key (AGE-SECRET-KEY-...) in GitHub."
+              exit 1
+              ;;
+          esac
+
+      # pg_dump refuses a server newer than itself, and the runner image's client
+      # can be older than Supabase's Postgres. Ask the server for its major version,
+      # then use the client of exactly that major, from the PGDG apt repository if
+      # the image does not have it. psql and pg_dump errors are not printed: they
+      # can name the pooler host and the project's user.
+      - name: Install age and a matching pg_dump
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client age
+
+          server_num=$(psql "$DB_URL" -X -A -t -q -c 'show server_version_num' 2>/dev/null) || {
+            echo "::error::Could not connect to the database with SUPABASE_DB_URL. Check the secret (session pooler, port 5432)."
+            exit 1
+          }
+          server_major=$(( server_num / 10000 ))
+          pg_bin="/usr/lib/postgresql/${server_major}/bin"
+
+          if [ ! -x "$pg_bin/pg_dump" ]; then
+            echo "The runner image has no Postgres ${server_major} client; adding the PGDG apt repository."
+            sudo apt-get install -y -qq postgresql-common
+            sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+            sudo apt-get install -y -qq "postgresql-client-${server_major}"
+          fi
+
+          client_major=$("$pg_bin/pg_dump" --version | sed -E 's/^pg_dump \(PostgreSQL\) ([0-9]+).*/\1/')
+          if [ "$client_major" != "$server_major" ]; then
+            echo "::error::pg_dump is version ${client_major} but the server is ${server_major}."
+            exit 1
+          fi
+          echo "Server and pg_dump are both Postgres ${server_major}."
+          echo "PG_BIN=$pg_bin" >> "$GITHUB_ENV"
+
+      # The dump goes pg_dump -> age -> file. There is no plaintext copy anywhere.
+      - name: Dump and encrypt
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          AGE_RECIPIENT: ${{ secrets.BACKUP_AGE_RECIPIENT }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$BACKUP_DIR"
+          out="$BACKUP_DIR/myest8-$(date -u +%Y%m%dT%H%M%SZ).sql.age"
+
+          if ! "$PG_BIN/pg_dump" --dbname="$DB_URL" --schema=public --no-owner --format=plain 2>/dev/null \
+              | age --encrypt --recipient "$AGE_RECIPIENT" --output "$out"; then
+            rm -f "$out"
+            echo "::error::pg_dump or age failed; nothing was uploaded. Run the same pg_dump locally to see the error."
+            exit 1
+          fi
+
+          # An age file starts with this header; an empty or plaintext file does not.
+          test -s "$out"
+          test "$(head -c 21 "$out")" = "age-encryption.org/v1"
+
+          # Only the encrypted file may be in the directory that gets uploaded.
+          for f in "$BACKUP_DIR"/*; do
+            case "$f" in
+              *.age) ;;
+              *) echo "::error::Unexpected file in the backup directory."; exit 1 ;;
+            esac
+          done
+          echo "Wrote an encrypted backup of $(stat -c %s "$out") bytes."
+
+      - name: Upload the encrypted backup
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: db-backup-${{ github.run_id }}
+          path: ${{ runner.temp }}/backup/*.age
+          retention-days: 30
+          if-no-files-found: error
+          compression-level: 0

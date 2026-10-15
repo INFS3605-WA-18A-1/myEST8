@@ -33,6 +33,8 @@ and Cloudflare Tunnel in `docs/hosting.md`, which still works for self-hosting.
 
 `.github/workflows/ci.yml` runs on free GitHub-hosted runners (the repository is public, so the minutes are unlimited). It never runs on a home server: on a public repository a pull request from a fork could run its code there.
 
+**Vercel's own Git integration is off.** `vercel.json` sets `"git": {"deploymentEnabled": false}`, so a push never makes Vercel build and deploy by itself. Otherwise Vercel could ship a commit before `test` and `migrate-prod` have finished, running new code on an old schema. Every production deploy goes through `deploy-prod` (or `Rollback`) in GitHub Actions.
+
 | Event | Jobs |
 | --- | --- |
 | Pull request | `test` only, with no secrets (forks included). There are no previews: the single Supabase project is production, and a preview would use its data. |
@@ -49,3 +51,7 @@ Migrations only ever add (new tables, new nullable columns); anything that remov
 - A GitHub Environment named `production`; add required reviewers to it to approve each production deploy.
 - Vercel environment variables for the *Production* scope. The running app uses the *transaction pooler* address (port 6543) as `SUPABASE_DB_URL`; the pipeline uses the session pooler's.
 - Branch protection on `master`: require a pull request and the `test` check.
+
+## Backups
+
+`.github/workflows/backup.yml` dumps the database every week, encrypts it with age, and keeps it as an artifact for 30 days. It needs the secrets `SUPABASE_DB_URL` (the same session pooler address as above) and `BACKUP_AGE_RECIPIENT` (a public key). Storage files are not included. Setup, restore commands and the restore drill are in [backup-restore.md](backup-restore.md).
