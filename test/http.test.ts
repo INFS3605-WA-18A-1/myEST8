@@ -2,6 +2,7 @@ import { createHmac, generateKeyPairSync, randomBytes, sign } from 'node:crypto'
 import { describe, expect, test } from 'vitest';
 import { createHttpApp } from '../src/http.ts';
 import { json, stubFetch } from './adapters/stub-fetch.ts';
+import { FakeBlobStore } from './support/fakes.ts';
 import { AGENCY_INBOX, AGENCY_NUMBER } from './support/harness.ts';
 import { photo } from './support/photos.ts';
 import { BELLA, TOM, tomsTapTicket, world } from './support/world.ts';
@@ -10,8 +11,8 @@ const PUBLIC_URL = 'https://myest8.test';
 const TWILIO_TOKEN = 'twilio-auth-token';
 const sendgridKeys = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
 
-async function server() {
-  const w = await world();
+async function server(options: Parameters<typeof world>[0] = {}) {
+  const w = await world(options);
   const http = createHttpApp(w.h.app, {
     publicUrl: PUBLIC_URL,
     twilioAuthToken: TWILIO_TOKEN,
@@ -161,6 +162,53 @@ describe('the no-login links', () => {
     expect(await refused.json()).toEqual({ error: 'Only photos can be uploaded here (JPEG, PNG, HEIC, WebP or GIF)' });
 
     expect((await http.request('/api/u/not-a-real-token', { method: 'POST', body: form })).status).toBe(404);
+  });
+
+  test('with storage, photos go straight to it: prepare hands out slots, complete collects them, and nothing outside the Agency can be collected', async () => {
+    const blobs = new FakeBlobStore();
+    const { h, alice, http } = await server({ blobs });
+    h.classifier.when('The kitchen tap is dripping', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });
+    await h.receive(TOM, 'The kitchen tap is dripping');
+    await h.answer(TOM, 'Kitchen sink');
+    await h.answer(TOM, 'Since Monday');
+    await h.answer(TOM, 'No', 'no');
+    await h.answer(TOM, 'Mornings', 'weekday_mornings');
+    const api = `/api${new URL(h.messenger.last(TOM)!.data.uploadLink as string).pathname}`;
+    const post = (path: string, body: unknown) =>
+      http.request(`${api}/${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+
+    const prepared = await post('prepare', { files: [{ filename: 'tap.jpg' }] });
+    expect(prepared.status).toBe(200);
+    const { direct, slots } = (await prepared.json()) as { direct: boolean; slots: { path: string; url: string }[] };
+    expect(direct).toBe(true);
+    expect(slots[0]!.url).toBe(`https://storage.test/upload/${slots[0]!.path}`);
+
+    await blobs.put(slots[0]!.path, photo({ takenAt: '2026:10:08 08:30:00' }), 'image/jpeg'); // the browser's PUT
+    const done = await post('complete', { files: [{ path: slots[0]!.path, filename: 'tap.jpg', contentType: 'image/jpeg' }] });
+    expect(done.status).toBe(202);
+    await h.drain();
+    expect((await alice.dashboard()).maintenanceRequests).toMatchObject([{ photos: [{ metadata: 'ok' }] }]);
+    expect(blobs.objects.has(slots[0]!.path)).toBe(false); // the staged copy is gone
+    expect([...blobs.objects.keys()].every((path) => /^\d+\/[0-9a-f-]{36}$/.test(path))).toBe(true); // the kept copy is named by the app, not the upload
+
+    blobs.objects.set('staging/999/other', { content: photo(), contentType: 'image/jpeg' });
+    const stolen = await post('complete', { files: [{ path: 'staging/999/other', filename: 'x.jpg', contentType: 'image/jpeg' }] });
+    expect(stolen.status).toBeGreaterThanOrEqual(400);
+    expect(blobs.objects.has('staging/999/other')).toBe(true);
+    expect((await http.request('/api/u/not-a-real-token/prepare', { method: 'POST', body: JSON.stringify({ files: [{}] }) })).status).toBe(404);
+  });
+
+  test('without storage, prepare says to use the ordinary form', async () => {
+    const { h, http } = await server();
+    h.classifier.when('The kitchen tap is dripping', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });
+    await h.receive(TOM, 'The kitchen tap is dripping');
+    await h.answer(TOM, 'Kitchen sink');
+    await h.answer(TOM, 'Since Monday');
+    await h.answer(TOM, 'No', 'no');
+    await h.answer(TOM, 'Mornings', 'weekday_mornings');
+    const api = `/api${new URL(h.messenger.last(TOM)!.data.uploadLink as string).pathname}`;
+    const prepared = await http.request(`${api}/prepare`, { method: 'POST', body: JSON.stringify({ files: [{}] }) });
+    expect(await prepared.json()).toEqual({ direct: false });
   });
 
   test("the Tenant's progress tracker is served as JSON for its link's token, and an unknown token is not found", async () => {

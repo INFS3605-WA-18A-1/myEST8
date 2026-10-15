@@ -24,7 +24,7 @@ describe('values round-trip as they did on SQLite', () => {
     );
 
     const file = await one<{ id: number; agency_id: number; content: Uint8Array; created_at: string }>(db, 'SELECT * FROM files WHERE id = ?', fileId);
-    expect(file).toEqual({ id: fileId, agency_id: agencyId, filename: 'tap.jpg', content_type: 'image/jpeg', content, created_at: at });
+    expect(file).toEqual({ id: fileId, agency_id: agencyId, filename: 'tap.jpg', content_type: 'image/jpeg', content, storage_path: null, created_at: at });
     expect(file!.content).toBeInstanceOf(Uint8Array);
     expect(Buffer.isBuffer(file!.content)).toBe(false);
     expect(await one(db, 'SELECT count(*) AS n, sum(agency_id) AS total FROM files')).toEqual({ n: 1, total: agencyId });

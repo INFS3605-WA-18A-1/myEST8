@@ -4,14 +4,14 @@ import { createChannelVerification } from './channel-verification.ts';
 import { createFiles } from './files.ts';
 import { createGoogleRatingRefresh } from './google-ratings.ts';
 import { createImports, type ImportChanges, type ImportKind } from './imports.ts';
-import { createIntake } from './intake.ts';
+import { createIntake, MAX_UPLOAD_FILES } from './intake.ts';
 import { createNotifications } from './notifications.ts';
 import { createOnboarding } from './onboarding.ts';
-import type { ChannelType, Clock, InboundMessage } from './ports.ts';
+import type { BlobStore, ChannelType, Clock, InboundMessage } from './ports.ts';
 import { createProfiles, type SignUp } from './profiles.ts';
 import { createQuotes } from './quotes.ts';
 import { createScheduling } from './scheduling.ts';
-import { DEFAULT_SETTINGS, type Role, type Settings, type Trade, type Urgency } from './shared.ts';
+import { DEFAULT_SETTINGS, invalid, type Role, type Settings, type Trade, type Urgency } from './shared.ts';
 import { createTickets } from './tickets.ts';
 import { createViews } from './views.ts';
 import { createWorker } from './worker.ts';
@@ -22,11 +22,11 @@ export type Upload = { filename: string; contentType: string; content: Uint8Arra
  * The whole app behind its boundary: inbound messages, uploads through links,
  * Property Manager actions and the background worker.
  */
-export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partial<Settings> & Pick<Settings, 'baseUrl'> }) {
+export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partial<Settings> & Pick<Settings, 'baseUrl'>; blobs?: BlobStore | null }) {
   const { db, clock } = deps;
   const settings: Settings = { ...DEFAULT_SETTINGS, ...deps.settings };
   const worker = createWorker(db, clock);
-  const files = createFiles(db, clock);
+  const files = createFiles(db, clock, deps.blobs ?? null);
   const modules = {} as Modules;
   const ctx: Context = {
     db,
@@ -83,6 +83,24 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
 
     /** An upload through a no-login link: issue photos or an Urgent Repair receipt. */
     upload: (token: string, uploads: Upload[]) => intake.upload(token, uploads),
+
+    /**
+     * Where a browser can send the files of a no-login upload straight to storage,
+     * past the function's request size limit: one URL per file, or null when files
+     * are kept in the database. Refuses a link that isn't an upload link.
+     */
+    async uploadSlots(token: string, count: number) {
+      if (!Number.isInteger(count) || count < 1 || count > MAX_UPLOAD_FILES) invalid(`Upload between 1 and ${MAX_UPLOAD_FILES} files`);
+      return files.stage(await intake.uploadAgency(token), count);
+    },
+
+    /** Finishes an upload sent to the slots from `uploadSlots`: collects the files, then handles them like `upload`. */
+    async completeUpload(token: string, sent: { path: string; filename: string; contentType: string }[]) {
+      const agencyId = await intake.uploadAgency(token);
+      const uploads: Upload[] = [];
+      for (const f of sent) uploads.push({ filename: f.filename, contentType: f.contentType, content: await files.take(agencyId, f.path) });
+      await intake.upload(token, uploads);
+    },
 
     /** The Tenant's progress tracker, reached by its no-login link. */
     tracker: (token: string) => tickets.tracker(token),

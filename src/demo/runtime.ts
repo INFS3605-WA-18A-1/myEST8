@@ -12,6 +12,7 @@ import { createJevClassifier } from '../adapters/jev.ts';
 import { messengersFromEnv } from '../adapters/messenger.ts';
 import { metaFetchMedia } from '../adapters/meta-whatsapp.ts';
 import { createQuoteReader } from '../adapters/quote-reader.ts';
+import { createSupabaseStorage } from '../adapters/supabase-storage.ts';
 import { resendInboundConfig } from '../adapters/resend.ts';
 import { twilioFetchMedia } from '../adapters/twilio.ts';
 import { createApp } from '../app.ts';
@@ -218,6 +219,7 @@ export async function createDemo<Seeded extends boolean = true>(
     places: createGooglePlaces(google),
     fetchMedia: mediaFetcher(env),
     settings: { baseUrl },
+    blobs: storageFromEnv(env),
   });
 
   // Worker runs never overlap: each call waits for the one before.
@@ -346,6 +348,18 @@ export async function createDemo<Seeded extends boolean = true>(
 }
 
 const MAIL_POLL_MS = 30_000;
+
+/**
+ * Files in Supabase Storage (private bucket `files`) when SUPABASE_URL and
+ * SUPABASE_SERVICE_ROLE_KEY are set; otherwise they stay in the database.
+ */
+function storageFromEnv(env: Env) {
+  const url = env.SUPABASE_URL?.trim();
+  const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (!url && !serviceKey) return null;
+  if (!url || !serviceKey) throw new Error('Set both SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY, or neither');
+  return createSupabaseStorage({ url, serviceKey });
+}
 
 /**
  * Gmail as the email channel, when GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are

@@ -111,7 +111,7 @@ function uploadPage(token: string, o: { error?: string; thanks?: string } = {}):
       ${card({
         title: sent ? 'Add more' : 'Choose your files',
         body: html`${o.error ? alert(o.error, 'error') : ''}
-          <form method="post" action="/u/${encodeURIComponent(token)}" enctype="multipart/form-data" class="space-y-4">
+          <form method="post" action="/u/${encodeURIComponent(token)}" enctype="multipart/form-data" data-direct-upload="${token}" class="space-y-4">
             <p>This link is only for the repair you told us about. You don't need an account.</p>
             ${dropZone()}
             ${button(sent ? 'Upload more' : 'Upload', { block: true })}

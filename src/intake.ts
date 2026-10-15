@@ -8,7 +8,7 @@ import type { GuidedQuestion } from './templates.ts';
 
 export const URGENT_REPAIR_LIMIT_CENTS = 1000_00;
 const NO_PHOTOS_TIMEOUT_MS = 48 * HOUR_MS;
-const MAX_UPLOAD_FILES = 10;
+export const MAX_UPLOAD_FILES = 10;
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 /** Photo formats phones produce. Not SVG, which can carry script into the Property Manager's pages. */
 const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/heic', 'image/heif', 'image/webp', 'image/gif'];
@@ -541,6 +541,13 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
         );
         await worker.schedule('intake.process', { inboundId });
       });
+    },
+
+    /** The Agency a no-login upload link belongs to; refuses a link that isn't one. */
+    async uploadAgency(token: string): Promise<number> {
+      const target = (await modules.tickets.issueByPhotosToken(token)) ?? (await modules.tickets.urgentRepairByToken(token));
+      if (!target) notFound('Upload link');
+      return target.agencyId;
     },
 
     /** Handles photos or a receipt uploaded through a no-login link. */

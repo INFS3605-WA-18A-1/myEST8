@@ -13,6 +13,7 @@ import { badge, countStrip, emptyState, flashFrom, humanise, linkButton, page, s
 import type { Booking } from './calendar.ts';
 import { alertRow, requestRow, streetOf, PHOTO_FLAG, ROLE_LABEL } from './requests.ts';
 import { finishSetupBanner } from './welcome.ts';
+import { streamOf } from '../stream.ts';
 
 export { PHOTO_FLAG, ROLE_LABEL };
 
@@ -142,7 +143,7 @@ export function dashboardPages() {
     const file = await c.var.actions.file(idParam(c, 'id'));
     if (!file) return c.notFound();
     const inline = INLINE_TYPES.has(file.contentType.toLowerCase());
-    return c.body(new Uint8Array(file.content), 200, {
+    return c.body(streamOf(file.content), 200, {
       'content-type': inline ? file.contentType : 'application/octet-stream',
       'content-disposition': inline ? 'inline' : `attachment; filename="${file.filename.replace(/[^\w.-]/g, '_')}"`,
       'x-content-type-options': 'nosniff',

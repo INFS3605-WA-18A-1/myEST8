@@ -1,5 +1,5 @@
 import { createApp, type PropertyManagerActions } from '../../src/app.ts';
-import type { ChannelType, InboundAttachment } from '../../src/ports.ts';
+import type { BlobStore, ChannelType, InboundAttachment } from '../../src/ports.ts';
 import { testDb } from './db.ts';
 import { FakeClassifier, FakeClock, FakeImageMatcher, FakeMessenger, FakePlaces, FakeQuoteReader } from './fakes.ts';
 
@@ -15,7 +15,7 @@ export const AGENCY_INBOX = 'inbox@harbour.example';
 export type Harness = Awaited<ReturnType<typeof createHarness>>;
 
 /** Drives the app through its boundary: inbound messages, uploads, Property Manager actions and the clock. */
-export async function createHarness() {
+export async function createHarness(options: { blobs?: BlobStore } = {}) {
   const clock = new FakeClock(START);
   const messenger = new FakeMessenger();
   const classifier = new FakeClassifier();
@@ -35,6 +35,7 @@ export async function createHarness() {
       throw new Error(`no media at ${url}`);
     },
     settings: { baseUrl: 'https://myest8.test' },
+    blobs: options.blobs ?? null,
   });
 
   async function drain() {

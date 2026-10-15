@@ -1,3 +1,5 @@
+> Hosting on Vercel and Supabase instead? See [vercel.md](vercel.md). This page covers self-hosting on one machine.
+
 # Hosting a shared copy
 
 The shared copy is two systemd user services on this server, so it survives logouts and reboots. `deploy/serve.sh` starts [`src/main.ts`](../src/main.ts) (the same program as `npm start`), not `src/demo/main.ts`.

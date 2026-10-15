@@ -14,7 +14,8 @@ import { twilioToInbound, verifyTwilioSignature } from './adapters/twilio.ts';
 import type { App } from './app.ts';
 import type { FileLinks } from './file-links.ts';
 import type { Clock } from './ports.ts';
-import { ActionError } from './shared.ts';
+import { ActionError, invalid } from './shared.ts';
+import { streamOf } from './web/stream.ts';
 
 const STATUS = { not_found: 404, invalid: 400, conflict: 409 } as const;
 const MB = 1024 * 1024;
@@ -130,6 +131,27 @@ export function createHttpApp(
     return c.text('ok', 200);
   });
 
+  // Uploads straight to storage, for files past the function's request size limit:
+  // `prepare` hands out one URL per file, the browser PUTs to them, `complete` collects them.
+  http.post('/api/u/:token/prepare', bodyLimit({ maxSize: 64 * 1024 }), async (c) => {
+    const body = await c.req.json().catch(() => null);
+    const count = Array.isArray(body?.files) ? body.files.length : 0;
+    const slots = await app.uploadSlots(c.req.param('token'), count);
+    return c.json(slots ? { direct: true, slots } : { direct: false });
+  });
+
+  http.post('/api/u/:token/complete', bodyLimit({ maxSize: 64 * 1024 }), async (c) => {
+    const body = await c.req.json().catch(() => null);
+    const sent = Array.isArray(body?.files) ? (body.files as unknown[]) : [];
+    const files = sent.map((f) => {
+      const { path, filename, contentType } = (f ?? {}) as Record<string, unknown>;
+      if (typeof path !== 'string' || typeof filename !== 'string') invalid('Expected the files that were uploaded');
+      return { path, filename, contentType: typeof contentType === 'string' && contentType ? contentType : 'application/octet-stream' };
+    });
+    await app.completeUpload(c.req.param('token'), files);
+    return c.json({ ok: true, count: files.length }, 202);
+  });
+
   http.post('/api/u/:token', bodyLimit({ maxSize: 105 * MB }), async (c) => {
     const form = await c.req.formData().catch(() => null);
     if (!form) return c.json({ error: 'Expected multipart/form-data' }, 400);
@@ -149,7 +171,7 @@ export function createHttpApp(
     const id = c.req.param('id');
     if (!config.fileLinks?.check(id, c.req.query('expires'), c.req.query('signature'))) return c.text('Not found', 404);
     const file = await app.linkedFile(Number(id));
-    return c.body(Buffer.from(file.content), 200, {
+    return c.body(streamOf(file.content), 200, {
       'content-type': file.contentType,
       'content-disposition': `inline; filename*=UTF-8''${encodeURIComponent(file.filename).replace(/['()*]/g, (ch) => `%${ch.charCodeAt(0).toString(16).toUpperCase()}`)}`,
       'cache-control': 'private, no-store',
