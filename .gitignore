@@ -31,4 +31,4 @@ ds-bundle/
 .claude/
 google-cloud-cli-*.tar.gz
 .vercel
-.env*
+.env*.local
