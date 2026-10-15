@@ -49,6 +49,56 @@ export function ident(name: string): string {
   return `"${name.replaceAll('"', '""')}"`;
 }
 
+/** Whether `url` goes through Supabase's transaction pooler (port 6543). */
+function isTransactionPooler(url: string): boolean {
+  try {
+    return new URL(url).port === '6543';
+  } catch {
+    return /:6543(\/|\?|$)/.test(url);
+  }
+}
+
+/** sslmode values that make postgres.js insist on TLS (or stricter); the rest can fall back to plain text. */
+const TLS_SSLMODES = new Set(['require', 'verify-ca', 'verify-full', 'no-verify']);
+
+/**
+ * The postgres.js options that depend on where `url` points and which `schema`
+ * it is for. Keys are left out (not set to undefined) when postgres.js's own
+ * default, or the URL, should decide, because an option beats the URL.
+ *
+ * - A database that isn't on this machine requires TLS, so a Supabase pooler URL
+ *   without `sslmode` can't connect in plain text. A URL `sslmode` that demands
+ *   TLS (`require`, `verify-ca`, `verify-full`, `no-verify`) is left to decide;
+ *   `disable`, `allow` and `prefer` are not honoured there. A local database
+ *   is left as it was.
+ * - A hosted database skips the type lookup at connect (`fetch_types`): it only
+ *   finds array types, and the app uses none, so it saves a round trip per
+ *   connection on a serverless cold start.
+ * - The transaction pooler (port 6543) keeps no prepared statements and ignores
+ *   the `search_path` start-up parameter, so it only serves schema `public`.
+ */
+export function connectionOptions(url: string, schema: string) {
+  const pooled = isTransactionPooler(url);
+  if (pooled && schema !== 'public') {
+    throw new Error(
+      `DATABASE_SCHEMA "${schema}" can't be used through Supabase's transaction pooler (port 6543): it ignores the search_path start-up parameter, so queries would run on the wrong schema. Use schema public, or connect through the session pooler (port 5432) or directly.`,
+    );
+  }
+  const local = isLocalUrl(url);
+  let sslmode: string | null = null;
+  try {
+    sslmode = new URL(url).searchParams.get('sslmode');
+  } catch {
+    // An unparseable URL has no sslmode.
+  }
+  return {
+    ...(!local && !(sslmode && TLS_SSLMODES.has(sslmode)) ? { ssl: 'require' as const } : {}),
+    ...(!local ? { fetch_types: false } : {}),
+    prepare: !pooled,
+    connection: schema === 'public' ? {} : { search_path: ident(schema) },
+  };
+}
+
 /**
  * Opens a pool on `url`. With `schema`, unqualified table names resolve to that
  * schema (tests and the demo each keep their data in their own schema).
@@ -60,9 +110,7 @@ export function openDb(url: string, options: { schema?: string; max?: number } =
     idle_timeout: 30,
     connect_timeout: 10,
     onnotice: () => {},
-    // Supabase's transaction pooler (port 6543) can't keep prepared statements.
-    prepare: !/:6543(\/|$)/.test(url),
-    connection: schema === 'public' ? {} : { search_path: ident(schema) },
+    ...connectionOptions(url, schema),
     types: {
       // Ids, counts and cents are bigint; they come back as JS numbers, as they did from SQLite.
       int8: { to: 20, from: [20], serialize: (x: number) => String(x), parse: (x: string) => Number(x) },

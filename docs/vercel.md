@@ -24,6 +24,7 @@ and Cloudflare Tunnel in `docs/hosting.md`, which still works for self-hosting.
 
 ## Limits to know
 
+- Any non-local `SUPABASE_DB_URL` connects with TLS required (a URL `sslmode=require`/`verify-*` is honoured), and `DATABASE_SCHEMA` must stay `public` on the :6543 transaction pooler, which ignores `search_path`; the app refuses to start otherwise.
 - Hobby cron is daily and the plan is for non-commercial use; Pro allows per-minute cron.
 - The SendGrid inbound webhook (`/webhooks/sendgrid`, up to 40 MB) cannot work on Vercel. Email comes in through Resend (ADR 0006).
 - All writes take one per-schema advisory lock (`src/db.ts`), so write throughput is serialised across instances.
