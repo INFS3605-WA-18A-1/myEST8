@@ -1,16 +1,30 @@
-# Typecheck, unit tests and browser end-to-end tests on every push and pull
-# request. No secrets: every external API is mocked in the demo, and every test
-# uses its own throwaway database on the Postgres service below, never a hosted
-# one (see docs/testing.md).
+# Test every change; deploy what lands on master (docs/vercel.md, "CI/CD").
+#
+#   pull request  ->  test  ->  preview (this repo's branches only, on the staging database)
+#   push to master -> test -> migrate-prod -> deploy-prod -> smoke
+#
+# `test` needs no secrets: every external API is mocked, and every test uses its
+# own throwaway database on the Postgres service below, never a hosted one (see
+# docs/testing.md). Only the jobs after it hold secrets, and a pull request from
+# a fork never reaches them. Never switch this to `pull_request_target`: that
+# would hand secrets to code from a fork.
+#
+# Third-party actions are pinned to a commit (the version is in the comment) and
+# kept current by Dependabot.
 name: CI
 
 on:
   push:
+    branches: [master, dev]
   pull_request:
+
+permissions:
+  contents: read
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # A newer push to a pull request replaces the older run. A deploy in progress on master is never cut off.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
@@ -34,9 +48,9 @@ jobs:
     env:
       TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:54340/postgres
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22.x # package.json needs >= 22.13
           cache: npm
@@ -49,6 +63,13 @@ jobs:
       - name: Unit and integration tests
         run: npm run test:unit
 
+      - name: Cache Playwright's Chromium
+        id: playwright
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
       - name: Install Chromium for Playwright
         run: npx playwright install --with-deps chromium
 
@@ -57,10 +78,126 @@ jobs:
 
       - name: Upload the Playwright report
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: playwright-report
           path: |
             playwright-report/
             test-results/
           retention-days: 14
+
+  # A preview of a branch of this repository, on the staging project's database.
+  # Migrations only ever add (docs/vercel.md), so branches sharing that database
+  # don't break one another.
+  preview:
+    needs: test
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.x
+          cache: npm
+      - run: npm ci
+
+      - name: Migrate the staging database
+        env:
+          DB_URL: ${{ secrets.SUPABASE_STAGING_DB_URL }}
+        run: npx supabase db push --yes --db-url "$DB_URL"
+
+      - name: Build and deploy the preview
+        id: deploy
+        run: |
+          npx vercel pull --yes --environment=preview --token "$VERCEL_TOKEN"
+          npx vercel build --token "$VERCEL_TOKEN"
+          echo "url=$(npx vercel deploy --prebuilt --token "$VERCEL_TOKEN")" >> "$GITHUB_OUTPUT"
+
+      - name: Link the preview on the pull request
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        env:
+          PREVIEW_URL: ${{ steps.deploy.outputs.url }}
+        with:
+          script: |
+            const marker = '<!-- myest8-preview -->';
+            const body = `${marker}\nPreview: ${process.env.PREVIEW_URL}\n\nIt runs on the staging database. Webhooks and sign-in with Google are tested on production only.`;
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number });
+            const mine = comments.find((c) => c.body?.startsWith(marker));
+            if (mine) await github.rest.issues.updateComment({ owner, repo, comment_id: mine.id, body });
+            else await github.rest.issues.createComment({ owner, repo, issue_number, body });
+
+  # The first run applies every migration to the empty production database. If a
+  # migration fails nothing is deployed. Use the session pooler's address (port
+  # 5432, reachable over IPv4); Supabase's direct address is IPv6 only. Add
+  # required reviewers to the `production` environment to approve each deploy.
+  migrate-prod:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.x
+          cache: npm
+      - run: npm ci
+      - name: Migrate the production database
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: npx supabase db push --yes --db-url "$DB_URL"
+
+  deploy-prod:
+    needs: migrate-prod
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # One production deploy at a time, in order; a newer one waits instead of cutting this one off.
+    concurrency:
+      group: deploy-prod
+      cancel-in-progress: false
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.x
+          cache: npm
+      - run: npm ci
+      - name: Build and deploy to production
+        run: |
+          npx vercel pull --yes --environment=production --token "$VERCEL_TOKEN"
+          npx vercel build --prod --token "$VERCEL_TOKEN"
+          npx vercel deploy --prebuilt --prod --token "$VERCEL_TOKEN"
+
+  # The deploy is live; check the app answers and reaches its database. A failure
+  # here means: run the Rollback workflow.
+  smoke:
+    needs: deploy-prod
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      APP_URL: ${{ vars.APP_URL }}
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+    steps:
+      - name: The landing page answers
+        run: curl --fail --silent --show-error --retry 5 --retry-delay 5 --retry-all-errors --max-time 30 --output /dev/null "$APP_URL/"
+      - name: The worker route refuses a caller without the secret
+        run: |
+          test "$(curl --silent --max-time 30 --output /dev/null --write-out '%{http_code}' "$APP_URL/api/cron/worker")" = 401
+      - name: The worker runs, so the database is reachable
+        run: |
+          curl --fail --silent --show-error --max-time 60 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/worker"

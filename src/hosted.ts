@@ -7,9 +7,14 @@ import { createDemo } from './demo/runtime.ts';
 
 export type Hosted = Awaited<ReturnType<typeof createDemo<false>>>;
 
-/** PUBLIC_URL, or the production domain Vercel assigns the project. Providers and Tenants need an https address. */
+/**
+ * PUBLIC_URL, or the address Vercel gave this deployment: the project's production
+ * domain in production, the deployment's own address in a preview. Providers and
+ * Tenants need an https address.
+ */
 function publicUrl(env: Record<string, string | undefined>) {
-  const url = env.PUBLIC_URL?.trim() || (env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${env.VERCEL_PROJECT_PRODUCTION_URL}` : '');
+  const vercelHost = env.VERCEL_ENV === 'production' ? env.VERCEL_PROJECT_PRODUCTION_URL : env.VERCEL_URL;
+  const url = env.PUBLIC_URL?.trim() || (vercelHost ? `https://${vercelHost}` : '');
   if (!url.startsWith('https://')) throw new Error('Set PUBLIC_URL to the https address providers and Tenants reach this app on.');
   return url;
 }
