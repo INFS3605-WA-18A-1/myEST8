@@ -1,7 +1,10 @@
 # Test every change; deploy what lands on master (docs/vercel.md, "CI/CD").
 #
-#   pull request  ->  test  ->  preview (this repo's branches only, on the staging database)
+#   pull request   ->  test
 #   push to master -> test -> migrate-prod -> deploy-prod -> smoke
+#
+# There are no preview deployments: the one Supabase project is production, and a
+# preview would run on its data. Add a staging project and a preview job to bring them back.
 #
 # `test` needs no secrets: every external API is mocked, and every test uses its
 # own throwaway database on the Postgres service below, never a hosted one (see
@@ -85,56 +88,6 @@ jobs:
             playwright-report/
             test-results/
           retention-days: 14
-
-  # A preview of a branch of this repository, on the staging project's database.
-  # Migrations only ever add (docs/vercel.md), so branches sharing that database
-  # don't break one another.
-  preview:
-    needs: test
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read
-      pull-requests: write
-    env:
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 22.x
-          cache: npm
-      - run: npm ci
-
-      - name: Migrate the staging database
-        env:
-          DB_URL: ${{ secrets.SUPABASE_STAGING_DB_URL }}
-        run: npx supabase db push --yes --db-url "$DB_URL"
-
-      - name: Build and deploy the preview
-        id: deploy
-        run: |
-          npx vercel pull --yes --environment=preview --token "$VERCEL_TOKEN"
-          npx vercel build --token "$VERCEL_TOKEN"
-          echo "url=$(npx vercel deploy --prebuilt --token "$VERCEL_TOKEN")" >> "$GITHUB_OUTPUT"
-
-      - name: Link the preview on the pull request
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
-        env:
-          PREVIEW_URL: ${{ steps.deploy.outputs.url }}
-        with:
-          script: |
-            const marker = '<!-- myest8-preview -->';
-            const body = `${marker}\nPreview: ${process.env.PREVIEW_URL}\n\nIt runs on the staging database. Webhooks and sign-in with Google are tested on production only.`;
-            const { owner, repo } = context.repo;
-            const issue_number = context.issue.number;
-            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number });
-            const mine = comments.find((c) => c.body?.startsWith(marker));
-            if (mine) await github.rest.issues.updateComment({ owner, repo, comment_id: mine.id, body });
-            else await github.rest.issues.createComment({ owner, repo, issue_number, body });
 
   # The first run applies every migration to the empty production database. If a
   # migration fails nothing is deployed. Use the session pooler's address (port

@@ -35,17 +35,17 @@ and Cloudflare Tunnel in `docs/hosting.md`, which still works for self-hosting.
 
 | Event | Jobs |
 | --- | --- |
-| Pull request | `test`; then, for a branch of this repository, `preview` (migrates the staging database, deploys a preview, comments its link). A fork gets `test` only and no secrets. |
+| Pull request | `test` only, with no secrets (forks included). There are no previews: the single Supabase project is production, and a preview would use its data. |
 | Push to `master` | `test`, then `migrate-prod` (`supabase db push`), `deploy-prod`, and `smoke` (landing page 200, worker route 401 without the secret and 200 with it). |
 | Manual | `Rollback`: give it an earlier deployment's address or id (`vercel ls --prod`). |
 
-Migrations only ever add (new tables, new nullable columns); anything that removes something is a separate, deliberate change. That is what lets the shared staging database serve several branches, and lets Rollback run older code on the newer database.
+Migrations only ever add (new tables, new nullable columns); anything that removes something is a separate, deliberate change. That is what lets Rollback run older code on the newer database.
 
 **Set up once**
 
-- A second Supabase project for staging, with the `files` bucket.
-- GitHub **secrets**: `VERCEL_TOKEN`, `SUPABASE_DB_URL` (production, the *session pooler* address on port 5432, which works over IPv4), `SUPABASE_STAGING_DB_URL` (same kind), `CRON_SECRET`.
+- The `files` bucket in the Supabase project (Storage, private).
+- GitHub **secrets**: `VERCEL_TOKEN`, `SUPABASE_DB_URL` (the *session pooler* address on port 5432, which works over IPv4), `CRON_SECRET`.
 - GitHub **variables**: `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` (both in `.vercel/project.json` after `vercel link`), `APP_URL`.
 - A GitHub Environment named `production`; add required reviewers to it to approve each production deploy.
-- Vercel environment variables for the *Production* and *Preview* scopes (Preview points at the staging project). The running app uses the *transaction pooler* address (port 6543) as `SUPABASE_DB_URL`; the pipeline uses the session pooler's.
+- Vercel environment variables for the *Production* scope. The running app uses the *transaction pooler* address (port 6543) as `SUPABASE_DB_URL`; the pipeline uses the session pooler's.
 - Branch protection on `master`: require a pull request and the `test` check.
