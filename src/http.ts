@@ -25,7 +25,8 @@ export function createHttpApp(
   config: {
     /** The address providers call, which Twilio signs: "https://myest8.example". */
     publicUrl: string;
-    twilioAuthToken: string;
+    /** Twilio's auth token. Null (hosted, none set) turns /webhooks/twilio off with a 404. */
+    twilioAuthToken: string | null;
     /** SendGrid's verification key (base64 DER). Every email webhook must be signed with it. */
     sendgridPublicKey: string;
     clock: Clock;
@@ -46,6 +47,7 @@ export function createHttpApp(
   };
 
   http.post('/webhooks/twilio', bodyLimit({ maxSize: MB }), async (c) => {
+    if (!config.twilioAuthToken) return c.notFound();
     const params = Object.fromEntries(new URLSearchParams(await c.req.text()));
     if (!verifyTwilioSignature(config.twilioAuthToken, publicUrl(c), params, c.req.header('x-twilio-signature') ?? '')) {
       return c.text('Invalid signature', 403);

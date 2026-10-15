@@ -25,7 +25,7 @@ export function createWebApp(deps: {
   sessions: Sessions;
   clock: Clock;
   publicUrl: string;
-  twilioAuthToken: string;
+  twilioAuthToken: string | null;
   sendgridPublicKey: string;
   /** Signed file links (src/file-links.ts), for Twilio to fetch attachments. */
   fileLinks?: FileLinks | null;

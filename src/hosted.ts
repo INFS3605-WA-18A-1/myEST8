@@ -19,7 +19,11 @@ function publicUrl(env: Record<string, string | undefined>) {
   return url;
 }
 
-/** Builds the hosted app. api/index.ts calls it once per function instance. */
-export async function hostedApp(env: Record<string, string | undefined> = process.env): Promise<Hosted> {
-  return createDemo({ env: { ...env, PUBLIC_URL: publicUrl(env) }, seedAgency: false, hosted: true });
+/**
+ * Builds the hosted app. api/index.ts calls it once per function instance. It
+ * throws, naming every missing setting, unless ALLOW_MOCKS=1 (see checkHosted in
+ * src/demo/runtime.ts), and logs which providers are real and which mocked.
+ */
+export async function hostedApp(env: Record<string, string | undefined> = process.env, log?: (line: string) => void): Promise<Hosted> {
+  return createDemo({ env: { ...env, PUBLIC_URL: publicUrl(env) }, seedAgency: false, hosted: true, ...(log ? { log } : {}) });
 }

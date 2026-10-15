@@ -228,6 +228,27 @@ describe('the no-login links', () => {
   });
 });
 
+describe('the Twilio webhook with no auth token (hosted without Twilio)', () => {
+  test('is off: 404, even for a request signed with the demo key', async () => {
+    const received: unknown[] = [];
+    const http = createHttpApp({ receiveInbound: async (m: unknown) => void received.push(m) } as never, {
+      publicUrl: PUBLIC_URL,
+      twilioAuthToken: null,
+      sendgridPublicKey: '',
+      clock: { now: () => new Date('2026-10-13T00:00:00Z') },
+    });
+    const params = { From: '+61400000001', To: '+61290000000', Body: 'hi', MessageSid: 'SM1' };
+    const payload = `${PUBLIC_URL}/webhooks/twilio` + Object.keys(params).sort().map((k) => k + params[k as keyof typeof params]).join('');
+    const res = await http.request('/webhooks/twilio', {
+      method: 'POST',
+      headers: { 'x-twilio-signature': createHmac('sha1', 'demo').update(payload).digest('base64') },
+      body: new URLSearchParams(params).toString(),
+    });
+    expect(res.status).toBe(404);
+    expect(received).toEqual([]);
+  });
+});
+
 describe('the Meta WhatsApp webhook', () => {
   const SECRET = 'meta-app-secret';
   function whatsappServer(enabled = true) {

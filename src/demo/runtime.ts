@@ -38,6 +38,61 @@ export type Env = Record<string, string | undefined>;
 /** Which external APIs are real (set by env vars) and which are the in-process mocks. */
 export type ApiChoice = Record<'classifier' | 'imageMatcher' | 'quoteReader' | 'places' | 'messenger', 'mock' | 'real'>;
 
+/** One thing the hosted app needs: the settings it reads, and which are unset. `required` ones stop a hosted start. */
+export type HostedProvider = { provider: string; required: boolean; missing: string[] };
+
+/**
+ * What the hosted app needs from its environment, by the fallback that fills the
+ * gap when a setting is absent: a mock (classifier, Google Places, photo matcher,
+ * quote reader), a made-up value (the `mail.example.test` inbound domain), or a
+ * feature left off (file storage in the database, Resend inbound, signed file
+ * links, the cron route). The photo matcher and quote reader are listed but not
+ * required: they only have a mock until their services exist.
+ */
+export function hostedProviders(env: Env): HostedProvider[] {
+  const set = (name: string) => !!env[name]?.trim();
+  const unset = (...names: string[]) => names.filter((name) => !set(name));
+  return [
+    // Claude, or Jev when JEV_API_URL is set, is the real classifier. Only a missing pair of both is a mock.
+    { provider: 'classifier', required: true, missing: set('ANTHROPIC_API_KEY') || set('JEV_API_URL') ? [] : ['ANTHROPIC_API_KEY'] },
+    { provider: 'places', required: true, missing: unset('GOOGLE_MAPS_API_KEY') },
+    { provider: 'file storage', required: true, missing: unset('SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY') },
+    { provider: 'email', required: true, missing: unset('RESEND_API_KEY') },
+    { provider: 'inbound email', required: true, missing: unset('RESEND_WEBHOOK_SECRET', 'RESEND_INBOUND_DOMAIN') },
+    { provider: 'file links', required: true, missing: unset('FILE_LINK_SECRET') },
+    { provider: 'worker cron', required: true, missing: unset('CRON_SECRET') },
+    { provider: 'imageMatcher', required: false, missing: unset('VISION_API_URL') },
+    { provider: 'quoteReader', required: false, missing: unset('QUOTES_API_URL') },
+  ];
+}
+
+/**
+ * Throws when hosted mode lacks a setting, naming every one that is missing. A real
+ * service URL with no key would be called with the made-up key 'demo', so that is
+ * always refused; ALLOW_MOCKS=1 only lets the missing providers run on mocks.
+ */
+function checkHosted(env: Env, log: (line: string) => void) {
+  const providers = hostedProviders(env);
+  const set = (name: string) => !!env[name]?.trim();
+  const missing = providers.filter((p) => p.required).flatMap((p) => p.missing);
+  const noKey = [
+    ...(set('JEV_API_URL') && !set('ANTHROPIC_API_KEY') && !set('JEV_API_KEY') ? ['JEV_API_KEY'] : []),
+    ...(set('VISION_API_URL') && !set('VISION_API_KEY') ? ['VISION_API_KEY'] : []),
+    ...(set('QUOTES_API_URL') && !set('QUOTES_API_KEY') ? ['QUOTES_API_KEY'] : []),
+  ];
+  const allowMocks = env.ALLOW_MOCKS === '1';
+  const refused = [...(allowMocks ? [] : missing), ...noKey];
+  if (refused.length) {
+    throw new Error(
+      `Hosted mode is missing required settings: ${refused.join(', ')}.` +
+        (allowMocks ? '' : ' Set them, or set ALLOW_MOCKS=1 to run the providers they configure on mocks.'),
+    );
+  }
+  const real = providers.filter((p) => p.missing.length === 0).map((p) => p.provider);
+  const off = providers.filter((p) => p.missing.length > 0).map((p) => p.provider);
+  log(`[hosted] Real: ${real.join(', ') || 'nothing'}. Mocked or off: ${off.join(', ') || 'nothing'}${allowMocks && off.length ? ' (ALLOW_MOCKS=1)' : ''}.`);
+}
+
 /**
  * Which Postgres schema the demo runs on, whether it's kept when the demo stops
  * (DATABASE_SCHEMA named it) or thrown away (a fresh one per start), and
@@ -144,14 +199,18 @@ export async function createDemo<Seeded extends boolean = true>(
      * is undeliverable instead of landing in the phone simulator.
      */
     hosted?: boolean;
+    /** Where the hosted start-up report (which providers are real, which mocked) goes. Defaults to console.log. */
+    log?: (line: string) => void;
   } = {},
 ) {
   const env = options.env ?? process.env;
+  const hosted = options.hosted === true;
+  // Hosted never starts on a silent mock: it names every missing setting first.
+  if (hosted) checkHosted(env, options.log ?? ((line) => console.log(line)));
   const resend = resendInboundConfig(env);
   const logError = options.logError ?? ((error: Error) => console.error('[worker]', error));
   // DATABASE_SCHEMA unset: a fresh schema, dropped on close. Set: a schema that is
   // seeded on the first start and reopened as it was on every start after.
-  const hosted = options.hosted === true;
   const { db, store, saved, schema, kept } = await openDemoDb(env, hosted);
   const seedAgency = !hosted && options.seedAgency !== false;
   const anthropicKey = env.ANTHROPIC_API_KEY?.trim();
@@ -163,7 +222,7 @@ export async function createDemo<Seeded extends boolean = true>(
   const saveClock = () => store.set('clockOffsetMs', clock.now().getTime() - Date.now());
   const timeZone = 'Australia/Sydney';
   const port = Number(env.PORT ?? 3000);
-  const baseUrl = (env.PUBLIC_URL ?? `http://localhost:${port}`).replace(/\/$/, '');
+  const baseUrl = (env.PUBLIC_URL || `http://localhost:${port}`).replace(/\/$/, '');
 
   const mock = mockApis();
   const mockFetch: typeof fetch = async (input, init) => mock.request(input, init);
@@ -332,7 +391,8 @@ export async function createDemo<Seeded extends boolean = true>(
     sessions,
     clock,
     publicUrl: baseUrl,
-    twilioAuthToken: twilioAuthToken || 'demo',
+    // Hosted with no Twilio token: /webhooks/twilio is off (404), never checked against 'demo'.
+    twilioAuthToken: twilioAuthToken || (hosted ? null : 'demo'),
     sendgridPublicKey:
       env.SENDGRID_INBOUND_PUBLIC_KEY?.trim() ||
       generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).publicKey.export({ format: 'der', type: 'spki' }).toString('base64'),

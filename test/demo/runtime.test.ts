@@ -114,6 +114,17 @@ describe('the demo', () => {
     expect(moved).toBeLessThan(48 * HOUR + 60_000);
   });
 
+  test('an empty PUBLIC_URL falls back to localhost on the port', async () => {
+    const { baseUrl } = await demoWorldWith({ PUBLIC_URL: '', PORT: '4321' });
+    expect(baseUrl).toBe('http://localhost:4321');
+  });
+
+  test('without TWILIO_AUTH_TOKEN the Twilio webhook still checks the demo key (dev behaviour is unchanged)', async () => {
+    const { web } = await demoWorld();
+    const res = await web.request('/webhooks/twilio', { method: 'POST', body: new URLSearchParams({ From: '+61400000000' }) });
+    expect(res.status).toBe(403);
+  });
+
   test('serves the sign-in page and keeps the simulator behind it', async () => {
     const { web } = await demoWorld();
     expect((await web.request('/login')).status).toBe(200);
