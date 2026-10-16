@@ -84,7 +84,7 @@ function ownerTable(waiting: Approvals['waitingOnOwner'], now: Date): Html {
       html`${formatAge(w.requestedAt, now).replace(' ago', '')}`,
       reminder(w),
     ]),
-    { caption: 'Quotes waiting on a Property Owner, longest waiting first', align: ['left', 'left', 'left', 'right', 'right', 'left', 'left'] },
+    { stack: true, caption: 'Quotes waiting on a Property Owner, longest waiting first', align: ['left', 'left', 'left', 'right', 'right', 'left', 'left'] },
   );
 }
 
@@ -99,6 +99,6 @@ function receiptTable(waiting: Approvals['waitingOnReceipt'], propertyIds: Map<s
       html`${formatWhen(u.reportedAt, timeZone)}`,
       html`${formatAge(u.reportedAt, now).replace(' ago', '')}`,
     ]),
-    { caption: 'Urgent Repairs waiting on a receipt, latest first' },
+    { stack: true, caption: 'Urgent Repairs waiting on a receipt, latest first' },
   );
 }

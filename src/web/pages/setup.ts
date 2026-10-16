@@ -367,7 +367,7 @@ function propertiesArea(agency: Agency, myId: number, shown: Shown): Html {
   return html`
     <p class="text-sm">Each Property has one Property Owner and is assigned to one Property Manager. Open one from <a class="link" href="/properties">Properties</a>.</p>
     ${agency.properties.length
-      ? table(['Address', 'Property Manager', 'Property Owner', 'Max Repair Cost', 'Tenants', 'Nominated Tradies', 'Building Manager'], rows, { caption: 'Properties' })
+      ? table(['Address', 'Property Manager', 'Property Owner', 'Max Repair Cost', 'Tenants', 'Nominated Tradies', 'Building Manager'], rows, { caption: 'Properties', stack: true })
       : emptyState('No Properties yet.')}
     ${addForm(
       'Add a Property',

@@ -497,7 +497,7 @@ function urgentRepairsTable(repairs: UrgentRepair[], timeZone: string): Html {
         html`${formatWhen(u.reportedAt, timeZone)}`,
       ];
     }),
-    { caption: 'Urgent Repairs' },
+    { caption: 'Urgent Repairs', stack: true },
   );
 }
 

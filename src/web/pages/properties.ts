@@ -164,7 +164,7 @@ function list(properties: Overview[]): Html {
       html`${p.openTickets}`,
       html`${p.propertyManager}`,
     ]),
-    { caption: 'Properties', align: ['left', 'left', 'right', 'left', 'right', 'left'] },
+    { stack: true, caption: 'Properties', align: ['left', 'left', 'right', 'left', 'right', 'left'] },
   );
 }
 

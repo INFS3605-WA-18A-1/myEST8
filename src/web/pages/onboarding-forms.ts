@@ -365,7 +365,7 @@ export async function tradiesTable(actions: PropertyManagerActions, tradies: Per
       html`${t.googlePlaceId ? `${t.googleRating?.toFixed(1) ?? '—'} (${t.googleReviewCount ?? 0} reviews)` : 'Not on Google'}`,
     ];
   });
-  return table(['Business', 'Name', 'Trades', 'myEST8 rating', 'Google rating'], rows, { caption: 'Tradies' });
+  return table(['Business', 'Name', 'Trades', 'myEST8 rating', 'Google rating'], rows, { stack: true, caption: 'Tradies' });
 }
 
 // Importing from a spreadsheet

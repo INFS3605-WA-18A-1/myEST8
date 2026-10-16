@@ -168,7 +168,7 @@ function directory(tradies: DirectoryEntry[], trade: Trade | null): Html {
         html`${t.quotes}`,
       ];
     }),
-    { caption: trade ? `${humanise(trade)} Tradies` : 'Tradies', align: ['left', 'left', 'left', 'left', 'right'] },
+    { stack: true, caption: trade ? `${humanise(trade)} Tradies` : 'Tradies', align: ['left', 'left', 'left', 'left', 'right'] },
   );
 }
 
