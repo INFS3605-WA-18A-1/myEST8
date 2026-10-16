@@ -5,6 +5,7 @@ import { approvalPages } from './pages/approvals.ts';
 import { calendarPages } from './pages/calendar.ts';
 import { googleOAuthPages } from './pages/oauth-google.ts';
 import { dashboardPages } from './pages/dashboard.ts';
+import { dispatchPages } from './pages/dispatch.ts';
 import { propertyPages } from './pages/properties.ts';
 import { requestPages } from './pages/requests.ts';
 import { settingsPages } from './pages/settings.ts';
@@ -24,10 +25,9 @@ export function pmPages(o: { demo: boolean; connectors: ChannelConnectors } = { 
   pages.route('/tickets', ticketListPages());
   pages.route('/tickets', ticketPages());
   pages.route('/approvals', approvalPages());
-  // The Schedule is the week of bookings, at /calendar. /dispatch is the map (phase 2d restores
-  // its page); until then it still shows the week, so the old links keep working.
+  // The Schedule is the week of bookings, at /calendar. /dispatch is the map.
   pages.route('/calendar', calendarPages());
-  pages.route('/dispatch', calendarPages());
+  pages.route('/dispatch', dispatchPages());
   pages.get('/schedule', (c) => c.redirect(`/calendar${new URL(c.req.url).search}`, 303));
   pages.route('/properties', propertyPages());
   pages.route('/tradies', tradiePages());

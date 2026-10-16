@@ -194,10 +194,10 @@ describe('the calendar and Tradie profiles', () => {
     await w.alice.sendWorkOrder(job.jobId);
     const cookie = await w.signIn();
 
-    const week = await page(w, '/dispatch?week=2026-10-14', cookie);
-    expect(week).toContain('Week of 12 Oct 2026');
-    expect(week).toContain('/dispatch?week=2026-10-05');
-    expect(week).toContain('/dispatch?week=2026-10-19');
+    const week = await page(w, '/calendar?week=2026-10-14', cookie);
+    expect(week).toContain('Week of Monday 12 October 2026');
+    expect(week).toContain('/calendar?week=2026-10-05');
+    expect(week).toContain('/calendar?week=2026-10-19');
     const booking = week.indexOf(`href="/tickets/${job.ticketId}"`);
     expect(week.indexOf('Tuesday 13 October')).toBeLessThan(booking);
     expect(week.indexOf('Wednesday 14 October')).toBeGreaterThan(booking);
@@ -205,7 +205,7 @@ describe('the calendar and Tradie profiles', () => {
     expect(week).toContain(KING_ST);
     expect(week).toContain('Plumbing');
 
-    expect(await page(w, '/dispatch?week=2026-10-19', cookie)).not.toContain(KING_ST);
+    expect(await page(w, '/calendar?week=2026-10-19', cookie)).not.toContain(KING_ST);
     expect(await page(w, '/', cookie)).toContain(`href="/tradies/${w.tradies.pete.id}"`);
 
     const pete = await page(w, `/tradies/${w.tradies.pete.id}`, cookie);

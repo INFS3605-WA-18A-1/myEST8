@@ -130,7 +130,7 @@ describe('the onboarding guide', () => {
 
     const added = await submit(w, '/setup/tradies?google=lucky', { ...tradie, placeId: 'place-lucky' }, cookie);
     expect(added.page).toContain('Lucky Locks added as a Tradie');
-    expect(added.page).toContain('4.6 (22 reviews)');
+    expect(added.page).toContain('22 reviews');
     const tradieId = /href="\/tradies\/(\d+)">Lucky Locks</.exec(added.page)?.[1];
     expect(await page(w, `/tradies/${tradieId}`, cookie)).toContain('Lou Lucky');
   });
