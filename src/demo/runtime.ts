@@ -404,6 +404,7 @@ export async function createDemo<Seeded extends boolean = true>(
     connectors: {
       gmail: mailboxes?.connector ?? null,
       whatsappNumber: env.META_WHATSAPP_NUMBER?.trim() || null,
+      smsInbound: hosted ? 'none' : 'simulator',
       unavailable: [
         // The demo simulates SMS; a hosted server needs a real provider, or a code can only fail.
         ...(hosted && !providers.channels.sms ? (['sms'] as const) : []),

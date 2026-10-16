@@ -249,7 +249,7 @@ async function channelsArea(
     <p class="text-sm">Tenants, Tradies and Property Owners reach the Agency by SMS, WhatsApp and email. Verify a phone number with a code. Forward the Agency inbox to the email address below.</p>
     ${shown.error}
     <div class="mt-4 grid gap-4 md:grid-cols-3">
-      ${CHANNELS.map((channel) => channelCard(channel, connected.find((c) => c.type === channel.type), timeZone, origin, { gmailBlock, whatsappNumber: connectors.whatsappNumber, unavailable: connectors.unavailable }, email, pending.find((row) => row.channelType === channel.type)))}
+      ${CHANNELS.map((channel) => channelCard(channel, connected.find((c) => c.type === channel.type), timeZone, origin, { gmailBlock, whatsappNumber: connectors.whatsappNumber, unavailable: connectors.unavailable, smsInbound: connectors.smsInbound }, email, pending.find((row) => row.channelType === channel.type)))}
     </div>
   `;
 }
@@ -260,7 +260,7 @@ function channelCard(
   connected: AgencyChannel | undefined,
   timeZone: string,
   origin: string,
-  via: { gmailBlock: Html | null; whatsappNumber: string | null; unavailable: ChannelType[] },
+  via: { gmailBlock: Html | null; whatsappNumber: string | null; unavailable: ChannelType[]; smsInbound: 'simulator' | 'none' },
   email: { address: string; state: 'waiting' | 'verified' | 'connected' },
   pending: { address: string } | undefined,
 ): Html {
@@ -276,7 +276,7 @@ function channelCard(
     title: channel.name,
     actions: channelChip(connected, { waiting, verified: emailVerified }),
     body: html`
-      ${connected ? channelLine(connected, timeZone, { waiting }) : ''}
+      ${connected ? channelLine(connected, timeZone, { waiting, smsInbound: via.smsInbound }) : ''}
       ${channel.type === 'email' || !viaWhatsapp ? html`<div class="mt-2">${channelGuide(channel.type, origin)}</div>` : ''}
       <div class="mt-3">
         ${channel.type === 'email'

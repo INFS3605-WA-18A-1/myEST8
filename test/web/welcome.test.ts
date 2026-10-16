@@ -45,7 +45,7 @@ function propertyFields(changes: Fields = {}): Fields {
 const TRADIE: Fields = { businessName: 'Sunny Plumbing', name: 'Sunny Sun', mobile: '0400 000 997', email: '', trades: ['plumbing'], startingRating: 4, placeId: 'none' };
 
 describe('a channel this server cannot deliver on', () => {
-  const connectors = { gmail: null, whatsappNumber: null, unavailable: ['sms', 'email'] as const };
+  const connectors = { gmail: null, whatsappNumber: null, smsInbound: 'none' as const, unavailable: ['sms', 'email'] as const };
 
   test('is not offered on the wizard or /setup, with a plain note instead, and does not hold setup back', async () => {
     const w = await webWorld({ connectors: { ...connectors, unavailable: [...connectors.unavailable] } });
@@ -75,6 +75,28 @@ describe('a channel this server cannot deliver on', () => {
     const html = await page(w, '/welcome/channels', sam);
     expect(html).toContain('id="sms-address"');
     expect(visible(html)).not.toContain("isn't available on this server");
+  });
+});
+
+describe('what a verified SMS number promises', () => {
+  async function verifiedSms(smsInbound: 'simulator' | 'none') {
+    const w = await webWorld({ connectors: { gmail: null, whatsappNumber: null, unavailable: [], smsInbound } });
+    const sam = await w.signUp();
+    await submit(w, '/welcome/channels', { type: 'sms', address: '+61 2 9100 0002' }, sam);
+    const code = String(w.h.messenger.last('+61291000002')?.data.code);
+    await submit(w, '/welcome/channels/confirm', { type: 'sms', address: '+61 2 9100 0002', code }, sam);
+    return Promise.all(['/welcome/channels', '/setup'].map(async (path) => visible(await page(w, path, sam))));
+  }
+
+  test('on a real server the typed number is not claimed to receive Tenant texts', async () => {
+    for (const text of await verifiedSms('none')) {
+      expect(text).toContain("is confirmed as the Agency's number. Texts to it don't reach myEST8 yet.");
+      expect(text).not.toContain('Tenants reach the Agency at +61291000002');
+    }
+  });
+
+  test('in the demo the simulator receives them', async () => {
+    for (const text of await verifiedSms('simulator')) expect(text).toContain('Tenants reach the Agency at +61291000002');
   });
 });
 

@@ -417,7 +417,7 @@ async function channelsStep(c: WizardContext, demo: boolean, connectors: Channel
             <div class="min-w-0">
               ${flash && flashChannel === channel.type ? flashMessage(flash) : ''}
               ${unavailable ? unavailableNote(channel.type, connectors.unavailable) : ''}
-              ${unavailable ? '' : current ? channelLine(current, agency.timeZone, { waiting }) : ''}
+              ${unavailable ? '' : current ? channelLine(current, agency.timeZone, { waiting, smsInbound: connectors.smsInbound }) : ''}
               ${unavailable ? '' : channel.type === 'email'
                 ? html`${inboundEmailField(email.address)}${gmailBlock ?? ''}<div class="mt-2">${channelGuide(channel.type, origin)}</div>`
                 : viaWhatsapp

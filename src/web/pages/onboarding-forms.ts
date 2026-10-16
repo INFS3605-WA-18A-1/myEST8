@@ -104,8 +104,12 @@ export function channelBadge(channel: AgencyChannel | undefined, o: { waiting?: 
 }
 
 /** The address a connected channel uses. */
-export function channelLine(channel: AgencyChannel, timeZone: string, o: { waiting?: boolean } = {}): Html {
+export function channelLine(channel: AgencyChannel, timeZone: string, o: { waiting?: boolean; smsInbound?: 'simulator' | 'none' } = {}): Html {
   if (o.waiting) return html`<p class="text-sm">Waiting for your first message at <strong class="break-all">${channel.address}</strong>.</p>`;
+  // A typed SMS number on a real server proves the Agency holds it; it isn't where Tenants' texts arrive.
+  if (channel.testedAt && channel.type === 'sms' && o.smsInbound === 'none') {
+    return html`<p class="text-sm">Verified ${formatWhen(channel.testedAt, timeZone)}. <strong class="break-all">${channel.address}</strong> is confirmed as the Agency's number. Texts to it don't reach myEST8 yet.</p>`;
+  }
   if (channel.testedAt) return html`<p class="text-sm">Verified ${formatWhen(channel.testedAt, timeZone)}. Tenants reach the Agency at <strong class="break-all">${channel.address}</strong>.</p>`;
   return html`<p class="text-sm">Connected to <strong class="break-all">${channel.address}</strong>.</p>`;
 }

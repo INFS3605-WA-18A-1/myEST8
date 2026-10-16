@@ -26,7 +26,13 @@ export interface ChannelConnectors {
    * decided in the runtime where providers are chosen. The pages don't offer them.
    */
   unavailable: ChannelType[];
+  /**
+   * Whether a Tenant's text to the Agency's own verified mobile number reaches myEST8:
+   * only in the demo, where the phone simulator stands in. Hosted, inbound SMS arrives at the
+   * provider's number, so a typed number only proves who the Agency is.
+   */
+  smsInbound: 'simulator' | 'none';
 }
 
 /** Nothing connectable, and every channel assumed deliverable: the default for tests and the plain web app. */
-export const NO_CONNECTORS: ChannelConnectors = { gmail: null, whatsappNumber: null, unavailable: [] };
+export const NO_CONNECTORS: ChannelConnectors = { gmail: null, whatsappNumber: null, unavailable: [], smsInbound: 'simulator' };
