@@ -2897,6 +2897,75 @@
       color: var(--ink);
     }
 
+    /* Settings (pages/settings.ts): side tabs, then the tab's sections in a column no
+       wider than 52rem so a row's name and its button stay within reach. Each list is
+       rows of a name (linked when it has a page), a muted hint, and actions at the end. */
+    .settings-layout {
+      display: grid;
+      align-items: start;
+      gap: 24px;
+    }
+    @media (min-width: 1024px) {
+      .settings-layout {
+        grid-template-columns: 13rem minmax(0, 52rem);
+      }
+    }
+    .settings-panel {
+      display: grid;
+      gap: 24px;
+      min-width: 0;
+    }
+    .settings-intro {
+      max-width: 72ch;
+      margin: 0 0 8px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+    .settings-list {
+      display: flex;
+      flex-direction: column;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .settings-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px 16px;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .settings-row:first-child {
+      padding-top: 0;
+    }
+    .settings-row:last-child {
+      padding-bottom: 0;
+      border-bottom: 0;
+    }
+    .settings-row-text {
+      display: flex;
+      flex: 1 1 16rem;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+    .settings-row-label {
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .settings-row-hint {
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .settings-row-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 16px;
+    }
+
     /* A Tradie's profile (pages/tradie.ts): the Trades and contact details beside the
        four ratings (myEST8, Property Managers', Tenants', Google) from 1024px. */
     .tradie-head .section-body,
