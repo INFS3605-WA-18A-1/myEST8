@@ -20,6 +20,32 @@ How the tests get their databases: the vitest global setup (`test/support/global
 
 Debugging a browser test: `npx playwright test --headed`, `npx playwright test --ui`, or open the trace of a failure with `npx playwright show-trace test-results/<test>/trace.zip`.
 
+## Run it like production
+
+`npm run demo` and `npm run dev` are the demo: a seeded Agency, stories, the phone simulator. Production is `api/index.ts` on Vercel, and it looks different. To see what a new Property Manager sees, run that same entry point on this machine:
+
+```sh
+npm run db:start             # the Docker Postgres, port 54340 (skip if one is already running)
+npm run prod:local           # http://localhost:3000, a new Agency signs up at /signup
+npm run test:e2e:prod-local  # the browser walkthrough of it, on a fresh database
+```
+
+`scripts/prod-local.ts` imports the default export of `api/index.ts` and serves its `fetch` with `@hono/node-server`; it composes nothing itself. First it applies the migrations with `scripts/db.ts migrate`, as `supabase db push` does for production (the app never migrates in hosted mode). Then it sets the environment Vercel would hold: `ALLOW_MOCKS=1`, `CRON_SECRET` (`prod-local-cron-secret`), `FILE_LINK_SECRET`, `PUBLIC_URL=http://localhost:<PORT>` with `LOCAL_PROD=1`, and blanks every external API (Claude, Jev, Google, Meta, Twilio, SendGrid, Resend, Gmail, Supabase) whatever your shell has set. A timer calls `/api/cron/worker` with the bearer every 30 s (`PROD_LOCAL_CRON_SECONDS`; production's GitHub ping is every 5 min), and the worker runs after every POST as on Vercel. It prints all of this when it starts.
+
+Settings: `SUPABASE_DB_URL` (a Postgres on this machine; default the Docker one), `DATABASE_SCHEMA` (default `public`, as in production), `PORT` (default 3000).
+
+`src/hosted.ts` still refuses a PUBLIC_URL that isn't https. `LOCAL_PROD=1` allows `http://localhost` or `http://127.0.0.1` and nothing else (`test/hosted.test.ts`). There is no demo Agency and no `--seed`: sign up like a real user.
+
+The specs are in `test/e2e/prod-local/` (`playwright.prod-local.config.ts`, which starts `prod:local` on a free port and a throwaway database, and uses a 2 s worker ping). The ordinary suite ignores them.
+
+What this does **not** reproduce:
+
+- **Supabase Storage.** `SUPABASE_URL` is blanked, so files stay in the database and the Tenant upload form posts to the function rather than uploading straight to a bucket through signed URLs. Setting it would call a real project.
+- **Real channels and providers.** The classifier, Google Places, email, WhatsApp and SMS are mocks or off. With no SMS provider, a verification code can't be sent (the page says so), and a Tenant can't message in: there is no phone simulator, so the Tenant upload (`/u/`) and tracker (`/t/`) links are only reachable by a link from a real message. The specs check the no-login pages with a bogus token only.
+- **Vercel itself.** Edge caching and CDN headers, the roughly 4.5 MB request cap (locally the app's own, much larger limits apply), cold starts, the `icn1` region, per-instance rate limits and `includeFiles` (a static file missing from `vercel.json` shows only on Vercel).
+- **Supabase's pooler.** TLS and the :6543 transaction pooler aren't in play against a local Postgres.
+- **Timing of background work.** The local worker ping is 10 times more frequent than production's.
+
 ## The layers
 
 | Layer | What it proves | Where | Runs |

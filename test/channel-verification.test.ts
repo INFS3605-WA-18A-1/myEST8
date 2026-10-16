@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { one } from '../src/db.ts';
+import { ProviderRefusedError, UndeliverableError } from '../src/ports.ts';
 import { createHarness, MINUTE, AGENCY_NUMBER } from './support/harness.ts';
 import { TOM, world } from './support/world.ts';
 
@@ -22,6 +23,69 @@ function sentCode(h: Awaited<ReturnType<typeof createHarness>>, to: string) {
 }
 
 describe('channel verification', () => {
+  test('a code that cannot be delivered is refused with a reason, and nothing is left open', async () => {
+    const { h, agencyId, sam } = await sunrise();
+    h.messenger.send = async (message) => {
+      throw new UndeliverableError(message.channelType, message.to, 'no sms provider is configured');
+    };
+
+    await expect(sam.startChannelVerification('sms', NUMBER)).rejects.toThrow("We couldn't send a code to +61 2 9000 1111 — that number couldn't be used. Check the number and try again.");
+    expect(await one(h.db, 'SELECT 1 FROM channel_verifications WHERE agency_id = ?', agencyId)).toBeUndefined();
+  });
+
+  test('a provider refusal is explained in plain English, and the stored code is deleted', async () => {
+    const { h, agencyId, sam } = await sunrise();
+    h.messenger.send = async (message) => {
+      throw new UndeliverableError(message.channelType, message.to, "Twilio 21211 The 'To' number is not valid", "that doesn't look like a valid phone number");
+    };
+    await expect(sam.startChannelVerification('sms', NUMBER)).rejects.toThrow(
+      "We couldn't send a code to +61 2 9000 1111 — that doesn't look like a valid phone number. Check the number and try again.",
+    );
+    expect(await one(h.db, 'SELECT 1 FROM channel_verifications WHERE agency_id = ?', agencyId)).toBeUndefined();
+
+    h.messenger.send = async () => {
+      throw new ProviderRefusedError('Meta returned 400: 131047 Re-engagement message', 'WhatsApp only allows a free-text message to a number that has messaged us in the last 24 hours');
+    };
+    await expect(sam.startChannelVerification('whatsapp', NUMBER)).rejects.toThrow(/last 24 hours\. Check the number/);
+    expect(await one(h.db, 'SELECT 1 FROM channel_verifications WHERE agency_id = ?', agencyId)).toBeUndefined();
+  });
+
+  test('an unexpected error is not swallowed', async () => {
+    const { h, sam } = await sunrise();
+    h.messenger.send = async () => {
+      throw new TypeError('boom');
+    };
+    await expect(sam.startChannelVerification('sms', NUMBER)).rejects.toThrow('boom');
+  });
+
+  test('allows one code per channel per minute, counted on the injected clock', async () => {
+    const { h, sam } = await sunrise();
+    await sam.startChannelVerification('sms', NUMBER);
+    const first = sentCode(h, NORMALIZED);
+
+    h.clock.advance(25_000);
+    await expect(sam.startChannelVerification('sms', NUMBER)).rejects.toThrow('Wait 35 seconds');
+    expect(sentCode(h, NORMALIZED)).toBe(first);
+    // Another channel has its own cooldown.
+    await sam.startChannelVerification('whatsapp', NUMBER);
+
+    h.clock.advance(35_000);
+    await sam.startChannelVerification('sms', NUMBER);
+    await expect(sam.confirmChannelVerification('sms', NUMBER, first)).rejects.toThrow('wrong');
+    await sam.confirmChannelVerification('sms', NUMBER, sentCode(h, NORMALIZED));
+  });
+
+  test('a number that cannot be right is refused with a helpful message before anything is sent', async () => {
+    const { h, sam } = await sunrise();
+    await expect(sam.startChannelVerification('sms', '+61')).rejects.toThrow(/too short/);
+    await expect(sam.startChannelVerification('sms', 'hello')).rejects.toThrow(/area code/);
+    await expect(sam.startChannelVerification('sms', '0412 345')).rejects.toThrow(/9 digits after \+61/);
+    expect(h.messenger.templatesTo('+61')).toEqual([]);
+    // Other spellings of one Australian mobile are the same number.
+    await sam.startChannelVerification('sms', '0061 (0)412 345 678');
+    expect(sentCode(h, '+61412345678')).toMatch(/^\d{6}$/);
+  });
+
   test('sends a 6-digit code and stores the address only after the code matches', async () => {
     const { h, agencyId, sam } = await sunrise();
 
@@ -57,6 +121,7 @@ describe('channel verification', () => {
     await expect(sam.confirmChannelVerification('whatsapp', NUMBER, code)).rejects.toThrow('tried too many times');
     expect(await sam.channels()).toEqual([]);
 
+    h.clock.advance(MINUTE);
     await sam.startChannelVerification('whatsapp', NUMBER);
     const fresh = sentCode(h, NORMALIZED);
     h.clock.advance(10 * MINUTE + 1);

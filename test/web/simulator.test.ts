@@ -14,9 +14,9 @@ const BARRY_ID = 904;
 /**
  * A demo with four people outside Harbour Realty and a few messages, recording
  * what the simulator asks of it. Only Property Managers added to `harbour` see
- * them; WhatsApp is refused as not connected when `noWhatsApp` is set.
+ * them; SMS is refused as not connected when `noSms` is set.
  */
-function fakeDemo(o: { noWhatsApp?: boolean; extra?: number } = {}) {
+function fakeDemo(o: { noSms?: boolean; extra?: number } = {}) {
   const harbour = new Set<number>();
   const ours = <T>(propertyManagerId: number, items: T[]) => (harbour.has(propertyManagerId) ? items : []);
   const sent: { as: number; from: string; channel: string; text: string; attachments: { filename: string; contentType: string; content: Uint8Array }[] | undefined }[] = [];
@@ -84,7 +84,7 @@ function fakeDemo(o: { noWhatsApp?: boolean; extra?: number } = {}) {
     outbox: async (id) => ours(id, outbox),
     inbound: async (id) => ours(id, inbound),
     async sendAs(id, from, channel, text, attachments) {
-      if (o.noWhatsApp && channel === 'whatsapp') throw new ActionError('invalid', 'Connect WhatsApp in Setup first');
+      if (o.noSms && channel === 'sms') throw new ActionError('invalid', 'Connect SMS in Setup first');
       sent.push({ as: id, from, channel, text, attachments });
     },
     async advance(hours) {
@@ -96,7 +96,7 @@ function fakeDemo(o: { noWhatsApp?: boolean; extra?: number } = {}) {
   return { demo, sent, advanced, harbour };
 }
 
-async function simulator(o: { noWhatsApp?: boolean; extra?: number } = {}) {
+async function simulator(o: { noSms?: boolean; extra?: number } = {}) {
   const fake = fakeDemo(o);
   const w = await webWorld({ demo: fake.demo });
   fake.harbour.add(w.ids.aliceId).add(w.ids.bobId);
@@ -144,7 +144,8 @@ describe('the phone simulator', () => {
     expect(page).not.toContain("<script>alert('hi')</script>");
     expect(page).toMatch(/<a [^>]*href="https:\/\/myest8\.test\/u\/abc123"[^>]*>https:\/\/myest8\.test\/u\/abc123<\/a>\. Thanks!/);
     expect(page).toContain('<option value="sms" selected>');
-    expect(page).toContain('<option value="whatsapp"');
+    expect(page).not.toContain('whatsapp');
+    expect(page).not.toContain('WhatsApp');
     expect(page).not.toContain('<option value="email"');
     expect(page).toContain('The kitchen tap is dripping');
     expect(page).toContain('name="quick" value="Any time"');
@@ -164,11 +165,11 @@ describe('the phone simulator', () => {
   test('replying as a contact sends in from their address on the chosen channel', async () => {
     const { post, cookie, sent, ids } = await simulator();
 
-    const res = await post('/demo/send', { contact: TOM_ID, channel: 'whatsapp', text: '  Yes  ' }, cookie);
+    const res = await post('/demo/send', { contact: TOM_ID, channel: 'sms', text: '  Yes  ' }, cookie);
 
     expect(res.status).toBe(303);
     expect(res.headers.get('location')).toMatch(new RegExp(`^/demo\\?contact=${TOM_ID}&ok=`));
-    expect(sent).toEqual([{ as: ids.aliceId, from: TOM, channel: 'whatsapp', text: 'Yes', attachments: [] }]);
+    expect(sent).toEqual([{ as: ids.aliceId, from: TOM, channel: 'sms', text: 'Yes', attachments: [] }]);
   });
 
   test('a quick reply sends its text, and a file goes as an attachment', async () => {
@@ -201,12 +202,12 @@ describe('the phone simulator', () => {
   });
 
   test("a channel the Agency hasn't connected is refused with how to fix it", async () => {
-    const { post, get, cookie, sent } = await simulator({ noWhatsApp: true });
+    const { post, get, cookie, sent } = await simulator({ noSms: true });
 
-    const res = await post('/demo/send', { contact: TOM_ID, channel: 'whatsapp', text: 'Hello' }, cookie);
+    const res = await post('/demo/send', { contact: TOM_ID, channel: 'sms', text: 'Hello' }, cookie);
 
-    expect(decodeURIComponent(res.headers.get('location')!)).toContain('Connect WhatsApp in Setup first');
-    expect(await (await get(res.headers.get('location')!, cookie)).text()).toContain('Connect WhatsApp in Setup first');
+    expect(decodeURIComponent(res.headers.get('location')!)).toContain('Connect SMS in Setup first');
+    expect(await (await get(res.headers.get('location')!, cookie)).text()).toContain('Connect SMS in Setup first');
     expect(sent).toEqual([]);
   });
 
@@ -221,7 +222,7 @@ describe('the phone simulator', () => {
     const page = await (await get('/demo', sam)).text();
 
     for (const name of ['Tom Tran', 'Pete Park', 'Olivia Owens', 'Approve a repair at 12 King St']) expect(page).not.toContain(name);
-    expect(page).toContain('SMS, WhatsApp and Email not connected yet');
+    expect(page).toContain('SMS and Email not connected yet');
     expect(page).toContain('href="/welcome/channels"');
     expect(page).toContain('No people to act as yet');
   });

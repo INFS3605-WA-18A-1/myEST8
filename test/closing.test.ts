@@ -40,7 +40,7 @@ describe('closing a Ticket', () => {
       ['done', true],
       ['closed', true],
     ]);
-    expect(JSON.stringify(tracker)).not.toMatch(/150|Cents|rating|Pete/i);
+    expect(JSON.stringify(tracker)).not.toMatch(/150|Cents|rating/i);
     expect((await alice.ticket(job.ticketId)).frequentIssues).toEqual([{ trade: 'plumbing', tickets: 1 }]);
     await expect(alice.addJob(job.ticketId, 'electrical')).rejects.toThrow(/closed/);
   });

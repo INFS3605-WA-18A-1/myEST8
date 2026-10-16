@@ -81,7 +81,6 @@ describe('the demo', () => {
     await expect(demo.sendAs(sam, TINA, 'sms', 'Hello')).rejects.toThrow('Connect SMS in Setup first');
 
     await sunrise.connectChannel('sms', '+61 2 9100 0002');
-    await sunrise.connectChannel('whatsapp', '+61 2 9100 0002');
     await sunrise.connectChannel('email', 'inbox@sunrise-realty.example');
     const owner = await sunrise.addOwner({ name: 'Omar Owen', mobile: '+61400000998' });
     const property = await sunrise.addProperty({

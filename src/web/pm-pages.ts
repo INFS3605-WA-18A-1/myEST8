@@ -5,6 +5,7 @@ import { approvalPages } from './pages/approvals.ts';
 import { calendarPages } from './pages/calendar.ts';
 import { googleOAuthPages } from './pages/oauth-google.ts';
 import { dashboardPages } from './pages/dashboard.ts';
+import { dispatchPages } from './pages/dispatch.ts';
 import { propertyPages } from './pages/properties.ts';
 import { requestPages } from './pages/requests.ts';
 import { settingsPages } from './pages/settings.ts';
@@ -24,9 +25,10 @@ export function pmPages(o: { demo: boolean; connectors: ChannelConnectors } = { 
   pages.route('/tickets', ticketListPages());
   pages.route('/tickets', ticketPages());
   pages.route('/approvals', approvalPages());
-  // The Schedule is the week of bookings; it lived at /calendar before the rail grew.
-  pages.route('/dispatch', calendarPages());
-  pages.get('/calendar', (c) => c.redirect(`/dispatch${new URL(c.req.url).search}`, 301));
+  // The Schedule is the week of bookings, at /calendar. /dispatch is the map.
+  pages.route('/calendar', calendarPages());
+  pages.route('/dispatch', dispatchPages());
+  pages.get('/schedule', (c) => c.redirect(`/calendar${new URL(c.req.url).search}`, 303));
   pages.route('/properties', propertyPages());
   pages.route('/tradies', tradiePages());
   pages.route('/setup', setupPages(o));

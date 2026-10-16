@@ -13,6 +13,7 @@ import { landingRoutes } from './pages/landing.ts';
 import { signupRoutes } from './pages/signup.ts';
 import { pmPages } from './pm-pages.ts';
 import { rateLimit } from './rate-limit.ts';
+import { loadNavCounts } from './shell.ts';
 import { tenantPages } from './tenant-pages.ts';
 
 /**
@@ -33,7 +34,7 @@ export function createWebApp(deps: {
   whatsapp?: { appSecret: string; verifyToken: string } | null;
   /** Resend inbound email, when both RESEND_WEBHOOK_SECRET and RESEND_API_KEY are set. */
   resend?: { webhookSecret: string; apiKey: string; fetch?: typeof fetch } | null;
-  /** What onboarding can connect (Gmail, the WhatsApp number). */
+  /** What onboarding can connect (Gmail). */
   connectors?: ChannelConnectors;
   demo?: DemoControls;
   /** Whether the landing page lists the demo Agency's sign-ins. Defaults to whether `demo` is set. */
@@ -55,6 +56,12 @@ export function createWebApp(deps: {
 
   const signedIn = new Hono<WebEnv>();
   signedIn.use('*', requirePropertyManager(deps.app, deps.sessions));
+  signedIn.use('*', async (c, next) => {
+    c.set('demo', !!deps.demo);
+    c.set('unavailableChannels', deps.connectors?.unavailable ?? []);
+    await next();
+  });
+  signedIn.use('*', loadNavCounts());
   if (deps.demo) signedIn.route('/demo', simulatorPages(deps.demo));
   signedIn.route('/', pmPages({ demo: !!deps.demo, connectors: deps.connectors ?? NO_CONNECTORS }));
   web.route('/', signedIn);

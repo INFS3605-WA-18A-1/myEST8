@@ -107,7 +107,7 @@ describe('the demo script', () => {
     expect((await d.lastTo(TOM)).template).toBe('tenant.ticket_closed');
     const trackerLink = (await d.demo.outbox(d.seed.ids.aliceId)).find((m) => m.to === TOM && m.template === 'tenant.confirmed')!.text;
     const tracker = await (await d.web.request(`/t/${d.tokenOf(trackerLink)}`)).text();
-    expect(tracker).toContain('Closed');
+    expect(tracker).toContain('Fixed');
     expect(tracker).not.toContain('$');
     expect(d.errors).toEqual([]);
   });
@@ -122,7 +122,7 @@ describe('the demo script', () => {
     expect((await d.lastTo('barry@strata.example')).template).toBe('building_manager.common_area_issue');
     expect((await d.lastTo('bella@example.com')).template).toBe('tenant.common_area_passed_on');
 
-    expect(await d.page('/requests?filter=all')).toContain('There is a gas smell in the kitchen');
+    expect(await d.page('/?filter=all')).toContain('There is a gas smell in the kitchen');
     expect(d.errors).toEqual([]);
   });
 });

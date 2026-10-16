@@ -9,7 +9,7 @@
 // Errors come back as { "code": 21211, "message": "...", "status": 400 }.
 
 import type { FileLinks } from '../file-links.ts';
-import { UndeliverableError, type Messenger, type OutboundMessage } from '../ports.ts';
+import { ProviderRefusedError, UndeliverableError, type Messenger, type OutboundMessage } from '../ports.ts';
 
 const TIMEOUT_MS = 15_000;
 const MAX_MMS_MEDIA = 10;
@@ -19,6 +19,15 @@ const MAX_MMS_MEDIA = 10;
  * phone number, 21610 the recipient replied STOP, 21614 not a mobile number.
  */
 export const TWILIO_UNDELIVERABLE_CODES: ReadonlySet<number> = new Set([21211, 21610, 21614]);
+
+/** What a person is told for each Twilio error code we recognise. */
+export const TWILIO_USER_REASONS: ReadonlyMap<number, string> = new Map([
+  [21211, "that doesn't look like a valid phone number"],
+  [21614, "that isn't a mobile number that can receive texts"],
+  [21610, 'that number has opted out of messages'],
+  [21608, 'this server can only text numbers verified on its trial SMS account'],
+  [21408, "texts to that country aren't enabled on this server"],
+]);
 
 export interface TwilioMessengerConfig {
   accountSid: string;
@@ -61,8 +70,10 @@ export function createTwilioMessenger({
     const error = parseError(text);
     const detail = error ? `${error.code ?? 'no code'} ${error.message ?? ''}`.trim() : text.slice(0, 200);
     if (error?.code !== undefined && TWILIO_UNDELIVERABLE_CODES.has(error.code)) {
-      throw new UndeliverableError(message.channelType, message.to, `Twilio ${detail}`);
+      throw new UndeliverableError(message.channelType, message.to, `Twilio ${detail}`, TWILIO_USER_REASONS.get(error.code));
     }
+    const friendly = error?.code === undefined ? undefined : TWILIO_USER_REASONS.get(error.code);
+    if (friendly) throw new ProviderRefusedError(`Twilio returned ${response.status}: ${detail}`, friendly);
     throw new Error(`Twilio returned ${response.status}: ${detail}`);
   }
 

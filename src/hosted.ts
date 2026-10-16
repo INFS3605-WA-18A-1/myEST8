@@ -15,7 +15,9 @@ export type Hosted = Awaited<ReturnType<typeof createDemo<false>>>;
 function publicUrl(env: Record<string, string | undefined>) {
   const vercelHost = env.VERCEL_ENV === 'production' ? env.VERCEL_PROJECT_PRODUCTION_URL : env.VERCEL_URL;
   const url = env.PUBLIC_URL?.trim() || (vercelHost ? `https://${vercelHost}` : '');
-  if (!url.startsWith('https://')) throw new Error('Set PUBLIC_URL to the https address providers and Tenants reach this app on.');
+  // `npm run prod:local` runs this same code on this machine: LOCAL_PROD=1 lets it use a plain-http localhost address, and nothing else.
+  const localHttp = env.LOCAL_PROD === '1' && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/?$/.test(url);
+  if (!url.startsWith('https://') && !localHttp) throw new Error('Set PUBLIC_URL to the https address providers and Tenants reach this app on.');
   return url;
 }
 

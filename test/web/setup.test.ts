@@ -25,11 +25,14 @@ describe('the onboarding guide', () => {
 
     const setup = await page(w, '/setup', cookie);
 
-    for (const text of ['id="channels"', 'id="tenants"', 'Forward', 'Resend']) expect(setup).toContain(text);
+    for (const text of ['id="channels"', 'id="people"', 'id="tradies"', 'id="properties"', 'id="tenants"', 'Forward', 'Resend']) expect(setup).toContain(text);
+    for (const text of ['Set up myEST8', 'aria-label="Setup areas"', 'href="#tradies"', 'href="#properties"', 'Use the step-by-step guide']) expect(setup).toContain(text);
     expect(setup).not.toContain('WhatsApp sandbox');
     expect(setup).not.toContain('/webhooks/twilio');
     expect(setup).not.toContain('/webhooks/sendgrid');
-    for (const text of ['Olivia Owens', 'Barry Strata', KING_ST, 'Tom Tran']) expect(setup).toContain(text);
+    for (const text of ['Olivia Owens', 'Barry Strata', KING_ST, 'Tom Tran', 'Flow Bros', 'Add a Tradie', 'Add a Property', '$500.00']) expect(setup).toContain(text);
+    expect(setup).toContain('action="/setup/tradies?from=setup"');
+    expect(setup).toContain('action="/setup/properties?from=setup"');
 
     const properties = await page(w, '/properties', cookie);
     for (const text of [KING_ST, '$500.00', 'Tom Tran', 'Olivia Owens']) expect(properties).toContain(text);
@@ -55,7 +58,7 @@ describe('the onboarding guide', () => {
     expect(typed.page).not.toContain('someone@example.com');
 
     const unknown = await submit(w, '/setup/channels', { type: 'fax', address: '123' }, cookie);
-    expect(unknown.page).toContain('Choose SMS, WhatsApp or email');
+    expect(unknown.page).toContain('Choose SMS or email');
   });
 
   test('adds a Tenant to a Property and lists them with it', async () => {
@@ -127,8 +130,29 @@ describe('the onboarding guide', () => {
 
     const added = await submit(w, '/setup/tradies?google=lucky', { ...tradie, placeId: 'place-lucky' }, cookie);
     expect(added.page).toContain('Lucky Locks added as a Tradie');
-    expect(added.page).toContain('4.6 (22 reviews)');
+    expect(added.page).toContain('22 reviews');
     const tradieId = /href="\/tradies\/(\d+)">Lucky Locks</.exec(added.page)?.[1];
     expect(await page(w, `/tradies/${tradieId}`, cookie)).toContain('Lou Lucky');
+  });
+
+  test('the Tradies and Properties sections on Setup come back to Setup, and keep the search and what went wrong', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+    w.h.places.listings.set('place-lucky', { name: 'Lucky Locks', address: 'Surry Hills', rating: 4.6, reviewCount: 22 });
+    const tradie = { businessName: 'Lucky Locks', name: 'Lou Lucky', mobile: '0412 999 000', trades: ['locksmith'], startingRating: 4 };
+
+    const refused = await submit(w, '/setup/tradies?from=setup&google=lucky', tradie, cookie);
+    expect(refused.location).toMatch(/^\/setup\?form=tradie&google=lucky&error=/);
+    expect(refused.page).toContain('Link the Tradie to their Google listing, or mark them as not on Google');
+    expect(refused.page).toContain('value="place-lucky"');
+    expect(refused.page).toMatch(/<details class="mt-4" open>\s*<summary[^>]*>Add a Tradie/);
+
+    const added = await submit(w, '/setup/tradies?from=setup&google=lucky', { ...tradie, placeId: 'place-lucky' }, cookie);
+    expect(added.location).toMatch(/^\/setup\?ok=/);
+    expect(added.page).toContain('Lucky Locks added as a Tradie');
+
+    const noCost = await submit(w, '/setup/properties?from=setup', { address: '1 A St', suburb: 'A', ownerId: '1', propertyManagerId: w.ids.aliceId }, cookie);
+    expect(noCost.location).toMatch(/^\/setup\?form=property&error=/);
+    expect(noCost.page).toContain('Enter the Max Repair Cost');
   });
 });

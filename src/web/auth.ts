@@ -11,7 +11,8 @@ import { one, run, type Db } from '../db.ts';
 import type { Clock } from '../ports.ts';
 import { iso } from '../shared.ts';
 import type { WebEnv } from './env.ts';
-import { button, field, linkButton, publicPage, type Flash } from './ui.ts';
+import { authPage, otherWay } from './auth-card.ts';
+import { button, field, linkButton, type Flash } from './ui.ts';
 
 /** The session cookie's name. */
 export const SESSION_COOKIE = 'myest8_session';
@@ -179,25 +180,24 @@ export function sameOrigin(c: HonoContext): boolean {
 }
 
 function signInPage(o: { next: string; email?: string; flash?: Flash }) {
-  return publicPage({
+  return authPage({
     title: 'Sign in to myEST8',
     subtitle: 'For Property Managers. Tenants, Tradies and Property Owners never need an account.',
-    width: 'narrow',
     flash: o.flash ?? null,
-    headerActions: html`<a class="link text-sm" href="/">Home</a>`,
+    size: 'login',
     footer: SIGNED_OUT_FOOTER,
-    body: html`<div class="space-y-5">
-        <form method="post" action="/login" class="space-y-4">
-          <input type="hidden" name="next" value="${o.next}" />
-          ${field({ label: 'Email', name: 'email', type: 'email', value: o.email ?? '', required: true, autocomplete: 'username' })}
-          ${field({ label: 'Password', name: 'password', type: 'password', required: true, autocomplete: 'current-password' })}
-          ${button('Sign in', { block: true })}
-        </form>
-        <div class="space-y-3 border-t border-line pt-5 text-center text-sm">
-          <p>New to myEST8? <a class="link" href="/signup">Create your Agency’s account</a></p>
-          <p><a class="link" href="/">Back to the front page</a></p>
-        </div>
-      </div>`,
+    form: html`<form method="post" action="/login" class="au-form">
+        <input type="hidden" name="next" value="${o.next}" />
+        ${field({ label: 'Email', name: 'email', type: 'email', value: o.email ?? '', required: true, autocomplete: 'username' })}
+        ${field({ label: 'Password', name: 'password', type: 'password', required: true, autocomplete: 'current-password' })}
+        ${button('Sign in', { size: 'lg', block: true })}
+      </form>
+      ${otherWay({ text: 'New to myEST8?', button: linkButton('Create your Agency’s account', '/signup', { variant: 'secondary', block: true }) })}`,
+    steps: [
+      { text: 'Your dashboard lists each Maintenance Request waiting for your decision.', request: true },
+      { text: 'Confirm one and it becomes a Ticket.' },
+      { text: 'Quotes come back from Tradies for you to choose between.' },
+    ],
   });
 }
 

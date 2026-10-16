@@ -83,6 +83,8 @@
   --rail-muted: #9aa8b4; /* rail counts, the Phone simulator, the Agency (6.7:1) */
   --rail-hover: rgb(255 255 255 / 0.05);
   --rail-current: rgb(255 255 255 / 0.08);
+  --rail-width: 220px; /* the rail, and the drawer on phones */
+  --rail-collapsed-width: 64px; /* the rail folded to its icons */
   --scrim: rgb(19 33 46 / 0.45); /* Night over the page, behind the open drawer */
   --shadow-lift: 0 8px 24px rgb(19 33 46 / 0.18); /* the one shadow: menus, dialogs, the phone frame */
   --font-body: 'Red Hat Text', system-ui, sans-serif;
@@ -403,7 +405,7 @@
       text-decoration: underline;
     }
 
-    /* Count chips: round counts on Paper; in the count strip they take the Wattle fill. */
+    /* Count chips: round counts. Decisions get the Wattle fill; the rest are Paper. */
     .count-chip {
       display: inline-flex;
       align-items: center;
@@ -420,8 +422,9 @@
       line-height: 1;
       font-variant-numeric: tabular-nums;
     }
-    .count-strip .count-chip {
+    .count-chip.is-decision {
       background: var(--hivis);
+      color: var(--ink);
     }
 
     /* ----- Forms: label above the control, 40px controls (44px on phones), hints and errors under them. */
@@ -529,6 +532,8 @@
       color: var(--ink);
     }
     .section-actions {
+      min-width: 0;
+      max-width: 100%;
       display: flex;
       flex-wrap: wrap;
       align-items: center;
@@ -569,21 +574,6 @@
     }
     .table tbody tr:last-child :where(th, td) {
       border-bottom: 0;
-    }
-    /* Inside a section the table runs to the section's edges under a hairline, not in a second box. */
-    .section-body > .table-frame {
-      margin: 0 -16px;
-      border: 0;
-      border-block: 1px solid var(--line);
-      border-radius: 0;
-    }
-    .section-body > .table-frame:last-child {
-      margin-bottom: -16px;
-      border-bottom: 0;
-      border-radius: 0 0 8px 8px;
-    }
-    .section-body > .table-frame :where(th, td):first-child {
-      padding-left: 16px;
     }
 
     /* ----- Steps: 24px circles. Done is --done with a tick, current is Harbour with its
@@ -779,23 +769,18 @@
       border: 1px solid var(--line);
       border-radius: 8px;
     }
-    /* Inside a section the section is the frame. */
-    .section-body > .empty-state {
-      padding: 0;
-      border: 0;
-    }
     .empty-state p {
       margin: 0;
       color: var(--muted);
     }
 
-    /* ----- Dockets: Tickets only. A stub with the number and Urgency, a dashed perforation, a body. */
+    /* ----- Dockets: Tickets only. The issue, the address, a dashed perforation, then the stub: the status and a foot with the number and age. */
     .docket {
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      gap: 6px;
       min-width: 0;
-      padding: 8px;
+      padding: 10px;
       background: var(--surface);
       border: 1px solid var(--line);
       border-radius: 4px;
@@ -840,11 +825,23 @@
       padding: 1px 8px;
       font-size: 13px;
     }
-    .docket.is-large .docket-address,
+    /* The Ticket page's header keeps the street first and bold, then the issue. */
+    .docket.is-large .docket-address {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--ink);
+    }
     .docket.is-large .docket-issue {
       font-size: 14px;
+      font-weight: 400;
     }
-    /* The perforation: a dashed hairline across the docket, under the stub. */
+    /* Waiting on the Property Manager (Ready to choose): the decision stripe. */
+    .docket.is-decision,
+    a.docket.is-decision:hover {
+      border-left-width: 4px;
+      border-left-color: var(--hivis);
+    }
+    /* The perforation: a dashed hairline across the docket, above the stub. */
     .docket-perf {
       display: block;
       border-top: 1px dashed var(--control);
@@ -855,15 +852,46 @@
       flex-direction: column;
       gap: 2px;
       min-width: 0;
-      padding-top: 2px;
     }
-    /* The address is one line and the issue up to two (line-clamp-1 and -2 in clip()). */
-    .docket-address {
-      font-size: 14px;
-      font-weight: 600;
-    }
+    /* Read first: the issue, up to three lines (line-clamp-3 in clip()). */
     .docket-issue {
-      font-size: 14px;
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.3;
+    }
+    /* Then where: the address on one line, the full text in its title. */
+    .docket-address {
+      font-size: 13px;
+      color: var(--muted);
+    }
+    /* Then the status: Urgency, Trades and what the Ticket waits on. */
+    .docket-status {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px 10px;
+      min-width: 0;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .docket-status .badge {
+      min-height: 18px;
+      padding: 0 6px;
+      font-size: 12px;
+    }
+    /* The foot: the number and the age, quiet. */
+    .docket-foot {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .docket-foot .docket-number {
+      font-size: 12px;
+    }
+    .docket-foot .ml-auto {
+      margin-left: auto;
     }
     .docket-meta {
       display: flex;
@@ -1064,9 +1092,14 @@
       flex-direction: column;
       gap: 8px;
       min-height: 0;
-      max-height: 300px;
       overflow-y: auto;
       padding: 8px;
+    }
+    /* From 1024px the board is five columns and each lane scrolls inside itself; on phones the lanes stack as a list. */
+    @media (min-width: 64rem) {
+      .lane-body {
+        max-height: 22rem;
+      }
     }
     .lane-body > * {
       flex-shrink: 0;
@@ -1083,7 +1116,8 @@
     @media (min-width: 64rem) {
       .app-shell.has-rail {
         display: grid;
-        grid-template-columns: 220px minmax(0, 1fr);
+        grid-template-columns: var(--rail-width) minmax(0, 1fr);
+        transition: grid-template-columns 150ms ease-out;
       }
     }
     .app-main {
@@ -1138,9 +1172,9 @@
       padding: 0;
       list-style: none;
     }
-    /* A gap, not a heading, between the work and the records. */
-    .rail-nav + .rail-nav:not(.rail-foot) {
-      margin-top: 16px;
+    /* A gap between the groups of places. */
+    .rail-gap {
+      margin-top: 12px;
     }
     .rail-foot {
       margin-top: auto;
@@ -1187,6 +1221,14 @@
         min-height: 44px;
       }
     }
+    /* The label fills the link, so its count sits at the right edge. */
+    .rail-label {
+      display: flex;
+      flex: 1 1 auto;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
     .rail-count {
       margin-left: auto;
       font-family: var(--font-body);
@@ -1198,6 +1240,99 @@
       padding: 4px 12px 0;
       font-size: 13px;
       color: var(--rail-muted);
+    }
+    /* Collapse menu: only from 1024px with JavaScript; under that the rail is a drawer. Quiet, like the Phone simulator. */
+    .rail-toggle {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      min-height: 36px;
+      margin-top: 4px;
+      padding: 0 12px;
+      border: 0;
+      border-radius: 6px;
+      background: none;
+      font-family: var(--font-body);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--rail-muted);
+      cursor: pointer;
+    }
+    .rail-toggle:hover {
+      background: var(--rail-hover);
+      color: var(--rail-text);
+    }
+    @media (min-width: 64rem) {
+      html.js .rail-toggle {
+        display: flex;
+      }
+
+      /* The rail folded to a 64px strip of icons. Each label stays the link's name and
+         shows as a tooltip on hover or focus; a waiting count becomes a Wattle dot. */
+      html.rail-collapsed .app-shell.has-rail {
+        grid-template-columns: var(--rail-collapsed-width) minmax(0, 1fr);
+      }
+      html.rail-collapsed .rail {
+        z-index: 30;
+        padding-inline: 8px;
+        overflow: visible;
+      }
+      html.rail-collapsed .rail-logo {
+        align-self: center;
+        padding: 4px;
+      }
+      html.rail-collapsed .logo-word,
+      html.rail-collapsed .rail-label {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+      html.rail-collapsed .rail-link,
+      html.rail-collapsed .rail-toggle {
+        position: relative;
+        justify-content: center;
+        padding: 0;
+      }
+      html.rail-collapsed .rail-link:hover .rail-label,
+      html.rail-collapsed .rail-link:focus-visible .rail-label,
+      html.rail-collapsed .rail-toggle:hover .rail-label,
+      html.rail-collapsed .rail-toggle:focus-visible .rail-label {
+        top: 50%;
+        left: calc(100% + 8px);
+        z-index: 50;
+        width: auto;
+        height: auto;
+        padding: 4px 8px;
+        overflow: visible;
+        clip-path: none;
+        transform: translateY(-50%);
+        border-radius: 4px;
+        background: var(--rail);
+        box-shadow: var(--shadow-lift);
+        font-family: var(--font-body);
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--rail-text);
+      }
+      html.rail-collapsed .rail-link:has(.rail-count)::after {
+        content: '';
+        position: absolute;
+        top: 8px;
+        left: calc(50% + 6px);
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--hivis);
+      }
+      html.rail-collapsed .rail-toggle svg {
+        transform: scaleX(-1);
+      }
+      html.rail-collapsed .rail-agency {
+        display: none;
+      }
     }
     /* Without JavaScript the rail sits above the content as a wrapping row, so the nav is still reachable. */
     @media (max-width: 63.99rem) {
@@ -1410,6 +1545,12 @@
       margin-inline: auto;
       padding: 24px 16px 32px;
     }
+    /* A public page's heading block stacks: the title, then its one line under it. */
+    .public-main .page-head {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 4px;
+    }
     .public-footer {
       width: 100%;
       max-width: 560px;
@@ -1507,7 +1648,7 @@
         bottom: 0;
         left: 0;
         z-index: 40;
-        width: 220px;
+        width: var(--rail-width);
         max-width: 85vw;
         overflow-y: auto;
         transform: translateX(-100%);
@@ -1573,7 +1714,8 @@
     }
     /* The Harbour ring is too dark on the Night rail, so the rail's links ring in rail text. */
     .rail-logo:focus-visible,
-    .rail-link:focus-visible {
+    .rail-link:focus-visible,
+    .rail-toggle:focus-visible {
       outline-color: var(--rail-text);
     }
   }
@@ -1789,468 +1931,7 @@
 }
 
 /* === landing === */
-@layer utilities {
-  @layer app {
-    /* The landing page (pages/landing.ts): the headline, one lead line, two ways in,
-       then the workflow, the one moving thing on the page. */
-    .public-main:has(.flow) {
-      padding-top: 40px;
-    }
-    .public-main:has(.flow) .page-title.is-hero {
-      max-width: 620px;
-      letter-spacing: -0.015em;
-    }
-    .landing-intro {
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
-      max-width: 620px;
-      margin-top: -4px;
-    }
-    .landing-lead {
-      margin: 0;
-      max-width: 60ch;
-      font-size: 16px;
-      line-height: 1.5;
-    }
-    .landing-actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-    }
-    @media (max-width: 40rem) {
-      .landing-actions > .btn {
-        flex: 1 1 100%;
-      }
-    }
-    .landing-demo {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      max-width: 576px;
-      margin-top: 24px;
-      padding-top: 20px;
-      border-top: 1px solid var(--line);
-    }
-    .landing-demo p {
-      margin: 0;
-    }
-
-    /*
-     * The workflow: one repair, stage by stage. The stage titles run down the left;
-     * each stage's picture sits in the pane on the right (above the titles on
-     * phones), one at a time. A band moves down the titles with the stage being
-     * shown; at the Property Manager's decision it carries the Wattle stripe, as a
-     * decision row does on the dashboard. One cycle is 8 stages of 2.6s.
-     */
-    .flow {
-      --row: 44px;
-      --step: calc(var(--row) + 4px);
-      --list-w: 22.5rem;
-      --pane-top: 0px;
-      --cycle: 20.8s;
-      --slot: 2.6s;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-      margin-top: 24px;
-    }
-    .flow-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      min-height: 44px;
-    }
-    .flow-pause {
-      min-height: 44px;
-      height: 44px;
-    }
-    .flow-heading {
-      margin: 0;
-      font-family: var(--font-head);
-      font-size: 16px;
-      font-weight: 600;
-      color: var(--ink);
-    }
-    .flow-play-icon,
-    .flow[data-paused] .flow-pause-icon {
-      display: none;
-    }
-    .flow[data-paused] .flow-play-icon {
-      display: inline-flex;
-    }
-    .flow-pause-icon {
-      display: inline-flex;
-    }
-
-    .flow-stages {
-      position: relative;
-      margin: 0;
-      padding: 0 calc(100% - var(--list-w)) 0 0;
-      list-style: none;
-    }
-    /* The pane the pictures appear in. */
-    .flow-stages::after {
-      content: '';
-      position: absolute;
-      top: 0;
-      right: 0;
-      bottom: 0;
-      left: calc(var(--list-w) + 32px);
-      min-height: 360px;
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: 8px;
-    }
-    @media (min-width: 48rem) {
-      .flow-stages {
-        min-height: 360px;
-      }
-    }
-    /* The band that marks the stage being shown. */
-    .flow-stages::before {
-      content: '';
-      position: absolute;
-      top: var(--pane-top);
-      left: 0;
-      width: var(--list-w);
-      height: var(--row);
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: 4px;
-      animation: flow-band var(--cycle) infinite;
-    }
-    /* Static, so each picture is placed in the pane (the list), not in its row. */
-    .flow-stage {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      height: var(--row);
-      margin-bottom: 4px;
-      padding-inline: 12px;
-    }
-    .flow-num {
-      position: relative;
-      display: inline-flex;
-      flex: 0 0 auto;
-      align-items: center;
-      justify-content: center;
-      width: 24px;
-      height: 24px;
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      background: var(--surface);
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--muted);
-      animation: flow-num var(--cycle) calc(var(--i) * var(--slot)) infinite;
-    }
-    .flow-title {
-      position: relative;
-      font-size: 15px;
-      color: var(--muted);
-      white-space: nowrap;
-      animation: flow-title var(--cycle) calc(var(--i) * var(--slot)) infinite;
-    }
-    /* At the decision the band's left edge is the Wattle stripe, as on a decision row. */
-    .flow-stage.is-decision .flow-title::before {
-      content: '';
-      position: absolute;
-      top: 50%;
-      left: -48px;
-      width: 4px;
-      height: var(--row);
-      transform: translateY(-50%);
-      border-radius: 4px 0 0 4px;
-      background: var(--hivis);
-      opacity: 0;
-      animation: flow-bar var(--cycle) calc(var(--i) * var(--slot)) infinite;
-    }
-    .flow-picture {
-      position: absolute;
-      z-index: 1;
-      top: 0;
-      right: 0;
-      bottom: 0;
-      left: calc(var(--list-w) + 32px);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
-      opacity: 0;
-      animation: flow-picture var(--cycle) calc(var(--i) * var(--slot)) infinite;
-    }
-    .flow-picture > * {
-      width: 100%;
-      max-width: 400px;
-    }
-    .flow-picture > .chat {
-      max-width: 320px;
-    }
-    /* On wide screens the pictures are drawn a size up, to fill the pane. */
-    @media (min-width: 64rem) {
-      .flow-picture > * {
-        zoom: 1.2;
-      }
-    }
-
-    /* The pictures: plain rows in the dispatch-desk look. */
-    .flow-card {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      padding: 12px 16px;
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: 4px;
-    }
-    .flow-card p {
-      margin: 0;
-    }
-    .flow-card.is-decision {
-      flex-direction: row;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-      padding: 14px 14px 14px 16px;
-      border-left: 4px solid var(--hivis);
-    }
-    .flow-card-title {
-      font-size: 15px;
-      font-weight: 600;
-    }
-    .flow-badges {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      padding-block: 4px;
-    }
-    .flow-confirm {
-      flex: 0 0 auto;
-      display: inline-flex;
-      align-items: center;
-      min-height: 36px;
-      padding: 0 14px;
-      border-radius: 6px;
-      background: var(--action);
-      color: var(--surface);
-      font-family: var(--font-head);
-      font-weight: 600;
-    }
-    .flow-rows {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      margin: 4px 0 0;
-      padding: 0;
-      list-style: none;
-    }
-    .flow-rows li,
-    .flow-sent {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .flow-rows svg {
-      color: var(--muted);
-    }
-    .flow-sent svg {
-      color: var(--done);
-    }
-    .flow-quote {
-      display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      gap: 12px;
-    }
-    .flow-amount {
-      font-family: var(--font-head);
-      font-size: 26px;
-      font-weight: 700;
-      line-height: 1;
-    }
-
-    /* Paused (the button, via app.js): everything holds where it is. */
-    .flow[data-paused] .flow-stages::before,
-    .flow[data-paused] .flow-title::before,
-    .flow[data-paused] .flow-num,
-    .flow[data-paused] .flow-title,
-    .flow[data-paused] .flow-picture {
-      animation-play-state: paused;
-    }
-
-    @keyframes flow-picture {
-      0% {
-        opacity: 0;
-        transform: translateY(6px);
-      }
-      2%,
-      11% {
-        opacity: 1;
-        transform: none;
-      }
-      12.5%,
-      100% {
-        opacity: 0;
-        transform: none;
-      }
-    }
-    @keyframes flow-title {
-      0%,
-      11.5% {
-        color: var(--ink);
-      }
-      12.5%,
-      100% {
-        color: var(--muted);
-      }
-    }
-    @keyframes flow-bar {
-      0%,
-      11.5% {
-        opacity: 1;
-      }
-      12.5%,
-      100% {
-        opacity: 0;
-      }
-    }
-    @keyframes flow-num {
-      0%,
-      11.5% {
-        background: var(--action);
-        border-color: var(--action);
-        color: var(--surface);
-      }
-      12.5%,
-      100% {
-        background: var(--surface);
-        border-color: var(--line);
-        color: var(--muted);
-      }
-    }
-    @keyframes flow-band {
-      0% {
-        opacity: 0;
-        transform: translateY(0);
-      }
-      1.5%,
-      11% {
-        opacity: 1;
-        transform: translateY(0);
-      }
-      12.5%,
-      23.5% {
-        transform: translateY(calc(var(--step) * 1));
-      }
-      25%,
-      36% {
-        transform: translateY(calc(var(--step) * 2));
-      }
-      37.5%,
-      48.5% {
-        transform: translateY(calc(var(--step) * 3));
-      }
-      50%,
-      61% {
-        transform: translateY(calc(var(--step) * 4));
-      }
-      62.5%,
-      73.5% {
-        transform: translateY(calc(var(--step) * 5));
-      }
-      75%,
-      86% {
-        transform: translateY(calc(var(--step) * 6));
-      }
-      87.5%,
-      98.5% {
-        opacity: 1;
-        transform: translateY(calc(var(--step) * 7));
-      }
-      100% {
-        opacity: 0;
-        transform: translateY(calc(var(--step) * 7));
-      }
-    }
-
-    /* Phones and narrow tablets: the pane sits above the titles. */
-    @media (max-width: 47.99rem) {
-      .flow {
-        --list-w: 100%;
-        --pane-top: 192px;
-      }
-      .flow-stages {
-        padding: var(--pane-top) 0 0;
-      }
-      .flow-stages::after,
-      .flow-picture {
-        top: 0;
-        right: 0;
-        bottom: auto;
-        left: 0;
-        height: calc(var(--pane-top) - 16px);
-        min-height: 0;
-      }
-      .flow-picture {
-        padding: 16px;
-      }
-      .flow-title {
-        font-size: 14px;
-      }
-    }
-
-    /*
-     * Less motion: no animation at all. Every stage shows with its picture, as the
-     * finished story, and the pause button has nothing to pause.
-     */
-    @media (prefers-reduced-motion: reduce) {
-      .flow-stages {
-        display: grid;
-        gap: 24px;
-        padding: 0;
-      }
-      @media (min-width: 48rem) {
-        .flow-stages {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 24px 32px;
-        }
-      }
-      .flow-stages::before,
-      .flow-stages::after,
-      .flow-stage.is-decision .flow-title::before {
-        display: none;
-      }
-      .flow-stage {
-        flex-wrap: wrap;
-        align-content: flex-start;
-        height: auto;
-        padding: 0;
-      }
-      .flow-num,
-      .flow-title,
-      .flow-picture {
-        animation: none;
-      }
-      .flow-title {
-        color: var(--ink);
-        white-space: normal;
-      }
-      .flow-picture {
-        position: static;
-        flex: 1 1 100%;
-        justify-content: flex-start;
-        height: auto;
-        padding: 0 0 0 36px;
-        opacity: 1;
-      }
-      .flow-pause {
-        display: none !important;
-      }
-    }
-  }
-}
+/* The landing page's styles are in landing.css, loaded only on that page. */
 
 /* === import === */
 @layer utilities {
@@ -2399,6 +2080,1198 @@
       .import-actions > .btn {
         flex: 1 1 100%;
       }
+    }
+  }
+}
+
+/* === dispatch === */
+@layer utilities {
+  @layer app {
+    /* The Dispatch page (pages/dispatch.ts, static/dispatch-map.js): the map beside a panel for the
+       Property or Tradie picked. Pins are drawn from the tokens only. Colour backs up the shape
+       and the number, never replaces them: a triangle is Urgent, a diamond High, a filled circle
+       Routine, an open circle no open Ticket, a square a Tradie. */
+    .dispatch-board {
+      scroll-margin-top: 76px; /* clear of the sticky top bar */
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 16px;
+      min-width: 0;
+    }
+    @media (min-width: 64rem) {
+      .dispatch-board {
+        grid-template-columns: minmax(0, 1fr) 22rem;
+        align-items: start;
+      }
+    }
+
+    .dispatch-map-section {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 0;
+    }
+    .dispatch-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 16px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    /* The key is only for the map: it means nothing without it. */
+    html:not(.js) .dispatch-legend {
+      display: none;
+    }
+    .dispatch-legend li {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .dispatch-legend .map-pin {
+      width: 20px;
+      height: 20px;
+    }
+    .dispatch-legend .map-pin svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    /* Leaflet's panes stack up to z-index 1000: contain them so they stay under the top bar and the drawer. */
+    .dispatch-map {
+      position: relative;
+      z-index: 0;
+      isolation: isolate;
+      height: 24rem;
+      overflow: hidden;
+      background: var(--page);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    @media (min-width: 64rem) {
+      .dispatch-map {
+        height: 32rem;
+      }
+    }
+    .dispatch-map-fallback {
+      margin: 0;
+      padding: 16px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+    .leaflet-container {
+      font-family: var(--font-body) !important;
+      background: var(--page) !important;
+    }
+    .leaflet-container a {
+      color: var(--action);
+    }
+    .leaflet-container:focus-visible {
+      outline: 2px solid var(--action);
+      outline-offset: 2px;
+    }
+
+    .map-pin-icon {
+      background: none;
+      border: 0;
+      border-radius: 50%;
+    }
+    .leaflet-marker-icon.map-pin-icon:focus-visible {
+      outline: 2px solid var(--action);
+      outline-offset: 4px;
+    }
+    .map-pin {
+      position: relative;
+      display: block;
+      width: 32px;
+      height: 32px;
+    }
+    /* Leaflet gives svg elements inside its panes a z-index of 200, which would hide the number: set both. */
+    .map-pin svg {
+      position: relative;
+      z-index: 0 !important;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+    .map-pin svg > * {
+      stroke: var(--surface);
+      stroke-width: 2;
+      stroke-linejoin: round;
+    }
+    .map-pin-urgent svg > * {
+      fill: var(--urgent);
+    }
+    .map-pin-high svg > * {
+      fill: var(--high);
+    }
+    .map-pin-routine svg > * {
+      fill: var(--muted);
+    }
+    .map-pin-none svg > * {
+      fill: var(--surface);
+      stroke: var(--muted);
+    }
+    .map-pin-tradie svg > * {
+      fill: var(--ink);
+    }
+    /* Tradies are quieter than Properties: smaller, and drawn under them. */
+    .map-pin-tradie {
+      width: 26px;
+      height: 26px;
+    }
+    .map-pin-tradie b {
+      font-size: 11px;
+    }
+    .map-pin b {
+      position: absolute;
+      z-index: 1;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      font-family: var(--font-head);
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1;
+      color: var(--surface);
+    }
+    .map-pin-urgent b {
+      padding-top: 9px;
+    }
+    .map-pin-none b {
+      color: var(--ink);
+    }
+    /* The one picked: a Harbour ring around it, over a pale disc so it reads on any tile. */
+    .map-pin.is-selected::before {
+      content: '';
+      position: absolute;
+      inset: -7px;
+      border: 3px solid var(--action);
+      border-radius: 50%;
+      background: color-mix(in srgb, var(--surface) 70%, transparent);
+    }
+    .dispatch-ring {
+      stroke: var(--action);
+      stroke-width: 2;
+      stroke-dasharray: 6 6;
+      fill: var(--action);
+      fill-opacity: 0.06;
+    }
+
+    /* The side column: a hint, then the one panel picked. Without JavaScript a row's link picks it (:target). */
+    .dispatch-side {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-width: 0;
+      padding: 16px;
+      font-size: 14px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    @media (min-width: 64rem) {
+      .dispatch-side {
+        max-height: 36.5rem;
+        overflow-y: auto;
+      }
+    }
+    .dispatch-panel-empty {
+      margin: 0;
+      color: var(--muted);
+    }
+    .dispatch-side.has-selection .dispatch-panel-empty,
+    html:not(.js) .dispatch-side:has(.dispatch-panel:target) .dispatch-panel-empty {
+      display: none;
+    }
+    .dispatch-panel {
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .dispatch-panel.is-open,
+    html:not(.js) .dispatch-panel:target {
+      display: flex;
+    }
+    .dispatch-panel-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .dispatch-panel-head .section-title {
+      overflow-wrap: anywhere;
+    }
+    .dispatch-panel-head .section-title:focus-visible {
+      outline-offset: 4px;
+    }
+    .dispatch-panel-meta {
+      margin: 0;
+      color: var(--muted);
+    }
+    .dispatch-panel-heading {
+      margin: 8px 0 0;
+      font-family: var(--font-head);
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .dispatch-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .dispatch-list-detail {
+      display: block;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .dispatch-not-found {
+      display: block;
+      margin-top: 4px;
+    }
+    .dispatch-day {
+      display: block;
+      font-family: var(--font-body);
+      font-size: 12px;
+      font-weight: 400;
+      color: var(--muted);
+    }
+    .dispatch-schedule :where(th, td) {
+      vertical-align: top;
+    }
+    .dispatch-schedule tbody th {
+      font-weight: 500;
+      text-align: left;
+    }
+    /* A day with a visit takes the room for its card; an empty one stays as wide as its heading. */
+    .dispatch-schedule td.has-visits {
+      min-width: 11rem;
+    }
+    .dispatch-board .dispatch-panel .btn,
+    .dispatch-panel [data-dispatch-clear] {
+      min-height: 2.75rem;
+    }
+    .dispatch-panel [data-dispatch-clear][hidden] {
+      display: none;
+    }
+    /* A row picked: Harbour's tint, so it can be found in a long table. */
+    tr[data-selected] :where(th, td) {
+      background: var(--info-bg);
+    }
+  }
+}
+
+@layer utilities {
+  @layer app {
+    /* Label and value lists (dl() in ui.ts): the label column is 8 to 12rem whatever
+       the box's width, so a value sits beside its label; in a box under 26rem (about
+       416px, a phone card) the label stacks over its value. The box decides, not the screen. */
+    .facts {
+      container-type: inline-size;
+      margin: 0;
+      font-size: 14px;
+    }
+    .facts-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 2px;
+      padding: 8px 0;
+      border-top: 1px solid var(--line);
+    }
+    .facts-row:first-child {
+      padding-top: 0;
+      border-top: 0;
+    }
+    .facts-row:last-child {
+      padding-bottom: 0;
+    }
+    .facts-term {
+      font-weight: 500;
+      color: var(--muted);
+    }
+    .facts-value {
+      min-width: 0;
+      margin: 0;
+      overflow-wrap: anywhere;
+    }
+    @container (min-width: 26rem) {
+      .facts-row {
+        grid-template-columns: minmax(8rem, 12rem) minmax(0, 1fr);
+        column-gap: 16px;
+      }
+    }
+
+    /* A Ticket in a table row (ticketCell() in ui.ts): the issue first and strong, its
+       number quiet beside it, the unread mark in words, then the address, muted. */
+    .ticket-cell {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+    .ticket-cell-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      column-gap: 8px;
+      row-gap: 2px;
+      margin: 0;
+    }
+    .ticket-cell-issue {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--ink);
+      text-decoration: none;
+    }
+    .ticket-cell-issue:hover {
+      color: var(--action);
+      text-decoration: underline;
+    }
+    .ticket-cell-number {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .ticket-cell-unread {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--action);
+      white-space: nowrap;
+    }
+    .ticket-cell-address {
+      margin: 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    a.ticket-cell-address {
+      text-decoration: underline;
+      text-decoration-color: var(--line);
+      text-underline-offset: 2px;
+    }
+    a.ticket-cell-address:hover {
+      color: var(--action);
+      text-decoration-color: currentColor;
+    }
+
+    /* Stacked tables (table(..., { stack: true })): rows read top to bottom. The issue's
+       link covers the whole row; other links and controls in the row sit above it. */
+    .table-frame.is-stacked tbody tr {
+      position: relative;
+    }
+    .table-frame.is-stacked .ticket-cell-issue::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+    }
+    .table-frame.is-stacked tbody :where(a:not(.ticket-cell-issue), button, form) {
+      position: relative;
+      z-index: 1;
+    }
+    .table-frame.is-stacked tbody tr:hover td {
+      background: var(--page);
+    }
+    .table-frame.is-stacked tbody td {
+      vertical-align: top;
+    }
+    @media (min-width: 640px) {
+      .table-frame.is-stacked tbody td {
+        min-width: 7rem;
+      }
+      .table-frame.is-stacked tbody td:first-child {
+        min-width: 16rem;
+      }
+    }
+    /* Phones: each row is a block, the issue and address then the badges in a wrapping row. */
+    @media (max-width: 639.98px) {
+      .table-frame.is-stacked {
+        overflow: visible;
+        background: transparent;
+        border: 0;
+        border-radius: 0;
+      }
+      .table-frame.is-stacked :where(table, tbody) {
+        display: block;
+      }
+      .table-frame.is-stacked thead {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+      .table-frame.is-stacked tbody {
+        display: grid;
+        gap: 8px;
+      }
+      .table-frame.is-stacked tbody tr {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px 8px;
+        padding: 10px 12px;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 4px;
+      }
+      .table-frame.is-stacked tbody td {
+        display: block;
+        height: auto;
+        min-width: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+      }
+      .table-frame.is-stacked tbody td:first-child {
+        flex-basis: 100%;
+        margin-bottom: 2px;
+      }
+      .table-frame.is-stacked tbody td:last-child {
+        margin-left: auto;
+      }
+      .table-frame.is-stacked tbody tr:hover td {
+        background: transparent;
+      }
+    }
+  }
+}
+
+/* === Request review page === */
+@layer utilities {
+  @layer app {
+    /* The Maintenance Request review (pages/requests.ts): what the Tenant reported leads, with
+       Checks and Decide beside it from 1024px (sticky, so the decision stays in reach while the
+       photos scroll) and straight under it on phones, before the answers and the photos. */
+    .request-review {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 16px;
+      min-width: 0;
+    }
+    .request-side,
+    .request-details {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      min-width: 0;
+    }
+    @media (min-width: 64rem) {
+      .request-review {
+        grid-template-columns: minmax(0, 1fr) 360px;
+        grid-template-areas: 'lead side' 'details side';
+        grid-template-rows: auto 1fr;
+        align-items: start;
+      }
+      .request-lead {
+        grid-area: lead;
+      }
+      .request-details {
+        grid-area: details;
+      }
+      .request-side {
+        grid-area: side;
+        position: sticky;
+        top: 16px;
+      }
+    }
+    /* The issue in the Tenant's words: the most-read thing on the page. */
+    .request-issue {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 600;
+      line-height: 1.35;
+      color: var(--ink);
+      overflow-wrap: anywhere;
+    }
+    .request-address {
+      margin: 0;
+      font-size: 15px;
+    }
+    /* Label and value pairs with the value right beside its label. */
+    .request-facts {
+      display: grid;
+      grid-template-columns: max-content minmax(0, 1fr);
+      gap: 6px 16px;
+      margin: 0;
+      font-size: 14px;
+    }
+    .request-facts > div {
+      display: contents;
+    }
+    .request-facts dt {
+      color: var(--muted);
+    }
+    .request-facts dd {
+      margin: 0;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+    /* Who and when, quiet, in one wrapping line. */
+    .request-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 20px;
+      font-size: 13px;
+    }
+    .request-meta > div {
+      display: flex;
+      gap: 6px;
+    }
+    .request-photo-flagged {
+      font-weight: 600;
+      color: var(--high);
+    }
+    /* Checks: flags to look at stand out on their tint; passed checks are quiet lines. */
+    .request-checks {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .request-checks li {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+    }
+    .request-checks svg {
+      margin-top: 1px;
+    }
+    .request-flag {
+      padding: 8px 10px;
+      border-radius: 4px;
+      color: var(--high);
+      background: var(--high-bg);
+    }
+    .request-flag.is-error {
+      color: var(--urgent);
+      background: var(--urgent-bg);
+    }
+    .request-check-passed {
+      color: var(--done);
+    }
+    .request-check-label {
+      margin: 0;
+      font-weight: 600;
+    }
+    .request-check-passed .request-check-label {
+      font-weight: 500;
+    }
+    .request-check-detail {
+      margin: 2px 0 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    /* Decide: the Urgency and Trade, then Confirm, then Reject folded away. */
+    .request-decide {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .request-urgency {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .request-urgency-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .request-urgency-row .select {
+      flex: 1 1 8rem;
+      width: auto;
+      min-width: 0;
+    }
+    .request-confirm-check > summary {
+      list-style: none;
+    }
+    .request-confirm-check > summary::-webkit-details-marker {
+      display: none;
+    }
+    .request-confirm-body {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 8px;
+      margin-top: 8px;
+      padding: 10px;
+      border-radius: 4px;
+      color: var(--high);
+      background: var(--high-bg);
+    }
+    .request-confirm-body p {
+      margin: 0;
+    }
+    .request-reject {
+      padding-top: 12px;
+      border-top: 1px solid var(--line);
+    }
+    .request-reject > summary {
+      cursor: pointer;
+      width: fit-content;
+      font-weight: 600;
+      color: var(--urgent);
+    }
+    .request-reject > summary:hover {
+      text-decoration: underline;
+    }
+    .request-reject-form {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .request-reject-form .fieldset {
+      align-self: stretch;
+    }
+    /* The Requests list reads like a docket: the issue strong, the address quiet under it. */
+    .request-list .queue-detail {
+      font-size: 13px;
+      color: var(--muted);
+    }
+  }
+}
+
+@layer utilities {
+  @layer app {
+    /* Property profile (pages/properties.ts): the headline facts as a strip, the Max
+       Repair Cost first and large; a contact's mobile and email on lines of their own. */
+    .property-facts {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+      gap: 16px 24px;
+      margin: 0;
+    }
+    .property-facts > div {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+    }
+    .property-facts dt {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--muted);
+    }
+    .property-facts dd {
+      min-width: 0;
+      margin: 0;
+      font-size: 14px;
+    }
+    .property-facts .property-facts-money {
+      font-family: var(--font-head);
+      font-size: 26px;
+      font-weight: 600;
+      line-height: 1.15;
+      font-variant-numeric: tabular-nums;
+    }
+    .property-contact {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
+    }
+  }
+}
+
+/* === Tenant pages === */
+@layer utilities {
+  @layer app {
+    /* The upload and tracker pages (tenant-pages.ts). The Agency's name leads the bar,
+       and the myEST8 logo sits small and quiet at the right: the page is from the Agency. */
+    .public-brand {
+      min-width: 0;
+      font-family: var(--font-head);
+      font-size: 18px;
+      font-weight: 600;
+      line-height: 1.25;
+      color: var(--ink);
+    }
+    .public-brand + .logotype {
+      flex-shrink: 0;
+      color: var(--muted);
+    }
+    .public-brand + .logotype .logo.is-sm {
+      font-size: 14px;
+    }
+    .public-brand + .logotype .logo-mark {
+      width: 16px;
+      height: 16px;
+      color: var(--muted);
+    }
+    /* The tracker's one sentence on where the repair is up to. */
+    .tracker-now {
+      font-family: var(--font-head);
+      font-size: 20px;
+      font-weight: 600;
+      line-height: 1.35;
+      color: var(--ink);
+    }
+    /* The issue an upload link is for, set off from the form by a hairline. */
+    .tenant-issue {
+      padding-left: 12px;
+      border-left: 2px solid var(--line);
+    }
+    /* What the Tenant picked, filled in by the page's script. */
+    .tenant-chosen:not(:empty) {
+      margin-top: 12px;
+      font-size: 14px;
+    }
+    .tenant-chosen ul {
+      margin: 4px 0 0;
+      padding-left: 20px;
+      list-style: disc;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+  }
+}
+
+/* === Ticket page === */
+@layer utilities {
+  @layer app {
+    /* The header in the docket's shape: the stub (number and Urgency) along the top
+       on phones and down the left from 640px, then a dashed perforation. */
+    .ticket-head {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    .ticket-stub {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      padding: 10px 16px;
+    }
+    .ticket-perf {
+      flex-shrink: 0;
+      margin: 0 12px;
+      border-top: 1px dashed var(--control);
+    }
+    @media (min-width: 40rem) {
+      .ticket-head {
+        flex-direction: row;
+      }
+      .ticket-stub {
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        width: 6rem;
+        flex-shrink: 0;
+        padding: 16px 4px;
+      }
+      .ticket-perf {
+        margin: 12px 0;
+        border-top: 0;
+        border-left: 1px dashed var(--control);
+      }
+    }
+    /* The one Next step: a Paper strip, with the Wattle stripe when it waits on the Property Manager. */
+    .ticket-next {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 2px 10px;
+      margin: 0;
+      padding: 8px 12px;
+      background: var(--page);
+      border-left: 4px solid var(--line);
+      border-radius: 4px;
+    }
+    .ticket-next.is-decision {
+      border-left-color: var(--hivis);
+    }
+    .ticket-next-label {
+      font-family: var(--font-head);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    /* Change Urgency: a small menu in the page actions; a sheet along the bottom on phones. */
+    .ticket-menu {
+      position: relative;
+      display: inline-block;
+    }
+    .ticket-menu > summary {
+      list-style: none;
+    }
+    .ticket-menu > summary::-webkit-details-marker {
+      display: none;
+    }
+    .ticket-menu[open] > summary {
+      background: var(--page);
+    }
+    .ticket-menu-panel {
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      z-index: 30;
+      width: min(18rem, calc(100vw - 32px));
+      padding: 16px;
+      text-align: left;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow-lift);
+    }
+    @media (max-width: 39.99rem) {
+      .ticket-menu-panel {
+        position: fixed;
+        top: auto;
+        right: 16px;
+        bottom: 16px;
+        left: 16px;
+        width: auto;
+      }
+    }
+    /* Quotes compared: compact blocks on a narrow column, one column per Quote once
+       there is room, their rows lined up across columns (subgrid). */
+    .quote-compare-frame {
+      container: quote-compare / inline-size;
+    }
+    .quote-compare {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .quote-column {
+      display: grid;
+      gap: 6px;
+      min-width: 0;
+      padding: 12px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+    }
+    .quote-column.is-approved {
+      border-color: var(--done);
+    }
+    .quote-tradie {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+    .quote-price {
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 22px;
+      font-weight: 600;
+      line-height: 1.15;
+    }
+    .quote-cell {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 0 12px;
+      font-size: 14px;
+    }
+    .quote-label {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .quote-ratings {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0 12px;
+    }
+    .quote-state {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px;
+    }
+    .quote-check > summary {
+      list-style: none;
+    }
+    .quote-check > summary::-webkit-details-marker {
+      display: none;
+    }
+    .quote-check[open] > summary {
+      background: var(--surface);
+      color: var(--action);
+      border-color: var(--control);
+    }
+    @container quote-compare (min-width: 30rem) {
+      .quote-compare {
+        grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+        column-gap: 12px;
+      }
+      .quote-column {
+        grid-row: span var(--quote-rows);
+        grid-template-rows: subgrid;
+        row-gap: 8px;
+        align-content: start;
+      }
+      .quote-cell {
+        flex-direction: column;
+        justify-content: flex-start;
+      }
+      .quote-ratings {
+        flex-direction: column;
+      }
+      .quote-state {
+        align-content: start;
+      }
+    }
+    /* Older messages fold above the latest ones. */
+    .ticket-older[open] > summary {
+      margin-bottom: 8px;
+    }
+  }
+}
+
+@layer utilities {
+  @layer app {
+    /* Schedule and Dispatch bookings (web/bookings.ts, pages/calendar.ts, pages/dispatch.ts) */
+
+    /* One booked visit: the time, the issue (strong, two lines at most, the Ticket's link),
+       the Tradie, the street and suburb, then how the visit stands. Nothing is cut short
+       but the issue: names and streets wrap. */
+    .booking-list {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .booking {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--surface);
+      font-size: 13px;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+    .booking.is-reschedule {
+      border-left: 4px solid var(--high);
+    }
+    .booking.is-done {
+      color: var(--muted);
+    }
+    .booking-time {
+      margin: 0;
+      font-weight: 500;
+    }
+    .booking-time time {
+      white-space: nowrap;
+    }
+    .booking-issue {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--ink);
+      text-decoration: none;
+    }
+    .booking-issue:hover {
+      color: var(--action);
+      text-decoration: underline;
+    }
+    .booking.is-done .booking-issue {
+      color: inherit;
+    }
+    .booking-tradie {
+      color: var(--action);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    .booking-tradie:hover {
+      color: var(--action-hover);
+    }
+    .booking-place,
+    .booking-meta {
+      margin: 0;
+      color: var(--muted);
+    }
+    .booking-reschedule {
+      font-weight: 600;
+      color: var(--high);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    .booking :where(a):focus-visible {
+      outline: 2px solid var(--action);
+      outline-offset: 2px;
+      border-radius: 2px;
+    }
+
+    /* The Schedule's week. Under 1024px a list of days, where a run of empty days is one
+       line (.schedule-quiet) and its days are hidden; from 1024px seven columns in a row,
+       a booked day taking the room and an empty one staying narrow. */
+    .schedule-week {
+      display: grid;
+      gap: 12px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .schedule-day {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 0;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+    .schedule-day.is-today {
+      background: var(--page);
+      border-color: var(--action);
+    }
+    .schedule-day.is-empty:not(.is-today) {
+      display: none;
+    }
+    .schedule-day-title {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 15px;
+      font-weight: 600;
+    }
+    .schedule-quiet {
+      padding: 4px 8px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+    @media (min-width: 1024px) {
+      .schedule-week {
+        display: flex;
+        align-items: stretch;
+        min-height: calc(100dvh - 14rem);
+      }
+      .schedule-quiet {
+        display: none;
+      }
+      .schedule-day,
+      .schedule-day.is-empty:not(.is-today) {
+        display: flex;
+        flex: 0 0 6.5rem;
+      }
+      .schedule-day.is-booked {
+        flex: 1 1 0;
+      }
+    }
+
+    /* Dispatch: the ratings side by side, and the disclosures under the two tables. */
+    .dispatch-ratings {
+      display: flex;
+      flex-wrap: wrap;
+      column-gap: 12px;
+      row-gap: 2px;
+    }
+    .dispatch-more {
+      margin-top: 12px;
+    }
+    .dispatch-more[open] > summary {
+      margin-bottom: 8px;
+    }
+
+    /* Dashboard page */
+    /* Decision rows in the 360px column: the issue (two lines at most), the street, the
+       badges, then the actions on their own line so they never crush the text. */
+    .dashboard-decisions .queue-head {
+      display: contents;
+    }
+    .dashboard-decisions .queue-title {
+      flex: none;
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      line-clamp: 2;
+      overflow: hidden;
+    }
+    .dashboard-decisions .queue-detail {
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .dashboard-decisions .queue-actions {
+      order: 9;
+    }
+    /* The inbox: each message compact, with the best guess in one line and its answers folded away. */
+    .inbox-item {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 0;
+      padding: 10px 12px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--hivis);
+      border-radius: 4px;
+      scroll-margin-top: 16px;
+    }
+    .inbox-item:target {
+      outline: 2px solid var(--action);
+      outline-offset: 2px;
+    }
+    .inbox-item-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      gap: 6px 12px;
+    }
+    .inbox-item-text {
+      flex: 1 1 16rem;
+      min-width: 0;
+      margin: 0;
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.35;
+      white-space: pre-line;
+      overflow-wrap: anywhere;
+    }
+    .inbox-item-from {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0 12px;
+      margin: 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .inbox-item-guess > summary {
+      cursor: pointer;
+      width: fit-content;
+      font-size: 14px;
+    }
+    .inbox-item-guess > summary:hover {
+      color: var(--action);
+    }
+    .inbox-item-guess[open] > summary {
+      margin-bottom: 8px;
+    }
+    .inbox-item-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      gap: 8px 12px;
+    }
+    .inbox-item-link {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      gap: 8px;
     }
   }
 }

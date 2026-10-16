@@ -90,9 +90,9 @@ With a paid Twilio account, one number you already own can send and receive for 
    FILE_LINK_SECRET=
    ```
 
-   `TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN` are both set, or neither. Both also require `FILE_LINK_SECRET` (32 random bytes or more, `openssl rand -base64 32`) and an https `PUBLIC_URL`: Twilio fetches attachments by a signed link. `TWILIO_SMS_FROM` is optional. When set, every SMS is sent from that E.164 number; when unset, the sender is the Agency's connected SMS address, which then has to be a number on the account.
+   `TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN` are both set, or neither. Both also require `FILE_LINK_SECRET` (32 random bytes or more, `openssl rand -base64 32`) and an https `PUBLIC_URL`: Twilio fetches attachments by a signed link. `TWILIO_SMS_FROM` is required with them: every SMS is sent from that E.164 number, and the app refuses to start without it (an SMS never goes out from an Agency's own mobile number).
 
-`TWILIO_WHATSAPP_FROM` is optional and unused while the Meta pair in section 2 is set: Meta takes the WhatsApp channel.
+`TWILIO_WHATSAPP_FROM` is optional (without it Twilio sends no WhatsApp) and unused while the Meta pair in section 2 is set: Meta takes the WhatsApp channel.
 
 ## 4. Classifier (optional)
 
@@ -115,7 +115,7 @@ Redirect URI, if you ever turn it on: `https://myest8.yourdomain.com/oauth/googl
 ## Checking it works
 
 1. Restart: `systemctl --user restart myest8`, then `journalctl --user -u myest8 -n 20`. A half-set group (for example only `GOOGLE_CLIENT_ID`, or only `META_WHATSAPP_ACCESS_TOKEN`) refuses to start and names what is missing. Mocked APIs do the same unless `ALLOW_MOCKS=1`.
-2. Sign up a new Agency. Leave `GOOGLE_CLIENT_ID` unset so email stays off the dormant Gmail button. With `META_WHATSAPP_NUMBER` set, WhatsApp offers **Use +15550000000 for WhatsApp**, using whatever number you set. SMS is an address you type. There is no **Get an SMS number** action. With the Twilio pair set, outbound SMS uses `TWILIO_SMS_FROM` when that is set, otherwise the address you typed.
+2. Sign up a new Agency. Leave `GOOGLE_CLIENT_ID` unset so email stays off the dormant Gmail button. WhatsApp is paused: the setup pages offer SMS and email only, and the WhatsApp backend below stays dormant. SMS is an address you type. There is no **Get an SMS number** action. With the Twilio pair set, outbound SMS always uses `TWILIO_SMS_FROM`.
 3. Send mail to an address on `RESEND_INBOUND_DOMAIN`, or forward a message there. Resend posts `email.received` to `/webhooks/resend`; the event has no body, and myEST8 fetches it.
-4. WhatsApp: **Send a test message** to a phone on the test number's allowed list (WhatsApp, API Setup). The text is `This is a test message from <Agency name> on myEST8. This channel is working.` Meta delivers that free-form text only within 24 hours of that phone's last message to the test number. A later failure is a warning in the log, `WhatsApp message to … failed`, so the webhook has to be subscribed to **messages** (delivery statuses come on that field too): `journalctl --user -u myest8 | grep "WhatsApp message to"`.
-5. Message the test number from an allowed phone. The message reaches the Agency, and a reply inside 24 hours is free-form text.
+4. WhatsApp (paused; only if it is turned back on): **Send a test message** to a phone on the test number's allowed list (WhatsApp, API Setup). The text is `This is a test message from <Agency name> on myEST8. This channel is working.` Meta delivers that free-form text only within 24 hours of that phone's last message to the test number. A later failure is a warning in the log, `WhatsApp message to … failed`, so the webhook has to be subscribed to **messages** (delivery statuses come on that field too): `journalctl --user -u myest8 | grep "WhatsApp message to"`.
+5. WhatsApp (paused): message the test number from an allowed phone. The message reaches the Agency, and a reply inside 24 hours is free-form text.

@@ -56,6 +56,18 @@ describe('the hosted app', () => {
     await expect(hostedApp({ SUPABASE_DB_URL: 'postgres://x', PUBLIC_URL: 'http://localhost' })).rejects.toThrow(/https/);
     await expect(hostedApp({ PUBLIC_URL: 'https://myest8.test', ALLOW_MOCKS: '1' }, () => {})).rejects.toThrow(/SUPABASE_DB_URL/);
   });
+
+  test('a plain-http address is refused, even localhost, unless LOCAL_PROD=1 and it is localhost (npm run prod:local)', async () => {
+    for (const PUBLIC_URL of ['http://localhost:3000', 'http://myest8.example', 'http://localhost.evil.example']) {
+      await expect(hostedApp({ SUPABASE_DB_URL: 'postgres://x', PUBLIC_URL }, () => {})).rejects.toThrow(/https/);
+    }
+    for (const PUBLIC_URL of ['http://myest8.example', 'http://localhost.evil.example', 'http://localhost@evil.example', 'http://user@localhost:3000']) {
+      await expect(hostedApp({ SUPABASE_DB_URL: 'postgres://x', PUBLIC_URL, LOCAL_PROD: '1' }, () => {})).rejects.toThrow(/https/);
+    }
+    const hosted = await hostedApp(await hostedEnv({ PUBLIC_URL: 'http://localhost:3000', LOCAL_PROD: '1' }), () => {});
+    expect(hosted.baseUrl).toBe('http://localhost:3000');
+    await hosted.close();
+  });
 });
 
 describe('hosted mode and missing provider settings', () => {
@@ -107,6 +119,11 @@ describe('hosted mode and missing provider settings', () => {
     await expect(hostedApp({ ...env, JEV_API_URL: 'https://jev.test' }, () => {})).rejects.toThrow(/JEV_API_KEY/);
   });
 
+  test('Twilio credentials without TWILIO_SMS_FROM refuse to start', async () => {
+    const env = await hostedEnv({ TWILIO_ACCOUNT_SID: 'ACtest', TWILIO_AUTH_TOKEN: 'test-twilio-token', FILE_LINK_SECRET: ALL_SETTINGS.FILE_LINK_SECRET });
+    await expect(hostedApp(env, () => {})).rejects.toThrow(/TWILIO_SMS_FROM/);
+  });
+
   test('/webhooks/twilio is 404 without TWILIO_AUTH_TOKEN', async () => {
     const hosted = await hostedApp(await hostedEnv(), () => {});
     expect((await twilioPost(hosted)).status).toBe(404);
@@ -114,7 +131,7 @@ describe('hosted mode and missing provider settings', () => {
   });
 
   test('/webhooks/twilio is served, and checks its signature, when TWILIO_AUTH_TOKEN is set', async () => {
-    const hosted = await hostedApp(await hostedEnv({ TWILIO_ACCOUNT_SID: 'ACtest', TWILIO_AUTH_TOKEN: 'test-twilio-token', FILE_LINK_SECRET: ALL_SETTINGS.FILE_LINK_SECRET }), () => {});
+    const hosted = await hostedApp(await hostedEnv({ TWILIO_ACCOUNT_SID: 'ACtest', TWILIO_AUTH_TOKEN: 'test-twilio-token', TWILIO_SMS_FROM: '+61480000000', FILE_LINK_SECRET: ALL_SETTINGS.FILE_LINK_SECRET }), () => {});
     expect((await twilioPost(hosted)).status).toBe(403);
     await hosted.close();
   });

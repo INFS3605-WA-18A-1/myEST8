@@ -1,6 +1,7 @@
 // Small enhancements for every page. Pages work without this file: it only adds
 // confirm dialogs, a guard against double submits, dismissable flash messages,
-// the drawer that opens the rail under 1024px, and closing the user menu.
+// the drawer that opens the rail under 1024px, collapsing the rail from 1024px,
+// and closing the user menu.
 
 (() => {
   // Forms with data-confirm (postButton's `confirm`) ask first. A form already
@@ -80,6 +81,32 @@
   wide.addEventListener('change', (event) => {
     if (event.matches) setDrawer(false);
   });
+
+  // Collapse menu (from 1024px): folds the rail to its icons. head() sets the class
+  // before the first paint from localStorage, so pages don't jump; this keeps the
+  // button's words and aria-expanded in step and remembers the choice.
+  const railToggle = document.querySelector('[data-rail-toggle]');
+  const root = document.documentElement;
+
+  function showRail() {
+    const collapsed = root.classList.contains('rail-collapsed');
+    railToggle.setAttribute('aria-expanded', String(!collapsed));
+    railToggle.querySelector('.rail-label').textContent = collapsed ? 'Expand menu' : 'Collapse menu';
+  }
+
+  if (railToggle) {
+    showRail();
+    railToggle.addEventListener('click', () => {
+      const collapsed = root.classList.toggle('rail-collapsed');
+      try {
+        if (collapsed) localStorage.setItem('rail', 'collapsed');
+        else localStorage.removeItem('rail');
+      } catch {
+        // Storage blocked: the choice lasts until the next page.
+      }
+      showRail();
+    });
+  }
 
   // The Property Manager's menu (<details data-menu>) closes on a click elsewhere or Escape.
   const openMenus = () => document.querySelectorAll('details[data-menu][open]');
@@ -223,6 +250,16 @@
     if (event.target instanceof HTMLInputElement && event.target.name === 'include') update();
   });
 })();
+
+// === autosubmit ===
+// A GET filter form marked data-autosubmit (the Tradies' Trade filter) applies as
+// soon as a select in it changes. Without this file its own button submits it.
+document.addEventListener('change', (event) => {
+  const select = event.target;
+  if (!(select instanceof HTMLSelectElement)) return;
+  const form = select.form;
+  if (form && form.hasAttribute('data-autosubmit')) form.requestSubmit();
+});
 
 // === copy ===
 // A button with data-copy-for="<input id>" copies that field. Without this file

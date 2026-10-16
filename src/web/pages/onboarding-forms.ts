@@ -25,12 +25,23 @@ export type Errors = Record<string, string>;
 /** The radio value for a Tradie who has no Google listing. */
 export const NOT_ON_GOOGLE = 'none';
 
-/** The Agency's three channels, as the forms describe them. */
-export const CHANNELS: { type: ChannelType; name: string; addressLabel: string; inputType: 'tel' | 'email'; placeholder: string }[] = [
+/**
+ * The Agency's channels, as the forms describe them: SMS and email. WhatsApp is not offered
+ * on these pages (the backend keeps it dormant), so a posted type of "whatsapp" is refused.
+ */
+export const CHANNELS: { type: 'sms' | 'email'; name: string; addressLabel: string; inputType: 'tel' | 'email'; placeholder: string }[] = [
   { type: 'sms', name: 'SMS', addressLabel: 'Agency SMS number', inputType: 'tel', placeholder: '+61 2 9000 0000' },
-  { type: 'whatsapp', name: 'WhatsApp', addressLabel: 'Agency WhatsApp number', inputType: 'tel', placeholder: '+61 400 000 000' },
   { type: 'email', name: 'Email', addressLabel: 'Inbound email address', inputType: 'email', placeholder: 'agency@mail.example.test' },
 ];
+
+/** The sentence that replaces a channel's form when this server can't deliver on it, naming what still works. */
+export function unavailableNote(type: ChannelType, unavailable: readonly ChannelType[]): Html {
+  const channel = CHANNELS.find((ch) => ch.type === type)!;
+  const working = CHANNELS.filter((ch) => !unavailable.includes(ch.type)).map((ch) => (ch.type === 'email' ? 'email' : ch.name));
+  const left = working.length ? ` Tenants can still reach you by ${working.join(' and ')}.` : '';
+  const what = type === 'email' ? 'Email forwarding' : channel.name;
+  return html`<p class="text-sm" data-unavailable="${type}">${what} isn't available on this server yet.${left}</p>`;
+}
 
 /** The posted form's text values, to show again after a refusal. Passwords are left out. */
 export function valuesOf(form: FormValues): Values {
@@ -53,7 +64,7 @@ export function valueOf(values: Values | undefined, name: string): string {
 export function channelOf(form: FormValues) {
   const type = text(form, 'type');
   const channel = CHANNELS.find((ch) => ch.type === type);
-  if (!channel) throw new ActionError('invalid', 'Choose SMS, WhatsApp or email');
+  if (!channel) throw new ActionError('invalid', 'Choose SMS or email');
   return channel;
 }
 
@@ -63,6 +74,9 @@ export function chosenId(form: FormValues, name: string, label: string) {
   if (!value) throw new ActionError('invalid', `Choose ${label}`, { [name]: `Choose ${label}` });
   return Number(value);
 }
+
+/** The chip for a channel this server can't deliver on. */
+export const unavailableChip = (): Html => badge('Not available here', 'neutral', { wrap: true });
 
 /** How a channel should read: missing, waiting on a first email, verified by code or inbound mail, or connected without that. */
 export function channelState(channel: AgencyChannel | undefined, o: { waiting?: boolean; verified?: boolean } = {}) {
@@ -76,13 +90,13 @@ export function channelState(channel: AgencyChannel | undefined, o: { waiting?: 
 export function channelChip(channel: AgencyChannel | undefined, o: { waiting?: boolean; verified?: boolean } = {}): Html {
   switch (channelState(channel, o)) {
     case 'missing':
-      return badge('Not connected', 'warning');
+      return badge('Not connected', 'warning', { wrap: true });
     case 'waiting':
-      return badge('Waiting for your first message', 'info');
+      return badge('Waiting for your first message', 'info', { wrap: true });
     case 'verified':
-      return badge('Verified', 'success');
+      return badge('Verified', 'success', { wrap: true });
     case 'connected':
-      return badge('Connected', 'info');
+      return badge('Connected', 'info', { wrap: true });
   }
 }
 
@@ -92,8 +106,12 @@ export function channelBadge(channel: AgencyChannel | undefined, o: { waiting?: 
 }
 
 /** The address a connected channel uses. */
-export function channelLine(channel: AgencyChannel, timeZone: string, o: { waiting?: boolean } = {}): Html {
+export function channelLine(channel: AgencyChannel, timeZone: string, o: { waiting?: boolean; smsInbound?: 'simulator' | 'none' } = {}): Html {
   if (o.waiting) return html`<p class="text-sm">Waiting for your first message at <strong class="break-all">${channel.address}</strong>.</p>`;
+  // A typed SMS number on a real server proves the Agency holds it; it isn't where Tenants' texts arrive.
+  if (channel.testedAt && channel.type === 'sms' && o.smsInbound === 'none') {
+    return html`<p class="text-sm">Verified ${formatWhen(channel.testedAt, timeZone)}. <strong class="break-all">${channel.address}</strong> is confirmed as the Agency's number. Texts to it don't reach myEST8 yet.</p>`;
+  }
   if (channel.testedAt) return html`<p class="text-sm">Verified ${formatWhen(channel.testedAt, timeZone)}. Tenants reach the Agency at <strong class="break-all">${channel.address}</strong>.</p>`;
   return html`<p class="text-sm">Connected to <strong class="break-all">${channel.address}</strong>.</p>`;
 }
@@ -152,7 +170,7 @@ export function inboundEmailField(address: string): Html {
 }
 
 /** How to set the channel up, folded away. */
-export function channelGuide(type: ChannelType, _origin: string, o: { open?: boolean } = {}): Html {
+export function channelGuide(type: 'sms' | 'email', _origin: string, o: { open?: boolean } = {}): Html {
   const open = o.open ? 'open' : '';
   switch (type) {
     case 'sms':
@@ -162,15 +180,6 @@ export function channelGuide(type: ChannelType, _origin: string, o: { open?: boo
             <li>Enter the mobile number the Agency uses for SMS.</li>
             <li>myEST8 texts a 6-digit code to that number. The code lasts 10 minutes.</li>
             <li>Enter the code here. The number is saved only after the code matches.</li>
-          </ol>
-        </details>`;
-    case 'whatsapp':
-      return html`<details class="text-sm" ${open}>
-          <summary>How WhatsApp verification works</summary>
-          <ol class="mt-2 ml-5 list-decimal space-y-1">
-            <li>Enter the Agency's WhatsApp number.</li>
-            <li>myEST8 sends a 6-digit code to it. Enter the code here. The number is saved only after the code matches.</li>
-            <li>WhatsApp only delivers a free-form reply within 24 hours of the person's last message. Outside that window, use SMS or email.</li>
           </ol>
         </details>`;
     case 'email':
@@ -365,7 +374,7 @@ export async function tradiesTable(actions: PropertyManagerActions, tradies: Per
       html`${t.googlePlaceId ? `${t.googleRating?.toFixed(1) ?? '—'} (${t.googleReviewCount ?? 0} reviews)` : 'Not on Google'}`,
     ];
   });
-  return table(['Business', 'Name', 'Trades', 'myEST8 rating', 'Google rating'], rows, { caption: 'Tradies' });
+  return table(['Business', 'Name', 'Trades', 'myEST8 rating', 'Google rating'], rows, { stack: true, caption: 'Tradies' });
 }
 
 // Importing from a spreadsheet
