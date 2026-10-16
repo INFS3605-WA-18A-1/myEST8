@@ -250,7 +250,7 @@ export async function createDemo<Seeded extends boolean = true>(
   // numbers are made up and could belong to someone. The simulator records every
   // message once it's sent. File links run on real time, as Twilio fetches them in
   // real time however far the demo clock has moved.
-  const providers = messengersFromEnv(env, { clock: { now: () => new Date() } });
+  const providers = messengersFromEnv(env, { clock: { now: () => new Date() }, strict: hosted, ...(options.log ? { log: options.log } : {}) });
   // Gmail (ADR 0004): each Agency connects its own mailbox by OAuth, so its
   // Messenger and reader need the database, not just env vars.
   const mailboxes = gmailFromEnv(env, db, baseUrl);

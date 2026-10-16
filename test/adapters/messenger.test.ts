@@ -88,6 +88,22 @@ describe('providers from the environment', () => {
     expect(((await request.json()) as { from: string }).from).toBe('inbox@harbour.example');
   });
 
+  test('Twilio without TWILIO_SMS_FROM refuses a strict start, naming the setting', () => {
+    expect(() => messengersFromEnv(twilioEnv, { clock })).toThrow('TWILIO_SMS_FROM');
+  });
+
+  test('Twilio without TWILIO_SMS_FROM, not strict, leaves SMS and WhatsApp unsent with log lines', () => {
+    const lines: string[] = [];
+    const { channels } = messengersFromEnv(twilioEnv, { clock, strict: false, log: (line) => lines.push(line) });
+    expect(channels).toEqual({});
+    expect(lines.join('\n')).toContain('SMS stays simulated');
+  });
+
+  test('Twilio SMS without TWILIO_WHATSAPP_FROM does not send WhatsApp', () => {
+    const { channels } = messengersFromEnv({ ...twilioEnv, TWILIO_SMS_FROM: '+61480000000' }, { clock, log: () => {} });
+    expect(Object.keys(channels)).toEqual(['sms']);
+  });
+
   test.each([
     ['only the account SID', { TWILIO_ACCOUNT_SID: 'AC123' }, 'Set both TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN'],
     ['Twilio without a file link secret', { TWILIO_ACCOUNT_SID: 'AC123', TWILIO_AUTH_TOKEN: 'token', PUBLIC_URL: 'https://myest8.test' }, 'set FILE_LINK_SECRET'],

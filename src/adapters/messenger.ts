@@ -26,8 +26,11 @@ export function routeByChannel(byChannel: ChannelMessengers): Messenger {
  * The providers the environment configures, by channel, and the file links Twilio
  * attachments need:
  * - TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN: SMS and WhatsApp; needs FILE_LINK_SECRET
- *   and PUBLIC_URL. Optional TWILIO_SMS_FROM and TWILIO_WHATSAPP_FROM override the
- *   Agency's own numbers as the sender.
+ *   and PUBLIC_URL. TWILIO_SMS_FROM is required: an SMS never goes out from the Agency's
+ *   own mobile (not a Twilio number) or from a name. Without it a `strict` start (the
+ *   default; hosted and npm start) throws, otherwise SMS is left to the caller's
+ *   simulator with a log line. TWILIO_WHATSAPP_FROM is the same for WhatsApp, except
+ *   that it only leaves Twilio without WhatsApp (Meta can still supply it).
  * - RESEND_API_KEY: email through Resend, from the Agency's channel address.
  *   On its own this enables email, and it takes precedence over SendGrid.
  * - SENDGRID_API_KEY: email, when Resend is not set. Optional SENDGRID_FROM
@@ -38,7 +41,7 @@ export function routeByChannel(byChannel: ChannelMessengers): Messenger {
  */
 export function messengersFromEnv(
   env: Record<string, string | undefined>,
-  { clock, fetch: fetchImpl = fetch }: { clock: Clock; fetch?: typeof fetch },
+  { clock, fetch: fetchImpl = fetch, strict = true, log = (line) => console.log(line) }: { clock: Clock; fetch?: typeof fetch; strict?: boolean; log?: (line: string) => void },
 ): { channels: ChannelMessengers; fileLinks: FileLinks | null } {
   const set = (name: string) => env[name]?.trim() || undefined;
   const channels: ChannelMessengers = {};
@@ -60,8 +63,11 @@ export function messengersFromEnv(
       fileLinks,
       fetch: fetchImpl,
     });
-    channels.sms = twilio;
-    channels.whatsapp = twilio;
+    if (smsFrom) channels.sms = twilio;
+    else if (strict) throw new Error("Twilio is configured but TWILIO_SMS_FROM is not: set it to the Twilio number SMS should come from (an SMS must never go out from an Agency's own number).");
+    else log('[messenger] TWILIO_SMS_FROM is not set, so SMS stays simulated.');
+    if (whatsappFrom) channels.whatsapp = twilio;
+    else log('[messenger] TWILIO_WHATSAPP_FROM is not set, so Twilio will not send WhatsApp.');
   }
 
   // Meta's WhatsApp Cloud API (ADR 0004) takes WhatsApp over from Twilio when set.
