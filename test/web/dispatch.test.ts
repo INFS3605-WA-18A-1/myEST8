@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { mapTiles } from '../../src/web/map-config.ts';
 import { visible, webWorld } from '../support/web.ts';
 import { confirmedQuotes, KING_ST, tomsTapTicket, type World } from '../support/world.ts';
 
@@ -25,7 +26,7 @@ function pinData(html: string) {
   const match = /<script type="application\/json" id="dispatch-data">([\s\S]*?)<\/script>/.exec(html);
   if (!match) throw new Error('The page has no pin data block');
   return JSON.parse(match[1]!) as {
-    tiles: { url: string; attribution: string };
+    tiles: { url: string; subdomains: string; attribution: string; maxZoom: number };
     radiusKm: number;
     properties: { key: string; id: number; address: string; suburb: string; lat: number; lng: number; urgency: string | null; openTickets: number }[];
     tradies: { key: string; id: number; name: string; lat: number; lng: number; trades: string[] }[];
@@ -48,6 +49,19 @@ async function locateTradies(w: World, bases: [number, { address: string; locati
 }
 
 describe('Dispatch: the map data', () => {
+  test('the pin key names, in words, every kind of pin the map draws, groups of pins included', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    const html = await dispatch(w, cookie);
+
+    const start = html.indexOf('aria-label="Pin key"');
+    expect(start).toBeGreaterThan(-1);
+    const key = html.slice(html.indexOf('>', start) + 1, html.indexOf('</ul>', start));
+    expect([...key.matchAll(/data-pin="([a-z]+)"/g)].map((m) => m[1])).toEqual(['urgent', 'high', 'routine', 'none', 'tradie', 'group']);
+    expect(visible(key).trim()).toBe('Urgent High Routine No open Tickets Tradie Group of pins, zoom in to see them');
+  });
+
   test('every geocoded Property is a pin with its coordinates and the worst urgency of its open Tickets', async () => {
     const w = await webWorld();
     const { ticketId } = await tomsTapTicket(w);
@@ -62,14 +76,13 @@ describe('Dispatch: the map data', () => {
     expect(ocean).toMatchObject({ lat: -33.8908, lng: 151.2743, urgency: null, openTickets: 0 });
   });
 
-  test('the tile source and its attribution come from one OpenStreetMap default, and the search radius defaults to 15 km', async () => {
+  test('the tile source and its attribution are the one map setting, and the search radius defaults to 15 km', async () => {
     const w = await webWorld();
     const cookie = await w.signIn();
 
     const data = pinData(await dispatch(w, cookie));
 
-    expect(data.tiles.url).toBe('https://tile.openstreetmap.org/{z}/{x}/{y}.png');
-    expect(data.tiles.attribution).toContain('OpenStreetMap');
+    expect(data.tiles).toEqual(mapTiles());
     expect(data.radiusKm).toBe(15);
   });
 
@@ -293,15 +306,17 @@ describe('Dispatch: the Tradie schedule', () => {
 });
 
 describe('Dispatch: what the page needs to run', () => {
-  test('loads Leaflet and the map script from /assets, and works as a table when they do not run', async () => {
+  test('loads Leaflet, its pin grouping and the map script from /assets, in that order, and works as a table when they do not run', async () => {
     const w = await webWorld();
     const cookie = await w.signIn();
 
     const html = await dispatch(w, cookie);
 
     expect(html).toContain('href="/assets/leaflet.css"');
-    expect(html).toContain('src="/assets/leaflet.js"');
-    expect(html).toContain('src="/assets/dispatch-map.js"');
+    expect(html).toContain('href="/assets/MarkerCluster.css"');
+    const scripts = ['/assets/leaflet.js', '/assets/leaflet.markercluster.js', '/assets/dispatch-map.js'].map((src) => html.indexOf(`src="${src}"`));
+    for (const at of scripts) expect(at).toBeGreaterThan(-1);
+    expect(scripts).toEqual([...scripts].sort((a, b) => a - b));
     expect(html).not.toMatch(/\son[a-z]+="/);
     expect(html).toContain('id="dispatch-map"');
     expect(visible(html)).toContain('The map needs JavaScript');

@@ -4,6 +4,7 @@ import { assetRoutes } from '../../src/web/assets.ts';
 import { shellInfo } from '../../src/web/shell.ts';
 import {
   alert,
+  badge,
   chatBubble,
   docket,
   dl,
@@ -170,6 +171,14 @@ describe('ui', () => {
     expect(out).toContain('id="field-mobile-hint"');
   });
 
+  it('marks a refused file or checkbox field the way it marks a text field: a red control, its error tied to it', async () => {
+    const file = await render(field({ label: 'Photos', name: 'photos', type: 'file', error: 'Choose a photo under 10 MB.' }));
+    expect(file).toMatch(/<input [^>]*aria-describedby="field-photos-error"[^>]*aria-invalid="true"[^>]*class="file-input w-full file-input-error"/);
+    const box = await render(field({ label: 'I agree', name: 'agree', type: 'checkbox', error: 'Tick this to go on.' }));
+    expect(box).toMatch(/<input [^>]*aria-invalid="true"[^>]*class="checkbox checkbox-primary checkbox-sm[^"]*checkbox-error/);
+    expect(await render(field({ label: 'Photos', name: 'photos', type: 'file' }))).not.toContain('file-input-error');
+  });
+
   it('escapes chat text, keeps its line breaks and links only http(s) URLs', async () => {
     const out = await render(chatBubble({ side: 'start', header: 'myEST8', text: `${HOSTILE}\nUpload: https://myest8.test/u/abc?x=1&y=2.` }));
     expect(out).not.toContain('<script>alert');
@@ -323,12 +332,36 @@ describe('ui', () => {
     expect(await render(queueRow({ title: 'Toilet keeps running' }))).not.toContain('is-decision');
   });
 
+  it('gives a badge a hairline boundary when asked, keeping its tone, so it holds on the page background', async () => {
+    const outlined = await render(badge('Plumbing', 'neutral', { outline: true }));
+    expect(outlined).toMatch(/class="badge badge-soft badge-neutral is-outline /);
+    expect(outlined).toContain('>Plumbing</span>');
+    expect(await render(badge('Plumbing'))).not.toContain('is-outline');
+  });
+
   it('shows Routine as muted text on a hairline, and keeps the High and Urgent tones', async () => {
     const routine = await render(urgencyBadge('routine'));
     expect(routine).toContain('badge-muted');
     expect(routine).not.toContain('badge-neutral');
     expect(await render(urgencyBadge('high'))).toContain('badge-warning');
     expect(await render(urgencyBadge('urgent'))).toContain('badge-error');
+  });
+
+  it('clamps a board docket’s issue to three lines, or to the lines asked for', async () => {
+    const base = { number: 7, href: '/tickets/7', urgency: 'high', address: '27 Llewellyn St', issue: 'The cupboard is falling apart', meta: [] };
+    expect(await render(docket(base))).toContain('class="line-clamp-3 docket-issue"');
+    const two = await render(docket({ ...base, lines: 2 }));
+    expect(two).toContain('class="line-clamp-2 docket-issue"');
+    expect(two).toContain('title="The cupboard is falling apart"');
+  });
+
+  it('keeps a done step that is the one on screen marked as both done and current', async () => {
+    const out = await render(steps([{ label: 'Email', done: true }, { label: 'SMS', done: false }], { horizontal: true, current: 0 }));
+    const first = out.split('<li').slice(1)[0]!;
+    expect(first).toContain('data-content="✓"');
+    expect(first).toContain('aria-current="step"');
+    expect(first).toContain('(done)');
+    expect(first).toContain('(this step)');
   });
 
   it('shows the street in a large docket and clamps the issue, with the full text as a title', async () => {
@@ -363,6 +396,51 @@ describe('ui', () => {
     expect(out).toContain('<td>Leak</td>');
     expect(out).toContain('<td class="num text-right">$420.00</td>');
     expect(await render(table(['Issue'], [[html`Leak`]]))).toContain('<div class="table-frame">');
+  });
+
+  it('labels each stacked cell with its column header when asked, so a phone row still says what each value is', async () => {
+    const out = await render(
+      table(['Property', 'Property Owner', 'Open Tickets', ''], [[html`12 King St`, html`Olivia Owens`, html`2`, html`<a href="/x">Edit</a>`]], {
+        align: ['left', 'left', 'right', 'left'],
+        stack: 'labelled',
+      }),
+    );
+    expect(out).toContain('<div class="table-frame is-stacked is-labelled">');
+    expect(out).toContain('<td data-label="Property Owner">Olivia Owens</td>');
+    expect(out).toContain('<td class="num text-right" data-label="Open Tickets">2</td>');
+    // The first cell leads the row, and a column with no header has nothing to say.
+    expect(out).toContain('<td>12 King St</td>');
+    expect(out).toContain('<td><a href="/x">Edit</a></td>');
+  });
+
+  it('gives each row the attributes asked for, escaped, and leaves rows without any bare', async () => {
+    const out = await render(
+      table(['Address', 'Suburb'], [[html`12 King St`, html`Newtown`], [html`9 Albion St`, html`Annandale`]], {
+        rowAttributes: [{ 'data-row': 'property-1', 'data-selected': true, 'aria-label': HOSTILE }, undefined],
+      }),
+    );
+    expect(out).toContain('<tr data-row="property-1" data-selected aria-label="&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;">');
+    expect(out).toContain('<tr><td class="min-w-28">9 Albion St</td>');
+    expect(out).not.toContain('<script>');
+  });
+
+  it('leaves out an attribute set to false, and refuses a name that is not a plain attribute name', async () => {
+    expect(await render(table(['A'], [[html`x`]], { rowAttributes: [{ 'data-selected': false }] }))).toContain('<tr><td');
+    expect(() => table(['A'], [[html`x`]], { rowAttributes: [{ 'onclick="x"': 'y' }] })).toThrow();
+  });
+
+  it('makes the first cell of each row its row header when asked, stacked or not', async () => {
+    const out = await render(
+      table(['Address', 'Open Tickets'], [[html`12 King St`, html`2`]], { rowHeader: true, stack: 'labelled', align: ['left', 'right'] }),
+    );
+    expect(out).toContain('<tr><th scope="row">12 King St</th><td class="num text-right" data-label="Open Tickets">2</td></tr>');
+    expect(await render(table(['Address'], [[html`12 King St`]]))).toContain('<td class="min-w-28">12 King St</td>');
+  });
+
+  it('escapes a stacked cell’s label', async () => {
+    const out = await render(table(['Issue', HOSTILE], [[html`Leak`, html`x`]], { stack: 'labelled' }));
+    expect(out).not.toContain('<script>');
+    expect(out).toContain('data-label="&lt;script&gt;');
   });
 
   it('pairs each label with its value in a facts list, escaping both', async () => {

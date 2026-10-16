@@ -145,9 +145,26 @@ describe('Tickets', () => {
     expect(open).toMatch(/1 Routine/);
   });
 
-  test('says so when there are none', async () => {
+  test('pairs each Job’s Trade with its stage, and says when an open Ticket is ready to close', async () => {
     const w = await webWorld();
-    expect(visible(await text(w, '/tickets', await w.signIn()))).toContain('No open Tickets on your Properties.');
+    const ids = await threeTickets(w);
+    await w.alice.cancelJob((await w.alice.ticket(ids.fan)).jobs[0]!.jobId);
+
+    const html = await text(w, '/tickets?filter=all');
+    const rowOf = (id: number) => html.split('<tr>').find((r) => r.includes(`href="/tickets/${id}"`)) ?? '';
+    // Each Job is its own item, its Trade then its stage.
+    const jobsOf = (id: number) => [...rowOf(id).matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/g)].map((m) => visible(m[1]!).trim());
+    expect(jobsOf(ids.tap)).toEqual(['Plumbing Quoting']);
+    expect(visible(rowOf(ids.tap))).not.toContain('Ready to close');
+    expect(jobsOf(ids.fan)).toEqual(['Plumbing Cancelled']);
+    expect(visible(rowOf(ids.fan))).toContain('Ready to close');
+  });
+
+  test('says so when there are none, with the way to every Property Manager’s', async () => {
+    const w = await webWorld();
+    const html = await text(w, '/tickets', await w.signIn());
+    expect(visible(html)).toContain('No open Tickets on your Properties.');
+    expect(html).toMatch(/href="\/tickets\?filter=all"[^>]*>\s*Show all Tickets/);
   });
 });
 
@@ -160,6 +177,8 @@ describe('Approvals', () => {
     const readable = visible(html);
     expect(html).toContain(`href="/tickets/${ticketId}"`);
     for (const expected of [KING_ST, 'Olivia Owens', '$650.00', '$500.00', '$150.00', 'Reminder not due yet']) expect(readable).toContain(expected);
+    // A Quote with the Property Owner waits on them, not the Property Manager: a quiet count, not Wattle.
+    expect(html).toMatch(/<span class="count-chip ">1<\/span><span class="count-label">Quotes waiting on a Property Owner/);
 
     await w.h.advance(25 * HOUR);
     expect(visible(await text(w, '/approvals'))).toContain('Reminder sent');
@@ -190,6 +209,7 @@ describe('Approvals', () => {
     const after = await text(w, '/approvals');
     expect(after).not.toContain(`href="/tickets/${ticketId}"`);
     expect(visible(after)).toContain('Nothing is waiting on a Property Owner or a receipt.');
+    expect(after).toMatch(/href="\/approvals\?filter=all"[^>]*>\s*Show all approvals/);
     expect(visible(after)).not.toContain('Waiting on a Property Owner');
     expect(railCount(after, '/approvals')).toBeNull();
   });

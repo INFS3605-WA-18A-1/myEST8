@@ -3,8 +3,8 @@
  * layered, so it wins over app.css and daisyUI for the lp- and flow- classes it
  * owns. Colours are app.css's tokens only (docs/design-system.md).
  *
- * The page's one bold thing is the hero: a Tenant's text beside the Maintenance
- * Request myEST8 makes of it, under a three-line headline whose middle line,
+ * The page's one bold thing is the hero: a Tenant's text, the Maintenance Request
+ * myEST8 makes of it and the Ticket it becomes, beside a three-line headline whose middle line,
  * "You decide.", carries the Wattle decision stripe. Wattle means "needs your
  * decision" here exactly as in the app: that line, the decision rows and the
  * "You" chips, nothing else. The workflow is the one moving thing.
@@ -99,37 +99,44 @@ body.lp {
 
 /* ----- The hero ----- */
 
+/* Phones and tablets: the words, then the repair. From 72rem: side by side, the repair on the right. */
 .lp-hero {
-  padding-block: 40px 56px;
+  padding-block: 32px 56px;
 }
 .lp-hero-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 32px;
+  gap: 40px;
 }
-@media (min-width: 64rem) {
+@media (min-width: 72rem) {
   .lp-hero {
-    padding-block: 52px 88px;
+    padding-block: 24px 72px;
   }
   .lp-hero-grid {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 560px);
-    column-gap: 64px;
-    row-gap: 40px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 488px);
+    column-gap: 48px;
   }
-  .lp-headline {
-    grid-column: 1 / -1;
+  /* The words sit level with the middle of the repair, so neither column hangs. */
+  .lp-intro {
+    align-self: center;
+    padding-bottom: 48px;
   }
 }
 
-/* Three sentences, one to a line: the Tenant's part, yours, myEST8's. */
+/* Three sentences, one to a line: the Tenant's part, yours, myEST8's. The landing scale is 36 to 52 px. */
 .lp-headline {
   margin: 0;
   font-family: var(--font-head);
-  font-size: clamp(38px, 4.2vw + 6px, 64px);
+  font-size: clamp(36px, 3vw + 18px, 52px);
   font-weight: 700;
-  line-height: 1.04;
+  line-height: 1.06;
   letter-spacing: -0.025em;
   color: var(--ink);
+}
+@media (min-width: 72rem) {
+  .lp-headline {
+    font-size: clamp(40px, 3.2vw, 46px);
+  }
 }
 .lp-line {
   display: block;
@@ -167,35 +174,19 @@ body.lp {
   min-width: 0;
 }
 .lp-lead {
-  max-width: 54ch;
+  max-width: 52ch;
   font-size: 18px;
   line-height: 1.55;
   color: var(--ink);
+  text-wrap: pretty;
 }
 @media (max-width: 39.99rem) {
   .lp-lead {
-    font-size: 17px;
+    font-size: 16px;
   }
   .lp-intro .lp-actions {
     align-self: stretch;
   }
-}
-.lp-channels {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 20px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  font-weight: 500;
-}
-.lp-channels li {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.lp-channels svg {
-  color: var(--action);
 }
 .lp-note {
   align-self: stretch;
@@ -214,23 +205,23 @@ body.lp {
 }
 .lp-thread {
   margin-right: 24px;
-  padding: 16px 16px 72px;
+  padding: 16px 16px 64px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 8px;
 }
 @media (min-width: 40rem) {
   .lp-thread {
-    margin-right: 72px;
-    padding: 20px 20px 88px;
+    margin-right: 64px;
+    padding: 16px 20px 64px;
   }
 }
 .lp-thread-head {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding-bottom: 14px;
-  margin-bottom: 16px;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
   border-bottom: 1px solid var(--line);
 }
 .lp-avatar {
@@ -265,7 +256,7 @@ body.lp {
 .lp-msgs {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -284,11 +275,11 @@ body.lp {
   align-items: flex-end;
 }
 .lp-bubble {
-  padding: 10px 14px;
+  padding: 8px 12px;
   border-radius: 14px 14px 14px 4px;
   background: var(--page);
   color: var(--ink);
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1.45;
 }
 .is-out .lp-bubble {
@@ -312,7 +303,7 @@ body.lp {
 
 .lp-photo {
   display: block;
-  width: 96px;
+  width: 88px;
   height: auto;
   border-radius: 4px;
 }
@@ -343,8 +334,8 @@ body.lp {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin: -56px 0 0 24px;
-  padding: 16px 16px 18px 18px;
+  margin: -48px 0 0 24px;
+  padding: 14px 16px 16px 18px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-left: 4px solid var(--hivis);
@@ -353,8 +344,8 @@ body.lp {
 }
 @media (min-width: 40rem) {
   .lp-request {
-    margin: -64px 0 0 72px;
-    padding: 18px 20px 20px 22px;
+    margin: -48px 0 0 64px;
+    padding: 16px 20px 16px 20px;
   }
 }
 .lp-request-kind {
@@ -381,16 +372,24 @@ body.lp {
 .lp-request-issue {
   color: var(--ink);
 }
+/* The fields myEST8 filled in, with the Tenant's photo beside them, under the docket's perforation. */
+.lp-request-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  margin: 6px 0 2px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+}
 .lp-request-fields {
   display: grid;
   gap: 8px;
-  margin: 8px 0 4px;
-  padding-top: 12px;
-  border-top: 1px dashed var(--line);
+  margin: 0;
 }
 .lp-request-fields > div {
   display: grid;
-  grid-template-columns: 72px minmax(0, 1fr);
+  grid-template-columns: 60px minmax(0, 1fr);
   align-items: start;
   gap: 12px;
 }
@@ -414,7 +413,49 @@ body.lp {
 .lp-request-actions {
   display: flex;
   gap: 8px;
-  margin-top: 8px;
+  margin-top: 6px;
+}
+
+/* Once confirmed: a hairline drops from the Maintenance Request to the Ticket it became, the dashboard's own docket. */
+.lp-became {
+  position: relative;
+  margin: 0 0 0 24px;
+  padding: 12px 0 0 28px;
+}
+.lp-became::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 24px;
+  left: 11px;
+  width: 2px;
+  background: var(--line);
+}
+.lp-became-note {
+  position: relative;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--done);
+}
+.lp-became-note::before {
+  content: '';
+  position: absolute;
+  top: 5px;
+  left: -21px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--done);
+}
+.lp-became .docket {
+  max-width: 320px;
+  background: var(--surface);
+}
+@media (min-width: 40rem) {
+  .lp-became {
+    margin-left: 64px;
+  }
 }
 .lp-caption {
   margin: 16px 0 0 24px;
@@ -423,7 +464,7 @@ body.lp {
 }
 @media (min-width: 40rem) {
   .lp-caption {
-    margin-left: 72px;
+    margin-left: 64px;
   }
 }
 

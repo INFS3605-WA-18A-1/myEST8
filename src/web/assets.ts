@@ -18,6 +18,8 @@ const PNG = 'image/png';
 
 /** Leaflet's built files, in its package's dist/ folder. */
 const leaflet = (...path: string[]) => join(dirname(require.resolve('leaflet/package.json')), 'dist', ...path);
+/** Leaflet.markercluster's built files (it groups the Dispatch map's overlapping pins). */
+const markercluster = (name: string) => join(dirname(require.resolve('leaflet.markercluster/package.json')), 'dist', name);
 
 const ASSETS: Record<string, { file: () => string; type: string }> = {
   'tailwind.js': { file: () => require.resolve('@tailwindcss/browser'), type: JS },
@@ -29,6 +31,8 @@ const ASSETS: Record<string, { file: () => string; type: string }> = {
   'app.js': { file: () => fileURLToPath(new URL('./static/app.js', import.meta.url)), type: JS },
   'leaflet.js': { file: () => leaflet('leaflet.js'), type: JS },
   'leaflet.css': { file: () => leaflet('leaflet.css'), type: CSS },
+  'leaflet.markercluster.js': { file: () => markercluster('leaflet.markercluster.js'), type: JS },
+  'MarkerCluster.css': { file: () => markercluster('MarkerCluster.css'), type: CSS },
   'dispatch-map.js': { file: () => fileURLToPath(new URL('./static/dispatch-map.js', import.meta.url)), type: JS },
   'favicon.svg': { file: () => fileURLToPath(new URL('./static/favicon.svg', import.meta.url)), type: SVG },
 };

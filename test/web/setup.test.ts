@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { webWorld } from '../support/web.ts';
+import { visible, webWorld } from '../support/web.ts';
 import { KING_ST } from '../support/world.ts';
 
 type Web = Awaited<ReturnType<typeof webWorld>>;
@@ -42,6 +42,24 @@ describe('the onboarding guide', () => {
     expect(tradies).toContain(`href="/tradies/${w.tradies.finn.id}"`);
   });
 
+  test('opens with the areas in order, each a link to its section saying what it has so far', async () => {
+    const w = await webWorld();
+
+    const nav = (html: string) => {
+      const found = html.match(/<nav aria-label="Setup areas"[^>]*>[\s\S]*?<\/nav>/)?.[0] ?? '';
+      return { html: found, text: visible(found).replace(/\s+/g, ' ') };
+    };
+    const harbour = nav(await page(w, '/setup', await w.signIn()));
+    for (const id of ['channels', 'people', 'tradies', 'properties', 'tenants']) expect(harbour.html).toMatch(new RegExp(`<a href="#${id}"`));
+    expect(harbour.html).not.toMatch(/class="link[ "]/);
+    expect(harbour.text).toMatch(/Tradies \d+ Tradies/);
+    expect(harbour.text).toMatch(/Properties \d+ Properties/);
+
+    const sunrise = nav(await page(w, '/setup', await w.signUp()));
+    expect(sunrise.text).toContain('Tradies None yet');
+    expect(sunrise.text).toContain('Tenants None yet');
+  });
+
   test('verifies a typed SMS number with a code, and does not store a typed email address', async () => {
     const w = await webWorld();
     const cookie = await w.signIn();
@@ -73,7 +91,7 @@ describe('the onboarding guide', () => {
     );
 
     expect(added.page).toContain('Tina Test added as a Tenant');
-    expect(added.page).toContain('2026-09-01');
+    expect(visible(added.page)).toContain('1 Sep 2026');
     expect(await page(w, '/properties', cookie)).toContain('Hana Ho, Tina Test, Tom Tran');
   });
 

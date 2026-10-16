@@ -4,7 +4,7 @@ import { describe, expect, test } from 'vitest';
 import type { DemoControls } from '../../src/demo/controls.ts';
 import { HOUR } from '../support/harness.ts';
 import { visible, webWorld } from '../support/web.ts';
-import { BELLA, confirmedQuotes, HANA, KING_ST, OCEAN_AVE, OLIVIA, TOM } from '../support/world.ts';
+import { BELLA, confirmedQuotes, HANA, KING_ST, OCEAN_AVE, OLIVIA, STRANGER, TOM } from '../support/world.ts';
 
 type Web = Awaited<ReturnType<typeof webWorld>>;
 
@@ -152,3 +152,15 @@ describe('signed out', () => {
   });
 });
 
+
+describe('the Requests count', () => {
+  test('counts what /requests lists: inbox messages are on the dashboard, not counted here', async () => {
+    const w = await webWorld();
+    await w.h.receive(STRANGER, 'Hi, this is Tom on my work phone');
+    const cookie = await w.signIn();
+
+    const dashboard = await text(w, '/', cookie);
+    expect(dashboard).toContain('Hi, this is Tom on my work phone');
+    expect(railCount(dashboard, '/requests')).toBeNull();
+  });
+});

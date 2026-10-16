@@ -192,7 +192,7 @@ function signInPage(o: { next: string; email?: string; flash?: Flash }) {
         ${field({ label: 'Password', name: 'password', type: 'password', required: true, autocomplete: 'current-password' })}
         ${button('Sign in', { size: 'lg', block: true })}
       </form>
-      ${otherWay({ text: 'New to myEST8?', button: linkButton('Create your Agency’s account', '/signup', { variant: 'secondary', block: true }) })}`,
+      ${otherWay({ text: 'New to myEST8?', button: linkButton('Create your Agency’s account', '/signup', { variant: 'secondary', size: 'lg', block: true }) })}`,
     steps: [
       { text: 'Your dashboard lists each Maintenance Request waiting for your decision.', request: true },
       { text: 'Confirm one and it becomes a Ticket.' },

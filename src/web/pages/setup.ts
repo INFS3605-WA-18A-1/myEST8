@@ -108,9 +108,7 @@ export function setupPages(o: { connectors?: ChannelConnectors } = {}) {
         subtitle: 'Work through these areas once. Come back any time to add more.',
         actions: linkButton('Use the step-by-step guide', '/welcome', { variant: 'secondary', size: 'sm' }),
         body: html`
-          <nav aria-label="Setup areas">
-            <ul class="flex flex-wrap gap-x-4 gap-y-1 text-sm">${AREAS.map(([id, title]) => html`<li><a class="link" href="#${id}">${title}</a></li>`)}</ul>
-          </nav>
+          ${areasNav(agency, channels, connectors.unavailable)}
           ${section({ id: 'channels', title: 'Channels', body: await channelsArea(origin, channels, timeZone, shownFor('channels'), connectors, actions.agency().id, email, pending) })}
           ${section({ id: 'people', title: 'Property Owners and Building Managers', body: peopleArea(agency, shownFor) })}
           ${section({ id: 'tradies', title: 'Tradies', body: html`${await tradiesArea(c, agency, googleQuery, shownFor('tradie'))}${importForm('tradies', shownFor('import-tradies'))}` })}
@@ -207,6 +205,43 @@ export function setupPages(o: { connectors?: ChannelConnectors } = {}) {
 
 // Areas
 
+/** "3 Tradies", "1 Property". */
+const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * The areas in the order they must happen, each a link to its section with what
+ * it has so far, so the page opens on what's done and what's next.
+ */
+function areasNav(agency: Agency, channels: AgencyChannel[], unavailable: readonly ChannelType[]): Html {
+  const offered = CHANNELS.filter((ch) => !unavailable.includes(ch.type));
+  const connected = offered.filter((ch) => channels.some((c) => c.type === ch.type)).map((ch) => (ch.type === 'email' ? 'email' : ch.name));
+  const people = [
+    ...(agency.owners.length ? [count(agency.owners.length, 'Property Owner')] : []),
+    ...(agency.buildingManagers.length ? [count(agency.buildingManagers.length, 'Building Manager')] : []),
+  ];
+  const state: Record<(typeof AREAS)[number][0], string | null> = {
+    channels: !offered.length ? 'Not available here' : connected.length ? `${connected.join(' and ').replace(/^./, (c) => c.toUpperCase())} connected` : null,
+    people: people.length ? people.join(', ') : null,
+    tradies: agency.tradies.length ? count(agency.tradies.length, 'Tradie') : null,
+    properties: agency.properties.length ? count(agency.properties.length, 'Property', 'Properties') : null,
+    tenants: agency.tenants.length ? count(agency.tenants.length, 'Tenant') : null,
+  };
+  return html`<nav aria-label="Setup areas" class="setup-areas">
+    <ol>
+      ${AREAS.map(([id, title]) => {
+        const has = state[id];
+        return html`<li>
+          <a href="#${id}" class="setup-area ${has ? 'is-done' : 'is-todo'}">
+            <span class="setup-area-mark" aria-hidden="true">${icon(has ? 'check-circle' : 'circle', { size: 'size-5' })}</span>
+            <span class="setup-area-name">${title}</span>
+            <span class="setup-area-state">${has ?? 'None yet'}</span>
+          </a>
+        </li>`;
+      })}
+    </ol>
+  </nav>`;
+}
+
 /** A group inside an area: a surface with its own heading, an optional chip and its body. */
 function subsection(o: { title: string; id?: string; actions?: Html; body: Html }): Html {
   return html`<div class="section" ${o.id ? html`id="${o.id}"` : ''}>
@@ -266,7 +301,7 @@ function channelCard(
 ): Html {
   const waiting = channel.type === 'email' && email.state === 'waiting';
   const emailVerified = channel.type === 'email' && email.state === 'verified';
-  const rowForm = 'mt-3 grid items-end gap-3';
+  const rowForm = 'grid items-end gap-3 sm:grid-cols-[minmax(0,1fr)_auto]';
   if (via.unavailable.includes(channel.type)) {
     return subsection({ id: channel.type, title: channel.name, actions: unavailableChip(), body: html`<div class="mt-2">${unavailableNote(channel.type, via.unavailable)}</div>` });
   }
@@ -276,7 +311,6 @@ function channelCard(
     actions: channelChip(connected, { waiting, verified: emailVerified }),
     body: html`
       ${connected ? channelLine(connected, timeZone, { waiting, smsInbound: via.smsInbound }) : ''}
-      ${html`<div class="mt-2">${channelGuide(channel.type, origin)}</div>`}
       <div class="mt-3">
         ${channel.type === 'email'
           ? html`${inboundEmailField(email.address)}${via.gmailBlock ?? ''}`
@@ -289,6 +323,7 @@ function channelCard(
                 className: rowForm,
               })}
       </div>
+      <div class="mt-3">${channelGuide(channel.type, origin)}</div>
     `,
   });
 }
@@ -368,7 +403,7 @@ function propertiesArea(agency: Agency, myId: number, shown: Shown): Html {
   return html`
     <p class="text-sm">Each Property has one Property Owner and is assigned to one Property Manager. Open one from <a class="link" href="/properties">Properties</a>.</p>
     ${agency.properties.length
-      ? table(['Address', 'Property Manager', 'Property Owner', 'Max Repair Cost', 'Tenants', 'Nominated Tradies', 'Building Manager'], rows, { caption: 'Properties', stack: true })
+      ? table(['Address', 'Property Manager', 'Property Owner', 'Max Repair Cost', 'Tenants', 'Nominated Tradies', 'Building Manager'], rows, { caption: 'Properties', stack: 'labelled' })
       : emptyState('No Properties yet.')}
     ${addForm(
       'Add a Property',
@@ -444,9 +479,9 @@ function tenantsArea(agency: Agency, shown: Shown): Html {
             html`${addressOf(t.propertyId)}`,
             html`${t.mobile ?? '—'}`,
             html`${t.email ?? '—'}`,
-            html`${t.tenancyStart ?? '—'}`,
+            html`${formatDate(t.tenancyStart)}`,
           ]),
-          { caption: 'Tenants' },
+          { caption: 'Tenants', stack: 'labelled' },
         )
       : emptyState('Tenants appear here once you add them. Add a Property first.')}
     ${addForm(
@@ -481,7 +516,16 @@ function peopleTable(people: Person[], empty: string): Html {
   return table(
     ['Name', 'Mobile', 'Email'],
     people.map((p) => [html`${p.name}`, html`${p.mobile ?? '—'}`, html`${p.email ?? '—'}`]),
+    { stack: 'labelled' },
   );
+}
+
+/** A calendar date as people read it: "2026-09-01" is "1 Sep 2026". */
+function formatDate(isoDate: string | null): string {
+  const m = isoDate?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return isoDate ?? '—';
+  const month = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][Number(m[2]) - 1];
+  return `${Number(m[3])} ${month} ${m[1]}`;
 }
 
 function formError(flash: Flash): Html {

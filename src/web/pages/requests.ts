@@ -41,10 +41,10 @@ export function requestPages() {
         body: html`
           ${countStrip([
             { label: 'Maintenance Requests to review', count: requests.length, href: '#requests', decision: true },
-            { label: 'Check Urgency', count: requests.filter((r) => r.checkUrgency).length, href: '#requests' },
+            { label: 'Check urgency', count: requests.filter((r) => r.checkUrgency).length, href: '#requests' },
             { label: 'No photos', count: requests.filter((r) => r.noPhotos).length, href: '#requests' },
           ])}
-          ${section({ title: 'Waiting for review', id: 'requests', body: requestList(requests, now) })}
+          ${section({ title: 'Waiting for review', id: 'requests', body: requestList(requests, now, all) })}
         `,
       }),
     );
@@ -88,12 +88,18 @@ export function byUrgency<T extends { urgency: string; reportedAt: string }>(req
 }
 
 /** Each request read like a docket: the issue, the address, then its badges, who reported it and when, with Confirm or Review. */
-function requestList(requests: MaintenanceRequest[], now: Date): Html {
-  if (!requests.length) return emptyState('No Maintenance Requests waiting for you.');
+function requestList(requests: MaintenanceRequest[], now: Date, all: boolean): Html {
+  if (!requests.length) {
+    return emptyState(
+      'No Maintenance Requests waiting for you. A Tenant’s report lands here once its photos are in, or after 48 hours without them.',
+      all ? undefined : linkButton('Show all Maintenance Requests', '/requests?filter=all'),
+    );
+  }
   return html`<div class="request-list grid gap-2">
     ${requests.map((r) =>
       queueRow({
         href: `/requests/${r.issueId}`,
+        thumb: r.photos[0] ? html`<img src="/files/${r.photos[0].fileId}" alt="Photo of the issue" width="56" height="56" loading="lazy" />` : undefined,
         title: r.description,
         detail: r.propertyAddress,
         badges: [urgencyBadge(r.urgency), badge(humanise(r.trade)), ...requestFlags(r).map((f) => badge(f.label, f.tone))],
@@ -213,7 +219,7 @@ function decide(r: MaintenanceRequest): Html {
         <select id="urgency-${r.issueId}" name="urgency" class="select" aria-describedby="${hintId}">
           ${URGENCIES.map((u) => html`<option value="${u}" ${u === r.urgency ? 'selected' : ''}>${humanise(u)}</option>`)}
         </select>
-        ${button('Change Urgency', { variant: 'secondary', size: 'sm' })}
+        ${button('Change Urgency', { variant: 'secondary' })}
       </div>
       <p id="${hintId}" class="field-hint">Urgent makes this an Urgent Repair, not a Ticket: the Tenant is reminded to call a Nominated Tradie.</p>
     </form>

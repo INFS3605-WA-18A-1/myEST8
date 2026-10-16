@@ -9,6 +9,7 @@ describe('browser-test API env', () => {
       VISION_API_URL: '',
       QUOTES_API_URL: '',
       GOOGLE_MAPS_API_KEY: '',
+      CARTO_BASEMAPS_KEY: '',
       GOOGLE_CLIENT_ID: '',
       GOOGLE_CLIENT_SECRET: '',
       META_WHATSAPP_PHONE_NUMBER_ID: '',

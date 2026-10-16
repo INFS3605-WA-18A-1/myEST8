@@ -67,6 +67,37 @@ describe('Schedule: the week', () => {
     expect(days).toContain('booking is-reschedule');
   });
 
+  test('the week says at a glance how many visits are booked and how many reschedule requests wait', async () => {
+    const w = await webWorld();
+    await bookedTap(w);
+    await w.h.answer(TOM, 'I have work on Tuesday, can we do another day?', 'reschedule');
+    const cookie = await w.signIn();
+
+    const html = await page(w, '/calendar?week=2026-10-12', cookie);
+
+    const summary = visible(html.slice(html.indexOf('class="schedule-summary"'), html.indexOf('class="schedule-week"')));
+    expect(summary).toContain('1 visit booked');
+    expect(summary).toContain('1 reschedule request waiting on you');
+    // Each day with visits says how many, beside its name.
+    expect(visible(week(html))).toMatch(/Tue 13 Tuesday 13 October 1 visit/);
+  });
+
+  test("a reschedule request on your own Property is your decision; on a colleague's it only stands out", async () => {
+    const w = await webWorld();
+    await bookedTap(w);
+    await w.h.answer(TOM, 'I have work on Tuesday, can we do another day?', 'reschedule');
+
+    const alice = await page(w, '/calendar?week=2026-10-12', await w.signIn());
+    expect(week(alice)).toContain('booking is-reschedule is-decision');
+
+    const bob = await page(w, '/calendar?week=2026-10-12&filter=all', await w.signIn('bob@harbour.example'));
+    expect(week(bob)).toContain('booking is-reschedule');
+    expect(week(bob)).not.toContain('is-decision');
+    // Bob's summary counts the request, but it isn't waiting on him.
+    expect(visible(bob)).toContain('1 reschedule requested');
+    expect(visible(bob)).not.toContain('waiting on you');
+  });
+
   test('today is marked and never folded away, even when nothing is booked', async () => {
     const w = await webWorld();
     const cookie = await w.signIn();

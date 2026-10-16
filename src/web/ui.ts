@@ -6,7 +6,7 @@
 // utilities generated in the browser by Tailwind's browser build. Some layouts are
 // adapted from HyperUI (https://hyperui.dev, MIT); each component says where it came from.
 
-import { html } from 'hono/html';
+import { html, raw } from 'hono/html';
 import type { HtmlEscapedString } from 'hono/utils/html';
 import type { Role } from '../shared.ts';
 import { icon } from './icons.ts';
@@ -174,7 +174,7 @@ function rail(active: NavKey | undefined, agencyName: string | undefined, counts
 /** The Property Manager's name, opening a menu with Sign out. */
 function userMenu(name: string): Html {
   return html`<details class="user-menu" data-menu>
-    <summary>${name}${ICON.chevron}</summary>
+    <summary><span class="user-menu-name">${name}</span>${ICON.chevron}</summary>
     <div class="user-menu-panel">${postButton('/logout', 'Sign out', { variant: 'ghost', size: 'sm' })}</div>
   </details>`;
 }
@@ -429,9 +429,13 @@ export function sectionHeader(title: string, actions?: Html): Html {
 
 const TONE: Record<Tone, string> = { neutral: 'badge-neutral', info: 'badge-info', success: 'badge-success', warning: 'badge-warning', error: 'badge-error' };
 
-/** A short label (daisyUI badge, soft style). The text carries the meaning; colour only backs it up. */
-export function badge(text: string, tone: Tone = 'neutral', o: { wrap?: boolean } = {}): Html {
-  return toneBadge(text, TONE[tone], o.wrap);
+/**
+ * A short label (daisyUI badge, soft style). The text carries the meaning; colour only backs it up.
+ * `outline` adds a hairline boundary and a white fill, keeping the tone's text colour: for a badge
+ * that sits straight on the Paper page (a neutral badge's own fill is Paper, so it would read as loose text).
+ */
+export function badge(text: string, tone: Tone = 'neutral', o: { wrap?: boolean; outline?: boolean } = {}): Html {
+  return toneBadge(text, `${TONE[tone]}${o.outline ? ' is-outline' : ''}`, o.wrap);
 }
 
 /** A badge with its class given: for the quiet looks (Routine, cancelled) that have no Tone. */
@@ -539,13 +543,39 @@ export function emptyState(text: string, action?: Html): Html {
  * phones, never the page. `caption` names it for screen readers. `align` gives each
  * column 'left' (the default) or 'right'; right-aligned figures get the tabular `num` class.
  * `stack: true` turns each row into a block on phones (under 640px), its cells one
- * under the other and the header hidden, for lists read row by row (the Tickets list).
+ * under the other and the header hidden, for lists whose cells explain themselves
+ * (the Tickets list: badges and an age). `stack: 'labelled'` does the same but puts
+ * each column's header beside its value (label left, value right), for rows of
+ * plain values such as names, money and counts (Properties, Tradies). The first
+ * cell leads the row unlabelled, and so does any column with an empty header.
+ *
+ * `rowHeader: true` makes each row's first cell its row header (`<th scope="row">`),
+ * so a screen reader names the row by it (an address, a Tradie). `rowAttributes`
+ * gives row i the attributes in `rowAttributes[i]` (`data-row`, `data-selected`,
+ * `aria-*`...): values are escaped, `true` writes a bare attribute, and `false` or
+ * undefined leaves it out.
  */
-export function table(headers: string[], rows: Html[][], o: { caption?: string; align?: ('left' | 'right')[]; stack?: boolean } = {}): Html {
+export function table(
+  headers: string[],
+  rows: Html[][],
+  o: {
+    caption?: string;
+    align?: ('left' | 'right')[];
+    stack?: boolean | 'labelled';
+    rowHeader?: boolean;
+    rowAttributes?: (RowAttributes | undefined)[];
+  } = {},
+): Html {
   const right = (i: number) => o.align?.[i] === 'right';
+  const labelled = o.stack === 'labelled';
   // A stacked table sets its cells' widths in app.css, as they become blocks on phones.
   const cellClass = (i: number) => [o.stack ? '' : 'min-w-28', right(i) ? 'num text-right' : ''].filter(Boolean).join(' ');
-  return html`<div class="table-frame${o.stack ? ' is-stacked' : ''}">
+  const label = (i: number) => (labelled && i > 0 && headers[i] ? html` data-label="${headers[i]}"` : '');
+  const cell = (content: Html, i: number) => {
+    const cls = cellClass(i) ? html` class="${cellClass(i)}"` : '';
+    return o.rowHeader && i === 0 ? html`<th scope="row"${cls}>${content}</th>` : html`<td${cls}${label(i)}>${content}</td>`;
+  };
+  return html`<div class="table-frame${o.stack ? ' is-stacked' : ''}${labelled ? ' is-labelled' : ''}">
     <table class="table table-sm">
       ${o.caption ? html`<caption class="sr-only">${o.caption}</caption>` : ''}
       <thead>
@@ -554,10 +584,26 @@ export function table(headers: string[], rows: Html[][], o: { caption?: string; 
         </tr>
       </thead>
       <tbody>
-        ${rows.map((row) => html`<tr>${row.map((cell, i) => html`<td${cellClass(i) ? html` class="${cellClass(i)}"` : ''}>${cell}</td>`)}</tr>`)}
+        ${rows.map((row, r) => html`<tr${rowAttributes(o.rowAttributes?.[r])}>${row.map(cell)}</tr>`)}
       </tbody>
     </table>
   </div>`;
+}
+
+/** Attributes for one table row: a value is escaped, `true` is a bare attribute, `false` leaves it out. */
+export type RowAttributes = Record<string, string | number | boolean | undefined>;
+
+const ATTRIBUTE_NAME = /^[a-z][a-z0-9-]*$/;
+
+function rowAttributes(attributes: RowAttributes | undefined): Html | string {
+  if (!attributes) return '';
+  const parts = Object.entries(attributes).flatMap(([name, value]) => {
+    // Names can't be escaped, so only plain lower-case names (data-row, aria-label, role) are allowed.
+    if (!ATTRIBUTE_NAME.test(name)) throw new Error(`Not an attribute name: ${name}`);
+    if (value === false || value === undefined) return [];
+    return value === true ? [html` ${raw(name)}`] : [html` ${raw(name)}="${value}"`];
+  });
+  return html`${parts}`;
 }
 
 /**
@@ -602,7 +648,7 @@ export function field(o: {
   if (type === 'checkbox') {
     return html`<div class="fieldset">
       <label for="${id}" class="flex cursor-pointer items-start gap-3 py-1 text-sm">
-        <input ${common} type="checkbox" class="checkbox checkbox-primary checkbox-sm mt-1" value="${o.value ?? 'on'}" ${o.checked ? 'checked' : ''} />
+        <input ${common} type="checkbox" class="checkbox checkbox-primary checkbox-sm mt-1${o.error ? ' checkbox-error' : ''}" value="${o.value ?? 'on'}" ${o.checked ? 'checked' : ''} />
         <span>${o.label}</span>
       </label>
       ${error} ${hint}
@@ -618,7 +664,7 @@ export function field(o: {
             ${(o.options ?? []).map((opt) => html`<option value="${opt.value}" ${String(o.value ?? '') === opt.value ? 'selected' : ''}>${opt.label}</option>`)}
           </select>`
         : type === 'file'
-          ? html`<input ${common} type="file" class="file-input w-full" ${o.accept ? html`accept="${o.accept}"` : ''} />`
+          ? html`<input ${common} type="file" class="file-input w-full${invalid.replace('input', 'file-input')}" ${o.accept ? html`accept="${o.accept}"` : ''} />`
           : html`<input ${common} type="${type}" class="input w-full${invalid}" value="${o.value ?? ''}" placeholder="${o.placeholder ?? ''}" ${o.autocomplete ? html`autocomplete="${o.autocomplete}"` : ''} ${o.step ? html`step="${o.step}"` : ''} ${o.min !== undefined ? html`min="${o.min}"` : ''} ${o.max !== undefined ? html`max="${o.max}"` : ''} />`;
   return html`<div class="fieldset">
     <label for="${id}" class="field-label">${o.label}</label>
@@ -754,7 +800,7 @@ export function timeline(items: { at: string; title: string; detail?: string }[]
         html`<li>
           ${i > 0 ? html`<hr class="bg-line" />` : ''}
           <div class="timeline-middle text-primary">${ICON.dot}</div>
-          <div class="timeline-end min-w-0 ${i < items.length - 1 ? 'mb-6' : ''}">
+          <div class="timeline-end min-w-0 ${i < items.length - 1 ? 'mb-3' : ''}">
             <p class="text-xs text-muted">${item.at}</p>
             <p class="text-sm font-medium">${item.title}</p>
             ${item.detail ? html`<p class="text-sm whitespace-pre-line text-muted">${item.detail}</p>` : ''}
@@ -848,6 +894,8 @@ export function ticketCell(o: { ticketId: number; issue: string; address?: strin
  *
  * `size: 'large'` is the Ticket page's header: the stub with a 26px number first,
  * then the address and the issue, as the page is already about that one Ticket.
+ * `lines` is how many lines the issue may take before its ellipsis: 3 on a board
+ * docket and 2 on the large one by default (the dashboard's lanes ask for 2).
  */
 export function docket(o: {
   number: number;
@@ -861,6 +909,7 @@ export function docket(o: {
   unread?: number;
   decision?: boolean;
   size?: 'default' | 'large';
+  lines?: 1 | 2 | 3;
 }): Html {
   const unread = o.unread
     ? html`<span><span class="unread-dot" aria-hidden="true"></span><span class="sr-only">unread messages</span></span>`
@@ -875,11 +924,11 @@ export function docket(o: {
           ${perf}
           <span class="docket-body">
             ${clipped(o.street ?? o.address, 1, 'docket-address', o.address)}
-            ${clipped(o.issue, 2, 'docket-issue')}
+            ${clipped(o.issue, o.lines ?? 2, 'docket-issue')}
             <span class="docket-meta">${o.meta.map((item) => html`<span>${item}</span>`)}${unread}</span>
           </span>`
       : html`<span class="docket-body">
-            ${clipped(o.issue, 3, 'docket-issue')}
+            ${clipped(o.issue, o.lines ?? 3, 'docket-issue')}
             ${clipped(o.street ?? o.address, 1, 'docket-address', o.address)}
           </span>
           ${perf}
