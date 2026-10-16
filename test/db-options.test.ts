@@ -2,7 +2,7 @@
 // isn't on this machine, and the transaction pooler's limits. Pure; no database.
 
 import { describe, expect, test } from 'vitest';
-import { connectionOptions } from '../src/db.ts';
+import { connectionOptions, requireDatabaseUrl } from '../src/db.ts';
 
 const POOLER = 'postgres://postgres.abc:pw@aws-0-ap-southeast-2.pooler.supabase.com:6543/postgres';
 const SESSION_POOLER = 'postgres://postgres.abc:pw@aws-0-ap-southeast-2.pooler.supabase.com:5432/postgres';
@@ -75,5 +75,13 @@ describe('the transaction pooler (port 6543)', () => {
     const refuse = () => connectionOptions(POOLER, 'myest8');
     expect(refuse).toThrow(/transaction pooler/);
     expect(refuse).not.toThrow(/pw@|postgres:\/\//);
+  });
+});
+
+describe('requireDatabaseUrl', () => {
+  test('prefers SUPABASE_DB_URL, falls back to the integration\'s POSTGRES_URL, and refuses with neither', () => {
+    expect(requireDatabaseUrl({ SUPABASE_DB_URL: 'postgres://a', POSTGRES_URL: 'postgres://b' })).toBe('postgres://a');
+    expect(requireDatabaseUrl({ POSTGRES_URL: ' postgres://b ' })).toBe('postgres://b');
+    expect(() => requireDatabaseUrl({})).toThrow(/SUPABASE_DB_URL/);
   });
 });
