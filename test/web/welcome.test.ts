@@ -82,6 +82,18 @@ describe('a channel this server cannot deliver on', () => {
   });
 });
 
+describe('channel status badges', () => {
+  test('may wrap inside their column, so a long one cannot run into the next column', async () => {
+    const w = await webWorld();
+    const sam = await w.signUp();
+    for (const path of ['/welcome/channels', '/setup']) {
+      const html = await page(w, path, sam);
+      expect(html, path).toMatch(/<span class="badge[^"]*whitespace-normal[^"]*">Waiting for your first message<\/span>/);
+      expect(html, path).not.toMatch(/whitespace-nowrap[^"]*">Waiting for your first message/);
+    }
+  });
+});
+
 describe('WhatsApp is not on the channel pages', () => {
   test('neither the wizard nor /setup offers it, counts it or names it, and a posted WhatsApp number is refused', async () => {
     const w = await webWorld();

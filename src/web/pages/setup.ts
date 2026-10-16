@@ -248,7 +248,7 @@ async function channelsArea(
   return html`
     <p class="text-sm">Tenants, Tradies and Property Owners reach the Agency by SMS and email. Verify a phone number with a code. Forward the Agency inbox to the email address below.</p>
     ${shown.error}
-    <div class="mt-4 grid gap-4 md:grid-cols-3">
+    <div class="mt-4 grid gap-4 md:grid-cols-2">
       ${CHANNELS.map((channel) => channelCard(channel, connected.find((c) => c.type === channel.type), timeZone, origin, { gmailBlock, unavailable: connectors.unavailable, smsInbound: connectors.smsInbound }, email, pending.find((row) => row.channelType === channel.type)))}
     </div>
   `;

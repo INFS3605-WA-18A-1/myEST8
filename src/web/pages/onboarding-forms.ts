@@ -76,7 +76,7 @@ export function chosenId(form: FormValues, name: string, label: string) {
 }
 
 /** The chip for a channel this server can't deliver on. */
-export const unavailableChip = (): Html => badge('Not available here', 'neutral');
+export const unavailableChip = (): Html => badge('Not available here', 'neutral', { wrap: true });
 
 /** How a channel should read: missing, waiting on a first email, verified by code or inbound mail, or connected without that. */
 export function channelState(channel: AgencyChannel | undefined, o: { waiting?: boolean; verified?: boolean } = {}) {
@@ -90,13 +90,13 @@ export function channelState(channel: AgencyChannel | undefined, o: { waiting?: 
 export function channelChip(channel: AgencyChannel | undefined, o: { waiting?: boolean; verified?: boolean } = {}): Html {
   switch (channelState(channel, o)) {
     case 'missing':
-      return badge('Not connected', 'warning');
+      return badge('Not connected', 'warning', { wrap: true });
     case 'waiting':
-      return badge('Waiting for your first message', 'info');
+      return badge('Waiting for your first message', 'info', { wrap: true });
     case 'verified':
-      return badge('Verified', 'success');
+      return badge('Verified', 'success', { wrap: true });
     case 'connected':
-      return badge('Connected', 'info');
+      return badge('Connected', 'info', { wrap: true });
   }
 }
 
