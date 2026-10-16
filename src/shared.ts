@@ -90,9 +90,34 @@ export function dollars(cents: number) {
 export function normalizeAddress(address: string) {
   const trimmed = address.trim();
   if (trimmed.includes('@')) return trimmed.toLowerCase();
-  const digits = trimmed.replace(/[^\d+]/g, '');
+  // "+61 (0)412 345 678": the bracketed trunk 0 isn't part of the number.
+  const digits = trimmed.replace(/\(0\)/g, '').replace(/[^\d+]/g, '');
+  // "0061412345678": 00 is the international call prefix.
+  if (digits.startsWith('00')) return normalizeLocal(`+${digits.slice(2)}`);
   // Australian numbers written locally ("0412 345 678") become E.164.
-  return digits.startsWith('0') ? `+61${digits.slice(1)}` : digits;
+  if (digits.startsWith('0')) return `+61${digits.slice(1)}`;
+  return normalizeLocal(digits);
+}
+
+/** "61412345678" (a plus left off) and "+610412345678" (the trunk 0 left in) become "+61412345678". */
+function normalizeLocal(digits: string) {
+  if (/^61\d{9}$/.test(digits)) return `+${digits}`;
+  if (/^\+610\d{9}$/.test(digits)) return `+61${digits.slice(4)}`;
+  return digits;
+}
+
+/**
+ * Why a normalised phone number can't be texted, in words for the person who typed it,
+ * or null when it looks usable: "+" and 8 to 15 digits, and exactly 9 after +61.
+ */
+export function phoneProblem(normalized: string): string | null {
+  const example = 'Enter a mobile number with its area code, like 0412 345 678 or +61 412 345 678';
+  if (!normalized.startsWith('+')) return `${example}. For another country, start with + and the country code.`;
+  if (!/^\+\d+$/.test(normalized)) return `${example}. Use digits only.`;
+  const length = normalized.length - 1;
+  if (length < 8 || length > 15) return `That number is too ${length < 8 ? 'short' : 'long'}. ${example}.`;
+  if (normalized.startsWith('+61') && length !== 11) return `An Australian number has 9 digits after +61 (or 10 starting with 0). ${example}.`;
+  return null;
 }
 
 /** Removes phone numbers and email addresses from text a Tenant wrote, before it goes to a Tradie. */

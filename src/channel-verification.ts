@@ -6,7 +6,7 @@ import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
 import type { Context } from './context.ts';
 import { all, one, run, transaction } from './db.ts';
 import { ProviderRefusedError, UndeliverableError, type ChannelType } from './ports.ts';
-import { addMs, invalid, isEmail, iso, normalizeAddress } from './shared.ts';
+import { addMs, invalid, isEmail, iso, normalizeAddress, phoneProblem } from './shared.ts';
 
 const CHANNEL_TYPES: ChannelType[] = ['sms', 'whatsapp', 'email'];
 const CODE_TTL_MS = 10 * 60_000;
@@ -66,8 +66,8 @@ export function createChannelVerification({ db, clock, modules }: Context) {
     async start(agencyId: number, channelType: ChannelType, address: string) {
       requireChannel(channelType);
       const normalized = normalizeAddress(address);
-      const usable = channelType === 'email' ? isEmail(normalized) : normalized.startsWith('+');
-      if (!usable) invalid(channelType === 'email' ? 'Enter an email address' : 'Enter a mobile number', 'address');
+      const problem = channelType === 'email' ? (isEmail(normalized) ? null : 'Enter an email address') : phoneProblem(normalized);
+      if (problem) invalid(problem, 'address');
       const owner = await profiles.agencyByChannel(channelType, normalized);
       if (owner !== null && owner !== agencyId) invalid(`${address} is connected to another Agency`);
 

@@ -75,6 +75,17 @@ describe('channel verification', () => {
     await sam.confirmChannelVerification('sms', NUMBER, sentCode(h, NORMALIZED));
   });
 
+  test('a number that cannot be right is refused with a helpful message before anything is sent', async () => {
+    const { h, sam } = await sunrise();
+    await expect(sam.startChannelVerification('sms', '+61')).rejects.toThrow(/too short/);
+    await expect(sam.startChannelVerification('sms', 'hello')).rejects.toThrow(/area code/);
+    await expect(sam.startChannelVerification('sms', '0412 345')).rejects.toThrow(/9 digits after \+61/);
+    expect(h.messenger.templatesTo('+61')).toEqual([]);
+    // Other spellings of one Australian mobile are the same number.
+    await sam.startChannelVerification('sms', '0061 (0)412 345 678');
+    expect(sentCode(h, '+61412345678')).toMatch(/^\d{6}$/);
+  });
+
   test('sends a 6-digit code and stores the address only after the code matches', async () => {
     const { h, agencyId, sam } = await sunrise();
 
