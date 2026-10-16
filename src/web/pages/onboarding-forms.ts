@@ -25,10 +25,12 @@ export type Errors = Record<string, string>;
 /** The radio value for a Tradie who has no Google listing. */
 export const NOT_ON_GOOGLE = 'none';
 
-/** The Agency's three channels, as the forms describe them. */
-export const CHANNELS: { type: ChannelType; name: string; addressLabel: string; inputType: 'tel' | 'email'; placeholder: string }[] = [
+/**
+ * The Agency's channels, as the forms describe them: SMS and email. WhatsApp is not offered
+ * on these pages (the backend keeps it dormant), so a posted type of "whatsapp" is refused.
+ */
+export const CHANNELS: { type: 'sms' | 'email'; name: string; addressLabel: string; inputType: 'tel' | 'email'; placeholder: string }[] = [
   { type: 'sms', name: 'SMS', addressLabel: 'Agency SMS number', inputType: 'tel', placeholder: '+61 2 9000 0000' },
-  { type: 'whatsapp', name: 'WhatsApp', addressLabel: 'Agency WhatsApp number', inputType: 'tel', placeholder: '+61 400 000 000' },
   { type: 'email', name: 'Email', addressLabel: 'Inbound email address', inputType: 'email', placeholder: 'agency@mail.example.test' },
 ];
 
@@ -62,7 +64,7 @@ export function valueOf(values: Values | undefined, name: string): string {
 export function channelOf(form: FormValues) {
   const type = text(form, 'type');
   const channel = CHANNELS.find((ch) => ch.type === type);
-  if (!channel) throw new ActionError('invalid', 'Choose SMS, WhatsApp or email');
+  if (!channel) throw new ActionError('invalid', 'Choose SMS or email');
   return channel;
 }
 
@@ -168,7 +170,7 @@ export function inboundEmailField(address: string): Html {
 }
 
 /** How to set the channel up, folded away. */
-export function channelGuide(type: ChannelType, _origin: string, o: { open?: boolean } = {}): Html {
+export function channelGuide(type: 'sms' | 'email', _origin: string, o: { open?: boolean } = {}): Html {
   const open = o.open ? 'open' : '';
   switch (type) {
     case 'sms':
@@ -178,15 +180,6 @@ export function channelGuide(type: ChannelType, _origin: string, o: { open?: boo
             <li>Enter the mobile number the Agency uses for SMS.</li>
             <li>myEST8 texts a 6-digit code to that number. The code lasts 10 minutes.</li>
             <li>Enter the code here. The number is saved only after the code matches.</li>
-          </ol>
-        </details>`;
-    case 'whatsapp':
-      return html`<details class="text-sm" ${open}>
-          <summary>How WhatsApp verification works</summary>
-          <ol class="mt-2 ml-5 list-decimal space-y-1">
-            <li>Enter the Agency's WhatsApp number.</li>
-            <li>myEST8 sends a 6-digit code to it. Enter the code here. The number is saved only after the code matches.</li>
-            <li>WhatsApp only delivers a free-form reply within 24 hours of the person's last message. Outside that window, use SMS or email.</li>
           </ol>
         </details>`;
     case 'email':
