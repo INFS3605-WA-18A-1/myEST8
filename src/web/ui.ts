@@ -230,7 +230,7 @@ export function page(o: {
   shell?: ShellInfo;
   /** Counts shown beside rail links. */
   navCounts?: Partial<Record<NavKey, number>>;
-  /** Whether the rail shows the Simulator link (demo deployments only). Defaults to true. */
+  /** Whether the rail shows the Simulator link (demo deployments only). Defaults to the shell's, else false. */
   demo?: boolean;
   /** Fills the page with no rail, for the onboarding wizard: the rest of the app comes after setup. */
   fullPage?: boolean;
@@ -244,7 +244,7 @@ export function page(o: {
       <body>
         <a href="#main" class="skip-link">Skip to content</a>
         <div class="app-shell ${withRail ? 'has-rail' : ''}" data-shell>
-          ${withRail ? rail(o.active, o.shell?.agencyName, o.navCounts ?? o.shell?.counts ?? {}, o.demo ?? true) : ''}
+          ${withRail ? rail(o.active, o.shell?.agencyName, o.navCounts ?? o.shell?.counts ?? {}, o.demo ?? o.shell?.demo ?? false) : ''}
           <div class="app-main">
             ${topBar(o.title, { menu: withRail, controls: o.controls, today: o.shell?.today, pm: o.pm })}
             ${o.flash ? html`<div class="app-flash">${flashMessage(o.flash)}</div>` : ''}

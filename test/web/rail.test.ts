@@ -1,6 +1,7 @@
 // The signed-in rail: its places, counts and current item on every page.
 
 import { describe, expect, test } from 'vitest';
+import type { DemoControls } from '../../src/demo/controls.ts';
 import { HOUR } from '../support/harness.ts';
 import { visible, webWorld } from '../support/web.ts';
 import { BELLA, confirmedQuotes, HANA, KING_ST, OCEAN_AVE, OLIVIA, TOM } from '../support/world.ts';
@@ -72,7 +73,26 @@ async function busyDesk(w: Web) {
   return { ticketId, jobId };
 }
 
+const noDemo = (): DemoControls => ({
+  contacts: async () => [],
+  outbox: async () => [],
+  inbound: async () => [],
+  sendAs: async () => {},
+  advance: async () => {},
+  now: () => new Date(),
+});
+
 describe('the rail', () => {
+  test('links to the Phone simulator on every signed-in page only when the app runs as the demo', async () => {
+    const paths = ['/', '/requests', '/tickets', '/properties', '/tradies', '/settings', '/setup', '/dispatch', '/calendar', '/approvals'];
+    const live = await webWorld();
+    const cookie = await live.signIn();
+    for (const path of paths) expect(await text(live, path, cookie), path).not.toContain('href="/demo"');
+    const demo = await webWorld({ demo: noDemo() });
+    const demoCookie = await demo.signIn();
+    for (const path of paths) expect(await text(demo, path, demoCookie), path).toContain('href="/demo"');
+  });
+
   test('lists every place in order on every signed-in page, with counts for Requests and Approvals', async () => {
     const w = await webWorld();
     const { ticketId } = await busyDesk(w);

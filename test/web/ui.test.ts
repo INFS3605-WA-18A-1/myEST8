@@ -118,7 +118,7 @@ describe('ui', () => {
   });
 
   it('lists every place in the rail in three groups, with the Phone simulator at its foot only in the demo', async () => {
-    const out = await render(page({ title: 'Dashboard', pm: { name: 'Alice' }, active: 'dashboard', body: html`<p>x</p>` }));
+    const out = await render(page({ title: 'Dashboard', pm: { name: 'Alice' }, active: 'dashboard', body: html`<p>x</p>`, demo: true }));
     const links = [...out.matchAll(/<a href="([^"]+)" class="rail-link[^"]*"/g)].map((m) => m[1]);
     expect(links).toEqual(['/', '/dispatch', '/requests', '/tickets', '/approvals', '/calendar', '/properties', '/tradies', '/settings', '/demo']);
     expect(out.match(/<ul class="rail-nav[ "]/g)).toHaveLength(4);
@@ -127,8 +127,10 @@ describe('ui', () => {
     expect(out).toContain('Phone simulator (demo)');
     expect(out).not.toContain('href="/setup"');
 
-    const live = await render(page({ title: 'Dashboard', pm: { name: 'Alice' }, active: 'dashboard', body: html`<p>x</p>`, demo: false }));
+    const live = await render(page({ title: 'Dashboard', pm: { name: 'Alice' }, active: 'dashboard', body: html`<p>x</p>` }));
     expect(live).not.toContain('href="/demo"');
+    const shellDemo = await render(page({ title: 'Dashboard', pm: { name: 'Alice' }, active: 'dashboard', body: html`<p>x</p>`, shell: { agencyName: 'A', today: 'Fri 9 Oct', demo: true } }));
+    expect(shellDemo).toContain('href="/demo"');
   });
 
   it('shows a count beside a rail link only when something is waiting', async () => {
@@ -157,7 +159,7 @@ describe('ui', () => {
         },
       },
     };
-    expect(shellInfo(c as never)).toEqual({ agencyName: 'Harbour Realty', today: 'Fri 9 Oct' });
+    expect(shellInfo(c as never)).toEqual({ agencyName: 'Harbour Realty', today: 'Fri 9 Oct', demo: false });
   });
 
   it('pairs a field’s label with its control and hint', async () => {
@@ -409,7 +411,7 @@ describe('ui', () => {
   });
 
   it('draws the rail, menu and message icons from Phosphor', async () => {
-    const out = await render(page({ title: 'Dashboard', pm: { name: 'Alice' }, active: 'dashboard', body: alert('Check the photo', 'warning') }));
+    const out = await render(page({ title: 'Dashboard', pm: { name: 'Alice' }, active: 'dashboard', body: alert('Check the photo', 'warning'), demo: true }));
     const phosphor = /<svg (?![^>]*logo-mark)[^>]*viewBox="0 0 256 256"/g;
     // ten rail links (nine places and the Phone simulator), Collapse menu, the menu button, the user menu caret, the alert (the logo's key tag is our own)
     expect(out.match(phosphor)).toHaveLength(14);

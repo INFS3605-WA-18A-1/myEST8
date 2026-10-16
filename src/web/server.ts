@@ -56,6 +56,10 @@ export function createWebApp(deps: {
 
   const signedIn = new Hono<WebEnv>();
   signedIn.use('*', requirePropertyManager(deps.app, deps.sessions));
+  signedIn.use('*', async (c, next) => {
+    c.set('demo', !!deps.demo);
+    await next();
+  });
   signedIn.use('*', loadNavCounts());
   if (deps.demo) signedIn.route('/demo', simulatorPages(deps.demo));
   signedIn.route('/', pmPages({ demo: !!deps.demo, connectors: deps.connectors ?? NO_CONNECTORS }));

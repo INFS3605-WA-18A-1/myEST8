@@ -7,6 +7,8 @@ export type WebEnv = {
     pm: PropertyManager;
     actions: PropertyManagerActions;
     /** The rail's counts, read once per request by `loadNavCounts` (src/web/shell.ts). */
+    /** Whether this is a demo deployment (phone simulator mounted): the rail links to it only then. */
+    demo?: boolean;
     navCounts?: { requests: number; approvals: number };
   };
 };

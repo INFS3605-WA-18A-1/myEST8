@@ -9,7 +9,7 @@ import type { WebEnv } from './env.ts';
 export type NavCounts = { requests: number; approvals: number };
 
 /** The shell's facts, passed to `page()` as its `shell` option. */
-export type ShellInfo = { agencyName: string; today: string; counts?: NavCounts };
+export type ShellInfo = { agencyName: string; today: string; counts?: NavCounts; demo?: boolean };
 
 /**
  * Reads the rail's counts once for the request, so every signed-in page can show
@@ -30,5 +30,5 @@ export function shellInfo(c: Context<WebEnv>): ShellInfo {
   const when = actions.now();
   const weekday = new Intl.DateTimeFormat('en-AU', { timeZone: agency.timeZone, weekday: 'short' }).format(when);
   const dayMonth = new Intl.DateTimeFormat('en-AU', { timeZone: agency.timeZone, day: 'numeric', month: 'short' }).format(when);
-  return { agencyName: agency.name, today: `${weekday} ${dayMonth}`, counts: c.var.navCounts };
+  return { agencyName: agency.name, today: `${weekday} ${dayMonth}`, counts: c.var.navCounts, demo: c.var.demo ?? false };
 }
