@@ -469,11 +469,13 @@
     }
 
     /* ----- Forms: label above the control, 36px controls (44px on phones and touch screens), the error then the hint under them. */
+    /* No block padding (daisyUI adds 4px), so a button bottom-aligned beside a field lines up with its control. */
     .fieldset {
       display: flex;
       flex-direction: column;
       gap: 4px;
       min-width: 0;
+      padding-block: 0;
       font-size: 14px;
     }
     .field-label {
@@ -668,6 +670,23 @@
     .steps .step-primary {
       --step-bg: var(--action);
       --step-fg: var(--surface);
+    }
+    /* The step on screen (aria-current) is ringed in Harbour, so "you are here" reads even
+       when that step is already done and shows its tick. The 2px gap is the colour the steps
+       sit on (Paper on the page, white in a section) and covers the connector under it;
+       the list keeps 4px above and below so its scroll box doesn't clip the ring. */
+    .steps {
+      --step-ring-gap: var(--page);
+      padding-block: 4px;
+    }
+    :where(.section, .card, .share-panel) .steps {
+      --step-ring-gap: var(--surface);
+    }
+    .steps .step[aria-current='step']::after {
+      z-index: 2;
+      box-shadow:
+        0 0 0 2px var(--step-ring-gap),
+        0 0 0 4px var(--action);
     }
     /* daisyUI colours step-primary's circle and connector on the pseudo-elements, so
        a done step (which is also step-primary) is set there too: Done green, with
@@ -1121,6 +1140,19 @@
     .queue-actions {
       flex: 0 0 auto;
     }
+    /* Phones: the actions take their own line under the badges, so the title keeps the row's width. */
+    @media (max-width: 39.99rem) {
+      .queue-head {
+        display: contents;
+      }
+      .queue-title {
+        flex: none;
+      }
+      .queue-actions {
+        order: 9;
+        margin-top: 4px;
+      }
+    }
     /* The age sits at the end of the badges' row. */
     .queue-meta {
       margin: 0 0 0 auto;
@@ -1449,15 +1481,43 @@
       overflow-wrap: anywhere;
       color: var(--ink);
     }
-    /* Phones: the title gets the room. It may take three lines, and the user menu (the
-       reader's own name, which they know) gives way first, ending in an ellipsis. */
+    /* Phones: a grid, so the title gets the room. Its column grows to the title's full
+       width first (up to three lines), and the user menu (the reader's own name, which
+       they know) keeps at least 6rem, ending in an ellipsis; beside a short title the
+       name stays whole. Margins instead of a column gap, so a missing menu button
+       leaves no gap. The page's controls take the second row. */
     @media (max-width: 40rem) {
+      .topbar {
+        display: grid;
+        grid-template-columns: auto minmax(0, max-content) minmax(6rem, 1fr);
+        align-items: center;
+        column-gap: 0;
+        row-gap: 8px;
+      }
+      .menu-button {
+        grid-column: 1;
+        margin-right: 12px;
+      }
       .topbar-title {
+        grid-row: 1;
+        grid-column: 2;
+        min-width: 0;
         font-size: 20px;
         -webkit-line-clamp: 3;
       }
+      .topbar-end {
+        grid-row: 1;
+        grid-column: 3;
+        justify-self: end;
+        max-width: 100%;
+        margin-left: 12px;
+      }
+      .topbar-controls {
+        grid-row: 2;
+        grid-column: 1 / -1;
+      }
       .topbar .user-menu {
-        max-width: 7rem;
+        max-width: 100%;
       }
     }
     .topbar-controls {
@@ -2706,7 +2766,7 @@
 
 @layer utilities {
   @layer app {
-    /* Label and value lists (dl() in ui.ts): the label column is 8 to 12rem whatever
+    /* Label and value lists (dl() in ui.ts): the label column is 10rem whatever
        the box's width, so a value sits beside its label; in a box under 26rem (about
        416px, a phone card) the label stacks over its value. The box decides, not the screen. */
     .facts {
@@ -2739,7 +2799,7 @@
     }
     @container (min-width: 26rem) {
       .facts-row {
-        grid-template-columns: minmax(8rem, 12rem) minmax(0, 1fr);
+        grid-template-columns: 10rem minmax(0, 1fr);
         column-gap: 16px;
       }
     }
@@ -2885,6 +2945,11 @@
       .table-frame.is-stacked tbody tr:hover :is(th, td) {
         background: transparent;
       }
+      /* A picked row (rowAttributes: { 'data-selected': true }) keeps Harbour's tint as a block. */
+      .table-frame.is-stacked tbody tr[data-selected] {
+        background: var(--info-bg);
+        border-color: var(--action);
+      }
       /* Labelled (stack: 'labelled'): the first cell leads, then each value sits beside
          its column's name in one aligned label column, read like a facts list. */
       .table-frame.is-labelled tbody tr {
@@ -2907,11 +2972,11 @@
       .table-frame.is-labelled tbody :is(th, td):last-child {
         margin-left: 0;
       }
+      /* The label hangs in the cell's left padding, so the value's own elements (a badge
+         and a note, a number and its words) flow together as one value beside it. */
       .table-frame.is-labelled tbody td[data-label] {
-        display: grid;
-        grid-template-columns: minmax(0, 8rem) minmax(0, 1fr);
-        column-gap: 12px;
-        align-items: baseline;
+        position: relative;
+        padding-left: calc(8rem + 12px);
         font-size: 14px;
         /* Beats the cell's text-right utility (Tailwind's layer outranks this one): label and value both read from the left. */
         text-align: left !important;
@@ -2919,8 +2984,14 @@
       }
       .table-frame.is-labelled tbody td[data-label]::before {
         content: attr(data-label);
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 8rem;
         font-size: 13px;
+        line-height: calc(14px * 1.45);
         color: var(--muted);
+        overflow-wrap: anywhere;
       }
       .table-frame.is-labelled tbody :is(th, td):empty {
         display: none;
@@ -3128,18 +3199,6 @@
     .request-list .queue-detail {
       font-size: 13px;
       color: var(--muted);
-    }
-    /* On phones the actions take their own line under the badges, so the issue keeps the width. */
-    @media (max-width: 39.99rem) {
-      .request-list .queue-head {
-        display: contents;
-      }
-      .request-list .queue-title {
-        flex: none;
-      }
-      .request-list .queue-actions {
-        order: 9;
-      }
     }
   }
 }
@@ -3385,12 +3444,6 @@
       font-weight: 600;
       color: var(--ink);
     }
-    /* The step on screen keeps its done tick or number, ringed in Harbour so it reads as "you are here". */
-    .wizard-steps .step[aria-current='step']::after {
-      box-shadow:
-        0 0 0 2px var(--page),
-        0 0 0 4px var(--action);
-    }
     .wizard-foot {
       display: flex;
       flex-wrap: wrap;
@@ -3451,12 +3504,6 @@
     .wizard-checklist .is-todo .wizard-check-text {
       color: var(--ink);
       font-weight: 500;
-    }
-
-    /* A field with its button on one line (onboarding-forms.ts): the field's box has no
-       padding below, so the button's foot lines up with the control's. */
-    .control-row > .fieldset {
-      padding-block: 0;
     }
 
     /* Setup's areas (pages/setup.ts), in the order they must happen: a strip of links to
@@ -4217,14 +4264,9 @@
         grid-row: 2;
       }
       /* The board keeps to the top of the first screen so the decisions start inside it:
-         lanes scroll inside 16rem and a docket's issue stops at two lines. */
+         lanes scroll inside 16rem (a docket's issue stops at two lines: docket({ lines: 2 })). */
       .dashboard-board .lane-body {
         max-height: 16rem;
-      }
-      /* The docket clamps with Tailwind's line-clamp-3 class, which outranks this layer. */
-      .dashboard-board .docket-issue {
-        -webkit-line-clamp: 2 !important;
-        line-clamp: 2 !important;
       }
     }
     /* Needs your decision: Maintenance Requests, alerts, the inbox, each a titled group. */
