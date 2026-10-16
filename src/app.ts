@@ -133,6 +133,24 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
         /** A photo, receipt or PDF Quote stored for the Agency, or null. */
         file: (fileId: number) => files.getInAgency(agencyId, fileId),
         dashboard: ({ filter = 'mine' }: { filter?: 'mine' | 'all' } = {}) => views.dashboard(agencyId, propertyManagerId, filter),
+        /** The Maintenance Requests waiting for review: the Property Manager's own, or all of the Agency's. */
+        requests: ({ filter = 'mine' }: { filter?: 'mine' | 'all' } = {}) => views.requests(agencyId, propertyManagerId, filter),
+        /** One Maintenance Request waiting for review, or null. */
+        request: (issueId: number) => views.request(agencyId, issueId),
+        /** Tickets by status (open by default) and optionally Urgency, most urgent first then oldest, with the counts for the filters. */
+        tickets: (o: { filter?: 'mine' | 'all'; status?: 'open' | 'closed'; urgency?: Urgency | null } = {}) =>
+          views.tickets(agencyId, propertyManagerId, { filter: o.filter ?? 'mine', status: o.status ?? 'open', urgency: o.urgency ?? null }),
+        /** Quotes waiting on a Property Owner over the Max Repair Cost, and Urgent Repairs waiting on a receipt. */
+        approvals: ({ filter = 'mine' }: { filter?: 'mine' | 'all' } = {}) => views.approvals(agencyId, propertyManagerId, filter),
+        propertyOverviews: () => views.propertyOverviews(agencyId),
+        property: (propertyId: number) => views.property(agencyId, propertyId),
+        tradieDirectory: () => views.tradies(agencyId),
+        /** The Dispatch map: the Agency's Properties with their open Tickets and its Tradies, each with where they are. */
+        dispatch: () => views.dispatch(agencyId),
+        /** Looks up again the Properties and Tradies the map couldn't place. Returns how many it placed. */
+        geocodeMissing: () => profiles.geocodeMissing(agencyId),
+        /** Sets where a Tradie works from, and places them on the map when the address is found. */
+        setTradieAddress: (tradieId: number, address: string) => profiles.setTradieAddress(agencyId, tradieId, address),
         ticket: (ticketId: number) => views.ticket(agencyId, ticketId),
         tradie: (tradieId: number) => views.tradie(agencyId, tradieId),
         /** The counts beside Requests and Approvals in the rail. */
