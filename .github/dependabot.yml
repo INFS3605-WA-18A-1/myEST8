@@ -9,3 +9,8 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # @types/node describes the Node we run on, which is 22 (package.json engines,
+      # CI's node-version). A newer major types APIs Node 22 lacks; bump it with the runtime.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
