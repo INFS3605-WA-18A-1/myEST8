@@ -182,6 +182,17 @@
       outline-offset: 2px;
     }
 
+    /* Disclosures (<details>): the summary is a control, so it gets the pointer, a
+       Slate marker and a rounded focus ring. :where keeps this at zero specificity,
+       so a page's own summary (a menu, a button) still wins. */
+    :where(summary) {
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    :where(summary)::marker {
+      color: var(--muted);
+    }
+
     /* Placeholders look like hints, never like typed values. */
     ::placeholder {
       color: var(--muted);
@@ -301,6 +312,23 @@
       border-color: var(--ink);
       color: var(--ink);
     }
+    /* Secondary is the one bordered look; daisyUI's slate-filled btn-secondary would be a second one. */
+    .btn-secondary {
+      --btn-color: var(--surface);
+      --btn-bg: var(--surface);
+      --btn-fg: var(--ink);
+      --btn-border: var(--control);
+      background: var(--surface);
+      border: 1px solid var(--control);
+      color: var(--ink);
+    }
+    .btn-secondary:hover {
+      --btn-bg: var(--page);
+      --btn-border: var(--ink);
+      background: var(--page);
+      border-color: var(--ink);
+      color: var(--ink);
+    }
     /* Danger: urgent text on surface; the border turns red on hover. */
     .btn-danger {
       background: var(--surface);
@@ -312,13 +340,19 @@
       border-color: var(--urgent);
       color: var(--urgent);
     }
+    /* Ghost: Harbour text and no box, so a quiet action ("See all Tickets", "Sign out") still reads as one, not as a heading. */
     .btn-ghost {
-      color: var(--ink);
+      color: var(--action);
     }
     .btn-ghost:hover {
       --btn-bg: var(--page);
       --btn-border: transparent;
-      color: var(--ink);
+      color: var(--action-hover);
+    }
+    /* Inside a message (the flash's close button) it takes the message's colour. */
+    .alert .btn-ghost,
+    .alert .btn-ghost:hover {
+      color: inherit;
     }
     .btn:disabled,
     .btn[disabled] {
@@ -372,9 +406,10 @@
     /* Alerts: each tone is a token pair, never a mix of two. Text is the pair's
        strong colour on its tint; the icon repeats the tone and the word says it. */
     .alert {
-      gap: 10px;
-      border-radius: 6px;
+      gap: 12px;
+      border-radius: 8px;
       font-size: 14px;
+      line-height: 1.45;
     }
     .alert.alert-soft {
       color: var(--ink);
@@ -416,7 +451,7 @@
       border-radius: 999px;
       background: var(--page);
       color: var(--ink);
-      font-family: var(--font-body);
+      font-family: var(--font-head);
       font-size: 12px;
       font-weight: 600;
       line-height: 1;
@@ -427,7 +462,7 @@
       color: var(--ink);
     }
 
-    /* ----- Forms: label above the control, 40px controls (44px on phones), hints and errors under them. */
+    /* ----- Forms: label above the control, 36px controls (44px on phones and touch screens), the error then the hint under them. */
     .fieldset {
       display: flex;
       flex-direction: column;
@@ -464,9 +499,12 @@
       color: var(--ink);
       font-size: 14px;
     }
+    /* The same height as a button beside them: 36px, 44px on phones and touch screens. */
     .input,
-    .select {
-      height: 2.5rem;
+    .select,
+    .file-input {
+      --size: 2.25rem;
+      height: var(--size);
     }
     .checkbox {
       --input-color: var(--control);
@@ -477,11 +515,19 @@
     }
     .textarea {
       min-height: 5.5rem;
+      line-height: 1.45;
     }
     .input-error,
     .select-error,
-    .textarea-error {
+    .textarea-error,
+    .file-input-error,
+    .checkbox-error {
       --input-color: var(--urgent);
+      border-color: var(--urgent);
+    }
+    /* A refused file field turns its border red, not its Choose file button: red fills are for nothing. */
+    .file-input-error {
+      --btn-color: var(--page);
     }
     .input:focus,
     .select:focus,
@@ -499,9 +545,12 @@
       .file-input {
         font-size: 1rem;
       }
+    }
+    @media (max-width: 40rem), (pointer: coarse) {
       .input,
-      .select {
-        height: 2.75rem;
+      .select,
+      .file-input {
+        --size: 2.75rem;
       }
     }
 
@@ -528,7 +577,7 @@
       font-family: var(--font-head);
       font-size: 16px;
       font-weight: 600;
-      line-height: 1.2;
+      line-height: 1.15;
       color: var(--ink);
     }
     .section-actions {
@@ -662,7 +711,7 @@
     .tabs-border > .tab {
       font-family: var(--font-head);
       font-size: 14px;
-      font-weight: 500;
+      font-weight: 400;
       color: var(--muted);
     }
     .tabs-border > .tab:hover {
@@ -692,8 +741,8 @@
       border: 1px solid transparent;
       border-radius: 6px;
       font-family: var(--font-head);
-      font-size: 15px;
-      font-weight: 500;
+      font-size: 14px;
+      font-weight: 400;
       color: var(--ink);
       text-decoration: none;
       white-space: nowrap;
@@ -719,7 +768,7 @@
       }
     }
 
-        /* daisyUI's snap-icon rule undoes compact on a vertical timeline; keep the icon column only. */
+    /* daisyUI's snap-icon rule undoes compact on a vertical timeline; keep the icon column only. */
     .timeline-compact.timeline-vertical.timeline-snap-icon > li {
       --timeline-col-start: 0;
     }
@@ -760,17 +809,30 @@
     }
 
     /* ----- Empty states: one sentence and the next action, no illustration. */
+    /* On the page it is a section of its own (surface, hairline); inside a section it is
+       just the sentence and the action, so there is no box in a box. */
     .empty-state {
       display: flex;
       flex-direction: column;
       align-items: flex-start;
       gap: 12px;
       padding: 16px;
+      background: var(--surface);
       border: 1px solid var(--line);
       border-radius: 8px;
     }
     .empty-state p {
       margin: 0;
+      max-width: 72ch;
+      color: var(--ink);
+    }
+    :where(.section-body, .section, .lane-body, .share-panel, td) > .empty-state {
+      padding: 0;
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+    }
+    :where(.section-body, .section, .lane-body, td) > .empty-state p {
       color: var(--muted);
     }
 
@@ -778,9 +840,9 @@
     .docket {
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 8px;
       min-width: 0;
-      padding: 10px;
+      padding: 12px;
       background: var(--surface);
       border: 1px solid var(--line);
       border-radius: 4px;
@@ -855,7 +917,7 @@
     }
     /* Read first: the issue, up to three lines (line-clamp-3 in clip()). */
     .docket-issue {
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 600;
       line-height: 1.3;
     }
@@ -943,6 +1005,7 @@
     /* ----- Segmented control (Mine | All): links, the current one filled with Harbour. */
     .segmented {
       display: inline-flex;
+      align-self: flex-start;
       gap: 2px;
       padding: 3px;
       background: var(--surface);
@@ -952,7 +1015,7 @@
     .segmented-item {
       display: inline-flex;
       align-items: center;
-      min-height: 32px;
+      min-height: 28px;
       padding-inline: 12px;
       border-radius: 4px;
       font-family: var(--font-head);
@@ -972,7 +1035,7 @@
     }
     @media (max-width: 40rem), (pointer: coarse) {
       .segmented-item {
-        min-height: 40px;
+        min-height: 36px;
         padding-inline: 16px;
       }
     }
@@ -983,7 +1046,7 @@
       align-items: flex-start;
       gap: 12px;
       min-width: 0;
-      padding: 10px 10px 10px 12px;
+      padding: 12px;
       background: var(--surface);
       border: 1px solid var(--line);
       border-radius: 4px;
@@ -1009,7 +1072,7 @@
       display: flex;
       flex: 1 1 auto;
       flex-direction: column;
-      gap: 6px;
+      gap: 4px;
       min-width: 0;
     }
     /* The title, then the actions at the end of its line (under it when there's no room). */
@@ -1017,7 +1080,7 @@
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 6px 8px;
+      gap: 8px;
       min-width: 0;
     }
     .queue-title {
@@ -1044,7 +1107,10 @@
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 6px;
+      gap: 4px 6px;
+    }
+    .queue-badges {
+      margin-top: 4px;
     }
     .queue-actions {
       flex: 0 0 auto;
@@ -1078,7 +1144,7 @@
       font-family: var(--font-head);
       font-size: 14px;
       font-weight: 600;
-      line-height: 1.2;
+      line-height: 1.15;
       color: var(--ink);
     }
     .lane-count {
@@ -1205,12 +1271,15 @@
     }
     /* The demo's Phone simulator: quieter, in the body face. */
     .rail-link.is-quiet {
-      gap: 8px;
       min-height: 36px;
       font-family: var(--font-body);
       font-size: 13px;
       font-weight: 500;
       color: var(--rail-muted);
+    }
+    /* Its 16px icon sits in the nav's 18px icon column, so every label in the rail starts on one line. */
+    .rail-link.is-quiet > svg {
+      margin-inline: 1px;
     }
     .rail-link.is-quiet:hover,
     .rail-link.is-quiet[aria-current='page'] {
@@ -1245,7 +1314,7 @@
     .rail-toggle {
       display: none;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
       min-height: 36px;
       margin-top: 4px;
       padding: 0 12px;
@@ -1365,7 +1434,7 @@
       font-family: var(--font-head);
       font-size: 22px;
       font-weight: 600;
-      line-height: 1.2;
+      line-height: 1.15;
       text-overflow: ellipsis;
       white-space: nowrap;
       color: var(--ink);
@@ -1449,7 +1518,7 @@
       display: flex;
       align-items: center;
       gap: 8px;
-      min-height: 40px;
+      min-height: 36px;
       padding-inline: 8px;
       border-radius: 6px;
       font-size: 14px;
@@ -1460,6 +1529,11 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+    }
+    @media (max-width: 40rem), (pointer: coarse) {
+      .user-menu > summary {
+        min-height: 44px;
+      }
     }
     .user-menu > summary::-webkit-details-marker {
       display: none;
@@ -1600,7 +1674,7 @@
     .page-head {
       display: flex;
       flex-wrap: wrap;
-      align-items: flex-end;
+      align-items: center;
       justify-content: space-between;
       gap: 12px 16px;
     }
@@ -1630,7 +1704,8 @@
       max-width: 72ch;
       font-size: 14px;
       color: var(--muted);
-    }    .page-actions {
+    }
+    .page-actions {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
@@ -1807,7 +1882,7 @@
       font-family: var(--font-head);
       font-size: 16px;
       font-weight: 600;
-      line-height: 1.2;
+      line-height: 1.15;
       overflow-wrap: anywhere;
     }
     .share-close {
@@ -2477,8 +2552,9 @@
     .table-frame.is-stacked tbody tr:hover td {
       background: var(--page);
     }
+    /* Cells of different kinds (a two-line Ticket, a badge, an age) line up on their first line's baseline, so a badge doesn't sit lower than the text beside it. */
     .table-frame.is-stacked tbody td {
-      vertical-align: top;
+      vertical-align: baseline;
     }
     @media (min-width: 640px) {
       .table-frame.is-stacked tbody td {
@@ -2538,6 +2614,40 @@
       }
       .table-frame.is-stacked tbody tr:hover td {
         background: transparent;
+      }
+      /* Labelled (stack: 'labelled'): the first cell leads, then each value sits beside
+         its column's name in one aligned label column, read like a facts list. */
+      .table-frame.is-labelled tbody tr {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 4px;
+        padding: 12px;
+      }
+      .table-frame.is-labelled tbody td:first-child {
+        margin-bottom: 4px;
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .table-frame.is-labelled tbody td:last-child {
+        margin-left: 0;
+      }
+      .table-frame.is-labelled tbody td[data-label] {
+        display: grid;
+        grid-template-columns: minmax(0, 8rem) minmax(0, 1fr);
+        column-gap: 12px;
+        align-items: baseline;
+        font-size: 14px;
+        /* Beats the cell's text-right utility (Tailwind's layer outranks this one): label and value both read from the left. */
+        text-align: left !important;
+        overflow-wrap: anywhere;
+      }
+      .table-frame.is-labelled tbody td[data-label]::before {
+        content: attr(data-label);
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .table-frame.is-labelled tbody td:empty {
+        display: none;
       }
     }
   }
