@@ -124,7 +124,7 @@
     map = L.map(mapElement, { scrollWheelZoom: false, zoomAnimation: !reduceMotion, fadeAnimation: !reduceMotion, markerZoomAnimation: !reduceMotion });
     // A view first: markers only get their elements once the map has one, and the aria-labels and key handlers need them.
     map.setView([-33.8688, 151.2093], 10);
-    L.tileLayer(data.tiles.url, { attribution: data.tiles.attribution, maxZoom: data.tiles.maxZoom }).addTo(map);
+    L.tileLayer(data.tiles.url, { subdomains: data.tiles.subdomains, attribution: data.tiles.attribution, maxZoom: data.tiles.maxZoom }).addTo(map);
     // The page scrolls: the wheel only zooms the map once the map has been clicked or focused.
     map.on('focus', () => map.scrollWheelZoom.enable());
     map.on('blur', () => map.scrollWheelZoom.disable());

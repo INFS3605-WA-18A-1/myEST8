@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { MAP_TILES } from '../../src/web/map-config.ts';
 import { visible, webWorld } from '../support/web.ts';
 import { confirmedQuotes, KING_ST, tomsTapTicket, type World } from '../support/world.ts';
 
@@ -25,7 +26,7 @@ function pinData(html: string) {
   const match = /<script type="application\/json" id="dispatch-data">([\s\S]*?)<\/script>/.exec(html);
   if (!match) throw new Error('The page has no pin data block');
   return JSON.parse(match[1]!) as {
-    tiles: { url: string; attribution: string };
+    tiles: { url: string; subdomains: string; attribution: string; maxZoom: number };
     radiusKm: number;
     properties: { key: string; id: number; address: string; suburb: string; lat: number; lng: number; urgency: string | null; openTickets: number }[];
     tradies: { key: string; id: number; name: string; lat: number; lng: number; trades: string[] }[];
@@ -62,14 +63,13 @@ describe('Dispatch: the map data', () => {
     expect(ocean).toMatchObject({ lat: -33.8908, lng: 151.2743, urgency: null, openTickets: 0 });
   });
 
-  test('the tile source and its attribution come from one OpenStreetMap default, and the search radius defaults to 15 km', async () => {
+  test('the tile source and its attribution are the one map setting, and the search radius defaults to 15 km', async () => {
     const w = await webWorld();
     const cookie = await w.signIn();
 
     const data = pinData(await dispatch(w, cookie));
 
-    expect(data.tiles.url).toBe('https://tile.openstreetmap.org/{z}/{x}/{y}.png');
-    expect(data.tiles.attribution).toContain('OpenStreetMap');
+    expect(data.tiles).toEqual(MAP_TILES);
     expect(data.radiusKm).toBe(15);
   });
 
