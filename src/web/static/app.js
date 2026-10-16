@@ -31,14 +31,17 @@
   // Coming back with the browser's Back button restores the page as it was left.
   window.addEventListener('pageshow', () => document.querySelectorAll('form[data-submitting]').forEach(release));
 
-  // Flash messages get a close button; "ok" ones also fade after a while,
-  // unless the pointer or focus is on them. Errors stay until closed.
+  // Flash messages get a close button (Phosphor's x, like every other icon); "ok"
+  // ones also fade after a while, unless the pointer or focus is on them. Errors
+  // stay until closed.
+  const X_ICON =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" width="16" height="16" aria-hidden="true" focusable="false"><path d="M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z"/></svg>';
   for (const flash of document.querySelectorAll('[data-flash]')) {
     const close = document.createElement('button');
     close.type = 'button';
-    close.className = 'btn btn-ghost btn-sm btn-square';
+    close.className = 'btn btn-ghost btn-sm btn-square flash-close';
     close.setAttribute('aria-label', 'Dismiss message');
-    close.textContent = '×';
+    close.innerHTML = X_ICON;
     close.addEventListener('click', () => flash.remove());
     flash.append(close);
     if (flash.dataset.flash === 'ok') {
