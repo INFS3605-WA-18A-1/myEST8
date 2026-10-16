@@ -213,7 +213,7 @@ function decide(r: MaintenanceRequest): Html {
         <select id="urgency-${r.issueId}" name="urgency" class="select" aria-describedby="${hintId}">
           ${URGENCIES.map((u) => html`<option value="${u}" ${u === r.urgency ? 'selected' : ''}>${humanise(u)}</option>`)}
         </select>
-        ${button('Change Urgency', { variant: 'secondary', size: 'sm' })}
+        ${button('Change Urgency', { variant: 'secondary' })}
       </div>
       <p id="${hintId}" class="field-hint">Urgent makes this an Urgent Repair, not a Ticket: the Tenant is reminded to call a Nominated Tradie.</p>
     </form>

@@ -532,7 +532,7 @@ function inboxItem(item: InboxItem, people: Person[], timeZone: string, q: strin
               options: people.map((p) => ({ value: String(p.id), label: personLabel(p) })),
               hint: 'Their next message from this address will be recognised.',
             })}
-            ${button('Link sender', { size: 'sm' })}
+            ${button('Link sender')}
           </form>`
         : item.reason === 'low_confidence' && item.bestGuess
           ? postButton(`${base}/route${q}`, 'Route with best guess', { size: 'sm' })

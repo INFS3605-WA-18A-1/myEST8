@@ -3160,12 +3160,7 @@
       gap: 12px;
     }
     .ticket-inline-form > .btn {
-      margin-top: calc(14px * 1.45 + 6px);
-    }
-    @media (max-width: 39.99rem), (pointer: coarse) {
-      .ticket-inline-form > .btn {
-        margin-top: calc(14px * 1.45 + 4px);
-      }
+      margin-top: calc(14px * 1.45 + 4px);
     }
     /* Under the Jobs: Add another Job, folded, and when the Ticket can close. */
     .ticket-jobs-foot {
@@ -3638,8 +3633,56 @@
     .inbox-item-link {
       display: flex;
       flex-wrap: wrap;
-      align-items: flex-end;
+      align-items: flex-start;
       gap: 8px;
+    }
+    .inbox-item-link > .fieldset {
+      flex: 1 1 12rem;
+    }
+    /* Level with the select under its label, whatever the hint under it. */
+    .inbox-item-link > .btn {
+      margin-top: calc(14px * 1.45 + 4px);
+    }
+
+    /* Tickets list page */
+    /* Open and Closed on the left, the Urgency counts on the right, on one line. */
+    .ticket-list-filters {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px 24px;
+    }
+    .ticket-list-filters > nav:last-child {
+      flex: 0 1 auto;
+    }
+    /* Each Job on its own line: the Trade, then its stage. */
+    .ticket-list-jobs {
+      display: grid;
+      gap: 4px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .ticket-list-jobs li {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 2px 8px;
+    }
+    .ticket-list-trade {
+      min-width: 6.5rem;
+    }
+    /* Waiting on the Property Manager: Night on a Wattle chip. */
+    .ticket-list-close {
+      width: fit-content;
+      margin: 6px 0 0;
+      padding: 1px 8px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--ink);
+      background: var(--hivis);
+      border-radius: 4px;
     }
   }
 }
