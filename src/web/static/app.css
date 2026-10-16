@@ -2787,6 +2787,47 @@
       color: var(--ink);
     }
 
+    /* A Tradie's profile (pages/tradie.ts): the Trades and contact details beside the
+       four ratings (myEST8, Property Managers', Tenants', Google) from 1024px. */
+    .tradie-head .section-body,
+    .tradie-head {
+      display: grid;
+      gap: 16px;
+    }
+    .tradie-contact {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-width: 0;
+    }
+    .tradie-contact dl {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 24px;
+      margin: 0;
+    }
+    .tradie-contact dl > div {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+    .tradie-contact dt {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--muted);
+    }
+    .tradie-contact dd {
+      margin: 0;
+      font-size: 14px;
+    }
+    @media (min-width: 1024px) {
+      .tradie-head {
+        grid-template-columns: minmax(14rem, 1fr) minmax(0, 2.4fr);
+        align-items: start;
+      }
+    }
+
     /* The Tradies directory's Trade filter (pages/tradie.ts): one link per Trade with how
        many Tradies do it, the current one filled with Harbour like the segmented
        control. It wraps on phones rather than scrolling sideways. */

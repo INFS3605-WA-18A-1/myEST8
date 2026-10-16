@@ -11,7 +11,7 @@ import type { WebEnv } from '../env.ts';
 import { formAction, text } from '../forms.ts';
 import { icon } from '../icons.ts';
 import { shellInfo } from '../shell.ts';
-import { alert, badge, button, dl, emptyState, field, flashFrom, formatMoney, formatWhen, humanise, linkButton, page, section, sectionHeader, stat, statGroup, table, ticketCell, type Html } from '../ui.ts';
+import { alert, badge, button, emptyState, field, flashFrom, formatMoney, formatWhen, humanise, linkButton, page, section, sectionHeader, stat, statGroup, table, ticketCell, type Html } from '../ui.ts';
 import { timeRange } from './calendar.ts';
 import { cellLabel } from './properties.ts';
 import { googleSearchForm, importPanel, searchListings, tradieFields } from './onboarding-forms.ts';
@@ -92,7 +92,7 @@ export function tradiePages() {
         flash,
         subtitle: tradie.businessName ? tradie.name : undefined,
         actions: linkButton('Back to Tradies', '/tradies', { variant: 'ghost', size: 'sm' }),
-        body: html`${header(tradie)} ${addressForm(tradie, flash, c.req.query('form'))} ${bookings(tradie, timeZone)} ${quotes(tradie, timeZone)} ${ratings(tradie, timeZone)}`,
+        body: html`${header(tradie)} ${quotes(tradie, timeZone)} ${bookings(tradie, timeZone)} ${ratings(tradie, timeZone)} ${addressForm(tradie, flash, c.req.query('form'))}`,
       }),
     );
   });
@@ -119,7 +119,7 @@ function addressForm(t: TradieView, flash: ReturnType<typeof flashFrom>, form: s
     body: html`<form method="post" action="/tradies/${t.tradieId}/address" class="grid max-w-xl gap-3">
       ${refused}
       ${field({
-        label: 'Business address',
+        label: 'Address',
         name: 'businessAddress',
         id: 'tradie-address',
         value: t.businessAddress ?? '',
@@ -174,23 +174,37 @@ function directory(tradies: DirectoryEntry[], trade: Trade | null): Html {
   );
 }
 
-/** The Trades, the contact details, and the two ratings side by side (two columns from 1024 px). */
+/**
+ * What a Property Manager weighs up first: the Trades and how to reach them, then the
+ * ratings. The myEST8 rating (the starting rating and every rating since) comes with
+ * the Property Managers' and the Tenants' averages on their own, and Google's rating
+ * beside them, never combined.
+ */
 function header(t: TradieView): Html {
   const { average, count } = t.myEst8Rating;
-  return html`<section class="section" aria-label="Tradie details">
-    <div class="flex flex-wrap items-center gap-2">${t.trades.map((trade) => badge(humanise(trade), 'info'))}</div>
-    <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-      ${dl([
-        ['Name', t.name],
-        ['Mobile', t.mobile ? html`<a class="link num" href="tel:${t.mobile}">${t.mobile}</a>` : '—'],
-        ['Email', t.email ? html`<a class="link break-all" href="mailto:${t.email}">${t.email}</a>` : '—'],
-      ])}
+  const bySource = (label: string, source: TradieView['ratings'][number]['source']) => {
+    const scores = t.ratings.filter((r) => r.source === source).map((r) => r.score);
+    return scores.length
+      ? stat({ label, value: (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1), hint: `${scores.length} ${scores.length === 1 ? 'rating' : 'ratings'}` })
+      : stat({ label, value: 'No ratings yet' });
+  };
+  return html`<section class="section tradie-head" aria-label="Tradie details">
+    <div class="tradie-contact">
+      <div class="flex flex-wrap items-center gap-2">${t.trades.map((trade) => badge(humanise(trade), 'info'))}</div>
+      <dl>
+        <div><dt>Mobile</dt><dd>${t.mobile ? html`<a class="link num" href="tel:${t.mobile}">${t.mobile}</a>` : '—'}</dd></div>
+        <div><dt>Email</dt><dd>${t.email ? html`<a class="link break-all" href="mailto:${t.email}">${t.email}</a>` : '—'}</dd></div>
+      </dl>
+    </div>
+    <div class="tradie-ratings">
       ${statGroup([
         stat({
           label: 'myEST8 rating',
           value: average.toFixed(1),
           hint: count === 1 ? 'The starting rating; no Jobs rated yet' : `From ${count} ratings, including the starting rating`,
         }),
+        bySource('From Property Managers', 'property_manager'),
+        bySource('From Tenants', 'tenant'),
         t.googleRating
           ? stat({
               label: 'Google rating',

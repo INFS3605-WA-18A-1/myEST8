@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { visible, webWorld } from '../support/web.ts';
-import { tomsTapTicket } from '../support/world.ts';
+import { confirmedQuotes, jobView, TOM, tomsTapTicket } from '../support/world.ts';
 
 describe('Tradies', () => {
   test('the directory is sorted by myEST8 rating, shows both ratings and Previous Quotes, and filters by Trade', async () => {
@@ -64,6 +64,42 @@ describe('Tradies', () => {
     const text = visible(page);
     for (const heading of ['From Property Managers', 'From Tenants', 'Previous Quotes', 'Upcoming bookings', 'Business address']) expect(text).toContain(heading);
     expect(page).toContain('Back to Tradies');
+  });
+
+  test('a profile leads with the ratings split by who gave them, then previous Quotes, with the business address last', async () => {
+    const w = await webWorld();
+    const job = await tomsTapTicket(w);
+    const [quote] = await confirmedQuotes(w, job, [[w.tradies.pete, 150_00, new Date('2026-10-13T09:00:00+11:00')]]);
+    await w.alice.chooseQuote(quote!.quoteId, 'Usual plumber');
+    await w.alice.sendWorkOrder(job.jobId);
+    const { workOrder } = await jobView(w, job);
+    w.h.classifier.when('All done', { replyType: 'done', relatedItem: `work_order:${workOrder!.workOrderId}` });
+    await w.h.receive(w.tradies.pete.address, 'All done');
+    await w.alice.rateTradie(job.jobId, 3);
+    await w.h.answer(TOM, '5', '5');
+    const cookie = await w.signIn();
+
+    const page = await (await w.get(`/tradies/${w.ids.pete}`, cookie)).text();
+    const text = visible(page);
+    // The starting rating (4), the Property Manager's 3 and the Tenant's 5 make the myEST8 rating; each source is also shown on its own.
+    expect(text).toContain('myEST8 rating 4.0 From 3 ratings, including the starting rating');
+    expect(text).toContain('From Property Managers 3.0 1 rating');
+    expect(text).toContain('From Tenants 5.0 1 rating');
+    expect(text).toContain('Google rating 4.8 120 reviews');
+    const at = (heading: string) => page.indexOf(`<h2 class="section-title">${heading}</h2>`);
+    expect(at('Previous Quotes')).toBeGreaterThan(-1);
+    expect(at('Previous Quotes')).toBeLessThan(at('Upcoming bookings'));
+    expect(at('Upcoming bookings')).toBeLessThan(at('Ratings'));
+    expect(at('Ratings')).toBeLessThan(at('Business address'));
+  });
+
+  test('a Tradie nobody has rated yet says so for each source', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+    const text = visible(await (await w.get(`/tradies/${w.ids.dana}`, cookie)).text());
+    expect(text).toContain('From Property Managers No ratings yet');
+    expect(text).toContain('From Tenants No ratings yet');
+    expect(text).toContain('Google rating Not on Google');
   });
 
   test('saving a business address puts the Tradie on the map', async () => {
