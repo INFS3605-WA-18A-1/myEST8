@@ -236,7 +236,7 @@ All of these are in `src/web/ui.ts`; pages use them instead of hand-building mar
 `shareButton({ title, text, url, label?, note?, channels?, align? })` in `src/web/share.ts` passes a link on. Links only: no server routes and no requests.
 
 - **The button** is a secondary small button with `share-network` and "Share", or a label that says who it's for ("Send this page to them", "Share this page").
-- **The panel** is a `<details>` disclosure with the menu shadow. It holds the title (which is also the email subject), an optional muted note, the link in a read-only field, then Email (`mailto:`), SMS (`sms:?&body=`) and WhatsApp (`wa.me`, new tab) as 40 px rows. On screens under 640 px it is a sheet along the bottom, 16 px clear of the edges.
+- **The panel** is a `<details>` disclosure with the menu shadow. It holds the title (which is also the email subject), an optional muted note, the link in a read-only field, then Email (`mailto:`) and SMS (`sms:?&body=`) as 40 px rows. On screens under 640 px it is a sheet along the bottom, 16 px clear of the edges.
 - **With JavaScript** (the "share" block in `app.js`), the panel gains:
   - Copy link, confirmed by "Link copied" in an `aria-live` line. If the clipboard is refused, the link is selected so it can be copied by hand.
   - More options…, which opens the phone's own share sheet, only where `navigator.share` exists.
