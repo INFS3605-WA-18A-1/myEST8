@@ -115,6 +115,7 @@ function mapSection(): Html {
       <li data-pin="routine"><span data-pin-sample aria-hidden="true"></span>Routine</li>
       <li data-pin="none"><span data-pin-sample aria-hidden="true"></span>No open Tickets</li>
       <li data-pin="tradie"><span data-pin-sample aria-hidden="true"></span>Tradie</li>
+      <li data-pin="group"><span data-pin-sample aria-hidden="true"></span>Group of pins, zoom in to see them</li>
     </ul>
     <div id="dispatch-map" class="dispatch-map" role="region" aria-label="Map. Each pin is a Property or a Tradie: Tab to a pin and press Enter to open its details.">
       <p class="dispatch-map-fallback">The map needs JavaScript. The table below lists the same Properties, each with its Tickets and urgency.</p>

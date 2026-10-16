@@ -49,6 +49,19 @@ async function locateTradies(w: World, bases: [number, { address: string; locati
 }
 
 describe('Dispatch: the map data', () => {
+  test('the pin key names, in words, every kind of pin the map draws, groups of pins included', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    const html = await dispatch(w, cookie);
+
+    const start = html.indexOf('aria-label="Pin key"');
+    expect(start).toBeGreaterThan(-1);
+    const key = html.slice(html.indexOf('>', start) + 1, html.indexOf('</ul>', start));
+    expect([...key.matchAll(/data-pin="([a-z]+)"/g)].map((m) => m[1])).toEqual(['urgent', 'high', 'routine', 'none', 'tradie', 'group']);
+    expect(visible(key).trim()).toBe('Urgent High Routine No open Tickets Tradie Group of pins, zoom in to see them');
+  });
+
   test('every geocoded Property is a pin with its coordinates and the worst urgency of its open Tickets', async () => {
     const w = await webWorld();
     const { ticketId } = await tomsTapTicket(w);

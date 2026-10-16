@@ -2150,6 +2150,14 @@
       border: 1px solid var(--line);
       border-radius: 8px;
     }
+    /* Phones and tablets: about half the screen, so the panel and the table start in reach. */
+    @media (max-width: 63.98rem) {
+      .dispatch-map {
+        height: 55vh;
+        min-height: 18rem;
+        max-height: 32rem;
+      }
+    }
     @media (min-width: 64rem) {
       .dispatch-map {
         height: 32rem;
@@ -2213,6 +2221,7 @@
     .map-pin-none svg > * {
       fill: var(--surface);
       stroke: var(--muted);
+      stroke-width: 2.5;
     }
     .map-pin-tradie svg > * {
       fill: var(--ink);
@@ -2252,12 +2261,59 @@
       border-radius: 50%;
       background: color-mix(in srgb, var(--surface) 70%, transparent);
     }
+    /* The Tradie search radius: a quiet dashed line, no fill, so it never covers the streets. */
     .dispatch-ring {
       stroke: var(--action);
-      stroke-width: 2;
-      stroke-dasharray: 6 6;
-      fill: var(--action);
-      fill-opacity: 0.06;
+      stroke-width: 1.5;
+      stroke-opacity: 0.55;
+      stroke-dasharray: 4 6;
+      fill: none;
+    }
+
+    /* A group of pins that overlap: a white disc with how many, ringed in Night like the Tradie
+       squares, with the worst Urgency's shape on its shoulder when it holds an Urgent or High Property. */
+    .map-group {
+      position: relative;
+      display: grid;
+      place-items: center;
+      width: 36px;
+      height: 36px;
+      font-family: var(--font-head);
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1;
+      color: var(--ink);
+      background: var(--surface);
+      border: 2px solid var(--ink);
+      border-radius: 50%;
+      font-variant-numeric: tabular-nums;
+    }
+    .map-group > .map-pin {
+      position: absolute;
+      top: -6px;
+      right: -8px;
+      width: 18px;
+      height: 18px;
+    }
+    .map-group.is-selected {
+      outline: 3px solid var(--action);
+      outline-offset: 2px;
+    }
+    .dispatch-legend .map-group {
+      width: 20px;
+      height: 20px;
+      font-size: 11px;
+      border-width: 1.5px;
+    }
+    .dispatch-spider-leg {
+      stroke: var(--ink);
+      stroke-opacity: 0.5;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .leaflet-cluster-anim :where(.leaflet-marker-icon, .leaflet-marker-shadow),
+      .leaflet-cluster-spider-leg {
+        transition: none;
+      }
     }
 
     /* The side column: a hint, then the one panel picked. Without JavaScript a row's link picks it (:target). */
