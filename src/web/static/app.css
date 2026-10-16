@@ -2784,6 +2784,106 @@
   }
 }
 
+/* === onboarding and setup === */
+@layer utilities {
+  @layer app {
+    /* The guide at /welcome (pages/welcome.ts): one column, the steps at its head with
+       which step this is, the step's body, and Back and the way on along its foot. */
+    .wizard {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      width: 100%;
+      max-width: 840px;
+      margin-inline: auto;
+    }
+    .wizard-steps {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .wizard-where {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 16px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+    .wizard-where > span:first-child {
+      font-family: var(--font-head);
+      font-weight: 600;
+      color: var(--ink);
+    }
+    /* The step on screen keeps its done tick or number, ringed in Harbour so it reads as "you are here". */
+    .wizard-steps .step[aria-current='step']::after {
+      box-shadow:
+        0 0 0 2px var(--page),
+        0 0 0 4px var(--action);
+    }
+    .wizard-foot {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding-top: 16px;
+      border-top: 1px solid var(--line);
+    }
+    .wizard-onward {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin-left: auto;
+    }
+    /* What a step still needs, in one line under its introduction. */
+    .wizard-next {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--ink);
+    }
+    /* The last step's checklist: a done tick or an open circle, the item, and a button for what's left. */
+    .wizard-checklist {
+      display: flex;
+      flex-direction: column;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .wizard-checklist > li {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 12px;
+      min-height: 44px;
+      padding-block: 6px;
+    }
+    .wizard-checklist > li + li {
+      border-top: 1px solid var(--line);
+    }
+    .wizard-check {
+      display: inline-flex;
+      flex: 0 0 auto;
+    }
+    .wizard-checklist .is-done .wizard-check {
+      color: var(--done);
+    }
+    .wizard-checklist .is-todo .wizard-check {
+      color: var(--control);
+    }
+    .wizard-check-text {
+      flex: 1 1 16rem;
+      min-width: 0;
+      font-size: 14px;
+      overflow-wrap: anywhere;
+    }
+    .wizard-checklist .is-todo .wizard-check-text {
+      color: var(--ink);
+      font-weight: 500;
+    }
+  }
+}
+
 /* === Tenant pages === */
 @layer utilities {
   @layer app {
