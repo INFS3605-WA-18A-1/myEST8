@@ -206,7 +206,7 @@ function propertyTable(properties: PropertyView[]): Html {
   const open = properties.filter((p) => p.openTickets.length);
   const quiet = properties.filter((p) => !p.openTickets.length);
   return html`${open.length
-      ? html`<div class="table-frame">
+      ? html`<div class="table-frame dispatch-stack">
           <table class="table table-sm">
             <caption class="sr-only">Properties with open Tickets, the most urgent first. The link in each row opens its details beside the map.</caption>
             <thead>
@@ -222,7 +222,7 @@ function propertyTable(properties: PropertyView[]): Html {
                 (p) => html`<tr data-row="property-${p.propertyId}">
                   ${addressCell(p)}
                   <td>${p.suburb}</td>
-                  <td class="min-w-64">
+                  <td class="dispatch-tickets">
                     <ul class="dispatch-list">${p.openTickets.map((t) => html`<li>${ticketCell({ ticketId: t.ticketId, issue: t.description })}</li>`)}</ul>
                   </td>
                   <td>${p.worstUrgency ? urgencyBadge(p.worstUrgency) : ''}</td>
@@ -235,7 +235,7 @@ function propertyTable(properties: PropertyView[]): Html {
     ${quiet.length
       ? html`<details class="dispatch-more">
           <summary class="cursor-pointer text-sm font-medium text-action">Show the ${quiet.length} ${quiet.length === 1 ? 'Property' : 'Properties'} with no open Tickets</summary>
-          <div class="table-frame">
+          <div class="table-frame dispatch-stack">
             <table class="table table-sm">
               <caption class="sr-only">Properties with no open Tickets. The link in each row opens its details beside the map.</caption>
               <thead>
@@ -254,7 +254,7 @@ function propertyTable(properties: PropertyView[]): Html {
 }
 
 function addressCell(p: PropertyView): Html {
-  return html`<th scope="row" class="min-w-48">
+  return html`<th scope="row" class="dispatch-address">
     <a class="link" href="#panel-property-${p.propertyId}" data-select="property-${p.propertyId}">${p.address}</a>
     ${p.location ? '' : html`<span class="dispatch-not-found">${badge('Address not found', 'warning')}</span>`}
   </th>`;
@@ -270,7 +270,7 @@ function scheduleTable(tradies: TradieView[], bookings: Booking[], days: string[
   const byDay = bookingsByDay(bookings, days[0]!, timeZone);
   const sorted = [...tradies].sort((a, b) => a.businessName.localeCompare(b.businessName));
   const booked = sorted.filter((t) => bookings.some((b) => b.tradieId === t.tradieId));
-  const grid = (rows: TradieView[], caption: string) => html`<div class="table-frame">
+  const grid = (rows: TradieView[], caption: string) => html`<div class="table-frame dispatch-stack">
     <table class="table table-sm dispatch-schedule">
       <caption class="sr-only">${caption}</caption>
       <thead>
@@ -282,11 +282,12 @@ function scheduleTable(tradies: TradieView[], bookings: Booking[], days: string[
       <tbody>
         ${rows.map(
           (t) => html`<tr>
-            <th scope="row" class="min-w-40"><a class="link" href="/tradies/${t.tradieId}">${t.businessName}</a><span class="dispatch-day">${t.trades.map(humanise).join(', ')}</span></th>
-            ${days.map((d) => {
+            <th scope="row" class="dispatch-tradie"><a class="link" href="/tradies/${t.tradieId}">${t.businessName}</a><span class="dispatch-day">${t.trades.map(humanise).join(', ')}</span></th>
+            ${days.map((d, i) => {
               const visits = (byDay.get(d) ?? []).filter((b) => b.tradieId === t.tradieId);
+              // On phones the header row is hidden and each day with visits is a block that names its day (hidden from 640px).
               return visits.length
-                ? html`<td class="has-visits"><ul class="booking-list">${visits.map((b) => bookingCard(b, timeZone, { tradie: false }))}</ul></td>`
+                ? html`<td class="has-visits"><span class="dispatch-cell-day">${i === 0 ? 'Today, ' : ''}${shortDay(d, { month: true })}</span><ul class="booking-list">${visits.map((b) => bookingCard(b, timeZone, { tradie: false }))}</ul></td>`
                 : html`<td><span class="sr-only">Nothing booked</span></td>`;
             })}
           </tr>`,

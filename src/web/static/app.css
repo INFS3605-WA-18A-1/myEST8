@@ -2419,6 +2419,103 @@
     tr[data-selected] :where(th, td) {
       background: var(--info-bg);
     }
+
+    /* The Properties and Tradie schedule tables. From 640px they are tables, their columns
+       wide enough to read; on phones each row is a block (like table({ stack: true }) in
+       ui.ts, which can't carry the row header and data-row these rows need), so nothing
+       scrolls sideways. */
+    .dispatch-cell-day {
+      display: none;
+    }
+    @media (min-width: 640px) {
+      .dispatch-stack .dispatch-address {
+        min-width: 12rem;
+      }
+      .dispatch-stack .dispatch-tickets {
+        min-width: 16rem;
+      }
+      .dispatch-stack .dispatch-tradie {
+        min-width: 10rem;
+      }
+    }
+    @media (max-width: 639.98px) {
+      .dispatch-stack {
+        overflow: visible;
+        background: transparent;
+        border: 0;
+        border-radius: 0;
+      }
+      .dispatch-stack :where(table, tbody) {
+        display: block;
+      }
+      .dispatch-stack thead {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+      .dispatch-stack tbody {
+        display: grid;
+        gap: 8px;
+      }
+      .dispatch-stack tbody tr {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px 8px;
+        padding: 10px 12px;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 4px;
+      }
+      .dispatch-stack tbody :where(th, td) {
+        display: block;
+        height: auto;
+        min-width: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+      }
+      /* A Property: its address, then the suburb with the worst urgency at the end, then its Tickets. */
+      .dispatch-stack tbody th {
+        flex-basis: 100%;
+        font-size: 14px;
+      }
+      .dispatch-stack tbody td:nth-child(2) {
+        color: var(--muted);
+      }
+      .dispatch-stack tbody td.dispatch-tickets {
+        order: 1;
+        flex-basis: 100%;
+      }
+      .dispatch-stack tbody td:nth-child(4) {
+        margin-left: auto;
+      }
+      .dispatch-stack tbody tr[data-selected] {
+        background: var(--info-bg);
+        border-color: var(--action);
+      }
+      /* A Tradie: name and Trades, then only the days with visits, each naming its day. */
+      .dispatch-schedule tbody td:not(.has-visits) {
+        display: none;
+      }
+      .dispatch-schedule tbody td.has-visits {
+        flex-basis: 100%;
+        min-width: 0;
+        margin: 0;
+        color: inherit;
+      }
+      .dispatch-cell-day {
+        display: block;
+        margin-bottom: 4px;
+        font-family: var(--font-head);
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--muted);
+      }
+    }
   }
 }
 
