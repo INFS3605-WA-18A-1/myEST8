@@ -155,16 +155,16 @@ export function propertyPages() {
 function list(properties: Overview[]): Html {
   if (!properties.length) return emptyState('No Properties yet. Add the first one to start taking reports.', linkButton('Add a Property', '#add-property', { variant: 'primary' }));
   return table(
-    ['Property', 'Property Owner', 'Max Repair Cost', 'Tenants', 'Open Tickets', 'Property Manager'],
+    ['Property', 'Open Tickets', 'Max Repair Cost', 'Property Owner', 'Tenants', 'Property Manager'],
     properties.map((p) => [
       html`<a class="link font-medium" href="/properties/${p.propertyId}">${p.address}</a>`,
-      html`${p.ownerName}`,
+      html`<span class="${p.openTickets ? 'property-open' : 'text-muted'}">${p.openTickets}</span>`,
       html`${formatMoney(p.maxRepairCostCents)}`,
+      html`${p.ownerName}`,
       html`${p.tenants.length ? p.tenants.join(', ') : html`<span class="text-muted">No Tenants</span>`}`,
-      html`${p.openTickets}`,
       html`${p.propertyManager}`,
     ]),
-    { stack: true, caption: 'Properties', align: ['left', 'left', 'right', 'left', 'right', 'left'] },
+    { stack: 'labelled', caption: 'Properties', align: ['left', 'right', 'right', 'left', 'left', 'left'] },
   );
 }
 
@@ -221,9 +221,9 @@ function tenants(p: PropertyView): Html {
             html`${t.mobile ? html`<a class="link num" href="tel:${t.mobile}">${t.mobile}</a>` : '—'}`,
             html`${t.email ? html`<a class="link break-all" href="mailto:${t.email}">${t.email}</a>` : '—'}`,
           ]),
-          { caption: 'Tenants' },
+          { caption: 'Tenants', stack: 'labelled' },
         )
-      : emptyState('No Tenants yet.')}
+      : emptyState('No Tenants yet. Add the people who live here so they can report repairs.', linkButton('Add a Tenant', '/setup#tenants'))}
   </section>`;
 }
 
@@ -237,7 +237,7 @@ function nominated(p: PropertyView): Html {
             html`<a class="link font-medium" href="/tradies/${t.tradieId}">${t.businessName ?? t.name}</a>`,
             html`<span class="flex flex-wrap gap-1">${t.trades.map((trade) => badge(humanise(trade), 'info'))}</span>`,
           ]),
-          { caption: 'Nominated Tradies for Urgent Repairs' },
+          { caption: 'Nominated Tradies for Urgent Repairs', stack: 'labelled' },
         )
       : emptyState('No Nominated Tradie. Tenants arrange Urgent Repairs themselves.')}
   </section>`;

@@ -2068,12 +2068,18 @@
     }
 
     /* The review page. */
+    /* The summary is a white strip like the dashboard's count strip, so the neutral
+       (Paper) "duplicate" badge reads as a badge rather than loose text. */
     .import-summary {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       gap: 6px 8px;
       margin: 0;
+      padding: 8px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
       font-size: 14px;
     }
     .import-ai {
@@ -2154,6 +2160,89 @@
     @media (max-width: 39.99rem) {
       .import-actions > .btn {
         flex: 1 1 100%;
+      }
+    }
+    /* Phones: both review tables stack, so nothing scrolls sideways. Each row is a white
+       block: its lead (the sheet's column, or the Add box, row number and status) on the
+       first line, then every other cell beside its column's name (data-label) in an
+       aligned 7rem label column. A flagged cell keeps its --high-bg tint. */
+    @media (max-width: 639.98px) {
+      .table-frame.import-stack {
+        overflow: visible;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+      }
+      .import-stack :where(table, tbody, tr, td, th) {
+        display: block;
+      }
+      .import-stack thead {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+      .import-stack tbody {
+        display: grid;
+        gap: 8px;
+      }
+      .import-stack tbody tr {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px 12px;
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        background: var(--surface);
+      }
+      .import-stack tbody :where(td, th) {
+        min-width: 0;
+        max-width: none;
+        height: auto;
+        padding: 0;
+        border: 0;
+      }
+      .import-stack tbody th[scope='row'] {
+        flex-basis: 100%;
+        font-size: 14px;
+      }
+      .import-stack td.import-include,
+      .import-stack td[data-label='Status'] {
+        flex: none;
+      }
+      .import-stack td[data-label='Row'] {
+        flex: none;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .import-stack td[data-label='Row']::before {
+        content: 'Row ';
+      }
+      .import-stack td[data-label]:not([data-label='Row'], [data-label='Status']) {
+        display: grid;
+        flex-basis: 100%;
+        grid-template-columns: 7rem minmax(0, 1fr);
+        column-gap: 12px;
+        align-items: start;
+      }
+      .import-stack td[data-label]:not([data-label='Row'], [data-label='Status'])::before {
+        content: attr(data-label);
+        grid-row: 1 / span 6;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .import-stack td[data-label]:not([data-label='Row'], [data-label='Status']) > * {
+        grid-column: 2;
+      }
+      .import-stack td.import-notes[data-label]:not(:has(> span)) {
+        display: none;
+      }
+      .import-table td.import-fix {
+        margin: 0 -12px;
+        padding: 8px 12px;
       }
     }
   }
@@ -3044,6 +3133,175 @@
       align-items: flex-start;
       gap: 2px;
     }
+    /* A Property with open Tickets: the count in Night 600, so the rows with work stand out. */
+    .property-open {
+      font-weight: 600;
+      color: var(--ink);
+    }
+
+    /* Settings (pages/settings.ts): side tabs, then the tab's sections in a column no
+       wider than 52rem so a row's name and its button stay within reach. Each list is
+       rows of a name (linked when it has a page), a muted hint, and actions at the end. */
+    .settings-layout {
+      display: grid;
+      align-items: start;
+      gap: 24px;
+    }
+    @media (min-width: 1024px) {
+      .settings-layout {
+        grid-template-columns: 13rem minmax(0, 52rem);
+      }
+    }
+    .settings-panel {
+      display: grid;
+      gap: 24px;
+      min-width: 0;
+    }
+    .settings-intro {
+      max-width: 72ch;
+      margin: 0 0 8px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+    .settings-list {
+      display: flex;
+      flex-direction: column;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .settings-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px 16px;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .settings-row:first-child {
+      padding-top: 0;
+    }
+    .settings-row:last-child {
+      padding-bottom: 0;
+      border-bottom: 0;
+    }
+    .settings-row-text {
+      display: flex;
+      flex: 1 1 16rem;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+    .settings-row-label {
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .settings-row-hint {
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .settings-row-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 16px;
+    }
+
+    /* A Tradie's profile (pages/tradie.ts): the Trades and contact details beside the
+       four ratings (myEST8, Property Managers', Tenants', Google) from 1024px. */
+    .tradie-head .section-body,
+    .tradie-head {
+      display: grid;
+      gap: 16px;
+    }
+    .tradie-contact {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-width: 0;
+    }
+    .tradie-contact dl {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 24px;
+      margin: 0;
+    }
+    .tradie-contact dl > div {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+    .tradie-contact dt {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--muted);
+    }
+    .tradie-contact dd {
+      margin: 0;
+      font-size: 14px;
+    }
+    @media (min-width: 1024px) {
+      .tradie-head {
+        grid-template-columns: minmax(14rem, 1fr) minmax(0, 2.4fr);
+        align-items: start;
+      }
+    }
+
+    /* The Tradies directory's Trade filter (pages/tradie.ts): one link per Trade with how
+       many Tradies do it, the current one filled with Harbour like the segmented
+       control. It wraps on phones rather than scrolling sideways. */
+    .trade-filter ul {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .trade-filter-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 32px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--ink);
+      font-family: var(--font-head);
+      font-size: 14px;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .trade-filter-item:hover {
+      border-color: var(--control);
+    }
+    .trade-filter-item:focus-visible {
+      outline: 2px solid var(--action);
+      outline-offset: 2px;
+    }
+    .trade-filter-count {
+      font-family: var(--font-body);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--muted);
+    }
+    .trade-filter-item[aria-current='page'] {
+      border-color: var(--action);
+      background: var(--action);
+      color: var(--surface);
+    }
+    .trade-filter-item[aria-current='page'] .trade-filter-count {
+      color: inherit;
+    }
+    @media (max-width: 639.98px), (pointer: coarse) {
+      .trade-filter-item {
+        min-height: 44px;
+      }
+    }
+
   }
 }
 
@@ -3328,6 +3586,10 @@
     .booking.is-reschedule {
       border-left: 4px solid var(--high);
     }
+    /* A reschedule request on the Property Manager's own Property waits on them. */
+    .booking.is-reschedule.is-decision {
+      border-left-color: var(--hivis);
+    }
     .booking.is-done {
       color: var(--muted);
     }
@@ -3376,9 +3638,54 @@
       border-radius: 2px;
     }
 
+    /* The Schedule's week in one line: the count of visits, then flags for how they
+       stand. A reschedule request waiting on you carries the Wattle stripe; a
+       colleague's the warning stripe; not confirmed yet is plain. */
+    .schedule-summary {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .schedule-tally {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin: 0;
+    }
+    .schedule-count {
+      margin-right: 4px;
+      font-family: var(--font-head);
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .schedule-flag {
+      padding: 1px 8px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: var(--surface);
+      font-size: 13px;
+      font-weight: 500;
+      line-height: 1.45;
+    }
+    .schedule-flag.is-decision {
+      border-left: 4px solid var(--hivis);
+    }
+    .schedule-flag.is-reschedule {
+      border-left: 4px solid var(--high);
+      color: var(--high);
+    }
+    .schedule-more {
+      margin: 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
     /* The Schedule's week. Under 1024px a list of days, where a run of empty days is one
        line (.schedule-quiet) and its days are hidden; from 1024px seven columns in a row,
-       a booked day taking the room and an empty one staying narrow. */
+       a booked day taking the room and an empty one staying narrow. Booked days are white;
+       empty ones stay on Paper behind a hairline so the work stands out; today is ringed
+       in Harbour. */
     .schedule-week {
       display: grid;
       gap: 12px;
@@ -3396,9 +3703,12 @@
       border-radius: 8px;
       background: var(--surface);
     }
+    .schedule-day.is-empty {
+      background: transparent;
+    }
     .schedule-day.is-today {
-      background: var(--page);
       border-color: var(--action);
+      box-shadow: inset 0 0 0 1px var(--action);
     }
     .schedule-day.is-empty:not(.is-today) {
       display: none;
@@ -3407,11 +3717,18 @@
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 8px;
+      gap: 4px 8px;
       margin: 0;
       font-family: var(--font-head);
-      font-size: 15px;
+      font-size: 16px;
       font-weight: 600;
+    }
+    .schedule-day-count {
+      margin-left: auto;
+      font-family: var(--font-body);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--muted);
     }
     .schedule-quiet {
       padding: 4px 8px;
@@ -3422,7 +3739,7 @@
       .schedule-week {
         display: flex;
         align-items: stretch;
-        min-height: calc(100dvh - 14rem);
+        min-height: 24rem;
       }
       .schedule-quiet {
         display: none;
