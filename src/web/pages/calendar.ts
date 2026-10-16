@@ -16,7 +16,7 @@ export type Booking = Awaited<ReturnType<PropertyManagerActions['calendar']>>[nu
 
 type Day = { year: number; month: number; day: number };
 
-/** The Schedule, mounted at /dispatch. */
+/** The Schedule, mounted at /calendar (and for now at /dispatch). */
 export function calendarPages() {
   const pages = new Hono<WebEnv>();
 
@@ -34,7 +34,7 @@ export function calendarPages() {
       page({
         title: 'Schedule',
         pm,
-        active: 'dispatch',
+        active: 'schedule',
         shell: await shellInfo(c),
         flash: flashFrom(c.req.url),
         subtitle: `Week of ${dateLabel(monday)} ${monday.year}`,

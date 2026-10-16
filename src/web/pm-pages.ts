@@ -24,9 +24,11 @@ export function pmPages(o: { demo: boolean; connectors: ChannelConnectors } = { 
   pages.route('/tickets', ticketListPages());
   pages.route('/tickets', ticketPages());
   pages.route('/approvals', approvalPages());
-  // The Schedule is the week of bookings; it lived at /calendar before the rail grew.
+  // The Schedule is the week of bookings, at /calendar. /dispatch is the map (phase 2d restores
+  // its page); until then it still shows the week, so the old links keep working.
+  pages.route('/calendar', calendarPages());
   pages.route('/dispatch', calendarPages());
-  pages.get('/calendar', (c) => c.redirect(`/dispatch${new URL(c.req.url).search}`, 301));
+  pages.get('/schedule', (c) => c.redirect(`/calendar${new URL(c.req.url).search}`, 303));
   pages.route('/properties', propertyPages());
   pages.route('/tradies', tradiePages());
   pages.route('/setup', setupPages(o));
