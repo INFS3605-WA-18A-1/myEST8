@@ -66,6 +66,7 @@ const MIN_QUOTES = 2;
 const FIRST_ROUND = 3;
 const FREE_SLOTS_SHOWN = 3;
 const DEFAULT_VISIT_HOURS = 2;
+/** WhatsApp is paused as a channel, but messages that came by it still say so. */
 const CHANNELS = { sms: 'SMS', whatsapp: 'WhatsApp', email: 'Email' } as const;
 const nothing = html``;
 
