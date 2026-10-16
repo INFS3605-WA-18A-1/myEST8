@@ -6,5 +6,7 @@ export type WebEnv = {
   Variables: {
     pm: PropertyManager;
     actions: PropertyManagerActions;
+    /** The rail's counts, read once per request by `loadNavCounts` (src/web/shell.ts). */
+    navCounts?: { requests: number; approvals: number };
   };
 };

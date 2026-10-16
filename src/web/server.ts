@@ -13,6 +13,7 @@ import { landingRoutes } from './pages/landing.ts';
 import { signupRoutes } from './pages/signup.ts';
 import { pmPages } from './pm-pages.ts';
 import { rateLimit } from './rate-limit.ts';
+import { loadNavCounts } from './shell.ts';
 import { tenantPages } from './tenant-pages.ts';
 
 /**
@@ -55,6 +56,7 @@ export function createWebApp(deps: {
 
   const signedIn = new Hono<WebEnv>();
   signedIn.use('*', requirePropertyManager(deps.app, deps.sessions));
+  signedIn.use('*', loadNavCounts());
   if (deps.demo) signedIn.route('/demo', simulatorPages(deps.demo));
   signedIn.route('/', pmPages({ demo: !!deps.demo, connectors: deps.connectors ?? NO_CONNECTORS }));
   web.route('/', signedIn);
