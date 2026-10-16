@@ -66,7 +66,8 @@ const MIN_QUOTES = 2;
 const FIRST_ROUND = 3;
 const FREE_SLOTS_SHOWN = 3;
 const DEFAULT_VISIT_HOURS = 2;
-const CHANNELS = { sms: 'SMS', whatsapp: 'WhatsApp', email: 'Email' } as const;
+/** WhatsApp is paused as a channel: old messages that used it still render, labelled generically. */
+const CHANNELS = { sms: 'SMS', whatsapp: 'chat', email: 'Email' } as const;
 const nothing = html``;
 
 /** The Ticket view under /tickets/:id and every Job action on it. */

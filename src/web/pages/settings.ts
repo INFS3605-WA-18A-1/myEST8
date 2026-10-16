@@ -20,7 +20,7 @@ const TABS = [
 ] as const;
 type Tab = (typeof TABS)[number][0];
 
-const CHANNEL_NAME: Record<AgencyChannel['type'], string> = { sms: 'SMS', whatsapp: 'WhatsApp', email: 'Email' };
+const CHANNEL_NAME: Record<AgencyChannel['type'], string> = { sms: 'SMS', whatsapp: 'Chat', email: 'Email' };
 
 /**
  * The Agency's Properties and the people around them: where each list is (if it has a
@@ -106,7 +106,7 @@ function channelsTab(channels: AgencyChannel[], timeZone: string): Html {
           channels.map((ch) => [html`${CHANNEL_NAME[ch.type]}`, html`${ch.address}`, html`${ch.testedAt ? formatWhen(ch.testedAt, timeZone) : 'Not tested'}`]),
           { caption: 'Channels' },
         )
-      : emptyState('No channels connected. Connect SMS, WhatsApp or email so Tenants can reach you.', linkButton('Connect a channel', '/setup#channels', { variant: 'primary', size: 'sm' })),
+      : emptyState('No channels connected. Connect SMS or email so Tenants can reach you.', linkButton('Connect a channel', '/setup#channels', { variant: 'primary', size: 'sm' })),
   });
 }
 
