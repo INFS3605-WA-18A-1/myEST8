@@ -4,6 +4,7 @@ import { assetRoutes } from '../../src/web/assets.ts';
 import { shellInfo } from '../../src/web/shell.ts';
 import {
   alert,
+  badge,
   chatBubble,
   docket,
   dl,
@@ -331,6 +332,13 @@ describe('ui', () => {
     expect(await render(queueRow({ title: 'Toilet keeps running' }))).not.toContain('is-decision');
   });
 
+  it('gives a badge a hairline boundary when asked, keeping its tone, so it holds on the page background', async () => {
+    const outlined = await render(badge('Plumbing', 'neutral', { outline: true }));
+    expect(outlined).toMatch(/class="badge badge-soft badge-neutral is-outline /);
+    expect(outlined).toContain('>Plumbing</span>');
+    expect(await render(badge('Plumbing'))).not.toContain('is-outline');
+  });
+
   it('shows Routine as muted text on a hairline, and keeps the High and Urgent tones', async () => {
     const routine = await render(urgencyBadge('routine'));
     expect(routine).toContain('badge-muted');
@@ -386,6 +394,30 @@ describe('ui', () => {
     // The first cell leads the row, and a column with no header has nothing to say.
     expect(out).toContain('<td>12 King St</td>');
     expect(out).toContain('<td><a href="/x">Edit</a></td>');
+  });
+
+  it('gives each row the attributes asked for, escaped, and leaves rows without any bare', async () => {
+    const out = await render(
+      table(['Address', 'Suburb'], [[html`12 King St`, html`Newtown`], [html`9 Albion St`, html`Annandale`]], {
+        rowAttributes: [{ 'data-row': 'property-1', 'data-selected': true, 'aria-label': HOSTILE }, undefined],
+      }),
+    );
+    expect(out).toContain('<tr data-row="property-1" data-selected aria-label="&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;">');
+    expect(out).toContain('<tr><td class="min-w-28">9 Albion St</td>');
+    expect(out).not.toContain('<script>');
+  });
+
+  it('leaves out an attribute set to false, and refuses a name that is not a plain attribute name', async () => {
+    expect(await render(table(['A'], [[html`x`]], { rowAttributes: [{ 'data-selected': false }] }))).toContain('<tr><td');
+    expect(() => table(['A'], [[html`x`]], { rowAttributes: [{ 'onclick="x"': 'y' }] })).toThrow();
+  });
+
+  it('makes the first cell of each row its row header when asked, stacked or not', async () => {
+    const out = await render(
+      table(['Address', 'Open Tickets'], [[html`12 King St`, html`2`]], { rowHeader: true, stack: 'labelled', align: ['left', 'right'] }),
+    );
+    expect(out).toContain('<tr><th scope="row">12 King St</th><td class="num text-right" data-label="Open Tickets">2</td></tr>');
+    expect(await render(table(['Address'], [[html`12 King St`]]))).toContain('<td class="min-w-28">12 King St</td>');
   });
 
   it('escapes a stacked cell’s label', async () => {

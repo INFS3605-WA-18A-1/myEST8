@@ -6,7 +6,7 @@
 // utilities generated in the browser by Tailwind's browser build. Some layouts are
 // adapted from HyperUI (https://hyperui.dev, MIT); each component says where it came from.
 
-import { html } from 'hono/html';
+import { html, raw } from 'hono/html';
 import type { HtmlEscapedString } from 'hono/utils/html';
 import type { Role } from '../shared.ts';
 import { icon } from './icons.ts';
@@ -174,7 +174,7 @@ function rail(active: NavKey | undefined, agencyName: string | undefined, counts
 /** The Property Manager's name, opening a menu with Sign out. */
 function userMenu(name: string): Html {
   return html`<details class="user-menu" data-menu>
-    <summary>${name}${ICON.chevron}</summary>
+    <summary><span class="user-menu-name">${name}</span>${ICON.chevron}</summary>
     <div class="user-menu-panel">${postButton('/logout', 'Sign out', { variant: 'ghost', size: 'sm' })}</div>
   </details>`;
 }
@@ -429,9 +429,13 @@ export function sectionHeader(title: string, actions?: Html): Html {
 
 const TONE: Record<Tone, string> = { neutral: 'badge-neutral', info: 'badge-info', success: 'badge-success', warning: 'badge-warning', error: 'badge-error' };
 
-/** A short label (daisyUI badge, soft style). The text carries the meaning; colour only backs it up. */
-export function badge(text: string, tone: Tone = 'neutral', o: { wrap?: boolean } = {}): Html {
-  return toneBadge(text, TONE[tone], o.wrap);
+/**
+ * A short label (daisyUI badge, soft style). The text carries the meaning; colour only backs it up.
+ * `outline` adds a hairline boundary and a white fill, keeping the tone's text colour: for a badge
+ * that sits straight on the Paper page (a neutral badge's own fill is Paper, so it would read as loose text).
+ */
+export function badge(text: string, tone: Tone = 'neutral', o: { wrap?: boolean; outline?: boolean } = {}): Html {
+  return toneBadge(text, `${TONE[tone]}${o.outline ? ' is-outline' : ''}`, o.wrap);
 }
 
 /** A badge with its class given: for the quiet looks (Routine, cancelled) that have no Tone. */
@@ -544,17 +548,33 @@ export function emptyState(text: string, action?: Html): Html {
  * each column's header beside its value (label left, value right), for rows of
  * plain values such as names, money and counts (Properties, Tradies). The first
  * cell leads the row unlabelled, and so does any column with an empty header.
+ *
+ * `rowHeader: true` makes each row's first cell its row header (`<th scope="row">`),
+ * so a screen reader names the row by it (an address, a Tradie). `rowAttributes`
+ * gives row i the attributes in `rowAttributes[i]` (`data-row`, `data-selected`,
+ * `aria-*`...): values are escaped, `true` writes a bare attribute, and `false` or
+ * undefined leaves it out.
  */
 export function table(
   headers: string[],
   rows: Html[][],
-  o: { caption?: string; align?: ('left' | 'right')[]; stack?: boolean | 'labelled' } = {},
+  o: {
+    caption?: string;
+    align?: ('left' | 'right')[];
+    stack?: boolean | 'labelled';
+    rowHeader?: boolean;
+    rowAttributes?: (RowAttributes | undefined)[];
+  } = {},
 ): Html {
   const right = (i: number) => o.align?.[i] === 'right';
   const labelled = o.stack === 'labelled';
   // A stacked table sets its cells' widths in app.css, as they become blocks on phones.
   const cellClass = (i: number) => [o.stack ? '' : 'min-w-28', right(i) ? 'num text-right' : ''].filter(Boolean).join(' ');
   const label = (i: number) => (labelled && i > 0 && headers[i] ? html` data-label="${headers[i]}"` : '');
+  const cell = (content: Html, i: number) => {
+    const cls = cellClass(i) ? html` class="${cellClass(i)}"` : '';
+    return o.rowHeader && i === 0 ? html`<th scope="row"${cls}>${content}</th>` : html`<td${cls}${label(i)}>${content}</td>`;
+  };
   return html`<div class="table-frame${o.stack ? ' is-stacked' : ''}${labelled ? ' is-labelled' : ''}">
     <table class="table table-sm">
       ${o.caption ? html`<caption class="sr-only">${o.caption}</caption>` : ''}
@@ -564,10 +584,26 @@ export function table(
         </tr>
       </thead>
       <tbody>
-        ${rows.map((row) => html`<tr>${row.map((cell, i) => html`<td${cellClass(i) ? html` class="${cellClass(i)}"` : ''}${label(i)}>${cell}</td>`)}</tr>`)}
+        ${rows.map((row, r) => html`<tr${rowAttributes(o.rowAttributes?.[r])}>${row.map(cell)}</tr>`)}
       </tbody>
     </table>
   </div>`;
+}
+
+/** Attributes for one table row: a value is escaped, `true` is a bare attribute, `false` leaves it out. */
+export type RowAttributes = Record<string, string | number | boolean | undefined>;
+
+const ATTRIBUTE_NAME = /^[a-z][a-z0-9-]*$/;
+
+function rowAttributes(attributes: RowAttributes | undefined): Html | string {
+  if (!attributes) return '';
+  const parts = Object.entries(attributes).flatMap(([name, value]) => {
+    // Names can't be escaped, so only plain lower-case names (data-row, aria-label, role) are allowed.
+    if (!ATTRIBUTE_NAME.test(name)) throw new Error(`Not an attribute name: ${name}`);
+    if (value === false || value === undefined) return [];
+    return value === true ? [html` ${raw(name)}`] : [html` ${raw(name)}="${value}"`];
+  });
+  return html`${parts}`;
 }
 
 /**

@@ -402,6 +402,12 @@
       color: var(--urgent);
       background-color: var(--urgent-bg);
     }
+    /* Outlined (badge(..., { outline: true })): white with a hairline, the tone's text kept, so a
+       badge straight on the Paper page has a boundary (a neutral badge's own fill is Paper). */
+    .badge.badge-soft.is-outline {
+      background-color: var(--surface);
+      border-color: var(--line);
+    }
 
     /* Alerts: each tone is a token pair, never a mix of two. Text is the pair's
        strong colour on its tint; the icon repeats the tone and the word says it. */
@@ -1426,22 +1432,32 @@
       background: var(--surface);
       border-bottom: 1px solid var(--line);
     }
+    /* The page's title wraps to a second line rather than losing its end (a Property's
+       address on its profile); only a title longer than two lines ends in an ellipsis. */
     .topbar-title {
+      display: -webkit-box;
       flex: 1 1 0;
       min-width: 12ch;
       margin: 0;
       overflow: hidden;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
       font-family: var(--font-head);
       font-size: 22px;
       font-weight: 600;
       line-height: 1.15;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      overflow-wrap: anywhere;
       color: var(--ink);
     }
+    /* Phones: the title gets the room. It may take three lines, and the user menu (the
+       reader's own name, which they know) gives way first, ending in an ellipsis. */
     @media (max-width: 40rem) {
       .topbar-title {
         font-size: 20px;
+        -webkit-line-clamp: 3;
+      }
+      .topbar .user-menu {
+        max-width: 7rem;
       }
     }
     .topbar-controls {
@@ -1527,6 +1543,11 @@
       cursor: pointer;
       list-style: none;
       white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .user-menu-name {
+      min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
     }
@@ -2777,6 +2798,13 @@
       text-decoration-color: currentColor;
     }
 
+    /* A row header (table(..., { rowHeader: true })) looks like the cells beside it: the
+       content decides its weight, not the browser's bold, centred <th>. */
+    .table tbody th[scope='row'] {
+      font-weight: inherit;
+      text-align: start;
+    }
+
     /* Stacked tables (table(..., { stack: true })): rows read top to bottom. The issue's
        link covers the whole row; other links and controls in the row sit above it. */
     .table-frame.is-stacked tbody tr {
@@ -2791,18 +2819,18 @@
       position: relative;
       z-index: 1;
     }
-    .table-frame.is-stacked tbody tr:hover td {
+    .table-frame.is-stacked tbody tr:hover :is(th, td) {
       background: var(--page);
     }
     /* Cells of different kinds (a two-line Ticket, a badge, an age) line up on their first line's baseline, so a badge doesn't sit lower than the text beside it. */
-    .table-frame.is-stacked tbody td {
+    .table-frame.is-stacked tbody :is(th, td) {
       vertical-align: baseline;
     }
     @media (min-width: 640px) {
-      .table-frame.is-stacked tbody td {
+      .table-frame.is-stacked tbody :is(th, td) {
         min-width: 7rem;
       }
-      .table-frame.is-stacked tbody td:first-child {
+      .table-frame.is-stacked tbody :is(th, td):first-child {
         min-width: 16rem;
       }
     }
@@ -2839,7 +2867,7 @@
         border: 1px solid var(--line);
         border-radius: 4px;
       }
-      .table-frame.is-stacked tbody td {
+      .table-frame.is-stacked tbody :is(th, td) {
         display: block;
         height: auto;
         min-width: 0;
@@ -2847,14 +2875,14 @@
         border: 0;
         background: transparent;
       }
-      .table-frame.is-stacked tbody td:first-child {
+      .table-frame.is-stacked tbody :is(th, td):first-child {
         flex-basis: 100%;
         margin-bottom: 2px;
       }
-      .table-frame.is-stacked tbody td:last-child {
+      .table-frame.is-stacked tbody :is(th, td):last-child {
         margin-left: auto;
       }
-      .table-frame.is-stacked tbody tr:hover td {
+      .table-frame.is-stacked tbody tr:hover :is(th, td) {
         background: transparent;
       }
       /* Labelled (stack: 'labelled'): the first cell leads, then each value sits beside
@@ -2865,12 +2893,18 @@
         gap: 4px;
         padding: 12px;
       }
-      .table-frame.is-labelled tbody td:first-child {
+      /* The lead is the cell's first line (its text, or its first element, such as the
+         business name's link); anything after it (a contact name under it) keeps its own weight. */
+      .table-frame.is-labelled tbody :is(th, td):first-child {
         margin-bottom: 4px;
         font-size: 14px;
         font-weight: 600;
       }
-      .table-frame.is-labelled tbody td:last-child {
+      .table-frame.is-labelled tbody :is(th, td):first-child > :not(:first-child) {
+        font-size: 13px;
+        font-weight: 400;
+      }
+      .table-frame.is-labelled tbody :is(th, td):last-child {
         margin-left: 0;
       }
       .table-frame.is-labelled tbody td[data-label] {
@@ -2888,7 +2922,7 @@
         font-size: 13px;
         color: var(--muted);
       }
-      .table-frame.is-labelled tbody td:empty {
+      .table-frame.is-labelled tbody :is(th, td):empty {
         display: none;
       }
     }
