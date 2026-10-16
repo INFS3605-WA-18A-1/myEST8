@@ -8,7 +8,6 @@ describe('Tradies', () => {
     const cookie = await w.signIn();
 
     const all = await (await w.get('/tradies', cookie)).text();
-    expect(all).toContain('data-autosubmit');
     expect(visible(all)).toContain('Previous Quotes');
     expect(visible(all)).toContain('Not on Google');
     // Dana (5.0) is ahead of Pete (4.0), and Finn (3.0) is last of the plumbers.
@@ -18,7 +17,35 @@ describe('Tradies', () => {
     const electricians = await (await w.get('/tradies?trade=electrical', cookie)).text();
     expect(electricians).toContain(`href="/tradies/${w.ids.sam}"`);
     expect(electricians).not.toContain(`href="/tradies/${w.ids.pete}"`);
-    expect(visible(electricians)).toContain('Show all Trades');
+  });
+
+  test('the Trades are links with how many Tradies do each, so filtering is one click and works without JavaScript', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    const all = await (await w.get('/tradies', cookie)).text();
+    const filter = all.slice(all.indexOf('aria-label="Filter by Trade"'), all.indexOf('</nav>', all.indexOf('aria-label="Filter by Trade"')));
+    expect(filter).toMatch(/<a href="\/tradies" class="trade-filter-item" aria-current="page">All Trades <span class="trade-filter-count num">6<\/span><\/a>/);
+    expect(filter).toMatch(/<a href="\/tradies\?trade=plumbing" class="trade-filter-item">Plumbing <span class="trade-filter-count num">5<\/span><\/a>/);
+    expect(visible(filter)).toContain('Electrical 1');
+    // A Trade nobody does isn't offered.
+    expect(visible(filter)).not.toContain('Roofing');
+
+    const electricians = await (await w.get('/tradies?trade=electrical', cookie)).text();
+    expect(electricians).toContain('<a href="/tradies?trade=electrical" class="trade-filter-item" aria-current="page">');
+    expect(electricians).toContain('<a href="/tradies" class="trade-filter-item">All Trades');
+  });
+
+  test("on phones each rating says whose it is, as the directory's header is hidden", async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    const page = await (await w.get('/tradies', cookie)).text();
+    const start = page.indexOf(`href="/tradies/${w.ids.pete}"`);
+    const row = visible(page.slice(start, page.indexOf('</tr>', start)));
+    expect(row).toContain('myEST8 rating 4.0 from 1');
+    expect(row).toContain('Google rating 4.8 120 reviews');
+    expect(row).toMatch(/Previous Quotes 0/);
   });
 
   test('the add form and spreadsheet import stay on the page', async () => {

@@ -13,6 +13,7 @@ import { icon } from '../icons.ts';
 import { shellInfo } from '../shell.ts';
 import { alert, badge, button, dl, emptyState, field, flashFrom, formatMoney, formatWhen, humanise, linkButton, page, section, sectionHeader, stat, statGroup, table, ticketCell, type Html } from '../ui.ts';
 import { timeRange } from './calendar.ts';
+import { cellLabel } from './properties.ts';
 import { googleSearchForm, importPanel, searchListings, tradieFields } from './onboarding-forms.ts';
 
 type TradieView = Awaited<ReturnType<PropertyManagerActions['tradie']>>;
@@ -41,7 +42,7 @@ export function tradiePages() {
         shell: shellInfo(c),
         subtitle: 'Best myEST8 rating first. The two ratings are shown side by side, never combined.',
         actions: linkButton('Add a Tradie', '#add-tradie', { variant: 'primary', size: 'sm' }),
-        body: html`${tradeFilter(trade)}${directory(tradies, trade)}
+        body: html`${tradeFilter(everyone, trade)}${directory(tradies, trade)}
           ${section({
             id: 'add-tradie',
             title: 'Add a Tradie',
@@ -135,18 +136,19 @@ function addressForm(t: TradieView, flash: ReturnType<typeof flashFrom>, form: s
 }
 
 /**
- * A GET form, so it works without JavaScript: pick a Trade and Filter. With
- * JavaScript the list narrows as soon as a Trade is picked (`data-autosubmit` in
- * app.js); the Filter button stays, secondary, for when JavaScript is off.
+ * The Trades as links, each with how many Tradies do it, so filtering is one click and
+ * works without JavaScript. A Trade nobody does isn't offered, unless it's the one asked for.
  */
-function tradeFilter(selected: Trade | null): Html {
-  return html`<form method="get" action="/tradies" class="flex flex-wrap items-end gap-2" aria-label="Filter Tradies" data-autosubmit>
-    <div class="w-full max-w-xs">
-      ${field({ label: 'Trade', name: 'trade', type: 'select', value: selected, placeholder: 'All Trades', options: TRADES.map((t) => ({ value: t, label: humanise(t) })) })}
-    </div>
-    <div class="pb-1">${button('Filter', { variant: 'secondary', size: 'sm' })}</div>
-    ${selected ? html`<div class="pb-1">${linkButton('Show all Trades', '/tradies', { variant: 'ghost', size: 'sm' })}</div>` : ''}
-  </form>`;
+function tradeFilter(everyone: DirectoryEntry[], selected: Trade | null): Html {
+  const counts = TRADES.map((t) => ({ trade: t, count: everyone.filter((x) => x.trades.includes(t)).length })).filter((c) => c.count || c.trade === selected);
+  const item = (label: string, href: string, count: number, active: boolean) =>
+    html`<li><a href="${href}" class="trade-filter-item"${active ? html` aria-current="page"` : ''}>${label} <span class="trade-filter-count num">${count}</span></a></li>`;
+  return html`<nav class="trade-filter" aria-label="Filter by Trade">
+    <ul>
+      ${item('All Trades', '/tradies', everyone.length, selected === null)}
+      ${counts.map((c) => item(humanise(c.trade), `/tradies?trade=${c.trade}`, c.count, c.trade === selected))}
+    </ul>
+  </nav>`;
 }
 
 /** Every Tradie with both ratings next to each other and the number of Quotes they have given. */
@@ -159,13 +161,13 @@ function directory(tradies: DirectoryEntry[], trade: Trade | null): Html {
     tradies.map((t) => {
       const { average, count } = t.myEst8Rating;
       return [
-        html`<a class="link font-medium" href="/tradies/${t.tradieId}">${t.businessName ?? t.name}</a>${t.businessName ? html`<br /><span class="text-sm text-muted">${t.name}</span>` : ''}`,
+        html`<a class="link font-medium" href="/tradies/${t.tradieId}">${t.businessName ?? t.name}</a>${t.businessName ? html`<br /><span class="text-xs text-muted">${t.name}</span>` : ''}`,
         html`<span class="flex flex-wrap gap-1">${t.trades.map((x) => badge(humanise(x), 'info'))}</span>`,
-        html`<span class="num font-medium">${average.toFixed(1)}</span> <span class="text-sm text-muted">from ${count}</span>`,
+        html`${cellLabel('myEST8 rating')}<span><span class="num font-medium">${average.toFixed(1)}</span> <span class="text-sm text-muted">from ${count}</span></span>`,
         t.googleRating
-          ? html`<span class="num font-medium">${t.googleRating.rating === null ? '—' : t.googleRating.rating.toFixed(1)}</span> <span class="text-sm text-muted">${t.googleRating.reviewCount ?? 0} reviews</span>`
-          : html`<span class="text-muted">Not on Google</span>`,
-        html`${t.quotes}`,
+          ? html`${cellLabel('Google rating')}<span><span class="num font-medium">${t.googleRating.rating === null ? '—' : t.googleRating.rating.toFixed(1)}</span> <span class="text-sm text-muted">${t.googleRating.reviewCount ?? 0} reviews</span></span>`
+          : html`${cellLabel('Google rating')}<span class="text-muted">Not on Google</span>`,
+        html`${cellLabel('Previous Quotes')}${t.quotes}`,
       ];
     }),
     { stack: true, caption: trade ? `${humanise(trade)} Tradies` : 'Tradies', align: ['left', 'left', 'left', 'left', 'right'] },

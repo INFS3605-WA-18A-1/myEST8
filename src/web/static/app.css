@@ -2787,6 +2787,59 @@
       color: var(--ink);
     }
 
+    /* The Tradies directory's Trade filter (pages/tradie.ts): one link per Trade with how
+       many Tradies do it, the current one filled with Harbour like the segmented
+       control. It wraps on phones rather than scrolling sideways. */
+    .trade-filter ul {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .trade-filter-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 32px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--ink);
+      font-family: var(--font-head);
+      font-size: 14px;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .trade-filter-item:hover {
+      border-color: var(--control);
+    }
+    .trade-filter-item:focus-visible {
+      outline: 2px solid var(--action);
+      outline-offset: 2px;
+    }
+    .trade-filter-count {
+      font-family: var(--font-body);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--muted);
+    }
+    .trade-filter-item[aria-current='page'] {
+      border-color: var(--action);
+      background: var(--action);
+      color: var(--surface);
+    }
+    .trade-filter-item[aria-current='page'] .trade-filter-count {
+      color: inherit;
+    }
+    @media (max-width: 639.98px), (pointer: coarse) {
+      .trade-filter-item {
+        min-height: 44px;
+      }
+    }
+
     /* Stacked directories (Properties, Tradies, Settings): on phones the header is hidden,
        so each value carries its label (cellLabel() in pages/properties.ts) and the
        labelled values sit in two columns under the row's name. */
