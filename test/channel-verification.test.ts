@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { one } from '../src/db.ts';
+import { UndeliverableError } from '../src/ports.ts';
 import { createHarness, MINUTE, AGENCY_NUMBER } from './support/harness.ts';
 import { TOM, world } from './support/world.ts';
 
@@ -22,6 +23,16 @@ function sentCode(h: Awaited<ReturnType<typeof createHarness>>, to: string) {
 }
 
 describe('channel verification', () => {
+  test('a code that cannot be delivered is refused with a reason, and nothing is left open', async () => {
+    const { h, agencyId, sam } = await sunrise();
+    h.messenger.send = async (message) => {
+      throw new UndeliverableError(message.channelType, message.to, 'no sms provider is configured');
+    };
+
+    await expect(sam.startChannelVerification('sms', NUMBER)).rejects.toThrow(/couldn't send a code to \+61 2 9000 1111.*no sms provider is configured/);
+    expect(await one(h.db, 'SELECT 1 FROM channel_verifications WHERE agency_id = ?', agencyId)).toBeUndefined();
+  });
+
   test('sends a 6-digit code and stores the address only after the code matches', async () => {
     const { h, agencyId, sam } = await sunrise();
 

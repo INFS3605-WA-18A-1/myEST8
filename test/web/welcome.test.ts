@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { UndeliverableError } from '../../src/ports.ts';
 import type { DemoControls } from '../../src/demo/controls.ts';
 import { visible, webWorld } from '../support/web.ts';
 import { KING_ST, OLIVIA } from '../support/world.ts';
@@ -44,6 +45,21 @@ function propertyFields(changes: Fields = {}): Fields {
 const TRADIE: Fields = { businessName: 'Sunny Plumbing', name: 'Sunny Sun', mobile: '0400 000 997', email: '', trades: ['plumbing'], startingRating: 4, placeId: 'none' };
 
 describe('the onboarding wizard', () => {
+  test('a code that cannot be delivered (no SMS provider, as on a hosted app without Twilio) is a message on the page, not a server error', async () => {
+    const w = await webWorld();
+    const sam = await w.signUp();
+    w.h.messenger.send = async (message) => {
+      throw new UndeliverableError(message.channelType, message.to, 'no sms provider is configured');
+    };
+
+    const res = await w.post('/welcome/channels', { type: 'sms', address: '+61 2 9100 0002' }, sam);
+    expect(res.status).toBe(303);
+    expect(res.headers.get('location')).toMatch(/^\/welcome\/channels\?channel=sms&error=.*#sms$/);
+    const text = visible(await page(w, res.headers.get('location')!.split('#')[0]!, sam));
+    expect(text).toContain("We couldn't send a code to +61 2 9100 0002");
+    expect(text).toContain('no sms provider is configured');
+  });
+
   test('a new Agency adds a colleague, connects and tests its channels, adds its first Property and a Tradie, and sees it all ticked', async () => {
     const w = await webWorld();
     const sam = await w.signUp();

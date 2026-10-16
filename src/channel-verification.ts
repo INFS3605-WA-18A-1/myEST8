@@ -5,7 +5,7 @@
 import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
 import type { Context } from './context.ts';
 import { all, one, run, transaction } from './db.ts';
-import type { ChannelType } from './ports.ts';
+import { UndeliverableError, type ChannelType } from './ports.ts';
 import { addMs, invalid, isEmail, iso, normalizeAddress } from './shared.ts';
 
 const CHANNEL_TYPES: ChannelType[] = ['sms', 'whatsapp', 'email'];
@@ -83,7 +83,14 @@ export function createChannelVerification({ db, clock, modules }: Context) {
           iso(addMs(clock.now(), CODE_TTL_MS)),
         );
       });
-      await modules.notifications.sendVerificationCode(agencyId, channelType, normalized, code);
+      try {
+        await modules.notifications.sendVerificationCode(agencyId, channelType, normalized, code);
+      } catch (error) {
+        if (!(error instanceof UndeliverableError)) throw error;
+        // No provider for this channel, or it refused the address: say so rather than fail, and keep no code nobody received.
+        await run(db, 'DELETE FROM channel_verifications WHERE agency_id = ? AND channel_type = ?', agencyId, channelType);
+        invalid(`We couldn't send a code to ${address}. ${error.message}`, 'address');
+      }
     },
 
     /**
