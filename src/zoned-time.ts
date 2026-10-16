@@ -64,3 +64,51 @@ export function formatVisit(at: Date | string, timeZone: string) {
     minute: '2-digit',
   }).format(new Date(at));
 }
+
+// Calendar days in the Agency's time zone. A day is written "2026-10-12": it sorts and
+// compares as text, and the arithmetic on it is plain UTC dates, so it never meets a
+// daylight-saving change. Only the instant a day starts depends on the time zone.
+
+/** The calendar day ("2026-10-12") an instant falls on in the time zone. */
+export function dayOf(at: Date | string, timeZone: string): string {
+  const w = wallClock(new Date(at), timeZone);
+  return dayKey(w.year, w.month, w.day);
+}
+
+/** The day `days` after (or, when negative, before) `day`. */
+export function addDays(day: string, days: number): string {
+  const [year, month, date] = day.split('-').map(Number);
+  const at = new Date(Date.UTC(year!, month! - 1, date! + days));
+  return dayKey(at.getUTCFullYear(), at.getUTCMonth() + 1, at.getUTCDate());
+}
+
+/** The Monday of the week (Monday to Sunday) that `day` is in. */
+export function mondayOf(day: string): string {
+  return addDays(day, -((weekdayOf(day) + 6) % 7));
+}
+
+/** 0 = Sunday ... 6 = Saturday, as in WallClock. */
+export function weekdayOf(day: string): number {
+  return new Date(`${day}T00:00:00Z`).getUTCDay();
+}
+
+/** The instant `day` starts in the time zone. */
+export function startOfDay(day: string, timeZone: string): Date {
+  const [year, month, date] = day.split('-').map(Number);
+  return zonedInstant(timeZone, year!, month!, date!);
+}
+
+/** `count` days in a row from `first`. */
+export function daysFrom(first: string, count: number): string[] {
+  return Array.from({ length: count }, (_, i) => addDays(first, i));
+}
+
+/** "2026-10-12" from a query string or form, or null when it isn't a real day. */
+export function parseDay(value: string | undefined | null): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value ?? '')) return null;
+  return addDays(value!, 0) === value ? value : null;
+}
+
+function dayKey(year: number, month: number, day: number) {
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
