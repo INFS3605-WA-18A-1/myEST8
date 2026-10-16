@@ -369,6 +369,8 @@ export function createViews({ clock, modules }: Context) {
         trades: tradie.trades,
         mobile: tradie.mobile,
         email: tradie.email,
+        businessAddress: tradie.businessAddress,
+        located: tradie.location !== null,
         myEst8Rating: await profiles.myEst8Rating(tradie.id),
         googleRating: tradie.googlePlaceId ? { rating: tradie.googleRating, reviewCount: tradie.googleReviewCount } : null,
         ratings: await profiles.ratings(tradie.id),
