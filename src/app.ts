@@ -102,6 +102,9 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
       await intake.upload(token, uploads);
     },
 
+    /** What a no-login upload link is for and whether it still takes files, or null for an unknown link. */
+    uploadLink: (token: string) => tickets.uploadLink(token),
+
     /** The Tenant's progress tracker, reached by its no-login link. */
     tracker: (token: string) => tickets.tracker(token),
 

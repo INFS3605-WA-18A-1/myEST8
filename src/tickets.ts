@@ -5,6 +5,8 @@ import { invalid, iso, newToken, normalizeAddress, notFound, TRADES, URGENCIES, 
 
 export type IssueStatus = 'gathering' | 'awaiting_photos' | 'checking' | 'maintenance_request' | 'confirmed' | 'rejected' | 'urgent';
 export const IN_INTAKE: IssueStatus[] = ['gathering', 'awaiting_photos', 'checking', 'maintenance_request'];
+/** An issue's photo link takes photos only while the issue is in these statuses (the same rule as intake.upload). */
+export const TAKES_PHOTOS: IssueStatus[] = ['awaiting_photos', 'checking', 'maintenance_request'];
 
 export type JobStatus = 'quoting' | 'awaiting_owner' | 'approved' | 'scheduled' | 'done' | 'cancelled';
 export type UrgentRepairStatus = 'reminder_sent' | 'receipt_received' | 'receipt_forwarded';
@@ -351,6 +353,26 @@ export function createTickets({ db, clock, settings, modules }: Context) {
     async issueByPhotosToken(token: string): Promise<Issue | null> {
       const row = await one<IssueRow>(db, 'SELECT * FROM issues WHERE photos_token = ?', token);
       return row ? toIssue(row) : null;
+    },
+
+    /**
+     * What a no-login upload link is, for the page that opens it: issue photos or an
+     * Urgent Repair receipt, whether it still takes files, and who and where it is
+     * from. Null for a token that is neither. Reads only; intake.upload still decides.
+     */
+    async uploadLink(token: string) {
+      const photos = await this.issueByPhotosToken(token);
+      const receipt = photos ? null : await this.urgentRepairByToken(token);
+      if (!photos && !receipt) return null;
+      const about = photos ?? (await issue(receipt!.issueId));
+      return {
+        kind: photos ? ('photos' as const) : ('receipt' as const),
+        // A receipt link stays open: a Tenant may send a second page or a better photo.
+        open: photos ? TAKES_PHOTOS.includes(photos.status) : true,
+        description: about.description,
+        agencyName: (await modules.profiles.agency(about.agencyId)).name,
+        address: (await modules.profiles.property(about.propertyId)).address,
+      };
     },
 
     async addPhoto(issueId: number, fileId: number, metadata: PhotoMetadata, reasons: string[]) {
@@ -738,29 +760,42 @@ export function createTickets({ db, clock, settings, modules }: Context) {
       );
     },
 
-    /** The Tenant's progress tracker. Built from statuses only: no prices, Quotes or ratings. */
+    /**
+     * The Tenant's progress tracker. Built from statuses only: no prices, Quotes or
+     * ratings. It names the Agency and the Property, and the booked stage names the
+     * Tradie's business and Trade, because the Tenant needs to know who is coming.
+     */
     async tracker(token: string) {
       const tracked = await this.ticketByTrackerToken(token);
       if (!tracked) notFound('Ticket');
       const events = await timeline(tracked.id);
       const first = (kind: string) => events.find((e) => e.kind === kind)?.at ?? null;
-      const visits = events.filter((e) => e.kind === 'work_order_sent' || e.kind === 'visit_moved') as { visitStart?: string }[];
       const jobs = (await jobsOf(tracked.id)).filter((j) => j.status !== 'cancelled');
       const allDone = jobs.length > 0 && jobs.every((j) => j.status === 'done');
       const doneAt = allDone ? (events.filter((e) => e.kind === 'job_done').at(-1)?.at ?? null) : null;
-      const stages: { stage: string; at: string | null; visitStart?: string }[] = [
+      // The latest visit, preferring a Job that is still going ahead.
+      type VisitEvent = { kind: string; jobId?: number; tradie?: string; visitStart?: string };
+      const visits = events.filter((e) => e.kind === 'work_order_sent' || e.kind === 'visit_moved') as VisitEvent[];
+      const visit = visits.findLast((e) => jobs.some((j) => j.id === e.jobId)) ?? visits.at(-1);
+      const tradie = visits.findLast((e) => e.kind === 'work_order_sent' && e.jobId === visit?.jobId)?.tradie;
+      const trade = jobs.find((j) => j.id === visit?.jobId)?.trade;
+      const booked = visit?.visitStart ? { visitStart: visit.visitStart, ...(tradie ? { tradie } : {}), ...(trade ? { trade } : {}) } : {};
+      const stages: { stage: string; at: string | null; visitStart?: string; tradie?: string; trade?: Trade }[] = [
         { stage: 'reported', at: tracked.reportedAt },
         { stage: 'confirmed', at: first('confirmed') },
         { stage: 'getting_quotes', at: first('quote_requests_sent') },
         { stage: 'approved', at: first('quote_approved') },
-        { stage: 'booked', at: first('work_order_sent'), ...(visits.length ? { visitStart: visits.at(-1)!.visitStart } : {}) },
+        { stage: 'booked', at: first('work_order_sent'), ...booked },
         { stage: 'done', at: doneAt },
         { stage: 'closed', at: tracked.closedAt },
       ];
+      const agency = await modules.profiles.agency(tracked.agencyId);
       return {
         description: (await issue(tracked.issueId)).description,
+        agencyName: agency.name,
+        address: (await modules.profiles.property(tracked.propertyId)).address,
         // The Agency's zone, so the Tenant sees times as the Agency does.
-        timeZone: (await modules.profiles.agency(tracked.agencyId)).timeZone,
+        timeZone: agency.timeZone,
         stages: stages.map((s) => ({ ...s, reached: s.at !== null })),
       };
     },

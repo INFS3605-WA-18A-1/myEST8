@@ -99,7 +99,7 @@ const TAILWIND_THEME = html`<style type="text/tailwindcss">
  * The document's head. The inline script marks the page as having JavaScript
  * before the first paint, so the rail can become a drawer only when it can open.
  */
-export function head(title: string, o: { css?: string[] } = {}): Html {
+export function head(title: string, o: { css?: string[]; runtime?: boolean } = {}): Html {
   return html`<meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${title} - myEST8</title>
@@ -110,8 +110,7 @@ export function head(title: string, o: { css?: string[] } = {}): Html {
     <link rel="stylesheet" href="/assets/daisyui.css" />
     <link rel="stylesheet" href="/assets/app.css" />
     ${(o.css ?? []).map((file) => html`<link rel="stylesheet" href="/assets/${file}" />`)}
-    <script src="/assets/tailwind.js"></script>
-    ${TAILWIND_THEME}
+    ${o.runtime === false ? '' : html`<script src="/assets/tailwind.js"></script>${TAILWIND_THEME}`}
     <script src="/assets/app.js" defer></script>`;
 }
 
@@ -284,6 +283,8 @@ export function publicPage(o: {
   footer?: Html | string;
   /** Extra stylesheets under /assets/ for this page, after app.css: "landing.css" or "auth.css". */
   css?: string[];
+  /** False for a page that needs no Tailwind browser runtime (the Tenant pages): it is not loaded. */
+  runtime?: boolean;
   /** Who the page is from (a Tenant's Agency): its name leads the bar and the logo goes small at the right. */
   brand?: string;
 }): Html {
@@ -293,7 +294,7 @@ export function publicPage(o: {
   return html`<!doctype html>
     <html lang="en-AU" data-theme="${THEME}">
       <head>
-        ${head(o.title, { css: o.css ?? [] })}
+        ${head(o.title, { css: o.css ?? [], runtime: o.runtime !== false })}
       </head>
       <body>
         <a href="#main" class="skip-link">Skip to content</a>

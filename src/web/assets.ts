@@ -25,6 +25,7 @@ const ASSETS: Record<string, { file: () => string; type: string }> = {
   'app.css': { file: () => fileURLToPath(new URL('./static/app.css', import.meta.url)), type: CSS },
   'landing.css': { file: () => fileURLToPath(new URL('./static/landing.css', import.meta.url)), type: CSS },
   'auth.css': { file: () => fileURLToPath(new URL('./static/auth.css', import.meta.url)), type: CSS },
+  'tenant.css': { file: () => fileURLToPath(new URL('./static/tenant.css', import.meta.url)), type: CSS },
   'app.js': { file: () => fileURLToPath(new URL('./static/app.js', import.meta.url)), type: JS },
   'leaflet.js': { file: () => leaflet('leaflet.js'), type: JS },
   'leaflet.css': { file: () => leaflet('leaflet.css'), type: CSS },

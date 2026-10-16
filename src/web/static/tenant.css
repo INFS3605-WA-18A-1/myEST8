@@ -1,0 +1,157 @@
+/*
+ * The Tenant pages (tenant-pages.ts): the upload page at /u/:token and the progress
+ * tracker at /t/:token. Loaded only there, after app.css. These pages do not load the
+ * Tailwind browser runtime, so everything they need beyond app.css is plain CSS here.
+ * Colours are app.css's tokens only (docs/design-system.md).
+ */
+
+/* The Agency's name leads the bar; the logo goes to the right edge. */
+.public-brand + .logotype {
+  margin-left: auto;
+}
+
+/* ----- Upload ----- */
+
+.tenant-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.tenant-issue-label {
+  font-size: 14px;
+  color: var(--muted);
+}
+.tenant-issue-text {
+  font-weight: 600;
+  color: var(--ink);
+}
+.drop-zone {
+  display: block;
+  cursor: pointer;
+  padding: 16px;
+  text-align: center;
+  background: var(--page);
+  border: 1px solid var(--control);
+  border-radius: 8px;
+}
+.drop-zone:has(:focus-visible) {
+  outline: 2px solid var(--action);
+  outline-offset: 2px;
+}
+.drop-zone-title {
+  display: block;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.drop-zone-pick {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 56px;
+  margin-top: 12px;
+  padding: 0 16px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--control);
+  border-radius: 6px;
+}
+.drop-zone-hint {
+  display: block;
+  margin-top: 12px;
+}
+.tenant-chosen-count {
+  font-weight: 600;
+  color: var(--ink);
+}
+.tenant-done {
+  padding: 16px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--done);
+  background: var(--done-bg);
+  border: 1px solid var(--done);
+  border-radius: 8px;
+}
+.tenant-tips {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding-left: 20px;
+  list-style: disc;
+}
+
+/* ----- Tracker ----- */
+
+.tracker-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tracker-step {
+  position: relative;
+  display: flex;
+  gap: 12px;
+  padding-bottom: 24px;
+}
+.tracker-step:last-child {
+  padding-bottom: 0;
+}
+/* The line from this step's circle down to the next, coloured once the Tenant is past it. */
+.tracker-line {
+  position: absolute;
+  top: 24px;
+  bottom: 0;
+  left: 11px;
+  width: 2px;
+  background: var(--line);
+}
+.tracker-line.is-done {
+  background: var(--done);
+}
+.tracker-circle {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  box-sizing: border-box;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  border: 2px solid var(--control);
+  border-radius: 9999px;
+  background: var(--surface);
+  color: var(--muted);
+}
+.tracker-circle.is-current {
+  border-color: var(--action);
+  color: var(--action);
+}
+.tracker-circle.is-done {
+  border-color: var(--done);
+  background: var(--done);
+  color: var(--surface);
+}
+.tracker-text {
+  min-width: 0;
+  padding-top: 2px;
+}
+.tracker-label {
+  color: var(--muted);
+}
+.tracker-label.is-reached {
+  font-weight: 600;
+  color: var(--ink);
+}
+.tracker-detail {
+  font-size: 14px;
+  color: var(--muted);
+}
