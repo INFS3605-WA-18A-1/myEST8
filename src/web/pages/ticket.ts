@@ -360,7 +360,7 @@ function ticketHeader(t: TicketView, x: Extras, share: Html): Html {
             ? html`<span class="num ${overMax ? 'text-high' : 'text-ink'}">Repair Cost <strong>${formatMoney(t.repairCostCents)}</strong>${overMax ? ", over the Max Repair Cost with the Property Owner's approval" : ''}</span>`
             : nothing}
           <span class="num">Max Repair Cost ${formatMoney(t.maxRepairCostCents)}</span>
-          ${t.checkUrgency ? html`<span class="flex items-center gap-2">${badge('Check Urgency', 'warning')} The intake agent wasn't sure.</span>` : nothing}
+          ${t.checkUrgency ? html`<span class="flex items-center gap-2">${badge('Check urgency', 'warning')} The intake agent wasn't sure.</span>` : nothing}
         </p>
       </div>
       ${nextStepLine(t, x)}
@@ -550,7 +550,7 @@ function jobCard(t: TicketView, job: JobView, x: Extras): Html {
   return card({
     id: `job-${job.jobId}`,
     title: jobLabel(t, job.jobId),
-    actions: html`${statusBadge(job.status, { job: true })} ${job.checkTrade ? badge('Check Trade', 'warning') : nothing}`,
+    actions: html`${statusBadge(job.status, { job: true })} ${job.checkTrade ? badge('Check trade', 'warning') : nothing}`,
     body: html`${jobSteps(job)}
       ${nextAction(t, job, x)}
       ${jobMore(t, job, x)}`,

@@ -110,7 +110,7 @@ function ticketTable(tickets: TicketList['tickets'], propertyIds: Map<string, nu
           propertyHref: propertyId === undefined ? undefined : `/properties/${propertyId}`,
           unread: t.unreadMessages,
         }),
-        html`<span class="flex flex-wrap gap-1">${urgencyBadge(t.urgency)}${t.checkUrgency ? badge('Check Urgency', 'warning') : ''}</span>`,
+        html`<span class="flex flex-wrap gap-1">${urgencyBadge(t.urgency)}${t.checkUrgency ? badge('Check urgency', 'warning') : ''}</span>`,
         ...(all ? [html`<span class="text-muted">${t.propertyManager}</span>`] : []),
         t.status === 'closed' ? statusBadge('closed') : jobsCell(t),
         html`<span class="text-muted whitespace-nowrap">${formatAge(t.reportedAt, now)}</span>`,

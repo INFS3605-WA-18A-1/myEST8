@@ -141,7 +141,7 @@ export function dashboardPages() {
             <div class="dashboard-board">${ticketsByStage(view.tickets, filter, now, timeZone)}</div>
             <div class="dashboard-side">
               ${nextSevenDays(view.calendar, now, timeZone)}
-              ${section({ title: 'Urgent Repairs', id: 'urgent-repairs', actions: countBadge(view.urgentRepairs.length), body: urgentRepairsTable(view.urgentRepairs, timeZone) })}
+              ${section({ title: 'Urgent Repairs', id: 'urgent-repairs', actions: countBadge(view.urgentRepairs.length), body: urgentRepairsTable(view.urgentRepairs, timeZone, now) })}
             </div>
           </div>
         `,
@@ -474,7 +474,7 @@ function ageOf(iso: string, now: Date) {
 
 // Urgent Repairs
 
-function urgentRepairsTable(repairs: UrgentRepair[], timeZone: string): Html {
+function urgentRepairsTable(repairs: UrgentRepair[], timeZone: string, now: Date): Html {
   if (!repairs.length) return emptyState('No Urgent Repairs reported.');
   // Read as a docket is: the issue, then where; the Tenant who arranges it; then where the receipt stands.
   return table(
@@ -487,7 +487,7 @@ function urgentRepairsTable(repairs: UrgentRepair[], timeZone: string): Html {
         html`${u.tenantName}`,
         badge(label, tone, { wrap: true }),
         html`${u.receipts}`,
-        html`<span class="whitespace-nowrap">${formatWhen(u.reportedAt, timeZone)}</span>`,
+        html`<time class="whitespace-nowrap" datetime="${u.reportedAt}" title="${formatWhen(u.reportedAt, timeZone)}">${ageOf(u.reportedAt, now)}</time>`,
       ];
     }),
     { caption: 'Urgent Repairs', stack: 'labelled', align: ['left', 'left', 'left', 'right', 'left'] },

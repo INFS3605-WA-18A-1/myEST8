@@ -82,9 +82,10 @@ function ownerTable(waiting: Approvals['waitingOnOwner'], now: Date): Html {
     waiting.map((w) => [
       html`<p><a class="link font-semibold num" href="/tickets/${w.ticketId}">Ticket #${w.ticketId}</a> <span class="text-muted">${humanise(w.trade)}</span></p>
         <p><a class="link text-xs" href="/properties/${w.propertyId}">${w.propertyAddress}</a></p>`,
-      html`<p>${w.ownerName}</p>${w.ownerMobile ? html`<p><a class="link text-xs" href="tel:${w.ownerMobile}">${w.ownerMobile}</a></p>` : ''}`,
-      html`<p>${formatMoney(w.quotePriceCents)}</p><p class="text-xs text-muted">${w.tradieBusinessName}</p>`,
-      html`<p class="font-semibold">${formatMoney(w.overByCents)}</p><p class="text-xs text-muted whitespace-nowrap">${formatMoney(w.repairCostCents)} of ${formatMoney(w.maxRepairCostCents)}</p>`,
+      // One element per labelled cell, so its lines stay together beside the label on phones.
+      html`<div><p>${w.ownerName}</p>${w.ownerMobile ? html`<p><a class="link text-xs" href="tel:${w.ownerMobile}">${w.ownerMobile}</a></p>` : ''}</div>`,
+      html`<div><p>${formatMoney(w.quotePriceCents)}</p><p class="text-xs text-muted">${w.tradieBusinessName}</p></div>`,
+      html`<div><p class="font-semibold">${formatMoney(w.overByCents)}</p><p class="text-xs text-muted whitespace-nowrap">${formatMoney(w.repairCostCents)} of ${formatMoney(w.maxRepairCostCents)}</p></div>`,
       html`<span class="whitespace-nowrap">${formatAge(w.requestedAt, now).replace(' ago', '')}</span>`,
       reminder(w),
     ]),

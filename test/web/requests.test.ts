@@ -19,7 +19,7 @@ describe('the checks on a Maintenance Request', () => {
       photos: [{ metadata: 'flagged', reasons: ['taken_before_tenancy'] }, { metadata: 'ok', reasons: [] }],
       imageMatch: { result: 'does_not_match', reason: 'The photo shows a fence' },
     });
-    expect(flags.map((f) => f.label)).toEqual(["Photos don't match the description", 'Check Urgency', 'Check Trade', 'Flagged photos']);
+    expect(flags.map((f) => f.label)).toEqual(["Photos don't match the description", 'Check urgency', 'Check trade', 'Flagged photos']);
     expect(flags[0]).toMatchObject({ tone: 'error', detail: 'The photo shows a fence' });
   });
 
