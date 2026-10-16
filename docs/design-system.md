@@ -59,7 +59,8 @@ The first draft was a white SaaS kit: identical rounded cards with soft grey sha
 - Shadow only on menus, dialogs, the Share sheet and the phone frame in the simulator: `0 8px 24px rgb(19 33 46 / 0.18)` (`--shadow-lift`).
 - Focus: `outline: 2px solid var(--action); outline-offset: 2px` on every interactive element. Never removed.
 - Motion: only in response to an action (open a menu, expand a `<details>`, 150 ms ease-out), and none at all under `prefers-reduced-motion: reduce`. No entrance animations.
-- Touch targets: buttons, rail links, the segmented control and the menu button are 44 px on phones (under 640 px) and on touch screens (`pointer: coarse`).
+- Touch targets: buttons, inputs, selects, rail links, the segmented control, the user menu and the menu button are 44 px on phones (under 640 px) and on touch screens (`pointer: coarse`).
+- Control height: on a desktop every control on a line (button, input, select, file field, the segmented control) is 36 px, so a field and its button line up; `sm` buttons (32 px) are for rows and lanes, not beside a field.
 
 ## Layout
 
@@ -122,7 +123,7 @@ The first frame at 1366×768 shows the Ticket pipeline across the full width, wi
 ```
 
 - Top, full width: "Tickets by stage", five lanes in workflow order: Quoting, With Property Owner, Ready to book, Booked, Done. A lane is a Paper tray (6 px radius, hairline) with its title and a muted count, holding white dockets. A Ticket sits in the lane of its least advanced open Job; within a lane, Urgency then reported time. From 1024 px lanes scroll vertically inside 22 rem; with no open Tickets the board is one empty state.
-- A board docket is read in the order the Property Manager reads it: the **issue** (Red Hat Text 600, 15 px, up to three lines), the **address** (13 px Slate, street and suburb on one line, the full address in its title), the perforation, then the **status**: the Urgency badge, the Trades and what the Ticket waits on ("No Quote Requests yet", "1 of 3 Quotes in", "2 Quotes to check", "Ready to choose" in Quoting; the visit time in Booked). A foot holds the number, the unread dot and the age. "2 Quotes to check" (unconfirmed Quotes in) and "Ready to choose" (two or more confirmed) get the 4 px Wattle stripe, as they wait on the Property Manager. The core works these out (`views.dashboard`); the page only renders them. On phones "Needs your decision" comes before the board.
+- A board docket is read in the order the Property Manager reads it: the **issue** (Red Hat Text 600, 14 px, up to three lines), the **address** (13 px Slate, street and suburb on one line, the full address in its title), the perforation, then the **status**: the Urgency badge, the Trades and what the Ticket waits on ("No Quote Requests yet", "1 of 3 Quotes in", "2 Quotes to check", "Ready to choose" in Quoting; the visit time in Booked). A foot holds the number, the unread dot and the age. "2 Quotes to check" (unconfirmed Quotes in) and "Ready to choose" (two or more confirmed) get the 4 px Wattle stripe, as they wait on the Property Manager. The core works these out (`views.dashboard`); the page only renders them. On phones "Needs your decision" comes before the board.
 - Under it, left (360 px) "Needs your decision": one list of compact rows, each with a 4 px Wattle left stripe. Order: Maintenance Requests (oldest first), then alerts, then inbox items. A Maintenance Request row: 56 px photo thumbnail (or a "No photos" tile), address, one-line description, Urgency and Trade badges plus "Check urgency", "Flagged photos" or "No photos" flags, age, and two actions: **Confirm** (POST) and **Review** (link to `/requests/:issueId`).
 - Under it, right: "Next 7 days": today and the six days after it in the Agency's time zone, bookings for both Property Managers, empty days collapsed into one muted line, linking to `/calendar`. A rolling window always shows the coming work, where a Monday-to-Sunday week is often empty.
 - Phone: one column: count strip (wrapping), Tickets as a list grouped by stage (lanes stacked, no inner scroll), Needs your decision, Next 7 days.
@@ -179,7 +180,7 @@ After sign-up the onboarding wizard (`/welcome`) also fills the page, with no ra
 └────────────────────────────┘
 ```
 
-- White surface, 1 px `--line` border, 4 px radius, 8 px padding. It sits in a Paper lane, so it reads as a slip on a tray.
+- White surface, 1 px `--line` border, 4 px radius, 12 px padding. It sits in a Paper lane, so it reads as a slip on a tray.
 - The stub along the top holds the Ticket number (Lexend 600, tabular) and the Urgency badge (Urgent and High tinted, Routine quiet).
 - A dashed hairline under the stub suggests the perforation of a docket book. Use the docket only for Tickets, on the dashboard board and as the Ticket page header (`size: 'large'`: a 26 px number, 8 px radius).
 - Body: address (14 px 600, one line), issue (14 px, up to two lines), meta row (12 px `--muted`): Trade, Job progress, age, and an unread dot in Harbour with visually hidden text "unread messages".
@@ -191,31 +192,37 @@ All of these are in `src/web/ui.ts`; pages use them instead of hand-building mar
 - **Buttons** (`button`, `linkButton`, `postButton`): Lexend 600, 6 px radius. Sizes `sm` 32 px (rows and lanes), `md` 36 px (default), `lg` 44 px (a page's main way in, as on the landing page); every size is 44 px on phones and touch screens.
   - Primary: Harbour fill, white text, `--action-hover` on hover.
   - Secondary: surface fill with a 1 px `--control` border and Night text.
-  - Ghost: text only, Paper on hover.
+  - Ghost: Harbour text, no box, Paper on hover: a quiet action ("See all Tickets", "Sign out") that still reads as one. Inside a message it takes the message's colour.
+  - daisyUI's `btn-secondary` is drawn as Secondary too, so there is one bordered look.
   - Danger: `--urgent` text on surface, red border on hover.
   - Labels are verbs that say what happens: "Confirm", "Send Quote Requests", "Send Work Order". No arrows.
 - **Badges:** 13 px Red Hat Text 500, 1 px 8 px padding, 4 px radius, tinted from the token pairs, word always present. Trade and channel badges are Night on Paper; info is Harbour on `--info-bg`.
-- **Count chips:** 22 px circles, 12 px 600. For decisions, Wattle with Night text; otherwise Paper with Night text.
+- **Count chips:** 22 px circles, Lexend 12 px 600, tabular. For decisions, Wattle with Night text; otherwise Paper with Night text.
 - **Count strip:** one row (44 px) in a section box: chip and label pairs that link into the queues.
-- **Queue rows** (`queueRow`): 4 px radius, hairline, 10 px padding. The title with the actions (Confirm, Review) at the end of its line, then the detail, then the badges with the age pushed to the end of their row. Only a row with `decision: true` gets the 4 px Wattle stripe on its left.
+- **Queue rows** (`queueRow`): 4 px radius, hairline, 12 px padding. The title with the actions (Confirm, Review) at the end of its line, then the detail, then the badges with the age pushed to the end of their row. Only a row with `decision: true` gets the 4 px Wattle stripe on its left.
 - **Lanes** (`lane`): a Paper tray of white dockets; the count is a muted number beside the title.
-- **Tables:** 13 px, 36 px rows, headers in Lexend 600 Night, hairlines between rows, horizontal scroll only inside the table's frame.
+- **Tables** (`table`): 13 px, 36 px rows, headers in Lexend 600 Night, hairlines between rows, horizontal scroll only inside the table's frame. On phones (under 640 px) a table can stack instead:
+  - `stack: true`: each row becomes a white block, the first cell leading and the rest in a wrapping row, headers hidden. For cells that explain themselves (badges, an age): the Tickets list.
+  - `stack: 'labelled'`: the same block, but each value after the first sits beside its column's header in one aligned label column (8 rem, 13 px Slate), like a facts list. For plain values (names, money, counts): Properties, Tradies. A column with an empty header (actions) stays unlabelled.
+  - On wider screens a stacked table's cells line up on their first line's baseline, so a badge sits level with the text beside it.
 - **Forms:**
   - Label above the control (14 px 600).
-  - Controls 40 px tall (44 px on phones) with a `--control` border and 4 px radius; text is 16 px on phones so iOS doesn't zoom.
-  - Hint 12 px `--muted`; field error 12 px `--urgent` with `aria-describedby`, and the control's border turns `--urgent`.
+  - Controls 36 px tall (44 px on phones and touch screens) with a `--control` border and 4 px radius; text is 16 px on phones so iOS doesn't zoom.
+  - Under the control, the error first, then the hint. Hint 12 px `--muted`; field error 12 px `--urgent`, both tied to the control with `aria-describedby`. An error also marks the control `aria-invalid` and turns its border `--urgent`, for every kind of field (text, select, textarea, file, checkbox); a file field's Choose file button stays Paper.
   - Placeholders `--muted` and italic so they never look filled in.
   - Two-column field grids at 768 px and up.
 - **Sections:** surface, 1 px `--line` border, 8 px radius, 16 px padding, no shadow, heading 16 px Lexend 600 with optional actions on the right.
-- **Alerts** (`alert`, `flashMessage`): 6 px radius, the tone's pair (info is Night on `--info-bg` with a Harbour icon), an icon and the tone's word for screen readers. Links inside take the alert's text colour, underlined.
+- **Alerts** (`alert`, `flashMessage`): 8 px radius, the tone's pair (info is Night on `--info-bg` with a Harbour icon), an icon and the tone's word for screen readers. Links inside take the alert's text colour, underlined.
 - **Steps** (sequences only: the Ticket's Job progress, the Tenant tracker, the setup guide): 24 px circles. Done is `--done` with a tick (and a done line between done steps); current is Harbour with its number; to come is a white circle on a hairline with a muted number.
-- **Tabs** (`tabs`): Lexend, muted until current; the current one is Night 600 with a Harbour underline and `aria-current`. **Side tabs** (`sideTabs`, for Settings' sections): a column of 40 px links, the current one a white tab with a hairline and the Wattle bar; a sideways-scrolling row under 768 px.
+- **Tabs** (`tabs`): Lexend, muted until current; the current one is Night 600 with a Harbour underline and `aria-current`. **Side tabs** (`sideTabs`, for Settings' sections): a column of 40 px Lexend 14 px links, the current one a white tab with a hairline and the Wattle bar; a sideways-scrolling row under 768 px.
 - **Timeline:** Harbour dots on a `--line` rule, the time muted above each event.
 - **Chat** (simulator and message logs):
   - myEST8's messages on the left on Paper; the person's on the right on Harbour with white text. 8 px radius.
   - Links in a bubble take the bubble's text colour, underlined, so they read on Harbour and on every tone (the global link colour would be Harbour on Harbour); their focus ring is the text colour too.
   - The channel is a small badge, the time is muted, and text keeps its line breaks.
-- **Empty states:** one sentence saying what will appear and the action to take, with no illustration.
+- **Empty states** (`emptyState(text, action?)`): one sentence saying what will appear and the action to take, with no illustration. Give it the action whenever there is one. Standing alone on the page it is a white section (hairline, 8 px radius) with Night text; inside a section, a lane or a table cell it is just the muted sentence and the action, with no box in a box.
+- **Disclosures** (`<details>`): the summary gets a pointer, a Slate marker and the focus ring. A page may style its own summary (a menu, a button); these rules have zero specificity so it wins.
+- **Segmented control** (`segmented`): 36 px on desktop like a button, 44 px on touch; it keeps its own width in a column.
 
 ### Icons and logo
 
