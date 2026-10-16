@@ -103,7 +103,7 @@ function request(): Html {
   </div>`;
 }
 
-/** The secondary way in under a hairline, at the foot of a form: a sentence, then a full-width button. */
+/** The secondary way in under a hairline, at the foot of a form: a sentence, then a full-width button as tall as the form's own. */
 export function otherWay(o: { text: string; button: Html }): Html {
   return html`<div class="au-other">
     <p class="au-other-text">${o.text}</p>

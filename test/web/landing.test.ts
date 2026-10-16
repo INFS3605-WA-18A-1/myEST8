@@ -44,6 +44,20 @@ describe('the landing page', () => {
     expect(text).not.toContain('demo1234');
   });
 
+  test('the hero shows a Tenant’s text becoming a Maintenance Request, then a Ticket, with nothing in it to tab to', async () => {
+    const w = await webWorld();
+
+    const page = await (await w.get('/')).text();
+
+    const hero = page.match(/<section class="lp-hero"[\s\S]*?<\/section>/)?.[0] ?? '';
+    const scene = hero.match(/<figure[\s\S]*?<\/figure>/)?.[0] ?? '';
+    const text = visible(scene).replace(/\s+/g, ' ');
+    const order = ['tap under the kitchen sink', 'Maintenance Request', 'Waiting for you', 'Confirmed', '#12'].map((words) => text.indexOf(words));
+    expect(order.every((at) => at >= 0), text).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(scene).not.toMatch(/<(a|button|input|select|textarea)[\s>]/);
+  });
+
   test('plays one repair through myEST8, stage by stage, as an ordered list', async () => {
     const w = await webWorld();
 

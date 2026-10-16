@@ -10,6 +10,11 @@
   margin-left: auto;
 }
 
+/* Who to reply to, at the foot: left-aligned under the page like everything above it. */
+.public-footer {
+  text-align: left;
+}
+
 /* ----- Upload ----- */
 
 .tenant-form {
@@ -131,9 +136,11 @@
   background: var(--surface);
   color: var(--muted);
 }
+/* Where the repair is now: Harbour, filled, with its number. */
 .tracker-circle.is-current {
   border-color: var(--action);
-  color: var(--action);
+  background: var(--action);
+  color: var(--surface);
 }
 .tracker-circle.is-done {
   border-color: var(--done);

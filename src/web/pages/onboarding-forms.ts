@@ -127,7 +127,7 @@ export function phoneChannelForm(o: {
   className: string;
 }): Html {
   const value = o.pending?.address || o.current || o.suggestion || '';
-  return html`<form method="post" action="${o.postTo}" class="${o.className}">
+  return html`<form method="post" action="${o.postTo}" class="control-row ${o.className}">
       <input type="hidden" name="type" value="${o.channel.type}" />
       ${field({
         label: o.channel.addressLabel,
@@ -138,7 +138,7 @@ export function phoneChannelForm(o: {
         value,
         placeholder: o.channel.placeholder,
       })}
-      ${button(o.current || o.pending ? 'Send a new code' : 'Send code', { size: 'sm', variant: o.current ? 'secondary' : 'primary' })}
+      ${button(o.current || o.pending ? 'Send a new code' : 'Send code', { variant: o.current ? 'secondary' : 'primary' })}
     </form>
     ${o.pending
       ? html`<form method="post" action="${o.confirmTo}" class="${o.className}">
@@ -153,7 +153,7 @@ export function phoneChannelForm(o: {
             placeholder: '123456',
             hint: `Sent to ${o.pending.address}. It expires in 10 minutes.`,
           })}
-          ${button(`Verify ${o.channel.name}`, { size: 'sm' })}
+          ${button(`Verify ${o.channel.name}`)}
         </form>`
       : ''}`;
 }
@@ -165,7 +165,7 @@ export function inboundEmailField(address: string): Html {
       <label class="field-label" for="email-address">Inbound email address</label>
       <input id="email-address" class="input w-full" type="email" readonly value="${address}" />
     </div>
-    <button type="button" class="btn btn-secondary btn-sm" data-copy-for="email-address">Copy</button>
+    <button type="button" class="btn btn-outline" data-copy-for="email-address">Copy</button>
   </div>`;
 }
 
@@ -274,9 +274,9 @@ export function choiceGroup(o: {
 
 /** The Google listing search that comes before the Tradie form. Submits `google` to `action` by GET. */
 export function googleSearchForm(action: string, query: string, problem: string | null, found: number): Html {
-  return html`<form method="get" action="${action}" class="grid items-end gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+  return html`<form method="get" action="${action}" class="control-row grid items-end gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
       ${field({ label: 'First, find their Google listing', name: 'google', id: 'google-search', value: query, placeholder: 'Business name and suburb' })}
-      ${button('Search Google', { variant: 'secondary', size: 'sm' })}
+      ${button('Search Google', { variant: 'secondary' })}
     </form>
     ${problem ? html`<p class="mt-2 text-sm text-high">${problem}</p>` : ''}
     ${query && !problem && !found ? html`<p class="mt-2 text-sm">No Google listings found for "${query}".</p>` : ''}`;
@@ -374,7 +374,7 @@ export async function tradiesTable(actions: PropertyManagerActions, tradies: Per
       html`${t.googlePlaceId ? `${t.googleRating?.toFixed(1) ?? '—'} (${t.googleReviewCount ?? 0} reviews)` : 'Not on Google'}`,
     ];
   });
-  return table(['Business', 'Name', 'Trades', 'myEST8 rating', 'Google rating'], rows, { stack: true, caption: 'Tradies' });
+  return table(['Business', 'Name', 'Trades', 'myEST8 rating', 'Google rating'], rows, { stack: 'labelled', caption: 'Tradies' });
 }
 
 // Importing from a spreadsheet
