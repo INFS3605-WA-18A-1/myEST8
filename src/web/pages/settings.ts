@@ -20,7 +20,7 @@ const TABS = [
 ] as const;
 type Tab = (typeof TABS)[number][0];
 
-const CHANNEL_NAME: Record<AgencyChannel['type'], string> = { sms: 'SMS', whatsapp: 'Chat', email: 'Email' };
+const CHANNEL_NAME: Record<AgencyChannel['type'], string> = { sms: 'SMS', whatsapp: 'WhatsApp', email: 'Email' };
 
 /**
  * The Agency's Properties and the people around them: where each list is (if it has a

@@ -404,7 +404,7 @@ describe('the message log', () => {
     expect(text).not.toMatch(/https?:\/\/\S+\/u\//);
   });
 
-  test('shows a recorded delivery failure on a message from a retired channel', async () => {
+  test('shows when WhatsApp could not deliver a message', async () => {
     const w = await webWorld();
     w.h.classifier.when('The kitchen tap is dripping', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });
     await w.h.receive(TOM, 'The kitchen tap is dripping', { channel: 'whatsapp' });
@@ -425,8 +425,6 @@ describe('the message log', () => {
       return { text: visibleText(html) };
     })();
 
-    expect(text).toContain('by chat');
-    expect(text).not.toContain('by WhatsApp');
     expect(text).toContain("WhatsApp couldn't deliver this message (131047): Re-engagement message");
   });
 });
