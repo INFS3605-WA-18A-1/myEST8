@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { one } from '../src/db.ts';
-import { UndeliverableError } from '../src/ports.ts';
+import { ProviderRefusedError, UndeliverableError } from '../src/ports.ts';
 import { createHarness, MINUTE, AGENCY_NUMBER } from './support/harness.ts';
 import { TOM, world } from './support/world.ts';
 
@@ -29,8 +29,33 @@ describe('channel verification', () => {
       throw new UndeliverableError(message.channelType, message.to, 'no sms provider is configured');
     };
 
-    await expect(sam.startChannelVerification('sms', NUMBER)).rejects.toThrow(/couldn't send a code to \+61 2 9000 1111.*no sms provider is configured/);
+    await expect(sam.startChannelVerification('sms', NUMBER)).rejects.toThrow("We couldn't send a code to +61 2 9000 1111 — that number couldn't be used. Check the number and try again.");
     expect(await one(h.db, 'SELECT 1 FROM channel_verifications WHERE agency_id = ?', agencyId)).toBeUndefined();
+  });
+
+  test('a provider refusal is explained in plain English, and the stored code is deleted', async () => {
+    const { h, agencyId, sam } = await sunrise();
+    h.messenger.send = async (message) => {
+      throw new UndeliverableError(message.channelType, message.to, "Twilio 21211 The 'To' number is not valid", "that doesn't look like a valid phone number");
+    };
+    await expect(sam.startChannelVerification('sms', NUMBER)).rejects.toThrow(
+      "We couldn't send a code to +61 2 9000 1111 — that doesn't look like a valid phone number. Check the number and try again.",
+    );
+    expect(await one(h.db, 'SELECT 1 FROM channel_verifications WHERE agency_id = ?', agencyId)).toBeUndefined();
+
+    h.messenger.send = async () => {
+      throw new ProviderRefusedError('Meta returned 400: 131047 Re-engagement message', 'WhatsApp only allows a free-text message to a number that has messaged us in the last 24 hours');
+    };
+    await expect(sam.startChannelVerification('whatsapp', NUMBER)).rejects.toThrow(/last 24 hours\. Check the number/);
+    expect(await one(h.db, 'SELECT 1 FROM channel_verifications WHERE agency_id = ?', agencyId)).toBeUndefined();
+  });
+
+  test('an unexpected error is not swallowed', async () => {
+    const { h, sam } = await sunrise();
+    h.messenger.send = async () => {
+      throw new TypeError('boom');
+    };
+    await expect(sam.startChannelVerification('sms', NUMBER)).rejects.toThrow('boom');
   });
 
   test('allows one code per channel per minute, counted on the injected clock', async () => {

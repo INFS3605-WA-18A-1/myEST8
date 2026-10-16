@@ -6,12 +6,23 @@
 // Errors come back as { error: { code, message, error_data: { details } } }.
 
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { UndeliverableError, type InboundMessage, type Messenger, type OutboundMessage } from '../ports.ts';
+import { ProviderRefusedError, UndeliverableError, type InboundMessage, type Messenger, type OutboundMessage } from '../ports.ts';
 
 const BASE = 'https://graph.facebook.com';
 const TIMEOUT_MS = 15_000;
 /** 131026 can't deliver to this number, 131030 recipient not in the allowed list. */
 const UNDELIVERABLE_CODES: ReadonlySet<number> = new Set([131026, 131030]);
+
+/** What a person is told for each Cloud API error code we recognise. */
+const USER_REASONS: ReadonlyMap<number, string> = new Map([
+  [131026, "WhatsApp can't deliver to that number (it may not be on WhatsApp)"],
+  [131030, "that number isn't on this server's WhatsApp allowed list yet"],
+  [131047, "WhatsApp only allows a free-text message to a number that has messaged us in the last 24 hours"],
+  [131021, "that's the number WhatsApp sends from"],
+  [131049, 'WhatsApp declined to deliver this message'],
+  [131056, 'WhatsApp is rate limiting messages to that number'],
+  [130429, 'WhatsApp is rate limiting this server'],
+]);
 
 interface GraphOptions {
   accessToken: string;
@@ -36,8 +47,10 @@ export function createMetaWhatsApp(o: { phoneNumberId: string } & GraphOptions):
     const error = parseError(text);
     const detail = error ? `${error.code ?? 'no code'} ${error.message}`.trim() : text.slice(0, 200);
     if (isUndeliverable(response.status, error)) {
-      throw new UndeliverableError(message.channelType, message.to, `Meta ${detail}`);
+      throw new UndeliverableError(message.channelType, message.to, `Meta ${detail}`, error?.code === undefined ? undefined : USER_REASONS.get(error.code) ?? "WhatsApp doesn't accept that number");
     }
+    const friendly = error?.code === undefined ? undefined : USER_REASONS.get(error.code);
+    if (friendly) throw new ProviderRefusedError(`Meta returned ${response.status}: ${detail}`, friendly);
     throw new Error(`Meta returned ${response.status}: ${detail}`);
   }
 

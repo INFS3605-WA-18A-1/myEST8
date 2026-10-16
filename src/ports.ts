@@ -69,11 +69,30 @@ export class UndeliverableError extends Error {
   readonly permanent = true;
   readonly channelType: ChannelType;
   readonly to: string;
-  constructor(channelType: ChannelType, to: string, reason: string) {
+  /** A short phrase a person can read ("that doesn't look like a valid phone number"); `message` stays technical for logs. */
+  readonly userReason: string;
+  constructor(channelType: ChannelType, to: string, reason: string, userReason?: string) {
     super(`Undeliverable ${channelType} message to ${to}: ${reason}`);
     this.name = 'UndeliverableError';
     this.channelType = channelType;
     this.to = to;
+    this.userReason =
+      userReason ?? (channelType === 'email' ? "that email address couldn't be used" : "that number couldn't be used");
+  }
+}
+
+/**
+ * A provider's known, explainable refusal that is not about the recipient being
+ * wrong forever (a trial account, a rate limit, WhatsApp's 24-hour window). Unlike
+ * UndeliverableError it is not permanent: the worker still retries it. `userReason`
+ * is a short phrase for the person who triggered the send.
+ */
+export class ProviderRefusedError extends Error {
+  readonly userReason: string;
+  constructor(message: string, userReason: string) {
+    super(message);
+    this.name = 'ProviderRefusedError';
+    this.userReason = userReason;
   }
 }
 

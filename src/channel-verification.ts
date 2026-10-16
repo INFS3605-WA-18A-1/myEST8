@@ -5,7 +5,7 @@
 import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
 import type { Context } from './context.ts';
 import { all, one, run, transaction } from './db.ts';
-import { UndeliverableError, type ChannelType } from './ports.ts';
+import { ProviderRefusedError, UndeliverableError, type ChannelType } from './ports.ts';
 import { addMs, invalid, isEmail, iso, normalizeAddress } from './shared.ts';
 
 const CHANNEL_TYPES: ChannelType[] = ['sms', 'whatsapp', 'email'];
@@ -101,10 +101,13 @@ export function createChannelVerification({ db, clock, modules }: Context) {
       try {
         await modules.notifications.sendVerificationCode(agencyId, channelType, normalized, code);
       } catch (error) {
-        if (!(error instanceof UndeliverableError)) throw error;
-        // No provider for this channel, or it refused the address: say so rather than fail, and keep no code nobody received.
+        // Only failures a provider adapter classified (the recipient refused, or a known
+        // provider refusal) become a form message. Anything else is a bug or an outage and surfaces.
+        if (!(error instanceof UndeliverableError || error instanceof ProviderRefusedError)) throw error;
+        // Keep no code nobody received.
         await run(db, 'DELETE FROM channel_verifications WHERE agency_id = ? AND channel_type = ?', agencyId, channelType);
-        invalid(`We couldn't send a code to ${address}. ${error.message}`, 'address');
+        const reason = error.userReason.replace(/\.$/, '');
+        invalid(`We couldn't send a code to ${address.trim()} — ${reason}. Check the ${channelType === 'email' ? 'address' : 'number'} and try again.`, 'address');
       }
     },
 

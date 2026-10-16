@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { describe, expect, test } from 'vitest';
 import { createMetaWhatsApp, metaFetchMedia, metaStatusFailures, metaToInbound, verifyMetaSignature } from '../../src/adapters/meta-whatsapp.ts';
-import { UndeliverableError, type OutboundMessage } from '../../src/ports.ts';
+import { ProviderRefusedError, UndeliverableError, type OutboundMessage } from '../../src/ports.ts';
 import { json, stubFetch } from './stub-fetch.ts';
 
 const message = (overrides: Partial<OutboundMessage> = {}): OutboundMessage => ({
@@ -65,6 +65,19 @@ describe('Meta WhatsApp outbound', () => {
   test('code 100 about the recipient parameter is undeliverable', async () => {
     const { messenger } = meta(() => json({ error: { code: 100, message: 'Invalid parameter', error_data: { details: "Recipient phone number not valid" } } }, 400));
     await expect(messenger.send(message())).rejects.toBeInstanceOf(UndeliverableError);
+  });
+
+  test('a recipient refusal carries a plain reason for the person', async () => {
+    const { messenger } = meta(() => json({ error: { code: 131026, message: 'Message undeliverable' } }, 400));
+    const error = await messenger.send(message()).catch((e: unknown) => e);
+    expect((error as UndeliverableError).userReason).toContain('may not be on WhatsApp');
+  });
+
+  test('the 24-hour window refusal is explained, and is retried like any other failure', async () => {
+    const { messenger } = meta(() => json({ error: { code: 131047, message: 'Re-engagement message' } }, 400));
+    const error = await messenger.send(message()).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ProviderRefusedError);
+    expect((error as ProviderRefusedError).userReason).toContain('24 hours');
   });
 
   test('other failures are plain errors so the worker retries', async () => {

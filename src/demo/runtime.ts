@@ -262,7 +262,7 @@ export async function createDemo<Seeded extends boolean = true>(
       const provider = providers.channels[message.channelType];
       if (provider && reallySends(message.to)) await provider.send({ ...message, cc: message.cc.filter(reallySends) });
       // Hosted, nothing records into the phone simulator: no provider means it can't be sent.
-      else if (hosted) throw new UndeliverableError(message.channelType, message.to, `no ${message.channelType} provider is configured`);
+      else if (hosted) throw new UndeliverableError(message.channelType, message.to, `no ${message.channelType} provider is configured`, `${message.channelType === 'sms' ? 'SMS' : message.channelType === 'whatsapp' ? 'WhatsApp' : 'email'} isn't set up on this server yet`);
       if (!hosted) await messenger.send(message);
     },
   };

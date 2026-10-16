@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { createTwilioMessenger } from '../../src/adapters/twilio-messenger.ts';
 import { createFileLinks } from '../../src/file-links.ts';
-import { UndeliverableError, type OutboundMessage } from '../../src/ports.ts';
+import { ProviderRefusedError, UndeliverableError, type OutboundMessage } from '../../src/ports.ts';
 import { FakeClock } from '../support/fakes.ts';
 import { json, stubFetch } from './stub-fetch.ts';
 
@@ -128,6 +128,20 @@ describe('Twilio outbound messages', () => {
     expect(error).toBeInstanceOf(UndeliverableError);
     expect((error as UndeliverableError).permanent).toBe(true);
     expect((error as Error).message).toBe(`Undeliverable sms message to +61400000001: Twilio ${code} ${text}`);
+  });
+
+  test('a recognised refusal that is not about the recipient carries a plain reason and is still retried', async () => {
+    const { messenger } = twilio(() => json({ code: 21608, message: 'The number is unverified. Trial accounts cannot send messages to unverified numbers', status: 400 }, 400));
+    const error = await messenger.send(message()).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ProviderRefusedError);
+    expect((error as ProviderRefusedError).userReason).toContain('trial');
+    expect((error as { permanent?: boolean }).permanent).toBeUndefined();
+  });
+
+  test('an undeliverable recipient carries a plain reason for the person', async () => {
+    const { messenger } = twilio(() => json({ code: 21211, message: "The 'To' number is not valid", status: 400 }, 400));
+    const error = await messenger.send(message()).catch((e: unknown) => e);
+    expect((error as UndeliverableError).userReason).toBe("that doesn't look like a valid phone number");
   });
 
   test.each([

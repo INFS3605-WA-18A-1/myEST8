@@ -57,7 +57,8 @@ describe('the onboarding wizard', () => {
     expect(res.headers.get('location')).toMatch(/^\/welcome\/channels\?channel=sms&error=.*#sms$/);
     const text = visible(await page(w, res.headers.get('location')!.split('#')[0]!, sam));
     expect(text).toContain("We couldn't send a code to +61 2 9100 0002");
-    expect(text).toContain('no sms provider is configured');
+    expect(text).toContain('Check the number and try again');
+    expect(text).not.toContain('Undeliverable');
   });
 
   test('a new Agency adds a colleague, connects and tests its channels, adds its first Property and a Tradie, and sees it all ticked', async () => {
