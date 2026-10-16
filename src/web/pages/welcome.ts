@@ -210,7 +210,7 @@ export function welcomePages(o: { demo: boolean; connectors?: ChannelConnectors 
   return pages;
 }
 
-// The frame around every step
+// The frame around every step: the wizard fills the page with no rail, and the rest of the app comes after setup.
 
 async function wizardPage(
   c: WizardContext,
@@ -231,7 +231,7 @@ async function wizardPage(
     title: o.title,
     subtitle: html`<span class="flex flex-wrap gap-x-4"><span>Step ${index + 1} of ${STEPS.length}</span><span>Setting up ${actions.agency().name}</span></span>`,
     pm,
-    active: 'settings',
+    fullPage: true,
     shell: await shellInfo(c),
     flash: o.flash ?? null,
     body: html`<div class="mx-auto flex w-full max-w-[720px] flex-col gap-4">
@@ -243,7 +243,7 @@ async function wizardPage(
       </nav>
       ${o.body}
       <div class="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
-        ${back ? linkButton('Back', back.path, { variant: 'secondary' }) : html`<a class="link text-sm" href="/">Set up later</a>`}
+        ${back ? linkButton('Back', back.path, { variant: 'secondary' }) : linkButton('Set up later', '/', { variant: 'ghost' })}
         <div class="flex flex-wrap items-center gap-2">${onward}</div>
       </div>
     </div>`,
