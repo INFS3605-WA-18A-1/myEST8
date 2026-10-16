@@ -200,11 +200,14 @@ describe('the Agency inbox', () => {
 
     const inbox = await page(w, '/', cookie);
     expect(inbox).toContain('Unknown sender');
-    // The brief row in Needs your decision points at the item and its actions below.
-    expect(inbox).toMatch(/href="#inbox-(\d+)"[\s\S]*id="inbox-\1"/);
     expect(inbox).toContain(STRANGER);
-    expect(inbox).toContain('Hi, this is Tom on my work phone');
-    const itemId = match(inbox, /action="\/inbox\/(\d+)\/link"/);
+    // The message shows once, in Needs your decision, with its actions on it.
+    expect(inbox.match(/Hi, this is Tom on my work phone/g)).toHaveLength(1);
+    const decisions = inbox.slice(inbox.indexOf('id="decisions"'), inbox.indexOf('</section>', inbox.indexOf('id="decisions"')));
+    const itemId = match(decisions, /id="inbox-(\d+)"/);
+    expect(decisions).toContain(`action="/inbox/${itemId}/link"`);
+    expect(decisions).toContain(`action="/inbox/${itemId}/dismiss"`);
+    expect(inbox).not.toContain('href="#inbox-');
 
     const unchosen = await w.post(`/inbox/${itemId}/link`, { personId: '' }, cookie);
     expect(await follow(w, unchosen, cookie)).toContain('Choose who sent this message');
@@ -217,7 +220,8 @@ describe('the Agency inbox', () => {
 
     const dismissed = await follow(w, await w.post(`/inbox/${itemId}/dismiss`, {}, cookie), cookie);
     expect(dismissed).toContain('Message dismissed');
-    expect(dismissed).toContain('The inbox is empty.');
+    expect(dismissed).not.toContain(`id="inbox-${itemId}"`);
+    expect(dismissed).not.toContain('Hi, this is Tom on my work phone');
   });
 });
 

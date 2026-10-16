@@ -3189,6 +3189,74 @@
     }
 
     /* Dashboard page */
+    /* One column on phones (decisions, board, next 7 days, Urgent Repairs). From 1024px
+       the board runs the full width; under it the decisions (360px) beside a column
+       holding the next 7 days and Urgent Repairs. */
+    .dashboard-desk {
+      display: grid;
+      gap: 16px;
+    }
+    .dashboard-desk > *,
+    .dashboard-side {
+      min-width: 0;
+    }
+    .dashboard-side {
+      display: grid;
+      gap: 16px;
+      align-content: start;
+    }
+    @media (min-width: 64rem) {
+      .dashboard-desk {
+        grid-template-columns: 360px minmax(0, 1fr);
+        align-items: start;
+      }
+      .dashboard-board {
+        grid-column: 1 / -1;
+        grid-row: 1;
+      }
+      .dashboard-decisions {
+        grid-column: 1;
+        grid-row: 2;
+      }
+      .dashboard-side {
+        grid-column: 2;
+        grid-row: 2;
+      }
+      /* The board keeps to the top of the first screen so the decisions start inside it:
+         lanes scroll inside 16rem and a docket's issue stops at two lines. */
+      .dashboard-board .lane-body {
+        max-height: 16rem;
+      }
+      /* The docket clamps with Tailwind's line-clamp-3 class, which outranks this layer. */
+      .dashboard-board .docket-issue {
+        -webkit-line-clamp: 2 !important;
+        line-clamp: 2 !important;
+      }
+    }
+    /* Needs your decision: Maintenance Requests, alerts, the inbox, each a titled group. */
+    .decision-groups {
+      display: grid;
+      gap: 16px;
+    }
+    .decision-group {
+      display: grid;
+      gap: 8px;
+      min-width: 0;
+      scroll-margin-top: 16px;
+    }
+    .decision-group-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .decision-group-title {
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 14px;
+      font-weight: 600;
+    }
     /* Decision rows in the 360px column: the issue (two lines at most), the street, the
        badges, then the actions on their own line so they never crush the text. */
     .dashboard-decisions .queue-head {

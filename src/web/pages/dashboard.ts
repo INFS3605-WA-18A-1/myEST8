@@ -1,7 +1,8 @@
-// The Property Manager's dispatch board. On phones what needs a decision comes first,
-// then Tickets by stage, then the next 7 days; from 1024px the board runs the full
-// width with the decisions beside the next 7 days under it. Then the inbox with its
-// actions and Urgent Repairs. Also the actions on each, and /files/:id for photos.
+// The Property Manager's dispatch board. On phones what needs a decision comes first
+// (Maintenance Requests, alerts and the inbox, each with its actions), then Tickets by
+// stage, the next 7 days and Urgent Repairs; from 1024px the board runs the full width
+// with the decisions beside the next 7 days and Urgent Repairs under it. Also the
+// actions on each, and /files/:id for photos.
 // Controls repeated per item get the item's id in their element id ("reason-12"),
 // so every label on the page points at its own control.
 
@@ -131,17 +132,18 @@ export function dashboardPages() {
           ${countStrip([
             { label: 'Maintenance Requests to review', count: view.maintenanceRequests.length, href: '#requests', decision: true },
             { label: 'Open Tickets', count: view.tickets.length, href: '#tickets' },
-            { label: 'Alerts', count: view.alerts.length, href: '#alerts', decision: true },
-            { label: 'In the inbox', count: view.inbox.length, href: '#inbox', decision: true },
+            { label: 'Alerts', count: view.alerts.length, href: view.alerts.length ? '#alerts' : '#decisions', decision: true },
+            { label: 'In the inbox', count: view.inbox.length, href: view.inbox.length ? '#inbox' : '#decisions', decision: true },
             { label: 'Urgent Repairs needing a receipt', count: needReceipt, href: '#urgent-repairs' },
           ])}
-          <div class="dashboard-desk grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)] lg:items-start">
-            <div class="dashboard-decisions min-w-0 lg:col-start-1 lg:row-start-2">${decisions(view, q, timeZone, now, shareUrl(c, '/?filter=all#requests'))}</div>
-            <div class="min-w-0 lg:col-span-2 lg:row-start-1">${ticketsByStage(view.tickets, filter, now, timeZone)}</div>
-            <div class="min-w-0 lg:col-start-2 lg:row-start-2">${nextSevenDays(view.calendar, now, timeZone)}</div>
+          <div class="dashboard-desk">
+            <div class="dashboard-decisions">${decisions(view, people, q, timeZone, now, shareUrl(c, '/?filter=all#requests'))}</div>
+            <div class="dashboard-board">${ticketsByStage(view.tickets, filter, now, timeZone)}</div>
+            <div class="dashboard-side">
+              ${nextSevenDays(view.calendar, now, timeZone)}
+              ${section({ title: 'Urgent Repairs', id: 'urgent-repairs', actions: countBadge(view.urgentRepairs.length), body: urgentRepairsTable(view.urgentRepairs, timeZone) })}
+            </div>
           </div>
-          ${section({ title: 'Inbox', id: 'inbox', actions: countBadge(view.inbox.length), body: inboxList(view.inbox, people, timeZone, q) })}
-          ${section({ title: 'Urgent Repairs', id: 'urgent-repairs', actions: countBadge(view.urgentRepairs.length), body: urgentRepairsTable(view.urgentRepairs, timeZone) })}
         `,
       }),
     );
@@ -245,18 +247,19 @@ function countBadge(count: number) {
 
 /**
  * Maintenance Requests (oldest first, as the core orders them), then alerts, then the
- * inbox in brief: the decisions, each with its actions. `shareLink` is the Agency-wide
- * list of Maintenance Requests, which a Share button passes on when there are any.
+ * inbox: the decisions, each once and with its actions on it. Alerts and the inbox show
+ * only when they hold something. `shareLink` is the Agency-wide list of Maintenance
+ * Requests, which a Share button passes on when there are any.
  */
-function decisions(view: Dashboard, q: string, timeZone: string, now: Date, shareLink: string): Html {
+function decisions(view: Dashboard, people: Person[], q: string, timeZone: string, now: Date, shareLink: string): Html {
   const requests = view.maintenanceRequests;
   return section({
     title: 'Needs your decision',
     id: 'decisions',
-    body: html`<div class="grid gap-4">
-      <div id="requests" class="grid gap-2">
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <h3 class="text-sm font-semibold">Maintenance Requests to review</h3>
+    body: html`<div class="decision-groups">
+      <div id="requests" class="decision-group">
+        <div class="decision-group-head">
+          <h3 class="decision-group-title">Maintenance Requests to review</h3>
           ${requests.length
             ? shareButton({
                 title: 'Maintenance Requests to review',
@@ -268,14 +271,16 @@ function decisions(view: Dashboard, q: string, timeZone: string, now: Date, shar
         </div>
         ${requests.length ? requests.map((r) => requestRow(r, q, now)) : emptyState('No Maintenance Requests waiting for you.')}
       </div>
-      <div id="alerts" class="grid gap-2">
-        <h3 class="text-sm font-semibold">Alerts</h3>
-        ${view.alerts.length ? view.alerts.map((a) => alertRow(a, timeZone)) : emptyState('No alerts.')}
-      </div>
+      ${view.alerts.length
+        ? html`<div id="alerts" class="decision-group">
+            <h3 class="decision-group-title">Alerts</h3>
+            ${view.alerts.map((a) => alertRow(a, timeZone))}
+          </div>`
+        : ''}
       ${view.inbox.length
-        ? html`<div class="grid gap-2">
-            <h3 class="text-sm font-semibold">In the inbox</h3>
-            ${view.inbox.map((item) => inboxRow(item, timeZone))}
+        ? html`<div id="inbox" class="decision-group">
+            <h3 class="decision-group-title">In the inbox</h3>
+            ${view.inbox.map((item) => inboxItem(item, people, timeZone, q))}
           </div>`
         : ''}
     </div>`,
@@ -333,19 +338,6 @@ function alertRow(alert: Alert, timeZone: string): Html {
         actions: linkButton('Rate the Tradie', `${ticket}#job-${alert.jobId}`, { size: 'sm' }),
       });
   }
-}
-
-/** An inbox item in brief: who sent it and what it says, linking to the item and its actions further down. */
-function inboxRow(item: InboxItem, timeZone: string): Html {
-  const [reason, tone] = INBOX_REASON[item.reason];
-  return queueRow({
-    href: `#inbox-${item.itemId}`,
-    title: item.text,
-    detail: item.personName ?? item.from,
-    badges: [badge(reason, tone)],
-    meta: formatWhen(item.receivedAt, timeZone),
-    decision: true,
-  });
 }
 
 // Tickets by stage
@@ -484,29 +476,25 @@ function ageOf(iso: string, now: Date) {
 
 function urgentRepairsTable(repairs: UrgentRepair[], timeZone: string): Html {
   if (!repairs.length) return emptyState('No Urgent Repairs reported.');
+  // Read as a docket is: the issue, then where; the Tenant who arranges it; then where the receipt stands.
   return table(
-    ['Property', 'Tenant', 'Issue', 'Status', 'Receipts', 'Reported'],
+    ['Issue', 'Tenant', 'Status', 'Receipts', 'Reported'],
     repairs.map((u) => {
       const [label, tone] = URGENT_REPAIR_STATUS[u.status];
       return [
-        html`${u.propertyAddress}`,
+        html`<p class="font-semibold">${u.description}</p>
+          <p class="text-xs text-muted">${u.propertyAddress}</p>`,
         html`${u.tenantName}`,
-        html`${u.description}`,
-        badge(label, tone),
+        badge(label, tone, { wrap: true }),
         html`${u.receipts}`,
-        html`${formatWhen(u.reportedAt, timeZone)}`,
+        html`<span class="whitespace-nowrap">${formatWhen(u.reportedAt, timeZone)}</span>`,
       ];
     }),
-    { caption: 'Urgent Repairs', stack: true },
+    { caption: 'Urgent Repairs', stack: true, align: ['left', 'left', 'left', 'right', 'left'] },
   );
 }
 
 // Inbox
-
-function inboxList(items: InboxItem[], people: Person[], timeZone: string, q: string): Html {
-  if (!items.length) return emptyState('The inbox is empty.');
-  return html`<div class="grid gap-2">${items.map((item) => inboxItem(item, people, timeZone, q))}</div>`;
-}
 
 /**
  * One inbox item, compact: the message, who sent it and when, then the agent's best
