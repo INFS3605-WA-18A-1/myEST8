@@ -2844,10 +2844,26 @@
     .request-reject-form .fieldset {
       align-self: stretch;
     }
+    /* Decide is the one thing on the page waiting on the Property Manager: the Wattle stripe. */
+    .request-side > #decide {
+      border-left: 4px solid var(--hivis);
+    }
     /* The Requests list reads like a docket: the issue strong, the address quiet under it. */
     .request-list .queue-detail {
       font-size: 13px;
       color: var(--muted);
+    }
+    /* On phones the actions take their own line under the badges, so the issue keeps the width. */
+    @media (max-width: 39.99rem) {
+      .request-list .queue-head {
+        display: contents;
+      }
+      .request-list .queue-title {
+        flex: none;
+      }
+      .request-list .queue-actions {
+        order: 9;
+      }
     }
   }
 }

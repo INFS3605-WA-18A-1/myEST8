@@ -93,6 +93,19 @@ describe('the Requests list', () => {
   });
 });
 
+describe('the Requests list with photos', () => {
+  test("shows each request's first photo beside it, as the dashboard does", async () => {
+    const w = await webWorld();
+    await w.h.upload(await report(w, TOM, 'The kitchen tap is dripping'), [upload('tap.jpg')]);
+    const r = await onlyRequest(w);
+
+    const html = await page(w, '/requests?filter=all', await w.signIn());
+    expect(html).toContain(`src="/files/${r.photos[0]!.fileId}"`);
+    expect(visible(html)).toContain('Check urgency');
+    expect(visible(html)).not.toContain('Check Urgency');
+  });
+});
+
 describe('the Maintenance Request review', () => {
   test('leads with what the Tenant reported, then the decision, then the answers and photos', async () => {
     const w = await webWorld();
