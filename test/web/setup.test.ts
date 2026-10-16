@@ -58,7 +58,7 @@ describe('the onboarding guide', () => {
     expect(typed.page).not.toContain('someone@example.com');
 
     const unknown = await submit(w, '/setup/channels', { type: 'fax', address: '123' }, cookie);
-    expect(unknown.page).toContain('Choose SMS, WhatsApp or email');
+    expect(unknown.page).toContain('Choose SMS or email');
   });
 
   test('adds a Tenant to a Property and lists them with it', async () => {

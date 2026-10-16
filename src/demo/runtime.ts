@@ -250,7 +250,7 @@ export async function createDemo<Seeded extends boolean = true>(
   // numbers are made up and could belong to someone. The simulator records every
   // message once it's sent. File links run on real time, as Twilio fetches them in
   // real time however far the demo clock has moved.
-  const providers = messengersFromEnv(env, { clock: { now: () => new Date() } });
+  const providers = messengersFromEnv(env, { clock: { now: () => new Date() }, strict: hosted, ...(options.log ? { log: options.log } : {}) });
   // Gmail (ADR 0004): each Agency connects its own mailbox by OAuth, so its
   // Messenger and reader need the database, not just env vars.
   const mailboxes = gmailFromEnv(env, db, baseUrl);
@@ -262,7 +262,7 @@ export async function createDemo<Seeded extends boolean = true>(
       const provider = providers.channels[message.channelType];
       if (provider && reallySends(message.to)) await provider.send({ ...message, cc: message.cc.filter(reallySends) });
       // Hosted, nothing records into the phone simulator: no provider means it can't be sent.
-      else if (hosted) throw new UndeliverableError(message.channelType, message.to, `no ${message.channelType} provider is configured`);
+      else if (hosted) throw new UndeliverableError(message.channelType, message.to, `no ${message.channelType} provider is configured`, `${message.channelType === 'sms' ? 'SMS' : message.channelType === 'whatsapp' ? 'WhatsApp' : 'email'} isn't set up on this server yet`);
       if (!hosted) await messenger.send(message);
     },
   };
@@ -401,7 +401,16 @@ export async function createDemo<Seeded extends boolean = true>(
     demoSignIns: seed !== null,
     whatsapp: env.META_APP_SECRET?.trim() && env.META_WEBHOOK_VERIFY_TOKEN?.trim() ? { appSecret: env.META_APP_SECRET.trim(), verifyToken: env.META_WEBHOOK_VERIFY_TOKEN.trim() } : null,
     resend,
-    connectors: { gmail: mailboxes?.connector ?? null, whatsappNumber: env.META_WHATSAPP_NUMBER?.trim() || null },
+    connectors: {
+      gmail: mailboxes?.connector ?? null,
+      smsInbound: hosted ? 'none' : 'simulator',
+      unavailable: [
+        // The demo simulates SMS; a hosted server needs a real provider, or a code can only fail.
+        ...(hosted && !providers.channels.sms ? (['sms'] as const) : []),
+        // Hosted email arrives through Resend inbound (or an Agency's own Gmail).
+        ...(hosted && (!resend || !env.RESEND_INBOUND_DOMAIN?.trim()) && !mailboxes ? (['email'] as const) : []),
+      ],
+    },
   });
 
   return { app, web, demo, sessions, clock, messenger, seed, stories, database, baseUrl, apis, runWorker, startWorkerLoop, close };

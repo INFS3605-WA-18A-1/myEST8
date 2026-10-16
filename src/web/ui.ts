@@ -430,13 +430,14 @@ export function sectionHeader(title: string, actions?: Html): Html {
 const TONE: Record<Tone, string> = { neutral: 'badge-neutral', info: 'badge-info', success: 'badge-success', warning: 'badge-warning', error: 'badge-error' };
 
 /** A short label (daisyUI badge, soft style). The text carries the meaning; colour only backs it up. */
-export function badge(text: string, tone: Tone = 'neutral'): Html {
-  return toneBadge(text, TONE[tone]);
+export function badge(text: string, tone: Tone = 'neutral', o: { wrap?: boolean } = {}): Html {
+  return toneBadge(text, TONE[tone], o.wrap);
 }
 
 /** A badge with its class given: for the quiet looks (Routine, cancelled) that have no Tone. */
-function toneBadge(text: string, toneClass: string): Html {
-  return html`<span class="badge badge-soft ${toneClass} whitespace-nowrap">${text}</span>`;
+function toneBadge(text: string, toneClass: string, wrap = false): Html {
+  // `wrap` lets a long label break onto a second line inside its column instead of running out of it.
+  return html`<span class="badge badge-soft ${toneClass} ${wrap ? 'max-w-full whitespace-normal text-left' : 'whitespace-nowrap'}">${text}</span>`;
 }
 
 /** Urgent, High or Routine. Routine is quiet: muted text on a hairline, so its word is the only signal. */

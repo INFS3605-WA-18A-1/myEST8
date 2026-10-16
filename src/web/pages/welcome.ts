@@ -7,7 +7,7 @@
 //
 //   1 Welcome          what we'll set up, and the Agency's details
 //   2 Your team        colleagues as Property Managers (optional)
-//   3 Channels         SMS and WhatsApp verified with a code, email at the inbound address
+//   3 Channels         SMS verified with a code, email at the inbound address
 //   4 Tradies          the Tradies the Agency already uses, so a Property can nominate them
 //   5 First Property   address, Max Repair Cost, Property Owner, Tenant, Building Manager
 //   6 Done             what's set up, and where to go next
@@ -20,7 +20,7 @@ import type { ChannelType } from '../../ports.ts';
 import { ActionError, isEmail, normalizeAddress, type Role } from '../../shared.ts';
 import { NO_CONNECTORS, type ChannelConnectors } from '../connectors.ts';
 import type { WebEnv } from '../env.ts';
-import { gmailControls, whatsappControls } from './oauth-google.ts';
+import { gmailControls } from './oauth-google.ts';
 import { cents, list, text, type FormValues } from '../forms.ts';
 import { shareButton } from '../share.ts';
 import { shellInfo } from '../shell.ts';
@@ -51,6 +51,8 @@ import {
   channelGuide,
   channelLine,
   channelOf,
+  unavailableChip,
+  unavailableNote,
   channelState,
   inboundEmailField,
   phoneChannelForm,
@@ -91,7 +93,7 @@ const NEEDED = ['channels', 'tradies', 'property'] as const;
 
 /** Each needed step as the "Finish setting up" banner says it. */
 const STILL_TO_DO: Record<(typeof NEEDED)[number], string> = {
-  channels: 'connect SMS, WhatsApp and email',
+  channels: 'connect SMS and email',
   property: 'add your first Property',
   tradies: 'add the Tradies you use',
 };
@@ -99,11 +101,12 @@ const STILL_TO_DO: Record<(typeof NEEDED)[number], string> = {
 const ROLE_LABEL: Record<Role, string> = { tenant: 'Tenant', owner: 'Property Owner', tradie: 'Tradie', building_manager: 'Building Manager' };
 
 /** How far the Agency's setup has got, read from what it has. */
-export async function setupProgress(actions: Actions) {
+export async function setupProgress(actions: Actions, unavailable: readonly ChannelType[] = []) {
   const channels = await actions.channels();
   return {
     team: (await actions.propertyManagers()).length > 1,
-    channels: CHANNELS.every((ch) => channels.some((c) => c.type === ch.type)),
+    // A channel this server can't deliver on isn't waited for.
+    channels: CHANNELS.filter((ch) => !unavailable.includes(ch.type)).every((ch) => channels.some((c) => c.type === ch.type)),
     property: (await actions.properties()).length > 0,
     tradies: (await actions.people('tradie')).length > 0,
   };
@@ -123,8 +126,8 @@ export function nextSetupStep(progress: Progress): string | null {
 }
 
 /** The dashboard's "Finish setting up" banner, or nothing once the Agency is set up. */
-export async function finishSetupBanner(actions: Actions): Promise<Html> {
-  const progress = await setupProgress(actions);
+export async function finishSetupBanner(actions: Actions, unavailable: readonly ChannelType[] = []): Promise<Html> {
+  const progress = await setupProgress(actions, unavailable);
   const next = nextSetupStep(progress);
   if (!next) return html``;
   const left = NEEDED.filter((k) => !progress[k]).map((k) => STILL_TO_DO[k]);
@@ -217,7 +220,7 @@ async function wizardPage(
   o: { step: StepKey; title: string; body: Html; progress?: Progress; flash?: Flash | null },
 ): Promise<Html> {
   const { actions, pm } = c.var;
-  const progress = o.progress ?? (await setupProgress(actions));
+  const progress = o.progress ?? (await setupProgress(actions, c.var.unavailableChannels));
   const index = STEPS.findIndex((s) => s.key === o.step);
   const back = STEPS[index - 1];
   const forward = STEPS[index + 1];
@@ -267,7 +270,7 @@ async function welcomeStep(c: WizardContext): Promise<Html> {
         title: 'Steps ahead',
         body: html`<ol class="ml-5 list-decimal space-y-2">
           <li><strong>Your team.</strong> Add the other Property Managers so each has their own sign-in. Optional.</li>
-          <li><strong>Channels.</strong> Connect the SMS number, WhatsApp and email inbox Tenants already use, and test each one.</li>
+          <li><strong>Channels.</strong> Connect the SMS number and email inbox Tenants already use, and test each one.</li>
           <li><strong>Tradies.</strong> The Tradies you already use, with their Trades and a starting rating.</li>
           <li><strong>Your first Property.</strong> Its address, Max Repair Cost, Property Owner and Tenant.</li>
         </ol>`,
@@ -393,7 +396,7 @@ async function channelsStep(c: WizardContext, demo: boolean, connectors: Channel
     flash: flash && !CHANNELS.some((ch) => ch.type === flashChannel) ? flash : null,
     body: html`
       <p>
-        Tenants, Tradies and Property Owners reach ${agency.name} by SMS, WhatsApp and email. Verify SMS and WhatsApp with a code sent to the number.
+        Tenants, Tradies and Property Owners reach ${agency.name} by SMS and email. Verify SMS with a code sent to the number.
         Email arrives at the address below once you forward the Agency inbox to it.${demo ? ' In the demo nothing is really sent, and the addresses work with the phone simulator.' : ''}
       </p>
       <p class="text-sm text-muted">${connected.length} of ${CHANNELS.length} connected, ${verified} verified.</p>
@@ -401,25 +404,22 @@ async function channelsStep(c: WizardContext, demo: boolean, connectors: Channel
         ${CHANNELS.map((channel) => {
           const current = connected.find((ch) => ch.type === channel.type);
           const suggestion = demo && channel.type !== 'email' ? demoAddress(channel.type, agency) : '';
-          const viaWhatsapp = channel.type === 'whatsapp' && connectors.whatsappNumber !== null;
           const waiting = channel.type === 'email' && email.state === 'waiting';
           const emailVerified = channel.type === 'email' && email.state === 'verified';
           const open = pending.find((row) => row.channelType === channel.type);
+          const unavailable = connectors.unavailable.includes(channel.type);
           return html`<div id="${channel.type}" class="grid gap-2 border-t border-line pt-4 first:border-t-0 first:pt-0 md:grid-cols-[9rem_minmax(0,1fr)]">
             <div>
               <h2 class="section-title">${channel.name}</h2>
-              <p class="mt-1">${channelBadge(current, { waiting, verified: emailVerified })}</p>
+              <p class="mt-1">${unavailable ? unavailableChip() : channelBadge(current, { waiting, verified: emailVerified })}</p>
             </div>
             <div class="min-w-0">
               ${flash && flashChannel === channel.type ? flashMessage(flash) : ''}
-              ${current ? channelLine(current, agency.timeZone, { waiting }) : ''}
-              ${channel.type === 'email'
-                ? html`${inboundEmailField(email.address)}${gmailBlock ?? ''}<div class="mt-2">${channelGuide(channel.type, origin)}</div>`
-                : viaWhatsapp
-                  ? current?.address === connectors.whatsappNumber
-                    ? ''
-                    : whatsappControls(connectors.whatsappNumber!, '/welcome/channels')
-                  : html`${phoneChannelForm({
+              ${unavailable ? unavailableNote(channel.type, connectors.unavailable) : ''}
+              ${unavailable ? '' : current ? channelLine(current, agency.timeZone, { waiting, smsInbound: connectors.smsInbound }) : ''}
+              ${unavailable ? '' : channel.type === 'email'
+                ? html`<div class="mt-2">${inboundEmailField(email.address)}</div>${gmailBlock ?? ''}<div class="mt-2">${channelGuide(channel.type, origin)}</div>`
+                : html`${phoneChannelForm({
                       channel,
                       postTo: '/welcome/channels',
                       confirmTo: '/welcome/channels/confirm',
@@ -807,7 +807,7 @@ function group(legend: string, fields: Html, note?: string): Html {
 
 async function doneStep(c: WizardContext, demo: boolean): Promise<Html> {
   const { actions } = c.var;
-  const progress = await setupProgress(actions);
+  const progress = await setupProgress(actions, c.var.unavailableChannels);
   const agency = actions.agency();
   const team = await actions.propertyManagers();
   const email = await actions.ensureInboundEmail();

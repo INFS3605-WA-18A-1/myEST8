@@ -44,6 +44,92 @@ function propertyFields(changes: Fields = {}): Fields {
 
 const TRADIE: Fields = { businessName: 'Sunny Plumbing', name: 'Sunny Sun', mobile: '0400 000 997', email: '', trades: ['plumbing'], startingRating: 4, placeId: 'none' };
 
+describe('a channel this server cannot deliver on', () => {
+  const connectors = (unavailable: ('sms' | 'email')[]) => ({ gmail: null, smsInbound: 'none' as const, unavailable });
+
+  test('is not offered on the wizard or /setup, with a plain note instead, and does not hold setup back', async () => {
+    const w = await webWorld({ connectors: connectors(['sms']) });
+    const sam = await w.signUp();
+
+    for (const path of ['/welcome/channels', '/setup']) {
+      const html = await page(w, path, sam);
+      expect(visible(html), path).toContain("SMS isn't available on this server yet. Tenants can still reach you by email.");
+      expect(html, path).not.toContain('id="sms-address"');
+      expect(html, path).toContain('id="email-address"');
+    }
+    // Email is allocated on the first visit; with SMS unavailable there is nothing else to wait for.
+    expect(visible(await page(w, '/', sam))).not.toContain('connect SMS');
+  });
+
+  test('email too: nothing is offered, and the note does not promise another way in', async () => {
+    const w = await webWorld({ connectors: connectors(['sms', 'email']) });
+    const sam = await w.signUp();
+    for (const path of ['/welcome/channels', '/setup']) {
+      const html = await page(w, path, sam);
+      expect(visible(html), path).toContain("Email forwarding isn't available on this server yet.");
+      expect(visible(html), path).not.toContain('Tenants can still reach you by');
+      expect(html, path).not.toContain('id="email-address"');
+      expect(html, path).not.toContain('id="sms-address"');
+    }
+  });
+
+  test('is offered as usual when the server can deliver on it', async () => {
+    const w = await webWorld();
+    const sam = await w.signUp();
+    const html = await page(w, '/welcome/channels', sam);
+    expect(html).toContain('id="sms-address"');
+    expect(visible(html)).not.toContain("isn't available on this server");
+  });
+});
+
+describe('channel status badges', () => {
+  test('may wrap inside their column, so a long one cannot run into the next column', async () => {
+    const w = await webWorld();
+    const sam = await w.signUp();
+    for (const path of ['/welcome/channels', '/setup']) {
+      const html = await page(w, path, sam);
+      expect(html, path).toMatch(/<span class="badge[^"]*whitespace-normal[^"]*">Waiting for your first message<\/span>/);
+      expect(html, path).not.toMatch(/whitespace-nowrap[^"]*">Waiting for your first message/);
+    }
+  });
+});
+
+describe('WhatsApp is not on the channel pages', () => {
+  test('neither the wizard nor /setup offers it, counts it or names it, and a posted WhatsApp number is refused', async () => {
+    const w = await webWorld();
+    const sam = await w.signUp();
+    for (const path of ['/welcome/channels', '/setup']) {
+      const html = await page(w, path, sam);
+      expect(visible(html), path).not.toMatch(/whatsapp/i);
+      expect(html, path).not.toContain('id="whatsapp"');
+    }
+    const refused = await w.post('/welcome/channels', { type: 'whatsapp', address: '+61 2 9100 0002' }, sam);
+    expect(decodeURIComponent(refused.headers.get('location')!)).toContain('Choose SMS or email');
+  });
+});
+
+describe('what a verified SMS number promises', () => {
+  async function verifiedSms(smsInbound: 'simulator' | 'none') {
+    const w = await webWorld({ connectors: { gmail: null, unavailable: [], smsInbound } });
+    const sam = await w.signUp();
+    await submit(w, '/welcome/channels', { type: 'sms', address: '+61 2 9100 0002' }, sam);
+    const code = String(w.h.messenger.last('+61291000002')?.data.code);
+    await submit(w, '/welcome/channels/confirm', { type: 'sms', address: '+61 2 9100 0002', code }, sam);
+    return Promise.all(['/welcome/channels', '/setup'].map(async (path) => visible(await page(w, path, sam))));
+  }
+
+  test('on a real server the typed number is not claimed to receive Tenant texts', async () => {
+    for (const text of await verifiedSms('none')) {
+      expect(text).toContain("is confirmed as the Agency's number. Texts to it don't reach myEST8 yet.");
+      expect(text).not.toContain('Tenants reach the Agency at +61291000002');
+    }
+  });
+
+  test('in the demo the simulator receives them', async () => {
+    for (const text of await verifiedSms('simulator')) expect(text).toContain('Tenants reach the Agency at +61291000002');
+  });
+});
+
 describe('the onboarding wizard', () => {
   test('a code that cannot be delivered (no SMS provider, as on a hosted app without Twilio) is a message on the page, not a server error', async () => {
     const w = await webWorld();
@@ -57,7 +143,8 @@ describe('the onboarding wizard', () => {
     expect(res.headers.get('location')).toMatch(/^\/welcome\/channels\?channel=sms&error=.*#sms$/);
     const text = visible(await page(w, res.headers.get('location')!.split('#')[0]!, sam));
     expect(text).toContain("We couldn't send a code to +61 2 9100 0002");
-    expect(text).toContain('no sms provider is configured');
+    expect(text).toContain('Check the number and try again');
+    expect(text).not.toContain('Undeliverable');
   });
 
   test('a new Agency adds a colleague, connects and tests its channels, adds its first Property and a Tradie, and sees it all ticked', async () => {
@@ -97,10 +184,7 @@ describe('the onboarding wizard', () => {
     const verified = await submit(w, '/welcome/channels/confirm', { type: 'sms', address: '+61 2 9100 0002', code: smsCode }, sam);
     expect(visible(verified.page)).toContain('SMS verified');
 
-    await submit(w, '/welcome/channels', { type: 'whatsapp', address: '+61 2 9100 0002' }, sam);
-    const whatsappCode = String(w.h.messenger.last('+61291000002')?.data.code);
-    const channels = await submit(w, '/welcome/channels/confirm', { type: 'whatsapp', address: '+61 2 9100 0002', code: whatsappCode }, sam);
-    expect(visible(channels.page)).toContain('3 of 3 connected, 2 verified');
+    expect(visible(verified.page)).toContain('2 of 2 connected, 1 verified');
     const typed = await w.post('/welcome/channels', { type: 'email', address: 'inbox@sunrise.example' }, sam);
     expect(decodeURIComponent(typed.headers.get('location')!)).not.toContain('inbox@sunrise.example');
     expect(visible(await page(w, '/welcome/channels', sam))).not.toContain('inbox@sunrise.example');
@@ -126,7 +210,6 @@ describe('the onboarding wizard', () => {
       'Done: Sunrise Realty created',
       'Done: 2 Property Managers on the team',
       'Done: SMS verified at +61291000002',
-      'Done: WhatsApp verified at +61291000002',
       'To do: Email is sunrise-realty@mail.example.test, waiting for your first message',
       'Done: 1 Property with 1 Tenant',
       'Done: 1 Tradie',
@@ -239,11 +322,11 @@ describe('a new Agency', () => {
 
     const dashboard = await page(w, '/', sam);
     expect(visible(dashboard)).toContain('Finish setting up Sunrise Realty');
-    expect(visible(dashboard)).toContain('connect SMS, WhatsApp and email, add the Tradies you use and add your first Property');
+    expect(visible(dashboard)).toContain('connect SMS and email, add the Tradies you use and add your first Property');
     expect(dashboard).toMatch(/data-banner="finish-setup"[\s\S]*href="\/welcome\/channels"/);
 
     await page(w, '/welcome/channels', sam);
-    for (const type of ['sms', 'whatsapp'] as const) {
+    for (const type of ['sms'] as const) {
       await w.post('/welcome/channels', { type, address: '+61 2 9100 0002' }, sam);
       const code = String(w.h.messenger.last('+61291000002')?.data.code);
       await w.post('/welcome/channels/confirm', { type, address: '+61 2 9100 0002', code }, sam);

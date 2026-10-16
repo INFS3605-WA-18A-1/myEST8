@@ -127,7 +127,7 @@ export function dashboardPages() {
           { label: 'All', href: '/?filter=all', active: filter === 'all' },
         ]),
         body: html`
-          ${(await finishSetupBanner(actions))}
+          ${(await finishSetupBanner(actions, c.var.unavailableChannels))}
           ${countStrip([
             { label: 'Maintenance Requests to review', count: view.maintenanceRequests.length, href: '#requests', decision: true },
             { label: 'Open Tickets', count: view.tickets.length, href: '#tickets' },

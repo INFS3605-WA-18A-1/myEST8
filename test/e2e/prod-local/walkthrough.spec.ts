@@ -49,10 +49,12 @@ test('signing up lands in the welcome wizard, and the setup sections open in ord
   await expect(page.getByRole('heading', { level: 1, name: 'Your team' })).toBeVisible();
   await page.getByRole('link', { name: 'Skip for now' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Channels' })).toBeVisible();
-  // No real channel is connected: the SMS, WhatsApp and email sections are the only way in.
+  // No real channel is connected: the SMS and email sections are the only way in. WhatsApp is not offered.
   await expect(page.getByRole('heading', { name: 'SMS' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'WhatsApp' })).toBeVisible();
-  await page.getByRole('link', { name: 'Skip for now' }).click();
+  await expect(page.getByRole('heading', { name: 'Email' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'WhatsApp' })).toHaveCount(0);
+  // Neither channel can work on this server, so nothing is left to wait for: the step reads as done.
+  await page.getByRole('link', { name: 'Continue' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Tradies' })).toBeVisible();
 });
 
@@ -157,13 +159,12 @@ test('the rail has no link to the phone simulator', async ({ page }) => {
   await expect(page.locator('a[href="/demo"]')).toHaveCount(0);
 });
 
-test('with no SMS provider, sending a verification code says so instead of failing', async ({ page }) => {
+test('with no SMS provider the channel page says so instead of offering a code that can only fail', async ({ page }) => {
   await signInAs(page);
   await page.goto('/welcome/channels');
-  await page.getByLabel('Agency SMS number').fill('+61 2 9100 0002');
-  await page.getByRole('button', { name: 'Send code' }).first().click();
-  await expect(page.getByText(/couldn.t send a code to \+61 2 9100 0002/)).toBeVisible();
-  await expect(page.getByText(/no sms provider is configured/)).toBeVisible();
+  await expect(page.getByText("SMS isn't available on this server yet.")).toBeVisible();
+  await expect(page.getByLabel('Agency SMS number')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Send code' })).toHaveCount(0);
 });
 
 async function signInAs(page: Page) {

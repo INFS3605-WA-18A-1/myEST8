@@ -92,15 +92,3 @@ export async function gmailControls(gmail: GmailConnector, agencyId: number, fro
     ${disconnect}
   </div>`;
 }
-
-/** WhatsApp's one-button connect to the Cloud API number this server receives on. */
-export function whatsappControls(number: string, postTo: string): Html {
-  return html`<div class="mt-2">
-    <form method="post" action="${postTo}" class="flex flex-wrap items-center gap-3">
-      <input type="hidden" name="type" value="whatsapp" />
-      <input type="hidden" name="address" value="${number}" />
-      ${button(`Use ${number} for WhatsApp`, { variant: 'secondary', size: 'sm' })}
-    </form>
-    <p class="mt-2 text-sm text-muted">Meta's test number only reaches up to 5 phones you add in the Meta dashboard.</p>
-  </div>`;
-}

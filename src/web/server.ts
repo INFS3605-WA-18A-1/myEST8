@@ -34,7 +34,7 @@ export function createWebApp(deps: {
   whatsapp?: { appSecret: string; verifyToken: string } | null;
   /** Resend inbound email, when both RESEND_WEBHOOK_SECRET and RESEND_API_KEY are set. */
   resend?: { webhookSecret: string; apiKey: string; fetch?: typeof fetch } | null;
-  /** What onboarding can connect (Gmail, the WhatsApp number). */
+  /** What onboarding can connect (Gmail). */
   connectors?: ChannelConnectors;
   demo?: DemoControls;
   /** Whether the landing page lists the demo Agency's sign-ins. Defaults to whether `demo` is set. */
@@ -58,6 +58,7 @@ export function createWebApp(deps: {
   signedIn.use('*', requirePropertyManager(deps.app, deps.sessions));
   signedIn.use('*', async (c, next) => {
     c.set('demo', !!deps.demo);
+    c.set('unavailableChannels', deps.connectors?.unavailable ?? []);
     await next();
   });
   signedIn.use('*', loadNavCounts());

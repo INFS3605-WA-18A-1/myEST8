@@ -13,9 +13,10 @@ import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
 import type { ImportKind } from '../../imports.ts';
 import { ActionError, normalizeAddress } from '../../shared.ts';
+import type { ChannelType } from '../../ports.ts';
 import { NO_CONNECTORS, type ChannelConnectors } from '../connectors.ts';
 import type { WebEnv } from '../env.ts';
-import { gmailControls, whatsappControls } from './oauth-google.ts';
+import { gmailControls } from './oauth-google.ts';
 import { cents, formAction, list, text } from '../forms.ts';
 import { icon } from '../icons.ts';
 import { shellInfo } from '../shell.ts';
@@ -25,6 +26,8 @@ import {
   addTradieFrom,
   CHANNELS,
   channelChip,
+  unavailableChip,
+  unavailableNote,
   channelGuide,
   channelLine,
   channelOf,
@@ -243,10 +246,10 @@ async function channelsArea(
 ): Promise<Html> {
   const gmailBlock = connectors.gmail ? await gmailControls(connectors.gmail, agencyId, 'setup') : null;
   return html`
-    <p class="text-sm">Tenants, Tradies and Property Owners reach the Agency by SMS, WhatsApp and email. Verify a phone number with a code. Forward the Agency inbox to the email address below.</p>
+    <p class="text-sm">Tenants, Tradies and Property Owners reach the Agency by SMS and email. Verify a phone number with a code. Forward the Agency inbox to the email address below.</p>
     ${shown.error}
-    <div class="mt-4 grid gap-4 md:grid-cols-3">
-      ${CHANNELS.map((channel) => channelCard(channel, connected.find((c) => c.type === channel.type), timeZone, origin, { gmailBlock, whatsappNumber: connectors.whatsappNumber }, email, pending.find((row) => row.channelType === channel.type)))}
+    <div class="mt-4 grid gap-4 md:grid-cols-2">
+      ${CHANNELS.map((channel) => channelCard(channel, connected.find((c) => c.type === channel.type), timeZone, origin, { gmailBlock, unavailable: connectors.unavailable, smsInbound: connectors.smsInbound }, email, pending.find((row) => row.channelType === channel.type)))}
     </div>
   `;
 }
@@ -257,29 +260,27 @@ function channelCard(
   connected: AgencyChannel | undefined,
   timeZone: string,
   origin: string,
-  via: { gmailBlock: Html | null; whatsappNumber: string | null },
+  via: { gmailBlock: Html | null; unavailable: ChannelType[]; smsInbound: 'simulator' | 'none' },
   email: { address: string; state: 'waiting' | 'verified' | 'connected' },
   pending: { address: string } | undefined,
 ): Html {
-  const viaWhatsapp = channel.type === 'whatsapp' && via.whatsappNumber !== null;
   const waiting = channel.type === 'email' && email.state === 'waiting';
   const emailVerified = channel.type === 'email' && email.state === 'verified';
   const rowForm = 'mt-3 grid items-end gap-3';
+  if (via.unavailable.includes(channel.type)) {
+    return subsection({ id: channel.type, title: channel.name, actions: unavailableChip(), body: html`<div class="mt-2">${unavailableNote(channel.type, via.unavailable)}</div>` });
+  }
   return subsection({
     id: channel.type,
     title: channel.name,
     actions: channelChip(connected, { waiting, verified: emailVerified }),
     body: html`
-      ${connected ? channelLine(connected, timeZone, { waiting }) : ''}
-      ${channel.type === 'email' || !viaWhatsapp ? html`<div class="mt-2">${channelGuide(channel.type, origin)}</div>` : ''}
+      ${connected ? channelLine(connected, timeZone, { waiting, smsInbound: via.smsInbound }) : ''}
+      ${html`<div class="mt-2">${channelGuide(channel.type, origin)}</div>`}
       <div class="mt-3">
         ${channel.type === 'email'
           ? html`${inboundEmailField(email.address)}${via.gmailBlock ?? ''}`
-          : viaWhatsapp
-            ? connected?.address === via.whatsappNumber
-              ? ''
-              : whatsappControls(via.whatsappNumber!, '/setup/channels')
-            : phoneChannelForm({
+          : phoneChannelForm({
                 channel,
                 postTo: '/setup/channels',
                 confirmTo: '/setup/channels/confirm',
