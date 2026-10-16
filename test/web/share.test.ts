@@ -111,7 +111,7 @@ describe('where people share', () => {
     expect(thisWeek.url).toMatch(/^http:\/\/localhost\/calendar\?week=\d{4}-\d{2}-\d{2}$/);
   });
 
-  test('a Maintenance Request and the list of them can be shared', async () => {
+  test('a Maintenance Request and the dashboard list of them can be shared', async () => {
     const w = await webWorld();
     w.h.classifier.when('The kitchen tap is dripping', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });
     await w.h.receive(TOM, 'The kitchen tap is dripping');
@@ -124,8 +124,8 @@ describe('where people share', () => {
     expect(review.url).toBe(`http://localhost/requests/${request!.issueId}`);
     expect(review.sms).toContain(encodeURIComponent('The kitchen tap is dripping'));
 
-    const dashboard = shareControls(await (await w.get('/requests', cookie)).text());
-    expect(dashboard.url).toBe('http://localhost/requests?filter=all');
+    const dashboard = shareControls(await (await w.get('/', cookie)).text());
+    expect(dashboard.url).toBe('http://localhost/?filter=all#requests');
     expect(dashboard.email).toContain(encodeURIComponent('1 Maintenance Request is waiting for review'));
   });
 

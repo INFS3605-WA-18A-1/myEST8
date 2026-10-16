@@ -152,11 +152,19 @@ export function createViews({ clock, modules }: Context) {
     async dashboard(agencyId: number, propertyManagerId: number, filter: 'mine' | 'all') {
       const now = clock.now();
       const propertyIds = filter === 'mine' ? await profiles.propertyIdsOf(propertyManagerId) : null;
-      return {
-        maintenanceRequests: await maintenanceRequestViews(agencyId, propertyIds),
-        tickets: await board(await tickets.openTickets(agencyId, propertyIds)),
-        urgentRepairs: await Promise.all(
-          (await tickets.urgentRepairs(agencyId, propertyIds)).map(async (u) => ({
+      const [maintenanceRequests, openTickets, urgentRepairs, inbox, quoteAlerts, schedulingAlerts, calendar] = await Promise.all([
+        maintenanceRequestViews(agencyId, propertyIds),
+        tickets.openTickets(agencyId, propertyIds),
+        tickets.urgentRepairs(agencyId, propertyIds),
+        intake.inbox(agencyId),
+        modules.quotes.alerts(agencyId, propertyIds),
+        modules.scheduling.alerts(agencyId, propertyIds),
+        modules.scheduling.calendar(agencyId, { from: iso(now), to: iso(addMs(now, CALENDAR_DAYS * 24 * HOUR_MS)) }),
+      ]);
+      const [boardTickets, repairs] = await Promise.all([
+        board(openTickets),
+        Promise.all(
+          urgentRepairs.map(async (u) => ({
             urgentRepairId: u.id,
             ...(await propertyLabel(u.propertyId)),
             tenantName: (await profiles.person(u.tenantId)).name,
@@ -166,10 +174,8 @@ export function createViews({ clock, modules }: Context) {
             reportedAt: u.createdAt,
           })),
         ),
-        inbox: await intake.inbox(agencyId),
-        alerts: [...(await modules.quotes.alerts(agencyId, propertyIds)), ...(await modules.scheduling.alerts(agencyId, propertyIds))],
-        calendar: await modules.scheduling.calendar(agencyId, { from: iso(now), to: iso(addMs(now, CALENDAR_DAYS * 24 * HOUR_MS)) }),
-      };
+      ]);
+      return { maintenanceRequests, tickets: boardTickets, urgentRepairs: repairs, inbox, alerts: [...quoteAlerts, ...schedulingAlerts], calendar };
     },
 
     /** The Maintenance Requests waiting for a Property Manager to confirm, oldest first. */
