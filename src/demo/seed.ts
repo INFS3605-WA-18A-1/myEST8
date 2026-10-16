@@ -12,9 +12,8 @@ export const DEMO_PASSWORD = 'demo1234';
 export const DEMO_TIME_ZONE = 'Australia/Sydney';
 
 /** The Agency's own channel addresses: where Tenants, Tradies and Owners send to. */
-export const DEMO_CHANNELS: Record<ChannelType, string> = {
+export const DEMO_CHANNELS: Partial<Record<ChannelType, string>> = {
   sms: '+61290000000',
-  whatsapp: '+61290000000',
   email: 'inbox@harbour.example',
 };
 

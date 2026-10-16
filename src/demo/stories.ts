@@ -434,7 +434,7 @@ function noahsLoosePalings(k: Kit) {
   });
 }
 
-/** Maintenance Request with flagged photos: Ruby's mouldy window at Glenmore Rd, by WhatsApp. One photo predates her tenancy, one was taken in Penrith. */
+/** Maintenance Request with flagged photos: Ruby's mouldy window at Glenmore Rd, by SMS. One photo predates her tenancy, one was taken in Penrith. */
 function rubysMouldyWindow(k: Kit) {
   const { ids, bob } = k;
   const s = k.story("Ruby's mouldy window");
@@ -594,16 +594,12 @@ interface JobRef {
 type Step = { at: Date; story: string; what: string; run: () => Promise<unknown>; order: number };
 type Kit = Awaited<ReturnType<typeof createKit>>;
 
-/** People who message by WhatsApp rather than SMS. */
-const ON_WHATSAPP = new Set<keyof DemoSeed['ids']>(['ruby']);
-
 /** The timeline, the people, and the moves the stories are made of: each checks it did what the story says. */
 async function createKit({ app, simulator, seed, clock, end }: { app: App; simulator: Pick<DemoControls, 'sendAs' | 'outbox'>; seed: DemoSeed; clock: OffsetClock; end: Date }) {
   const { ids } = seed;
   const alice = await app.asPropertyManager(ids.aliceId);
   const bob = await app.asPropertyManager(ids.bobId);
   const people = new Map((await alice.people()).map((p) => [p.id, p]));
-  const whatsapp = new Set([...ON_WHATSAPP].map((key) => ids[key]));
   const steps: Step[] = [];
   let photoNumber = 4810;
   let closedTickets = 0;
@@ -654,10 +650,10 @@ async function createKit({ app, simulator, seed, clock, end }: { app: App; simul
     return (await outbox()).slice(sentBefore);
   }
 
-  /** A message from someone in the seed, on WhatsApp, SMS or email as they prefer. Returns what myEST8 sent in reply. */
+  /** A message from someone in the seed, on SMS or email as they prefer. Returns what myEST8 sent in reply. */
   function say(personId: number, text: string, options: SayOptions = {}) {
     const p = person(personId);
-    const channel = options.channel ?? (whatsapp.has(personId) ? 'whatsapp' : p.mobile ? 'sms' : 'email');
+    const channel = options.channel ?? (p.mobile ? 'sms' : 'email');
     const from = channel === 'email' ? p.email : p.mobile;
     if (!from) throw new Error(`${p.name} has no ${channel} address`);
     return sendFrom(p.name, from, channel, text, options);
