@@ -190,13 +190,12 @@ export function createViews({ clock, modules }: Context) {
      */
     async navCounts(agencyId: number, propertyManagerId: number) {
       const propertyIds = await profiles.propertyIdsOf(propertyManagerId);
-      const open = await tickets.openTickets(agencyId, propertyIds);
-      const readyToBook = (await Promise.all(open.map((t) => tickets.jobsOf(t.id)))).flat().filter((j) => j.status === 'approved').length;
-      const alerts = [...(await modules.quotes.alerts(agencyId, propertyIds)), ...(await modules.scheduling.alerts(agencyId, propertyIds))];
-      return {
-        requests: (await tickets.maintenanceRequests(agencyId, propertyIds)).length + (await intake.inbox(agencyId)).length,
-        approvals: readyToBook + alerts.length,
-      };
+      const [requests, inbox, waitingOnOwner] = await Promise.all([
+        tickets.maintenanceRequests(agencyId, propertyIds),
+        intake.inbox(agencyId),
+        modules.quotes.waitingOnOwner(agencyId, propertyIds),
+      ]);
+      return { requests: requests.length + inbox.length, approvals: waitingOnOwner.length };
     },
 
     /**

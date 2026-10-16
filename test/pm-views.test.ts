@@ -124,7 +124,7 @@ describe('Property views', () => {
     const w = await world();
     const { ticketId } = await tomsTapTicket(w);
     const overviews = await w.alice.propertyOverviews();
-    expect(overviews.find((p) => p.propertyId === w.ids.kingSt)).toMatchObject({ openTickets: 1, tenants: ['Tom Tran', 'Hana Ho'].sort((a, b) => 0 * a.length + 0 * b.length) });
+    expect(overviews.find((p) => p.propertyId === w.ids.kingSt)).toMatchObject({ openTickets: 1, tenants: ['Hana Ho', 'Tom Tran'] });
     const profile = await w.alice.property(w.ids.kingSt);
     expect(profile).toMatchObject({ address: KING_ST, owner: { name: 'Olivia Owens' }, closedTickets: [] });
     expect(profile.openTickets.map((t) => t.ticketId)).toEqual([ticketId]);
