@@ -94,6 +94,21 @@ describe('uploading a spreadsheet', () => {
     expect(gone.headers.get('location')).toMatch(/^\/setup\?error=This%20upload%20has%20expired/);
   });
 
+  test('on phones the review stacks: every cell names its column, and the way back is a button', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+    w.h.classifier.when('Contact No.', { importColumn: ['mobile', 0.9] });
+
+    const review = await follow(w, await upload(w, '/setup/import/owners', csvFile(`Landlord,Contact No.\nPriya Patel,0412 111 222\nNo Contact,\n`), cookie), cookie);
+    const page = review.page;
+    expect(page.match(/class="table-frame import-stack"/g)).toHaveLength(2);
+    // The columns table: each column's sample values, where it goes and how it was matched.
+    for (const label of ['Sample values', 'Goes to', 'How']) expect(page).toContain(`data-label="${label}"`);
+    // The rows table: the status, notes and each field under its heading.
+    for (const label of ['Row', 'Status', 'Notes', 'Name', 'Mobile']) expect(page).toContain(`data-label="${label}"`);
+    expect(page).toMatch(/<a href="\/setup#people" class="btn btn-ghost btn-sm">Back to Setup<\/a>/);
+  });
+
   test('an .xlsx file is read too, and a Tradie Trade the AI filled in is marked as such', async () => {
     const w = await webWorld();
     const cookie = await w.signIn();

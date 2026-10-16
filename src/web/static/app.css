@@ -2068,12 +2068,18 @@
     }
 
     /* The review page. */
+    /* The summary is a white strip like the dashboard's count strip, so the neutral
+       (Paper) "duplicate" badge reads as a badge rather than loose text. */
     .import-summary {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       gap: 6px 8px;
       margin: 0;
+      padding: 8px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
       font-size: 14px;
     }
     .import-ai {
@@ -2154,6 +2160,89 @@
     @media (max-width: 39.99rem) {
       .import-actions > .btn {
         flex: 1 1 100%;
+      }
+    }
+    /* Phones: both review tables stack, so nothing scrolls sideways. Each row is a white
+       block: its lead (the sheet's column, or the Add box, row number and status) on the
+       first line, then every other cell beside its column's name (data-label) in an
+       aligned 7rem label column. A flagged cell keeps its --high-bg tint. */
+    @media (max-width: 639.98px) {
+      .table-frame.import-stack {
+        overflow: visible;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+      }
+      .import-stack :where(table, tbody, tr, td, th) {
+        display: block;
+      }
+      .import-stack thead {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+      .import-stack tbody {
+        display: grid;
+        gap: 8px;
+      }
+      .import-stack tbody tr {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px 12px;
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        background: var(--surface);
+      }
+      .import-stack tbody :where(td, th) {
+        min-width: 0;
+        max-width: none;
+        height: auto;
+        padding: 0;
+        border: 0;
+      }
+      .import-stack tbody th[scope='row'] {
+        flex-basis: 100%;
+        font-size: 14px;
+      }
+      .import-stack td.import-include,
+      .import-stack td[data-label='Status'] {
+        flex: none;
+      }
+      .import-stack td[data-label='Row'] {
+        flex: none;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .import-stack td[data-label='Row']::before {
+        content: 'Row ';
+      }
+      .import-stack td[data-label]:not([data-label='Row'], [data-label='Status']) {
+        display: grid;
+        flex-basis: 100%;
+        grid-template-columns: 7rem minmax(0, 1fr);
+        column-gap: 12px;
+        align-items: start;
+      }
+      .import-stack td[data-label]:not([data-label='Row'], [data-label='Status'])::before {
+        content: attr(data-label);
+        grid-row: 1 / span 6;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .import-stack td[data-label]:not([data-label='Row'], [data-label='Status']) > * {
+        grid-column: 2;
+      }
+      .import-stack td.import-notes[data-label]:not(:has(> span)) {
+        display: none;
+      }
+      .import-table td.import-fix {
+        margin: 0 -12px;
+        padding: 8px 12px;
       }
     }
   }
