@@ -19,6 +19,8 @@ const CI = !!process.env.CI;
 export default defineConfig({
   testDir: 'test/e2e',
   testMatch: '**/*.spec.ts',
+  // The production-like specs run under playwright.prod-local.config.ts.
+  testIgnore: '**/prod-local/**',
   globalTeardown: './test/e2e/support/teardown.ts',
   fullyParallel: true,
   forbidOnly: CI,

@@ -16,6 +16,8 @@
     "dev:reset": "tsx scripts/db.ts reset",
     "demo": "tsx scripts/db.ts start --quiet && tsx src/demo/main.ts",
     "start": "tsx src/main.ts",
+    "prod:local": "tsx scripts/prod-local.ts",
+    "test:e2e:prod-local": "playwright test -c playwright.prod-local.config.ts",
     "db:start": "tsx scripts/db.ts start",
     "db:stop": "tsx scripts/db.ts stop",
     "db:migrate": "tsx scripts/db.ts migrate",
