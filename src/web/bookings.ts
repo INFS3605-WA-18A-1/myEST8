@@ -16,11 +16,15 @@ export type Booking = Awaited<ReturnType<PropertyManagerActions['calendar']>>[nu
  * (linking to the profile), the street and suburb, then how the visit stands. Names
  * and addresses wrap rather than cut. `day` puts the day before the time, for a list
  * that isn't grouped by day; `tradie: false` leaves the Tradie out where the row
- * already names them; `propertyManager` names whose Property it is.
+ * already names them; `propertyManager` names whose Property it is. `decision` marks a
+ * reschedule request that waits on the Property Manager looking (it is on their own
+ * Property) with the Wattle stripe; anyone else's request keeps the warning stripe.
  */
-export function bookingCard(b: Booking, timeZone: string, o: { day?: boolean; tradie?: boolean; propertyManager?: boolean } = {}): Html {
+export function bookingCard(b: Booking, timeZone: string, o: { day?: boolean; tradie?: boolean; propertyManager?: boolean; decision?: boolean } = {}): Html {
   const note = visitNote(b);
-  return html`<li class="booking ${b.visit === 'reschedule_requested' ? 'is-reschedule' : ''} ${b.visit === 'done' ? 'is-done' : ''}">
+  const reschedule = b.visit === 'reschedule_requested';
+  const classes = ['booking', reschedule ? 'is-reschedule' : '', reschedule && o.decision ? 'is-decision' : '', b.visit === 'done' ? 'is-done' : ''].filter(Boolean).join(' ');
+  return html`<li class="${classes}">
     <p class="booking-time num">${o.day ? html`${formatDay(b.start, timeZone)}, ` : ''}<time datetime="${b.start}">${formatTime(b.start, timeZone)}</time> – <time datetime="${b.end}">${formatTime(b.end, timeZone)}</time></p>
     <a class="booking-issue" href="/tickets/${b.ticketId}">${clip(b.issue, { lines: 2 })}</a>
     ${o.tradie === false ? '' : html`<a class="booking-tradie" href="/tradies/${b.tradieId}">${b.businessName}</a>`}

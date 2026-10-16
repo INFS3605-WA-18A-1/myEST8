@@ -56,10 +56,8 @@ export function calendarPages() {
           note: COLLEAGUES_ONLY,
         })}`,
         body: html`
-          ${hidden
-            ? html`<p class="text-sm text-muted">${hidden} more ${hidden === 1 ? 'visit' : 'visits'} this week on other Property Managers’ Properties. <a class="link" href="${hrefFor(monday, 'all')}">Show all</a></p>`
-            : ''}
-          ${weekList(days, bookingsByDay(bookings, monday, timeZone), today, timeZone, filter)}
+          ${summary(bookings, pm.id, hidden ? html`${hidden} more ${hidden === 1 ? 'visit' : 'visits'} this week on other Property Managers’ Properties. <a class="link" href="${hrefFor(monday, 'all')}">Show all</a>` : '')}
+          ${weekList(days, bookingsByDay(bookings, monday, timeZone), today, timeZone, filter, pm.id)}
         `,
       }),
     );
@@ -73,18 +71,41 @@ export function timeRange(start: string, end: string, timeZone: string): Html {
   return html`<time datetime="${start}">${formatWhen(start, timeZone)}</time> – <time datetime="${end}">${formatTime(end, timeZone)}</time>`;
 }
 
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * The week in one line: how many visits are booked, then how they stand. A reschedule
+ * request on the Property Manager's own Property waits on them, so it carries the
+ * Wattle stripe; a colleague's only stands out. `more` says what Mine leaves out.
+ */
+function summary(bookings: Booking[], meId: number, more: Html | ''): Html {
+  const reschedules = bookings.filter((b) => b.visit === 'reschedule_requested');
+  const mine = reschedules.filter((b) => b.propertyManagerId === meId).length;
+  const others = reschedules.length - mine;
+  const unconfirmed = bookings.filter((b) => b.visit === 'not_confirmed').length;
+  return html`<div class="schedule-summary">
+    <p class="schedule-tally">
+      <span class="schedule-count num">${bookings.length ? `${plural(bookings.length, 'visit', 'visits')} booked` : 'Nothing booked this week'}</span>
+      ${mine ? html`<span class="schedule-flag is-decision">${plural(mine, 'reschedule request', 'reschedule requests')} waiting on you</span>` : ''}
+      ${others ? html`<span class="schedule-flag is-reschedule">${plural(others, 'reschedule', 'reschedules')} requested</span>` : ''}
+      ${unconfirmed ? html`<span class="schedule-flag">${unconfirmed} not confirmed yet</span>` : ''}
+    </p>
+    ${more ? html`<p class="schedule-more">${more}</p>` : ''}
+  </div>`;
+}
+
 /**
  * The week as a list of days. Each run of empty days (today is never folded) is also
  * written as one line; the CSS shows that line below 1024 px and the empty days, narrow,
  * from 1024 px, so each screen reads one of the two.
  */
-function weekList(days: string[], byDay: Map<string, Booking[]>, today: string, timeZone: string, filter: Filter): Html {
+function weekList(days: string[], byDay: Map<string, Booking[]>, today: string, timeZone: string, filter: Filter, meId: number): Html {
   const items: Html[] = [];
   let quiet: string[] = [];
   const flush = () => {
     if (quiet.length) {
       items.push(html`<li class="schedule-quiet">Nothing booked ${dayRange(quiet)}</li>`);
-      items.push(...quiet.map((day) => dayItem(day, [], false, timeZone, filter)));
+      items.push(...quiet.map((day) => dayItem(day, [], false, timeZone, filter, meId)));
     }
     quiet = [];
   };
@@ -95,22 +116,23 @@ function weekList(days: string[], byDay: Map<string, Booking[]>, today: string, 
       continue;
     }
     flush();
-    items.push(dayItem(day, bookings, day === today, timeZone, filter));
+    items.push(dayItem(day, bookings, day === today, timeZone, filter, meId));
   }
   flush();
   return html`<ol class="schedule-week" aria-label="The week, Monday to Sunday">${items}</ol>`;
 }
 
-/** One day: "Mon 12" (the month is in the page's subtitle), then its bookings or "Nothing booked". */
-function dayItem(day: string, bookings: Booking[], isToday: boolean, timeZone: string, filter: Filter): Html {
+/** One day: "Mon 12" (the month is in the page's subtitle) and how many visits, then its bookings or "Nothing booked". */
+function dayItem(day: string, bookings: Booking[], isToday: boolean, timeZone: string, filter: Filter, meId: number): Html {
   const classes = ['schedule-day', bookings.length ? 'is-booked' : 'is-empty', isToday ? 'is-today' : ''].join(' ');
   return html`<li class="${classes}" ${isToday ? html`aria-current="date"` : ''}>
     <h2 class="schedule-day-title">
       <time datetime="${day}"><span aria-hidden="true">${shortDay(day)}</span><span class="sr-only">${longDay(day)}</span></time>
       ${isToday ? badge('Today', 'info') : ''}
+      ${bookings.length ? html`<span class="schedule-day-count num">${plural(bookings.length, 'visit', 'visits')}</span>` : ''}
     </h2>
     ${bookings.length
-      ? html`<ul class="booking-list">${bookings.map((b) => bookingCard(b, timeZone, { propertyManager: filter === 'all' }))}</ul>`
+      ? html`<ul class="booking-list">${bookings.map((b) => bookingCard(b, timeZone, { propertyManager: filter === 'all', decision: b.propertyManagerId === meId }))}</ul>`
       : html`<p class="text-sm text-muted">Nothing booked</p>`}
   </li>`;
 }
