@@ -1,6 +1,8 @@
-import { createHmac, generateKeyPairSync, sign } from 'node:crypto';
+import { createHmac, generateKeyPairSync, randomBytes, sign } from 'node:crypto';
 import { describe, expect, test } from 'vitest';
 import { createHttpApp } from '../src/http.ts';
+import { json, stubFetch } from './adapters/stub-fetch.ts';
+import { FakeBlobStore } from './support/fakes.ts';
 import { AGENCY_INBOX, AGENCY_NUMBER } from './support/harness.ts';
 import { photo } from './support/photos.ts';
 import { BELLA, TOM, tomsTapTicket, world } from './support/world.ts';
@@ -9,8 +11,8 @@ const PUBLIC_URL = 'https://myest8.test';
 const TWILIO_TOKEN = 'twilio-auth-token';
 const sendgridKeys = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
 
-async function server() {
-  const w = await world();
+async function server(options: Parameters<typeof world>[0] = {}) {
+  const w = await world(options);
   const http = createHttpApp(w.h.app, {
     publicUrl: PUBLIC_URL,
     twilioAuthToken: TWILIO_TOKEN,
@@ -162,6 +164,53 @@ describe('the no-login links', () => {
     expect((await http.request('/api/u/not-a-real-token', { method: 'POST', body: form })).status).toBe(404);
   });
 
+  test('with storage, photos go straight to it: prepare hands out slots, complete collects them, and nothing outside the Agency can be collected', async () => {
+    const blobs = new FakeBlobStore();
+    const { h, alice, http } = await server({ blobs });
+    h.classifier.when('The kitchen tap is dripping', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });
+    await h.receive(TOM, 'The kitchen tap is dripping');
+    await h.answer(TOM, 'Kitchen sink');
+    await h.answer(TOM, 'Since Monday');
+    await h.answer(TOM, 'No', 'no');
+    await h.answer(TOM, 'Mornings', 'weekday_mornings');
+    const api = `/api${new URL(h.messenger.last(TOM)!.data.uploadLink as string).pathname}`;
+    const post = (path: string, body: unknown) =>
+      http.request(`${api}/${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+
+    const prepared = await post('prepare', { files: [{ filename: 'tap.jpg' }] });
+    expect(prepared.status).toBe(200);
+    const { direct, slots } = (await prepared.json()) as { direct: boolean; slots: { path: string; url: string }[] };
+    expect(direct).toBe(true);
+    expect(slots[0]!.url).toBe(`https://storage.test/upload/${slots[0]!.path}`);
+
+    await blobs.put(slots[0]!.path, photo({ takenAt: '2026:10:08 08:30:00' }), 'image/jpeg'); // the browser's PUT
+    const done = await post('complete', { files: [{ path: slots[0]!.path, filename: 'tap.jpg', contentType: 'image/jpeg' }] });
+    expect(done.status).toBe(202);
+    await h.drain();
+    expect((await alice.dashboard()).maintenanceRequests).toMatchObject([{ photos: [{ metadata: 'ok' }] }]);
+    expect(blobs.objects.has(slots[0]!.path)).toBe(false); // the staged copy is gone
+    expect([...blobs.objects.keys()].every((path) => /^\d+\/[0-9a-f-]{36}$/.test(path))).toBe(true); // the kept copy is named by the app, not the upload
+
+    blobs.objects.set('staging/999/other', { content: photo(), contentType: 'image/jpeg' });
+    const stolen = await post('complete', { files: [{ path: 'staging/999/other', filename: 'x.jpg', contentType: 'image/jpeg' }] });
+    expect(stolen.status).toBeGreaterThanOrEqual(400);
+    expect(blobs.objects.has('staging/999/other')).toBe(true);
+    expect((await http.request('/api/u/not-a-real-token/prepare', { method: 'POST', body: JSON.stringify({ files: [{}] }) })).status).toBe(404);
+  });
+
+  test('without storage, prepare says to use the ordinary form', async () => {
+    const { h, http } = await server();
+    h.classifier.when('The kitchen tap is dripping', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });
+    await h.receive(TOM, 'The kitchen tap is dripping');
+    await h.answer(TOM, 'Kitchen sink');
+    await h.answer(TOM, 'Since Monday');
+    await h.answer(TOM, 'No', 'no');
+    await h.answer(TOM, 'Mornings', 'weekday_mornings');
+    const api = `/api${new URL(h.messenger.last(TOM)!.data.uploadLink as string).pathname}`;
+    const prepared = await http.request(`${api}/prepare`, { method: 'POST', body: JSON.stringify({ files: [{}] }) });
+    expect(await prepared.json()).toEqual({ direct: false });
+  });
+
   test("the Tenant's progress tracker is served as JSON for its link's token, and an unknown token is not found", async () => {
     const w = await server();
     const { h, http } = w;
@@ -176,6 +225,27 @@ describe('the no-login links', () => {
       stages: [{ stage: 'reported', reached: true }, { stage: 'confirmed', reached: true }, { stage: 'getting_quotes', reached: false }, {}, {}, {}, {}],
     });
     expect((await http.request('/api/t/not-a-real-token')).status).toBe(404);
+  });
+});
+
+describe('the Twilio webhook with no auth token (hosted without Twilio)', () => {
+  test('is off: 404, even for a request signed with the demo key', async () => {
+    const received: unknown[] = [];
+    const http = createHttpApp({ receiveInbound: async (m: unknown) => void received.push(m) } as never, {
+      publicUrl: PUBLIC_URL,
+      twilioAuthToken: null,
+      sendgridPublicKey: '',
+      clock: { now: () => new Date('2026-10-13T00:00:00Z') },
+    });
+    const params = { From: '+61400000001', To: '+61290000000', Body: 'hi', MessageSid: 'SM1' };
+    const payload = `${PUBLIC_URL}/webhooks/twilio` + Object.keys(params).sort().map((k) => k + params[k as keyof typeof params]).join('');
+    const res = await http.request('/webhooks/twilio', {
+      method: 'POST',
+      headers: { 'x-twilio-signature': createHmac('sha1', 'demo').update(payload).digest('base64') },
+      body: new URLSearchParams(params).toString(),
+    });
+    expect(res.status).toBe(404);
+    expect(received).toEqual([]);
   });
 });
 
@@ -219,5 +289,124 @@ describe('the Meta WhatsApp webhook', () => {
     const { http } = whatsappServer(false);
     expect((await http.request('/webhooks/whatsapp?hub.mode=subscribe')).status).toBe(404);
     expect((await http.request('/webhooks/whatsapp', { method: 'POST', body })).status).toBe(404);
+  });
+
+  test('a failed delivery status is recorded against the message', async () => {
+    const failures: unknown[] = [];
+    const http = createHttpApp(
+      { receiveInbound: async () => {}, recordDeliveryFailure: async (failure: unknown) => void failures.push(failure) } as never,
+      {
+        publicUrl: PUBLIC_URL,
+        twilioAuthToken: TWILIO_TOKEN,
+        sendgridPublicKey: '',
+        clock: { now: () => new Date('2026-10-13T00:00:00Z') },
+        whatsapp: { appSecret: SECRET, verifyToken: 'verify-me' },
+      },
+    );
+    const status = JSON.stringify({
+      entry: [{ changes: [{ field: 'messages', value: { statuses: [{ id: 'w2', status: 'failed', recipient_id: '61400000001', errors: [{ code: 131047, title: 'Re-engagement message' }] }] } }] }],
+    });
+    const res = await http.request('/webhooks/whatsapp', { method: 'POST', headers: { 'x-hub-signature-256': sign(status) }, body: status });
+    expect(res.status).toBe(200);
+    expect(failures).toEqual([{ to: '+61400000001', code: 131047, title: 'Re-engagement message' }]);
+  });
+});
+
+describe('the Resend webhook', () => {
+  const secretBytes = randomBytes(24);
+  const SECRET = `whsec_${secretBytes.toString('base64')}`;
+  const API_KEY = 're_test_not_a_real_key';
+  const NOW = new Date('2026-10-13T00:00:00Z');
+  const EMAIL_ID = '4ef9a417-02e9-4d39-ad75-9611e0fcc33c';
+  const MB = 1024 * 1024;
+
+  function svix(body: string, timestamp = String(Math.floor(NOW.getTime() / 1000)), id = 'msg_resend_test') {
+    const signature = createHmac('sha256', secretBytes).update(`${id}.${timestamp}.${body}`).digest('base64');
+    return { 'svix-id': id, 'svix-timestamp': timestamp, 'svix-signature': `v1,${signature}` };
+  }
+
+  function resendServer(enabled = true, fetchImpl: typeof fetch = async () => json({})) {
+    const received: unknown[] = [];
+    const http = createHttpApp({ receiveInbound: async (m: unknown) => void received.push(m) } as never, {
+      publicUrl: PUBLIC_URL,
+      twilioAuthToken: TWILIO_TOKEN,
+      sendgridPublicKey: '',
+      clock: { now: () => NOW },
+      resend: enabled ? { webhookSecret: SECRET, apiKey: API_KEY, fetch: fetchImpl } : null,
+    });
+    return { http, received };
+  }
+
+  const payload = JSON.stringify({
+    type: 'email.received',
+    data: { email_id: EMAIL_ID, from: 'bella@example.com', to: ['inbox@harbour.example'] },
+  });
+
+  test('without configuration the route is 404', async () => {
+    const { http, received } = resendServer(false);
+    expect((await http.request('/webhooks/resend', { method: 'POST', headers: svix(payload), body: payload })).status).toBe(404);
+    expect(received).toEqual([]);
+  });
+
+  test('a signed email is fetched and passed to receiveInbound; a bad or stale signature is refused', async () => {
+    const stub = stubFetch(() =>
+      json({
+        id: EMAIL_ID,
+        from: 'Bella <bella@example.com>',
+        to: ['Inbox@Harbour.example'],
+        text: 'The shower drain is blocked\n\nOn Tue, 6 Oct 2026 at 9:00, Harbour <inbox@harbour.example> wrote:\n> old',
+        attachments: [],
+      }),
+    );
+    const { http, received } = resendServer(true, stub.fetch);
+    const bad = await http.request('/webhooks/resend', { method: 'POST', headers: { ...svix(payload), 'svix-signature': 'v1,bm90LXRoaXM=' }, body: payload });
+    expect(bad.status).toBe(403);
+    expect(received).toEqual([]);
+    expect(stub.requests).toEqual([]);
+
+    const staleAt = String(Math.floor(NOW.getTime() / 1000) - 301);
+    const stale = await http.request('/webhooks/resend', { method: 'POST', headers: svix(payload, staleAt), body: payload });
+    expect(stale.status).toBe(403);
+
+    const pretty = JSON.stringify(JSON.parse(payload), null, 2);
+    const reformatted = await http.request('/webhooks/resend', { method: 'POST', headers: svix(payload), body: pretty });
+    expect(reformatted.status).toBe(403);
+    expect(stub.requests).toEqual([]);
+
+    const good = await http.request('/webhooks/resend', { method: 'POST', headers: svix(payload), body: payload });
+    expect(good.status).toBe(200);
+    expect(await good.text()).toBe('ok');
+    expect(received).toMatchObject([{ providerMessageId: `re-${EMAIL_ID}`, agencyChannel: 'inbox@harbour.example', from: 'bella@example.com', text: 'The shower drain is blocked' }]);
+    expect(stub.requests[0]?.headers.get('authorization')).toBe(`Bearer ${API_KEY}`);
+  });
+
+  test('an event that is not email.received is acknowledged and not fetched', async () => {
+    const body = JSON.stringify({ type: 'email.sent', data: { email_id: EMAIL_ID } });
+    const stub = stubFetch(() => json({}));
+    const { http, received } = resendServer(true, stub.fetch);
+    const response = await http.request('/webhooks/resend', { method: 'POST', headers: svix(body), body });
+    expect(response.status).toBe(200);
+    expect(received).toEqual([]);
+    expect(stub.requests).toEqual([]);
+  });
+
+  test('signed JSON that does not parse is 400', async () => {
+    const body = '{"type":';
+    const { http, received } = resendServer();
+    const response = await http.request('/webhooks/resend', { method: 'POST', headers: svix(body), body });
+    expect(response.status).toBe(400);
+    expect(received).toEqual([]);
+  });
+
+  test('a body over 1MB is refused', async () => {
+    const { http, received } = resendServer();
+    const body = 'x'.repeat(MB + 1);
+    const response = await http.request('/webhooks/resend', {
+      method: 'POST',
+      headers: { ...svix(body), 'content-length': String(body.length) },
+      body,
+    });
+    expect(response.status).toBe(413);
+    expect(received).toEqual([]);
   });
 });

@@ -44,6 +44,11 @@ export interface OutboundMessage {
   template: string;
   data: object;
   attachments: OutboundAttachment[];
+  /**
+   * Stable id for this send, when the caller has one. Providers that support
+   * idempotency (Resend) send it so a retry does not deliver the message twice.
+   */
+  id?: string;
 }
 
 export interface Messenger {
@@ -121,3 +126,15 @@ export interface Clock {
 
 /** Downloads an attachment that a provider delivered by URL (Twilio media). */
 export type FetchMedia = (url: string) => Promise<Uint8Array>;
+
+/**
+ * Where file bytes live when they are not in the database (Supabase Storage, in a
+ * private bucket). Paths are chosen by the app, never from a filename.
+ */
+export interface BlobStore {
+  put(path: string, content: Uint8Array, contentType: string): Promise<void>;
+  get(path: string): Promise<Uint8Array>;
+  remove(path: string): Promise<void>;
+  /** A URL a browser can PUT one object to, without any other credential. */
+  uploadUrl(path: string): Promise<string>;
+}

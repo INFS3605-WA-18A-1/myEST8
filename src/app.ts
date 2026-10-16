@@ -1,16 +1,17 @@
 import type { Context, Modules, Ports } from './context.ts';
 import type { Db } from './db.ts';
+import { createChannelVerification } from './channel-verification.ts';
 import { createFiles } from './files.ts';
 import { createGoogleRatingRefresh } from './google-ratings.ts';
 import { createImports, type ImportChanges, type ImportKind } from './imports.ts';
-import { createIntake } from './intake.ts';
+import { createIntake, MAX_UPLOAD_FILES } from './intake.ts';
 import { createNotifications } from './notifications.ts';
 import { createOnboarding } from './onboarding.ts';
-import type { ChannelType, Clock, InboundMessage } from './ports.ts';
+import type { BlobStore, ChannelType, Clock, InboundMessage } from './ports.ts';
 import { createProfiles, type SignUp } from './profiles.ts';
 import { createQuotes } from './quotes.ts';
 import { createScheduling } from './scheduling.ts';
-import { DEFAULT_SETTINGS, type Role, type Settings, type Trade, type Urgency } from './shared.ts';
+import { DEFAULT_SETTINGS, invalid, type Role, type Settings, type Trade, type Urgency } from './shared.ts';
 import { createTickets } from './tickets.ts';
 import { createViews } from './views.ts';
 import { createWorker } from './worker.ts';
@@ -21,11 +22,11 @@ export type Upload = { filename: string; contentType: string; content: Uint8Arra
  * The whole app behind its boundary: inbound messages, uploads through links,
  * Property Manager actions and the background worker.
  */
-export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partial<Settings> & Pick<Settings, 'baseUrl'> }) {
+export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partial<Settings> & Pick<Settings, 'baseUrl'>; blobs?: BlobStore | null }) {
   const { db, clock } = deps;
   const settings: Settings = { ...DEFAULT_SETTINGS, ...deps.settings };
   const worker = createWorker(db, clock);
-  const files = createFiles(db, clock);
+  const files = createFiles(db, clock, deps.blobs ?? null);
   const modules = {} as Modules;
   const ctx: Context = {
     db,
@@ -51,6 +52,7 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
   modules.scheduling = createScheduling(ctx);
   createGoogleRatingRefresh(ctx);
   const onboarding = createOnboarding(ctx);
+  const verification = createChannelVerification(ctx);
   const imports = createImports(ctx, onboarding);
   const views = createViews(ctx);
   const { profiles, tickets, intake, quotes, scheduling } = modules;
@@ -76,14 +78,35 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
     /** Called by the webhooks: stores the message and returns straight away. */
     receiveInbound: (message: InboundMessage) => intake.receive(message),
 
+    /** A WhatsApp delivery failure from Meta, recorded on the outbound message. */
+    recordDeliveryFailure: (failure: { to: string; code: number; title: string }) => tickets.recordDeliveryFailure(failure),
+
     /** An upload through a no-login link: issue photos or an Urgent Repair receipt. */
     upload: (token: string, uploads: Upload[]) => intake.upload(token, uploads),
+
+    /**
+     * Where a browser can send the files of a no-login upload straight to storage,
+     * past the function's request size limit: one URL per file, or null when files
+     * are kept in the database. Refuses a link that isn't an upload link.
+     */
+    async uploadSlots(token: string, count: number) {
+      if (!Number.isInteger(count) || count < 1 || count > MAX_UPLOAD_FILES) invalid(`Upload between 1 and ${MAX_UPLOAD_FILES} files`);
+      return files.stage(await intake.uploadAgency(token), count);
+    },
+
+    /** Finishes an upload sent to the slots from `uploadSlots`: collects the files, then handles them like `upload`. */
+    async completeUpload(token: string, sent: { path: string; filename: string; contentType: string }[]) {
+      const agencyId = await intake.uploadAgency(token);
+      const uploads: Upload[] = [];
+      for (const f of sent) uploads.push({ filename: f.filename, contentType: f.contentType, content: await files.take(agencyId, f.path) });
+      await intake.upload(token, uploads);
+    },
 
     /** The Tenant's progress tracker, reached by its no-login link. */
     tracker: (token: string) => tickets.tracker(token),
 
     /** Runs every background task that is due. */
-    runWorker: () => worker.runDue(),
+    runWorker: (options?: { budgetMs?: number }) => worker.runDue(options),
 
     /** A stored file, for a signed file link (src/file-links.ts): the checked signature is the access control. */
     linkedFile: (fileId: number) => files.get(fileId),
@@ -116,11 +139,17 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
         navCounts: () => views.navCounts(agencyId, propertyManagerId),
 
         // Onboarding
-        /** The Agency's connected channels, with when each last passed a test message. */
+        /** The Agency's connected channels. `testedAt` is when a code or a first inbound email verified the address. */
         channels: () => profiles.channels(agencyId),
         /** Adds a colleague as a Property Manager. Returns their id and a temporary password to pass on, shown once. */
         addColleague: (input: { name: string; email: string }) => profiles.addColleague(agencyId, input),
+        /** Stores an address the caller has already proved: the demo seed, Gmail OAuth, or a confirmed code. */
         connectChannel: (channelType: ChannelType, address: string) => onboarding.connectChannel(agencyId, channelType, address),
+        /** Sends a 6-digit code. The typed address is not stored until confirmChannelVerification. */
+        startChannelVerification: (channelType: ChannelType, address: string) => verification.start(agencyId, channelType, address),
+        confirmChannelVerification: (channelType: ChannelType, address: string, code: string) => verification.confirm(agencyId, channelType, address, code),
+        pendingChannelVerifications: () => verification.pending(agencyId),
+        ensureInboundEmail: () => verification.ensureInboundEmail(agencyId),
         sendTestMessage: (channelType: ChannelType, to: string) => onboarding.sendTestMessage(agencyId, channelType, to),
         addOwner: (input: Parameters<typeof onboarding.addOwner>[1]) => onboarding.addOwner(agencyId, input),
         addBuildingManager: (input: Parameters<typeof onboarding.addBuildingManager>[1]) => onboarding.addBuildingManager(agencyId, input),

@@ -6,13 +6,16 @@
 
 import { Hono, type Context as HonoContext } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
+import { HTTPException } from 'hono/http-exception';
 import { metaStatusFailures, metaToInbound, verifyMetaSignature } from './adapters/meta-whatsapp.ts';
+import { resendToInbound, verifyResendSignature } from './adapters/resend.ts';
 import { sendgridToInbound, verifySendgridSignature } from './adapters/sendgrid.ts';
 import { twilioToInbound, verifyTwilioSignature } from './adapters/twilio.ts';
 import type { App } from './app.ts';
 import type { FileLinks } from './file-links.ts';
 import type { Clock } from './ports.ts';
-import { ActionError } from './shared.ts';
+import { ActionError, invalid } from './shared.ts';
+import { streamOf } from './web/stream.ts';
 
 const STATUS = { not_found: 404, invalid: 400, conflict: 409 } as const;
 const MB = 1024 * 1024;
@@ -22,7 +25,8 @@ export function createHttpApp(
   config: {
     /** The address providers call, which Twilio signs: "https://myest8.example". */
     publicUrl: string;
-    twilioAuthToken: string;
+    /** Twilio's auth token. Null (hosted, none set) turns /webhooks/twilio off with a 404. */
+    twilioAuthToken: string | null;
     /** SendGrid's verification key (base64 DER). Every email webhook must be signed with it. */
     sendgridPublicKey: string;
     clock: Clock;
@@ -30,6 +34,8 @@ export function createHttpApp(
     fileLinks?: FileLinks | null;
     /** Meta's WhatsApp Cloud API: the app secret that signs webhooks, and the verify token for its handshake. */
     whatsapp?: { appSecret: string; verifyToken: string } | null;
+    /** Resend inbound email. Absent unless both the webhook secret and the API key are set. */
+    resend?: { webhookSecret: string; apiKey: string; fetch?: typeof fetch } | null;
   },
 ) {
   const http = new Hono();
@@ -41,6 +47,7 @@ export function createHttpApp(
   };
 
   http.post('/webhooks/twilio', bodyLimit({ maxSize: MB }), async (c) => {
+    if (!config.twilioAuthToken) return c.notFound();
     const params = Object.fromEntries(new URLSearchParams(await c.req.text()));
     if (!verifyTwilioSignature(config.twilioAuthToken, publicUrl(c), params, c.req.header('x-twilio-signature') ?? '')) {
       return c.text('Invalid signature', 403);
@@ -69,9 +76,7 @@ export function createHttpApp(
       return c.text('Invalid JSON', 400);
     }
     for (const message of metaToInbound(body, config.clock.now())) await app.receiveInbound(message);
-    for (const failure of metaStatusFailures(body)) {
-      console.warn(`WhatsApp message to ${failure.to} failed (${failure.code}): ${failure.title}`);
-    }
+    for (const failure of metaStatusFailures(body)) await app.recordDeliveryFailure(failure);
     return c.text('ok', 200);
   });
 
@@ -95,6 +100,60 @@ export function createHttpApp(
     return c.body(null, 200);
   });
 
+  http.post('/webhooks/resend', bodyLimit({ maxSize: MB }), async (c) => {
+    if (!config.resend) return c.notFound();
+    // The signature covers the raw bytes, so check it before parsing JSON.
+    const raw = new Uint8Array(await c.req.arrayBuffer());
+    if (
+      !verifyResendSignature(
+        config.resend.webhookSecret,
+        raw,
+        {
+          id: c.req.header('svix-id') ?? '',
+          timestamp: c.req.header('svix-timestamp') ?? '',
+          signature: c.req.header('svix-signature') ?? '',
+        },
+        config.clock.now(),
+      )
+    ) {
+      return c.text('Invalid signature', 403);
+    }
+    let event: unknown;
+    try {
+      event = JSON.parse(new TextDecoder().decode(raw));
+    } catch {
+      return c.text('Invalid JSON', 400);
+    }
+    const message = await resendToInbound(event, {
+      apiKey: config.resend.apiKey,
+      fetch: config.resend.fetch ?? fetch,
+      receivedAt: config.clock.now(),
+    });
+    if (message) await app.receiveInbound(message);
+    return c.text('ok', 200);
+  });
+
+  // Uploads straight to storage, for files past the function's request size limit:
+  // `prepare` hands out one URL per file, the browser PUTs to them, `complete` collects them.
+  http.post('/api/u/:token/prepare', bodyLimit({ maxSize: 64 * 1024 }), async (c) => {
+    const body = await c.req.json().catch(() => null);
+    const count = Array.isArray(body?.files) ? body.files.length : 0;
+    const slots = await app.uploadSlots(c.req.param('token'), count);
+    return c.json(slots ? { direct: true, slots } : { direct: false });
+  });
+
+  http.post('/api/u/:token/complete', bodyLimit({ maxSize: 64 * 1024 }), async (c) => {
+    const body = await c.req.json().catch(() => null);
+    const sent = Array.isArray(body?.files) ? (body.files as unknown[]) : [];
+    const files = sent.map((f) => {
+      const { path, filename, contentType } = (f ?? {}) as Record<string, unknown>;
+      if (typeof path !== 'string' || typeof filename !== 'string') invalid('Expected the files that were uploaded');
+      return { path, filename, contentType: typeof contentType === 'string' && contentType ? contentType : 'application/octet-stream' };
+    });
+    await app.completeUpload(c.req.param('token'), files);
+    return c.json({ ok: true, count: files.length }, 202);
+  });
+
   http.post('/api/u/:token', bodyLimit({ maxSize: 105 * MB }), async (c) => {
     const form = await c.req.formData().catch(() => null);
     if (!form) return c.json({ error: 'Expected multipart/form-data' }, 400);
@@ -114,7 +173,7 @@ export function createHttpApp(
     const id = c.req.param('id');
     if (!config.fileLinks?.check(id, c.req.query('expires'), c.req.query('signature'))) return c.text('Not found', 404);
     const file = await app.linkedFile(Number(id));
-    return c.body(Buffer.from(file.content), 200, {
+    return c.body(streamOf(file.content), 200, {
       'content-type': file.contentType,
       'content-disposition': `inline; filename*=UTF-8''${encodeURIComponent(file.filename).replace(/['()*]/g, (ch) => `%${ch.charCodeAt(0).toString(16).toUpperCase()}`)}`,
       'cache-control': 'private, no-store',
@@ -126,6 +185,7 @@ export function createHttpApp(
   });
 
   http.onError((error, c) => {
+    if (error instanceof HTTPException) return error.getResponse();
     if (error instanceof ActionError) return c.json({ error: error.message }, STATUS[error.code]);
     console.error(error);
     return c.json({ error: 'Something went wrong' }, 500);

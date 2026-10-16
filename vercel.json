@@ -1,0 +1,12 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "git": { "deploymentEnabled": false },
+  "rewrites": [{ "source": "/(.*)", "destination": "/api" }],
+  "functions": {
+    "api/index.ts": {
+      "maxDuration": 60,
+      "includeFiles": "{src/web/static/**,node_modules/@tailwindcss/browser/**,node_modules/daisyui/**,node_modules/@fontsource/lexend/**,node_modules/@fontsource/red-hat-text/**,node_modules/@phosphor-icons/core/assets/**}"
+    }
+  },
+  "crons": [{ "path": "/api/cron/worker", "schedule": "0 6 * * *" }]
+}

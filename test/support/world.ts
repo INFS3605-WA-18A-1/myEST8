@@ -24,8 +24,8 @@ export const PASSWORD = 'correct horse battery';
 export const KING_ST_LOCATION = { lat: -33.897, lng: 151.179 };
 export const OCEAN_AVE = '5/40 Ocean Ave, Bondi NSW 2026';
 
-export async function world() {
-  const h = await createHarness();
+export async function world(options: Parameters<typeof createHarness>[0] = {}) {
+  const h = await createHarness(options);
   const agencyId = await h.app.setup.createAgency({ name: 'Harbour Realty', timeZone: 'Australia/Sydney' });
   const aliceId = await h.app.setup.addPropertyManager(agencyId, { name: 'Alice Archer', email: 'alice@harbour.example', password: PASSWORD });
   const bobId = await h.app.setup.addPropertyManager(agencyId, { name: 'Bob Baker', email: 'bob@harbour.example', password: PASSWORD });

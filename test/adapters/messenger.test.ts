@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { messengersFromEnv, routeByChannel } from '../../src/adapters/messenger.ts';
 import type { OutboundMessage } from '../../src/ports.ts';
 import { FakeClock, FakeMessenger } from '../support/fakes.ts';
-import { stubFetch } from './stub-fetch.ts';
+import { json, stubFetch } from './stub-fetch.ts';
 
 const clock = new FakeClock(new Date('2026-10-08T09:00:00+11:00'));
 const SECRET = 'a-test-secret-that-is-long-enough-1234';
@@ -69,6 +69,23 @@ describe('providers from the environment', () => {
     expect(email!.url).toBe('https://api.sendgrid.com/v3/mail/send');
     expect(email!.headers.get('authorization')).toBe('Bearer SG.key');
     expect(((await email!.json()) as { from: unknown }).from).toEqual({ email: 'noreply@myest8.example' });
+  });
+
+  test('RESEND_API_KEY alone enables email, and takes precedence over SendGrid', async () => {
+    const stub = stubFetch(() => json({ id: '4ef9a417-02e9-4d39-ad75-9611e0fcc33c' }));
+    const alone = messengersFromEnv({ RESEND_API_KEY: 're_test_key' }, { clock, fetch: stub.fetch });
+    expect(Object.keys(alone.channels)).toEqual(['email']);
+    expect(alone.fileLinks).toBeNull();
+
+    const both = messengersFromEnv(
+      { RESEND_API_KEY: 're_test_key', SENDGRID_API_KEY: 'SG.key', SENDGRID_FROM: 'noreply@myest8.example' },
+      { clock, fetch: stub.fetch },
+    );
+    await routeByChannel(both.channels).send(message('email', 'tom@example.com'));
+    const request = stub.requests[0]!;
+    expect(request.url).toBe('https://api.resend.com/emails');
+    expect(request.headers.get('authorization')).toBe('Bearer re_test_key');
+    expect(((await request.json()) as { from: string }).from).toBe('inbox@harbour.example');
   });
 
   test.each([

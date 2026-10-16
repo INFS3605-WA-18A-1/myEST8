@@ -7,7 +7,7 @@
 //
 //   1 Welcome          what we'll set up, and the Agency's details
 //   2 Your team        colleagues as Property Managers (optional)
-//   3 Channels         SMS, WhatsApp and email, each with a test message
+//   3 Channels         SMS and WhatsApp verified with a code, email at the inbound address
 //   4 Tradies          the Tradies the Agency already uses, so a Property can nominate them
 //   5 First Property   address, Max Repair Cost, Property Owner, Tenant, Building Manager
 //   6 Done             what's set up, and where to go next
@@ -51,6 +51,9 @@ import {
   channelGuide,
   channelLine,
   channelOf,
+  channelState,
+  inboundEmailField,
+  phoneChannelForm,
   choiceGroup,
   contactFields,
   contactFrom,
@@ -157,25 +160,20 @@ export function welcomePages(o: { demo: boolean; connectors?: ChannelConnectors 
   pages.get('/channels', async (c) => c.html(await channelsStep(c, o.demo, o.connectors ?? NO_CONNECTORS)));
   pages.post('/channels', (c) =>
     channelAction(c, async (form, channel) => {
+      if (channel.type === 'email') return 'Forward the Agency inbox to the inbound address on this page. A typed address is not saved.';
       const address = text(form, 'address');
       if (!address) throw new ActionError('invalid', `Enter the ${channel.addressLabel}`);
-      await c.var.actions.connectChannel(channel.type, address);
-      return `${channel.name} connected to ${address}. Now send a test message to check it works.`;
+      await c.var.actions.startChannelVerification(channel.type, address);
+      return `We sent a 6-digit code to ${normalizeAddress(address)}. It expires in 10 minutes.`;
     }),
   );
-  pages.post('/channels/test', (c) =>
+  pages.post('/channels/confirm', (c) =>
     channelAction(c, async (form, channel) => {
-      const to = text(form, 'to');
-      if (!to) throw new ActionError('invalid', 'Enter where to send the test message');
-      try {
-        await c.var.actions.sendTestMessage(channel.type, to);
-      } catch (error) {
-        // The point of a test is to see what's wrong, so a channel or provider failure is shown, not hidden.
-        if (error instanceof ActionError) throw error;
-        throw new ActionError('invalid', `The ${channel.name} test message didn't send: ${error instanceof Error ? error.message : String(error)}`);
-      }
-      const where = o.demo ? ' In the demo it shows under "What myEST8 sent" in the phone simulator.' : ' Check that it arrived.';
-      return `Test message sent to ${to} by ${channel.name}.${where}`;
+      const address = text(form, 'address');
+      const code = text(form, 'code');
+      if (!code) throw new ActionError('invalid', 'Enter the 6-digit code');
+      await c.var.actions.confirmChannelVerification(channel.type, address, code);
+      return `${channel.name} verified.`;
     }),
   );
 
@@ -377,13 +375,15 @@ async function channelAction(c: WizardContext, action: (form: FormValues, channe
 }
 
 async function channelsStep(c: WizardContext, demo: boolean, connectors: ChannelConnectors): Promise<Html> {
-  const { actions, pm } = c.var;
+  const { actions } = c.var;
   const agency = actions.agency();
+  const email = await actions.ensureInboundEmail();
+  const pending = await actions.pendingChannelVerifications();
   const connected = await actions.channels();
   const flash = flashFrom(c.req.url);
   const flashChannel = c.req.query('channel');
   const origin = new URL(c.req.url).origin;
-  const tested = connected.filter((ch) => ch.testedAt).length;
+  const verified = connected.filter((ch) => channelState(ch, { verified: ch.type === 'email' && email.state === 'verified', waiting: ch.type === 'email' && email.state === 'waiting' }) === 'verified').length;
   const rowForm = 'mt-2 grid items-end gap-3 md:grid-cols-[minmax(0,1fr)_auto]';
   const gmailBlock = connectors.gmail ? await gmailControls(connectors.gmail, agency.id, 'welcome') : null;
   return wizardPage(c, {
@@ -393,58 +393,41 @@ async function channelsStep(c: WizardContext, demo: boolean, connectors: Channel
     flash: flash && !CHANNELS.some((ch) => ch.type === flashChannel) ? flash : null,
     body: html`
       <p>
-        Tenants, Tradies and Property Owners reach ${agency.name} by SMS, WhatsApp and email. Connect each one, then send yourself a test message.${demo ? ' In the demo nothing is really sent, and the addresses work with the phone simulator.' : ''}
+        Tenants, Tradies and Property Owners reach ${agency.name} by SMS, WhatsApp and email. Verify SMS and WhatsApp with a code sent to the number.
+        Email arrives at the address below once you forward the Agency inbox to it.${demo ? ' In the demo nothing is really sent, and the addresses work with the phone simulator.' : ''}
       </p>
-      <p class="text-sm text-muted">${connected.length} of ${CHANNELS.length} connected, ${tested} tested.</p>
+      <p class="text-sm text-muted">${connected.length} of ${CHANNELS.length} connected, ${verified} verified.</p>
       <div class="flex flex-col gap-4">
         ${CHANNELS.map((channel) => {
           const current = connected.find((ch) => ch.type === channel.type);
-          const suggestion = demo ? demoAddress(channel.type, agency) : '';
-          const viaGmail = channel.type === 'email' && gmailBlock !== null;
+          const suggestion = demo && channel.type !== 'email' ? demoAddress(channel.type, agency) : '';
           const viaWhatsapp = channel.type === 'whatsapp' && connectors.whatsappNumber !== null;
+          const waiting = channel.type === 'email' && email.state === 'waiting';
+          const emailVerified = channel.type === 'email' && email.state === 'verified';
+          const open = pending.find((row) => row.channelType === channel.type);
           return html`<div id="${channel.type}" class="grid gap-2 border-t border-line pt-4 first:border-t-0 first:pt-0 md:grid-cols-[9rem_minmax(0,1fr)]">
             <div>
               <h2 class="section-title">${channel.name}</h2>
-              <p class="mt-1">${channelBadge(current)}</p>
+              <p class="mt-1">${channelBadge(current, { waiting, verified: emailVerified })}</p>
             </div>
             <div class="min-w-0">
               ${flash && flashChannel === channel.type ? flashMessage(flash) : ''}
-              ${current ? channelLine(current, agency.timeZone) : ''}
-              ${viaGmail
-                ? gmailBlock
+              ${current ? channelLine(current, agency.timeZone, { waiting }) : ''}
+              ${channel.type === 'email'
+                ? html`${inboundEmailField(email.address)}${gmailBlock ?? ''}<div class="mt-2">${channelGuide(channel.type, origin)}</div>`
                 : viaWhatsapp
                   ? current?.address === connectors.whatsappNumber
                     ? ''
                     : whatsappControls(connectors.whatsappNumber!, '/welcome/channels')
-                  : html`<form method="post" action="/welcome/channels" class="${rowForm}">
-                <input type="hidden" name="type" value="${channel.type}" />
-                ${field({
-                  label: channel.addressLabel,
-                  name: 'address',
-                  id: `${channel.type}-address`,
-                  type: channel.inputType,
-                  required: true,
-                  value: current?.address ?? suggestion,
-                  placeholder: channel.placeholder,
-                })}
-                ${button(current ? `Change ${channel.name}` : `Connect ${channel.name}`, { size: 'sm', variant: 'secondary' })}
-              </form>`}
-              ${current
-                ? html`<form method="post" action="/welcome/channels/test" class="${rowForm}">
-                    <input type="hidden" name="type" value="${channel.type}" />
-                    ${field({
-                      label: channel.type === 'email' ? 'Send a test email to' : 'Send a test message to',
-                      name: 'to',
-                      id: `${channel.type}-to`,
-                      type: channel.inputType,
-                      required: true,
-                      value: channel.type === 'email' ? pm.email : '',
-                      placeholder: channel.type === 'email' ? 'you@youragency.com.au' : 'Your mobile, like 0412 345 678',
-                    })}
-                    ${button('Send a test message', { variant: 'secondary', size: 'sm' })}
-                  </form>`
-                : ''}
-              ${viaGmail || viaWhatsapp ? '' : html`<div class="mt-2">${channelGuide(channel.type, origin)}</div>`}
+                  : html`${phoneChannelForm({
+                      channel,
+                      postTo: '/welcome/channels',
+                      confirmTo: '/welcome/channels/confirm',
+                      pending: open,
+                      suggestion,
+                      current: current?.address,
+                      className: rowForm,
+                    })}<div class="mt-2">${channelGuide(channel.type, origin)}</div>`}
             </div>
           </div>`;
         })}
@@ -827,6 +810,7 @@ async function doneStep(c: WizardContext, demo: boolean): Promise<Html> {
   const progress = await setupProgress(actions);
   const agency = actions.agency();
   const team = await actions.propertyManagers();
+  const email = await actions.ensureInboundEmail();
   const channels = await actions.channels();
   const properties = await actions.properties();
   const tenants = await actions.people('tenant');
@@ -842,10 +826,19 @@ async function doneStep(c: WizardContext, demo: boolean): Promise<Html> {
     },
     ...CHANNELS.map((ch) => {
       const current = channels.find((c) => c.type === ch.type);
+      const waiting = ch.type === 'email' && email.state === 'waiting';
+      const verified = !!current?.testedAt || (ch.type === 'email' && email.state === 'verified');
+      const text = !current
+        ? `${ch.name} not connected`
+        : waiting
+          ? `Email is ${current.address}, waiting for your first message`
+          : verified
+            ? `${ch.name} verified at ${current.address}`
+            : `${ch.name} connected to ${current.address}`;
       return {
-        done: !!current?.testedAt,
-        text: current ? (current.testedAt ? `${ch.name} connected to ${current.address} and tested` : `${ch.name} connected to ${current.address}, not tested yet`) : `${ch.name} not connected`,
-        fix: [current ? 'Send a test message' : `Connect ${ch.name}`, `/welcome/channels#${ch.type}`] as [string, string],
+        done: verified,
+        text,
+        fix: ['Check channels', `/welcome/channels#${ch.type}`] as [string, string],
       };
     }),
     { done: progress.tradies, text: progress.tradies ? count(tradies.length, 'Tradie') : 'No Tradies yet', fix: ['Add Tradies', '/welcome/tradies'] },

@@ -1,0 +1,26 @@
+# Vercel's Hobby plan runs a cron job once a day at most, but delayed tasks (quote
+# and owner reminders, the no-photos timeout, rating refreshes) need a nudge more
+# often. This calls the app's worker route every five minutes. Webhooks and
+# uploads already run the worker straight away (api/index.ts).
+#
+# Needs the repository secret CRON_SECRET (the same value as on Vercel) and the
+# repository variable APP_URL (the production https address, no trailing slash).
+name: Worker ping
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Run due tasks
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ vars.APP_URL }}
+        run: |
+          test -n "$CRON_SECRET" && test -n "$APP_URL" || { echo "Set the CRON_SECRET secret and APP_URL variable"; exit 1; }
+          curl --fail --silent --show-error --max-time 90 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/worker"

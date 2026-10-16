@@ -30,3 +30,5 @@ ds-bundle/
 # Local tooling: agent worktrees, settings, cloud CLI installer
 .claude/
 google-cloud-cli-*.tar.gz
+.vercel
+.env*.local

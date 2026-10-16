@@ -25,7 +25,10 @@ describe('the onboarding guide', () => {
 
     const setup = await page(w, '/setup', cookie);
 
-    for (const text of ['id="channels"', 'id="tenants"', '/webhooks/twilio', 'WhatsApp sandbox', 'Inbound Parse', '/webhooks/sendgrid']) expect(setup).toContain(text);
+    for (const text of ['id="channels"', 'id="tenants"', 'Forward', 'Resend']) expect(setup).toContain(text);
+    expect(setup).not.toContain('WhatsApp sandbox');
+    expect(setup).not.toContain('/webhooks/twilio');
+    expect(setup).not.toContain('/webhooks/sendgrid');
     for (const text of ['Olivia Owens', 'Barry Strata', KING_ST, 'Tom Tran']) expect(setup).toContain(text);
 
     const properties = await page(w, '/properties', cookie);
@@ -36,16 +39,20 @@ describe('the onboarding guide', () => {
     expect(tradies).toContain(`href="/tradies/${w.tradies.finn.id}"`);
   });
 
-  test('connects a channel and sends a test message on it', async () => {
+  test('verifies a typed SMS number with a code, and does not store a typed email address', async () => {
     const w = await webWorld();
     const cookie = await w.signIn();
 
-    const connected = await submit(w, '/setup/channels', { type: 'sms', address: '+61 2 9000 1111' }, cookie);
-    expect(connected.location).toMatch(/^\/setup\?form=channels&ok=/);
-    expect(connected.page).toContain('SMS connected to +61 2 9000 1111');
+    const started = await submit(w, '/setup/channels', { type: 'sms', address: '+61 2 9000 1111' }, cookie);
+    expect(started.location).toMatch(/^\/setup\?form=channels&ok=/);
+    expect(started.page).toContain('We sent a 6-digit code to +61290001111');
+    expect(started.page).not.toContain('SMS connected to +61 2 9000 1111');
+    const code = String(w.h.messenger.last('+61290001111')?.data.code);
+    const verified = await submit(w, '/setup/channels/confirm', { type: 'sms', address: '+61 2 9000 1111', code }, cookie);
+    expect(verified.page).toContain('Verified');
 
-    const tested = await submit(w, '/setup/channels/test', { type: 'sms', to: '0412 345 678' }, cookie);
-    expect(tested.page).toContain('Test message sent to 0412 345 678 by SMS');
+    const typed = await submit(w, '/setup/channels', { type: 'email', address: 'someone@example.com' }, cookie);
+    expect(typed.page).not.toContain('someone@example.com');
 
     const unknown = await submit(w, '/setup/channels', { type: 'fax', address: '123' }, cookie);
     expect(unknown.page).toContain('Choose SMS, WhatsApp or email');

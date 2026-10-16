@@ -1,4 +1,5 @@
 import type {
+  BlobStore,
   ChannelType,
   Classifier,
   ClassifierAnswer,
@@ -128,5 +129,24 @@ export class FakePlaces implements PlacesLookup {
   }
   async geocode(address: string) {
     return this.locations.get(address) ?? null;
+  }
+}
+
+/** Object storage in memory. A browser's PUT to a slot URL is `put(path, bytes, type)`. */
+export class FakeBlobStore implements BlobStore {
+  objects = new Map<string, { content: Uint8Array; contentType: string }>();
+  async put(path: string, content: Uint8Array, contentType: string) {
+    this.objects.set(path, { content, contentType });
+  }
+  async get(path: string) {
+    const object = this.objects.get(path);
+    if (!object) throw new Error(`no object at ${path}`);
+    return object.content;
+  }
+  async remove(path: string) {
+    this.objects.delete(path);
+  }
+  async uploadUrl(path: string) {
+    return `https://storage.test/upload/${path}`;
   }
 }

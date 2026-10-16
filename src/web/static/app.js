@@ -223,3 +223,70 @@
     if (event.target instanceof HTMLInputElement && event.target.name === 'include') update();
   });
 })();
+
+// === copy ===
+// A button with data-copy-for="<input id>" copies that field. Without this file
+// the field is still there to copy by hand.
+(() => {
+  for (const button of document.querySelectorAll('[data-copy-for]')) {
+    button.addEventListener('click', async () => {
+      const input = document.getElementById(button.getAttribute('data-copy-for'));
+      if (!(input instanceof HTMLInputElement)) return;
+      const label = button.textContent;
+      try {
+        await navigator.clipboard.writeText(input.value);
+        button.textContent = 'Copied';
+        setTimeout(() => {
+          button.textContent = label;
+        }, 2000);
+      } catch {
+        input.focus();
+        input.select();
+      }
+    });
+  }
+})();
+
+// === direct upload ===
+// The Tenant upload form (data-direct-upload="<token>") sends its files straight to
+// storage, because a hosted function accepts only about 4 MB per request. When the
+// server says it has no storage (direct: false) or anything fails, the form is
+// submitted the ordinary way, so it still works without this file.
+(() => {
+  const form = document.querySelector('form[data-direct-upload]');
+  if (!(form instanceof HTMLFormElement)) return;
+  const token = encodeURIComponent(form.dataset.directUpload);
+  const input = form.querySelector('input[type=file]');
+  const post = (path, body) => fetch(`/api/u/${token}/${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  let plain = false;
+  form.addEventListener('submit', async (event) => {
+    if (plain || !(input instanceof HTMLInputElement) || !input.files?.length) return;
+    event.preventDefault();
+    const button = form.querySelector('button[type=submit], button:not([type])');
+    if (button instanceof HTMLButtonElement) button.disabled = true;
+    const fallback = () => {
+      plain = true;
+      if (button instanceof HTMLButtonElement) button.disabled = false;
+      // The page-wide double-submit guard marked this form busy when the first submit was stopped.
+      delete form.dataset.submitting;
+      form.removeAttribute('aria-busy');
+      form.requestSubmit();
+    };
+    try {
+      const files = [...input.files];
+      const prepared = await post('prepare', { files: files.map((f) => ({ filename: f.name })) });
+      if (!prepared.ok) return fallback();
+      const { direct, slots } = await prepared.json();
+      if (!direct) return fallback();
+      for (const [i, file] of files.entries()) {
+        const put = await fetch(slots[i].url, { method: 'PUT', headers: { 'content-type': file.type || 'application/octet-stream' }, body: file });
+        if (!put.ok) throw new Error('upload');
+      }
+      const done = await post('complete', { files: files.map((f, i) => ({ path: slots[i].path, filename: f.name, contentType: f.type })) });
+      if (!done.ok) throw new Error('complete');
+      location.assign(`/u/${token}?ok=${files.length}`);
+    } catch {
+      fallback();
+    }
+  });
+})();

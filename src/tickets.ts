@@ -1,7 +1,7 @@
 import type { Context } from './context.ts';
 import { all, one, run, transaction, type Param } from './db.ts';
 import type { ChannelType, ImageMatchResult } from './ports.ts';
-import { invalid, iso, newToken, notFound, TRADES, URGENCIES, type Availability, type Trade, type Urgency } from './shared.ts';
+import { invalid, iso, newToken, normalizeAddress, notFound, TRADES, URGENCIES, type Availability, type Trade, type Urgency } from './shared.ts';
 
 export type IssueStatus = 'gathering' | 'awaiting_photos' | 'checking' | 'maintenance_request' | 'confirmed' | 'rejected' | 'urgent';
 export const IN_INTAKE: IssueStatus[] = ['gathering', 'awaiting_photos', 'checking', 'maintenance_request'];
@@ -572,9 +572,9 @@ export function createTickets({ db, clock, settings, modules }: Context) {
     },
 
     async messages(issueId: number) {
-      return (await all<{ direction: 'in' | 'out'; person_id: number | null; channel_type: ChannelType; address: string; template: string | null; text: string; unread: number; at: string }>(
+      return (await all<{ direction: 'in' | 'out'; person_id: number | null; channel_type: ChannelType; address: string; template: string | null; text: string; delivery_error: string | null; unread: number; at: string }>(
         db,
-        'SELECT direction, person_id, channel_type, address, template, text, unread, at FROM messages WHERE issue_id = ? ORDER BY at, id',
+        'SELECT direction, person_id, channel_type, address, template, text, delivery_error, unread, at FROM messages WHERE issue_id = ? ORDER BY at, id',
         issueId,
       )).map((m) => ({
         direction: m.direction,
@@ -583,9 +583,21 @@ export function createTickets({ db, clock, settings, modules }: Context) {
         address: m.address,
         template: m.template,
         text: m.text,
+        deliveryError: m.delivery_error,
         unread: !!m.unread,
         at: m.at,
       }));
+    },
+
+    /** Notes a provider's delivery failure on the latest outbound WhatsApp message to that number. */
+    async recordDeliveryFailure(failure: { to: string; code: number; title: string }) {
+      const row = await one<{ id: number }>(
+        db,
+        `SELECT id FROM messages WHERE direction = 'out' AND channel_type = 'whatsapp' AND address = ? ORDER BY at DESC, id DESC LIMIT 1`,
+        normalizeAddress(failure.to),
+      );
+      if (!row) return;
+      await run(db, 'UPDATE messages SET delivery_error = ? WHERE id = ?', `WhatsApp couldn't deliver this message (${failure.code}): ${failure.title}`, row.id);
     },
 
     async unreadCount(issueId: number) {

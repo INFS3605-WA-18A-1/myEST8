@@ -6,13 +6,32 @@ const HOUR = 3_600_000;
 
 /** The demo with every external API mocked, whatever this machine's env vars say. Task errors fail the test. */
 async function demoWorld() {
+  return demoWorldWith();
+}
+
+async function demoWorldWith(extra: Record<string, string> = {}) {
   const errors: Error[] = [];
-  const d = await createDemo({ now: new Date('2026-10-08T09:00:00+11:00'), env: demoEnv(), logError: (e) => errors.push(e) });
+  const d = await createDemo({ now: new Date('2026-10-08T09:00:00+11:00'), env: demoEnv(extra), logError: (e) => errors.push(e) });
   closeAfter(d);
   return { ...d, errors };
 }
 
 describe('the demo', () => {
+  test('ANTHROPIC_API_KEY counts the classifier as real without a Jev URL', async () => {
+    const { apis } = await demoWorldWith({ ANTHROPIC_API_KEY: 'test-anthropic-key' });
+    expect(apis.classifier).toBe('real');
+  });
+
+  test('a Jev URL still counts the classifier as real when no Anthropic key is set', async () => {
+    const { apis } = await demoWorldWith({ JEV_API_URL: 'https://jev.example/api' });
+    expect(apis.classifier).toBe('real');
+  });
+
+  test('a blank Anthropic key stays on the mock classifier', async () => {
+    const { apis } = await demoWorldWith({ ANTHROPIC_API_KEY: '   ' });
+    expect(apis.classifier).toBe('mock');
+  });
+
   test('starts with Harbour Realty seeded and every external API mocked', async () => {
     const { demo, app, seed, apis, errors } = await demoWorld();
     expect(apis).toEqual({ classifier: 'mock', imageMatcher: 'mock', quoteReader: 'mock', places: 'mock', messenger: 'mock' });
@@ -93,6 +112,17 @@ describe('the demo', () => {
     const moved = demo.now().getTime() - before;
     expect(moved).toBeGreaterThanOrEqual(48 * HOUR);
     expect(moved).toBeLessThan(48 * HOUR + 60_000);
+  });
+
+  test('an empty PUBLIC_URL falls back to localhost on the port', async () => {
+    const { baseUrl } = await demoWorldWith({ PUBLIC_URL: '', PORT: '4321' });
+    expect(baseUrl).toBe('http://localhost:4321');
+  });
+
+  test('without TWILIO_AUTH_TOKEN the Twilio webhook still checks the demo key (dev behaviour is unchanged)', async () => {
+    const { web } = await demoWorld();
+    const res = await web.request('/webhooks/twilio', { method: 'POST', body: new URLSearchParams({ From: '+61400000000' }) });
+    expect(res.status).toBe(403);
   });
 
   test('serves the sign-in page and keeps the simulator behind it', async () => {

@@ -1,55 +1,48 @@
 # Setting up real channels: keys and accounts
 
-myEST8 reaches Tenants, Tradies and Property Owners through channels they already use ([ADR 0004](adr/0004-gmail-and-whatsapp-cloud-api.md)):
+myEST8 reaches Tenants, Tradies and Property Owners through channels they already use. Email goes through Resend ([ADR 0006](adr/0006-resend-email-and-claude-haiku.md)). WhatsApp goes through Meta's WhatsApp Cloud API ([ADR 0004](adr/0004-gmail-and-whatsapp-cloud-api.md)). SMS is simulated, or one shared Twilio number. A Twilio number bought for each Agency ([ADR 0005](adr/0005-twilio-sms-number-per-agency.md)) is not built.
 
 | Channel | How | What you set up |
 | ------- | --- | --------------- |
-| Email | Gmail, connected by each Agency signing in to Google | A Google Cloud OAuth client (section 1) |
+| Email | Resend, on a subdomain such as `mail.kevinhe.pro` | The domain's MX, SPF and DKIM, and a webhook (section 1) |
 | WhatsApp | Meta's WhatsApp Cloud API | A Meta app, a token and a webhook (section 2) |
-| SMS | A Twilio number bought for each Agency ([ADR 0005](adr/0005-twilio-sms-number-per-agency.md)), or simulated | A paid Twilio account and an Australian regulatory bundle (section 3). Without them, nothing: SMS is simulated |
+| SMS | Simulated, or one shared Twilio number | A Twilio account only if SMS should be real (section 3) |
 
-With none of this set, every channel is simulated: a new Agency is connected to the phone simulator when it signs up, and nothing is sent to a real phone or inbox. Set up only what you want to be real.
+Gmail OAuth is still in the code and is dormant (section 5). With none of the groups below set, every channel is simulated: nothing is sent to a real phone or inbox.
 
-All the values go in one file outside the repo, `~/.config/myest8/live.env` (`chmod 600`), which the systemd service loads. [`deploy/live.env.example`](../deploy/live.env.example) is the template. The repo's `.env` is not used by the service.
+All the values go in one file outside the repo, `~/.config/myest8/live.env` (`chmod 600`), which the systemd service loads. [`deploy/live.env.example`](../deploy/live.env.example) is the template. The repo's `.env` is not used by the service. The names below are the ones the process reads. It does not read `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `CHANNEL_SECRET_KEY`, `WHATSAPP_TOKEN`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_DISPLAY_NUMBER`, `TWILIO_BUNDLE_SID` or `TWILIO_ADDRESS_SID`.
 
 ## 0. A stable public address (first)
 
-Google's redirect address and Meta's webhook address must be exact, fixed HTTPS URLs. A quick tunnel gets a new URL every time it restarts, which breaks both. You need a hostname such as `myest8.yourdomain.com` on a domain in your Cloudflare account.
+Resend's webhook address and Meta's webhook address must be exact, fixed HTTPS URLs. A quick tunnel gets a new URL every time it restarts, which breaks both. You need a hostname such as `myest8.yourdomain.com` on a domain in your Cloudflare account.
 
 1. Put the hostname in `deploy/cloudflared.yml` (copy it from the example in that file) and in `live.env` as `PUBLIC_URL=https://myest8.yourdomain.com`.
 2. `cloudflared tunnel route dns mytunnel myest8.yourdomain.com` creates the DNS record for the tunnel.
 3. Run the named tunnel instead of the quick one: see [hosting.md](hosting.md#a-fixed-address).
 
-Without a domain, use the quick tunnel for the simulated demo only.
+Without a domain, use the quick tunnel for the simulated demo only. The live service runs `src/main.ts`, which refuses to start unless `PUBLIC_URL` is `https://...` and, while any API is mocked, unless `ALLOW_MOCKS=1`. See [hosting.md](hosting.md#which-program-the-service-runs).
 
-## 1. Gmail (email, one connection per Agency)
+## 1. Resend (email)
 
-In the [Google Cloud console](https://console.cloud.google.com):
+Inbound mail uses a subdomain so the root domain's existing MX is left alone. `mail.kevinhe.pro` is the example; another subdomain of a domain you control is the same setup. An Agency forwards or CCs its mail to an address on that subdomain.
 
-1. Create a project called "myEST8" and enable the **Gmail API** (APIs and services, Library).
-2. **OAuth consent screen** (Google Auth Platform):
-   - User type **External**. Fill in the app name, support email and developer contact.
-   - Audience: **Testing**. Add every Gmail address that will connect as a **Test user** (up to 100).
-3. **Data access**: add the scopes `openid`, `email`, `https://www.googleapis.com/auth/gmail.readonly` and `https://www.googleapis.com/auth/gmail.send`. myEST8 never asks for `gmail.modify`, so it cannot change or delete mail.
-4. **Credentials, Create credentials, OAuth client ID, Web application.** Authorized redirect URIs:
-   - `https://myest8.yourdomain.com/oauth/google/callback`
-   - `http://localhost:4001/oauth/google/callback` for `PORT=4001 npm run dev`
-5. Put these in `live.env`:
+In the [Resend dashboard](https://resend.com/domains):
+
+1. Add the subdomain and turn on sending and receiving.
+2. Publish the records Resend shows for that subdomain. Do not copy values from this page; they are generated per domain.
+   - **SPF** and **DKIM** so Resend can send as the subdomain.
+   - **MX** for receiving. It has to be the lowest priority (the smallest preference number) on that subdomain, or mail goes somewhere else. Resend drops mail forwarded straight at the SMTP host in the MX record unless this MX is verified.
+3. Wait until Resend shows the domain and receiving as verified.
+4. Create a webhook. Endpoint `https://myest8.yourdomain.com/webhooks/resend` (your `PUBLIC_URL`, plus `/webhooks/resend`). Event **`email.received`**. The event carries metadata only; myEST8 then fetches the body. Copy the signing secret into `RESEND_WEBHOOK_SECRET`.
+5. Put these in `live.env` (all three, or none). The values here are placeholders:
 
    ```sh
-   GOOGLE_OAUTH_CLIENT_ID=...apps.googleusercontent.com
-   GOOGLE_OAUTH_CLIENT_SECRET=GOCSPX-...
-   CHANNEL_SECRET_KEY=...     # openssl rand -base64 32
+   RESEND_API_KEY=re_xxx
+   RESEND_WEBHOOK_SECRET=whsec_xxx
+   RESEND_INBOUND_DOMAIN=mail.kevinhe.pro
    ```
 
-   `CHANNEL_SECRET_KEY` encrypts the stored Gmail refresh tokens (AES-256-GCM). Keep a copy: if it is lost, every Agency has to connect Gmail again. All three must be set, or none.
-
-What to expect:
-
-- Google shows "Google hasn't verified this app". Choose Advanced, then continue.
-- In Testing mode a refresh token lapses after about 7 days (third-party sources; Google's own page doesn't state it). The Agency then sees "Gmail needs reconnecting" and clicks Reconnect Gmail. Mail that arrived meanwhile is still read.
-- `gmail.readonly` is a Restricted scope. Publishing the app, which removes the 7-day limit, needs Google's verification and a security assessment, which takes weeks.
-- Each Agency signs in once under Settings, Channels, Connect Gmail. myEST8 polls the inbox every minute and replies from that address.
+`RESEND_INBOUND_DOMAIN` is the subdomain from step 1, with no `@` and no scheme.
 
 ## 2. WhatsApp (Meta Cloud API, one number for the server)
 
@@ -60,15 +53,17 @@ At [developers.facebook.com](https://developers.facebook.com):
 3. **A permanent token.** Business Settings, Users, System users: create a system user, give it your app (Manage app) and the WhatsApp account (Manage WhatsApp Business accounts), then generate a token with `business_management`, `whatsapp_business_messaging` and `whatsapp_business_management`. The temporary token on the API Setup page expires within hours, so don't use it.
 4. **App secret**: App settings, Basic, App secret.
 5. **Webhook**: WhatsApp, Configuration. Callback URL `https://myest8.yourdomain.com/webhooks/whatsapp`, and a verify token you make up. Subscribe to the **messages** field. Meta calls the URL once to check it, so myEST8 must already be running there.
-6. Put these in `live.env` (all five, or none):
+6. Put these in `live.env`:
 
    ```sh
-   WHATSAPP_TOKEN=EAAG...
-   WHATSAPP_APP_SECRET=...
-   WHATSAPP_VERIFY_TOKEN=any-random-string-you-chose
-   WHATSAPP_PHONE_NUMBER_ID=106540352242922
-   WHATSAPP_DISPLAY_NUMBER=+15551234567
+   META_WHATSAPP_ACCESS_TOKEN=
+   META_WHATSAPP_PHONE_NUMBER_ID=
+   META_APP_SECRET=
+   META_WEBHOOK_VERIFY_TOKEN=
+   META_WHATSAPP_NUMBER=+15550000000
    ```
+
+   `META_WHATSAPP_PHONE_NUMBER_ID` and `META_WHATSAPP_ACCESS_TOKEN` are both set, or neither: a half pair refuses to start. `META_APP_SECRET` and `META_WEBHOOK_VERIFY_TOKEN` are both set or the webhook route is off (a half pair does not throw; the route is absent). `META_WHATSAPP_NUMBER` is the E.164 number shown on the channels page.
 
 Limits:
 
@@ -76,37 +71,51 @@ Limits:
 - One WhatsApp number belongs to one Agency. The first Agency to press Connect WhatsApp gets it. A number for every Agency (Embedded Signup) is not built.
 - A Meta app in Development mode may not receive some webhooks.
 
-## 3. SMS (Twilio, a number for each Agency)
+## 3. SMS (simulated, or one shared Twilio number)
 
-The Agency clicks **Get an SMS number** under Channels. myEST8 buys an Australian mobile on your Twilio account, sends its incoming texts to `https://myest8.yourdomain.com/webhooks/twilio`, and connects it. Nothing else is set up per Agency.
+A button that buys an Australian mobile per Agency is not built. `TWILIO_BUNDLE_SID` and `TWILIO_ADDRESS_SID` are not read. Leave them unset.
 
-1. Upgrade the Twilio account from trial and add funds. A trial account can't hold an Australian number, and can only text verified numbers.
-2. Phone Numbers, Regulatory Compliance, **Bundles**: create a bundle for Australia, Mobile, Business, and wait for Twilio to approve it (it can take a few days). Note its `BU...` id and the `AD...` id of the address in it.
+Without Twilio, SMS stays on the phone simulator.
+
+With a paid Twilio account, one number you already own can send and receive for the server:
+
+1. Upgrade the Twilio account from trial if you need to text numbers you have not verified.
+2. On that number, set "A message comes in" to `https://myest8.yourdomain.com/webhooks/twilio`, HTTP POST.
 3. Put these in `live.env`:
 
    ```sh
    TWILIO_ACCOUNT_SID=AC...
-   TWILIO_AUTH_TOKEN=...
-   TWILIO_BUNDLE_SID=BU...      # turns SMS numbers on
-   TWILIO_ADDRESS_SID=AD...     # the address in the bundle
-   FILE_LINK_SECRET=...         # openssl rand -base64 32; Twilio fetches attachments by signed link
+   TWILIO_AUTH_TOKEN=
+   TWILIO_SMS_FROM=+61400000000
+   FILE_LINK_SECRET=
    ```
 
-   Leave `TWILIO_SMS_FROM` empty: it would send every Agency's SMS from one number.
+   `TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN` are both set, or neither. Both also require `FILE_LINK_SECRET` (32 random bytes or more, `openssl rand -base64 32`) and an https `PUBLIC_URL`: Twilio fetches attachments by a signed link. `TWILIO_SMS_FROM` is optional. When set, every SMS is sent from that E.164 number; when unset, the sender is the Agency's connected SMS address, which then has to be a number on the account.
 
-Each number costs a monthly fee plus each message. Asking again never buys a second number for the same Agency (the number is named `myEST8 Agency <id>` on Twilio). A number you release in the Twilio console stops working for that Agency.
+`TWILIO_WHATSAPP_FROM` is optional and unused while the Meta pair in section 2 is set: Meta takes the WhatsApp channel.
 
-## 4. Optional
+## 4. Classifier (optional)
 
-- `GOOGLE_MAPS_API_KEY`: real address lookup for the Dispatch map. Enable the Geocoding API and the Places API (New) on the key and restrict the key to those two. Without it a mock places the pins.
-- `JEV_API_URL`, `JEV_API_KEY`, `VISION_API_*`, `QUOTES_API_*`: your own classifier, photo matcher and quote reader. Leave them empty and the mocks run.
+```sh
+ANTHROPIC_API_KEY=sk-ant-xxx
+```
+
+That value is a placeholder. When `ANTHROPIC_API_KEY` is set, classification uses Claude Haiku. When it is unset, the classifier is Jev if `JEV_API_URL` is set, and the in-process mock otherwise.
+
+`JEV_API_URL`, `JEV_API_KEY`, `VISION_API_*`, `QUOTES_API_*` and `GOOGLE_MAPS_API_KEY` are the same as before: leave them empty and the mocks run. For the maps key, enable the Geocoding API and the Places API (New) and restrict the key to those two.
+
+`src/main.ts` exits if any of these is still a mock, unless `ALLOW_MOCKS=1`.
+
+## 5. Gmail (dormant)
+
+Gmail is not the email path. The code remains: if `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are both set, the process also requires `TOKEN_ENCRYPTION_KEY` (base64 of 32 bytes, `openssl rand -base64 32`) and polls the connected mailbox. Set neither client value and Gmail stays off. A half pair refuses to start. Losing `TOKEN_ENCRYPTION_KEY` means every connected Agency has to sign in to Google again.
+
+Redirect URI, if you ever turn it on: `https://myest8.yourdomain.com/oauth/google/callback`.
 
 ## Checking it works
 
-1. Restart: `systemctl --user restart myest8`, then `journalctl --user -u myest8 -n 20`. A half-set group (for example only `GOOGLE_OAUTH_CLIENT_ID`) refuses to start and names what is missing.
-2. Sign up a new Agency. Email shows **Connect Gmail**, WhatsApp **Connect WhatsApp**, and SMS **Get an SMS number** (or, without Twilio, it is connected and simulated).
-3. Connect Gmail with a Test user account, then email that address from another account. A Maintenance Request appears within about a minute.
-4. Reply from myEST8: the message arrives from the Agency's own address.
-5. WhatsApp: **Send a test message** to a phone on the test number's allowed list (WhatsApp, API Setup). It arrives as WhatsApp's "Hello World" sample template, because WhatsApp drops free-form messages to anyone who hasn't messaged the number in the last 24 hours. Meta accepts every send before delivering it, so a refusal shows only in the log: `journalctl --user -u myest8 | grep "WhatsApp could not deliver"` (the webhook must be subscribed to **messages**, which also carries delivery statuses).
-6. Message the test number from an allowed phone. The message reaches the Agency, and the reply arrives within 24 hours.
-7. Email: **Send a test email to** fills in your own address. Change it to any inbox you can check. Signing in to Google does not count as a test.
+1. Restart: `systemctl --user restart myest8`, then `journalctl --user -u myest8 -n 20`. A half-set group (for example only `GOOGLE_CLIENT_ID`, or only `META_WHATSAPP_ACCESS_TOKEN`) refuses to start and names what is missing. Mocked APIs do the same unless `ALLOW_MOCKS=1`.
+2. Sign up a new Agency. Leave `GOOGLE_CLIENT_ID` unset so email stays off the dormant Gmail button. With `META_WHATSAPP_NUMBER` set, WhatsApp offers **Use +15550000000 for WhatsApp**, using whatever number you set. SMS is an address you type. There is no **Get an SMS number** action. With the Twilio pair set, outbound SMS uses `TWILIO_SMS_FROM` when that is set, otherwise the address you typed.
+3. Send mail to an address on `RESEND_INBOUND_DOMAIN`, or forward a message there. Resend posts `email.received` to `/webhooks/resend`; the event has no body, and myEST8 fetches it.
+4. WhatsApp: **Send a test message** to a phone on the test number's allowed list (WhatsApp, API Setup). The text is `This is a test message from <Agency name> on myEST8. This channel is working.` Meta delivers that free-form text only within 24 hours of that phone's last message to the test number. A later failure is a warning in the log, `WhatsApp message to … failed`, so the webhook has to be subscribed to **messages** (delivery statuses come on that field too): `journalctl --user -u myest8 | grep "WhatsApp message to"`.
+5. Message the test number from an allowed phone. The message reaches the Agency, and a reply inside 24 hours is free-form text.
