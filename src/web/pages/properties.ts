@@ -227,10 +227,10 @@ function tenants(p: PropertyView): Html {
           ['Tenant', 'Mobile', 'Email'],
           p.tenants.map((t) => [
             html`<span class="font-medium">${t.name}</span>${t.tenancyStart ? html`<br /><span class="text-xs text-muted">Since ${formatDate(t.tenancyStart)}</span>` : ''}`,
-            html`${t.mobile ? html`<a class="link num" href="tel:${t.mobile}">${t.mobile}</a>` : '—'}`,
-            html`${t.email ? html`<a class="link break-all" href="mailto:${t.email}">${t.email}</a>` : '—'}`,
+            html`${cellLabel('Mobile')}${t.mobile ? html`<a class="link num" href="tel:${t.mobile}">${t.mobile}</a>` : '—'}`,
+            html`${cellLabel('Email')}${t.email ? html`<a class="link break-all" href="mailto:${t.email}">${t.email}</a>` : '—'}`,
           ]),
-          { caption: 'Tenants' },
+          { caption: 'Tenants', stack: true },
         )
       : emptyState('No Tenants yet.')}
   </section>`;
@@ -246,7 +246,7 @@ function nominated(p: PropertyView): Html {
             html`<a class="link font-medium" href="/tradies/${t.tradieId}">${t.businessName ?? t.name}</a>`,
             html`<span class="flex flex-wrap gap-1">${t.trades.map((trade) => badge(humanise(trade), 'info'))}</span>`,
           ]),
-          { caption: 'Nominated Tradies for Urgent Repairs' },
+          { caption: 'Nominated Tradies for Urgent Repairs', stack: true },
         )
       : emptyState('No Nominated Tradie. Tenants arrange Urgent Repairs themselves.')}
   </section>`;

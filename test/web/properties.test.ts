@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { visible, webWorld } from '../support/web.ts';
-import { KING_ST, OCEAN_AVE, tomsTapTicket } from '../support/world.ts';
+import { HANA, HANA_EMAIL, KING_ST, OCEAN_AVE, tomsTapTicket } from '../support/world.ts';
 
 describe('Properties', () => {
   test('the list links each address to its profile and counts open Tickets', async () => {
@@ -50,6 +50,19 @@ describe('Properties', () => {
     expect(text).toContain('Olivia Owens');
     expect(page).toContain('href="/properties"');
     expect(page).toContain('Back to Properties');
+  });
+
+  test('on a profile, Tenants and Nominated Tradies stack on phones with their values labelled', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    const page = await (await w.get(`/properties/${w.ids.kingSt}`, cookie)).text();
+    const tenants = page.slice(page.indexOf('aria-label="Tenants"'), page.indexOf('aria-label="Nominated Tradies"'));
+    expect(tenants).toContain('table-frame is-stacked');
+    expect(visible(tenants)).toContain(`Hana Ho Since 1 Jan 2025 Mobile ${HANA} Email ${HANA_EMAIL}`);
+    const nominated = page.slice(page.indexOf('aria-label="Nominated Tradies"'), page.indexOf('aria-label="Frequent issues"'));
+    expect(nominated).toContain('table-frame is-stacked');
+    expect(visible(nominated)).toMatch(/Sparky Sam Electrical/);
   });
 
   test('an unknown Property is a 404 in the design, not a blank page', async () => {
