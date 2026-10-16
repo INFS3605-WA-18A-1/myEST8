@@ -85,7 +85,6 @@ function hero(): Html {
         <div class="lp-actions">${linkButton(SIGN_UP, '/signup', { variant: 'primary', size: 'lg' })} ${linkButton('Sign in', '/login', { size: 'lg' })}</div>
         <ul class="lp-channels" aria-label="How Tenants reach the Agency">
           <li>${icon('chat-text', { size: 'size-5' })}<span>SMS</span></li>
-          <li>${icon('whatsapp-logo', { size: 'size-5' })}<span>WhatsApp</span></li>
           <li>${icon('envelope-simple', { size: 'size-5' })}<span>Email</span></li>
         </ul>
         <p class="lp-note">Tenants, Tradies and Property Owners never need an account. They reply by text or a link.</p>
@@ -381,7 +380,7 @@ const CHORES = [
 
 /** The people who never sign in, and how myEST8 reaches them. */
 const PEOPLE = [
-  { icon: 'user', who: 'Tenants', text: 'Report by SMS, WhatsApp or email, in their own words and photos.' },
+  { icon: 'user', who: 'Tenants', text: 'Report by SMS or email, in their own words and photos.' },
   { icon: 'wrench', who: 'Tradies', text: 'Get Quote Requests and Work Orders by text, and reply with a price and a time.' },
   { icon: 'house-line', who: 'Property Owners', text: 'Approve a Quote over the Max Repair Cost with a reply or a link.' },
 ];

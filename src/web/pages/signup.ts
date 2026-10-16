@@ -155,7 +155,7 @@ function signUpPage(o: { values?: Values; errors?: Errors; flash?: Flash; shareL
       </aside>`,
     steps: [
       { text: 'Your account and your Agency are created, and you are signed in.' },
-      { text: 'The setup guide adds your team, connects SMS, WhatsApp and email, then adds your Tradies and your first Property.' },
+      { text: 'The setup guide adds your team, connects SMS and email, then adds your Tradies and your first Property.' },
       { text: 'Tenants can then text in a repair, and it reaches you as a Maintenance Request to confirm.', request: true },
     ],
   });
