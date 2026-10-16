@@ -612,7 +612,7 @@ export function field(o: {
   if (type === 'checkbox') {
     return html`<div class="fieldset">
       <label for="${id}" class="flex cursor-pointer items-start gap-3 py-1 text-sm">
-        <input ${common} type="checkbox" class="checkbox checkbox-primary checkbox-sm mt-1" value="${o.value ?? 'on'}" ${o.checked ? 'checked' : ''} />
+        <input ${common} type="checkbox" class="checkbox checkbox-primary checkbox-sm mt-1${o.error ? ' checkbox-error' : ''}" value="${o.value ?? 'on'}" ${o.checked ? 'checked' : ''} />
         <span>${o.label}</span>
       </label>
       ${error} ${hint}
@@ -628,7 +628,7 @@ export function field(o: {
             ${(o.options ?? []).map((opt) => html`<option value="${opt.value}" ${String(o.value ?? '') === opt.value ? 'selected' : ''}>${opt.label}</option>`)}
           </select>`
         : type === 'file'
-          ? html`<input ${common} type="file" class="file-input w-full" ${o.accept ? html`accept="${o.accept}"` : ''} />`
+          ? html`<input ${common} type="file" class="file-input w-full${invalid.replace('input', 'file-input')}" ${o.accept ? html`accept="${o.accept}"` : ''} />`
           : html`<input ${common} type="${type}" class="input w-full${invalid}" value="${o.value ?? ''}" placeholder="${o.placeholder ?? ''}" ${o.autocomplete ? html`autocomplete="${o.autocomplete}"` : ''} ${o.step ? html`step="${o.step}"` : ''} ${o.min !== undefined ? html`min="${o.min}"` : ''} ${o.max !== undefined ? html`max="${o.max}"` : ''} />`;
   return html`<div class="fieldset">
     <label for="${id}" class="field-label">${o.label}</label>

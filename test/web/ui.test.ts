@@ -170,6 +170,14 @@ describe('ui', () => {
     expect(out).toContain('id="field-mobile-hint"');
   });
 
+  it('marks a refused file or checkbox field the way it marks a text field: a red control, its error tied to it', async () => {
+    const file = await render(field({ label: 'Photos', name: 'photos', type: 'file', error: 'Choose a photo under 10 MB.' }));
+    expect(file).toMatch(/<input [^>]*aria-describedby="field-photos-error"[^>]*aria-invalid="true"[^>]*class="file-input w-full file-input-error"/);
+    const box = await render(field({ label: 'I agree', name: 'agree', type: 'checkbox', error: 'Tick this to go on.' }));
+    expect(box).toMatch(/<input [^>]*aria-invalid="true"[^>]*class="checkbox checkbox-primary checkbox-sm[^"]*checkbox-error/);
+    expect(await render(field({ label: 'Photos', name: 'photos', type: 'file' }))).not.toContain('file-input-error');
+  });
+
   it('escapes chat text, keeps its line breaks and links only http(s) URLs', async () => {
     const out = await render(chatBubble({ side: 'start', header: 'myEST8', text: `${HOSTILE}\nUpload: https://myest8.test/u/abc?x=1&y=2.` }));
     expect(out).not.toContain('<script>alert');
