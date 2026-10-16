@@ -142,7 +142,7 @@ function signUpPage(o: { values?: Values; errors?: Errors; flash?: Flash; shareL
         </fieldset>
         ${button('Create account', { size: 'lg', block: true })}
       </form>
-      ${otherWay({ text: 'Already have an account?', button: linkButton('Sign in', '/login', { variant: 'secondary', block: true }) })}
+      ${otherWay({ text: 'Already have an account?', button: linkButton('Sign in', '/login', { variant: 'secondary', size: 'lg', block: true }) })}
       <aside class="au-share" aria-label="Someone else setting up the Agency">
         <p class="au-other-text">One Property Manager creates the account, then adds the rest of the Agency from the setup guide. Is someone else doing that?</p>
         ${shareButton({

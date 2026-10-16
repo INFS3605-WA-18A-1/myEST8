@@ -196,12 +196,12 @@ export function createViews({ clock, modules }: Context) {
      */
     async navCounts(agencyId: number, propertyManagerId: number) {
       const propertyIds = await profiles.propertyIdsOf(propertyManagerId);
-      const [requests, inbox, waitingOnOwner] = await Promise.all([
+      // Requests counts what /requests lists; inbox messages wait on the dashboard instead.
+      const [requests, waitingOnOwner] = await Promise.all([
         tickets.maintenanceRequests(agencyId, propertyIds),
-        intake.inbox(agencyId),
         modules.quotes.waitingOnOwner(agencyId, propertyIds),
       ]);
-      return { requests: requests.length + inbox.length, approvals: waitingOnOwner.length };
+      return { requests: requests.length, approvals: waitingOnOwner.length };
     },
 
     /**

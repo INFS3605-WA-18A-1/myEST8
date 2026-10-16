@@ -21,6 +21,7 @@ import { ActionError, isEmail, normalizeAddress, type Role } from '../../shared.
 import { NO_CONNECTORS, type ChannelConnectors } from '../connectors.ts';
 import type { WebEnv } from '../env.ts';
 import { gmailControls } from './oauth-google.ts';
+import { icon } from '../icons.ts';
 import { cents, list, text, type FormValues } from '../forms.ts';
 import { shareButton } from '../share.ts';
 import { shellInfo } from '../shell.ts';
@@ -224,30 +225,31 @@ async function wizardPage(
   const index = STEPS.findIndex((s) => s.key === o.step);
   const back = STEPS[index - 1];
   const forward = STEPS[index + 1];
-  // A step not done yet moves on with "Skip for now"; a done one with "Continue".
+  // A step not done yet moves on with "Skip for now"; a done one with "Continue". The last step leads to the dashboard.
   const onward = forward
     ? isDone(o.step, progress)
       ? linkButton(o.step === 'welcome' ? "Let's start" : 'Continue', forward.path, { variant: 'primary' })
       : linkButton('Skip for now', forward.path, { variant: 'ghost' })
-    : '';
+    : linkButton('Go to your dashboard', '/', { variant: 'primary' });
   return page({
     title: o.title,
-    subtitle: html`<span class="flex flex-wrap gap-x-4"><span>Step ${index + 1} of ${STEPS.length}</span><span>Setting up ${actions.agency().name}</span></span>`,
     pm,
     fullPage: true,
     shell: await shellInfo(c),
     flash: o.flash ?? null,
-    body: html`<div class="mx-auto flex w-full max-w-[720px] flex-col gap-4">
-      <nav aria-label="Setup steps">
+    // Which step this is sits with the steps, in the wizard's own column.
+    body: html`<div class="wizard">
+      <nav aria-label="Setup steps" class="wizard-steps">
+        <p class="wizard-where"><span>Step ${index + 1} of ${STEPS.length}</span><span>Setting up ${actions.agency().name}</span></p>
         ${steps(
           STEPS.map((s) => ({ label: s.label, done: isDone(s.key, progress), href: s.path })),
           { current: index, horizontal: true },
         )}
       </nav>
       ${o.body}
-      <div class="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
+      <div class="wizard-foot">
         ${back ? linkButton('Back', back.path, { variant: 'secondary' }) : linkButton('Set up later', '/', { variant: 'ghost' })}
-        <div class="flex flex-wrap items-center gap-2">${onward}</div>
+        <div class="wizard-onward">${onward}</div>
       </div>
     </div>`,
   });
@@ -386,7 +388,9 @@ async function channelsStep(c: WizardContext, demo: boolean, connectors: Channel
   const flash = flashFrom(c.req.url);
   const flashChannel = c.req.query('channel');
   const origin = new URL(c.req.url).origin;
-  const verified = connected.filter((ch) => channelState(ch, { verified: ch.type === 'email' && email.state === 'verified', waiting: ch.type === 'email' && email.state === 'waiting' }) === 'verified').length;
+  const verifiedTypes = connected
+    .filter((ch) => channelState(ch, { verified: ch.type === 'email' && email.state === 'verified', waiting: ch.type === 'email' && email.state === 'waiting' }) === 'verified')
+    .map((ch) => ch.type);
   const rowForm = 'mt-2 grid items-end gap-3 md:grid-cols-[minmax(0,1fr)_auto]';
   const gmailBlock = connectors.gmail ? await gmailControls(connectors.gmail, agency.id, 'welcome') : null;
   return wizardPage(c, {
@@ -399,7 +403,7 @@ async function channelsStep(c: WizardContext, demo: boolean, connectors: Channel
         Tenants, Tradies and Property Owners reach ${agency.name} by SMS and email. Verify SMS with a code sent to the number.
         Email arrives at the address below once you forward the Agency inbox to it.${demo ? ' In the demo nothing is really sent, and the addresses work with the phone simulator.' : ''}
       </p>
-      <p class="text-sm text-muted">${connected.length} of ${CHANNELS.length} connected, ${verified} verified.</p>
+      <p class="wizard-next">${channelsStillToDo(CHANNELS.filter((ch) => !connectors.unavailable.includes(ch.type)).map((ch) => ({ type: ch.type, verified: verifiedTypes.includes(ch.type) })))}</p>
       <div class="flex flex-col gap-4">
         ${CHANNELS.map((channel) => {
           const current = connected.find((ch) => ch.type === channel.type);
@@ -434,6 +438,16 @@ async function channelsStep(c: WizardContext, demo: boolean, connectors: Channel
       </div>
     `,
   });
+}
+
+/** What the channels still need, as one sentence: what's next rather than a count. */
+function channelsStillToDo(channels: { type: ChannelType; verified: boolean }[]): string {
+  const left = channels
+    .filter((ch) => !ch.verified)
+    .map((ch) => (ch.type === 'email' ? "send one email to the Agency inbox so it's forwarded here" : "verify the Agency's SMS number with a code"));
+  if (!channels.length) return 'Nothing to connect on this server. Continue to the next step.';
+  if (!left.length) return `${sentence(channels.map((ch) => (ch.type === 'email' ? 'email' : 'SMS')))} ${channels.length > 1 ? 'are' : 'is'} verified.`.replace(/^./, (c) => c.toUpperCase());
+  return `Still to do: ${left.join(', and ')}.`;
 }
 
 /** A made-up channel address for a demo Agency, unique to it: channel addresses can belong to only one Agency. */
@@ -834,11 +848,13 @@ async function doneStep(c: WizardContext, demo: boolean): Promise<Html> {
           ? `Email is ${current.address}, waiting for your first message`
           : verified
             ? `${ch.name} verified at ${current.address}`
-            : `${ch.name} connected to ${current.address}`;
+            : `${ch.name} connected to ${current.address}, not verified yet`;
+      // The button says the next thing to do for this channel.
+      const fix = ch.type === 'email' ? 'Check email' : current ? 'Verify SMS' : 'Connect SMS';
       return {
         done: verified,
         text,
-        fix: ['Check channels', `/welcome/channels#${ch.type}`] as [string, string],
+        fix: [fix, `/welcome/channels#${ch.type}`] as [string, string],
       };
     }),
     { done: progress.tradies, text: progress.tradies ? count(tradies.length, 'Tradie') : 'No Tradies yet', fix: ['Add Tradies', '/welcome/tradies'] },
@@ -863,13 +879,13 @@ async function doneStep(c: WizardContext, demo: boolean): Promise<Html> {
       </p>
       ${card({
         title: 'Your setup',
-        body: html`<ul class="space-y-1" aria-label="Setup checklist">
+        body: html`<ul class="wizard-checklist" aria-label="Setup checklist">
           ${items.map(
-            (item) => html`<li class="flex items-start gap-3 text-sm">
-              <span class="${item.done ? 'text-done' : 'text-muted'} w-4 shrink-0 text-center font-semibold" aria-hidden="true">${item.done ? '✓' : '–'}</span>
+            (item) => html`<li class="${item.done ? 'is-done' : 'is-todo'}">
+              <span class="wizard-check" aria-hidden="true">${item.done ? icon('check-circle', { size: 'size-5' }) : icon('circle', { size: 'size-5' })}</span>
               <span class="sr-only">${item.done ? 'Done: ' : 'To do: '}</span>
-              <span class="min-w-0 flex-1">${item.text}</span>
-              ${!item.done && item.fix ? html`<a class="link text-sm" href="${item.fix[1]}">${item.fix[0]}</a>` : ''}
+              <span class="wizard-check-text">${item.text}</span>
+              ${!item.done && item.fix ? linkButton(item.fix[0], item.fix[1], { size: 'sm' }) : ''}
             </li>`,
           )}
         </ul>`,
@@ -887,7 +903,6 @@ async function doneStep(c: WizardContext, demo: boolean): Promise<Html> {
               questions, and it arrives on your dashboard as a Maintenance Request.
             </p>`,
       })}
-      <p>${linkButton('Go to your dashboard', '/', { variant: 'primary' })}</p>
     `,
   });
 }

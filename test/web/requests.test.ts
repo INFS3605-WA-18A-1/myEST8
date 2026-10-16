@@ -19,7 +19,7 @@ describe('the checks on a Maintenance Request', () => {
       photos: [{ metadata: 'flagged', reasons: ['taken_before_tenancy'] }, { metadata: 'ok', reasons: [] }],
       imageMatch: { result: 'does_not_match', reason: 'The photo shows a fence' },
     });
-    expect(flags.map((f) => f.label)).toEqual(["Photos don't match the description", 'Check Urgency', 'Check Trade', 'Flagged photos']);
+    expect(flags.map((f) => f.label)).toEqual(["Photos don't match the description", 'Check urgency', 'Check trade', 'Flagged photos']);
     expect(flags[0]).toMatchObject({ tone: 'error', detail: 'The photo shows a fence' });
   });
 
@@ -90,6 +90,19 @@ describe('the Requests list', () => {
     expect(tap).toBeGreaterThan(-1);
     expect(tap).toBeLessThan(html.indexOf('The bathroom fan is rattling'));
     expect(tap).toBeLessThan(html.indexOf(KING_ST));
+  });
+});
+
+describe('the Requests list with photos', () => {
+  test("shows each request's first photo beside it, as the dashboard does", async () => {
+    const w = await webWorld();
+    await w.h.upload(await report(w, TOM, 'The kitchen tap is dripping'), [upload('tap.jpg')]);
+    const r = await onlyRequest(w);
+
+    const html = await page(w, '/requests?filter=all', await w.signIn());
+    expect(html).toContain(`src="/files/${r.photos[0]!.fileId}"`);
+    expect(visible(html)).toContain('Check urgency');
+    expect(visible(html)).not.toContain('Check Urgency');
   });
 });
 

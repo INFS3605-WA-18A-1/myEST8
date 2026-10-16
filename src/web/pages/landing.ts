@@ -66,27 +66,23 @@ export function landingPage(o: { demo: boolean }): Html {
 /**
  * The headline, in three short sentences, one to a line: the Tenant's part, the
  * Property Manager's, myEST8's. "You decide." carries the Wattle stripe a decision
- * row has on the dashboard. Beside it, a Tenant's thread and its Maintenance Request.
+ * row has on the dashboard. Beside it (under it on phones), one repair from the
+ * Tenant's text to the Ticket it becomes.
  */
 function hero(): Html {
   return html`<section class="lp-hero" aria-labelledby="lp-title">
     <div class="lp-wrap lp-hero-grid">
-      <h1 id="lp-title" class="lp-headline">
-        <span class="lp-line">Tenants text the problem.</span>
-        <span class="lp-line is-you">You decide.</span>
-        <span class="lp-line">myEST8 does the chasing.</span>
-      </h1>
       <div class="lp-intro">
+        <h1 id="lp-title" class="lp-headline">
+          <span class="lp-line">Tenants text the problem.</span>
+          <span class="lp-line is-you">You decide.</span>
+          <span class="lp-line">myEST8 does the chasing.</span>
+        </h1>
         <p class="lp-lead">
-          A maintenance desk for Property Managers at small Agencies. Tenants report repairs in their own words. myEST8 asks the follow-up
-          questions, works out the Trade and Urgency, gets the Quotes, books the Tradie and keeps the Tenant posted. You confirm and choose,
-          from one desk.
+          A maintenance desk for Property Managers at small Agencies. Tenants report repairs by SMS or email. myEST8 asks the follow-up questions, gets
+          the Quotes and books the Tradie. You confirm the repair and choose the Quote.
         </p>
         <div class="lp-actions">${linkButton(SIGN_UP, '/signup', { variant: 'primary', size: 'lg' })} ${linkButton('Sign in', '/login', { size: 'lg' })}</div>
-        <ul class="lp-channels" aria-label="How Tenants reach the Agency">
-          <li>${icon('chat-text', { size: 'size-5' })}<span>SMS</span></li>
-          <li>${icon('envelope-simple', { size: 'size-5' })}<span>Email</span></li>
-        </ul>
         <p class="lp-note">Tenants, Tradies and Property Owners never need an account. They reply by text or a link.</p>
       </div>
       ${scene()}
@@ -98,9 +94,10 @@ function hero(): Html {
 const found = (words: string) => html`<mark class="lp-found">${words}</mark>`;
 
 /**
- * The hero's picture: a Tenant's SMS thread with myEST8 (its follow-up question
- * settles the Urgency), and the Maintenance Request it makes, waiting for the
- * Property Manager. An illustration: nothing in it is a link or a control.
+ * The hero's picture, top to bottom: a Tenant's SMS thread with myEST8 (its
+ * follow-up question settles the Urgency), the Maintenance Request it makes,
+ * waiting for the Property Manager, and the Ticket it becomes once confirmed.
+ * An illustration: nothing in it is a link or a control.
  */
 function scene(): Html {
   return html`<figure class="lp-scene">
@@ -112,11 +109,11 @@ function scene(): Html {
       </div>
       <ol class="lp-msgs">
         <li class="lp-msg is-in">
-          <p class="lp-bubble">hi the ${found('tap under the kitchen sink')} keeps dripping and there’s a puddle in the cupboard. started sunday</p>
+          <p class="lp-bubble">hi the ${found('tap under the kitchen sink')} keeps dripping, there’s a puddle in the cupboard</p>
           <p class="lp-msg-meta">Priya, 7:42 am</p>
         </li>
         <li class="lp-msg is-out">
-          <p class="lp-bubble">Thanks Priya. Is the water near any power points, or spreading past the cupboard? A photo of the tap would help.</p>
+          <p class="lp-bubble">Thanks Priya. Is the water near any power points? A photo of the tap would help.</p>
           <p class="lp-msg-meta">myEST8, 7:43 am</p>
         </li>
         <li class="lp-msg is-in">
@@ -128,22 +125,32 @@ function scene(): Html {
     <div class="lp-request">
       <p class="lp-request-kind"><span>Maintenance Request</span><span class="lp-request-age">Waiting for you</span></p>
       <p class="lp-request-address">12 King St, Newtown</p>
-      <p class="lp-request-issue">Kitchen tap dripping under the sink. Water pooling in the cupboard since Sunday.</p>
-      <dl class="lp-request-fields">
-        <div>
-          <dt>Trade</dt>
-          <dd>${badge('Plumbing')}<span class="lp-from">from “tap under the kitchen sink”</span></dd>
-        </div>
-        <div>
-          <dt>Urgency</dt>
-          <dd>${urgencyBadge('routine')}<span class="lp-from">from “just the cupboard”</span></dd>
-        </div>
-        <div>
-          <dt>Photos</dt>
-          <dd>${tapPhoto()}</dd>
-        </div>
-      </dl>
+      <p class="lp-request-issue">Kitchen tap dripping under the sink since Sunday.</p>
+      <div class="lp-request-body">
+        <dl class="lp-request-fields">
+          <div>
+            <dt>Trade</dt>
+            <dd>${badge('Plumbing')}<span class="lp-from">from “tap under the kitchen sink”</span></dd>
+          </div>
+          <div>
+            <dt>Urgency</dt>
+            <dd>${urgencyBadge('routine')}<span class="lp-from">from “just the cupboard”</span></dd>
+          </div>
+        </dl>
+        ${tapPhoto()}
+      </div>
       <p class="lp-request-actions" aria-hidden="true"><span class="lp-fake-btn is-primary">Confirm</span><span class="lp-fake-btn">Review</span></p>
+    </div>
+    <div class="lp-became">
+      <p class="lp-became-note">Confirmed at 9:10 am. Now it’s a Ticket.</p>
+      ${docket({
+        number: 12,
+        urgency: 'routine',
+        address: '12 King St, Newtown',
+        issue: 'Kitchen tap dripping under the sink',
+        meta: [html`Plumbing`, html`0 of 3 Quotes in`],
+        age: 'just now',
+      })}
     </div>
     <figcaption class="lp-caption">The marked words are where myEST8 found the Trade and the Urgency.</figcaption>
   </figure>`;
