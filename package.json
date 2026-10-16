@@ -35,7 +35,7 @@
     "hono": "^4.13.13",
     "leaflet": "^1.9.4",
     "postgres": "^3.4.9",
-    "read-excel-file": "9.3.10"
+    "read-excel-file": "9.3.12"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.0",
