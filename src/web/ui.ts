@@ -539,13 +539,23 @@ export function emptyState(text: string, action?: Html): Html {
  * phones, never the page. `caption` names it for screen readers. `align` gives each
  * column 'left' (the default) or 'right'; right-aligned figures get the tabular `num` class.
  * `stack: true` turns each row into a block on phones (under 640px), its cells one
- * under the other and the header hidden, for lists read row by row (the Tickets list).
+ * under the other and the header hidden, for lists whose cells explain themselves
+ * (the Tickets list: badges and an age). `stack: 'labelled'` does the same but puts
+ * each column's header beside its value (label left, value right), for rows of
+ * plain values such as names, money and counts (Properties, Tradies). The first
+ * cell leads the row unlabelled, and so does any column with an empty header.
  */
-export function table(headers: string[], rows: Html[][], o: { caption?: string; align?: ('left' | 'right')[]; stack?: boolean } = {}): Html {
+export function table(
+  headers: string[],
+  rows: Html[][],
+  o: { caption?: string; align?: ('left' | 'right')[]; stack?: boolean | 'labelled' } = {},
+): Html {
   const right = (i: number) => o.align?.[i] === 'right';
+  const labelled = o.stack === 'labelled';
   // A stacked table sets its cells' widths in app.css, as they become blocks on phones.
   const cellClass = (i: number) => [o.stack ? '' : 'min-w-28', right(i) ? 'num text-right' : ''].filter(Boolean).join(' ');
-  return html`<div class="table-frame${o.stack ? ' is-stacked' : ''}">
+  const label = (i: number) => (labelled && i > 0 && headers[i] ? html` data-label="${headers[i]}"` : '');
+  return html`<div class="table-frame${o.stack ? ' is-stacked' : ''}${labelled ? ' is-labelled' : ''}">
     <table class="table table-sm">
       ${o.caption ? html`<caption class="sr-only">${o.caption}</caption>` : ''}
       <thead>
@@ -554,7 +564,7 @@ export function table(headers: string[], rows: Html[][], o: { caption?: string; 
         </tr>
       </thead>
       <tbody>
-        ${rows.map((row) => html`<tr>${row.map((cell, i) => html`<td${cellClass(i) ? html` class="${cellClass(i)}"` : ''}>${cell}</td>`)}</tr>`)}
+        ${rows.map((row) => html`<tr>${row.map((cell, i) => html`<td${cellClass(i) ? html` class="${cellClass(i)}"` : ''}${label(i)}>${cell}</td>`)}</tr>`)}
       </tbody>
     </table>
   </div>`;

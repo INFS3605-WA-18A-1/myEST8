@@ -2477,8 +2477,9 @@
     .table-frame.is-stacked tbody tr:hover td {
       background: var(--page);
     }
+    /* Cells of different kinds (a two-line Ticket, a badge, an age) line up on their first line's baseline, so a badge doesn't sit lower than the text beside it. */
     .table-frame.is-stacked tbody td {
-      vertical-align: top;
+      vertical-align: baseline;
     }
     @media (min-width: 640px) {
       .table-frame.is-stacked tbody td {
@@ -2538,6 +2539,37 @@
       }
       .table-frame.is-stacked tbody tr:hover td {
         background: transparent;
+      }
+      /* Labelled (stack: 'labelled'): the first cell leads, then each value sits beside
+         its column's name in one aligned label column, read like a facts list. */
+      .table-frame.is-labelled tbody tr {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 4px;
+        padding: 12px;
+      }
+      .table-frame.is-labelled tbody td:first-child {
+        margin-bottom: 4px;
+      }
+      .table-frame.is-labelled tbody td:last-child {
+        margin-left: 0;
+      }
+      .table-frame.is-labelled tbody td[data-label] {
+        display: grid;
+        grid-template-columns: minmax(0, 8rem) minmax(0, 1fr);
+        column-gap: 12px;
+        align-items: baseline;
+        font-size: 14px;
+        text-align: left;
+        overflow-wrap: anywhere;
+      }
+      .table-frame.is-labelled tbody td[data-label]::before {
+        content: attr(data-label);
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .table-frame.is-labelled tbody td:empty {
+        display: none;
       }
     }
   }

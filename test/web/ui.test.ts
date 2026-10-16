@@ -365,6 +365,27 @@ describe('ui', () => {
     expect(await render(table(['Issue'], [[html`Leak`]]))).toContain('<div class="table-frame">');
   });
 
+  it('labels each stacked cell with its column header when asked, so a phone row still says what each value is', async () => {
+    const out = await render(
+      table(['Property', 'Property Owner', 'Open Tickets', ''], [[html`12 King St`, html`Olivia Owens`, html`2`, html`<a href="/x">Edit</a>`]], {
+        align: ['left', 'left', 'right', 'left'],
+        stack: 'labelled',
+      }),
+    );
+    expect(out).toContain('<div class="table-frame is-stacked is-labelled">');
+    expect(out).toContain('<td data-label="Property Owner">Olivia Owens</td>');
+    expect(out).toContain('<td class="num text-right" data-label="Open Tickets">2</td>');
+    // The first cell leads the row, and a column with no header has nothing to say.
+    expect(out).toContain('<td>12 King St</td>');
+    expect(out).toContain('<td><a href="/x">Edit</a></td>');
+  });
+
+  it('escapes a stacked cell’s label', async () => {
+    const out = await render(table(['Issue', HOSTILE], [[html`Leak`, html`x`]], { stack: 'labelled' }));
+    expect(out).not.toContain('<script>');
+    expect(out).toContain('data-label="&lt;script&gt;');
+  });
+
   it('pairs each label with its value in a facts list, escaping both', async () => {
     const out = await render(dl([['Max Repair Cost', '$500.00'], ['Property Owner', HOSTILE]]));
     expect(out).toMatch(/^<dl class="facts">/);
