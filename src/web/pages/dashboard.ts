@@ -401,6 +401,7 @@ function ticketDocket(t: BoardTicket, now: Date, timeZone: string): Html {
     age: ageOf(t.reportedAt, now),
     unread: t.unreadMessages,
     decision: t.decision !== null,
+    lines: 2,
   });
 }
 

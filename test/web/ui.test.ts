@@ -347,6 +347,23 @@ describe('ui', () => {
     expect(await render(urgencyBadge('urgent'))).toContain('badge-error');
   });
 
+  it('clamps a board docket’s issue to three lines, or to the lines asked for', async () => {
+    const base = { number: 7, href: '/tickets/7', urgency: 'high', address: '27 Llewellyn St', issue: 'The cupboard is falling apart', meta: [] };
+    expect(await render(docket(base))).toContain('class="line-clamp-3 docket-issue"');
+    const two = await render(docket({ ...base, lines: 2 }));
+    expect(two).toContain('class="line-clamp-2 docket-issue"');
+    expect(two).toContain('title="The cupboard is falling apart"');
+  });
+
+  it('keeps a done step that is the one on screen marked as both done and current', async () => {
+    const out = await render(steps([{ label: 'Email', done: true }, { label: 'SMS', done: false }], { horizontal: true, current: 0 }));
+    const first = out.split('<li').slice(1)[0]!;
+    expect(first).toContain('data-content="✓"');
+    expect(first).toContain('aria-current="step"');
+    expect(first).toContain('(done)');
+    expect(first).toContain('(this step)');
+  });
+
   it('shows the street in a large docket and clamps the issue, with the full text as a title', async () => {
     const out = await render(
       docket({

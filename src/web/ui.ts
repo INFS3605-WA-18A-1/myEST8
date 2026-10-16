@@ -800,7 +800,7 @@ export function timeline(items: { at: string; title: string; detail?: string }[]
         html`<li>
           ${i > 0 ? html`<hr class="bg-line" />` : ''}
           <div class="timeline-middle text-primary">${ICON.dot}</div>
-          <div class="timeline-end min-w-0 ${i < items.length - 1 ? 'mb-6' : ''}">
+          <div class="timeline-end min-w-0 ${i < items.length - 1 ? 'mb-3' : ''}">
             <p class="text-xs text-muted">${item.at}</p>
             <p class="text-sm font-medium">${item.title}</p>
             ${item.detail ? html`<p class="text-sm whitespace-pre-line text-muted">${item.detail}</p>` : ''}
@@ -894,6 +894,8 @@ export function ticketCell(o: { ticketId: number; issue: string; address?: strin
  *
  * `size: 'large'` is the Ticket page's header: the stub with a 26px number first,
  * then the address and the issue, as the page is already about that one Ticket.
+ * `lines` is how many lines the issue may take before its ellipsis: 3 on a board
+ * docket and 2 on the large one by default (the dashboard's lanes ask for 2).
  */
 export function docket(o: {
   number: number;
@@ -907,6 +909,7 @@ export function docket(o: {
   unread?: number;
   decision?: boolean;
   size?: 'default' | 'large';
+  lines?: 1 | 2 | 3;
 }): Html {
   const unread = o.unread
     ? html`<span><span class="unread-dot" aria-hidden="true"></span><span class="sr-only">unread messages</span></span>`
@@ -921,11 +924,11 @@ export function docket(o: {
           ${perf}
           <span class="docket-body">
             ${clipped(o.street ?? o.address, 1, 'docket-address', o.address)}
-            ${clipped(o.issue, 2, 'docket-issue')}
+            ${clipped(o.issue, o.lines ?? 2, 'docket-issue')}
             <span class="docket-meta">${o.meta.map((item) => html`<span>${item}</span>`)}${unread}</span>
           </span>`
       : html`<span class="docket-body">
-            ${clipped(o.issue, 3, 'docket-issue')}
+            ${clipped(o.issue, o.lines ?? 3, 'docket-issue')}
             ${clipped(o.street ?? o.address, 1, 'docket-address', o.address)}
           </span>
           ${perf}
