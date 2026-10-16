@@ -1,29 +1,107 @@
-// The Property Manager's dashboard: a short overview of what needs a decision (Maintenance
-// Requests to confirm and alerts) and the next seven days of bookings. The lists live on
-// /requests and /tickets. Also the actions on Maintenance Requests and the inbox (their
-// pages redirect back to /requests), and /files/:id for photos.
+// The Property Manager's dispatch board. On phones what needs a decision comes first,
+// then Tickets by stage, then the next 7 days; from 1024px the board runs the full
+// width with the decisions beside the next 7 days under it. Then the inbox with its
+// actions and Urgent Repairs. Also the actions on each, and /files/:id for photos.
+// Controls repeated per item get the item's id in their element id ("reason-12"),
+// so every label on the page points at its own control.
 
 import { Hono, type Context } from 'hono';
 import { html } from 'hono/html';
+import type { PropertyManagerActions } from '../../app.ts';
 import { ActionError, type Urgency } from '../../shared.ts';
+import { STAGES, type Stage } from '../../views.ts';
+import { addDays, dayOf } from '../../zoned-time.ts';
 import type { WebEnv } from '../env.ts';
-import { formAction, text } from '../forms.ts';
+import { formAction, text, type FormValues } from '../forms.ts';
+import { requestFlags } from '../request-checks.ts';
+import { COLLEAGUES_ONLY, shareButton, shareUrl } from '../share.ts';
 import { shellInfo } from '../shell.ts';
-import { badge, countStrip, emptyState, flashFrom, humanise, linkButton, page, section, segmented, type Html } from '../ui.ts';
-import type { Booking } from './calendar.ts';
-import { alertRow, requestRow, streetOf, PHOTO_FLAG, ROLE_LABEL } from './requests.ts';
+import {
+  badge,
+  button,
+  countStrip,
+  dl,
+  docket,
+  emptyState,
+  field,
+  flashFrom,
+  formatWhen,
+  humanise,
+  lane,
+  linkButton,
+  page,
+  postButton,
+  queueRow,
+  section,
+  segmented,
+  table,
+  urgencyBadge,
+  type Html,
+  ROLE_LABEL,
+  type Tone,
+} from '../ui.ts';
+import { dayRange, shortDay, streetOf, type Booking } from '../bookings.ts';
 import { finishSetupBanner } from './welcome.ts';
 import { streamOf } from '../stream.ts';
 
-export { PHOTO_FLAG, ROLE_LABEL };
+/** Kept for the pages that still import it from here; the words live with the other request checks. */
+export { PHOTO_FLAG } from '../request-checks.ts';
 
-/** How many Maintenance Requests and alerts the dashboard lists before pointing at /requests. */
-const SHOWN = 5;
+type Dashboard = Awaited<ReturnType<PropertyManagerActions['dashboard']>>;
+type MaintenanceRequest = Dashboard['maintenanceRequests'][number];
+type BoardTicket = Dashboard['tickets'][number];
+type UrgentRepair = Dashboard['urgentRepairs'][number];
+type InboxItem = Dashboard['inbox'][number];
+type Alert = Dashboard['alerts'][number];
+type Person = Awaited<ReturnType<PropertyManagerActions['people']>>[number];
+type Filter = 'mine' | 'all';
+
+const INBOX_REASON: Record<InboxItem['reason'], [string, Tone]> = {
+  unknown_sender: ['Unknown sender', 'warning'],
+  other: ['Not maintenance', 'neutral'],
+  low_confidence: ['Agent unsure', 'info'],
+  common_area_no_building_manager: ['Common Area with no Building Manager', 'warning'],
+};
+
+const URGENT_REPAIR_STATUS: Record<UrgentRepair['status'], [string, Tone]> = {
+  reminder_sent: ['Waiting for receipt', 'warning'],
+  receipt_received: ['Receipt received', 'info'],
+  receipt_forwarded: ['Receipt sent to Property Owner', 'success'],
+};
+
+const GUESS_LABEL: Record<string, string> = {
+  messageClass: 'Kind of message',
+  relatedItem: 'Related to',
+  updateType: 'Update',
+  replyType: 'Reply',
+  urgency: 'Urgency',
+  trade: 'Trade',
+};
+
+/** The kind of message the agent guessed, as the one-line best guess starts it. */
+const MESSAGE_CLASS: Record<string, string> = {
+  new_issue: 'New issue',
+  update: 'Update',
+  common_area: 'Common Area issue',
+  other: 'Not maintenance',
+};
+
+/** The board's lanes, named as the Property Manager says them. */
+const STAGE_TITLE: Record<Stage, string> = {
+  quoting: 'Quoting',
+  awaiting_owner: 'With Property Owner',
+  approved: 'Ready to book',
+  scheduled: 'Booked',
+  done: 'Done',
+};
+
+/** Where a Maintenance Request's action may send the Property Manager back to: the Requests list or one request's review. */
+const REQUEST_RETURN = /^\/requests(\/\d+)?$/;
 
 /** File types safe to show in the browser. Anything else (HTML, SVG...) downloads instead. */
 const INLINE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'image/heif', 'application/pdf']);
 
-/** The dashboard at /, the actions on Maintenance Requests and the inbox, and /files/:id for photos. */
+/** The dashboard at /: the dispatch board, the inbox, Urgent Repairs and their actions; and /files/:id for photos. */
 export function dashboardPages() {
   const pages = new Hono<WebEnv>();
 
@@ -33,9 +111,9 @@ export function dashboardPages() {
     const view = await actions.dashboard({ filter });
     const { timeZone } = actions.agency();
     const now = actions.now();
+    const people = view.inbox.some((item) => item.personId === null) ? await actions.people() : [];
     const q = filter === 'all' ? '?filter=all' : '';
     const needReceipt = view.urgentRepairs.filter((u) => u.status === 'reminder_sent').length;
-    const requests = [...view.maintenanceRequests].sort((a, b) => a.reportedAt.localeCompare(b.reportedAt));
 
     return c.html(
       page({
@@ -51,59 +129,41 @@ export function dashboardPages() {
         body: html`
           ${(await finishSetupBanner(actions))}
           ${countStrip([
-            { label: 'Maintenance Requests to confirm', count: requests.length, href: `/requests${q}` },
-            { label: 'Open Tickets', count: view.tickets.length, href: `/tickets${q}` },
-            { label: 'Alerts', count: view.alerts.length, href: '/approvals' },
-            { label: 'Urgent Repairs needing a receipt', count: needReceipt, href: `/requests${q}#urgent-repairs` },
+            { label: 'Maintenance Requests to review', count: view.maintenanceRequests.length, href: '#requests', decision: true },
+            { label: 'Open Tickets', count: view.tickets.length, href: '#tickets' },
+            { label: 'Alerts', count: view.alerts.length, href: '#alerts', decision: true },
+            { label: 'In the inbox', count: view.inbox.length, href: '#inbox', decision: true },
+            { label: 'Urgent Repairs needing a receipt', count: needReceipt, href: '#urgent-repairs' },
           ])}
-          ${section({
-            title: 'Needs your decision',
-            id: 'decisions',
-            body: html`<div class="grid gap-6">
-              <div id="requests" class="grid gap-2">
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                  <h3 class="section-title">Maintenance Requests to confirm</h3>
-                  ${linkButton('See all requests', `/requests${q}`, { variant: 'ghost', size: 'sm' })}
-                </div>
-                ${requests.length
-                  ? html`${requests.slice(0, SHOWN).map((r) => requestRow(r, q, now))}${requests.length > SHOWN
-                      ? html`<p class="text-sm text-muted">Showing ${SHOWN} of ${requests.length}.</p>`
-                      : ''}`
-                  : emptyState('No Maintenance Requests waiting for you.')}
-              </div>
-              <div id="alerts" class="grid gap-2 border-t border-line pt-4">
-                <h3 class="section-title">Alerts</h3>
-                ${view.alerts.length
-                  ? html`${view.alerts.slice(0, SHOWN).map((a) => alertRow(a, timeZone))}${view.alerts.length > SHOWN
-                      ? html`<p class="text-sm text-muted">Showing ${SHOWN} of ${view.alerts.length}.</p>`
-                      : ''}`
-                  : emptyState('No alerts.')}
-              </div>
-            </div>`,
-          })}
-          ${nextSevenDays(view.calendar, now, timeZone)}
+          <div class="dashboard-desk grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)] lg:items-start">
+            <div class="dashboard-decisions min-w-0 lg:col-start-1 lg:row-start-2">${decisions(view, q, timeZone, now, shareUrl(c, '/?filter=all#requests'))}</div>
+            <div class="min-w-0 lg:col-span-2 lg:row-start-1">${ticketsByStage(view.tickets, filter, now, timeZone)}</div>
+            <div class="min-w-0 lg:col-start-2 lg:row-start-2">${nextSevenDays(view.calendar, now, timeZone)}</div>
+          </div>
+          ${section({ title: 'Inbox', id: 'inbox', actions: countBadge(view.inbox.length), body: inboxList(view.inbox, people, timeZone, q) })}
+          ${section({ title: 'Urgent Repairs', id: 'urgent-repairs', actions: countBadge(view.urgentRepairs.length), body: urgentRepairsTable(view.urgentRepairs, timeZone) })}
         `,
       }),
     );
   });
 
-  pages.post('/requests/:issueId{[0-9]+}/confirm', (c) =>
-    formAction(c, back(c), async () => {
+  pages.post('/requests/:issueId{[0-9]+}/confirm', async (c) =>
+    formAction(c, await requestBack(c), async () => {
       const ticketId = await c.var.actions.confirmMaintenanceRequest(idParam(c, 'issueId'));
       return { ok: 'Confirmed. The Ticket is open and the Tenant has been told.', redirect: `/tickets/${ticketId}` };
     }),
   );
 
-  pages.post('/requests/:issueId{[0-9]+}/reject', (c) =>
-    formAction(c, back(c), async (form) => {
+  pages.post('/requests/:issueId{[0-9]+}/reject', async (c) =>
+    formAction(c, await requestBack(c), async (form) => {
       const issueId = idParam(c, 'issueId');
       await c.var.actions.rejectMaintenanceRequest(issueId, text(form, 'reason'));
       return { ok: 'Rejected. The Tenant has been told why.' };
     }),
   );
 
-  pages.post('/requests/:issueId{[0-9]+}/urgency', (c) =>
-    formAction(c, back(c), async (form) => {
+  pages.post('/requests/:issueId{[0-9]+}/urgency', async (c) =>
+    formAction(c, await requestBack(c), async (form) => {
       const issueId = idParam(c, 'issueId');
       const urgency = text(form, 'urgency') as Urgency;
       await c.var.actions.changeUrgency({ issueId }, urgency);
@@ -154,17 +214,202 @@ export function dashboardPages() {
   return pages;
 }
 
-function filterOf(c: Context<WebEnv>): 'mine' | 'all' {
+function filterOf(c: Context<WebEnv>): Filter {
   return c.req.query('filter') === 'all' ? 'all' : 'mine';
 }
 
-/** Back to the Maintenance Requests page, keeping "mine" or "all". */
+/** Back to the dashboard, keeping "mine" or "all". */
 function back(c: Context<WebEnv>) {
-  return filterOf(c) === 'all' ? '/requests?filter=all' : '/requests';
+  return filterOf(c) === 'all' ? '/?filter=all' : '/';
+}
+
+/**
+ * Back from a Maintenance Request's action: to the page it was taken on when the form
+ * names one (its hidden `return` field, the Requests list or a review), else the dashboard.
+ */
+async function requestBack(c: Context<WebEnv>) {
+  const form = (await c.req.parseBody({ all: true })) as FormValues;
+  const to = text(form, 'return');
+  return REQUEST_RETURN.test(to) ? to : back(c);
 }
 
 function idParam(c: Context<WebEnv>, name: string) {
   return Number(c.req.param(name));
+}
+
+function countBadge(count: number) {
+  return count ? badge(String(count)) : undefined;
+}
+
+// Needs your decision
+
+/**
+ * Maintenance Requests (oldest first, as the core orders them), then alerts, then the
+ * inbox in brief: the decisions, each with its actions. `shareLink` is the Agency-wide
+ * list of Maintenance Requests, which a Share button passes on when there are any.
+ */
+function decisions(view: Dashboard, q: string, timeZone: string, now: Date, shareLink: string): Html {
+  const requests = view.maintenanceRequests;
+  return section({
+    title: 'Needs your decision',
+    id: 'decisions',
+    body: html`<div class="grid gap-4">
+      <div id="requests" class="grid gap-2">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h3 class="text-sm font-semibold">Maintenance Requests to review</h3>
+          ${requests.length
+            ? shareButton({
+                title: 'Maintenance Requests to review',
+                text: `${requests.length} ${requests.length === 1 ? 'Maintenance Request is' : 'Maintenance Requests are'} waiting for review in myEST8.`,
+                url: shareLink,
+                note: COLLEAGUES_ONLY,
+              })
+            : ''}
+        </div>
+        ${requests.length ? requests.map((r) => requestRow(r, q, now)) : emptyState('No Maintenance Requests waiting for you.')}
+      </div>
+      <div id="alerts" class="grid gap-2">
+        <h3 class="text-sm font-semibold">Alerts</h3>
+        ${view.alerts.length ? view.alerts.map((a) => alertRow(a, timeZone)) : emptyState('No alerts.')}
+      </div>
+      ${view.inbox.length
+        ? html`<div class="grid gap-2">
+            <h3 class="text-sm font-semibold">In the inbox</h3>
+            ${view.inbox.map((item) => inboxRow(item, timeZone))}
+          </div>`
+        : ''}
+    </div>`,
+  });
+}
+
+/**
+ * A Maintenance Request in "Needs your decision", read like a docket: the issue, the
+ * street, then every badge (Urgency, Trade and each check that needs a second look),
+ * with Confirm and Review on their own line.
+ */
+function requestRow(r: MaintenanceRequest, q: string, now: Date): Html {
+  const [first] = r.photos;
+  return queueRow({
+    href: `/requests/${r.issueId}`,
+    thumb: first ? html`<img src="/files/${first.fileId}" alt="Photo of the issue" width="56" height="56" loading="lazy" />` : undefined,
+    title: r.description,
+    detail: streetOf(r.propertyAddress),
+    badges: [urgencyBadge(r.urgency), badge(humanise(r.trade)), ...requestFlags(r).map((f) => badge(f.label, f.tone))],
+    meta: ageOf(r.reportedAt, now),
+    decision: true,
+    actions: html`${postButton(`/requests/${r.issueId}/confirm${q}`, 'Confirm', { size: 'sm' })}${linkButton('Review', `/requests/${r.issueId}`, { variant: 'secondary', size: 'sm' })}`,
+  });
+}
+
+/** Each alert says what is wrong, on which Property, with the next step as its action. */
+function alertRow(alert: Alert, timeZone: string): Html {
+  const ticket = `/tickets/${alert.ticketId}`;
+  switch (alert.kind) {
+    case 'invite_more_tradies':
+      return queueRow({
+        href: ticket,
+        title: `Only ${alert.confirmedQuotes} confirmed ${alert.confirmedQuotes === 1 ? 'Quote' : 'Quotes'} after 72 hours`,
+        detail: streetOf(alert.propertyAddress),
+        badges: [badge('Quotes', 'warning')],
+        decision: true,
+        actions: linkButton('Ask more Tradies', `${ticket}#job-${alert.jobId}-tradies`, { size: 'sm' }),
+      });
+    case 'owner_no_reply':
+      return queueRow({
+        href: ticket,
+        title: `${alert.ownerName}, the Property Owner, hasn't replied since ${formatWhen(alert.requestedAt, timeZone)}`,
+        detail: streetOf(alert.propertyAddress),
+        badges: [badge('Approval', 'warning')],
+        decision: true,
+        actions: alert.ownerPhone ? linkButton(`Call ${alert.ownerPhone}`, `tel:${alert.ownerPhone}`, { size: 'sm' }) : html`<span class="text-xs text-muted">No phone number on file</span>`,
+      });
+    case 'rating_due':
+      return queueRow({
+        href: ticket,
+        title: `${alert.businessName} finished the Job`,
+        detail: streetOf(alert.propertyAddress),
+        badges: [badge('Rating', 'info')],
+        decision: true,
+        actions: linkButton('Rate the Tradie', `${ticket}#job-${alert.jobId}`, { size: 'sm' }),
+      });
+  }
+}
+
+/** An inbox item in brief: who sent it and what it says, linking to the item and its actions further down. */
+function inboxRow(item: InboxItem, timeZone: string): Html {
+  const [reason, tone] = INBOX_REASON[item.reason];
+  return queueRow({
+    href: `#inbox-${item.itemId}`,
+    title: item.text,
+    detail: item.personName ?? item.from,
+    badges: [badge(reason, tone)],
+    meta: formatWhen(item.receivedAt, timeZone),
+    decision: true,
+  });
+}
+
+// Tickets by stage
+
+/**
+ * The board: five lanes from 1024px, each scrolling inside itself, and on phones the
+ * lanes stacked as a list grouped by stage. The core gives each Ticket its lane,
+ * Trades, Quote counts, next visit and whether it needs a decision; this only draws
+ * them. With no open Tickets at all it is one empty state, not five.
+ */
+function ticketsByStage(tickets: BoardTicket[], filter: Filter, now: Date, timeZone: string): Html {
+  return section({
+    title: 'Tickets by stage',
+    id: 'tickets',
+    actions: linkButton('See all Tickets', filter === 'all' ? '/tickets?filter=all' : '/tickets', { variant: 'ghost', size: 'sm' }),
+    body: tickets.length
+      ? html`<div class="grid gap-3 lg:grid-cols-5">
+          ${STAGES.map((stage) => {
+            const inLane = tickets.filter((t) => t.stage === stage);
+            return lane({
+              title: STAGE_TITLE[stage],
+              count: inLane.length,
+              body: inLane.length
+                ? html`${inLane.map((t) => ticketDocket(t, now, timeZone))}`
+                : html`<p class="text-sm text-muted">Nothing at this stage.</p>`,
+            });
+          })}
+        </div>`
+      : emptyState(filter === 'mine' ? 'No open Tickets on your Properties. Confirming a Maintenance Request opens one.' : 'No open Tickets. Confirming a Maintenance Request opens one.'),
+  });
+}
+
+/** What a Ticket being quoted waits on: Quotes to check, Ready to choose, or how many Quotes are in. */
+export function quotingStatus(t: Pick<BoardTicket, 'quoting' | 'decision'>): string | null {
+  const q = t.quoting;
+  if (!q) return null;
+  if (t.decision === 'check_quotes') {
+    const toCheck = q.received - q.confirmed;
+    return `${toCheck} ${toCheck === 1 ? 'Quote' : 'Quotes'} to check`;
+  }
+  if (t.decision === 'choose_quote') return 'Ready to choose';
+  if (!q.asked && !q.received) return 'No Quote Requests yet';
+  const of = Math.max(q.asked, q.received);
+  return `${q.received} of ${of} ${of === 1 ? 'Quote' : 'Quotes'} in`;
+}
+
+function ticketDocket(t: BoardTicket, now: Date, timeZone: string): Html {
+  const quoting = quotingStatus(t);
+  return docket({
+    number: t.ticketId,
+    href: `/tickets/${t.ticketId}`,
+    urgency: t.urgency,
+    address: t.propertyAddress,
+    street: t.propertyAddress.replace(/\s+[A-Z]{2,3}\s+\d{4}$/, ''),
+    issue: t.description,
+    meta: [
+      ...t.trades.map((trade) => html`${humanise(trade)}`),
+      ...(quoting ? [html`${quoting}`] : []),
+      ...(t.nextVisit ? [html`Visit ${formatWhen(t.nextVisit, timeZone)}`] : []),
+    ],
+    age: ageOf(t.reportedAt, now),
+    unread: t.unreadMessages,
+    decision: t.decision !== null,
+  });
 }
 
 // Next 7 days
@@ -175,16 +420,16 @@ function idParam(c: Context<WebEnv>, name: string) {
  * single muted line.
  */
 function nextSevenDays(bookings: Booking[], now: Date, timeZone: string): Html {
-  const today = dayKey(now, timeZone);
+  const today = dayOf(now, timeZone);
   const byDay = new Map<string, Booking[]>();
   for (const b of bookings) {
-    const day = dayKey(new Date(b.start), timeZone);
+    const day = dayOf(b.start, timeZone);
     byDay.set(day, [...(byDay.get(day) ?? []), b]);
   }
   const rows: Html[] = [];
   let quiet: string[] = [];
   const flushQuiet = () => {
-    if (quiet.length) rows.push(html`<li class="px-2 py-2 text-sm text-muted">Nothing booked ${dayRange(quiet)}</li>`);
+    if (quiet.length) rows.push(html`<li class="px-2 py-2 text-sm text-muted">Nothing booked ${dayRange(quiet, { month: true })}</li>`);
     quiet = [];
   };
   for (let i = 0; i < 7; i++) {
@@ -201,7 +446,7 @@ function nextSevenDays(bookings: Booking[], now: Date, timeZone: string): Html {
   return section({
     title: 'Next 7 days',
     id: 'next-7-days',
-    actions: linkButton('Open the schedule', '/dispatch', { variant: 'ghost', size: 'sm' }),
+    actions: linkButton('Open calendar', '/calendar', { variant: 'ghost', size: 'sm' }),
     body: html`<ol class="grid">${rows}</ol>`,
   });
 }
@@ -209,7 +454,7 @@ function nextSevenDays(bookings: Booking[], now: Date, timeZone: string): Html {
 /** One day: its date (today is highlighted), then its bookings or "Nothing booked today". */
 function dayRow(day: string, bookings: Booking[], isToday: boolean, timeZone: string): Html {
   return html`<li class="grid gap-2 border-t border-line px-2 py-2 first:border-t-0 sm:grid-cols-[7rem_minmax(0,1fr)] ${isToday ? 'rounded bg-page' : ''}" ${isToday ? html`aria-current="date"` : ''}>
-    <p class="text-sm font-semibold"><time datetime="${day}">${dayLabel(day, true)}</time>${isToday ? html` ${badge('Today', 'info')}` : ''}</p>
+    <p class="text-sm font-semibold"><time datetime="${day}">${shortDay(day, { month: true })}</time>${isToday ? html` ${badge('Today', 'info')}` : ''}</p>
     ${bookings.length
       ? html`<ul class="grid gap-1.5">${bookings.map((b) => bookingLine(b, timeZone))}</ul>`
       : html`<p class="text-sm text-muted">Nothing booked today</p>`}
@@ -226,27 +471,116 @@ function bookingLine(b: Booking, timeZone: string): Html {
   </li>`;
 }
 
-/** A day as "Thu 8 Oct", or "Thu 8" when a range of days is named after its last day (en-GB writes it without a comma). */
-function dayLabel(day: string, withMonth: boolean) {
-  return new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: withMonth ? 'short' : undefined }).format(new Date(`${day}T00:00:00Z`));
+/** "2 days ago", "5 hours ago": how long a request has waited. */
+function ageOf(iso: string, now: Date) {
+  const hours = Math.floor((now.getTime() - new Date(iso).getTime()) / 3_600_000);
+  if (hours < 1) return 'Just now';
+  if (hours < 24) return hours === 1 ? '1 hour ago' : `${hours} hours ago`;
+  const days = Math.floor(hours / 24);
+  return days === 1 ? '1 day ago' : `${days} days ago`;
 }
 
-/** "Fri 9 – Mon 12 Oct" for a run of days, or "Mon 12 Oct" for one. */
-function dayRange(days: string[]) {
-  const first = days[0] ?? '';
-  const last = days.at(-1) ?? first;
-  return first === last ? dayLabel(first, true) : `${dayLabel(first, false)} – ${dayLabel(last, true)}`;
+// Urgent Repairs
+
+function urgentRepairsTable(repairs: UrgentRepair[], timeZone: string): Html {
+  if (!repairs.length) return emptyState('No Urgent Repairs reported.');
+  return table(
+    ['Property', 'Tenant', 'Issue', 'Status', 'Receipts', 'Reported'],
+    repairs.map((u) => {
+      const [label, tone] = URGENT_REPAIR_STATUS[u.status];
+      return [
+        html`${u.propertyAddress}`,
+        html`${u.tenantName}`,
+        html`${u.description}`,
+        badge(label, tone),
+        html`${u.receipts}`,
+        html`${formatWhen(u.reportedAt, timeZone)}`,
+      ];
+    }),
+    { caption: 'Urgent Repairs' },
+  );
 }
 
+// Inbox
 
-/** The calendar day ("2026-10-12") that an instant falls on in the time zone. */
-function dayKey(at: Date, timeZone: string) {
-  return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(at);
+function inboxList(items: InboxItem[], people: Person[], timeZone: string, q: string): Html {
+  if (!items.length) return emptyState('The inbox is empty.');
+  return html`<div class="grid gap-2">${items.map((item) => inboxItem(item, people, timeZone, q))}</div>`;
 }
 
-function addDays(day: string, days: number) {
-  const d = new Date(`${day}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
+/**
+ * One inbox item, compact: the message, who sent it and when, then the agent's best
+ * guess in one line beside the actions. Every answer behind the guess is one click away.
+ */
+function inboxItem(item: InboxItem, people: Person[], timeZone: string, q: string): Html {
+  const [reason, tone] = INBOX_REASON[item.reason];
+  const base = `/inbox/${item.itemId}`;
+  const guesses = item.bestGuess && Object.keys(item.bestGuess).length ? item.bestGuess : null;
+  return html`<article class="inbox-item${item.personId === null ? ' is-unknown' : ''}" id="inbox-${item.itemId}">
+    <div class="inbox-item-head">
+      <blockquote class="inbox-item-text">${item.text}</blockquote>
+      ${badge(reason, tone)}
+    </div>
+    <p class="inbox-item-from">
+      ${item.personName ? html`<span>${item.personName}</span><span>${item.from}</span>` : html`<span>${item.from}</span>`}
+      <span>${formatWhen(item.receivedAt, timeZone)}</span>
+    </p>
+    ${guesses
+      ? html`<details class="inbox-item-guess">
+          <summary>Looks like: ${guessSummary(guesses)}</summary>
+          ${dl(Object.entries(guesses).map(([question, answer]) => [guessLabel(question), guessAnswer(answer)]))}
+        </details>`
+      : ''}
+    <div class="inbox-item-actions">
+      ${item.personId === null
+        ? html`<form method="post" action="${base}/link${q}" class="inbox-item-link">
+            ${field({
+              label: 'Link sender to',
+              name: 'personId',
+              id: `person-${item.itemId}`,
+              type: 'select',
+              required: true,
+              placeholder: 'Choose a person',
+              options: people.map((p) => ({ value: String(p.id), label: personLabel(p) })),
+              hint: 'Their next message from this address will be recognised.',
+            })}
+            ${button('Link sender', { size: 'sm' })}
+          </form>`
+        : item.reason === 'low_confidence' && item.bestGuess
+          ? postButton(`${base}/route${q}`, 'Route with best guess', { size: 'sm' })
+          : ''}
+      ${postButton(`${base}/dismiss${q}`, 'Dismiss', { variant: 'ghost', size: 'sm' })}
+    </div>
+  </article>`;
 }
 
+/**
+ * The best guess in one line: what kind of message, what it is about, then its
+ * Urgency and Trade. "Update on Ticket 12, Routine, Plumbing".
+ */
+function guessSummary(g: Record<string, string>): string {
+  const kind =
+    g.replyType && g.replyType !== 'other'
+      ? humanise(g.replyType)
+      : g.updateType && g.updateType !== 'general'
+        ? humanise(g.updateType)
+        : g.messageClass
+          ? (MESSAGE_CLASS[g.messageClass] ?? humanise(g.messageClass))
+          : 'Message';
+  const about = g.relatedItem && g.relatedItem !== 'none' ? ` on ${guessAnswer(g.relatedItem)}` : '';
+  return [`${kind}${about}`, ...(g.urgency ? [humanise(g.urgency)] : []), ...(g.trade ? [humanise(g.trade)] : [])].join(', ');
+}
+
+function personLabel(p: Person) {
+  return `${p.businessName ?? p.name} (${ROLE_LABEL[p.role]})`;
+}
+
+function guessLabel(question: string) {
+  return GUESS_LABEL[question] ?? humanise(question.replace(/([a-z])([A-Z])/g, '$1 $2').replace(':', ': ').toLowerCase());
+}
+
+function guessAnswer(answer: string) {
+  if (answer === 'none') return 'Nothing open';
+  const ref = /^([a-z_]+):(\d+)$/.exec(answer);
+  return ref ? `${humanise(ref[1]!)} ${ref[2]}` : humanise(answer);
+}
