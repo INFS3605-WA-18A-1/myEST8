@@ -490,7 +490,7 @@ function urgentRepairsTable(repairs: UrgentRepair[], timeZone: string): Html {
         html`<span class="whitespace-nowrap">${formatWhen(u.reportedAt, timeZone)}</span>`,
       ];
     }),
-    { caption: 'Urgent Repairs', stack: true, align: ['left', 'left', 'left', 'right', 'left'] },
+    { caption: 'Urgent Repairs', stack: 'labelled', align: ['left', 'left', 'left', 'right', 'left'] },
   );
 }
 

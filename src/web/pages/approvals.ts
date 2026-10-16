@@ -52,12 +52,16 @@ function body(waiting: Approvals, all: boolean, propertyIds: Map<string, number>
   const owners = waiting.waitingOnOwner;
   const receipts = waiting.waitingOnReceipt;
   if (!owners.length && !receipts.length) {
-    return emptyState('Nothing is waiting on a Property Owner or a receipt.', all ? undefined : linkButton('See every Property Manager’s', '/approvals?filter=all', { size: 'sm' }));
+    return emptyState(
+      'Nothing is waiting on a Property Owner or a receipt. A Quote lands here when choosing it would take a Ticket over its Max Repair Cost.',
+      all ? undefined : linkButton('Show all approvals', '/approvals?filter=all'),
+    );
   }
   const silent = owners.filter((w) => w.silent).length;
   return html`
     ${countStrip([
-      ...(owners.length ? [{ label: 'Quotes waiting on a Property Owner', count: owners.length, href: '#owners', decision: true }] : []),
+      // Only a silent Property Owner needs the Property Manager (a call); the rest wait on the Owner.
+      ...(owners.length ? [{ label: 'Quotes waiting on a Property Owner', count: owners.length, href: '#owners' }] : []),
       ...(silent ? [{ label: 'No reply for 48 hours', count: silent, href: '#owners', decision: true }] : []),
       ...(receipts.length ? [{ label: 'Urgent Repairs waiting on a receipt', count: receipts.length, href: '#receipts' }] : []),
     ])}
@@ -74,31 +78,34 @@ function reminder(w: Approvals['waitingOnOwner'][number]): Html {
 
 function ownerTable(waiting: Approvals['waitingOnOwner'], now: Date): Html {
   return table(
-    ['Ticket', 'Property', 'Property Owner', 'Quote', 'Over the limit', 'Waiting', 'Reminder'],
+    ['Ticket', 'Property Owner', 'Quote', 'Over the limit', 'Waiting', 'Reminder'],
     waiting.map((w) => [
-      html`<a class="link font-medium num" href="/tickets/${w.ticketId}">#${w.ticketId}</a><br /><span class="text-sm text-muted">${humanise(w.trade)}</span>`,
-      html`<a class="link" href="/properties/${w.propertyId}">${w.propertyAddress}</a>`,
-      html`${w.ownerName}${w.ownerMobile ? html`<br /><a class="link text-sm" href="tel:${w.ownerMobile}">${w.ownerMobile}</a>` : ''}`,
-      html`${formatMoney(w.quotePriceCents)}<br /><span class="text-sm text-muted">${w.tradieBusinessName}</span>`,
-      html`<strong>${formatMoney(w.overByCents)}</strong><br /><span class="text-sm text-muted">${formatMoney(w.repairCostCents)} against ${formatMoney(w.maxRepairCostCents)}</span>`,
-      html`${formatAge(w.requestedAt, now).replace(' ago', '')}`,
+      html`<p><a class="link font-semibold num" href="/tickets/${w.ticketId}">Ticket #${w.ticketId}</a> <span class="text-muted">${humanise(w.trade)}</span></p>
+        <p><a class="link text-xs" href="/properties/${w.propertyId}">${w.propertyAddress}</a></p>`,
+      html`<p>${w.ownerName}</p>${w.ownerMobile ? html`<p><a class="link text-xs" href="tel:${w.ownerMobile}">${w.ownerMobile}</a></p>` : ''}`,
+      html`<p>${formatMoney(w.quotePriceCents)}</p><p class="text-xs text-muted">${w.tradieBusinessName}</p>`,
+      html`<p class="font-semibold">${formatMoney(w.overByCents)}</p><p class="text-xs text-muted whitespace-nowrap">${formatMoney(w.repairCostCents)} of ${formatMoney(w.maxRepairCostCents)}</p>`,
+      html`<span class="whitespace-nowrap">${formatAge(w.requestedAt, now).replace(' ago', '')}</span>`,
       reminder(w),
     ]),
-    { stack: true, caption: 'Quotes waiting on a Property Owner, longest waiting first', align: ['left', 'left', 'left', 'right', 'right', 'left', 'left'] },
+    { stack: 'labelled', caption: 'Quotes waiting on a Property Owner, longest waiting first', align: ['left', 'left', 'right', 'right', 'left', 'left'] },
   );
 }
 
 function receiptTable(waiting: Approvals['waitingOnReceipt'], propertyIds: Map<string, number>, timeZone: string, now: Date): Html {
   return table(
-    ['Property', 'Tenant', 'Property Owner', 'Issue', 'Reported', 'Waiting'],
-    waiting.map((u) => [
-      propertyIds.has(u.propertyAddress) ? html`<a class="link" href="/properties/${propertyIds.get(u.propertyAddress)}">${u.propertyAddress}</a>` : html`${u.propertyAddress}`,
-      html`${u.tenantName}`,
-      html`${u.ownerName}`,
-      html`${u.description}`,
-      html`${formatWhen(u.reportedAt, timeZone)}`,
-      html`${formatAge(u.reportedAt, now).replace(' ago', '')}`,
-    ]),
-    { stack: true, caption: 'Urgent Repairs waiting on a receipt, latest first' },
+    ['Issue', 'Tenant', 'Property Owner', 'Reported', 'Waiting'],
+    waiting.map((u) => {
+      const id = propertyIds.get(u.propertyAddress);
+      return [
+        html`<p class="font-semibold">${u.description}</p>
+          <p>${id === undefined ? html`<span class="text-xs text-muted">${u.propertyAddress}</span>` : html`<a class="link text-xs" href="/properties/${id}">${u.propertyAddress}</a>`}</p>`,
+        html`${u.tenantName}`,
+        html`${u.ownerName}`,
+        html`<span class="whitespace-nowrap">${formatWhen(u.reportedAt, timeZone)}</span>`,
+        html`${formatAge(u.reportedAt, now).replace(' ago', '')}`,
+      ];
+    }),
+    { stack: 'labelled', caption: 'Urgent Repairs waiting on a receipt, latest first' },
   );
 }
