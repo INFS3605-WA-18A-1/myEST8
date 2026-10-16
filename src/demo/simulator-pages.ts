@@ -34,7 +34,8 @@ const ROLE_LABEL: Record<Role, string> = {
   building_manager: 'Building Manager',
 };
 
-const CHANNEL_LABEL: Record<ChannelType, string> = { sms: 'SMS', whatsapp: 'WhatsApp', email: 'Email' };
+/** The channels a simulated person can message on. WhatsApp is paused as a product channel, so it isn't offered. */
+const CHANNEL_LABEL: Partial<Record<ChannelType, string>> = { sms: 'SMS', email: 'Email' };
 
 /** One-tap replies for the demo script. */
 const QUICK_REPLIES: Record<Role, string[]> = {
@@ -219,7 +220,7 @@ function feedLimit(raw: string | undefined) {
 /** An address as written in messages, comparable with a contact's mobile or email. */
 function normalise(address: string) {
   const bracketed = /<([^>]+)>/.exec(address);
-  const plain = (bracketed ? bracketed[1]! : address).trim().toLowerCase().replace(/^whatsapp:/, '');
+  const plain = (bracketed ? bracketed[1]! : address).trim().toLowerCase();
   return plain.includes('@') ? plain : plain.replace(/[\s()-]/g, '');
 }
 
@@ -251,7 +252,7 @@ function matchesQuery(contact: DemoContact, query: string) {
 }
 
 function channelsOf(contact: DemoContact): ChannelType[] {
-  return [...(contact.mobile ? (['sms', 'whatsapp'] as const) : []), ...(contact.email ? (['email'] as const) : [])];
+  return [...(contact.mobile ? (['sms'] as const) : []), ...(contact.email ? (['email'] as const) : [])];
 }
 
 /** Everything myEST8 sent the contact and everything they sent in, oldest first. */
@@ -270,7 +271,7 @@ function threadOf(contact: DemoContact, outbox: DemoOutboundMessage[], inbound: 
 
 /** People can only message the Agency on the channels it has connected. */
 function unconnectedNotice(missing: ChannelType[]): Html {
-  const names = missing.map((ch) => CHANNEL_LABEL[ch]);
+  const names = missing.map((ch) => CHANNEL_LABEL[ch] ?? ch);
   const list = names.length < 2 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
   return alert(
     html`<p>Connect ${list} in Setup first. Until then, nobody can message the Agency that way from here.</p>
@@ -281,7 +282,7 @@ function unconnectedNotice(missing: ChannelType[]): Html {
 }
 
 function channelBadge(channel: ChannelType): Html {
-  return badge(CHANNEL_LABEL[channel] ?? channel, channel === 'email' ? 'info' : channel === 'whatsapp' ? 'success' : 'neutral');
+  return badge(CHANNEL_LABEL[channel] ?? channel, channel === 'email' ? 'info' : 'neutral');
 }
 
 /** "tenant.upload_link" -> Tenant, then Upload link, as two elements with a gap between them. */
