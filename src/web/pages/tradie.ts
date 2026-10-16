@@ -13,7 +13,6 @@ import { icon } from '../icons.ts';
 import { shellInfo } from '../shell.ts';
 import { alert, badge, button, emptyState, field, flashFrom, formatMoney, formatWhen, humanise, linkButton, page, section, sectionHeader, stat, statGroup, table, ticketCell, type Html } from '../ui.ts';
 import { timeRange } from './calendar.ts';
-import { cellLabel } from './properties.ts';
 import { googleSearchForm, importPanel, searchListings, tradieFields } from './onboarding-forms.ts';
 
 type TradieView = Awaited<ReturnType<PropertyManagerActions['tradie']>>;
@@ -163,14 +162,14 @@ function directory(tradies: DirectoryEntry[], trade: Trade | null): Html {
       return [
         html`<a class="link font-medium" href="/tradies/${t.tradieId}">${t.businessName ?? t.name}</a>${t.businessName ? html`<br /><span class="text-xs text-muted">${t.name}</span>` : ''}`,
         html`<span class="flex flex-wrap gap-1">${t.trades.map((x) => badge(humanise(x), 'info'))}</span>`,
-        html`${cellLabel('myEST8 rating')}<span><span class="num font-medium">${average.toFixed(1)}</span> <span class="text-sm text-muted">from ${count}</span></span>`,
+        html`<span><span class="num font-medium">${average.toFixed(1)}</span> <span class="text-sm text-muted">from ${count}</span></span>`,
         t.googleRating
-          ? html`${cellLabel('Google rating')}<span><span class="num font-medium">${t.googleRating.rating === null ? '—' : t.googleRating.rating.toFixed(1)}</span> <span class="text-sm text-muted">${t.googleRating.reviewCount ?? 0} reviews</span></span>`
-          : html`${cellLabel('Google rating')}<span class="text-muted">Not on Google</span>`,
-        html`${cellLabel('Previous Quotes')}${t.quotes}`,
+          ? html`<span><span class="num font-medium">${t.googleRating.rating === null ? '—' : t.googleRating.rating.toFixed(1)}</span> <span class="text-sm text-muted">${t.googleRating.reviewCount ?? 0} reviews</span></span>`
+          : html`<span class="text-muted">Not on Google</span>`,
+        html`${t.quotes}`,
       ];
     }),
-    { stack: true, caption: trade ? `${humanise(trade)} Tradies` : 'Tradies', align: ['left', 'left', 'left', 'left', 'right'] },
+    { stack: 'labelled', caption: trade ? `${humanise(trade)} Tradies` : 'Tradies', align: ['left', 'left', 'left', 'left', 'right'] },
   );
 }
 

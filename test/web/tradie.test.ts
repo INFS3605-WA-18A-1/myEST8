@@ -42,10 +42,13 @@ describe('Tradies', () => {
 
     const page = await (await w.get('/tradies', cookie)).text();
     const start = page.indexOf(`href="/tradies/${w.ids.pete}"`);
-    const row = visible(page.slice(start, page.indexOf('</tr>', start)));
-    expect(row).toContain('myEST8 rating 4.0 from 1');
-    expect(row).toContain('Google rating 4.8 120 reviews');
-    expect(row).toMatch(/Previous Quotes 0/);
+    const row = page.slice(start, page.indexOf('</tr>', start));
+    expect(page).toContain('table-frame is-stacked is-labelled');
+    expect(row).toContain('data-label="myEST8 rating"');
+    expect(visible(row)).toContain('4.0 from 1');
+    expect(row).toContain('data-label="Google rating"');
+    expect(visible(row)).toContain('4.8 120 reviews');
+    expect(row).toMatch(/data-label="Previous Quotes">0</);
   });
 
   test('the add form and spreadsheet import stay on the page', async () => {

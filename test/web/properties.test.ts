@@ -27,12 +27,13 @@ describe('Properties', () => {
     const page = await (await w.get('/properties', cookie)).text();
     const headers = [...page.matchAll(/<th scope="col"[^>]*>([^<]+)<\/th>/g)].map((m) => m[1]);
     expect(headers.slice(0, 3)).toEqual(['Property', 'Open Tickets', 'Max Repair Cost']);
-    // The phone layout hides the header, so each value says what it is.
-    const row = visible(page.slice(page.indexOf(`href="/properties/${w.ids.kingSt}"`), page.indexOf('</tr>', page.indexOf(`href="/properties/${w.ids.kingSt}"`))));
-    expect(row).toMatch(/Open Tickets 1\b/);
-    expect(row).toContain('Max Repair Cost $500.00');
-    expect(row).toContain('Property Owner Olivia Owens');
-    expect(page).toContain('class="cell-label"');
+    // The phone layout hides the header, so each value carries its column's name.
+    const start = page.indexOf(`href="/properties/${w.ids.kingSt}"`);
+    const row = page.slice(start, page.indexOf('</tr>', start));
+    expect(page).toContain('table-frame is-stacked is-labelled');
+    expect(row).toMatch(/data-label="Open Tickets"><span class="property-open">1<\/span>/);
+    expect(row).toMatch(/data-label="Max Repair Cost">\$500\.00/);
+    expect(row).toMatch(/data-label="Property Owner">Olivia Owens/);
   });
 
   test("a profile shows the open Ticket, the facts, Tenants and Nominated Tradies, with a way back", async () => {
@@ -58,10 +59,11 @@ describe('Properties', () => {
 
     const page = await (await w.get(`/properties/${w.ids.kingSt}`, cookie)).text();
     const tenants = page.slice(page.indexOf('aria-label="Tenants"'), page.indexOf('aria-label="Nominated Tradies"'));
-    expect(tenants).toContain('table-frame is-stacked');
-    expect(visible(tenants)).toContain(`Hana Ho Since 1 Jan 2025 Mobile ${HANA} Email ${HANA_EMAIL}`);
+    expect(tenants).toContain('table-frame is-stacked is-labelled');
+    expect(tenants).toContain(`data-label="Mobile"><a class="link num" href="tel:${HANA}">`);
+    expect(tenants).toContain(`data-label="Email"><a class="link break-all" href="mailto:${HANA_EMAIL}">`);
     const nominated = page.slice(page.indexOf('aria-label="Nominated Tradies"'), page.indexOf('aria-label="Frequent issues"'));
-    expect(nominated).toContain('table-frame is-stacked');
+    expect(nominated).toContain('table-frame is-stacked is-labelled');
     expect(visible(nominated)).toMatch(/Sparky Sam Electrical/);
   });
 

@@ -158,23 +158,14 @@ function list(properties: Overview[]): Html {
     ['Property', 'Open Tickets', 'Max Repair Cost', 'Property Owner', 'Tenants', 'Property Manager'],
     properties.map((p) => [
       html`<a class="link font-medium" href="/properties/${p.propertyId}">${p.address}</a>`,
-      html`${cellLabel('Open Tickets')}<span class="${p.openTickets ? 'property-open' : 'text-muted'}">${p.openTickets}</span>`,
-      html`${cellLabel('Max Repair Cost')}${formatMoney(p.maxRepairCostCents)}`,
-      html`${cellLabel('Property Owner')}${p.ownerName}`,
-      html`${cellLabel('Tenants')}${p.tenants.length ? p.tenants.join(', ') : html`<span class="text-muted">No Tenants</span>`}`,
-      html`${cellLabel('Property Manager')}${p.propertyManager}`,
+      html`<span class="${p.openTickets ? 'property-open' : 'text-muted'}">${p.openTickets}</span>`,
+      html`${formatMoney(p.maxRepairCostCents)}`,
+      html`${p.ownerName}`,
+      html`${p.tenants.length ? p.tenants.join(', ') : html`<span class="text-muted">No Tenants</span>`}`,
+      html`${p.propertyManager}`,
     ]),
-    { stack: true, caption: 'Properties', align: ['left', 'right', 'right', 'left', 'left', 'left'] },
+    { stack: 'labelled', caption: 'Properties', align: ['left', 'right', 'right', 'left', 'left', 'left'] },
   );
-}
-
-/**
- * What a value in a stacked table is: shown only on phones, where the table's header is
- * hidden and each row is a block (`table({ stack: true })`), so "500.00" reads
- * "Max Repair Cost $500.00". Wider screens have the column heading instead.
- */
-export function cellLabel(label: string): Html {
-  return html`<span class="cell-label">${label}</span>`;
 }
 
 /** A name, then the mobile number and the email to reach them on, each on its own line. */
@@ -227,12 +218,12 @@ function tenants(p: PropertyView): Html {
           ['Tenant', 'Mobile', 'Email'],
           p.tenants.map((t) => [
             html`<span class="font-medium">${t.name}</span>${t.tenancyStart ? html`<br /><span class="text-xs text-muted">Since ${formatDate(t.tenancyStart)}</span>` : ''}`,
-            html`${cellLabel('Mobile')}${t.mobile ? html`<a class="link num" href="tel:${t.mobile}">${t.mobile}</a>` : '—'}`,
-            html`${cellLabel('Email')}${t.email ? html`<a class="link break-all" href="mailto:${t.email}">${t.email}</a>` : '—'}`,
+            html`${t.mobile ? html`<a class="link num" href="tel:${t.mobile}">${t.mobile}</a>` : '—'}`,
+            html`${t.email ? html`<a class="link break-all" href="mailto:${t.email}">${t.email}</a>` : '—'}`,
           ]),
-          { caption: 'Tenants', stack: true },
+          { caption: 'Tenants', stack: 'labelled' },
         )
-      : emptyState('No Tenants yet.')}
+      : emptyState('No Tenants yet. Add the people who live here so they can report repairs.', linkButton('Add a Tenant', '/setup#tenants'))}
   </section>`;
 }
 
@@ -246,7 +237,7 @@ function nominated(p: PropertyView): Html {
             html`<a class="link font-medium" href="/tradies/${t.tradieId}">${t.businessName ?? t.name}</a>`,
             html`<span class="flex flex-wrap gap-1">${t.trades.map((trade) => badge(humanise(trade), 'info'))}</span>`,
           ]),
-          { caption: 'Nominated Tradies for Urgent Repairs', stack: true },
+          { caption: 'Nominated Tradies for Urgent Repairs', stack: 'labelled' },
         )
       : emptyState('No Nominated Tradie. Tenants arrange Urgent Repairs themselves.')}
   </section>`;
