@@ -254,16 +254,6 @@
   });
 })();
 
-// === autosubmit ===
-// A GET filter form marked data-autosubmit (the Tradies' Trade filter) applies as
-// soon as a select in it changes. Without this file its own button submits it.
-document.addEventListener('change', (event) => {
-  const select = event.target;
-  if (!(select instanceof HTMLSelectElement)) return;
-  const form = select.form;
-  if (form && form.hasAttribute('data-autosubmit')) form.requestSubmit();
-});
-
 // === copy ===
 // A button with data-copy-for="<input id>" copies that field. Without this file
 // the field is still there to copy by hand.
