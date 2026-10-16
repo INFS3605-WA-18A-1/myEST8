@@ -24,12 +24,13 @@ export interface Db {
 export const LOCAL_DATABASE_URL = 'postgres://postgres:postgres@127.0.0.1:54340/myest8';
 
 /**
- * The connection string from SUPABASE_DB_URL. Refuses to go on without one, so
- * a deployed app never falls back to some other database.
+ * The connection string from SUPABASE_DB_URL, or POSTGRES_URL (the transaction
+ * pooler address Vercel's Supabase integration sets). Refuses to go on without
+ * one, so a deployed app never falls back to some other database.
  */
 export function requireDatabaseUrl(env: Record<string, string | undefined> = process.env): string {
-  const url = env.SUPABASE_DB_URL?.trim();
-  if (!url) throw new Error('SUPABASE_DB_URL is not set: give the Postgres connection string for this environment (see .env.example).');
+  const url = env.SUPABASE_DB_URL?.trim() || env.POSTGRES_URL?.trim();
+  if (!url) throw new Error('SUPABASE_DB_URL (or POSTGRES_URL) is not set: give the Postgres connection string for this environment (see .env.example).');
   return url;
 }
 

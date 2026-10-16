@@ -33,8 +33,6 @@ jobs:
   backup:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    env:
-      BACKUP_DIR: ${{ runner.temp }}/backup
     steps:
       # Fail before touching the database if either secret is missing or wrong.
       - name: Check the secrets are set
@@ -105,6 +103,7 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
+          BACKUP_DIR="$RUNNER_TEMP/backup"
           mkdir -p "$BACKUP_DIR"
           out="$BACKUP_DIR/myest8-$(date -u +%Y%m%dT%H%M%SZ).sql.age"
 
