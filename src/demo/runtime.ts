@@ -47,7 +47,8 @@ export type HostedProvider = { provider: string; required: boolean; missing: str
  * quote reader), a made-up value (the `mail.example.test` inbound domain), or a
  * feature left off (file storage in the database, Resend inbound, signed file
  * links, the cron route). The photo matcher and quote reader are listed but not
- * required: they only have a mock until their services exist.
+ * required: they only have a mock until their services exist; nor are the map tiles,
+ * which fall back to a keyless basemap.
  */
 export function hostedProviders(env: Env): HostedProvider[] {
   const set = (name: string) => !!env[name]?.trim();
@@ -63,6 +64,8 @@ export function hostedProviders(env: Env): HostedProvider[] {
     { provider: 'worker cron', required: true, missing: unset('CRON_SECRET') },
     { provider: 'imageMatcher', required: false, missing: unset('VISION_API_URL') },
     { provider: 'quoteReader', required: false, missing: unset('QUOTES_API_URL') },
+    // The Dispatch map: CARTO's tiles with the key, Esri's keyless grey base without (src/web/map-config.ts).
+    { provider: 'map tiles', required: false, missing: unset('CARTO_BASEMAPS_KEY') },
   ];
 }
 

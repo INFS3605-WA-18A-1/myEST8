@@ -145,9 +145,10 @@
     map = L.map(mapElement, { scrollWheelZoom: false, zoomAnimation: !reduceMotion, fadeAnimation: !reduceMotion, markerZoomAnimation: !reduceMotion });
     // A view first: markers only get their elements once the map has one.
     map.setView([-33.8688, 151.2093], 12);
-    L.tileLayer(data.tiles.url, { subdomains: data.tiles.subdomains, attribution: data.tiles.attribution, maxZoom: data.tiles.maxZoom }).addTo(map);
+    const { url, subdomains, attribution, maxZoom } = data.tiles;
+    L.tileLayer(url, { ...(subdomains ? { subdomains } : {}), attribution, maxZoom }).addTo(map);
     // Street level is close enough to tell neighbours apart; past it, pins still together fan out.
-    map.setMaxZoom(Math.min(data.tiles.maxZoom, 18));
+    map.setMaxZoom(Math.min(maxZoom, 18));
     // The page scrolls: the wheel only zooms the map once the map has been clicked or focused.
     map.on('focus', () => map.scrollWheelZoom.enable());
     map.on('blur', () => map.scrollWheelZoom.disable());

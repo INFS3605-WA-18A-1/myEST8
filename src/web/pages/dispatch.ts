@@ -22,7 +22,7 @@ import { addDays, dayOf, daysFrom, startOfDay } from '../../zoned-time.ts';
 import { bookingCard, bookingsByDay, shortDay, type Booking } from '../bookings.ts';
 import type { WebEnv } from '../env.ts';
 import { formAction } from '../forms.ts';
-import { MAP_TILES } from '../map-config.ts';
+import { mapTiles } from '../map-config.ts';
 import { shellInfo } from '../shell.ts';
 import { badge, emptyState, flashFrom, humanise, page, postButton, section, ticketCell, urgencyBadge, type Html } from '../ui.ts';
 
@@ -310,7 +310,7 @@ function scheduleTable(tradies: TradieView[], bookings: Booking[], days: string[
  */
 function pinData(properties: PropertyView[], tradies: TradieView[]): Html {
   const data = {
-    tiles: MAP_TILES,
+    tiles: mapTiles(),
     radiusKm: TRADIE_SEARCH_RADIUS_KM,
     properties: properties.flatMap((p) =>
       p.location

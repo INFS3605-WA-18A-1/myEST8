@@ -10,11 +10,11 @@ const KING_ST = '12 King St, Newtown NSW 2042';
 /** A 1×1 transparent PNG, so tile requests are answered without the network. */
 const BLANK_TILE = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
 
-/** Answers the map's tile requests with a blank tile and records every URL the page asks for. */
+/** Answers the map's tile requests (CARTO with a key, Esri's grey base without) with a blank tile and records every URL the page asks for. */
 async function recordRequests(page: Page) {
   const urls: string[] = [];
   page.on('request', (request) => urls.push(request.url()));
-  await page.route(/basemaps\.cartocdn\.com/, (route) => route.fulfill({ status: 200, contentType: 'image/png', body: BLANK_TILE }));
+  await page.route(/basemaps\.cartocdn\.com|server\.arcgisonline\.com/, (route) => route.fulfill({ status: 200, contentType: 'image/png', body: BLANK_TILE }));
   return urls;
 }
 
@@ -31,7 +31,7 @@ async function zoomInUntilVisible(page: Page, pin: Locator) {
   await expect(pin).toBeVisible();
 }
 
-test('Dispatch draws its pins on CARTO tiles and never asks tile.openstreetmap.org', async ({ page }) => {
+test('Dispatch draws its pins on a grey basemap and never asks tile.openstreetmap.org', async ({ page }) => {
   const urls = await recordRequests(page);
   await signIn(page);
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Dispatch' }).click();
@@ -41,9 +41,10 @@ test('Dispatch draws its pins on CARTO tiles and never asks tile.openstreetmap.o
   await expect(map).toBeVisible();
   // Every Property is on the map, as its own pin or inside a group.
   await expect(map.getByRole('button', { name: /^(Group of \d+ pins|.+ NSW \d{4}, \d+ open Tickets?)/ }).first()).toBeVisible();
-  await expect(page.getByText('CARTO', { exact: true })).toBeVisible();
+  // The test server has no CARTO key, so the tiles are Esri's World Light Gray Base, credited to Esri.
+  await expect(map.getByText(/Tiles © Esri/)).toBeVisible();
 
-  expect(urls.some((url) => /^https:\/\/[abcd]\.basemaps\.cartocdn\.com\/light_all\//.test(url))).toBe(true);
+  expect(urls.some((url) => url.startsWith('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/'))).toBe(true);
   expect(urls.filter((url) => url.includes('tile.openstreetmap.org'))).toEqual([]);
 });
 

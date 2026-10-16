@@ -108,8 +108,16 @@ describe('hosted mode and missing provider settings', () => {
     const lines: string[] = [];
     const hosted = await hostedApp(await hostedEnv({ ALLOW_MOCKS: '', ...ALL_SETTINGS }), (line) => lines.push(line));
     expect(lines[0]).toMatch(/Real: classifier, places, file storage, email, inbound email, file links, worker cron/);
-    expect(lines[0]).toMatch(/Mocked or off: imageMatcher, quoteReader\./);
+    expect(lines[0]).toMatch(/Mocked or off: imageMatcher, quoteReader, map tiles\./);
     await hosted.close();
+  });
+
+  test("the Dispatch map's CARTO key is reported as real or off, and a start never waits for it", async () => {
+    const lines: string[] = [];
+    const withKey = await hostedApp(await hostedEnv({ ALLOW_MOCKS: '', ...ALL_SETTINGS, CARTO_BASEMAPS_KEY: 'test-carto' }), (line) => lines.push(line));
+    await withKey.close();
+    expect(lines[0]).toMatch(/Real: .*worker cron, map tiles\./);
+    expect(JSON.stringify(lines)).not.toContain('test-carto');
   });
 
   test("a real service URL with no key is refused even with ALLOW_MOCKS=1: it would be called with 'demo'", async () => {

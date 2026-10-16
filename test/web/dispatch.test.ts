@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { MAP_TILES } from '../../src/web/map-config.ts';
+import { mapTiles } from '../../src/web/map-config.ts';
 import { visible, webWorld } from '../support/web.ts';
 import { confirmedQuotes, KING_ST, tomsTapTicket, type World } from '../support/world.ts';
 
@@ -82,7 +82,7 @@ describe('Dispatch: the map data', () => {
 
     const data = pinData(await dispatch(w, cookie));
 
-    expect(data.tiles).toEqual(MAP_TILES);
+    expect(data.tiles).toEqual(mapTiles());
     expect(data.radiusKm).toBe(15);
   });
 
