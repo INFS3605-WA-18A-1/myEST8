@@ -155,17 +155,26 @@ export function propertyPages() {
 function list(properties: Overview[]): Html {
   if (!properties.length) return emptyState('No Properties yet. Add the first one to start taking reports.', linkButton('Add a Property', '#add-property', { variant: 'primary' }));
   return table(
-    ['Property', 'Property Owner', 'Max Repair Cost', 'Tenants', 'Open Tickets', 'Property Manager'],
+    ['Property', 'Open Tickets', 'Max Repair Cost', 'Property Owner', 'Tenants', 'Property Manager'],
     properties.map((p) => [
       html`<a class="link font-medium" href="/properties/${p.propertyId}">${p.address}</a>`,
-      html`${p.ownerName}`,
-      html`${formatMoney(p.maxRepairCostCents)}`,
-      html`${p.tenants.length ? p.tenants.join(', ') : html`<span class="text-muted">No Tenants</span>`}`,
-      html`${p.openTickets}`,
-      html`${p.propertyManager}`,
+      html`${cellLabel('Open Tickets')}<span class="${p.openTickets ? 'property-open' : 'text-muted'}">${p.openTickets}</span>`,
+      html`${cellLabel('Max Repair Cost')}${formatMoney(p.maxRepairCostCents)}`,
+      html`${cellLabel('Property Owner')}${p.ownerName}`,
+      html`${cellLabel('Tenants')}${p.tenants.length ? p.tenants.join(', ') : html`<span class="text-muted">No Tenants</span>`}`,
+      html`${cellLabel('Property Manager')}${p.propertyManager}`,
     ]),
-    { stack: true, caption: 'Properties', align: ['left', 'left', 'right', 'left', 'right', 'left'] },
+    { stack: true, caption: 'Properties', align: ['left', 'right', 'right', 'left', 'left', 'left'] },
   );
+}
+
+/**
+ * What a value in a stacked table is: shown only on phones, where the table's header is
+ * hidden and each row is a block (`table({ stack: true })`), so "500.00" reads
+ * "Max Repair Cost $500.00". Wider screens have the column heading instead.
+ */
+export function cellLabel(label: string): Html {
+  return html`<span class="cell-label">${label}</span>`;
 }
 
 /** A name, then the mobile number and the email to reach them on, each on its own line. */

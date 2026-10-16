@@ -19,6 +19,22 @@ describe('Properties', () => {
     expect(page).toContain('action="/setup/properties"');
   });
 
+  test('each row leads with the address and its open Tickets, and labels its values for phones', async () => {
+    const w = await webWorld();
+    await tomsTapTicket(w);
+    const cookie = await w.signIn();
+
+    const page = await (await w.get('/properties', cookie)).text();
+    const headers = [...page.matchAll(/<th scope="col"[^>]*>([^<]+)<\/th>/g)].map((m) => m[1]);
+    expect(headers.slice(0, 3)).toEqual(['Property', 'Open Tickets', 'Max Repair Cost']);
+    // The phone layout hides the header, so each value says what it is.
+    const row = visible(page.slice(page.indexOf(`href="/properties/${w.ids.kingSt}"`), page.indexOf('</tr>', page.indexOf(`href="/properties/${w.ids.kingSt}"`))));
+    expect(row).toMatch(/Open Tickets 1\b/);
+    expect(row).toContain('Max Repair Cost $500.00');
+    expect(row).toContain('Property Owner Olivia Owens');
+    expect(page).toContain('class="cell-label"');
+  });
+
   test("a profile shows the open Ticket, the facts, Tenants and Nominated Tradies, with a way back", async () => {
     const w = await webWorld();
     const { ticketId } = await tomsTapTicket(w);

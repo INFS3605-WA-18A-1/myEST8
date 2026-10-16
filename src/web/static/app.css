@@ -2781,6 +2781,37 @@
       align-items: flex-start;
       gap: 2px;
     }
+    /* A Property with open Tickets: the count in Night 600, so the rows with work stand out. */
+    .property-open {
+      font-weight: 600;
+      color: var(--ink);
+    }
+
+    /* Stacked directories (Properties, Tradies, Settings): on phones the header is hidden,
+       so each value carries its label (cellLabel() in pages/properties.ts) and the
+       labelled values sit in two columns under the row's name. */
+    .cell-label {
+      display: none;
+    }
+    @media (max-width: 639.98px) {
+      .table-frame.is-stacked tbody td:has(> .cell-label) {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        flex: 1 1 calc(50% - 8px);
+        min-width: 0;
+        margin-left: 0;
+      }
+      .table-frame.is-stacked tbody td:has(> .cell-label.is-wide) {
+        flex-basis: 100%;
+      }
+      .table-frame.is-stacked .cell-label {
+        display: block;
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--muted);
+      }
+    }
   }
 }
 
