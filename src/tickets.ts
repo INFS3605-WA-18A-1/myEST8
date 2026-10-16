@@ -328,6 +328,18 @@ export function createTickets({ db, clock, settings, modules }: Context) {
 
     issue,
 
+    /** Many issues in one query, with how many unread messages each has, by issue id. */
+    async issuesWithUnread(issueIds: number[]) {
+      if (!issueIds.length) return new Map<number, Issue & { unreadMessages: number }>();
+      const rows = await all<IssueRow & { unread_messages: number }>(
+        db,
+        `SELECT issues.*, (SELECT count(*) FROM messages WHERE messages.issue_id = issues.id AND messages.unread = 1) AS unread_messages
+         FROM issues WHERE id IN (SELECT value::bigint FROM jsonb_array_elements_text(?::text::jsonb) AS ids (value))`,
+        JSON.stringify(issueIds),
+      );
+      return new Map(rows.map((r) => [r.id, { ...toIssue(r), unreadMessages: r.unread_messages }]));
+    },
+
     async updateIssue(id: number, patch: IssuePatch) {
       const entries = Object.entries(patch).filter(([, value]) => value !== undefined);
       if (!entries.length) return;
@@ -483,6 +495,16 @@ export function createTickets({ db, clock, settings, modules }: Context) {
     job,
     jobInAgency,
     jobsOf,
+
+    /** The Jobs of many Tickets in one query, each Ticket's in the order they were added. */
+    async jobsOfTickets(ticketIds: number[]) {
+      if (!ticketIds.length) return [];
+      return (await all<JobRow>(
+        db,
+        'SELECT * FROM jobs WHERE ticket_id IN (SELECT value::bigint FROM jsonb_array_elements_text(?::text::jsonb) AS ids (value)) ORDER BY ticket_id, id',
+        JSON.stringify(ticketIds),
+      )).map(toJob);
+    },
 
     async setJobStatus(jobId: number, status: JobStatus) {
       await run(db, 'UPDATE jobs SET status = ? WHERE id = ?', status, jobId);
@@ -687,6 +709,18 @@ export function createTickets({ db, clock, settings, modules }: Context) {
         db,
         `SELECT * FROM tickets WHERE agency_id = ? AND status = 'open'${filter}
          ORDER BY CASE urgency WHEN 'high' THEN 0 ELSE 1 END, reported_at, id`,
+        agencyId,
+        ...params,
+      )).map(toTicket);
+    },
+
+    /** Every Ticket, open or closed: Urgent before High before Routine, then the earliest reported first. */
+    async list(agencyId: number, propertyIds: number[] | null) {
+      const [filter, params] = propertyFilter(propertyIds);
+      return (await all<TicketRow>(
+        db,
+        `SELECT * FROM tickets WHERE agency_id = ?${filter}
+         ORDER BY CASE urgency WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 ELSE 2 END, reported_at, id`,
         agencyId,
         ...params,
       )).map(toTicket);

@@ -36,6 +36,18 @@ type WorkOrderRow = {
   reschedule_requested_by: 'tenant' | 'tradie' | null;
 };
 
+/**
+ * How a booked visit stands: done, waiting on new times, or booked and either
+ * confirmed by the Tenant or not yet. A cancelled Work Order is never a booking.
+ */
+export type VisitStatus = 'done' | 'reschedule_requested' | 'not_confirmed' | 'confirmed';
+
+function visitOf(row: WorkOrderRow): VisitStatus {
+  if (row.status === 'done') return 'done';
+  if (row.reschedule_requested_by) return 'reschedule_requested';
+  return row.visit_confirmed ? 'confirmed' : 'not_confirmed';
+}
+
 /** The shared calendar, Work Orders, reschedule suggestions and Job completion. */
 export function createScheduling({ db, clock, modules }: Context) {
 
@@ -121,20 +133,31 @@ export function createScheduling({ db, clock, modules }: Context) {
     return { job, ticket, property, tradieBusinessName: tradie.businessName ?? tradie.name };
   }
 
+  /**
+   * A booking as the calendar, Dispatch and the dashboard show it: what the visit is
+   * for (the Ticket's issue and the Job's Trade), who, where, when, and `visit`, the
+   * one word on how the visit stands, so no page works it out again.
+   */
   async function toView(row: WorkOrderRow) {
-    const { property, tradieBusinessName } = await place(row);
+    const { job, ticket, property, tradieBusinessName } = await place(row);
     return {
       workOrderId: row.id,
       jobId: row.job_id,
       ticketId: row.ticket_id,
       tradieId: row.tradie_id,
       businessName: tradieBusinessName,
+      trade: job.trade,
+      issue: (await tickets.issue(ticket.issueId)).description,
       start: row.start,
       end: row.end,
       status: row.status,
+      visit: visitOf(row),
       visitConfirmed: !!row.visit_confirmed,
       rescheduleRequestedBy: row.reschedule_requested_by,
+      propertyId: property.id,
       propertyAddress: property.address,
+      suburb: property.suburb,
+      propertyManagerId: property.propertyManagerId,
       propertyManager: (await profiles.propertyManager(property.propertyManagerId)).name,
     };
   }
@@ -408,6 +431,19 @@ export function createScheduling({ db, clock, modules }: Context) {
     async workOrderForJob(jobId: number) {
       const row = await one<WorkOrderRow>(db, `SELECT * FROM work_orders WHERE job_id = ? AND status != 'cancelled' ORDER BY id DESC LIMIT 1`, jobId);
       return row ? toView(row) : null;
+    },
+
+    /** When each Job of many Tickets is booked, from its current Work Order, in one query. Jobs never booked are left out. */
+    async visitsOfTickets(ticketIds: number[]) {
+      if (!ticketIds.length) return new Map<number, string>();
+      const rows = await all<{ job_id: number; start: string }>(
+        db,
+        `SELECT DISTINCT ON (job_id) job_id, start FROM work_orders
+         WHERE ticket_id IN (SELECT value::bigint FROM jsonb_array_elements_text(?::text::jsonb) AS ids (value)) AND status != 'cancelled'
+         ORDER BY job_id, id DESC`,
+        JSON.stringify(ticketIds),
+      );
+      return new Map(rows.map((r) => [r.job_id, r.start]));
     },
 
     /** A cancelled Job frees the Tradie's slot. */
