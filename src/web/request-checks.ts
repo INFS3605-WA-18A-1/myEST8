@@ -43,15 +43,15 @@ export function hasFlaggedPhotos(r: Pick<CheckedRequest, 'photos'>): boolean {
 
 /**
  * The flags to look at before confirming, most serious first: photos that don't
- * match the description, Check Urgency, Check Trade, flagged photos, no photos, and
+ * match the description, Check urgency, Check trade, flagged photos, no photos, and
  * an unclear photo check. Empty when nothing needs a second look.
  */
 export function requestFlags(r: CheckedRequest): Check[] {
   const match = r.imageMatch;
   return [
     ...(match?.result === 'does_not_match' ? [{ label: "Photos don't match the description", tone: 'error' as const, detail: match.reason }] : []),
-    ...(r.checkUrgency ? [{ label: 'Check Urgency', tone: 'warning' as const }] : []),
-    ...(r.checkTrade ? [{ label: 'Check Trade', tone: 'warning' as const }] : []),
+    ...(r.checkUrgency ? [{ label: 'Check urgency', tone: 'warning' as const }] : []),
+    ...(r.checkTrade ? [{ label: 'Check trade', tone: 'warning' as const }] : []),
     ...(hasFlaggedPhotos(r) ? [{ label: 'Flagged photos', tone: 'warning' as const }] : []),
     ...(r.noPhotos ? [{ label: 'No photos', tone: 'warning' as const }] : []),
     ...(match?.result === 'unclear' ? [{ label: 'Photo check unclear', tone: 'warning' as const, detail: match.reason }] : []),

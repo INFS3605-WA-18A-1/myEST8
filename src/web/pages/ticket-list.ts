@@ -41,12 +41,13 @@ export function ticketListPages() {
         shell: await shellInfo(c),
         subtitle: filters.urgency
           ? html`${humanise(filters.urgency)} ${filters.status} Tickets. <a class="link" href="${hrefFor({ ...filters, urgency: null })}">Show every Urgency</a>`
-          : 'Most urgent first, then the earliest reported.',
+          : undefined,
         controls: segmented([
           { label: 'Mine', href: hrefFor({ ...filters, filter: 'mine' }), active: filters.filter === 'mine' },
           { label: 'All', href: hrefFor({ ...filters, filter: 'all' }), active: filters.filter === 'all' },
         ]),
         body: html`
+          <div class="ticket-list-filters">
           ${tabs(
             [
               { label: 'Open', href: hrefFor({ ...filters, status: 'open' }), active: filters.status === 'open', count: list.counts.open },
@@ -59,9 +60,9 @@ export function ticketListPages() {
               label: humanise(urgency),
               count: list.counts[urgency],
               href: hrefFor({ ...filters, urgency: filters.urgency === urgency ? null : urgency }),
-              decision: urgency === 'urgent' && list.counts.urgent > 0,
             })),
           )}
+          </div>
           ${ticketTable(list.tickets, propertyIds, filters, now)}
         `,
       }),
@@ -86,11 +87,15 @@ function hrefFor(f: Filters): string {
  * number quiet beside it and any unread messages), the address under it (a link to
  * the Property), then Urgency, the Jobs and their stages, and when it was reported.
  * On phones each row is a block: the issue, the address, then the badges.
+ * The table is sorted most urgent first, then the earliest reported (its caption says so).
  */
 function ticketTable(tickets: TicketList['tickets'], propertyIds: Map<string, number>, f: Filters, now: Date): Html {
   if (!tickets.length) {
     const what = `${f.urgency ? `${humanise(f.urgency)} ` : ''}${f.status === 'closed' ? 'closed' : 'open'}`;
-    return emptyState(`No ${what} Tickets${f.filter === 'mine' ? ' on your Properties' : ''}.`, f.filter === 'mine' ? linkButton('See every Property Manager’s', hrefFor({ ...f, filter: 'all' }), { size: 'sm' }) : undefined);
+    return emptyState(
+      `No ${what} Tickets${f.filter === 'mine' ? ' on your Properties' : ''}. A Ticket opens when you confirm a Maintenance Request.`,
+      f.filter === 'mine' ? linkButton('Show all Tickets', hrefFor({ ...f, filter: 'all' })) : linkButton('Review Maintenance Requests', '/requests?filter=all'),
+    );
   }
   const all = f.filter === 'all';
   return table(
@@ -105,14 +110,24 @@ function ticketTable(tickets: TicketList['tickets'], propertyIds: Map<string, nu
           propertyHref: propertyId === undefined ? undefined : `/properties/${propertyId}`,
           unread: t.unreadMessages,
         }),
-        html`<span class="flex flex-wrap gap-1">${urgencyBadge(t.urgency)}${t.checkUrgency ? badge('Check Urgency', 'warning') : ''}</span>`,
+        html`<span class="flex flex-wrap gap-1">${urgencyBadge(t.urgency)}${t.checkUrgency ? badge('Check urgency', 'warning') : ''}</span>`,
         ...(all ? [html`<span class="text-muted">${t.propertyManager}</span>`] : []),
-        t.status === 'closed'
-          ? statusBadge('closed')
-          : html`<span class="flex flex-wrap gap-1">${t.jobs.map((j) => html`<span class="whitespace-nowrap">${humanise(j.trade)} ${statusBadge(j.status, { job: true })}</span>`)}</span>`,
+        t.status === 'closed' ? statusBadge('closed') : jobsCell(t),
         html`<span class="text-muted whitespace-nowrap">${formatAge(t.reportedAt, now)}</span>`,
       ];
     }),
     { caption: `${f.status === 'closed' ? 'Closed' : 'Open'} Tickets, most urgent and oldest first`, stack: true },
   );
+}
+
+/**
+ * An open Ticket's Jobs, one to a line: the Trade, then its stage. When no Job is open
+ * any more the Ticket waits on the Property Manager to close it, and says so.
+ */
+function jobsCell(t: TicketList['tickets'][number]): Html {
+  const readyToClose = t.jobs.length > 0 && t.jobs.every((j) => j.status === 'done' || j.status === 'cancelled');
+  return html`<ul class="ticket-list-jobs" role="list">
+      ${t.jobs.map((j) => html`<li><span class="ticket-list-trade">${humanise(j.trade)}</span> ${statusBadge(j.status, { job: true })}</li>`)}
+    </ul>
+    ${readyToClose ? html`<p class="ticket-list-close">Ready to close</p>` : ''}`;
 }

@@ -3086,10 +3086,26 @@
     .request-reject-form .fieldset {
       align-self: stretch;
     }
+    /* Decide is the one thing on the page waiting on the Property Manager: the Wattle stripe. */
+    .request-side > #decide {
+      border-left: 4px solid var(--hivis);
+    }
     /* The Requests list reads like a docket: the issue strong, the address quiet under it. */
     .request-list .queue-detail {
       font-size: 13px;
       color: var(--muted);
+    }
+    /* On phones the actions take their own line under the badges, so the issue keeps the width. */
+    @media (max-width: 39.99rem) {
+      .request-list .queue-head {
+        display: contents;
+      }
+      .request-list .queue-title {
+        flex: none;
+      }
+      .request-list .queue-actions {
+        order: 9;
+      }
     }
   }
 }
@@ -3541,11 +3557,11 @@
 @layer utilities {
   @layer app {
     /* The header in the docket's shape: the stub (number and Urgency) along the top
-       on phones and down the left from 640px, then a dashed perforation. */
+       on phones and down the left from 640px, then a dashed perforation. Its menus
+       (Share, Change Urgency) open over the page, so nothing here clips. */
     .ticket-head {
       display: flex;
       flex-direction: column;
-      overflow: hidden;
       background: var(--surface);
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -3555,6 +3571,18 @@
       align-items: baseline;
       gap: 12px;
       padding: 10px 16px;
+      border-radius: 7px 7px 0 0;
+    }
+    .ticket-number {
+      font-family: var(--font-head);
+      font-size: 26px;
+      font-weight: 700;
+      line-height: 1;
+    }
+    .ticket-urgency {
+      font-family: var(--font-head);
+      font-size: 14px;
+      font-weight: 600;
     }
     .ticket-perf {
       flex-shrink: 0;
@@ -3573,11 +3601,117 @@
         width: 6rem;
         flex-shrink: 0;
         padding: 16px 4px;
+        border-radius: 7px 0 0 7px;
       }
       .ticket-perf {
         margin: 12px 0;
         border-top: 0;
         border-left: 1px dashed var(--control);
+      }
+    }
+    /* The issue, the address and one line of facts; the Next step under them, full width;
+       the tools under it on phones and at the top right from 1024px. */
+    .ticket-head-body {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      flex: 1 1 auto;
+      gap: 12px;
+      min-width: 0;
+      padding: 16px;
+    }
+    .ticket-head-main {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+    }
+    .ticket-issue {
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 20px;
+      font-weight: 600;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+    .ticket-address {
+      margin: 0;
+      font-weight: 500;
+      overflow-wrap: anywhere;
+    }
+    .ticket-meta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px 16px;
+      margin: 4px 0 0;
+      font-size: 14px;
+      color: var(--muted);
+    }
+    .ticket-meta strong {
+      font-weight: 700;
+    }
+    .ticket-tools {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    @media (min-width: 64rem) {
+      .ticket-head-body {
+        grid-template-columns: minmax(0, 1fr) auto;
+        column-gap: 24px;
+      }
+      .ticket-head-main {
+        grid-column: 1;
+        grid-row: 1;
+      }
+      .ticket-tools {
+        grid-column: 2;
+        grid-row: 1;
+        align-self: start;
+        justify-content: flex-end;
+      }
+      .ticket-head-body > .ticket-next {
+        grid-column: 1 / -1;
+      }
+    }
+    /* Under the header: one column on phones in the order the work is read (the Jobs,
+       what the Tenant reported, the details, the timeline, the messages); from 1024px
+       the Jobs and the timeline on the left, the report and the messages on the right. */
+    .ticket-layout,
+    .ticket-jobs,
+    .ticket-report {
+      display: grid;
+      gap: 16px;
+      min-width: 0;
+    }
+    .ticket-main,
+    .ticket-side {
+      display: contents;
+    }
+    .ticket-jobs {
+      order: 1;
+    }
+    .ticket-report {
+      order: 2;
+    }
+    .ticket-history {
+      order: 3;
+      min-width: 0;
+    }
+    .ticket-messages {
+      order: 4;
+      min-width: 0;
+    }
+    @media (min-width: 64rem) {
+      .ticket-layout {
+        grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+        align-items: start;
+      }
+      .ticket-main,
+      .ticket-side {
+        display: grid;
+        gap: 16px;
+        min-width: 0;
       }
     }
     /* The one Next step: a Paper strip, with the Wattle stripe when it waits on the Property Manager. */
@@ -3601,7 +3735,74 @@
       font-weight: 600;
       color: var(--muted);
     }
-    /* Change Urgency: a small menu in the page actions; a sheet along the bottom on phones. */
+    .ticket-next > a {
+      font-size: 15px;
+    }
+    /* Label and value pairs in the side column, each value beside its label. */
+    .ticket-facts {
+      display: grid;
+      grid-template-columns: max-content minmax(0, 1fr);
+      gap: 6px 16px;
+      margin: 0;
+      font-size: 14px;
+    }
+    .ticket-facts > div {
+      display: contents;
+    }
+    .ticket-facts dt {
+      color: var(--muted);
+    }
+    .ticket-facts dd {
+      margin: 0;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+    /* A form on one line: fields and the button, the button level with the controls
+       (below their labels) whatever hints sit under the fields. */
+    .ticket-inline-form {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .ticket-inline-form > .btn {
+      margin-top: calc(14px * 1.45 + 4px);
+    }
+    /* Under the Jobs: Add another Job, folded, and when the Ticket can close. */
+    .ticket-jobs-foot {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px 24px;
+      padding: 0 4px;
+    }
+    .ticket-add-job {
+      flex: 1 1 20rem;
+      min-width: 0;
+    }
+    .ticket-add-job > summary {
+      cursor: pointer;
+      width: fit-content;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--action);
+    }
+    .ticket-add-job[open] {
+      padding: 12px 16px 16px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    .ticket-add-job[open] > summary {
+      margin-bottom: 12px;
+    }
+    .ticket-close-hint {
+      margin: 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    /* Change Urgency: a small menu in the header's tools; a sheet along the bottom on phones. */
     .ticket-menu {
       position: relative;
       display: inline-block;
@@ -3948,6 +4149,74 @@
     }
 
     /* Dashboard page */
+    /* One column on phones (decisions, board, next 7 days, Urgent Repairs). From 1024px
+       the board runs the full width; under it the decisions (360px) beside a column
+       holding the next 7 days and Urgent Repairs. */
+    .dashboard-desk {
+      display: grid;
+      gap: 16px;
+    }
+    .dashboard-desk > *,
+    .dashboard-side {
+      min-width: 0;
+    }
+    .dashboard-side {
+      display: grid;
+      gap: 16px;
+      align-content: start;
+    }
+    @media (min-width: 64rem) {
+      .dashboard-desk {
+        grid-template-columns: 360px minmax(0, 1fr);
+        align-items: start;
+      }
+      .dashboard-board {
+        grid-column: 1 / -1;
+        grid-row: 1;
+      }
+      .dashboard-decisions {
+        grid-column: 1;
+        grid-row: 2;
+      }
+      .dashboard-side {
+        grid-column: 2;
+        grid-row: 2;
+      }
+      /* The board keeps to the top of the first screen so the decisions start inside it:
+         lanes scroll inside 16rem and a docket's issue stops at two lines. */
+      .dashboard-board .lane-body {
+        max-height: 16rem;
+      }
+      /* The docket clamps with Tailwind's line-clamp-3 class, which outranks this layer. */
+      .dashboard-board .docket-issue {
+        -webkit-line-clamp: 2 !important;
+        line-clamp: 2 !important;
+      }
+    }
+    /* Needs your decision: Maintenance Requests, alerts, the inbox, each a titled group. */
+    .decision-groups {
+      display: grid;
+      gap: 16px;
+    }
+    .decision-group {
+      display: grid;
+      gap: 8px;
+      min-width: 0;
+      scroll-margin-top: 16px;
+    }
+    .decision-group-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .decision-group-title {
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 14px;
+      font-weight: 600;
+    }
     /* Decision rows in the 360px column: the issue (two lines at most), the street, the
        badges, then the actions on their own line so they never crush the text. */
     .dashboard-decisions .queue-head {
@@ -4026,11 +4295,56 @@
       align-items: flex-end;
       gap: 8px 12px;
     }
+    /* In the 360px column the select takes the width and Link sender goes under it. */
     .inbox-item-link {
       display: flex;
-      flex-wrap: wrap;
-      align-items: flex-end;
+      flex-direction: column;
+      align-items: flex-start;
       gap: 8px;
+    }
+    .inbox-item-link > .fieldset {
+      align-self: stretch;
+    }
+
+    /* Tickets list page */
+    /* Open and Closed on the left, the Urgency counts on the right, on one line. */
+    .ticket-list-filters {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px 24px;
+    }
+    .ticket-list-filters > nav:last-child {
+      flex: 0 1 auto;
+    }
+    /* Each Job on its own line: the Trade, then its stage. */
+    .ticket-list-jobs {
+      display: grid;
+      gap: 4px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .ticket-list-jobs li {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 2px 8px;
+    }
+    .ticket-list-trade {
+      min-width: 6.5rem;
+    }
+    /* Waiting on the Property Manager: Night on a Wattle chip. */
+    .ticket-list-close {
+      width: fit-content;
+      margin: 6px 0 0;
+      padding: 1px 8px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--ink);
+      background: var(--hivis);
+      border-radius: 4px;
     }
   }
 }

@@ -201,6 +201,8 @@ describe('Work Orders', () => {
     await approvePete(150_00);
 
     const ready = await open();
+    // The Job's stage in the words every screen uses.
+    expect(ready.text).toContain('Plumbing Job Ready to book');
     expect(ready.text).toContain("Pete's Plumbing's Quote of $150.00 is approved.");
     expect(ready.text).toContain('The Quote has no proposed time. Pick one.');
     const action = formPosting(ready.html, /\/work-order$/);
@@ -294,6 +296,8 @@ describe('changing the Ticket', () => {
 
     const page = await open();
     expect(page.text).toContain('Close once every Job is done or cancelled (1 still open).');
+    // Close Ticket is offered only once it can work.
+    expect(page.text).not.toContain('Close Ticket');
     const refused = await submit(`${path}/close`);
     expect(refused.error).toBe('Every Job must be done or cancelled before the Ticket closes');
 
@@ -338,6 +342,9 @@ describe('the Next step', () => {
     // Each unchecked Quote folds its correct-and-confirm form under "Check and confirm".
     expect(page.html.match(/<details class="quote-check">\s*<summary[^>]*>Check and confirm<\/summary>/g)).toHaveLength(2);
     expect(page.text).toContain('0 confirmed, 2 to check.');
+    // A Tradie who quoted is listed under Quotes, not again under Quote Requests.
+    expect(page.text).toContain('2 asked: 2 quoted, 0 waiting on a reply.');
+    expect(page.text).not.toContain('Quoted, asked');
   });
 
   test('with two confirmed Quotes, asks for a choice and compares them with both ratings', async () => {
