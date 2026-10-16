@@ -121,6 +121,19 @@ describe('the onboarding wizard', () => {
     expect(visible(await page(w, '/', sam))).not.toContain('Finish setting up');
   });
 
+  test('fills the page with no rail, and offers "Set up later" on the first step', async () => {
+    const w = await webWorld();
+    const sam = await w.signUp();
+    for (const path of ['/welcome', '/welcome/team', '/welcome/channels', '/welcome/tradies', '/welcome/property', '/welcome/done']) {
+      const html = await page(w, path, sam);
+      expect(html, path).not.toContain('has-rail');
+      expect(html, path).not.toContain('data-drawer-toggle');
+      expect(html, path).toContain('aria-label="Setup steps"');
+    }
+    expect(visible(await page(w, '/welcome', sam))).toContain('Set up later');
+    expect((await w.get('/tickets', sam)).status).toBe(200);
+  });
+
   test('shows where the Agency is up to: each step offers "Skip for now" until it is done, then "Continue"', async () => {
     const w = await webWorld();
     const sam = await w.signUp();
