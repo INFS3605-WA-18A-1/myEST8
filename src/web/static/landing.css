@@ -1,0 +1,1043 @@
+/*
+ * The landing page (pages/landing.ts). Loaded only there, after app.css, and not
+ * layered, so it wins over app.css and daisyUI for the lp- and flow- classes it
+ * owns. Colours are app.css's tokens only (docs/design-system.md).
+ *
+ * The page's one bold thing is the hero: a Tenant's text beside the Maintenance
+ * Request myEST8 makes of it, under a three-line headline whose middle line,
+ * "You decide.", carries the Wattle decision stripe. Wattle means "needs your
+ * decision" here exactly as in the app: that line, the decision rows and the
+ * "You" chips, nothing else. The workflow is the one moving thing.
+ */
+
+/* ----- Frame ----- */
+
+body.lp {
+  font-size: 15px;
+  line-height: 1.5;
+}
+/* Zero specificity, so any lp- class can set a margin. */
+:where(.lp) p {
+  margin: 0;
+}
+.lp-wrap {
+  width: 100%;
+  max-width: 1200px;
+  margin-inline: auto;
+  padding-inline: 16px;
+}
+@media (min-width: 48rem) {
+  .lp-wrap {
+    padding-inline: 32px;
+  }
+}
+
+.lp-bar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.lp-bar-inner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+}
+.lp-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+.lp-bar-signup {
+  display: none;
+}
+@media (min-width: 40rem) {
+  .lp-bar-signup {
+    display: inline-flex;
+  }
+}
+
+.lp-band.is-paper {
+  background: var(--page);
+  border-top: 1px solid var(--line);
+}
+.lp-band.is-surface {
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+}
+
+.lp-h2 {
+  margin: 0;
+  max-width: 24ch;
+  font-family: var(--font-head);
+  font-size: clamp(26px, 1.6vw + 18px, 38px);
+  font-weight: 600;
+  line-height: 1.12;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+  text-wrap: balance;
+}
+.lp-h3 {
+  margin: 0 0 16px;
+  font-family: var(--font-head);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--ink);
+}
+
+.lp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+@media (max-width: 39.99rem) {
+  .lp-actions > .btn {
+    flex: 1 1 100%;
+  }
+}
+
+/* ----- The hero ----- */
+
+.lp-hero {
+  padding-block: 40px 56px;
+}
+.lp-hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 32px;
+}
+@media (min-width: 64rem) {
+  .lp-hero {
+    padding-block: 52px 88px;
+  }
+  .lp-hero-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 560px);
+    column-gap: 64px;
+    row-gap: 40px;
+  }
+  .lp-headline {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Three sentences, one to a line: the Tenant's part, yours, myEST8's. */
+.lp-headline {
+  margin: 0;
+  font-family: var(--font-head);
+  font-size: clamp(38px, 4.2vw + 6px, 64px);
+  font-weight: 700;
+  line-height: 1.04;
+  letter-spacing: -0.025em;
+  color: var(--ink);
+}
+.lp-line {
+  display: block;
+}
+.lp-line + .lp-line {
+  margin-top: 0.06em;
+}
+/* "You decide." carries the decision stripe, out in the gutter so the lines stay aligned. */
+.lp-line.is-you {
+  position: relative;
+}
+.lp-line.is-you::before {
+  content: '';
+  position: absolute;
+  top: 0.14em;
+  bottom: 0.1em;
+  left: -12px;
+  width: 4px;
+  border-radius: 2px;
+  background: var(--hivis);
+}
+@media (min-width: 48rem) {
+  .lp-line.is-you::before {
+    left: -22px;
+    width: 6px;
+    border-radius: 3px;
+  }
+}
+
+.lp-intro {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 24px;
+  min-width: 0;
+}
+.lp-lead {
+  max-width: 54ch;
+  font-size: 18px;
+  line-height: 1.55;
+  color: var(--ink);
+}
+@media (max-width: 39.99rem) {
+  .lp-lead {
+    font-size: 17px;
+  }
+  .lp-intro .lp-actions {
+    align-self: stretch;
+  }
+}
+.lp-channels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-weight: 500;
+}
+.lp-channels li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.lp-channels svg {
+  color: var(--action);
+}
+.lp-note {
+  align-self: stretch;
+  max-width: 54ch;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  font-size: 14px;
+  color: var(--muted);
+}
+
+/* The scene: the Tenant's thread, with the Maintenance Request laid over its corner. */
+.lp-scene {
+  position: relative;
+  min-width: 0;
+  margin: 0;
+}
+.lp-thread {
+  margin-right: 24px;
+  padding: 16px 16px 72px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+@media (min-width: 40rem) {
+  .lp-thread {
+    margin-right: 72px;
+    padding: 20px 20px 88px;
+  }
+}
+.lp-thread-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 14px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+.lp-avatar {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: var(--info-bg);
+  color: var(--action);
+  font-family: var(--font-head);
+  font-size: 13px;
+  font-weight: 600;
+}
+.lp-thread-who {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin-right: auto;
+  line-height: 1.3;
+}
+.lp-thread-name {
+  font-weight: 600;
+}
+.lp-thread-meta {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.lp-msgs {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lp-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 88%;
+}
+.lp-msg.is-in {
+  align-self: flex-start;
+}
+.lp-msg.is-out {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+.lp-bubble {
+  padding: 10px 14px;
+  border-radius: 14px 14px 14px 4px;
+  background: var(--page);
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.45;
+}
+.is-out .lp-bubble {
+  border-radius: 14px 14px 4px 14px;
+  background: var(--action);
+  color: var(--surface);
+}
+.lp-msg-meta {
+  padding-inline: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+/* Where myEST8 found the Trade or the Urgency: Harbour's tint, as "Filled in by AI" is in the app, underlined so it doesn't rest on colour. */
+.lp-found {
+  padding: 0 2px;
+  border-radius: 2px;
+  background: var(--info-bg);
+  color: var(--ink);
+  box-shadow: inset 0 -2px 0 var(--action);
+}
+
+.lp-photo {
+  display: block;
+  width: 96px;
+  height: auto;
+  border-radius: 4px;
+}
+.lp-photo .p-wall {
+  fill: var(--ink);
+}
+.lp-photo .p-shelf {
+  fill: var(--muted);
+}
+.lp-photo .p-pipe {
+  fill: var(--control);
+}
+.lp-photo .p-valve {
+  fill: var(--action);
+}
+.lp-photo .p-drop,
+.lp-photo .p-puddle-hi {
+  fill: var(--info-bg);
+}
+.lp-photo .p-puddle {
+  fill: var(--action);
+}
+
+/* The Maintenance Request myEST8 made: a decision row, so it has the Wattle stripe. */
+.lp-request {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: -56px 0 0 24px;
+  padding: 16px 16px 18px 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--hivis);
+  border-radius: 8px;
+  box-shadow: var(--shadow-lift);
+}
+@media (min-width: 40rem) {
+  .lp-request {
+    margin: -64px 0 0 72px;
+    padding: 18px 20px 20px 22px;
+  }
+}
+.lp-request-kind {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  font-family: var(--font-head);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.lp-request-age {
+  font-family: var(--font-body);
+  font-weight: 500;
+  color: var(--ink);
+}
+.lp-request-address {
+  font-family: var(--font-head);
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+.lp-request-issue {
+  color: var(--ink);
+}
+.lp-request-fields {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 4px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+}
+.lp-request-fields > div {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+}
+.lp-request-fields dt {
+  padding-top: 2px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.lp-request-fields dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin: 0;
+}
+.lp-from {
+  font-size: 13px;
+  font-style: italic;
+  color: var(--muted);
+}
+.lp-request-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.lp-caption {
+  margin: 16px 0 0 24px;
+  font-size: 13px;
+  color: var(--muted);
+}
+@media (min-width: 40rem) {
+  .lp-caption {
+    margin-left: 72px;
+  }
+}
+
+/* A button drawn in a picture: it looks like the app's, but it is text. */
+.lp-fake-btn {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--control);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-head);
+  font-size: 14px;
+  font-weight: 600;
+}
+.lp-fake-btn.is-primary {
+  border-color: var(--action);
+  background: var(--action);
+  color: var(--surface);
+}
+
+/* ----- The demo sign-ins ----- */
+
+.lp-demo {
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+}
+.lp-demo-inner {
+  display: grid;
+  gap: 20px;
+  padding-block: 32px;
+}
+@media (min-width: 64rem) {
+  .lp-demo-inner {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 560px);
+    column-gap: 64px;
+    align-items: center;
+  }
+}
+.lp-demo-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 60ch;
+}
+.lp-demo-copy .lp-h3 {
+  margin: 0;
+}
+.lp-demo-copy p {
+  color: var(--muted);
+}
+.lp-demo-password {
+  font-weight: 600;
+  color: var(--ink);
+}
+.lp-demo-people {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.lp-demo-people li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 12px 16px;
+}
+.lp-demo-people li + li {
+  border-top: 1px solid var(--line);
+}
+.lp-demo-person {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.35;
+}
+.lp-demo-name {
+  font-weight: 600;
+}
+.lp-demo-email {
+  font-size: 14px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+@media (max-width: 39.99rem) {
+  .lp-demo-people form,
+  .lp-demo-people .btn {
+    width: 100%;
+  }
+}
+
+/* ----- The workflow ----- */
+
+/*
+ * One repair, stage by stage. Every stage and its picture always shows. A "now"
+ * marker moves down the stages: the stage being shown lifts onto white and its
+ * number fills with Harbour; at a decision its left edge is the Wattle stripe.
+ * One cycle is 8 stages of 2.6s; --i sets each stage's delay.
+ */
+.flow {
+  --cycle: 20.8s;
+  --slot: 2.6s;
+  padding-block: 48px 56px;
+}
+@media (min-width: 64rem) {
+  .flow {
+    padding-block: 80px 88px;
+  }
+}
+.flow-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 32px;
+}
+.flow-head-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.flow-summary {
+  max-width: 60ch;
+  font-size: 17px;
+  color: var(--muted);
+}
+.flow-pause {
+  min-height: 44px;
+  height: 44px;
+}
+.flow-play-icon,
+.flow[data-paused] .flow-pause-icon {
+  display: none;
+}
+.flow-pause-icon,
+.flow[data-paused] .flow-play-icon {
+  display: inline-flex;
+}
+
+.flow-stages {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.flow-stage {
+  position: relative;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  column-gap: 14px;
+  row-gap: 12px;
+  padding: 16px 12px 20px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  animation: flow-now var(--cycle) calc(var(--i) * var(--slot)) infinite;
+}
+.flow-stage.is-decision {
+  animation-name: flow-now-decision;
+}
+/* The track from this stage's number down to the next one's. */
+.flow-stage:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  top: 52px;
+  bottom: -14px;
+  left: 28px;
+  width: 2px;
+  background: var(--line);
+}
+.flow-node {
+  position: relative;
+  z-index: 1;
+  grid-row: 1 / span 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--control);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-head);
+  font-size: 13px;
+  font-weight: 600;
+  animation: flow-node var(--cycle) calc(var(--i) * var(--slot)) infinite;
+}
+.flow-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  padding-top: 4px;
+}
+.flow-when {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.flow-title {
+  font-family: var(--font-head);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--ink);
+}
+.flow-who {
+  margin-top: 6px;
+  padding: 1px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+/* The Property Manager's own stages: a Wattle chip behind Night text, as the app's decision counts. */
+.flow-who.is-you {
+  border-color: var(--hivis);
+  background: var(--hivis);
+  color: var(--ink);
+  font-weight: 600;
+}
+.flow-picture {
+  grid-column: 2;
+  min-width: 0;
+}
+.flow-picture > * {
+  max-width: 460px;
+}
+@media (min-width: 48rem) {
+  .flow-stage {
+    grid-template-columns: 32px 220px minmax(0, 1fr);
+    column-gap: 20px;
+    padding: 20px 20px 24px 12px;
+  }
+  .flow-stage:not(:last-child)::before {
+    top: 56px;
+    bottom: -18px;
+  }
+  .flow-picture {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+  }
+}
+/* Wide screens: the times get their own column, read down like a dispatch log. */
+@media (min-width: 64rem) {
+  .flow-stage {
+    grid-template-columns: 84px 32px 280px minmax(0, 1fr);
+    grid-template-rows: auto auto 1fr;
+    column-gap: 24px;
+    row-gap: 6px;
+    padding: 18px 24px 22px 12px;
+  }
+  .flow-stage:not(:last-child)::before {
+    top: 54px;
+    bottom: -16px;
+    left: 135px;
+  }
+  .flow-node {
+    grid-column: 2;
+    grid-row: 1 / span 3;
+  }
+  .flow-text {
+    display: contents;
+  }
+  .flow-when {
+    grid-column: 1;
+    grid-row: 1;
+    padding-top: 7px;
+    font-size: 14px;
+    text-align: right;
+    white-space: nowrap;
+  }
+  .flow-title {
+    grid-column: 3;
+    grid-row: 1;
+    padding-top: 4px;
+  }
+  .flow-who {
+    grid-column: 3;
+    grid-row: 2;
+    justify-self: start;
+    margin-top: 2px;
+  }
+  .flow-picture {
+    grid-column: 4;
+    grid-row: 1 / span 3;
+  }
+  .flow-picture > * {
+    max-width: 480px;
+  }
+}
+
+/* The pictures: rows in the dispatch-desk look. */
+.lp-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.lp-card.is-decision {
+  border-left: 4px solid var(--hivis);
+}
+.lp-card.is-row {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.lp-card-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.lp-card-title {
+  font-weight: 600;
+}
+.lp-card-meta {
+  font-size: 13px;
+  color: var(--muted);
+}
+.lp-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-block: 4px;
+}
+.lp-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0;
+  padding: 0;
+  list-style: none;
+}
+.lp-rows li,
+.lp-sent {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.lp-rows svg {
+  color: var(--action);
+}
+.lp-sent svg {
+  color: var(--done);
+}
+.lp-quote {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 8px;
+}
+.lp-quote > span:first-child {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.lp-quote.is-other {
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.lp-amount {
+  font-family: var(--font-head);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
+}
+.lp-quote.is-other .lp-amount {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.lp-mini-thread {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.lp-mini-thread .lp-bubble {
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+/* Paused (the button, via app.js): the marker holds where it is. */
+.flow[data-paused] .flow-stage,
+.flow[data-paused] .flow-node {
+  animation-play-state: paused;
+}
+
+@keyframes flow-now {
+  0%,
+  11.5% {
+    background: var(--surface);
+    border-color: var(--line);
+  }
+  12.5%,
+  100% {
+    background: transparent;
+    border-color: transparent;
+  }
+}
+@keyframes flow-now-decision {
+  0%,
+  11.5% {
+    background: var(--surface);
+    border-color: var(--line);
+    box-shadow: inset 4px 0 0 var(--hivis);
+  }
+  12.5%,
+  100% {
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+  }
+}
+@keyframes flow-node {
+  0%,
+  11.5% {
+    background: var(--action);
+    border-color: var(--action);
+    color: var(--surface);
+  }
+  12.5%,
+  100% {
+    background: var(--surface);
+    border-color: var(--control);
+    color: var(--ink);
+  }
+}
+
+/* Less motion: nothing moves. Every stage already shows, so the story is whole; the pause button has nothing to pause. */
+@media (prefers-reduced-motion: reduce) {
+  .flow-stage,
+  .flow-stage.is-decision,
+  .flow-node {
+    animation: none;
+  }
+  .flow-pause {
+    display: none !important;
+  }
+}
+
+/* ----- Who does what ----- */
+
+.lp-roles {
+  padding-block: 56px 64px;
+}
+@media (min-width: 64rem) {
+  .lp-roles {
+    padding-block: 88px 96px;
+  }
+}
+.lp-roles .lp-h2 {
+  margin-bottom: 40px;
+}
+.lp-roles-grid {
+  display: grid;
+  gap: 40px;
+}
+@media (min-width: 64rem) {
+  .lp-roles-grid {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    column-gap: 64px;
+  }
+}
+.lp-decisions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lp-decisions li {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 20px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--hivis);
+  border-radius: 4px;
+}
+.lp-decisions li p:last-child {
+  color: var(--muted);
+}
+.lp-decision-title {
+  font-family: var(--font-head);
+  font-size: 17px;
+  font-weight: 600;
+}
+.lp-chores {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+.lp-chores li {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding-block: 14px;
+  border-bottom: 1px solid var(--line);
+}
+.lp-chores svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--action);
+}
+.lp-people {
+  margin-top: 56px;
+  padding-top: 32px;
+  border-top: 1px solid var(--line);
+}
+.lp-people ul {
+  display: grid;
+  gap: 20px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+@media (min-width: 48rem) {
+  .lp-people ul {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 32px;
+  }
+}
+.lp-people li {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 40ch;
+}
+.lp-people li > p:last-child {
+  color: var(--muted);
+}
+.lp-person-who {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-head);
+  font-weight: 600;
+}
+.lp-person-who svg {
+  color: var(--action);
+}
+
+/* ----- The way in, again: on Night, as the app's rail ----- */
+
+.lp-close {
+  background: var(--ink);
+  color: var(--rail-text);
+}
+.lp-close-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding-block: 56px;
+}
+@media (min-width: 64rem) {
+  .lp-close-inner {
+    flex-direction: row;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 48px;
+    padding-block: 80px;
+  }
+}
+.lp-close-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.lp-close .lp-h2 {
+  color: var(--rail-text);
+}
+.lp-close-copy p {
+  max-width: 52ch;
+  font-size: 17px;
+  color: var(--rail-muted);
+}
+.lp-close .btn-outline {
+  border-color: var(--rail-muted);
+  background: transparent;
+  color: var(--rail-text);
+}
+.lp-close .btn-outline:hover {
+  border-color: var(--rail-text);
+  background: var(--rail-hover);
+}
+/* Harbour is too dark to ring on Night, so focus rings in rail text here. */
+.lp-close :focus-visible {
+  outline-color: var(--rail-text);
+}
+.lp-close .lp-actions {
+  flex: 0 0 auto;
+}
+
+.lp-footer {
+  padding-block: 20px 28px;
+  background: var(--ink);
+  border-top: 1px solid var(--rail-current);
+  font-size: 13px;
+  color: var(--rail-muted);
+}

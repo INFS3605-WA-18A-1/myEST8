@@ -35,7 +35,9 @@ describe('the landing page', () => {
     expect(res.status).toBe(200);
     const page = await res.text();
     const text = visible(page);
-    expect(page).toMatch(/<h1[^>]*>From a Tenant’s first text to the finished repair\.<\/h1>/);
+    const h1 = page.match(/<h1[^>]*>([\s\S]*?)<\/h1>/g) ?? [];
+    expect(h1).toHaveLength(1);
+    expect(visible(h1[0]!).trim()).toBe('Tenants text the problem. You decide. myEST8 does the chasing.');
     expect(text).toContain('small Agencies');
     expect(page).toMatch(/<a href="\/signup"[^>]*>Create your Agency’s account<\/a>/);
     expect(page).toMatch(/<a href="\/login"[^>]*>Sign in<\/a>/);
@@ -77,9 +79,8 @@ describe('the landing page', () => {
   test('the workflow stands still for anyone who asks for less motion', async () => {
     const w = await webWorld();
 
-    const css = await (await w.get('/assets/app.css')).text();
+    const landing = await (await w.get('/assets/landing.css')).text();
 
-    const landing = css.slice(css.indexOf('/* === landing === */'));
     expect(landing).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*\.flow[\s\S]*animation: none/);
   });
 
