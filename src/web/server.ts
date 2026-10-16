@@ -58,6 +58,7 @@ export function createWebApp(deps: {
   signedIn.use('*', requirePropertyManager(deps.app, deps.sessions));
   signedIn.use('*', async (c, next) => {
     c.set('demo', !!deps.demo);
+    c.set('unavailableChannels', deps.connectors?.unavailable ?? []);
     await next();
   });
   signedIn.use('*', loadNavCounts());

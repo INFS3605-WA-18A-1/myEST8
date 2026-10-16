@@ -32,6 +32,15 @@ export const CHANNELS: { type: ChannelType; name: string; addressLabel: string; 
   { type: 'email', name: 'Email', addressLabel: 'Inbound email address', inputType: 'email', placeholder: 'agency@mail.example.test' },
 ];
 
+/** The sentence that replaces a channel's form when this server can't deliver on it, naming what still works. */
+export function unavailableNote(type: ChannelType, unavailable: readonly ChannelType[]): Html {
+  const channel = CHANNELS.find((ch) => ch.type === type)!;
+  const working = CHANNELS.filter((ch) => !unavailable.includes(ch.type)).map((ch) => (ch.type === 'email' ? 'email' : ch.name));
+  const left = working.length ? ` Tenants can still reach you by ${working.join(' and ')}.` : '';
+  const what = type === 'email' ? 'Email forwarding' : channel.name;
+  return html`<p class="text-sm" data-unavailable="${type}">${what} isn't available on this server yet.${left}</p>`;
+}
+
 /** The posted form's text values, to show again after a refusal. Passwords are left out. */
 export function valuesOf(form: FormValues): Values {
   const values: Values = {};
@@ -63,6 +72,9 @@ export function chosenId(form: FormValues, name: string, label: string) {
   if (!value) throw new ActionError('invalid', `Choose ${label}`, { [name]: `Choose ${label}` });
   return Number(value);
 }
+
+/** The chip for a channel this server can't deliver on. */
+export const unavailableChip = (): Html => badge('Not available here', 'neutral');
 
 /** How a channel should read: missing, waiting on a first email, verified by code or inbound mail, or connected without that. */
 export function channelState(channel: AgencyChannel | undefined, o: { waiting?: boolean; verified?: boolean } = {}) {

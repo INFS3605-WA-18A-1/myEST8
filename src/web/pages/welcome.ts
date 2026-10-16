@@ -51,6 +51,8 @@ import {
   channelGuide,
   channelLine,
   channelOf,
+  unavailableChip,
+  unavailableNote,
   channelState,
   inboundEmailField,
   phoneChannelForm,
@@ -99,11 +101,12 @@ const STILL_TO_DO: Record<(typeof NEEDED)[number], string> = {
 const ROLE_LABEL: Record<Role, string> = { tenant: 'Tenant', owner: 'Property Owner', tradie: 'Tradie', building_manager: 'Building Manager' };
 
 /** How far the Agency's setup has got, read from what it has. */
-export async function setupProgress(actions: Actions) {
+export async function setupProgress(actions: Actions, unavailable: readonly ChannelType[] = []) {
   const channels = await actions.channels();
   return {
     team: (await actions.propertyManagers()).length > 1,
-    channels: CHANNELS.every((ch) => channels.some((c) => c.type === ch.type)),
+    // A channel this server can't deliver on isn't waited for.
+    channels: CHANNELS.filter((ch) => !unavailable.includes(ch.type)).every((ch) => channels.some((c) => c.type === ch.type)),
     property: (await actions.properties()).length > 0,
     tradies: (await actions.people('tradie')).length > 0,
   };
@@ -123,8 +126,8 @@ export function nextSetupStep(progress: Progress): string | null {
 }
 
 /** The dashboard's "Finish setting up" banner, or nothing once the Agency is set up. */
-export async function finishSetupBanner(actions: Actions): Promise<Html> {
-  const progress = await setupProgress(actions);
+export async function finishSetupBanner(actions: Actions, unavailable: readonly ChannelType[] = []): Promise<Html> {
+  const progress = await setupProgress(actions, unavailable);
   const next = nextSetupStep(progress);
   if (!next) return html``;
   const left = NEEDED.filter((k) => !progress[k]).map((k) => STILL_TO_DO[k]);
@@ -217,7 +220,7 @@ async function wizardPage(
   o: { step: StepKey; title: string; body: Html; progress?: Progress; flash?: Flash | null },
 ): Promise<Html> {
   const { actions, pm } = c.var;
-  const progress = o.progress ?? (await setupProgress(actions));
+  const progress = o.progress ?? (await setupProgress(actions, c.var.unavailableChannels));
   const index = STEPS.findIndex((s) => s.key === o.step);
   const back = STEPS[index - 1];
   const forward = STEPS[index + 1];
@@ -405,15 +408,17 @@ async function channelsStep(c: WizardContext, demo: boolean, connectors: Channel
           const waiting = channel.type === 'email' && email.state === 'waiting';
           const emailVerified = channel.type === 'email' && email.state === 'verified';
           const open = pending.find((row) => row.channelType === channel.type);
+          const unavailable = connectors.unavailable.includes(channel.type);
           return html`<div id="${channel.type}" class="grid gap-2 border-t border-line pt-4 first:border-t-0 first:pt-0 md:grid-cols-[9rem_minmax(0,1fr)]">
             <div>
               <h2 class="section-title">${channel.name}</h2>
-              <p class="mt-1">${channelBadge(current, { waiting, verified: emailVerified })}</p>
+              <p class="mt-1">${unavailable ? unavailableChip() : channelBadge(current, { waiting, verified: emailVerified })}</p>
             </div>
             <div class="min-w-0">
               ${flash && flashChannel === channel.type ? flashMessage(flash) : ''}
-              ${current ? channelLine(current, agency.timeZone, { waiting }) : ''}
-              ${channel.type === 'email'
+              ${unavailable ? unavailableNote(channel.type, connectors.unavailable) : ''}
+              ${unavailable ? '' : current ? channelLine(current, agency.timeZone, { waiting }) : ''}
+              ${unavailable ? '' : channel.type === 'email'
                 ? html`${inboundEmailField(email.address)}${gmailBlock ?? ''}<div class="mt-2">${channelGuide(channel.type, origin)}</div>`
                 : viaWhatsapp
                   ? current?.address === connectors.whatsappNumber
@@ -807,7 +812,7 @@ function group(legend: string, fields: Html, note?: string): Html {
 
 async function doneStep(c: WizardContext, demo: boolean): Promise<Html> {
   const { actions } = c.var;
-  const progress = await setupProgress(actions);
+  const progress = await setupProgress(actions, c.var.unavailableChannels);
   const agency = actions.agency();
   const team = await actions.propertyManagers();
   const email = await actions.ensureInboundEmail();

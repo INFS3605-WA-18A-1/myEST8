@@ -1,3 +1,5 @@
+import type { ChannelType } from '../ports.ts';
+
 // What the onboarding pages can connect, as configured on this server (ADR 0004):
 // an Agency's Gmail by OAuth, and the WhatsApp Cloud API number this server
 // receives on. Built in the runtime from environment variables and passed down
@@ -19,6 +21,12 @@ export interface ChannelConnectors {
   gmail: GmailConnector | null;
   /** The WhatsApp Cloud API business number (E.164) this server receives on, or null. */
   whatsappNumber: string | null;
+  /**
+   * Channels this server can't deliver on (hosted with no SMS provider, no inbound email),
+   * decided in the runtime where providers are chosen. The pages don't offer them.
+   */
+  unavailable: ChannelType[];
 }
 
-export const NO_CONNECTORS: ChannelConnectors = { gmail: null, whatsappNumber: null };
+/** Nothing connectable, and every channel assumed deliverable: the default for tests and the plain web app. */
+export const NO_CONNECTORS: ChannelConnectors = { gmail: null, whatsappNumber: null, unavailable: [] };

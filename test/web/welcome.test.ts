@@ -44,6 +44,40 @@ function propertyFields(changes: Fields = {}): Fields {
 
 const TRADIE: Fields = { businessName: 'Sunny Plumbing', name: 'Sunny Sun', mobile: '0400 000 997', email: '', trades: ['plumbing'], startingRating: 4, placeId: 'none' };
 
+describe('a channel this server cannot deliver on', () => {
+  const connectors = { gmail: null, whatsappNumber: null, unavailable: ['sms', 'email'] as const };
+
+  test('is not offered on the wizard or /setup, with a plain note instead, and does not hold setup back', async () => {
+    const w = await webWorld({ connectors: { ...connectors, unavailable: [...connectors.unavailable] } });
+    const sam = await w.signUp();
+
+    for (const path of ['/welcome/channels', '/setup']) {
+      const html = await page(w, path, sam);
+      const text = visible(html);
+      expect(text, path).toContain("SMS isn't available on this server yet. Tenants can still reach you by WhatsApp.");
+      expect(text, path).toContain("Email forwarding isn't available on this server yet. Tenants can still reach you by WhatsApp.");
+      expect(html, path).not.toContain('id="sms-address"');
+      expect(html, path).not.toContain('id="email-address"');
+      expect(html, path).toContain('id="whatsapp-address"');
+    }
+
+    // Only WhatsApp is left to connect.
+    expect(visible(await page(w, '/', sam))).toContain('connect SMS, WhatsApp and email');
+    await submit(w, '/welcome/channels', { type: 'whatsapp', address: '+61 2 9100 0002' }, sam);
+    const code = String(w.h.messenger.last('+61291000002')?.data.code);
+    await submit(w, '/welcome/channels/confirm', { type: 'whatsapp', address: '+61 2 9100 0002', code }, sam);
+    expect(visible(await page(w, '/', sam))).not.toContain('connect SMS, WhatsApp and email');
+  });
+
+  test('is offered as usual when the server can deliver on it', async () => {
+    const w = await webWorld();
+    const sam = await w.signUp();
+    const html = await page(w, '/welcome/channels', sam);
+    expect(html).toContain('id="sms-address"');
+    expect(visible(html)).not.toContain("isn't available on this server");
+  });
+});
+
 describe('the onboarding wizard', () => {
   test('a code that cannot be delivered (no SMS provider, as on a hosted app without Twilio) is a message on the page, not a server error', async () => {
     const w = await webWorld();

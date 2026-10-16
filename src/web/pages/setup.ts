@@ -13,6 +13,7 @@ import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
 import type { ImportKind } from '../../imports.ts';
 import { ActionError, normalizeAddress } from '../../shared.ts';
+import type { ChannelType } from '../../ports.ts';
 import { NO_CONNECTORS, type ChannelConnectors } from '../connectors.ts';
 import type { WebEnv } from '../env.ts';
 import { gmailControls, whatsappControls } from './oauth-google.ts';
@@ -25,6 +26,8 @@ import {
   addTradieFrom,
   CHANNELS,
   channelChip,
+  unavailableChip,
+  unavailableNote,
   channelGuide,
   channelLine,
   channelOf,
@@ -246,7 +249,7 @@ async function channelsArea(
     <p class="text-sm">Tenants, Tradies and Property Owners reach the Agency by SMS, WhatsApp and email. Verify a phone number with a code. Forward the Agency inbox to the email address below.</p>
     ${shown.error}
     <div class="mt-4 grid gap-4 md:grid-cols-3">
-      ${CHANNELS.map((channel) => channelCard(channel, connected.find((c) => c.type === channel.type), timeZone, origin, { gmailBlock, whatsappNumber: connectors.whatsappNumber }, email, pending.find((row) => row.channelType === channel.type)))}
+      ${CHANNELS.map((channel) => channelCard(channel, connected.find((c) => c.type === channel.type), timeZone, origin, { gmailBlock, whatsappNumber: connectors.whatsappNumber, unavailable: connectors.unavailable }, email, pending.find((row) => row.channelType === channel.type)))}
     </div>
   `;
 }
@@ -257,7 +260,7 @@ function channelCard(
   connected: AgencyChannel | undefined,
   timeZone: string,
   origin: string,
-  via: { gmailBlock: Html | null; whatsappNumber: string | null },
+  via: { gmailBlock: Html | null; whatsappNumber: string | null; unavailable: ChannelType[] },
   email: { address: string; state: 'waiting' | 'verified' | 'connected' },
   pending: { address: string } | undefined,
 ): Html {
@@ -265,6 +268,9 @@ function channelCard(
   const waiting = channel.type === 'email' && email.state === 'waiting';
   const emailVerified = channel.type === 'email' && email.state === 'verified';
   const rowForm = 'mt-3 grid items-end gap-3';
+  if (via.unavailable.includes(channel.type)) {
+    return subsection({ id: channel.type, title: channel.name, actions: unavailableChip(), body: html`<div class="mt-2">${unavailableNote(channel.type, via.unavailable)}</div>` });
+  }
   return subsection({
     id: channel.type,
     title: channel.name,

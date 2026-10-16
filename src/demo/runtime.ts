@@ -401,7 +401,16 @@ export async function createDemo<Seeded extends boolean = true>(
     demoSignIns: seed !== null,
     whatsapp: env.META_APP_SECRET?.trim() && env.META_WEBHOOK_VERIFY_TOKEN?.trim() ? { appSecret: env.META_APP_SECRET.trim(), verifyToken: env.META_WEBHOOK_VERIFY_TOKEN.trim() } : null,
     resend,
-    connectors: { gmail: mailboxes?.connector ?? null, whatsappNumber: env.META_WHATSAPP_NUMBER?.trim() || null },
+    connectors: {
+      gmail: mailboxes?.connector ?? null,
+      whatsappNumber: env.META_WHATSAPP_NUMBER?.trim() || null,
+      unavailable: [
+        // The demo simulates SMS; a hosted server needs a real provider, or a code can only fail.
+        ...(hosted && !providers.channels.sms ? (['sms'] as const) : []),
+        // Hosted email arrives through Resend inbound (or an Agency's own Gmail).
+        ...(hosted && (!resend || !env.RESEND_INBOUND_DOMAIN?.trim()) && !mailboxes ? (['email'] as const) : []),
+      ],
+    },
   });
 
   return { app, web, demo, sessions, clock, messenger, seed, stories, database, baseUrl, apis, runWorker, startWorkerLoop, close };
