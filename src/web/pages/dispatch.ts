@@ -81,7 +81,9 @@ export function dispatchPages() {
           ${section({ title: 'Tradie schedule', id: 'tradie-schedule', body: scheduleTable(tradies, bookings, days, timeZone) })}
           ${pinData(ordered, tradies)}
           <link rel="stylesheet" href="/assets/leaflet.css" />
+          <link rel="stylesheet" href="/assets/MarkerCluster.css" />
           <script src="/assets/leaflet.js" defer></script>
+          <script src="/assets/leaflet.markercluster.js" defer></script>
           <script src="/assets/dispatch-map.js" defer></script>
         `,
       }),

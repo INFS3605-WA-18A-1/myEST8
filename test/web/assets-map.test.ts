@@ -20,6 +20,18 @@ describe('assets for the Dispatch map', () => {
     expect(await css.text()).toContain('.leaflet-container');
   });
 
+  it('serves Leaflet.markercluster, which groups pins that overlap, and its stylesheet', async () => {
+    const js = await assets.request('/assets/leaflet.markercluster.js');
+    expect(js.status).toBe(200);
+    expect(js.headers.get('content-type')).toMatch(/^text\/javascript/);
+    expect(await js.text()).toContain('MarkerClusterGroup');
+
+    const css = await assets.request('/assets/MarkerCluster.css');
+    expect(css.status).toBe(200);
+    expect(css.headers.get('content-type')).toMatch(/^text\/css/);
+    expect(await css.text()).toContain('.leaflet-cluster-anim');
+  });
+
   it("serves the page's own map script", async () => {
     const res = await assets.request('/assets/dispatch-map.js');
     expect(res.status).toBe(200);
@@ -40,6 +52,9 @@ describe('assets for the Dispatch map', () => {
     for (const path of [
       '/assets/leaflet-src.js',
       '/assets/leaflet.js.map',
+      '/assets/leaflet.markercluster-src.js',
+      '/assets/leaflet.markercluster.js.map',
+      '/assets/MarkerCluster.Default.css',
       '/assets/leaflet/leaflet.js',
       '/assets/images/unknown.png',
       '/assets/images/leaflet.js',

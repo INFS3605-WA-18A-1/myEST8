@@ -293,15 +293,17 @@ describe('Dispatch: the Tradie schedule', () => {
 });
 
 describe('Dispatch: what the page needs to run', () => {
-  test('loads Leaflet and the map script from /assets, and works as a table when they do not run', async () => {
+  test('loads Leaflet, its pin grouping and the map script from /assets, in that order, and works as a table when they do not run', async () => {
     const w = await webWorld();
     const cookie = await w.signIn();
 
     const html = await dispatch(w, cookie);
 
     expect(html).toContain('href="/assets/leaflet.css"');
-    expect(html).toContain('src="/assets/leaflet.js"');
-    expect(html).toContain('src="/assets/dispatch-map.js"');
+    expect(html).toContain('href="/assets/MarkerCluster.css"');
+    const scripts = ['/assets/leaflet.js', '/assets/leaflet.markercluster.js', '/assets/dispatch-map.js'].map((src) => html.indexOf(`src="${src}"`));
+    for (const at of scripts) expect(at).toBeGreaterThan(-1);
+    expect(scripts).toEqual([...scripts].sort((a, b) => a - b));
     expect(html).not.toMatch(/\son[a-z]+="/);
     expect(html).toContain('id="dispatch-map"');
     expect(visible(html)).toContain('The map needs JavaScript');
