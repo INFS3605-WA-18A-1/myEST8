@@ -3,7 +3,7 @@
 `npm run demo` starts the whole app on your machine with:
 
 - **Dummy external APIs.** The classifier (Jev), the photo matcher, the quote reader and Google Places/Geocoding are answered by an in-process mock (`src/demo/mock-apis.ts`). Nothing leaves your machine unless you set the env vars below.
-- **A simulated messenger.** No SMS, WhatsApp or email is really sent (unless you set up Twilio and SendGrid: see [Sending real messages](#sending-real-messages)). Every outbound message is kept in the demo's database and shown in the phone simulator.
+- **A simulated messenger.** No SMS or email is really sent (unless you set up Twilio and SendGrid: see [Sending real messages](#sending-real-messages)). Every outbound message is kept in the demo's database and shown in the phone simulator.
 - **A movable clock.** The demo clock runs in real time, and the simulator can move it forward to show reminders and deadlines without waiting.
 - **Seed data.** The Agency "Harbour Realty" with its Property Managers, Properties, Owners, Tenants and Tradies.
 - **Work already in flight.** Ten days of maintenance stories are played before the demo opens, so every screen has something on it. See [What's already in the demo](#whats-already-in-the-demo).
@@ -64,7 +64,7 @@ Sessions follow the real clock, so moving the demo clock forward doesn't sign yo
 
 ## What's in the seed
 
-The Agency's channels: SMS and WhatsApp on `+61290000000`, email at `inbox@harbour.example`.
+The Agency's channels: SMS on `+61290000000`, email at `inbox@harbour.example`.
 
 | Property                            | Property Manager | Property Owner           | Max Repair Cost | Tenants                                               | Notes                                              |
 | ----------------------------------- | ---------------- | ------------------------ | --------------- | ----------------------------------------------------- | -------------------------------------------------- |
@@ -75,7 +75,7 @@ The Agency's channels: SMS and WhatsApp on `+61290000000`, email at `inbox@harbo
 | 2/31 Australia St, Camperdown NSW 2050 | Alice         | Grace Green              | $500            | Liam Lee `+61400000005`                               | Strata unit, no Building Manager on file; Nominated Tradie: Sam |
 | 9 Albion St, Annandale NSW 2038     | Alice            | Grace Green              | $700            | Maya Morris `+61400000006`, `maya@example.com`        | Nominated Tradies: Dana, Erin                      |
 | 27 Llewellyn St, Marrickville NSW 2204 | Alice         | Henry Hill               | $400            | Noah Nair `+61400000007`, Kai Kelly `+61400000008`    | Nominated Tradies: Dana, Lucy                      |
-| 17 Glenmore Rd, Paddington NSW 2021 | Bob              | Isla Irwin               | $600            | Ruby Russo `+61400000009` (moved in 17 Aug 2026; uses WhatsApp) | Nominated Tradie: Finn                  |
+| 17 Glenmore Rd, Paddington NSW 2021 | Bob              | Isla Irwin               | $600            | Ruby Russo `+61400000009` (moved in 17 Aug 2026) | Nominated Tradie: Finn                  |
 | 42 Coogee Bay Rd, Coogee NSW 2034   | Bob              | Isla Irwin               | $800            | Ethan Evans `+61400000010`, Sofia Silva `+61400000011` | Nominated Tradies: Finn, Erin                     |
 | 3/15 Bronte Rd, Bondi Junction NSW 2022 | Bob          | Jack Jones (mobile only) | $500            | Omar Odeh `+61400000012`                              | Strata unit, no Building Manager on file           |
 
@@ -115,7 +115,7 @@ Waiting as Maintenance Requests:
 | ---------------------------------- | ----- | --------------------------------------- | ------------------------------------------------------- |
 | Wei Zhang, 7 Wilson St             | Alice | Bathroom basin draining slowly          | Two clean photos: taken just now, at the Property       |
 | Noah Nair, 27 Llewellyn St         | Alice | Loose fence palings                     | Never sent photos: went ahead after 48 hours, "no photos" |
-| Ruby Russo, 17 Glenmore Rd         | Bob   | Mouldy window frame (by WhatsApp)       | Both photos flagged: one predates her tenancy, one was taken in Penrith |
+| Ruby Russo, 17 Glenmore Rd         | Bob   | Mouldy window frame (by SMS)       | Both photos flagged: one predates her tenancy, one was taken in Penrith |
 | Sofia Silva, 42 Coogee Bay Rd      | Bob   | Power point buzzing and warm            | Urgency flagged "check urgency"; a screenshot with no metadata |
 
 Open Tickets:
@@ -193,7 +193,7 @@ Each external API can be pointed at a real endpoint with env vars. Anything not 
 | `VISION_API_URL`, `VISION_API_KEY`    | The photo matcher                                     |
 | `QUOTES_API_URL`, `QUOTES_API_KEY`    | The quote reader                                      |
 | `GOOGLE_MAPS_API_KEY`                 | Google Places (New) and the Geocoding API             |
-| `TWILIO_*`, `SENDGRID_*`, `FILE_LINK_SECRET`, `DEMO_SEND_TO` | Real SMS, WhatsApp and email. See [Sending real messages](#sending-real-messages) |
+| `TWILIO_*`, `SENDGRID_*`, `FILE_LINK_SECRET`, `DEMO_SEND_TO` | Real SMS and email. See [Sending real messages](#sending-real-messages) |
 | `PORT`                                | The port to listen on (default 3000)                  |
 | `PUBLIC_URL`                          | The address used in upload and tracker links (default `http://localhost:$PORT`) |
 | `SUPABASE_DB_URL`                     | The Postgres to use (default: the local one from `npm run db:start`). See [The database](#the-database) |
@@ -216,8 +216,8 @@ With Twilio and/or SendGrid configured, the demo really sends on those channels 
 
 | Env vars | What for |
 | -------- | -------- |
-| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` | SMS and WhatsApp through Twilio's Messages API. The token also checks signatures on `/webhooks/twilio` |
-| `TWILIO_SMS_FROM`, `TWILIO_WHATSAPP_FROM` | Optional senders used instead of the Agency's connected numbers (the seeded `+61290000000` isn't a Twilio number). For the WhatsApp sandbox, `+14155238886` |
+| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` | SMS through Twilio's Messages API. The token also checks signatures on `/webhooks/twilio` |
+| `TWILIO_SMS_FROM` | Optional senders used instead of the Agency's connected numbers (the seeded `+61290000000` isn't a Twilio number) |
 | `FILE_LINK_SECRET`, `PUBLIC_URL` | Required with Twilio: photos and PDFs go as `MediaUrl` links to `PUBLIC_URL/media/:id`, signed with this secret and valid for an hour. `PUBLIC_URL` must be an https address Twilio can reach (a tunnel works) |
 | `SENDGRID_API_KEY` | Email through SendGrid v3 Mail Send, with reply-to the Agency's inbox address and cc and attachments |
 | `SENDGRID_FROM` | Optional sender on a SendGrid-verified domain, used instead of the Agency's inbox address |
@@ -229,7 +229,7 @@ TWILIO_ACCOUNT_SID=AC... TWILIO_AUTH_TOKEN=... TWILIO_SMS_FROM=+61480000000 \
 DEMO_SEND_TO=+61412345678 npm run demo
 ```
 
-For replies to come back in, point the Twilio number's "A message comes in" webhook (and the WhatsApp sandbox's) at `PUBLIC_URL/webhooks/twilio` (HTTP POST), and SendGrid Inbound Parse at `PUBLIC_URL/webhooks/sendgrid` with signing on. In Setup, connect the Agency's SMS and WhatsApp channels to the Twilio number (and email to the Inbound Parse address), so inbound messages reach the right Agency. A recipient the provider refuses for good (Twilio 21211, 21614 or 21610; a SendGrid 400 on the address) fails its task once with an "Undeliverable" error in the log instead of being retried.
+For replies to come back in, point the Twilio number's "A message comes in" webhook at `PUBLIC_URL/webhooks/twilio` (HTTP POST), and SendGrid Inbound Parse at `PUBLIC_URL/webhooks/sendgrid` with signing on. In Setup, connect the Agency's SMS and WhatsApp channels to the Twilio number (and email to the Inbound Parse address), so inbound messages reach the right Agency. A recipient the provider refuses for good (Twilio 21211, 21614 or 21610; a SendGrid 400 on the address) fails its task once with an "Undeliverable" error in the log instead of being retried.
 
 ### Checking the live services by hand
 
@@ -239,12 +239,12 @@ Manual checklist with real providers:
 
 1. `npm run smoke:live -- --to <your mobile>`: the SMS arrives, Jev answers each question with an option and a confidence, the geocode is near 12 King St, Newtown.
 2. Demo with Twilio set and `DEMO_SEND_TO=<your mobile>`, and a Tenant added in Setup with your mobile: text the Agency's Twilio number from your phone, get the acknowledgement by SMS, reply, and see the reply land.
-3. Add a Property Owner with your mobile and no email, and a Tenant at their Property: report an Urgent Repair as the Tenant and upload a receipt photo. The Owner's SMS arrives as an MMS with the receipt (WhatsApp in the sandbox shows it too); its `/media/...` link stops working after an hour. (Quote Requests only attach photos on email.)
+3. Add a Property Owner with your mobile and no email, and a Tenant at their Property: report an Urgent Repair as the Tenant and upload a receipt photo. The Owner's SMS arrives as an MMS with the receipt; its `/media/...` link stops working after an hour. (Quote Requests only attach photos on email.)
 4. With SendGrid set, a Tradie on email gets the Quote Request with the photos attached; replying lands in the Ticket through Inbound Parse.
 
 ## Running it for real on a home server
 
-`npm start` runs myEST8 without the demo Agency, for people who sign up (`src/main.ts`, ADR 0004). Email goes through each Agency's own Gmail, WhatsApp through Meta's WhatsApp Cloud API, and SMS stays on the phone simulator.
+`npm start` runs myEST8 without the demo Agency, for people who sign up (`src/main.ts`, ADR 0004). Email goes through each Agency's own Gmail, and SMS stays on the phone simulator.
 
 1. **Database.** `npm run db:start` (Docker) on the server. Data is kept in the schema `myest8`. Alternatively, set `SUPABASE_DB_URL` to a Postgres connection string.
 2. **Public address.** Create a Cloudflare named tunnel to a hostname you own, pointing at `http://localhost:$PORT`. A quick tunnel's random URL changes on every start and breaks the webhooks and the OAuth redirect. Set `PUBLIC_URL` to `https://<that hostname>`.
@@ -253,12 +253,12 @@ Manual checklist with real providers:
    - Create an OAuth client (Web application) with the redirect URI `https://<hostname>/oauth/google/callback`.
    - Keep the consent screen in Testing, and add each Gmail account that will connect as a test user.
    - Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `TOKEN_ENCRYPTION_KEY`.
-4. **WhatsApp.**
+4. **WhatsApp (paused).** Not offered in the app for now; skip this step.
    - In Meta for Developers, create an app with WhatsApp.
    - On API Setup, note the test number and its Phone number ID, and add your phone as a recipient.
    - Set the four `META_*` values.
    - Add the webhook `https://<hostname>/webhooks/whatsapp` with your verify token, and subscribe to `messages`.
 5. **Classifier.** Set `JEV_API_URL` and `JEV_API_KEY`. Anything else left on a mock needs `ALLOW_MOCKS=1`.
-6. **Start.** Export the variables, run `npm start`, then sign up at the public address. On the channels step, connect Gmail and the WhatsApp number, then send a test message.
+6. **Start.** Export the variables, run `npm start`, then sign up at the public address. On the channels step, connect Gmail, then send a test message.
 
 Keep secrets out of the repo: load them from a git-ignored `.env`, or the server's service manager (for example a systemd `EnvironmentFile`). `npm start` runs TypeScript through `tsx`, so install with dev dependencies (`npm ci`).
