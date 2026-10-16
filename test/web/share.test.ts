@@ -24,14 +24,13 @@ function shareControls(page: string) {
     url: input ? decode(/value="([^"]*)"/.exec(input)![1]!) : null,
     email: href('email'),
     sms: href('sms'),
-    whatsapp: href('whatsapp'),
   };
 }
 
 describe('shareButton', () => {
   const o = { title: 'Jobs booked this week', text: 'Here are the Jobs booked this week & next.', url: 'https://myest8.test/dispatch?week=2026-10-12' };
 
-  test('a Share button opens a panel with Copy link, Email, SMS and WhatsApp, each carrying the link', async () => {
+  test('a Share button opens a panel with Copy link, Email and SMS, each carrying the link', async () => {
     const page = await render(shareButton(o));
     const share = shareControls(page);
 
@@ -43,8 +42,7 @@ describe('shareButton', () => {
     const message = `${o.text} ${o.url}`;
     expect(share.email).toBe(`mailto:?subject=${encodeURIComponent(o.title)}&body=${encodeURIComponent(`${o.text}\n\n${o.url}`)}`);
     expect(share.sms).toBe(`sms:?&body=${encodeURIComponent(message)}`);
-    expect(share.whatsapp).toBe(`https://wa.me/?text=${encodeURIComponent(message)}`);
-    expect(page).toMatch(/data-share-channel="whatsapp"[^>]*target="_blank"|target="_blank"[^>]*data-share-channel="whatsapp"/);
+    expect(page).not.toMatch(/whatsapp|wa\.me/i);
   });
 
   test('works without JavaScript: a disclosure with plain links and a read-only link to copy by hand', async () => {
@@ -75,7 +73,6 @@ describe('shareButton', () => {
     const share = shareControls(page);
     expect(share.email).not.toBeNull();
     expect(share.sms).toBeNull();
-    expect(share.whatsapp).toBeNull();
   });
 
   test('gives each control its own ids, so two on a page never clash', async () => {
@@ -150,7 +147,7 @@ describe('where people share', () => {
 
     const share = shareControls(page);
     expect(share.url).toBe(`http://localhost${path}`);
-    expect(share.whatsapp).toContain(encodeURIComponent('The kitchen tap is dripping'));
+    expect(share.sms).toContain(encodeURIComponent('The kitchen tap is dripping'));
     expect(page).toContain('Anyone with this link can see');
   });
 });

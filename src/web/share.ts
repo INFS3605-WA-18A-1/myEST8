@@ -1,5 +1,5 @@
 // The Share control: a button that opens a small panel to pass a link on by
-// copying it, or by email, SMS or WhatsApp. Everything is server-rendered links:
+// copying it, or by email or SMS. Everything is server-rendered links:
 // there are no server routes and no requests. It is a <details> disclosure, so
 // without JavaScript the panel still opens with the plain links and a read-only
 // field to copy the link by hand. app.js (the "share" block) adds the Copy link
@@ -11,9 +11,9 @@ import { html } from 'hono/html';
 import { icon } from './icons.ts';
 import type { Html } from './ui.ts';
 
-export type ShareChannel = 'copy' | 'email' | 'sms' | 'whatsapp' | 'native';
+export type ShareChannel = 'copy' | 'email' | 'sms' | 'native';
 
-const ALL_CHANNELS: ShareChannel[] = ['copy', 'email', 'sms', 'whatsapp', 'native'];
+const ALL_CHANNELS: ShareChannel[] = ['copy', 'email', 'sms', 'native'];
 
 /** The note on a Property Manager page's Share panel: its links only open for colleagues. */
 export const COLLEAGUES_ONLY = 'Only Property Managers in your Agency can open this link.';
@@ -42,13 +42,12 @@ export function shareButton(o: {
   const message = `${o.text} ${o.url}`;
   const email = `mailto:?subject=${encodeURIComponent(o.title)}&body=${encodeURIComponent(`${o.text}\n\n${o.url}`)}`;
   const sms = `sms:?&body=${encodeURIComponent(message)}`;
-  const whatsapp = `https://wa.me/?text=${encodeURIComponent(message)}`;
 
-  const option = (channel: ShareChannel, href: string, iconName: string, label: string, external = false) =>
+  const option = (channel: ShareChannel, href: string, iconName: string, label: string) =>
     channels.has(channel)
       ? html`<li>
-          <a class="share-option" data-share-channel="${channel}" href="${href}" ${external ? html`target="_blank" rel="noopener noreferrer"` : ''}>
-            ${icon(iconName)}<span>${label}</span>${external ? html`<span class="sr-only"> (opens in a new tab)</span>` : ''}
+          <a class="share-option" data-share-channel="${channel}" href="${href}">
+            ${icon(iconName)}<span>${label}</span>
           </a>
         </li>`
       : '';
@@ -74,7 +73,6 @@ export function shareButton(o: {
       <ul class="share-options" aria-label="Send the link">
         ${option('email', email, 'envelope', 'Email')}
         ${option('sms', sms, 'chat-text', 'SMS')}
-        ${option('whatsapp', whatsapp, 'whatsapp-logo', 'WhatsApp', true)}
         ${channels.has('native')
           ? html`<li data-share-native hidden>
               <button type="button" class="share-option">${icon('dots-three')}<span>More options…</span></button>
