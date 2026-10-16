@@ -33,6 +33,23 @@ describe('channel verification', () => {
     expect(await one(h.db, 'SELECT 1 FROM channel_verifications WHERE agency_id = ?', agencyId)).toBeUndefined();
   });
 
+  test('allows one code per channel per minute, counted on the injected clock', async () => {
+    const { h, sam } = await sunrise();
+    await sam.startChannelVerification('sms', NUMBER);
+    const first = sentCode(h, NORMALIZED);
+
+    h.clock.advance(25_000);
+    await expect(sam.startChannelVerification('sms', NUMBER)).rejects.toThrow('Wait 35 seconds');
+    expect(sentCode(h, NORMALIZED)).toBe(first);
+    // Another channel has its own cooldown.
+    await sam.startChannelVerification('whatsapp', NUMBER);
+
+    h.clock.advance(35_000);
+    await sam.startChannelVerification('sms', NUMBER);
+    await expect(sam.confirmChannelVerification('sms', NUMBER, first)).rejects.toThrow('wrong');
+    await sam.confirmChannelVerification('sms', NUMBER, sentCode(h, NORMALIZED));
+  });
+
   test('sends a 6-digit code and stores the address only after the code matches', async () => {
     const { h, agencyId, sam } = await sunrise();
 
@@ -68,6 +85,7 @@ describe('channel verification', () => {
     await expect(sam.confirmChannelVerification('whatsapp', NUMBER, code)).rejects.toThrow('tried too many times');
     expect(await sam.channels()).toEqual([]);
 
+    h.clock.advance(MINUTE);
     await sam.startChannelVerification('whatsapp', NUMBER);
     const fresh = sentCode(h, NORMALIZED);
     h.clock.advance(10 * MINUTE + 1);

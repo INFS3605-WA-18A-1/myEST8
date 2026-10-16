@@ -11,6 +11,8 @@ import { addMs, invalid, isEmail, iso, normalizeAddress } from './shared.ts';
 const CHANNEL_TYPES: ChannelType[] = ['sms', 'whatsapp', 'email'];
 const CODE_TTL_MS = 10 * 60_000;
 const MAX_ATTEMPTS = 5;
+/** At most one code per Agency per channel in this long, so Send code can't be used to spam a number. */
+const RESEND_COOLDOWN_MS = 60_000;
 
 type Row = {
   address: string;
@@ -69,6 +71,19 @@ export function createChannelVerification({ db, clock, modules }: Context) {
       const owner = await profiles.agencyByChannel(channelType, normalized);
       if (owner !== null && owner !== agencyId) invalid(`${address} is connected to another Agency`);
 
+      // A code was sent at expires_at - CODE_TTL_MS, so the row itself says when the last send was.
+      const last = await one<{ expires_at: string }>(db, 'SELECT expires_at FROM channel_verifications WHERE agency_id = ? AND channel_type = ?', agencyId, channelType);
+      if (last) {
+        const waitMs = new Date(last.expires_at).getTime() - CODE_TTL_MS + RESEND_COOLDOWN_MS - clock.now().getTime();
+        if (waitMs > 0) {
+          const seconds = Math.ceil(waitMs / 1000);
+          invalid(`A code was just sent. Wait ${seconds} second${seconds === 1 ? '' : 's'} before asking for another.`, 'address');
+        }
+      }
+
+      // A resend replaces the open code with a fresh random one and starts its attempts at 0.
+      // That doesn't help a guesser: the old code is dead, so earlier wrong guesses count for nothing
+      // against the new one, and the cooldown above caps how many fresh codes (5 guesses each) per minute.
       const code = newCode();
       await transaction(db, async () => {
         await run(db, 'DELETE FROM channel_verifications WHERE agency_id = ? AND channel_type = ?', agencyId, channelType);
