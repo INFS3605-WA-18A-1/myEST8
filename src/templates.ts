@@ -44,9 +44,12 @@ export const templates = {
     (d, a) => `Hi ${d.tenantName}, this is ${a.name}. Thanks for letting us know about an issue at ${d.propertyAddress}. We've got your message.`,
   ),
   'tenant.guided_question': template<{ question: GuidedQuestion }>('A quick question', (d) => GUIDED_QUESTIONS[d.question]),
-  'tenant.upload_link': template<{ uploadLink: string }>(
+  'tenant.upload_link': template<{ uploadLink: string; alreadyHave?: number }>(
     'Please send photos',
-    (d) => `Thanks. Please upload a few photos of the issue here, straight from your phone: ${d.uploadLink}`,
+    (d) =>
+      d.alreadyHave
+        ? `Thanks, we have your ${d.alreadyHave} photo${d.alreadyHave === 1 ? '' : 's'}. Add more here if it helps: ${d.uploadLink}`
+        : `Thanks. Please upload a few photos of the issue here, straight from your phone: ${d.uploadLink}`,
   ),
   'tenant.urgent_repair_reminder': template<{
     limitCents: number;
@@ -84,6 +87,13 @@ export const templates = {
     'Repair visit moved',
     (d, a) => `Your visit from ${d.tradieBusinessName} has moved to ${visit(d.visitStart, a)}. Reply YES to confirm or tell us if you need another time.`,
   ),
+  'tenant.site_quotes': template<{ visits: { tradieBusinessName: string; visitStart: string }[] }>(
+    'Tradies are coming to quote',
+    (d, a) =>
+      `Before we fix it, ${d.visits.length} ${d.visits.length === 1 ? 'tradie' : 'tradies'} will come to look and quote: ` +
+      `${d.visits.map((v) => `${v.tradieBusinessName} on ${visit(v.visitStart, a)}`).join('; ')}. ` +
+      'Reply YES if those times work, or tell us if you need another time.',
+  ),
   'tenant.fixed_properly': template<{ trade: Trade; tradieBusinessName: string }>(
     'Was it fixed properly?',
     (d) => `${d.tradieBusinessName} has finished the ${trade(d.trade)} job. Was it fixed properly? Reply with a number from 1 (not at all) to 5 (perfectly).`,
@@ -112,6 +122,22 @@ export const templates = {
   'tradie.visit_moved': template<{ propertyAddress: string; visitStart: string }>(
     'Visit moved',
     (d, a) => `Your visit to ${d.propertyAddress} has moved to ${visit(d.visitStart, a)}.`,
+  ),
+
+  'tradie.site_quote': template<{ propertyAddress: string; trade: Trade; summary: string; visitStart: string; visitEnd: string }>(
+    'Site quote visit',
+    (d, a) =>
+      `Site quote for ${a.name}: ${trade(d.trade)} at ${d.propertyAddress}, ${visit(d.visitStart, a)}. Issue: ${d.summary}. ` +
+      'Reply with your revised price after the visit, DONE if your price stands, or tell us if you need another time.',
+  ),
+  'tradie.site_quote_reminder': template<{ propertyAddress: string; trade: Trade }>(
+    'Reminder: revised quote',
+    (d, a) =>
+      `Reminder from ${a.name}: after your visit to ${d.propertyAddress}, please send your revised price for the ${trade(d.trade)} job, or DONE if your quote stands.`,
+  ),
+  'tradie.site_quote_cancelled': template<{ propertyAddress: string; trade: Trade }>(
+    'Site quote visit cancelled',
+    (d, a) => `${a.name} no longer needs your site visit to ${d.propertyAddress} for the ${trade(d.trade)} job. Thanks for your time.`,
   ),
 
   'owner.approval_request': template<{

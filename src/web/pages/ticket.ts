@@ -14,6 +14,7 @@ import { cents, formAction, int, isoToLocal, list, localToIso, text, type FormVa
 import { COLLEAGUES_ONLY, shareButton, shareUrl } from '../share.ts';
 import { shellInfo } from '../shell.ts';
 import {
+  aiFilled,
   alert,
   badge,
   button,
@@ -27,6 +28,7 @@ import {
   formatMoney,
   formatWhen,
   humanise,
+  jobStageLabel,
   linkButton,
   page,
   photoGrid,
@@ -63,7 +65,6 @@ type Extras = {
 
 /** Shown to explain the rule; the core enforces it. */
 const MIN_QUOTES = 2;
-const FIRST_ROUND = 3;
 const FREE_SLOTS_SHOWN = 3;
 const DEFAULT_VISIT_HOURS = 2;
 /** WhatsApp is paused as a channel, but messages that came by it still say so. */
@@ -106,6 +107,11 @@ export function ticketPages() {
     const urgency = text(form, 'urgency') as Urgency;
     await actions.changeUrgency({ ticketId: ticket.ticketId }, urgency);
     return `Urgency changed to ${humanise(urgency)}`;
+  });
+
+  onPost(pages, '/:id/summary', async ({ actions, ticket, form }) => {
+    await actions.editSummary({ ticketId: ticket.ticketId }, text(form, 'summary'));
+    return 'Summary saved';
   });
 
   onPost(pages, '/:id/close', async ({ actions, ticket }) => {
@@ -190,6 +196,35 @@ export function ticketPages() {
     // A refused time keeps the suggestions open.
     (params) => `?suggest=${encodeURIComponent(params.workOrderId ?? '')}`,
   );
+
+  // Site Quotes. Form fields for booking: `start_<tradieId>` (a local date and time; leave blank to skip that Tradie) and `minutes` (default 60).
+  onPost(pages, '/:id/jobs/:jobId/site-quotes', async ({ actions, ticket, form, params, timeZone }) => {
+    const job = jobIn(ticket, params.jobId);
+    const minutes = text(form, 'minutes') ? int(form, 'minutes', 'the visit length') : undefined;
+    const visits = [...new Set(job.quotes.map((q) => q.tradieId))].flatMap((tradieId) => {
+      const start = text(form, `start_${tradieId}`);
+      return start ? [{ tradieId, start: localToIso(start, timeZone), ...(minutes ? { durationMinutes: minutes } : {}) }] : [];
+    });
+    await actions.bookSiteQuotes(job.jobId, visits);
+    return `Site quotes booked with ${visits.length} ${plural(visits.length, 'Tradie')}. The Tradies and the Tenant have been told.`;
+  });
+
+  onPost(pages, '/:id/jobs/:jobId/site-quotes/skip', async ({ actions, ticket, params }) => {
+    await actions.skipSiteQuotes(jobIn(ticket, params.jobId).jobId);
+    return 'Site quotes skipped. Choose a Quote when you are ready.';
+  });
+
+  onPost(pages, '/:id/jobs/:jobId/site-quotes/final', async ({ actions, ticket, params }) => {
+    await actions.markQuotesFinal(jobIn(ticket, params.jobId).jobId);
+    return 'Quotes marked final. Any visits still to happen were cancelled.';
+  });
+
+  onPost(pages, '/:id/work-orders/:workOrderId/site-quote-done', async ({ actions, ticket, params }) => {
+    const id = Number(params.workOrderId);
+    const visit = ticket.jobs.flatMap((j) => j.siteQuotes.visits).find((v) => v.workOrderId === id) ?? notFound('Work Order');
+    await actions.markSiteQuoteDone(visit.workOrderId);
+    return `${visit.businessName}'s site quote visit marked done`;
+  });
 
   onPost(pages, '/:id/jobs/:jobId/rate', async ({ actions, ticket, form, params }) => {
     const job = jobIn(ticket, params.jobId);
@@ -307,15 +342,15 @@ async function freeSlotsFor(actions: PropertyManagerActions, ticket: TicketView)
 // The page
 
 /**
- * The header with the Next step first in reading order after the issue; then the
- * Jobs (where the next action is) with the timeline under them in the main column,
- * and what the Tenant reported, the Ticket's details and the messages beside them.
- * On phones it is one column: the Jobs, what the Tenant reported, the details, the
- * timeline, the messages. `share` is the Share button, which sits in the header with
- * the Ticket's other tools.
+ * The header, the stage tracker and the Next block first; then the Jobs (where the
+ * next action is) with the timeline under them in the main column, and what the
+ * Tenant reported, the Ticket's details and the messages beside them. On phones it is
+ * one column: the Jobs, what the Tenant reported, the details, the timeline, the
+ * messages. `share` is the Share button, which sits in the header with the Ticket's
+ * other tools.
  */
 function ticketBody(t: TicketView, x: Extras, share: Html): Html {
-  return html`${ticketHeader(t, x, share)}
+  return html`${ticketHeader(t, x, share)} ${stageTracker(t, x)} ${nextStepLine(t, x)}
     <div class="ticket-layout">
       <div class="ticket-main">
         <div class="ticket-jobs">
@@ -332,12 +367,11 @@ function ticketBody(t: TicketView, x: Extras, share: Html): Html {
 }
 
 /**
- * The Ticket's header, hand-built in the docket's shape (number and Urgency in the
- * stub, a dashed perforation) because it reads the issue first and links the
- * address: the issue, the address, then the Tenant, status, age, Repair Cost (once
- * there is one) and Max Repair Cost in one line, and the one Next step. Share, Change
- * Urgency and Close Ticket (once it can work) sit at its top right from 1024px and
- * under the Next step on phones.
+ * The Ticket's header, hand-built in the docket's large shape (the number at 40px and
+ * Urgency in the stub, a dashed perforation) because it reads the Summary first, with
+ * the address linked under it: then the Tenant, status, age, Repair Cost (once there
+ * is one) and Max Repair Cost in one line. Share, Change Urgency and Close Ticket
+ * (once it can work) sit at its top right from 1024px and under the facts on phones.
  */
 function ticketHeader(t: TicketView, x: Extras, share: Html): Html {
   const overMax = t.repairCostCents > t.maxRepairCostCents;
@@ -350,7 +384,7 @@ function ticketHeader(t: TicketView, x: Extras, share: Html): Html {
     <div aria-hidden="true" class="ticket-perf"></div>
     <div class="ticket-head-body">
       <div class="ticket-head-main">
-        <h2 class="ticket-issue">${t.description}</h2>
+        ${summaryBlock(t)}
         <p class="ticket-address"><a class="link" href="/properties/${t.propertyId}">${t.propertyAddress}</a></p>
         <p class="ticket-meta">
           <span>Tenant ${t.tenantName}</span>
@@ -363,10 +397,27 @@ function ticketHeader(t: TicketView, x: Extras, share: Html): Html {
           ${t.checkUrgency ? html`<span class="flex items-center gap-2">${badge('Check urgency', 'warning')} The intake agent wasn't sure.</span>` : nothing}
         </p>
       </div>
-      ${nextStepLine(t, x)}
       <div class="ticket-tools">${share}${urgencyMenu(t)}${closeControl(t)}</div>
     </div>
   </header>`;
+}
+
+/** The Summary (else the Tenant's words), on the AI tint when AI wrote it, with a small form to edit it. */
+function summaryBlock(t: TicketView): Html {
+  const words = t.summary ?? t.description;
+  const edit = t.status === 'open'
+    ? html`<details class="ticket-summary-edit">
+        <summary class="btn btn-ghost btn-sm" aria-label="Edit the Summary">Edit</summary>
+        <form method="post" action="/tickets/${t.ticketId}/summary" class="space-y-2">
+          ${field({ id: 'ticket-summary', label: 'Summary', name: 'summary', type: 'textarea', rows: 2, value: words, required: true, hint: 'One line, 160 characters at most.' })}
+          ${button('Save Summary', { size: 'sm' })}
+        </form>
+      </details>`
+    : nothing;
+  const issue = html`<h2 class="ticket-issue">${words}</h2>`;
+  return t.summaryBy === 'ai'
+    ? aiFilled(issue, { edit })
+    : html`<div class="ticket-summary">${issue}${edit}</div>`;
 }
 
 type NextStep = { text: string; href: string; decision: boolean; job?: JobView };
@@ -374,14 +425,14 @@ type NextStep = { text: string; href: string; decision: boolean; job?: JobView }
 /**
  * The one thing to do next on the Ticket: the first Job waiting on the Property
  * Manager's decision, else the first Job waiting on someone else, else closing.
- * A decision gets the Wattle stripe.
+ * A decision gets the Wattle bar.
  */
 function nextStepLine(t: TicketView, x: Extras): Html {
   const step = nextStep(t, x);
   if (!step) return nothing;
   const job = step.job && t.jobs.length > 1 ? html` <span class="text-sm text-muted">${jobLabel(t, step.job.jobId)}</span>` : nothing;
   return html`<p class="ticket-next ${step.decision ? 'is-decision' : ''}" data-next-step>
-    <span class="ticket-next-label">Next step</span>
+    <span class="ticket-next-label">Next</span>
     <a class="link font-semibold" href="${step.href}">${step.text}</a>${job}
   </p>`;
 }
@@ -396,29 +447,38 @@ function nextStep(t: TicketView, x: Extras): NextStep | null {
   return { text: done ? 'Close the Ticket: every Job is done' : 'Close the Ticket: every Job is cancelled', href: '#close-ticket', decision: true };
 }
 
-/** What a Job waits on, and whether that is the Property Manager. */
+/** What a Job waits on, and whether that is the Property Manager. Quoting Jobs follow `decision`. */
 function jobStep(t: TicketView, job: JobView, x: Extras): NextStep | null {
   const at = (section: string) => `#job-${job.jobId}-${section}`;
   const decide = (text: string, section: string): NextStep => ({ text, href: at(section), decision: true, job });
   const wait = (text: string, section: string): NextStep => ({ text, href: at(section), decision: false, job });
   switch (job.status) {
-    case 'quoting': {
+    case 'quoting':
+    case 'site_quoting': {
       const open = job.quotes.filter((q) => q.status === 'open');
       const unchecked = open.filter((q) => !q.confirmed);
       const confirmed = open.filter((q) => q.confirmed);
       const waiting = job.quoteRequests.filter((r) => r.status === 'sent' || r.status === 'reminded');
-      if (!job.quoteRequests.length) return decide(job.checkTrade ? 'Check the Trade, then send Quote Requests' : 'Send Quote Requests', 'tradies');
-      if (unchecked.length) {
+      if (job.decision === 'check_quotes' && unchecked.length) {
         const names = andList(unchecked.map((q) => q.businessName));
         return decide(`Check ${unchecked.length} ${plural(unchecked.length, 'Quote')} from ${names}`, 'quotes');
       }
-      if (confirmed.length >= MIN_QUOTES) return decide(`Choose a Quote: ${confirmed.length} confirmed`, 'quotes');
+      if (job.decision === 'book_site_quotes') return decide(`Book site quotes: ${confirmed.length} confirmed Quotes on a High Ticket`, 'site-quotes');
+      if (job.decision === 'choose_quote') {
+        return confirmed.length === 1
+          ? decide(`Choose ${confirmed[0]!.businessName}'s Quote with a reason, or ask more Tradies`, 'quotes')
+          : decide(`Choose a Quote: ${confirmed.length} confirmed`, 'quotes');
+      }
+      if (!job.quoteRequests.length) return decide(job.checkTrade ? 'Check the Trade, then send Quote Requests' : 'Send Quote Requests', 'tradies');
+      if (job.status === 'site_quoting') {
+        const n = job.siteQuotes.openVisits;
+        return wait(`Waiting on ${n} site quote ${plural(n, 'visit')}, then Quotes are final`, 'site-quotes');
+      }
       if (waiting.length) {
         const oldest = waiting.reduce((a, b) => (a.sentAt < b.sentAt ? a : b));
         const names = andList(waiting.map((r) => r.businessName));
         return wait(`Waiting on ${plural(waiting.length, 'a Quote', 'Quotes')} from ${names}, asked ${formatAge(oldest.sentAt, x.now)}`, 'requests');
       }
-      if (confirmed.length === 1) return decide(`Choose ${confirmed[0]!.businessName}'s Quote with a reason, or ask more Tradies`, 'quotes');
       return decide('Ask more Tradies to quote', 'tradies');
     }
     case 'awaiting_owner': {
@@ -439,10 +499,30 @@ function jobStep(t: TicketView, job: JobView, x: Extras): NextStep | null {
       return wait(`Visit ${formatWhen(wo.start, x.timeZone)} with ${wo.businessName}`, 'work-order');
     }
     case 'done':
-      return lastEvent(t, 'tradie_rated', job.jobId) ? null : decide(`Rate ${job.workOrder?.businessName ?? 'the Tradie'}`, 'rating');
+      return lastEvent(t, 'tradie_rated', job.jobId) ? null : decide(`Rate the Tradie: ${job.workOrder?.businessName ?? 'how did they do'}`, 'rating');
     default:
       return null;
   }
+}
+
+/**
+ * Where the Ticket stands across the top: Quoting, Site quotes (only once visits are
+ * booked or the Ticket is High), With Property Owner, Ready to book, Booked, Done. It
+ * follows the Job the Next block is about, named when the Ticket has several.
+ */
+function stageTracker(t: TicketView, x: Extras): Html {
+  const live = t.jobs.filter((j) => j.status !== 'cancelled');
+  const job = nextStep(t, x)?.job ?? live.find(isOpen) ?? live.at(-1);
+  if (!job) return nothing;
+  const showSite = t.urgency === 'high' || job.siteQuotes.booked || job.status === 'site_quoting';
+  const order = ['quoting', ...(showSite ? ['site_quoting'] : []), 'awaiting_owner', 'approved', 'scheduled', 'done'];
+  const current = order.indexOf(job.status === 'site_quoting' && !showSite ? 'quoting' : job.status);
+  const items = order.map((status, i) => ({
+    label: jobStageLabel(status),
+    done: job.status === 'done' || i < current || (status === 'site_quoting' && job.siteQuotes.booked && job.status === 'quoting'),
+  }));
+  const name = t.jobs.length > 1 ? html`<p class="ticket-stages-job">${jobLabel(t, job.jobId)}</p>` : nothing;
+  return html`<nav class="ticket-stages" aria-label="Where the Ticket stands">${name}${steps(items, { horizontal: true, ...(job.status === 'done' ? {} : { current }) })}</nav>`;
 }
 
 /** "Reported 2 days ago", in the Agency's clock's hours and days. */
@@ -530,6 +610,7 @@ function reportCard(t: TicketView): Html {
     body: html`<div class="space-y-4">
       ${photos}
       ${facts([
+        ...(t.summary ? [["The Tenant's words", t.description] as [string, string]] : []),
         ['Where', a.location ?? '—'],
         ['Started', a.started ?? '—'],
         ['Getting worse', a.worsening ? humanise(a.worsening) : '—'],
@@ -551,8 +632,7 @@ function jobCard(t: TicketView, job: JobView, x: Extras): Html {
     id: `job-${job.jobId}`,
     title: jobLabel(t, job.jobId),
     actions: html`${statusBadge(job.status, { job: true })} ${job.checkTrade ? badge('Check trade', 'warning') : nothing}`,
-    body: html`${jobSteps(job)}
-      ${nextAction(t, job, x)}
+    body: html`${nextAction(t, job, x)}
       ${jobMore(t, job, x)}`,
   });
 }
@@ -573,23 +653,11 @@ function cancelledJob(t: TicketView, job: JobView, x: Extras): Html {
   </section>`;
 }
 
-/** Progress through the Job: Quoting, the Property Owner's approval when it needed one, Booked, Done. */
-function jobSteps(job: JobView): Html {
-  const approvalNeeded = job.approval !== null || job.status === 'awaiting_owner';
-  const approved = job.status === 'approved' || job.status === 'scheduled' || job.status === 'done';
-  const items = [
-    { label: 'Quoting', done: job.status !== 'quoting' },
-    ...(approvalNeeded ? [{ label: 'Property Owner approval', done: approved }] : []),
-    { label: 'Booked', done: job.status === 'scheduled' || job.status === 'done' },
-    { label: 'Done', done: job.status === 'done' },
-  ];
-  return steps(items, { horizontal: true });
-}
-
 /** The one thing to do next on the Job, by its status. */
 function nextAction(t: TicketView, job: JobView, x: Extras): Html {
   switch (job.status) {
     case 'quoting':
+    case 'site_quoting':
       return quotingAction(t, job, x);
     case 'awaiting_owner':
       return job.approval ? approvalSection(t, job, job.approval, x) : nothing;
@@ -615,6 +683,7 @@ function quotingAction(t: TicketView, job: JobView, x: Extras): Html {
     ${declined ? alert('The Property Owner said NO. Choose another Quote.', 'warning') : nothing}
     ${job.checkTrade && !job.quoteRequests.length ? tradeForm(t, job) : nothing}
     ${job.quotes.length ? quotesSection(t, job, x) : nothing}
+    ${siteQuotesSection(t, job, x)}
     ${job.quoteRequests.length ? quoteRequestsWaiting(job, x) : nothing}
     ${job.quoteRequests.length
       ? html`<details class="group" id="job-${job.jobId}-tradies">
@@ -627,8 +696,8 @@ function quotingAction(t: TicketView, job: JobView, x: Extras): Html {
 
 /** Secondary details, collapsed: the Trade, Quote Requests, Quotes and approval not in the main view, the finished Work Order, and cancelling. */
 function jobMore(t: TicketView, job: JobView, x: Extras): Html {
-  const quoting = job.status === 'quoting';
-  const trade = quoting && !job.quoteRequests.length && !job.checkTrade ? tradeForm(t, job) : nothing;
+  const quoting = job.status === 'quoting' || job.status === 'site_quoting';
+  const trade = job.status === 'quoting' && !job.quoteRequests.length && !job.checkTrade ? tradeForm(t, job) : nothing;
   const requests = !quoting && job.quoteRequests.length ? quoteRequestsSection(job, x) : nothing;
   const quotes = !quoting && job.quotes.length ? quotesSection(t, job, x) : nothing;
   const approval = job.approval && job.status !== 'awaiting_owner' ? approvalSection(t, job, job.approval, x) : nothing;
@@ -675,15 +744,19 @@ function recommendationsSection(t: TicketView, job: JobView, x: Extras): Html {
     return html`<section class="space-y-3">${header} ${emptyState(none, linkButton('Add a Tradie', '/setup', { size: 'sm' }))}</section>`;
   }
   const firstRound = job.quoteRequests.length === 0;
-  const ticked = new Set(firstRound ? job.recommendations.slice(0, FIRST_ROUND).map((r) => r.tradieId) : []);
+  const ticked = new Set(job.recommendations.filter((r) => r.preselected).map((r) => r.tradieId));
+  const rule = job.requestRule;
   const anyLeft = job.recommendations.some((r) => !r.requested);
   const rows = job.recommendations.map((r, i) => recommendationRow(job, r, i + 1, ticked.has(r.tradieId), x));
   return html`<section class="space-y-3">
     ${header}
     <p class="text-muted">
       Ranked by myEST8 rating, then Google rating, then median previous Quote.
-      ${firstRound ? 'Send the first round to 3–4 Tradies; the top three are ticked.' : 'Invite more Tradies if the Job is short of Quotes.'}
+      ${firstRound ? 'Send the first round to three or four Tradies; the top three are ticked.' : 'Invite more Tradies if the Job is short of Quotes.'}
     </p>
+    ${rule?.singleReason ? alert(rule.singleReason, 'info') : (rule?.minimum ?? MIN_QUOTES) > 1
+      ? html`<p class="text-sm text-muted">Send Quote Requests to at least ${rule?.minimum === 3 ? 'three' : 'two'} Tradies.</p>`
+      : nothing}
     <form method="post" action="/tickets/${t.ticketId}/jobs/${job.jobId}/quote-requests" class="space-y-3">
       ${compactTable(['Tradie', 'Rating', 'Google', 'Median Quote', 'Ask'], rows, `Recommended Tradies for the ${humanise(job.trade)} Job`)}
       ${anyLeft ? button('Send Quote Requests', { block: true }) : html`<p>Every recommended Tradie has been asked.</p>`}
@@ -713,6 +786,7 @@ function recommendationRow(job: JobView, r: Recommendation, rank: number, ticked
     html`<div class="space-y-1">
       <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
         <label for="${id}" class="font-semibold">${rank}. ${r.businessName}</label>
+        ${r.nominated ? badge('Nominated', 'success') : nothing}
         ${r.requested ? badge('Already asked', 'info') : nothing}
         <a class="link text-xs" href="/tradies/${r.tradieId}">Profile</a>
       </div>
@@ -769,99 +843,188 @@ const REPLY: Record<string, string> = {
 };
 
 /**
- * While quoting: how many were asked and have quoted, then who hasn't replied yet (or
- * declined) and how long ago they were asked. A Tradie who quoted is under Quotes.
+ * Every Quote Request on the Job while it is getting Quotes: how many were asked and
+ * have quoted, then each Tradie with how their request stands (sent, reminded, quoted,
+ * declined) and how long ago they were asked.
  */
 function quoteRequestsWaiting(job: JobView, x: Extras): Html {
   const waiting = job.quoteRequests.filter((r) => r.status === 'sent' || r.status === 'reminded').length;
   const quoted = job.quoteRequests.filter((r) => r.status === 'quoted').length;
   const asked = job.quoteRequests.length;
-  const unanswered = job.quoteRequests.filter((r) => r.status !== 'quoted');
   return html`<section class="space-y-2" id="job-${job.jobId}-requests">
     ${sectionHeader('Quote Requests')}
     <p class="text-sm text-muted">${asked} asked: ${quoted} quoted, ${waiting} waiting on a reply.</p>
-    ${unanswered.length
-      ? html`<ul role="list" class="divide-y divide-line rounded-[4px] border border-line text-sm">
-      ${unanswered.map((r) => {
+    <ul role="list" class="divide-y divide-line rounded-[4px] border border-line text-sm">
+      ${job.quoteRequests.map((r) => {
         const open = r.status === 'sent' || r.status === 'reminded';
         return html`<li class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-3 py-2">
           ${tradieLink(r.tradieId, r.businessName)}
-          <span class="${open ? '' : 'text-muted'}"
+          <span class="${open || r.status === 'quoted' ? '' : 'text-muted'}"
             >${REPLY[r.status] ?? humanise(r.status)}, <span class="text-muted"
               >asked <time datetime="${r.sentAt}" title="${formatWhen(r.sentAt, x.timeZone)}">${formatAge(r.sentAt, x.now)}</time></span
             ></span
           >
         </li>`;
       })}
-    </ul>`
-      : nothing}
+    </ul>
   </section>`;
 }
 
 /**
- * The Job's Quotes compared: one column per Quote (Tradie, price, proposed time,
- * both ratings, whether it is confirmed) with its action at the foot. A Quote that
- * still needs checking folds its correct-and-confirm form under the column. On a
- * narrow screen each Quote is a compact block instead.
+ * The Job's Quotes compared in one table, a row per Quote: Tradie, initial price,
+ * the price after the visit when there is one (a Quote the Tradie revised after a
+ * site quote shows both), proposed time, both ratings, whether a PDF came, and the
+ * action. A Quote that still needs checking folds its correct-and-confirm form into
+ * its action. On a narrow screen each row stacks, labelled.
  */
 function quotesSection(t: TicketView, job: JobView, x: Extras): Html {
   const confirmed = job.quotes.filter((q) => q.confirmed).length;
-  const quoting = job.status === 'quoting';
+  const getting = job.status === 'quoting' || job.status === 'site_quoting';
   const unchecked = job.quotes.filter((q) => q.status === 'open' && !q.confirmed).length;
   const advice =
     confirmed < MIN_QUOTES
       ? 'myEST8 needs two confirmed Quotes before you choose one. To go ahead with fewer, record why.'
       : 'Compare them and choose one.';
-  const ratings = new Map(job.recommendations.map((r) => [r.tradieId, r]));
-  const showRatings = job.quotes.some((q) => ratings.has(q.tradieId));
-  const rows = showRatings ? 6 : 5;
+  const visits = new Map(job.siteQuotes.visits.map((v) => [v.tradieId, v]));
+  const twoPrices = job.siteQuotes.booked || job.quotes.some((q) => q.revisedAt !== null);
+  const headers = ['Tradie', ...(twoPrices ? ['Initial price', 'After visit'] : ['Price']), 'Proposed time', 'Ratings', 'Action'];
+  const rows = job.quotes.map((q) => {
+    const visit = visits.get(q.tradieId);
+    const initial = q.initialPriceCents ?? q.priceCents;
+    const after = q.revisedAt
+      ? html`<span class="num font-semibold">${formatMoney(q.priceCents)}</span>`
+      : visit
+        ? html`<span class="text-muted">${visit.visit === 'done' ? 'Visit done, price stands' : 'Visit to come'}</span>`
+        : html`<span class="text-muted">No visit</span>`;
+    const proposed = q.revisedAt ? (q.proposedTime ?? q.initialProposedTime) : q.proposedTime;
+    return [
+      html`<div class="space-y-1">
+        <div>${tradieLink(q.tradieId, q.businessName)}${q.hasPdf ? html` <span class="text-xs text-muted">PDF attached</span>` : nothing}</div>
+        <div class="flex flex-wrap gap-1">
+          ${q.confirmed ? badge('Confirmed', 'success') : badge('Needs checking', 'warning')}
+          ${q.revisedAt ? badge('Revised after visit', 'info', { outline: true }) : nothing}
+        </div>
+        ${q.reason ? html`<p class="text-sm">Chosen with one Quote: ${q.reason}</p>` : nothing}
+      </div>`,
+      html`<span class="num">${formatMoney(initial)}</span>`,
+      ...(twoPrices ? [after] : []),
+      html`${proposed ? formatWhen(proposed, x.timeZone) : 'None given'}`,
+      html`<span class="num">myEST8 ${q.myEst8Rating.average.toFixed(1)}<br />${q.googleRating ? (q.googleRating.rating === null ? 'Google no rating' : `Google ${q.googleRating.rating.toFixed(1)}`) : 'Not on Google'}</span>`,
+      quoteAction(t, job, q, confirmed, x),
+    ];
+  });
   return html`<section class="space-y-3" id="job-${job.jobId}-quotes">
     ${sectionHeader('Quotes')}
-    ${quoting
-      ? html`<p class="text-sm text-muted">
-          ${confirmed} confirmed${unchecked ? `, ${unchecked} to check` : ''}. ${advice}
-        </p>`
+    ${getting
+      ? html`<p class="text-sm text-muted">${confirmed} confirmed${unchecked ? `, ${unchecked} to check` : ''}. ${advice}</p>`
       : nothing}
-    <div class="quote-compare-frame">
-      <ul role="list" class="quote-compare" style="--quote-rows: ${rows}">
-        ${job.quotes.map((q) => quoteColumn(t, job, q, confirmed, showRatings ? (ratings.get(q.tradieId) ?? null) : undefined, x))}
-      </ul>
-    </div>
+    ${table(headers, rows, {
+      caption: `Quotes for the ${humanise(job.trade)} Job`,
+      rowHeader: true,
+      stack: 'labelled',
+      align: headers.map((h) => (h === 'Price' || h === 'Initial price' || h === 'After visit' ? 'right' : 'left')),
+    })}
   </section>`;
 }
 
-/** One Quote's column. `rating` is undefined when no Quote on the Job has ratings to show. */
-function quoteColumn(t: TicketView, job: JobView, q: QuoteView, confirmed: number, rating: Recommendation | null | undefined, x: Extras): Html {
+/** What can be done to one Quote: check it, choose it, or nothing (its status says where it stands). */
+function quoteAction(t: TicketView, job: JobView, q: QuoteView, confirmed: number, x: Extras): Html {
   const open = q.status === 'open';
-  const cell = (label: string, value: Html | string) =>
-    html`<div class="quote-cell"><span class="quote-label">${label}</span><span class="quote-value">${value}</span></div>`;
-  const action =
-    open && !q.confirmed
-      ? confirmForm(t, q, x)
-      : open && q.confirmed && job.status === 'quoting'
-        ? chooseForm(t, q, confirmed)
-        : open
-          ? nothing
-          : statusBadge(q.status);
-  return html`<li class="quote-column ${q.status === 'approved' ? 'is-approved' : ''}">
-    <div class="quote-tradie">${tradieLink(q.tradieId, q.businessName)}</div>
-    <p class="quote-price num">${formatMoney(q.priceCents)}</p>
-    ${cell('Proposed time', q.proposedTime ? formatWhen(q.proposedTime, x.timeZone) : 'None given')}
-    ${rating === undefined
-      ? nothing
-      : cell(
-          'Ratings',
-          rating
-            ? html`<span class="quote-ratings"><span class="num">${myEst8Rating(rating)}</span><span>${googleRating(rating.googleRating)}</span></span>`
-            : '—',
-        )}
-    <div class="quote-state">
-      ${q.confirmed ? badge('Confirmed', 'success') : badge('Needs checking', 'warning')}
-      ${q.hasPdf ? badge('PDF attached', 'info') : nothing}
-      ${q.reason ? html`<span class="block w-full text-sm">Chosen with one Quote: ${q.reason}</span>` : nothing}
+  if (open && !q.confirmed) return confirmForm(t, q, x);
+  if (open && q.confirmed && (job.status === 'quoting' || job.status === 'site_quoting')) return chooseForm(t, q, confirmed);
+  return open ? nothing : statusBadge(q.status);
+}
+
+const VISIT_WORDS: Record<string, string> = {
+  confirmed: 'Confirmed',
+  not_confirmed: 'Not confirmed yet',
+  reschedule_requested: 'Asked for another time',
+  done: 'Done',
+};
+
+/**
+ * Site quotes: before any are booked, the form (a time for each Tradie with a
+ * confirmed Quote, prefilled with the first free slot and the others as quick
+ * choices; leave a time blank to skip that Tradie) with Book and Skip. Once booked,
+ * each visit with its state and Mark done, and Quotes are final when the visits are over.
+ */
+function siteQuotesSection(t: TicketView, job: JobView, x: Extras): Html {
+  const s = job.siteQuotes;
+  const base = `/tickets/${t.ticketId}/jobs/${job.jobId}/site-quotes`;
+  if (s.visits.length) {
+    const rows = s.visits.map((v) => {
+      const done = v.visit === 'done';
+      return html`<li class="site-visit">
+        <div class="site-visit-who">
+          ${tradieLink(v.tradieId, v.businessName)} ${badge('Site quote', 'neutral', { outline: true })}
+        </div>
+        <div class="site-visit-when">${formatRange(v.start, v.end, x.timeZone)}</div>
+        <div class="site-visit-state">${badge(VISIT_WORDS[v.visit] ?? humanise(v.visit), done ? 'success' : v.visit === 'reschedule_requested' ? 'warning' : 'neutral')}</div>
+        <div class="site-visit-action">
+          ${done ? nothing : postButton(`/tickets/${t.ticketId}/work-orders/${v.workOrderId}/site-quote-done`, 'Mark done', { variant: 'secondary', size: 'sm' })}
+        </div>
+      </li>`;
+    });
+    const final = job.status === 'site_quoting'
+      ? html`<div class="flex flex-wrap items-center gap-3">
+          ${postButton(`${base}/final`, 'Quotes are final', {
+            variant: s.openVisits ? 'secondary' : 'primary',
+            confirm: s.openVisits ? 'Mark the Quotes final? Visits still to happen are cancelled.' : undefined,
+          })}
+          <span class="text-sm text-muted">${s.openVisits ? 'Cancels the visits still to happen.' : 'Every visit is done. Choose a Quote when the prices are in.'}</span>
+        </div>`
+      : nothing;
+    return html`<section class="space-y-3" id="job-${job.jobId}-site-quotes">
+      ${sectionHeader('Site quotes')}
+      <p class="text-sm text-muted">Each Tradie visits, then replies with a revised price or says theirs stands.</p>
+      <ul role="list" class="site-visits">${rows}</ul>
+      ${final}
+    </section>`;
+  }
+  if (!s.canBook || s.skipped) return nothing;
+  const tradies = job.quotes.filter((q) => q.confirmed && q.status === 'open');
+  const fields = tradies.map((q) => {
+    const slots = s.slots.find((o) => o.tradieId === q.tradieId)?.slots ?? [];
+    const id = `job-${job.jobId}-site-${q.tradieId}`;
+    return html`<li class="site-form-row">
+      <div class="site-form-field">
+        ${field({
+          id,
+          label: `${q.businessName}`,
+          name: `start_${q.tradieId}`,
+          type: 'datetime-local',
+          value: slots[0] ? isoToLocal(slots[0].start, x.timeZone) : '',
+          hint: slots.length ? `${x.timeZone} time. Leave empty to skip ${q.businessName}.` : `No free time found. Pick one or leave empty to skip ${q.businessName}.`,
+        })}
+      </div>
+      ${slots.length > 1
+        ? html`<div class="site-form-slots" role="group" aria-label="Other times for ${q.businessName}">
+            <span class="text-sm text-muted">Other times:</span>
+            ${slots.slice(1).map((slot) => html`<button type="button" class="btn btn-outline btn-sm" data-fill="${id}" data-value="${isoToLocal(slot.start, x.timeZone)}">${formatWhen(slot.start, x.timeZone)}</button>`)}
+          </div>`
+        : nothing}
+    </li>`;
+  });
+  const high = t.urgency === 'high' || job.decision === 'book_site_quotes';
+  const form = html`<form method="post" action="${base}" class="space-y-3">
+    <p class="text-muted">
+      A High repair is worth a look before the Agency commits to a price. Pick a time for each Tradie to visit; each visit is one hour.
+      The Tradies and the Tenant are told.
+    </p>
+    <ul role="list" class="site-form">${fields}</ul>
+    <div class="flex flex-wrap gap-2">
+      ${button('Book site quotes')}
+      <button type="submit" formaction="${base}/skip" formnovalidate class="btn btn-outline">Skip site quotes</button>
     </div>
-    <div class="quote-action">${action}</div>
-  </li>`;
+  </form>`;
+  return high
+    ? html`<section class="space-y-3" id="job-${job.jobId}-site-quotes">${sectionHeader('Site quotes')} ${form}</section>`
+    : html`<section id="job-${job.jobId}-site-quotes">
+        <details class="group">
+          <summary class="cursor-pointer text-sm font-medium text-action">Book site quotes before choosing</summary>
+          <div class="mt-3">${form}</div>
+        </details>
+      </section>`;
 }
 
 /** The fields read from the Tradie's reply, folded under "Check and confirm" until the Property Manager opens them. */

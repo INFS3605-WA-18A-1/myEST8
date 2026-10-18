@@ -27,6 +27,7 @@ const STAGE_LABEL: Record<string, string> = {
   reported: 'Reported',
   confirmed: 'Confirmed',
   getting_quotes: 'Getting quotes',
+  site_visit: 'Site visit',
   approved: 'Repair approved',
   booked: 'Booked',
   fixed: 'Fixed',
@@ -145,7 +146,7 @@ function badLinkPage(link: UploadLink | null): Html {
     runtime: false,
     brand: link.agencyName,
     title: 'This link has expired',
-    subtitle: link.address,
+    subtitle: `Repair at ${link.address}`,
     footer: replyTo(link.agencyName),
     body: html`<p>${link.agencyName} has already dealt with this issue, so this link no longer takes photos.</p>
       <p>To send more, or if something has changed, reply to the message you got from ${link.agencyName}.</p>`,
@@ -166,7 +167,7 @@ function uploadPage(token: string, link: UploadLink, o: { error?: string; thanks
     runtime: false,
     brand: link.agencyName,
     title: photos ? 'Send photos of the issue' : 'Send your Urgent Repair receipt',
-    subtitle: link.address,
+    subtitle: `${photos ? 'For the repair at' : 'For the Urgent Repair at'} ${link.address}`,
     footer: replyTo(link.agencyName),
     body: html`
       ${o.thanks ? doneBox(o.thanks) : ''}
@@ -251,7 +252,7 @@ function doneBox(message: string): Html {
   return html`<div role="status" class="tenant-done">${message}</div>`;
 }
 
-type Step = { stage: string; at: string | null; reached: boolean; visitStart?: string; tradie?: string; trade?: Trade };
+type Step = { stage: string; at: string | null; reached: boolean; visitStart?: string; tradie?: string; trade?: Trade; visits?: { tradie: string; visitStart: string }[] };
 
 /**
  * The stages a Tenant sees. The core keeps Done and Closed apart; here they are
@@ -286,6 +287,13 @@ function statusLine(step: Step, agencyName: string, timeZone: string): string {
       return `${agencyName} has confirmed the repair and is arranging a tradie.`;
     case 'getting_quotes':
       return `${agencyName} is asking tradies to quote for the repair.`;
+    // The backend adds this stage when the Job had Site Quotes; the visits' times come through stepDetail.
+    case 'site_visit':
+      return step.visits?.length
+        ? `${agencyName} has asked tradies to look at the problem before choosing who fixes it.`
+        : step.visitStart
+        ? `${agencyName} has asked tradies to look at the problem. The next visit is ${formatWhen(step.visitStart, timeZone)}.`
+        : `${agencyName} has asked tradies to visit and look at the problem before choosing who fixes it.`;
     case 'approved':
       return `The repair is approved. ${agencyName} is booking a visit next.`;
     case 'booked':
@@ -308,7 +316,7 @@ function trackerPage(progress: Tracker, link: string): Html {
     runtime: false,
     brand: progress.agencyName,
     title: progress.description,
-    subtitle: progress.address,
+    subtitle: `Repair at ${progress.address}`,
     footer: replyTo(progress.agencyName),
     body: html`
       ${current ? html`<p class="tracker-now">${statusLine(current, progress.agencyName, progress.timeZone)}</p>` : ''}
@@ -330,6 +338,7 @@ function trackerPage(progress: Tracker, link: string): Html {
 
 /** The lines under a step: who is coming and when, for the visit, or else when it happened. */
 function stepDetail(s: Step, timeZone: string): string[] {
+  if (s.visits?.length) return s.visits.map((v) => `${v.tradie}, ${formatWhen(v.visitStart, timeZone)}`);
   if (s.visitStart) return [...(s.tradie ? [s.tradie] : []), `Visit ${formatWhen(s.visitStart, timeZone)}`];
   return s.at ? [formatWhen(s.at, timeZone)] : [];
 }

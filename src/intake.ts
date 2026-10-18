@@ -239,6 +239,9 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
     });
     await logInbound(msg, tenant.id, issueId);
     if ((await modules.tickets.issue(issueId)).urgency === 'urgent') return startUrgentRepair(issueId);
+    // Photos sent with the first message are the issue's photos; other attachments are ignored here.
+    const arrived = await savePhotos(issueId, msg.fileIds);
+    if (arrived) await modules.tickets.updateIssue(issueId, { photosOnArrival: arrived });
     // If the Tenant stops answering, the issue still reaches a Property Manager.
     await worker.schedule('intake.no_photos', { issueId, stage: 'gathering' }, addMs(clock.now(), NO_PHOTOS_TIMEOUT_MS));
     await modules.notifications.send(
@@ -248,6 +251,41 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
       { issueId },
     );
     await askGuidedQuestion(tenant.id, issueId, 'location');
+  }
+
+  /** Saves each stored image as one of the issue's photos, with its metadata checked. Returns how many were photos. */
+  async function savePhotos(issueId: number, fileIds: number[]): Promise<number> {
+    const issue = await modules.tickets.issue(issueId);
+    const tenant = await modules.profiles.person(issue.tenantId);
+    const property = await modules.profiles.property(issue.propertyId);
+    const { timeZone } = await modules.profiles.agency(issue.agencyId);
+    let saved = 0;
+    for (const fileId of fileIds) {
+      const file = await files.get(fileId);
+      if (!PHOTO_TYPES.includes(file.contentType)) continue;
+      await addCheckedPhoto(issue, tenant, property, timeZone, fileId, file.content);
+      saved++;
+    }
+    return saved;
+  }
+
+  async function addCheckedPhoto(
+    issue: Awaited<ReturnType<typeof modules.tickets.issue>>,
+    tenant: Person,
+    property: Property,
+    timeZone: string,
+    fileId: number,
+    content: Uint8Array,
+  ) {
+    const check = await checkPhotoMetadata(content, {
+      reportedAt: new Date(issue.reportedAt),
+      tenancyStart: tenant.tenancyStart,
+      propertyLocation: property.location,
+      timeZone,
+      maxAgeDays: settings.photoMaxAgeDays,
+      maxDistanceKm: settings.photoMaxDistanceKm,
+    });
+    await modules.tickets.addPhoto(issue.id, fileId, check.metadata, check.reasons);
   }
 
   async function askGuidedQuestion(tenantId: number, issueId: number, next: GuidedQuestion) {
@@ -289,13 +327,17 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
     const urgency = readUrgency(answers);
     await modules.tickets.updateIssue(issueId, { ...urgency, ...readTrade(answers) });
     if (urgency.urgency === 'urgent') return startUrgentRepair(issueId);
+    await worker.schedule('intake.summarise', { issueId });
+    const have = (await modules.tickets.photos(issueId)).length;
+    const uploadLink = `${settings.baseUrl}/u/${issue.photosToken}`;
+    if (have > 0) {
+      await modules.tickets.updateIssue(issueId, { status: 'checking' });
+      await worker.schedule('intake.match_photos', { issueId });
+      await modules.notifications.send(issue.tenantId, 'tenant.upload_link', { uploadLink, alreadyHave: have }, { issueId });
+      return;
+    }
     await modules.tickets.updateIssue(issueId, { status: 'awaiting_photos' });
-    await modules.notifications.send(
-      issue.tenantId,
-      'tenant.upload_link',
-      { uploadLink: `${settings.baseUrl}/u/${issue.photosToken}` },
-      { issueId },
-    );
+    await modules.notifications.send(issue.tenantId, 'tenant.upload_link', { uploadLink }, { issueId });
     await worker.schedule('intake.no_photos', { issueId, stage: 'awaiting_photos' }, addMs(clock.now(), NO_PHOTOS_TIMEOUT_MS));
   }
 
@@ -418,6 +460,14 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
       const pdf = (await Promise.all(msg.fileIds.map((fileId) => files.get(fileId)))).find((f) => f.contentType === 'application/pdf');
       return modules.quotes.recordTradieReply(id, { kind: replyType, text: msg.text, pdfFileId: pdf?.id ?? null });
     }
+    if (kind === 'work_order' && replyType === 'quote') {
+      // A price sent about a Site Quote visit is the revised Quote for the request that visit belongs to.
+      const visit = await modules.scheduling.workOrder(id);
+      if (visit?.kind !== 'site_quote' || !visit.quoteRequestId) return toInbox(msg, tradie.id, 'low_confidence', answers);
+      await logInbound(msg, tradie.id, issueId);
+      const pdf = (await Promise.all(msg.fileIds.map((fileId) => files.get(fileId)))).find((f) => f.contentType === 'application/pdf');
+      return modules.quotes.recordTradieReply(visit.quoteRequestId, { kind: 'quote', text: msg.text, pdfFileId: pdf?.id ?? null });
+    }
     if (kind === 'work_order' && replyType === 'reschedule_request') {
       await logInbound(msg, tradie.id, issueId, true);
       return modules.scheduling.recordRescheduleRequest(id, 'tradie');
@@ -483,6 +533,21 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
     // Each handler claims the message once the classifier has answered; that step alone is safe to retry.
     await route(msg, await modules.profiles.person(sender.personId));
     await claim(msg);
+  });
+
+  /** Writes the Summary. A Property Manager's own edit is never overwritten. A failure throws, so the worker retries. */
+  worker.on<{ issueId: number }>('intake.summarise', async ({ issueId }) => {
+    const issue = await modules.tickets.issue(issueId);
+    if (issue.summaryBy === 'property_manager') return;
+    const { summary } = await ports.summariser.summarise({
+      description: issue.description,
+      answers: { location: issue.answers.location, started: issue.answers.started, worsening: issue.answers.worsening },
+      trade: issue.trade,
+      photoCount: (await modules.tickets.photos(issueId)).length,
+    });
+    // Read again: the Property Manager may have edited while the model was writing.
+    if ((await modules.tickets.issue(issueId)).summaryBy === 'property_manager') return;
+    await modules.tickets.updateIssue(issueId, { summary, summaryBy: 'ai' });
   });
 
   worker.on<{ issueId: number }>('intake.match_photos', async ({ issueId }) => {
@@ -563,22 +628,15 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
         const property = await modules.profiles.property(issue.propertyId);
         const { timeZone } = await modules.profiles.agency(issue.agencyId);
         for (const photo of uploads) {
-          const fileId = await files.save(issue.agencyId, photo);
-          const check = await checkPhotoMetadata(photo.content, {
-            reportedAt: new Date(issue.reportedAt),
-            tenancyStart: tenant.tenancyStart,
-            propertyLocation: property.location,
-            timeZone,
-            maxAgeDays: settings.photoMaxAgeDays,
-            maxDistanceKm: settings.photoMaxDistanceKm,
-          });
-          await modules.tickets.addPhoto(issue.id, fileId, check.metadata, check.reasons);
+          await addCheckedPhoto(issue, tenant, property, timeZone, await files.save(issue.agencyId, photo), photo.content);
         }
         await modules.tickets.updateIssue(issue.id, {
           noPhotos: false,
           ...(issue.status === 'awaiting_photos' ? { status: 'checking' as const } : {}),
         });
         await worker.schedule('intake.match_photos', { issueId: issue.id });
+        // New photos can change the Summary, until a Property Manager edits it.
+        if (issue.summaryBy !== 'property_manager') await worker.schedule('intake.summarise', { issueId: issue.id });
         return;
       }
 

@@ -5,90 +5,61 @@
  * accessibility rules. Page markup is Tailwind utilities and the classes in src/web/ui.ts.
  */
 
-/* Lexend (wordmark, headings, buttons, nav) and Red Hat Text (body, tables, forms), self-hosted under /assets/fonts/. */
+/*
+ * Bricolage Grotesque (display: page titles, section headings, docket numbers, the
+ * wordmark) and Public Sans (text: body, tables, forms, buttons, nav, badges), both
+ * variable fonts self-hosted under /assets/fonts/. The weight axis covers 400 to 700;
+ * Bricolage's optical size axis is left to the browser (font-optical-sizing: auto).
+ */
 @font-face {
-  font-family: 'Lexend';
+  font-family: 'Bricolage Grotesque';
   font-style: normal;
-  font-weight: 400;
+  font-weight: 200 800;
   font-display: swap;
-  src: url('/assets/fonts/lexend-latin-400-normal.woff2') format('woff2');
+  src: url('/assets/fonts/bricolage-grotesque-latin-opsz-normal.woff2') format('woff2');
 }
 @font-face {
-  font-family: 'Lexend';
+  font-family: 'Public Sans';
   font-style: normal;
-  font-weight: 600;
+  font-weight: 100 900;
   font-display: swap;
-  src: url('/assets/fonts/lexend-latin-600-normal.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Lexend';
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url('/assets/fonts/lexend-latin-700-normal.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Red Hat Text';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url('/assets/fonts/red-hat-text-latin-400-normal.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Red Hat Text';
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url('/assets/fonts/red-hat-text-latin-500-normal.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Red Hat Text';
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url('/assets/fonts/red-hat-text-latin-600-normal.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Red Hat Text';
-  font-style: italic;
-  font-weight: 400;
-  font-display: swap;
-  src: url('/assets/fonts/red-hat-text-latin-400-italic.woff2') format('woff2');
+  src: url('/assets/fonts/public-sans-latin-wght-normal.woff2') format('woff2');
 }
 
 /*
- * The tokens: the "Harbour and Wattle" palette. A harbour blue for actions, a wattle
- * yellow for anything that needs the Property Manager's decision, on cool neutrals.
- * Every text pair meets WCAG AA (docs/design-system.md lists each measured pair).
+ * The tokens: green and gold. Gum (the action green) for what you do, Wattle (the
+ * gold) only for the decisions waiting on the Property Manager, on gum-leaf neutrals,
+ * with Slate for done so that green always means "act". Every text pair meets WCAG AA
+ * (docs/design-system.md lists each measured pair).
  */
 :root {
-  --ink: #13212e; /* Night: body text, the rail (16.4:1 on white) */
-  --page: #f2f4f6; /* Paper: the page behind sections */
-  --surface: #ffffff; /* sections, rows, dockets, inputs */
-  --muted: #55636f; /* Slate: secondary text, timestamps, hints (6.2:1 on white, 5.6:1 on Paper) */
-  --line: #d8dee4; /* Line: hairlines and section borders (decorative) */
-  --control: #7d8a95; /* input, select, checkbox and secondary button borders (3.5:1 on white) */
-  --action: #1f5c8b; /* Harbour: primary buttons, links, focus, selected (white on it 7.1:1) */
-  --action-hover: #174a70; /* Harbour, pressed darker: primary hover, link hover */
-  --hivis: #ffc233; /* Wattle: the decision stripe, the current rail item, decision chips (Night on it 10.1:1) */
-  --info-bg: #e8f0f7; /* Harbour's tint: info badges and alerts, "Filled in by AI" */
-  --urgent: #b42318; /* urgent, errors, destructive actions */
-  --urgent-bg: #fdecea;
-  --high: #9a4a0b; /* High Urgency, warnings, flags */
-  --high-bg: #fdf1e3;
-  --done: #2f5a3e; /* done, approved, confirmed */
-  --done-bg: #e8f1ea;
-  --rail: #13212e; /* the rail is Night */
-  --rail-text: #e6ebf0; /* rail text on Night (13.6:1) */
-  --rail-muted: #9aa8b4; /* rail counts, the Phone simulator, the Agency (6.7:1) */
-  --rail-hover: rgb(255 255 255 / 0.05);
-  --rail-current: rgb(255 255 255 / 0.08);
+  --ink: #1c2622; /* Ironbark: text, headings, the landing's closing band */
+  --page: #ecefe9; /* Gumleaf: the page behind sections, and the rail */
+  --surface: #ffffff; /* White: sections, rows, dockets, inputs */
+  --muted: #5c645e; /* Bark: secondary text, timestamps, hints, Routine (5.4:1 on Gumleaf) */
+  --line: #d4dad1; /* Line: hairlines and section borders (decorative) */
+  --control: #7a847c; /* input, select and secondary button borders */
+  --action: #27694b; /* Gum: primary buttons, links, focus, selected (white on it 6.6:1) */
+  --action-hover: #1e553c; /* hover and pressed */
+  --hivis: #ffc233; /* Wattle: the decision bar, the current rail item, decision counts (Ironbark on it 11.8:1). Never text, never a button, never a wash */
+  --info-bg: #e9f1ec; /* "Filled in by AI" and info tints */
+  --urgent: #b23a1e; /* Rust: urgent, errors, destructive */
+  --urgent-bg: #fbeae5;
+  --high: #9a5a0b; /* Ochre: High Urgency, warnings, flags */
+  --high-bg: #fbf0df;
+  --done: #3e5a72; /* Slate: done, approved, confirmed (kept off green so Gum always means "act") */
+  --done-bg: #e7eef4;
+  --rail: var(--page); /* the rail is Gumleaf */
+  --rail-text: var(--ink);
+  --rail-muted: var(--muted);
+  --rail-hover: rgb(28 38 34 / 0.06);
+  --rail-current: rgb(28 38 34 / 0.08);
   --rail-width: 220px; /* the rail, and the drawer on phones */
   --rail-collapsed-width: 64px; /* the rail folded to its icons */
-  --scrim: rgb(19 33 46 / 0.45); /* Night over the page, behind the open drawer */
-  --shadow-lift: 0 8px 24px rgb(19 33 46 / 0.18); /* the one shadow: menus, dialogs, the phone frame */
-  --font-body: 'Red Hat Text', system-ui, sans-serif;
-  --font-head: 'Lexend', system-ui, sans-serif;
+  --scrim: rgb(28 38 34 / 0.45); /* Ironbark over the page, behind the open drawer */
+  --shadow-lift: 0 8px 24px rgb(28 38 34 / 0.16); /* the one shadow: menus, dialogs, the phone frame */
+  --font-body: 'Public Sans', system-ui, sans-serif;
+  --font-head: 'Bricolage Grotesque', system-ui, sans-serif;
 }
 
 /*
@@ -149,6 +120,7 @@
       color: var(--ink);
       font-family: var(--font-body);
       font-size: 14px;
+      font-weight: 400;
       line-height: 1.45;
       -webkit-font-smoothing: antialiased;
     }
@@ -157,10 +129,12 @@
     h2,
     h3 {
       font-family: var(--font-head);
-      line-height: 1.15;
+      font-optical-sizing: auto;
+      font-weight: 600;
+      line-height: 1.1;
     }
 
-    /* Ordinary links are Harbour. Links styled as buttons (.btn) keep their variant's text colour. :where keeps this at zero specificity, so any class (rail, docket, segmented, a chat bubble) still wins. */
+    /* Ordinary links are Gum. Links styled as buttons (.btn) keep their variant's text colour. :where keeps this at zero specificity, so any class (rail, docket, segmented, a chat bubble) still wins. */
     :where(a:not(.btn)) {
       color: var(--action);
     }
@@ -196,7 +170,7 @@
     /* Placeholders look like hints, never like typed values. */
     ::placeholder {
       color: var(--muted);
-      font-style: italic;
+      font-style: normal;
       opacity: 1;
     }
 
@@ -252,7 +226,7 @@
       -webkit-line-clamp: 3;
     }
 
-    /* ----- Buttons: Lexend 600, 6px radius. 36px, 32px small, 44px large; every size is 44px on phones and touch screens. */
+    /* ----- Buttons: Public Sans 600, 6px radius. 36px, 32px small, 44px large; every size is 44px on phones and touch screens. */
     .btn {
       --size: 2.25rem;
       height: var(--size);
@@ -260,7 +234,7 @@
       padding-inline: 14px;
       gap: 6px;
       border-radius: 6px;
-      font-family: var(--font-head);
+      font-family: var(--font-body);
       font-weight: 600;
       font-size: 14px;
       letter-spacing: 0;
@@ -288,7 +262,7 @@
       outline: 2px solid var(--action);
       outline-offset: 2px;
     }
-    /* Primary: white on Harbour, darker Harbour on hover, whatever the link colour. */
+    /* Primary: white on Gum, darker Gum on hover, whatever the link colour. */
     .btn-primary {
       --btn-color: var(--action);
       --btn-fg: var(--surface);
@@ -301,7 +275,7 @@
       --btn-bg: var(--action-hover);
       --btn-border: var(--action-hover);
     }
-    /* Secondary: surface fill, a control border, Night text. */
+    /* Secondary: surface fill, a control border, Ironbark text. */
     .btn-outline {
       background: var(--surface);
       border: 1px solid var(--control);
@@ -340,7 +314,7 @@
       border-color: var(--urgent);
       color: var(--urgent);
     }
-    /* Ghost: Harbour text and no box, so a quiet action ("See all Tickets", "Sign out") still reads as one, not as a heading. */
+    /* Ghost: Gum text and no box, so a quiet action ("See all Tickets", "Sign out") still reads as one, not as a heading. */
     .btn-ghost {
       color: var(--action);
     }
@@ -374,7 +348,7 @@
     .badge.badge-soft {
       border: 1px solid transparent;
     }
-    /* Neutral (a Trade, a channel): Night on Paper. */
+    /* Neutral (a Trade, a channel): Ironbark on Gumleaf. */
     .badge-soft.badge-neutral {
       color: var(--ink);
       background-color: var(--page);
@@ -402,11 +376,11 @@
       color: var(--urgent);
       background-color: var(--urgent-bg);
     }
-    /* Outlined (badge(..., { outline: true })): white with a hairline, the tone's text kept, so a
+    /* Outlined (badge(..., { outline: true }), e.g. "Site quote"): white with a border in the tone's own colour, so a
        badge straight on the Paper page has a boundary (a neutral badge's own fill is Paper). */
     .badge.badge-soft.is-outline {
       background-color: var(--surface);
-      border-color: var(--line);
+      border-color: currentColor;
     }
 
     /* Alerts: each tone is a token pair, never a mix of two. Text is the pair's
@@ -457,7 +431,7 @@
       border-radius: 999px;
       background: var(--page);
       color: var(--ink);
-      font-family: var(--font-head);
+      font-family: var(--font-body);
       font-size: 12px;
       font-weight: 600;
       line-height: 1;
@@ -583,9 +557,9 @@
     .section-title {
       margin: 0;
       font-family: var(--font-head);
-      font-size: 16px;
+      font-size: 20px;
       font-weight: 600;
-      line-height: 1.15;
+      line-height: 1.1;
       color: var(--ink);
     }
     .section-actions {
@@ -604,7 +578,7 @@
       font-size: 14px;
     }
 
-    /* ----- Tables: 36px rows, Lexend headers, hairlines, no zebra. */
+    /* ----- Tables: 36px rows, Public Sans headers, hairlines, no zebra. */
     .table-frame {
       min-width: 0;
       overflow-x: auto;
@@ -623,7 +597,7 @@
       vertical-align: middle;
     }
     .table :where(thead, tfoot) {
-      font-family: var(--font-head);
+      font-family: var(--font-body);
       font-size: 13px;
       font-weight: 600;
       color: var(--ink);
@@ -732,9 +706,9 @@
       outline-color: currentColor;
     }
 
-    /* Tabs: Lexend, the active one Night with the Harbour underline. */
+    /* Tabs: the active one Ironbark with the Gum underline. */
     .tabs-border > .tab {
-      font-family: var(--font-head);
+      font-family: var(--font-body);
       font-size: 14px;
       font-weight: 400;
       color: var(--muted);
@@ -765,7 +739,7 @@
       padding: 0 12px;
       border: 1px solid transparent;
       border-radius: 6px;
-      font-family: var(--font-head);
+      font-family: var(--font-body);
       font-size: 14px;
       font-weight: 400;
       color: var(--ink);
@@ -861,7 +835,7 @@
       color: var(--muted);
     }
 
-    /* ----- Dockets: Tickets only. The issue, the address, a dashed perforation, then the stub: the status and a foot with the number and age. */
+    /* ----- Dockets: Tickets only. The stub (number, Urgency, age), a dashed perforation, then the issue, the address and the stage line. */
     .docket {
       display: flex;
       flex-direction: column;
@@ -882,7 +856,7 @@
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 6px;
+      gap: 4px 8px;
       min-width: 0;
     }
     .docket-stub .badge {
@@ -890,45 +864,37 @@
       padding: 0 6px;
       font-size: 12px;
     }
+    .docket-age {
+      margin-left: auto;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    /* The number: large, in the display face. */
     .docket-number {
       font-family: var(--font-head);
-      font-size: 14px;
-      font-weight: 600;
-      line-height: 1.2;
+      font-size: 20px;
+      font-weight: 700;
+      line-height: 1.1;
+      letter-spacing: 0;
     }
-    /* The Ticket page's header docket: the number at 26px. */
+    /* The Ticket page's header docket: the number at 40px. */
     .docket.is-large {
-      gap: 8px;
       padding: 12px 16px;
-      border-radius: 8px;
+      border-radius: 4px;
     }
     .docket.is-large .docket-number {
-      font-size: 26px;
-      font-weight: 700;
-      line-height: 1.15;
+      font-size: 40px;
+      letter-spacing: -0.01em;
     }
     .docket.is-large .docket-stub .badge {
       min-height: 20px;
       padding: 1px 8px;
       font-size: 13px;
     }
-    /* The Ticket page's header keeps the street first and bold, then the issue. */
-    .docket.is-large .docket-address {
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--ink);
-    }
     .docket.is-large .docket-issue {
-      font-size: 14px;
-      font-weight: 400;
+      font-size: 16px;
     }
-    /* Waiting on the Property Manager (Ready to choose): the decision stripe. */
-    .docket.is-decision,
-    a.docket.is-decision:hover {
-      border-left-width: 4px;
-      border-left-color: var(--hivis);
-    }
-    /* The perforation: a dashed hairline across the docket, above the stub. */
+    /* The perforation: a dashed hairline across the docket, under the stub. */
     .docket-perf {
       display: block;
       border-top: 1px dashed var(--control);
@@ -940,10 +906,10 @@
       gap: 2px;
       min-width: 0;
     }
-    /* Read first: the issue, up to three lines (line-clamp-3 in clip()). */
+    /* Read first: the issue (the Summary), up to three lines (line-clamp-3 in clip()). */
     .docket-issue {
-      font-size: 14px;
-      font-weight: 600;
+      font-size: 16px;
+      font-weight: 500;
       line-height: 1.3;
     }
     /* Then where: the address on one line, the full text in its title. */
@@ -951,7 +917,7 @@
       font-size: 13px;
       color: var(--muted);
     }
-    /* Then the status: Urgency, Trades and what the Ticket waits on. */
+    /* Then the stage line: Trades and what the Ticket waits on. */
     .docket-status {
       display: flex;
       flex-wrap: wrap;
@@ -965,20 +931,6 @@
       min-height: 18px;
       padding: 0 6px;
       font-size: 12px;
-    }
-    /* The foot: the number and the age, quiet. */
-    .docket-foot {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 12px;
-      color: var(--muted);
-    }
-    .docket-foot .docket-number {
-      font-size: 12px;
-    }
-    .docket-foot .ml-auto {
-      margin-left: auto;
     }
     .docket-meta {
       display: flex;
@@ -997,37 +949,84 @@
       background: var(--action);
     }
 
-    /* ----- The count strip: links into the queues. */
-    .count-strip {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 4px 20px;
-      min-height: 44px;
+    /* ----- The count sentence: one sentence under the title, every count a link into its queue.
+       A count that needs a decision is Ironbark on a Wattle chip; the rest are Gum links. */
+    .count-sentence {
+      max-width: 72ch;
       margin: 0;
-      padding: 4px 16px;
-      list-style: none;
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      font-size: 14px;
-    }
-    .count-item {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      min-height: 36px;
-      color: var(--ink);
-      text-decoration: none;
-    }
-    .count-item:hover {
+      font-size: 16px;
+      line-height: 1.6;
       color: var(--ink);
     }
-    .count-item:hover .count-label {
+    .count-link {
+      border-radius: 4px;
+      font-weight: 500;
       text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+    .count-link.is-decision {
+      color: var(--ink);
+      font-weight: 600;
+      text-decoration-color: var(--hivis);
+      text-decoration-thickness: 3px;
+      text-underline-offset: 4px;
+    }
+    :where(a.count-link.is-decision):hover {
+      color: var(--ink);
+      text-decoration-color: var(--ink);
     }
 
-    /* ----- Segmented control (Mine | All): links, the current one filled with Harbour. */
+    /* ----- Needs you: the decision queue is one section with a full-height 4px Wattle bar on its
+       own left edge. Rows inside are hairline-separated, not cards. This bar is the desk's one
+       memorable element. */
+    .needs-you {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+      padding: 16px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--hivis);
+      border-radius: 8px;
+    }
+    .needs-you-body {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .needs-you .queue-row {
+      padding: 12px 0;
+      background: transparent;
+      border: 0;
+      border-top: 1px solid var(--line);
+      border-radius: 0;
+    }
+    .needs-you .queue-row:first-child {
+      border-top: 0;
+    }
+    .needs-you-body > .queue-row:first-child {
+      border-top: 0;
+    }
+
+    /* ----- Filled in by AI: the info tint, with a quiet label, for text the AI wrote that the
+       Property Manager can edit (a Summary). Not Wattle, not a wash of the page. */
+    .ai-filled {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+      padding: 8px 12px;
+      background: var(--info-bg);
+      border-radius: 4px;
+      color: var(--ink);
+    }
+    .ai-filled-label {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    /* ----- Segmented control (Mine | All): links, the current one filled with Gum. */
     .segmented {
       display: inline-flex;
       align-self: flex-start;
@@ -1043,7 +1042,7 @@
       min-height: 28px;
       padding-inline: 12px;
       border-radius: 4px;
-      font-family: var(--font-head);
+      font-family: var(--font-body);
       font-size: 14px;
       font-weight: 600;
       color: var(--ink);
@@ -1065,7 +1064,7 @@
       }
     }
 
-    /* ----- Queue rows: compact. Only a row that needs the Property Manager's decision gets the 4px Wattle stripe. */
+    /* ----- Queue rows: compact. A decision row sits inside the Needs you section, which carries the one Wattle bar. */
     .queue-row {
       display: flex;
       align-items: flex-start;
@@ -1075,10 +1074,6 @@
       background: var(--surface);
       border: 1px solid var(--line);
       border-radius: 4px;
-    }
-    .queue-row.is-decision {
-      border-left-width: 4px;
-      border-left-color: var(--hivis);
     }
     .queue-thumb {
       flex: 0 0 56px;
@@ -1186,7 +1181,7 @@
       color: var(--ink);
     }
     .lane-count {
-      font-family: var(--font-head);
+      font-family: var(--font-body);
       font-size: 14px;
       font-weight: 600;
       color: var(--muted);
@@ -1234,6 +1229,7 @@
       gap: 4px;
       padding: 20px 12px 16px;
       background: var(--rail);
+      border-right: 1px solid var(--line);
       color: var(--rail-text);
     }
     @media (min-width: 64rem) {
@@ -1259,7 +1255,7 @@
       color: var(--rail-text);
     }
     .rail-logo .logo-mark {
-      color: var(--hivis);
+      color: var(--ink);
     }
     /* The nav fills the rail, so the Phone simulator can sit at its foot. */
     .rail-menu {
@@ -1291,9 +1287,9 @@
       min-height: 40px;
       padding: 0 12px;
       border-radius: 6px;
-      font-family: var(--font-head);
-      font-size: 16px;
-      font-weight: 600;
+      font-family: var(--font-body);
+      font-size: 15px;
+      font-weight: 500;
       color: var(--rail-text);
       text-decoration: none;
     }
@@ -1301,11 +1297,12 @@
       background: var(--rail-hover);
       color: var(--rail-text);
     }
-    /* The current place: a lighter band with the Wattle bar on its left edge. */
+    /* The current place: weight 600 and the 4px Wattle bar on its left edge. */
     .rail-link[aria-current='page'] {
       background: var(--rail-current);
       box-shadow: inset 4px 0 0 var(--hivis);
-      color: var(--surface);
+      font-weight: 600;
+      color: var(--rail-text);
     }
     /* The demo's Phone simulator: quieter, in the body face. */
     .rail-link.is-quiet {
@@ -1340,7 +1337,19 @@
       margin-left: auto;
       font-family: var(--font-body);
       font-size: 13px;
+      font-weight: 400;
       color: var(--rail-muted);
+    }
+    /* A count that means "needs you" (Requests, Approvals): a small Wattle chip with Ironbark text. */
+    .rail-link[data-decision] .rail-count {
+      min-width: 20px;
+      padding: 0 6px;
+      border-radius: 999px;
+      background: var(--hivis);
+      color: var(--ink);
+      font-weight: 600;
+      line-height: 20px;
+      text-align: center;
     }
     .rail-agency {
       margin: 0;
@@ -1454,101 +1463,41 @@
       }
     }
 
-    .topbar {
+    /* ----- The page header: the first row of the content column. The title (Bricolage 28px) on
+       the left; the page's controls, the date and the user menu on the right of the same row.
+       On phones the row wraps: the title, then the controls. */
+    .page-header {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
+      justify-content: space-between;
+      gap: 8px 16px;
+      min-width: 0;
+    }
+    .page-header-lead {
+      display: flex;
+      flex: 1 1 14rem;
+      align-items: center;
       gap: 12px;
-      min-height: 60px;
-      padding: 10px 24px;
-      background: var(--surface);
-      border-bottom: 1px solid var(--line);
+      min-width: 0;
     }
-    /* The page's title wraps to a second line rather than losing its end (a Property's
-       address on its profile); only a title longer than two lines ends in an ellipsis. */
-    .topbar-title {
-      display: -webkit-box;
-      flex: 1 1 0;
-      min-width: 12ch;
-      margin: 0;
-      overflow: hidden;
-      -webkit-box-orient: vertical;
-      -webkit-line-clamp: 2;
-      font-family: var(--font-head);
-      font-size: 22px;
-      font-weight: 600;
-      line-height: 1.15;
-      overflow-wrap: anywhere;
-      color: var(--ink);
+    .page-header-end {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px 16px;
+      min-width: 0;
+      max-width: 100%;
     }
-    /* Phones: a grid, so the title gets the room. Its column grows to the title's full
-       width first (up to three lines), and the user menu (the reader's own name, which
-       they know) keeps at least 6rem, ending in an ellipsis; beside a short title the
-       name stays whole. Margins instead of a column gap, so a missing menu button
-       leaves no gap. The page's controls take the second row. */
-    @media (max-width: 40rem) {
-      .topbar {
-        display: grid;
-        grid-template-columns: auto minmax(0, max-content) minmax(6rem, 1fr);
-        align-items: center;
-        column-gap: 0;
-        row-gap: 8px;
-      }
-      .menu-button {
-        grid-column: 1;
-        margin-right: 12px;
-      }
-      .topbar-title {
-        grid-row: 1;
-        grid-column: 2;
-        min-width: 0;
-        font-size: 20px;
-        -webkit-line-clamp: 3;
-      }
-      .topbar-end {
-        grid-row: 1;
-        grid-column: 3;
-        justify-self: end;
-        max-width: 100%;
-        margin-left: 12px;
-      }
-      .topbar-controls {
-        grid-row: 2;
-        grid-column: 1 / -1;
-      }
-      .topbar .user-menu {
-        max-width: 100%;
-      }
-    }
-    .topbar-controls {
+    .page-header-controls {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       gap: 12px;
       min-width: 0;
     }
-    .topbar-end {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      min-width: 0;
-    }
-    /* Under 1024px the page's controls take a second row under the title, full width. */
-    @media (max-width: 63.99rem) {
-      .topbar {
-        padding-block: 8px;
-        padding-inline: 16px;
-      }
-      .topbar-controls {
-        order: 1;
-        flex: 0 0 100%;
-        padding-bottom: 4px;
-      }
-      .topbar-end {
-        order: 0;
-      }
-    }
-    .topbar-date {
+    .page-header-date {
       display: none;
       font-size: 14px;
       color: var(--muted);
@@ -1556,8 +1505,17 @@
       font-variant-numeric: tabular-nums;
     }
     @media (min-width: 40rem) {
-      .topbar-date {
+      .page-header-date {
         display: inline;
+      }
+    }
+    @media (max-width: 39.99rem) {
+      .page-header-lead {
+        flex-basis: 9rem;
+      }
+      .page-header-end:has(.page-header-controls) {
+        flex: 1 1 100%;
+        justify-content: space-between;
       }
     }
 
@@ -1689,7 +1647,7 @@
       text-decoration: none;
     }
     .logotype .logo-mark {
-      color: var(--action);
+      color: var(--ink);
     }
     .public-main {
       display: flex;
@@ -1762,15 +1720,16 @@
     .page-title {
       margin: 0;
       font-family: var(--font-head);
-      font-size: 26px;
-      font-weight: 600;
-      line-height: 1.15;
+      font-size: 28px;
+      font-weight: 700;
+      line-height: 1.1;
+      letter-spacing: -0.01em;
       color: var(--ink);
       overflow-wrap: anywhere;
     }
     @media (max-width: 40rem) {
       .page-title {
-        font-size: 22px;
+        font-size: 24px;
       }
     }
     /* A headline (the landing page): 36px on phones up to 52px on wide screens. */
@@ -1836,7 +1795,7 @@
 @layer utilities {
   @layer app {
     /* The logo: the key tag beside the wordmark (logo() in ui.ts). The word takes the
-       parent's colour; the tag is Harbour on the public bar and Wattle in the rail. */
+       parent's colour; the tag is Ironbark on light surfaces, White or Wattle on dark ones. */
     .logo {
       display: inline-flex;
       align-items: center;
@@ -1868,12 +1827,7 @@
       width: 20px;
       height: 20px;
     }
-    /* The Harbour ring is too dark on the Night rail, so the rail's links ring in rail text. */
-    .rail-logo:focus-visible,
-    .rail-link:focus-visible,
-    .rail-toggle:focus-visible {
-      outline-color: var(--rail-text);
-    }
+
   }
 }
 
@@ -2485,7 +2439,7 @@
       inset: 0;
       display: grid;
       place-items: center;
-      font-family: var(--font-head);
+      font-family: var(--font-body);
       font-size: 12px;
       font-weight: 600;
       line-height: 1;
@@ -2523,7 +2477,7 @@
       place-items: center;
       width: 36px;
       height: 36px;
-      font-family: var(--font-head);
+      font-family: var(--font-body);
       font-size: 13px;
       font-weight: 600;
       line-height: 1;
@@ -3195,6 +3149,54 @@
     .request-side > #decide {
       border-left: 4px solid var(--hivis);
     }
+    /* Summary: the line to read first, with its pencil beside it. */
+    .request-summary-plain {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .request-summary-form {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .request-summary-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .request-lead .icon-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: none;
+      width: 36px;
+      height: 36px;
+      border-radius: 4px;
+      color: var(--action);
+    }
+    .request-lead .icon-btn:hover {
+      background: rgb(28 38 34 / 0.06);
+    }
+    .request-lead .icon-btn:focus-visible {
+      outline: 2px solid var(--action);
+      outline-offset: 2px;
+    }
+    /* Photos: sent with the message first, then uploaded, each group labelled. */
+    .request-photos {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .request-photo-label {
+      margin: 0 0 8px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .request-photos ul[role='list']:not(.request-checks) {
+      grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+    }
     /* The Requests list reads like a docket: the issue strong, the address quiet under it. */
     .request-list .queue-detail {
       font-size: 13px;
@@ -3359,7 +3361,7 @@
     }
 
     /* The Tradies directory's Trade filter (pages/tradie.ts): one link per Trade with how
-       many Tradies do it, the current one filled with Harbour like the segmented
+       many Tradies do it, the current one filled with Gum like the segmented
        control. It wraps on phones rather than scrolling sideways. */
     .trade-filter ul {
       display: flex;
@@ -3379,7 +3381,7 @@
       border-radius: 6px;
       background: var(--surface);
       color: var(--ink);
-      font-family: var(--font-head);
+      font-family: var(--font-body);
       font-size: 14px;
       font-weight: 600;
       text-decoration: none;
@@ -3440,7 +3442,7 @@
       color: var(--muted);
     }
     .wizard-where > span:first-child {
-      font-family: var(--font-head);
+      font-family: var(--font-body);
       font-weight: 600;
       color: var(--ink);
     }
@@ -3656,12 +3658,12 @@
     }
     .ticket-number {
       font-family: var(--font-head);
-      font-size: 26px;
+      font-size: 40px;
       font-weight: 700;
       line-height: 1;
     }
     .ticket-urgency {
-      font-family: var(--font-head);
+      font-family: var(--font-body);
       font-size: 14px;
       font-weight: 600;
     }
@@ -3679,7 +3681,7 @@
         align-items: center;
         justify-content: center;
         gap: 4px;
-        width: 6rem;
+        width: 7.5rem;
         flex-shrink: 0;
         padding: 16px 4px;
         border-radius: 7px 0 0 7px;
@@ -3795,15 +3797,16 @@
         min-width: 0;
       }
     }
-    /* The one Next step: a Paper strip, with the Wattle stripe when it waits on the Property Manager. */
+    /* The Next block: the one thing to do, in a white panel; the Wattle bar when it waits on the Property Manager. */
     .ticket-next {
       display: flex;
       flex-wrap: wrap;
       align-items: baseline;
-      gap: 2px 10px;
-      margin: 0;
-      padding: 8px 12px;
-      background: var(--page);
+      gap: 2px 12px;
+      margin: 16px 0;
+      padding: 14px 16px;
+      background: var(--surface);
+      border: 1px solid var(--line);
       border-left: 4px solid var(--line);
       border-radius: 4px;
     }
@@ -3812,12 +3815,147 @@
     }
     .ticket-next-label {
       font-family: var(--font-head);
-      font-size: 13px;
+      font-size: 14px;
       font-weight: 600;
       color: var(--muted);
     }
     .ticket-next > a {
-      font-size: 15px;
+      font-family: var(--font-head);
+      font-size: 18px;
+      overflow-wrap: anywhere;
+    }
+    /* The Summary: the issue at the top of the header, an Edit button beside it that opens a small form below. */
+    .ticket-summary,
+    .ai-filled .flex:has(> .min-w-0 > .ticket-issue) {
+      flex-wrap: wrap;
+    }
+    .ticket-summary {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .ticket-summary > .ticket-issue {
+      flex: 1 1 16rem;
+      min-width: 0;
+    }
+    .ticket-summary-edit[open] {
+      flex-basis: 100%;
+      padding: 12px;
+      background: var(--page);
+      border-radius: 4px;
+    }
+    .ticket-summary-edit > summary {
+      list-style: none;
+    }
+    .ticket-summary-edit > summary::-webkit-details-marker {
+      display: none;
+    }
+    .ticket-summary-edit[open] > summary {
+      margin-bottom: 8px;
+    }
+    /* The stage tracker under the header. */
+    .ticket-stages {
+      margin: 16px 0 0;
+      padding: 12px 8px 0;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    .ticket-stages-job {
+      margin: 0 0 4px 8px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .ticket-stages .step {
+      min-width: 0;
+    }
+    /* The comparison and the Tradie list sit in the main column: tighter cells so eight columns fit without scrolling. */
+    .ticket-jobs .table-frame:not(.is-stacked-phone) :is(th, td) {
+      padding-inline: 8px;
+      font-size: 13px;
+    }
+    .ticket-jobs .table-frame :is(th, td) .btn {
+      height: auto;
+      min-height: 2rem;
+      padding-block: 4px;
+      line-height: 1.2;
+    }
+    .ticket-jobs .table-frame :is(th, td):last-child {
+      width: 7.5rem;
+    }
+    @media (min-width: 640px) {
+      .ticket-jobs .table-frame.is-stacked tbody :is(th, td),
+      .ticket-jobs .table-frame.is-stacked tbody :is(th, td):first-child {
+        min-width: 0;
+      }
+    }
+    /* Site quote visits, one per row: the Tradie, when, how it stands and Mark done. */
+    .site-visits,
+    .site-form {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .site-visit {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 4px 12px;
+      align-items: center;
+      padding: 10px 12px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+    }
+    .site-visit-who {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px 8px;
+      min-width: 0;
+    }
+    .site-visit-when {
+      grid-column: 1;
+      font-size: 14px;
+      font-variant-numeric: tabular-nums;
+    }
+    .site-visit-state {
+      grid-column: 2;
+      grid-row: 1;
+      justify-self: end;
+    }
+    .site-visit-action {
+      grid-column: 2;
+      grid-row: 2;
+      justify-self: end;
+    }
+    @media (min-width: 48rem) {
+      .site-visit {
+        grid-template-columns: minmax(10rem, 1.2fr) minmax(0, 1.4fr) auto auto;
+      }
+      .site-visit-when,
+      .site-visit-state,
+      .site-visit-action {
+        grid-column: auto;
+        grid-row: auto;
+      }
+    }
+    /* Booking: a time for each Tradie, the other free slots as quick choices under it. */
+    .site-form-row {
+      display: grid;
+      gap: 6px;
+      padding: 12px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+    }
+    .site-form-slots {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
     }
     /* Label and value pairs in the side column, each value beside its label. */
     .ticket-facts {
@@ -4087,6 +4225,25 @@
       margin: 0;
       color: var(--muted);
     }
+    .booking-kind {
+      margin: 0 0 2px;
+    }
+    .schedule-free {
+      margin: 8px 0 0;
+      font-size: 13px;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+    .schedule-free-label {
+      cursor: pointer;
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .schedule-free-list {
+      margin: 4px 0 0;
+      padding: 0;
+      list-style: none;
+    }
     .booking-reschedule {
       font-weight: 600;
       color: var(--high);
@@ -4230,9 +4387,7 @@
     }
 
     /* Dashboard page */
-    /* One column on phones (decisions, board, next 7 days, Urgent Repairs). From 1024px
-       the board runs the full width; under it the decisions (360px) beside a column
-       holding the next 7 days and Urgent Repairs. */
+    /* One column: Needs you, Tickets by stage, then the next 7 days and Urgent Repairs. */
     .dashboard-desk {
       display: grid;
       gap: 16px;
@@ -4246,37 +4401,30 @@
       gap: 16px;
       align-content: start;
     }
+    /* The board: six lanes in one row, sideways scroll inside the board if they run out of width. */
+    .board-lanes {
+      display: grid;
+      gap: 12px;
+    }
     @media (min-width: 64rem) {
-      .dashboard-desk {
-        grid-template-columns: 360px minmax(0, 1fr);
-        align-items: start;
+      .board-lanes {
+        grid-auto-flow: column;
+        grid-auto-columns: minmax(10.5rem, 1fr);
+        overflow-x: auto;
+        padding-bottom: 4px;
       }
-      .dashboard-board {
-        grid-column: 1 / -1;
-        grid-row: 1;
-      }
-      .dashboard-decisions {
-        grid-column: 1;
-        grid-row: 2;
-      }
-      .dashboard-side {
-        grid-column: 2;
-        grid-row: 2;
-      }
-      /* The board keeps to the top of the first screen so the decisions start inside it:
-         lanes scroll inside 16rem (a docket's issue stops at two lines: docket({ lines: 2 })). */
-      .dashboard-board .lane-body {
-        max-height: 16rem;
+      .board-lanes .lane-body {
+        max-height: 24rem;
       }
     }
-    /* Needs your decision: Maintenance Requests, alerts, the inbox, each a titled group. */
+    /* Needs you: titled groups of decision rows. */
     .decision-groups {
       display: grid;
-      gap: 16px;
+      gap: 20px;
     }
     .decision-group {
       display: grid;
-      gap: 8px;
+      gap: 0;
       min-width: 0;
       scroll-margin-top: 16px;
     }
@@ -4293,25 +4441,19 @@
       font-size: 14px;
       font-weight: 600;
     }
-    /* Decision rows in the 360px column: the issue (two lines at most), the street, the
-       badges, then the actions on their own line so they never crush the text. */
-    .dashboard-decisions .queue-head {
-      display: contents;
-    }
-    .dashboard-decisions .queue-title {
-      flex: none;
+    .decision-group .queue-title {
       display: -webkit-box;
       -webkit-box-orient: vertical;
       -webkit-line-clamp: 2;
       line-clamp: 2;
       overflow: hidden;
     }
-    .dashboard-decisions .queue-detail {
-      font-size: 13px;
-      color: var(--muted);
-    }
-    .dashboard-decisions .queue-actions {
-      order: 9;
+    .needs-you .inbox-item {
+      padding: 12px 0;
+      background: transparent;
+      border: 0;
+      border-top: 1px solid var(--line);
+      border-radius: 0;
     }
     /* The inbox: each message compact, with the best guess in one line and its answers folded away. */
     .inbox-item {

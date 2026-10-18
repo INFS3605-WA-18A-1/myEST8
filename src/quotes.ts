@@ -9,6 +9,11 @@ const OWNER_REMINDER_MS = 24 * HOUR_MS;
 const OWNER_ALERT_MS = 48 * HOUR_MS;
 /** Confirmed Quotes a Job needs before a Quote can be chosen without a reason. */
 export const MIN_QUOTES = 2;
+/** Quote Requests a Job needs (sent and new together) before the Property Manager compares prices. */
+export const MIN_QUOTE_REQUESTS = 2;
+/** The most Tradies `recommend` returns, and how many of them start ticked. */
+export const MAX_RECOMMENDED = 4;
+export const PRESELECTED = 3;
 
 type QuoteRequestStatus = 'sent' | 'reminded' | 'quoted' | 'declined' | 'closed';
 type QuoteStatus = 'open' | 'awaiting_owner' | 'approved' | 'declined_by_owner' | 'not_chosen';
@@ -30,6 +35,9 @@ type QuoteRow = {
   pdf_file_id: number | null;
   single_quote_reason: string | null;
   received_at: string;
+  initial_price_cents: number | null;
+  initial_proposed_time: string | null;
+  revised_at: string | null;
 };
 type ApprovalRow = { id: number; agency_id: number; quote_id: number; job_id: number; ticket_id: number; owner_id: number; status: ApprovalStatus; requested_at: string };
 
@@ -91,6 +99,12 @@ export function createQuotes({ db, clock, worker, ports, files, modules }: Conte
       await run(db, `UPDATE quotes SET status = 'approved' WHERE id = ?`, quote.id);
       await tickets.setJobStatus(job.id, 'approved');
       await tickets.recordEvent(job.ticketId, 'quote_approved', { jobId: job.id, tradie: await businessName(quote.tradie_id), priceCents: quote.price_cents });
+      await run(
+        db,
+        `UPDATE work_orders SET status = 'cancelled' WHERE job_id = ? AND kind = 'site_quote' AND status = 'active' AND tradie_id != ?`,
+        job.id,
+        quote.tradie_id,
+      );
       const others = (await quoteRequestsOf(job.id)).filter((r) => r.id !== quote.quote_request_id && r.status !== 'declined' && r.status !== 'closed');
       for (const request of others) {
         await run(db, `UPDATE quote_requests SET status = 'closed' WHERE id = ?`, request.id);
@@ -129,11 +143,34 @@ export function createQuotes({ db, clock, worker, ports, files, modules }: Conte
     );
   });
 
+  /** What a send of Quote Requests must meet: see `quoteRequestRule`. */
+  async function requestRule(agencyId: number, jobId: number, trade: Trade) {
+    const askedIds = new Set((await quoteRequestsOf(jobId)).map((r) => r.tradie_id));
+    const available = (await profiles.tradiesWithTrade(agencyId, trade)).filter((t) => !askedIds.has(t.id)).length;
+    const canReachTwo = askedIds.size + available >= MIN_QUOTE_REQUESTS;
+    const minimum = canReachTwo ? Math.max(1, MIN_QUOTE_REQUESTS - askedIds.size) : 1;
+    return {
+      asked: askedIds.size,
+      available,
+      /** New Quote Requests the next send must hold. */
+      minimum,
+      /** Set when the Agency has too few Tradies for the Trade to ask two, so one is allowed. */
+      singleReason: !canReachTwo
+        ? `Your Agency has only ${askedIds.size + available === 1 ? 'one' : 'no'} ${trade.replace('_', ' ')} Tradie, so one Quote Request is allowed`
+        : null,
+    };
+  }
+
   return {
-    /** The Agency's Tradies with the Job's Trade: myEST8 rating, then Google rating, then median Quote (none last). */
+    /**
+     * At most four of the Agency's Tradies with the Job's Trade: the Property's Nominated Tradies
+     * first, then myEST8 rating, Google rating, median Quote (none last). The first three that
+     * have not been asked yet are `preselected`.
+     */
     async recommend(agencyId: number, jobId: number) {
       const job = await tickets.jobInAgency(agencyId, jobId);
       const requested = new Set((await quoteRequestsOf(jobId)).map((r) => r.tradie_id));
+      const nominatedIds = new Set((await profiles.property((await tickets.ticket(job.ticketId)).propertyId)).nominatedTradieIds);
       const tradies = await profiles.tradiesWithTrade(agencyId, job.trade);
       const recommendations = await Promise.all(
         tradies.map(async (tradie) => {
@@ -147,16 +184,31 @@ export function createQuotes({ db, clock, worker, ports, files, modules }: Conte
             medianQuoteCents: median(previous.map((q) => q.priceCents)),
             bookings: await modules.scheduling.bookings(agencyId, tradie.id),
             requested: requested.has(tradie.id),
+            nominated: nominatedIds.has(tradie.id),
           };
         }),
       );
-      return recommendations.sort(
+      const ranked = recommendations
+        .sort(
           (a, b) =>
+            Number(b.nominated) - Number(a.nominated) ||
             b.myEst8Rating.average - a.myEst8Rating.average ||
             (b.googleRating?.rating ?? -1) - (a.googleRating?.rating ?? -1) ||
             (a.medianQuoteCents ?? Infinity) - (b.medianQuoteCents ?? Infinity) ||
             a.businessName.localeCompare(b.businessName),
-        );
+        )
+        .slice(0, MAX_RECOMMENDED);
+      return ranked.map((r, i) => ({ ...r, preselected: i < PRESELECTED && !r.requested }));
+    },
+
+    /**
+     * What the next send of Quote Requests must hold: `minimum` new requests (two for a first
+     * round, one for a later round that reaches two with those already sent), and `singleReason`,
+     * set when the Agency has too few Tradies for the Trade to reach two, saying why one is allowed.
+     */
+    async quoteRequestRule(agencyId: number, jobId: number) {
+      const job = await tickets.jobInAgency(agencyId, jobId);
+      return requestRule(agencyId, job.id, job.trade);
     },
 
     async sendQuoteRequests(agencyId: number, jobId: number, tradieIds: number[]) {
@@ -172,6 +224,8 @@ export function createQuotes({ db, clock, worker, ports, files, modules }: Conte
           if (!tradie.trades.includes(job.trade)) invalid(`${tradie.businessName ?? tradie.name} doesn't do ${job.trade} work`);
           if (already.has(tradie.id)) invalid(`${tradie.businessName ?? tradie.name} has already been asked to quote`);
         }
+        const rule = await requestRule(agencyId, jobId, job.trade);
+        if (tradies.length < rule.minimum) invalid('Send Quote Requests to at least two Tradies');
         const requestIds: number[] = [];
         for (const tradie of tradies) {
           requestIds.push(
@@ -196,7 +250,7 @@ export function createQuotes({ db, clock, worker, ports, files, modules }: Conte
         await notifications.send(
           tradie.id,
           'tradie.quote_request',
-          { trade: job.trade, urgency: ticket.urgency, description: withoutContactDetails(issue.description), suburb: property.suburb },
+          { trade: job.trade, urgency: ticket.urgency, description: withoutContactDetails(issue.summary ?? issue.description), suburb: property.suburb },
           { issueId: issue.id, attachmentFileIds: byEmail ? photoFileIds : [] },
         );
         await worker.schedule('quotes.reminder', { quoteRequestId: requestIds[i] }, addMs(clock.now(), QUOTE_REMINDER_MS));
@@ -206,7 +260,10 @@ export function createQuotes({ db, clock, worker, ports, files, modules }: Conte
     /** A Tradie's reply to a Quote Request: an unconfirmed Quote read from the text and any PDF, or a decline. */
     async recordTradieReply(quoteRequestId: number, reply: { kind: 'quote' | 'decline'; text: string; pdfFileId: number | null }) {
       const waiting = (await one<QuoteRequestRow>(db, 'SELECT * FROM quote_requests WHERE id = ?', quoteRequestId))!;
-      if (!WAITING.includes(waiting.status)) return;
+      // A Quote already given can be revised, but only after a Site Quote visit.
+      const revisable = async (request: QuoteRequestRow) =>
+        request.status === 'quoted' && reply.kind === 'quote' && (await tickets.job(request.job_id)).status === 'site_quoting';
+      if (!WAITING.includes(waiting.status) && !(await revisable(waiting))) return;
       const read =
         reply.kind === 'quote'
           ? await ports.quoteReader.read({
@@ -217,8 +274,33 @@ export function createQuotes({ db, clock, worker, ports, files, modules }: Conte
       await transaction(db, async () => {
         // Checked again: another reply may have been recorded while the quote reader read this one.
         const request = (await one<QuoteRequestRow>(db, 'SELECT * FROM quote_requests WHERE id = ?', quoteRequestId))!;
-        if (!WAITING.includes(request.status)) return;
+        const revising = await revisable(request);
+        if (!WAITING.includes(request.status) && !revising) return;
         const job = await tickets.job(request.job_id);
+        if (revising) {
+          const quote = (await one<QuoteRow>(db, `SELECT * FROM quotes WHERE quote_request_id = ? AND status = 'open'`, request.id))!;
+          const toCents = read!.priceCents ?? quote.price_cents;
+          const toTime = read!.proposedTime ? iso(read!.proposedTime) : quote.proposed_time;
+          await run(
+            db,
+            `UPDATE quotes SET initial_price_cents = ?, initial_proposed_time = ?, price_cents = ?, proposed_time = ?, confirmed = 0, revised_at = ?,
+               pdf_file_id = ? WHERE id = ?`,
+            quote.initial_price_cents ?? quote.price_cents,
+            quote.initial_price_cents === null ? quote.proposed_time : quote.initial_proposed_time,
+            toCents,
+            toTime,
+            iso(clock.now()),
+            reply.pdfFileId ?? quote.pdf_file_id,
+            quote.id,
+          );
+          await tickets.recordEvent(request.ticket_id, 'quote_revised', {
+            jobId: job.id,
+            tradie: await businessName(request.tradie_id),
+            fromCents: quote.price_cents,
+            toCents,
+          });
+          return;
+        }
         if (!read) {
           await run(db, `UPDATE quote_requests SET status = 'declined' WHERE id = ?`, request.id);
           await tickets.recordEvent(request.ticket_id, 'tradie_declined', { jobId: job.id, tradie: await businessName(request.tradie_id) });
@@ -271,7 +353,7 @@ export function createQuotes({ db, clock, worker, ports, files, modules }: Conte
         if (!quote.confirmed) invalid('Confirm the Quote before choosing it');
         if (quote.status !== 'open') invalid('This Quote can no longer be chosen');
         const { job, ticket, property } = await jobPlace(quote.job_id);
-        if (job.status !== 'quoting') invalid('This Job is not choosing a Quote');
+        if (job.status !== 'quoting' && job.status !== 'site_quoting') invalid('This Job is not choosing a Quote');
         const why = reason?.trim() || null;
         const onlyOne = (await confirmedCount(job.id)) < MIN_QUOTES;
         if (onlyOne && !why) {
@@ -337,6 +419,22 @@ export function createQuotes({ db, clock, worker, ports, files, modules }: Conte
       if (approved) await tellPassedOver(approved.quote, approved.passedOver);
     },
 
+    /** The Job's confirmed, still-open Quote from this Tradie, and the Quote Request it answers. */
+    async confirmedQuoteFor(jobId: number, tradieId: number) {
+      const row = await one<QuoteRow>(db, `SELECT * FROM quotes WHERE job_id = ? AND tradie_id = ? AND confirmed = 1 AND status = 'open' ORDER BY id LIMIT 1`, jobId, tradieId);
+      return row ? { quoteId: row.id, quoteRequestId: row.quote_request_id } : null;
+    },
+
+    /** Tradies with a confirmed, open Quote on the Job, in the order they quoted. */
+    async confirmedQuoteTradies(jobId: number) {
+      return (await all<{ tradie_id: number }>(db, `SELECT tradie_id FROM quotes WHERE job_id = ? AND confirmed = 1 AND status = 'open' ORDER BY id`, jobId)).map((r) => r.tradie_id);
+    },
+
+    /** Whether the Quote answering this Quote Request has been revised since the visit. */
+    async hasRevisedQuote(quoteRequestId: number) {
+      return !!(await one(db, 'SELECT 1 FROM quotes WHERE quote_request_id = ? AND revised_at IS NOT NULL', quoteRequestId));
+    },
+
     async hasQuoteRequests(jobId: number) {
       return (await quoteRequestsOf(jobId)).length > 0;
     },
@@ -351,13 +449,18 @@ export function createQuotes({ db, clock, worker, ports, files, modules }: Conte
     },
 
     async itemsWaitingOn(tradieId: number): Promise<OpenItem[]> {
+      // A Quote already given waits for its revised price while the Job is getting Site Quotes.
       return Promise.all((await all<QuoteRequestRow>(
         db,
-        `SELECT * FROM quote_requests WHERE tradie_id = ? AND status IN ('sent', 'reminded') ORDER BY id DESC`,
+        `SELECT r.* FROM quote_requests r JOIN jobs j ON j.id = r.job_id
+         WHERE r.tradie_id = ? AND (r.status IN ('sent', 'reminded') OR (r.status = 'quoted' AND j.status = 'site_quoting')) ORDER BY r.id DESC`,
         tradieId,
       )).map(async (r) => {
         const { job, property } = await jobPlace(r.job_id);
-        return { ref: `quote_request:${r.id}`, summary: `Quote Request: ${job.trade} job in ${property.suburb}` };
+        return {
+          ref: `quote_request:${r.id}`,
+          summary: r.status === 'quoted' ? `Revised Quote: ${job.trade} job at ${property.address}` : `Quote Request: ${job.trade} job in ${property.suburb}`,
+        };
       }));
     },
 
@@ -397,6 +500,8 @@ export function createQuotes({ db, clock, worker, ports, files, modules }: Conte
       const approval = await one<ApprovalRow>(db, 'SELECT * FROM approvals WHERE job_id = ? ORDER BY id DESC LIMIT 1', jobId);
       return {
         recommendations: job.status === 'quoting' ? await this.recommend(agencyId, jobId) : [],
+        /** For the send form: new requests it must hold (`minimum`), and why one is enough when it is. */
+        requestRule: job.status === 'quoting' ? await requestRule(agencyId, jobId, job.trade) : null,
         quoteRequests: await Promise.all((await quoteRequestsOf(jobId)).map(async (r) => ({
           quoteRequestId: r.id,
           tradieId: r.tradie_id,
@@ -414,6 +519,9 @@ export function createQuotes({ db, clock, worker, ports, files, modules }: Conte
           status: q.status,
           hasPdf: q.pdf_file_id !== null,
           reason: q.single_quote_reason,
+          initialPriceCents: q.initial_price_cents,
+          initialProposedTime: q.initial_proposed_time,
+          revisedAt: q.revised_at,
         }))),
         approval: approval
           ? { approvalId: approval.id, quoteId: approval.quote_id, status: approval.status, requestedAt: approval.requested_at }

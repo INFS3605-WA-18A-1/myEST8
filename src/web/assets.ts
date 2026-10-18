@@ -1,7 +1,7 @@
 // The design system's static files, served from this server so the demo works
-// offline: Tailwind's browser build, daisyUI and Leaflet (the Dispatch map) from
+// offline: the prebuilt Tailwind utilities (static/tw.css, from `npm run css`), daisyUI and Leaflet (the Dispatch map) from
 // node_modules, the app's own CSS, JS and favicon from ./static, and the
-// self-hosted Lexend and Red Hat Text fonts. Each file is read once, on first request.
+// self-hosted Bricolage Grotesque and Public Sans variable fonts. Each file is read once, on first request.
 
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -22,7 +22,7 @@ const leaflet = (...path: string[]) => join(dirname(require.resolve('leaflet/pac
 const markercluster = (name: string) => join(dirname(require.resolve('leaflet.markercluster/package.json')), 'dist', name);
 
 const ASSETS: Record<string, { file: () => string; type: string }> = {
-  'tailwind.js': { file: () => require.resolve('@tailwindcss/browser'), type: JS },
+  'tw.css': { file: () => fileURLToPath(new URL('./static/tw.css', import.meta.url)), type: CSS },
   'daisyui.css': { file: () => require.resolve('daisyui/daisyui.css'), type: CSS },
   'app.css': { file: () => fileURLToPath(new URL('./static/app.css', import.meta.url)), type: CSS },
   'landing.css': { file: () => fileURLToPath(new URL('./static/landing.css', import.meta.url)), type: CSS },
@@ -39,13 +39,8 @@ const ASSETS: Record<string, { file: () => string; type: string }> = {
 
 /** The fonts the design uses, by package and file name. Only these are served under /assets/fonts/. */
 const FONTS: Record<string, string> = {
-  'lexend-latin-400-normal.woff2': '@fontsource/lexend',
-  'lexend-latin-600-normal.woff2': '@fontsource/lexend',
-  'lexend-latin-700-normal.woff2': '@fontsource/lexend',
-  'red-hat-text-latin-400-normal.woff2': '@fontsource/red-hat-text',
-  'red-hat-text-latin-400-italic.woff2': '@fontsource/red-hat-text',
-  'red-hat-text-latin-500-normal.woff2': '@fontsource/red-hat-text',
-  'red-hat-text-latin-600-normal.woff2': '@fontsource/red-hat-text',
+  'bricolage-grotesque-latin-opsz-normal.woff2': '@fontsource-variable/bricolage-grotesque',
+  'public-sans-latin-wght-normal.woff2': '@fontsource-variable/public-sans',
 };
 
 /**
@@ -72,8 +67,8 @@ function fontFile(name: string) {
 }
 
 /**
- * Serves /assets/*: Tailwind's browser build, daisyUI, Leaflet and its images, the app's own
- * CSS, JS and favicon, and the Lexend and Red Hat Text fonts under /assets/fonts/. Anything
+ * Serves /assets/*: the prebuilt Tailwind utilities, daisyUI, Leaflet and its images, the app's own
+ * CSS, JS and favicon, and the Bricolage Grotesque and Public Sans fonts under /assets/fonts/. Anything
  * else there is a 404.
  */
 export function assetRoutes() {

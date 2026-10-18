@@ -39,6 +39,7 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
       classifier: deps.classifier,
       imageMatcher: deps.imageMatcher,
       quoteReader: deps.quoteReader,
+      summariser: deps.summariser,
       places: deps.places,
       fetchMedia: deps.fetchMedia,
     },
@@ -198,7 +199,10 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
         dismissInboxItem: (itemId: number) => intake.dismissInboxItem(agencyId, itemId),
 
         // Maintenance Requests and Tickets
-        confirmMaintenanceRequest: (issueId: number) => tickets.confirmMaintenanceRequest(agencyId, issueId),
+        /** Confirms a Maintenance Request into a Ticket and Job; `edits.summary`, when not blank, replaces the Summary. */
+        confirmMaintenanceRequest: (issueId: number, edits?: { summary?: string }) => tickets.confirmMaintenanceRequest(agencyId, issueId, edits),
+        /** Edits a Maintenance Request's or Ticket's Summary without confirming it. The model never overwrites an edit. */
+        editSummary: (target: { issueId: number } | { ticketId: number }, summary: string) => tickets.editSummary(agencyId, target, summary),
         rejectMaintenanceRequest: (issueId: number, reason: string) => tickets.rejectMaintenanceRequest(agencyId, issueId, reason),
         changeUrgency: (target: { issueId: number } | { ticketId: number }, urgency: Urgency) =>
           tickets.changeUrgency(agencyId, target, urgency),
@@ -223,6 +227,15 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
         suggestTimes: (workOrderId: number) => scheduling.suggestTimes(agencyId, workOrderId),
         acceptTime: (workOrderId: number, start: string) => scheduling.acceptTime(agencyId, workOrderId, start),
         rateTradie: (jobId: number, score: number) => scheduling.rateTradie(agencyId, jobId, score),
+
+        // Site Quotes
+        siteQuoteSlots: (jobId: number) => scheduling.siteQuoteSlots(agencyId, jobId),
+        bookSiteQuotes: (jobId: number, visits: { tradieId: number; start: string; durationMinutes?: number }[]) =>
+          scheduling.bookSiteQuotes(agencyId, jobId, visits),
+        skipSiteQuotes: (jobId: number) => scheduling.skipSiteQuotes(agencyId, jobId),
+        markQuotesFinal: (jobId: number) => scheduling.markQuotesFinal(agencyId, jobId),
+        markSiteQuoteDone: (workOrderId: number) => scheduling.markSiteQuoteDoneForAgency(agencyId, workOrderId),
+        quoteRequestRule: (jobId: number) => quotes.quoteRequestRule(agencyId, jobId),
       };
     },
   };

@@ -1,7 +1,7 @@
 import { createApp, type PropertyManagerActions } from '../../src/app.ts';
 import type { BlobStore, ChannelType, InboundAttachment } from '../../src/ports.ts';
 import { testDb } from './db.ts';
-import { FakeClassifier, FakeClock, FakeImageMatcher, FakeMessenger, FakePlaces, FakeQuoteReader } from './fakes.ts';
+import { FakeClassifier, FakeClock, FakeImageMatcher, FakeMessenger, FakePlaces, FakeQuoteReader, FakeSummariser } from './fakes.ts';
 
 /** Thursday 8 October 2026, 9:00 am in Sydney. */
 export const START = new Date('2026-10-08T09:00:00+11:00');
@@ -21,6 +21,7 @@ export async function createHarness(options: { blobs?: BlobStore } = {}) {
   const classifier = new FakeClassifier();
   const imageMatcher = new FakeImageMatcher();
   const quoteReader = new FakeQuoteReader();
+  const summariser = new FakeSummariser();
   const places = new FakePlaces();
   const db = await testDb();
   const app = createApp({
@@ -30,6 +31,7 @@ export async function createHarness(options: { blobs?: BlobStore } = {}) {
     classifier,
     imageMatcher,
     quoteReader,
+    summariser,
     places,
     fetchMedia: async (url) => {
       throw new Error(`no media at ${url}`);
@@ -71,6 +73,7 @@ export async function createHarness(options: { blobs?: BlobStore } = {}) {
     classifier,
     imageMatcher,
     quoteReader,
+    summariser,
     places,
     drain,
     receive,

@@ -139,7 +139,15 @@ export async function tradieQuotes(
 
 /** Quote Requests go to each Tradie, every one quotes, and the Property Manager confirms every Quote. */
 export async function confirmedQuotes(w: World, job: JobRef, quotes: [TradieRef, number, Date?][]) {
-  await w.alice.sendQuoteRequests(job.jobId, quotes.map(([tradie]) => tradie.id));
+  const asked = quotes.map(([tradie]) => tradie.id);
+  // Quote Requests go to at least two Tradies (one only when the Agency has no other for the Trade),
+  // so a lone quoting Tradie is asked alongside another who stays silent.
+  const rule = (await jobView(w, job)).requestRule;
+  if (rule && asked.length < rule.minimum) {
+    const others = (await w.alice.ticket(job.ticketId)).jobs.find((j) => j.jobId === job.jobId)!.recommendations.filter((r) => !r.requested && !asked.includes(r.tradieId));
+    asked.push(...others.slice(0, rule.minimum - asked.length).map((r) => r.tradieId));
+  }
+  await w.alice.sendQuoteRequests(job.jobId, asked);
   for (const [tradie, priceCents, proposedTime] of quotes) {
     await tradieQuotes(w, job, tradie, `Quote from ${tradie.address} for job ${job.jobId}`, { priceCents, proposedTime });
   }

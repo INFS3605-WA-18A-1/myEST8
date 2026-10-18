@@ -101,7 +101,6 @@ describe('the Requests list with photos', () => {
 
     const html = await page(w, '/requests?filter=all', await w.signIn());
     expect(html).toContain(`src="/files/${r.photos[0]!.fileId}"`);
-    expect(visible(html)).toContain('Check urgency');
     expect(visible(html)).not.toContain('Check Urgency');
   });
 });
@@ -115,7 +114,7 @@ describe('the Maintenance Request review', () => {
     // From the review itself: the Share panel above it repeats the description.
     const text = visible(html.slice(html.indexOf('class="request-review"')));
 
-    const order = ['What the Tenant reported', 'The kitchen tap is dripping', KING_ST, 'Checks', 'Decide', "The Tenant's answers", 'Kitchen sink', 'No metadata'];
+    const order = ['Summary', 'The kitchen tap is dripping', KING_ST, 'Decide', 'Photos', 'No metadata', "The Tenant's answers", 'Kitchen sink'];
     const at = order.map((t) => text.indexOf(t));
     expect(at.every((i) => i > -1), JSON.stringify(at)).toBe(true);
     expect([...at].sort((a, b) => a - b)).toEqual(at);
@@ -124,6 +123,7 @@ describe('the Maintenance Request review', () => {
     // The photo check passed: a quiet line, and no "Nothing to check." above it.
     expect(text).toContain('Photos match the description');
     expect(text).not.toContain('Nothing to check.');
+    expect(text).not.toContain('What the Tenant reported');
   });
 
   test('Confirm is the one primary action; Reject and Change Urgency come back to Requests', async () => {
@@ -135,7 +135,7 @@ describe('the Maintenance Request review', () => {
 
     const review = html.slice(html.indexOf('class="request-review"'));
     expect(review.match(/btn-primary/g)).toHaveLength(1);
-    expect(html).toMatch(new RegExp(`<form method="post" action="/requests/${r.issueId}/confirm">`));
+    expect(html).toMatch(new RegExp(`<form method="post" action="/requests/${r.issueId}/confirm"`));
     expect(html).toMatch(/<details class="request-reject">\s*<summary>Reject this Maintenance Request…<\/summary>[\s\S]*name="return" value="\/requests"[\s\S]*name="reason"/);
     expect(html).toMatch(new RegExp(`action="/requests/${r.issueId}/urgency"[^>]*>\\s*<input type="hidden" name="return" value="/requests/${r.issueId}"`));
     expect(visible(html)).toContain('No photos');
@@ -155,5 +155,60 @@ describe('the Maintenance Request review', () => {
 
     expect(visible(html)).toContain('Flagged photos');
     expect(html).toMatch(new RegExp(`<details class="request-confirm-check">[\\s\\S]*action="/requests/${r.issueId}/confirm"[\\s\\S]*Confirm anyway[\\s\\S]*</details>`));
+  });
+});
+
+describe('the Summary on a Maintenance Request', () => {
+  /** A request whose Summary the AI wrote (the test summariser), with one photo sent on the first message. */
+  async function summarised() {
+    const w = await webWorld();
+    await w.h.upload(await report(w, TOM, 'The kitchen tap is dripping'), [upload('tap.jpg')]);
+    const r = await onlyRequest(w);
+    return { w, r, cookie: await w.signIn() };
+  }
+
+  test('leads with the Summary under the "Filled in by AI" label, with a pencil to edit', async () => {
+    const { w, r, cookie } = await summarised();
+    expect(r.summaryBy).toBe('ai');
+    const html = await page(w, `/requests/${r.issueId}`, cookie);
+    const text = visible(html.slice(html.indexOf('class="request-review"')));
+    expect(text).toContain('Filled in by AI');
+    expect(text).toContain(r.summary!);
+    expect(text.indexOf('Filled in by AI')).toBeLessThan(text.indexOf('Photos'));
+    expect(html).toContain(`href="/requests/${r.issueId}?edit=summary#summary"`);
+    expect(html).toContain('aria-label="Edit Summary"');
+  });
+
+  test('a Summary the Property Manager edited loses the AI label, and Confirm can carry an edit', async () => {
+    const { w, r, cookie } = await summarised();
+    const form = await page(w, `/requests/${r.issueId}?edit=summary`, cookie);
+    expect(form).toContain(`action="/requests/${r.issueId}/summary"`);
+    expect(form).toMatch(new RegExp(`<button type="submit" form="summary-form-${r.issueId}" formaction="/requests/${r.issueId}/confirm"`));
+
+    const saved = await w.post(`/requests/${r.issueId}/summary`, { summary: 'Kitchen tap drips onto the cupboard' }, cookie);
+    expect(saved.headers.get('location')).toMatch(new RegExp(`^/requests/${r.issueId}\\?ok=`));
+    const html = await page(w, `/requests/${r.issueId}`, cookie);
+    const text = visible(html.slice(html.indexOf('class="request-review"')));
+    expect(text).toContain('Kitchen tap drips onto the cupboard');
+    expect(text).not.toContain('Filled in by AI');
+    expect((await onlyRequest(w)).summaryBy).toBe('property_manager');
+
+    const blank = await w.post(`/requests/${r.issueId}/summary`, { summary: '   ' }, cookie);
+    expect(blank.headers.get('location')).toMatch(/error=/);
+  });
+
+  test('Confirm posts an edited Summary with it', async () => {
+    const { w, r, cookie } = await summarised();
+    const res = await w.post(`/requests/${r.issueId}/confirm`, { summary: 'Tap drips, getting worse' }, cookie);
+    expect(res.headers.get('location')).toMatch(/^\/tickets\/\d+\?ok=/);
+    const [ticket] = await w.alice.dashboard({ filter: 'all' }).then((d) => d.tickets);
+    expect(ticket!.description).toBeTruthy();
+  });
+
+  test('the list leads each row with the Summary, and the photo strip names where the photos came from', async () => {
+    const { w, r, cookie } = await summarised();
+    expect(visible(await page(w, '/requests?filter=all', cookie))).toContain(r.summary!);
+    const text = visible(await page(w, `/requests/${r.issueId}`, cookie));
+    expect(text).toMatch(/1 photo, (sent with the message|uploaded)/);
   });
 });

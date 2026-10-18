@@ -138,6 +138,64 @@ describe('Maintenance Requests on the dashboard', () => {
   });
 });
 
+describe('the count sentence and Needs you', () => {
+  /** Alice's dashboard with one Routine Ticket to choose from and one High Ticket whose site quotes are to book. */
+  async function quoteDecisions() {
+    const w = await webWorld();
+    const routine = await tomsTapTicket(w);
+    await confirmedQuotes(w, routine, [
+      [w.tradies.pete, 300_00],
+      [w.tradies.dana, 340_00],
+    ]);
+    const high = await tomsTapTicket(w);
+    await w.alice.changeUrgency({ ticketId: high.ticketId }, 'high');
+    await confirmedQuotes(w, high, [
+      [w.tradies.pete, 300_00],
+      [w.tradies.dana, 340_00],
+    ]);
+    return { w, cookie: await w.signIn(), routine, high };
+  }
+
+  test('the sentence counts what needs the Property Manager, with singular wording for one', async () => {
+    const { w, cookie } = await quoteDecisions();
+    const dashboard = await page(w, '/', cookie);
+    const sentence = match(dashboard, /<p class="count-sentence">([\s\S]*?)<\/p>/).replace(/<[^>]+>/g, '');
+    expect(sentence).toContain('1 Quote to choose');
+    expect(sentence).toContain('1 Site quote to book');
+    expect(sentence).not.toMatch(/\b1 (Quotes|Site quotes|Alerts)/);
+    expect(sentence).not.toContain('Open Tickets');
+  });
+
+  test('says so when nothing needs the Property Manager', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+    expect(await page(w, '/', cookie)).toContain('Nothing needs you right now.');
+  });
+
+  test('Needs you leads the page and holds Quotes to choose and Book site quotes once each', async () => {
+    const { w, cookie, routine, high } = await quoteDecisions();
+    const dashboard = await page(w, '/', cookie);
+    expect(dashboard.indexOf('id="decisions"')).toBeLessThan(dashboard.indexOf('id="tickets"'));
+    expect(dashboard).toContain('class="needs-you"');
+    expect(dashboard).toContain('Site quotes to book');
+    expect(dashboard).toContain('Book site quotes');
+    expect(dashboard).toContain('Choose a Quote');
+    const needs = dashboard.slice(dashboard.indexOf('id="decisions"'), dashboard.indexOf('id="tickets"'));
+    expect(needs).toContain(`href="/tickets/${high.ticketId}"`);
+    expect(needs).toContain(`href="/tickets/${routine.ticketId}"`);
+  });
+
+  test('the board has a Site quotes lane and no inbox or Ticket list is repeated below it', async () => {
+    const { w, cookie } = await quoteDecisions();
+    const dashboard = await page(w, '/', cookie);
+    expect(dashboard).toContain('Site quotes');
+    expect(dashboard).toContain('class="board-lanes"');
+    expect(dashboard.match(/id="inbox"/g) ?? []).toHaveLength(0);
+    expect(dashboard.match(/All open Tickets/g) ?? []).toHaveLength(0);
+    expect(dashboard.match(/id="tickets"/g)).toHaveLength(1);
+  });
+});
+
 describe('Maintenance Request review', () => {
   test('an unknown Maintenance Request is not found', async () => {
     const w = await webWorld();
@@ -148,12 +206,19 @@ describe('Maintenance Request review', () => {
   });
 });
 
+/** The Ticket's docket in the board (the part of the page from Tickets by stage on), not its row in Needs you. */
+function inBoard(page: string, ticketId: number) {
+  const board = page.slice(page.indexOf('id="tickets"'));
+  const at = board.indexOf(`href="/tickets/${ticketId}"`);
+  return board.slice(at, board.indexOf('</a>', at));
+}
+
 describe('Tickets on the dashboard', () => {
   test('a Quoting docket says what the Property Manager has to do: check the Quotes in, then choose', async () => {
     const w = await webWorld();
     const job = await tomsTapTicket(w);
     const cookie = await w.signIn();
-    const docketOf = (board: string) => board.slice(board.indexOf(`href="/tickets/${job.ticketId}"`), board.indexOf('</a>', board.indexOf(`href="/tickets/${job.ticketId}"`)));
+    const docketOf = (page: string) => inBoard(page, job.ticketId);
 
     const board = await page(w, '/', cookie);
     expect(board).toContain('<h3 class="lane-title">Quoting</h3>');

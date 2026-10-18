@@ -142,3 +142,32 @@ describe('Schedule: Mine and All', () => {
     expect(html).not.toContain('http://localhost/calendar?week=2026-10-19&amp;filter');
   });
 });
+
+describe('Schedule: Site Quotes and who is free', () => {
+  test('a Site Quote visit carries a Site quote badge and links to the Job on the Ticket', async () => {
+    const w = await webWorld();
+    const job = await tomsTapTicket(w);
+    await w.alice.changeUrgency({ ticketId: job.ticketId }, 'high');
+    await confirmedQuotes(w, job, [[w.tradies.pete, 300_00], [w.tradies.dana, 340_00]]);
+    await w.alice.bookSiteQuotes(job.jobId, [{ tradieId: w.tradies.pete.id, start: TUE_9AM.toISOString() }]);
+    const cookie = await w.signIn();
+
+    const html = week(await page(w, '/calendar?week=2026-10-14', cookie));
+
+    expect(visible(html)).toContain('Site quote');
+    expect(html).toContain('is-outline');
+    expect(html).toContain(`href="/tickets/${job.ticketId}#job-${job.jobId}"`);
+  });
+
+  test("today's column lists the Tradies with no booking as Free today", async () => {
+    const w = await webWorld();
+    await bookedTap(w);
+    const cookie = await w.signIn();
+
+    const html = await page(w, '/calendar', cookie);
+
+    const free = visible(week(html));
+    expect(free).toContain('Free today');
+    
+  });
+});

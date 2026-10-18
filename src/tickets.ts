@@ -8,7 +8,9 @@ export const IN_INTAKE: IssueStatus[] = ['gathering', 'awaiting_photos', 'checki
 /** An issue's photo link takes photos only while the issue is in these statuses (the same rule as intake.upload). */
 export const TAKES_PHOTOS: IssueStatus[] = ['awaiting_photos', 'checking', 'maintenance_request'];
 
-export type JobStatus = 'quoting' | 'awaiting_owner' | 'approved' | 'scheduled' | 'done' | 'cancelled';
+export type JobStatus = 'quoting' | 'site_quoting' | 'awaiting_owner' | 'approved' | 'scheduled' | 'done' | 'cancelled';
+/** Who wrote a Maintenance Request's Summary: the model, or a Property Manager who edited it (never overwritten by the model again). */
+export type SummaryBy = 'ai' | 'property_manager';
 export type UrgentRepairStatus = 'reminder_sent' | 'receipt_received' | 'receipt_forwarded';
 export type PhotoMetadata = 'ok' | 'flagged' | 'no_metadata';
 
@@ -19,12 +21,17 @@ export interface Issue {
   tenantId: number;
   status: IssueStatus;
   description: string;
+  /** One line describing the issue, written by AI or edited by a Property Manager; null until the summariser has run. */
+  summary: string | null;
+  summaryBy: SummaryBy | null;
   answers: { location: string | null; started: string | null; worsening: string | null; availability: Availability | null };
   urgency: Urgency;
   checkUrgency: boolean;
   trade: Trade;
   checkTrade: boolean;
   noPhotos: boolean;
+  /** How many photos came with the Tenant's first message, before any upload link. */
+  photosOnArrival: number;
   imageMatch: { result: ImageMatchResult; reason: string } | null;
   photosToken: string;
   reportedAt: string;
@@ -92,6 +99,9 @@ type IssueRow = {
   tenant_id: number;
   status: IssueStatus;
   description: string;
+  summary: string | null;
+  summary_by: SummaryBy | null;
+  photos_on_arrival: number;
   location: string | null;
   started: string | null;
   worsening: string | null;
@@ -146,6 +156,9 @@ const ISSUE_COLUMNS = {
   trade: 'trade',
   checkTrade: 'check_trade',
   noPhotos: 'no_photos',
+  photosOnArrival: 'photos_on_arrival',
+  summary: 'summary',
+  summaryBy: 'summary_by',
   imageMatch: 'image_match',
   imageMatchReason: 'image_match_reason',
 } as const;
@@ -161,6 +174,9 @@ export type IssuePatch = Partial<{
   trade: Trade;
   checkTrade: boolean;
   noPhotos: boolean;
+  photosOnArrival: number;
+  summary: string;
+  summaryBy: SummaryBy;
   imageMatch: ImageMatchResult;
   imageMatchReason: string;
 }>;
@@ -172,12 +188,15 @@ const toIssue = (r: IssueRow): Issue => ({
   tenantId: r.tenant_id,
   status: r.status,
   description: r.description,
+  summary: r.summary,
+  summaryBy: r.summary_by,
   answers: { location: r.location, started: r.started, worsening: r.worsening, availability: r.availability },
   urgency: r.urgency,
   checkUrgency: !!r.check_urgency,
   trade: r.trade,
   checkTrade: !!r.check_trade,
   noPhotos: !!r.no_photos,
+  photosOnArrival: r.photos_on_arrival ?? 0,
   imageMatch: r.image_match ? { result: r.image_match, reason: r.image_match_reason ?? '' } : null,
   photosToken: r.photos_token,
   reportedAt: r.reported_at,
@@ -395,7 +414,9 @@ export function createTickets({ db, clock, settings, modules }: Context) {
       )).map((p) => ({ photoId: p.id, fileId: p.file_id, metadata: p.metadata, reasons: JSON.parse(p.reasons) as string[] }));
     },
 
-    async confirmMaintenanceRequest(agencyId: number, issueId: number) {
+    /** Confirms a Maintenance Request. A non-blank `edits.summary` replaces the Summary, as the Property Manager's own words. */
+    async confirmMaintenanceRequest(agencyId: number, issueId: number, edits: { summary?: string } = {}) {
+      const editedSummary = edits.summary?.trim() ?? '';
       // Checked inside the transaction, so confirming twice at once makes one Ticket.
       const { confirmed, ticketId, trackerToken } = await transaction(db, async () => {
         const confirmed = await issueInAgency(agencyId, issueId);
@@ -425,6 +446,10 @@ export function createTickets({ db, clock, settings, modules }: Context) {
         await run(db, `UPDATE issues SET status = 'confirmed' WHERE id = ?`, issueId);
         await recordEvent(ticketId, 'reported', {}, confirmed.reportedAt);
         await recordEvent(ticketId, 'confirmed');
+        if (editedSummary && editedSummary !== confirmed.summary) {
+          await run(db, `UPDATE issues SET summary = ?, summary_by = 'property_manager' WHERE id = ?`, editedSummary, issueId);
+          await recordEvent(ticketId, 'summary_edited', { summary: editedSummary });
+        }
         return { confirmed, ticketId, trackerToken };
       });
       await modules.notifications.send(
@@ -434,6 +459,20 @@ export function createTickets({ db, clock, settings, modules }: Context) {
         { issueId },
       );
       return ticketId;
+    },
+
+    /** Edits the Summary of a Maintenance Request or of a Ticket's issue. Blank is refused. Once edited, the model never overwrites it. */
+    async editSummary(agencyId: number, target: { issueId: number } | { ticketId: number }, summary: string) {
+      const trimmed = summary.trim();
+      if (!trimmed) invalid('Write a Summary');
+      if (trimmed.length > 160) invalid('Keep the Summary to 160 characters');
+      const ticketId = 'ticketId' in target ? (await ticketInAgency(agencyId, target.ticketId)).id : null;
+      const issueId = ticketId === null ? (await issueInAgency(agencyId, (target as { issueId: number }).issueId)).id : (await ticket(ticketId)).issueId;
+      const current = await issue(issueId);
+      if (current.summary === trimmed && current.summaryBy === 'property_manager') return;
+      await this.updateIssue(issueId, { summary: trimmed, summaryBy: 'property_manager' });
+      const linked = ticketId ?? (await one<{ id: number }>(db, 'SELECT id FROM tickets WHERE issue_id = ?', issueId))?.id;
+      if (linked !== undefined) await recordEvent(linked, 'summary_edited', { summary: trimmed });
     },
 
     async rejectMaintenanceRequest(agencyId: number, issueId: number, reason: string) {
@@ -775,15 +814,24 @@ export function createTickets({ db, clock, settings, modules }: Context) {
       const doneAt = allDone ? (events.filter((e) => e.kind === 'job_done').at(-1)?.at ?? null) : null;
       // The latest visit, preferring a Job that is still going ahead.
       type VisitEvent = { kind: string; jobId?: number; tradie?: string; visitStart?: string };
-      const visits = events.filter((e) => e.kind === 'work_order_sent' || e.kind === 'visit_moved') as VisitEvent[];
+      const visits = events.filter((e) => (e.kind === 'work_order_sent' || e.kind === 'visit_moved') && !(e as { siteQuote?: boolean }).siteQuote) as VisitEvent[];
       const visit = visits.findLast((e) => jobs.some((j) => j.id === e.jobId)) ?? visits.at(-1);
       const tradie = visits.findLast((e) => e.kind === 'work_order_sent' && e.jobId === visit?.jobId)?.tradie;
       const trade = jobs.find((j) => j.id === visit?.jobId)?.trade;
       const booked = visit?.visitStart ? { visitStart: visit.visitStart, ...(tradie ? { tradie } : {}), ...(trade ? { trade } : {}) } : {};
-      const stages: { stage: string; at: string | null; visitStart?: string; tradie?: string; trade?: Trade }[] = [
+      // Site Quote visits, only when the Job had them: who is coming and when, for the visits still to happen.
+      const siteQuotesBooked = events.find((e) => e.kind === 'site_quotes_booked');
+      const siteVisits = siteQuotesBooked
+        ? (await Promise.all(jobs.map((j) => modules.scheduling.siteQuoteVisits(j.id))))
+            .flat()
+            .filter((v) => v.status === 'active')
+            .map((v) => ({ tradie: v.businessName, visitStart: v.start }))
+        : [];
+      const stages: { stage: string; at: string | null; visitStart?: string; tradie?: string; trade?: Trade; visits?: { tradie: string; visitStart: string }[] }[] = [
         { stage: 'reported', at: tracked.reportedAt },
         { stage: 'confirmed', at: first('confirmed') },
         { stage: 'getting_quotes', at: first('quote_requests_sent') },
+        ...(siteQuotesBooked ? [{ stage: 'site_visit', at: siteQuotesBooked.at, visits: siteVisits }] : []),
         { stage: 'approved', at: first('quote_approved') },
         { stage: 'booked', at: first('work_order_sent'), ...booked },
         { stage: 'done', at: doneAt },

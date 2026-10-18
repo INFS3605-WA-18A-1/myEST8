@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { all, one } from '../src/db.ts';
 import { upload } from './support/photos.ts';
 import { HOUR } from './support/harness.ts';
 import { confirmedQuotes, jobView, BARRY, BELLA, HANA, KING_ST, KING_ST_LOCATION, NINA, OCEAN_AVE, OLIVIA_EMAIL, SAM, STRANGER, TOM, tomsTapTicket, world } from './support/world.ts';
@@ -415,5 +416,136 @@ describe('nothing stalls', () => {
 
     await h.answer(TOM, 'Yes see you Tuesday', 'confirm');
     expect((await jobView(w, job)).workOrder).toMatchObject({ visitConfirmed: true });
+  });
+});
+
+const summaryOf = async ({ h }: World, issueId: number) =>
+  (await one<{ summary: string | null; summary_by: string | null; photos_on_arrival: number; status: string }>(
+    h.db,
+    'SELECT summary, summary_by, photos_on_arrival, status FROM issues WHERE id = ?',
+    issueId,
+  ))!;
+
+/** Tom reports a dripping tap with a photo on the first message and answers every question. */
+async function tomReportsTapWithPhoto({ h }: World) {
+  h.classifier.when('The kitchen tap is dripping', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });
+  await h.receive(TOM, 'The kitchen tap is dripping', { attachments: [upload('tap.jpg', { takenAt: '2026:10:08 08:30:00' }), { filename: 'note.pdf', contentType: 'application/pdf', content: new Uint8Array([1]) }] });
+  await h.answer(TOM, 'Kitchen sink');
+  await h.answer(TOM, 'Since Monday');
+  await h.answer(TOM, 'No', 'no');
+  await h.answer(TOM, 'Mornings', 'weekday_mornings');
+}
+
+describe('photos on the first message', () => {
+  test('become the issue photos, skip awaiting_photos, and the upload link says they were received', async () => {
+    const w = await world();
+    const { h, alice } = w;
+    await tomReportsTapWithPhoto(w);
+
+    const { maintenanceRequests } = await alice.dashboard();
+    expect(maintenanceRequests).toMatchObject([{ photos: [{ metadata: 'ok' }], imageMatch: { result: 'matches' }, noPhotos: false }]);
+    const issueId = maintenanceRequests[0]!.issueId;
+    expect(await summaryOf(w, issueId)).toMatchObject({ photos_on_arrival: 1, status: 'maintenance_request' });
+    expect(h.messenger.last(TOM)).toMatchObject({ template: 'tenant.upload_link', data: { alreadyHave: 1 } });
+    expect(h.messenger.last(TOM)!.text).toMatch(/we have your 1 photo\. Add more here/);
+  });
+
+  test('more photos can still be added through the link', async () => {
+    const w = await world();
+    const { h, alice } = w;
+    await tomReportsTapWithPhoto(w);
+    await h.upload(h.messenger.last(TOM)!.data.uploadLink as string, [upload('more.jpg')]);
+    expect((await alice.dashboard()).maintenanceRequests).toMatchObject([{ photos: [{}, {}] }]);
+  });
+});
+
+describe('the Summary', () => {
+  test('intake.summarise stores an AI Summary from the description and answers', async () => {
+    const w = await world();
+    const { h, alice } = w;
+    await tomReportsTapWithPhoto(w);
+    const [request] = (await alice.dashboard()).maintenanceRequests;
+
+    expect(await summaryOf(w, request!.issueId)).toMatchObject({ summary: 'Summary: The kitchen tap is dripping', summary_by: 'ai' });
+    expect(h.summariser.calls.at(-1)).toEqual({
+      description: 'The kitchen tap is dripping',
+      answers: { location: 'Kitchen sink', started: 'Since Monday', worsening: 'no' },
+      trade: 'plumbing',
+      photoCount: 1,
+    });
+  });
+
+  test('a failing summariser leaves the request confirmable without a Summary', async () => {
+    const w = await world();
+    const { h, alice } = w;
+    h.summariser.next = new Error('Claude is down');
+    h.classifier.when('The kitchen tap is dripping', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });
+    await h.receive(TOM, 'The kitchen tap is dripping');
+    await h.answer(TOM, 'Kitchen sink');
+    await h.answer(TOM, 'Since Monday');
+    await h.answer(TOM, 'No', 'no');
+    await h.answer(TOM, 'Mornings', 'weekday_mornings').catch(() => {});
+    await h.advance(48 * HOUR).catch(() => {});
+    const [request] = (await alice.dashboard()).maintenanceRequests;
+    expect(await summaryOf(w, request!.issueId)).toMatchObject({ summary: null, summary_by: null });
+    await expect(alice.confirmMaintenanceRequest(request!.issueId)).resolves.toBeTypeOf('number');
+  });
+
+  test('never overwrites a Property Manager edit, even when new photos trigger another run', async () => {
+    const w = await world();
+    const { h, alice } = w;
+    await tomReportsTapWithPhoto(w);
+    const [request] = (await alice.dashboard()).maintenanceRequests;
+    await alice.editSummary({ issueId: request!.issueId }, 'Dripping kitchen tap, tenant home mornings');
+    h.summariser.next = 'Something the model wrote later';
+
+    await h.upload(h.messenger.last(TOM)!.data.uploadLink as string, [upload('more.jpg')]);
+
+    expect(await summaryOf(w, request!.issueId)).toMatchObject({ summary: 'Dripping kitchen tap, tenant home mornings', summary_by: 'property_manager' });
+  });
+
+  test('new photos before confirmation rewrite an AI Summary', async () => {
+    const w = await world();
+    const { h, alice } = w;
+    await tomReportsTapWithPhoto(w);
+    const [request] = (await alice.dashboard()).maintenanceRequests;
+    h.summariser.next = 'Updated by the model';
+    await h.upload(h.messenger.last(TOM)!.data.uploadLink as string, [upload('more.jpg')]);
+    expect(await summaryOf(w, request!.issueId)).toMatchObject({ summary: 'Updated by the model', summary_by: 'ai' });
+    expect(h.summariser.calls.at(-1)!.photoCount).toBe(2);
+  });
+
+  test('confirming with an edited Summary stores it as the Property Manager\'s and records summary_edited', async () => {
+    const w = await world();
+    const { h, alice } = w;
+    await tomReportsTapWithPhoto(w);
+    const [request] = (await alice.dashboard()).maintenanceRequests;
+
+    const ticketId = await alice.confirmMaintenanceRequest(request!.issueId, { summary: '  Kitchen mixer tap dripping  ' });
+
+    expect(await summaryOf(w, request!.issueId)).toMatchObject({ summary: 'Kitchen mixer tap dripping', summary_by: 'property_manager' });
+    const kinds = (await all<{ kind: string }>(h.db, 'SELECT kind FROM timeline WHERE ticket_id = ? ORDER BY id', ticketId)).map((e) => e.kind);
+    expect(kinds).toContain('summary_edited');
+  });
+
+  test('confirming with a blank or unchanged Summary keeps the AI one', async () => {
+    const w = await world();
+    const { alice } = w;
+    await tomReportsTapWithPhoto(w);
+    const [request] = (await alice.dashboard()).maintenanceRequests;
+    await alice.confirmMaintenanceRequest(request!.issueId, { summary: '   ' });
+    expect(await summaryOf(w, request!.issueId)).toMatchObject({ summary: 'Summary: The kitchen tap is dripping', summary_by: 'ai' });
+  });
+
+  test('editSummary refuses a blank Summary and works on a Ticket', async () => {
+    const w = await world();
+    const { h, alice } = w;
+    await tomReportsTapWithPhoto(w);
+    const [request] = (await alice.dashboard()).maintenanceRequests;
+    await expect(alice.editSummary({ issueId: request!.issueId }, '  ')).rejects.toThrow(/Summary/);
+    const ticketId = await alice.confirmMaintenanceRequest(request!.issueId);
+    await alice.editSummary({ ticketId }, 'Tap fixed after a look');
+    expect(await summaryOf(w, request!.issueId)).toMatchObject({ summary: 'Tap fixed after a look', summary_by: 'property_manager' });
+    expect((await all<{ kind: string }>(h.db, 'SELECT kind FROM timeline WHERE ticket_id = ?', ticketId)).map((e) => e.kind)).toContain('summary_edited');
   });
 });

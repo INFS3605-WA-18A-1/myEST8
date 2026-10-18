@@ -5,7 +5,25 @@
  * Colours are app.css's tokens only (docs/design-system.md).
  */
 
-/* The Agency's name leads the bar; the logo goes to the right edge. */
+/* A white column on Gumleaf. */
+body {
+  background: var(--page);
+}
+.public-main {
+  background: var(--surface);
+  border-inline: 1px solid var(--line);
+  padding: 24px 16px 32px;
+  max-width: 560px;
+}
+.public-footer {
+  max-width: 560px;
+}
+
+/* The Agency's name leads the bar; the logo goes to the right edge, in Ironbark. */
+.public-brand + .logotype,
+.public-brand + .logotype .logo-mark {
+  color: var(--ink);
+}
 .public-brand + .logotype {
   margin-left: auto;
 }
@@ -136,7 +154,7 @@
   background: var(--surface);
   color: var(--muted);
 }
-/* Where the repair is now: Harbour, filled, with its number. */
+/* Where the repair is now: Gum, filled, with its number; its text carries the Wattle bar. */
 .tracker-circle.is-current {
   border-color: var(--action);
   background: var(--action);
@@ -158,7 +176,23 @@
   font-weight: 600;
   color: var(--ink);
 }
+.tracker-step[aria-current='step'] .tracker-text {
+  padding-left: 12px;
+  border-left: 4px solid var(--hivis);
+}
 .tracker-detail {
   font-size: 14px;
   color: var(--muted);
+}
+
+.tracker-now {
+  max-width: 60ch;
+  font-size: 16px;
+  color: var(--ink);
+}
+@media (prefers-reduced-motion: reduce) {
+  * {
+    scroll-behavior: auto;
+    transition: none;
+  }
 }

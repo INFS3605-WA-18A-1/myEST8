@@ -67,10 +67,10 @@ describe('the landing page', () => {
     expect(stages).toHaveLength(8);
     const expected = [
       ['A Tenant texts the problem', 'The kitchen tap is dripping'],
-      ['It becomes a Maintenance Request', 'Routine', 'Plumbing'],
+      ['Photos are checked and a summary is written', 'Routine', 'Plumbing', 'Summary filled in by AI'],
       ['The Property Manager confirms', 'Confirm'],
       ['It becomes a Ticket', '#12'],
-      ['Quote Requests go to Tradies', '3 Tradies'],
+      ['Quote Requests go to at least two Tradies', '3 Tradies'],
       ['A Quote comes back', '$180'],
       ['The Work Order goes out', 'Work Order sent'],
       ['The Job is done, and the Tenant sees it', 'Done'],

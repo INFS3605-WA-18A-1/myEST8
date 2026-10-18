@@ -5,7 +5,7 @@
 import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../app.ts';
 import { dayOf } from '../zoned-time.ts';
-import { clip, formatDay, formatTime, type Html } from './ui.ts';
+import { badge, clip, formatDay, formatTime, type Html } from './ui.ts';
 
 /** One booking as the core's calendar returns it. */
 export type Booking = Awaited<ReturnType<PropertyManagerActions['calendar']>>[number];
@@ -23,10 +23,12 @@ export type Booking = Awaited<ReturnType<PropertyManagerActions['calendar']>>[nu
 export function bookingCard(b: Booking, timeZone: string, o: { day?: boolean; tradie?: boolean; propertyManager?: boolean; decision?: boolean } = {}): Html {
   const note = visitNote(b);
   const reschedule = b.visit === 'reschedule_requested';
-  const classes = ['booking', reschedule ? 'is-reschedule' : '', reschedule && o.decision ? 'is-decision' : '', b.visit === 'done' ? 'is-done' : ''].filter(Boolean).join(' ');
+  const siteQuote = b.kind === 'site_quote';
+  const classes = ['booking', siteQuote ? 'is-site-quote' : '', reschedule ? 'is-reschedule' : '', reschedule && o.decision ? 'is-decision' : '', b.visit === 'done' ? 'is-done' : ''].filter(Boolean).join(' ');
   return html`<li class="${classes}">
+    ${siteQuote ? html`<p class="booking-kind">${badge('Site quote', 'info', { outline: true })}</p>` : ''}
     <p class="booking-time num">${o.day ? html`${formatDay(b.start, timeZone)}, ` : ''}<time datetime="${b.start}">${formatTime(b.start, timeZone)}</time> – <time datetime="${b.end}">${formatTime(b.end, timeZone)}</time></p>
-    <a class="booking-issue" href="/tickets/${b.ticketId}">${clip(b.issue, { lines: 2 })}</a>
+    <a class="booking-issue" href="/tickets/${b.ticketId}${siteQuote ? `#job-${b.jobId}` : ''}">${clip(b.issue, { lines: 2 })}</a>
     ${o.tradie === false ? '' : html`<a class="booking-tradie" href="/tradies/${b.tradieId}">${b.businessName}</a>`}
     <p class="booking-place" title="${b.propertyAddress}">${placeOf(b)}</p>
     ${o.propertyManager ? html`<p class="booking-meta"><span class="sr-only">Property Manager: </span>${b.propertyManager}</p>` : ''}

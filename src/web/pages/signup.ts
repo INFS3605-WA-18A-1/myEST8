@@ -43,7 +43,7 @@ export function signupRoutes(app: App, sessions: Sessions) {
     const password = rawText(form, 'password');
     const refused = (errors: Errors) =>
       c.html(
-        signUpPage({ values, errors, flash: { kind: 'error', message: 'Check the highlighted fields and try again.' }, shareLink: shareUrl(c, '/signup') }),
+        signUpPage({ values, errors, flash: { kind: 'error', message: 'Some details need fixing. Each one is explained beside its field.' }, shareLink: shareUrl(c, '/signup') }),
         400,
       );
 

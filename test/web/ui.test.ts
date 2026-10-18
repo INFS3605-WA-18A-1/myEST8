@@ -34,11 +34,12 @@ describe('assets', () => {
   const assets = assetRoutes();
 
   it('serves Tailwind and daisyUI with their content types, cacheable', async () => {
-    const js = await assets.request('/assets/tailwind.js');
-    expect(js.status).toBe(200);
-    expect(js.headers.get('content-type')).toMatch(/^text\/javascript/);
-    expect(js.headers.get('cache-control')).toBe('public, max-age=3600');
-    expect((await js.text()).length).toBeGreaterThan(100_000);
+    const tw = await assets.request('/assets/tw.css');
+    expect(tw.status).toBe(200);
+    expect(tw.headers.get('content-type')).toMatch(/^text\/css/);
+    expect(tw.headers.get('cache-control')).toBe('public, max-age=3600');
+    expect(await tw.text()).toContain('.text-muted');
+    expect((await assets.request('/assets/tailwind.js')).status).toBe(404);
 
     const css = await assets.request('/assets/daisyui.css');
     expect(css.status).toBe(200);
@@ -65,8 +66,8 @@ describe('assets', () => {
     expect((await assets.request('/assets/..%2Fui.ts')).status).toBe(404);
   });
 
-  it('serves the Lexend and Red Hat Text fonts as woff2, long-cached, and 404s other font names', async () => {
-    for (const name of ['lexend-latin-600-normal.woff2', 'red-hat-text-latin-400-normal.woff2']) {
+  it('serves the Bricolage Grotesque and Public Sans variable fonts as woff2, long-cached, and 404s other font names', async () => {
+    for (const name of ['bricolage-grotesque-latin-opsz-normal.woff2', 'public-sans-latin-wght-normal.woff2']) {
       const font = await assets.request(`/assets/fonts/${name}`);
       expect(font.status).toBe(200);
       expect(font.headers.get('content-type')).toBe('font/woff2');
@@ -74,10 +75,10 @@ describe('assets', () => {
       expect((await font.arrayBuffer()).byteLength).toBeGreaterThan(1000);
     }
 
-    expect((await assets.request('/assets/fonts/lexend-latin-800-normal.woff2')).status).toBe(404);
+    expect((await assets.request('/assets/fonts/bricolage-grotesque-latin-wght-normal.woff2')).status).toBe(404);
     expect((await assets.request('/assets/fonts/barlow-latin-400-normal.woff2')).status).toBe(404);
     expect((await assets.request('/assets/fonts/..%2Fui.ts')).status).toBe(404);
-    expect((await assets.request('/assets/fonts/lexend-latin-400-normal.woff')).status).toBe(404);
+    expect((await assets.request('/assets/fonts/public-sans-latin-wght-normal.woff')).status).toBe(404);
   });
 
   it('declares every allowlisted font in app.css and preloads the two the first paint needs', async () => {
@@ -85,8 +86,8 @@ describe('assets', () => {
     for (const name of css.matchAll(/url\('\/assets\/fonts\/([^']+)'\)/g)) {
       expect((await assets.request(`/assets/fonts/${name[1]}`)).status).toBe(200);
     }
-    expect(css).toContain("--font-head: 'Lexend'");
-    expect(css).toContain("--font-body: 'Red Hat Text'");
+    expect(css).toContain("--font-head: 'Bricolage Grotesque'");
+    expect(css).toContain("--font-body: 'Public Sans'");
     const out = await render(publicPage({ title: 'Sign in', body: html`<p>x</p>` }));
     for (const name of out.matchAll(/<link rel="preload" href="\/assets\/fonts\/([^"]+)"/g)) {
       expect(css).toContain(`/assets/fonts/${name[1]}`);
@@ -217,7 +218,7 @@ describe('ui', () => {
     expect(out.match(/<a /g)).toHaveLength(1);
   });
 
-  it('reads a board docket issue first, then the address, then the status and number under the perforation', async () => {
+  it('reads a docket as the stub (number, Urgency), the perforation, then the issue, the address and the stage line', async () => {
     const out = await render(
       docket({
         number: 12,
@@ -232,10 +233,11 @@ describe('ui', () => {
     );
     expect(out.startsWith('<a href="/tickets/12" class="docket is-decision">')).toBe(true);
     const at = (text: string) => out.indexOf(text);
+    expect(at('#12')).toBeLessThan(at('High'));
+    expect(at('High')).toBeLessThan(at('docket-perf'));
+    expect(at('docket-perf')).toBeLessThan(at('Toilet keeps running'));
     expect(at('Toilet keeps running')).toBeLessThan(at('7 Wilson St'));
-    expect(at('7 Wilson St')).toBeLessThan(at('docket-perf'));
-    expect(at('docket-perf')).toBeLessThan(at('High'));
-    expect(at('Ready to choose')).toBeLessThan(at('#12'));
+    expect(at('7 Wilson St')).toBeLessThan(at('Ready to choose'));
     expect(out).toContain('line-clamp-3 docket-issue');
     expect(out).toContain('2 days ago');
   });
@@ -261,7 +263,7 @@ describe('ui', () => {
     expect(out).toContain('<h1 class="page-title is-hero">Headline</h1>');
   });
 
-  it('page controls render in the second-row container, after the title', async () => {
+  it('page controls sit in the page header, after the title and before the date and user menu', async () => {
     const out = await render(
       page({
         title: 'Dashboard',
@@ -274,15 +276,16 @@ describe('ui', () => {
         ]),
       }),
     );
-    const controls = out.indexOf('<div class="topbar-controls">');
-    expect(controls).toBeGreaterThan(out.indexOf('<h1 class="topbar-title">Dashboard</h1>'));
-    expect(out.slice(controls)).toMatch(/<div class="topbar-controls">\s*<nav class="segmented"/);
-    expect(out.indexOf('class="topbar-end"')).toBeGreaterThan(controls);
+    const controls = out.indexOf('<div class="page-header-controls">');
+    expect(controls).toBeGreaterThan(out.indexOf('<h1 class="page-title">Dashboard</h1>'));
+    expect(out.slice(controls)).toMatch(/<div class="page-header-controls">\s*<nav class="segmented"/);
+    expect(out.indexOf('class="user-menu"')).toBeGreaterThan(controls);
+    expect(out).not.toContain('class="topbar');
   });
 
   it('a page without controls renders no controls container', async () => {
     const out = await render(page({ title: 'Dispatch', pm: { name: 'Alice' }, active: 'dispatch', body: html`<p>x</p>` }));
-    expect(out).not.toContain('topbar-controls');
+    expect(out).not.toContain('page-header-controls');
   });
 
   it('formats times as "Mon 14 Sep, 10:00 am" with three-letter months, never "Sept"', () => {

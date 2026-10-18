@@ -1,8 +1,8 @@
-// The Property Manager's dispatch board. On phones what needs a decision comes first
-// (Maintenance Requests, alerts and the inbox, each with its actions), then Tickets by
-// stage, the next 7 days and Urgent Repairs; from 1024px the board runs the full width
-// with the decisions beside the next 7 days and Urgent Repairs under it. Also the
-// actions on each, and /files/:id for photos.
+// The Property Manager's dispatch board. A count sentence, then "Needs you" (Maintenance
+// Requests to confirm, Quotes to check, Site quotes to book, Quotes to choose, Tradies to
+// rate, alerts and the inbox, each once with its actions), then Tickets by stage in one
+// row of lanes, then the next 7 days and Urgent Repairs. Also the actions on each, and
+// /files/:id for photos.
 // Controls repeated per item get the item's id in their element id ("reason-12"),
 // so every label on the page points at its own control.
 
@@ -20,7 +20,7 @@ import { shellInfo } from '../shell.ts';
 import {
   badge,
   button,
-  countStrip,
+  countSentence,
   dl,
   docket,
   emptyState,
@@ -30,6 +30,7 @@ import {
   humanise,
   lane,
   linkButton,
+  needsYou,
   page,
   postButton,
   queueRow,
@@ -90,6 +91,7 @@ const MESSAGE_CLASS: Record<string, string> = {
 /** The board's lanes, named as the Property Manager says them. */
 const STAGE_TITLE: Record<Stage, string> = {
   quoting: 'Quoting',
+  site_quoting: 'Site quotes',
   awaiting_owner: 'With Property Owner',
   approved: 'Ready to book',
   scheduled: 'Booked',
@@ -115,6 +117,11 @@ export function dashboardPages() {
     const people = view.inbox.some((item) => item.personId === null) ? await actions.people() : [];
     const q = filter === 'all' ? '?filter=all' : '';
     const needReceipt = view.urgentRepairs.filter((u) => u.status === 'reminder_sent').length;
+    const toCheck = view.tickets.filter((t) => t.decision === 'check_quotes');
+    const toBook = view.tickets.filter((t) => t.decision === 'book_site_quotes');
+    const toChoose = view.tickets.filter((t) => t.decision === 'choose_quote');
+    const toRate = view.alerts.filter((a) => a.kind === 'rating_due');
+    const otherAlerts = view.alerts.filter((a) => a.kind !== 'rating_due');
 
     return c.html(
       page({
@@ -129,16 +136,22 @@ export function dashboardPages() {
         ]),
         body: html`
           ${(await finishSetupBanner(actions, c.var.unavailableChannels))}
-          ${countStrip([
-            { label: 'Maintenance Requests to review', count: view.maintenanceRequests.length, href: '#requests', decision: true },
-            { label: 'Open Tickets', count: view.tickets.length, href: '#tickets' },
-            { label: 'Alerts', count: view.alerts.length, href: view.alerts.length ? '#alerts' : '#decisions', decision: true },
-            { label: 'In the inbox', count: view.inbox.length, href: view.inbox.length ? '#inbox' : '#decisions', decision: true },
-            { label: 'Urgent Repairs needing a receipt', count: needReceipt, href: '#urgent-repairs' },
-          ])}
+          ${countSentence(
+            [
+              { label: 'Maintenance Requests to confirm', one: 'Maintenance Request to confirm', count: view.maintenanceRequests.length, href: '#requests', decision: true },
+              { label: 'Quotes to check', one: 'Quote to check', count: toCheck.length, href: '#quotes-to-check', decision: true },
+              { label: 'Site quotes to book', one: 'Site quote to book', count: toBook.length, href: '#site-quotes', decision: true },
+              { label: 'Quotes to choose', one: 'Quote to choose', count: toChoose.length, href: '#quotes-to-choose', decision: true },
+              { label: 'Tradies to rate', one: 'Tradie to rate', count: toRate.length, href: '#to-rate', decision: true },
+              { label: 'Alerts', one: 'Alert', count: otherAlerts.length, href: '#alerts', decision: true },
+              { label: 'Messages in the inbox', one: 'Message in the inbox', count: view.inbox.length, href: '#inbox', decision: true },
+              { label: 'Urgent Repairs waiting for a receipt', one: 'Urgent Repair waiting for a receipt', count: needReceipt, href: '#urgent-repairs' },
+            ],
+            { label: 'What needs you' },
+          )}
           <div class="dashboard-desk">
-            <div class="dashboard-decisions">${decisions(view, people, q, timeZone, now, shareUrl(c, '/?filter=all#requests'))}</div>
-            <div class="dashboard-board">${ticketsByStage(view.tickets, filter, now, timeZone)}</div>
+            ${needsYouSection({ view, toCheck, toBook, toChoose, toRate, otherAlerts, people, q, timeZone, now, shareLink: shareUrl(c, '/?filter=all#requests') })}
+            ${ticketsByStage(view.tickets, filter, now, timeZone)}
             <div class="dashboard-side">
               ${nextSevenDays(view.calendar, now, timeZone)}
               ${section({ title: 'Urgent Repairs', id: 'urgent-repairs', actions: countBadge(view.urgentRepairs.length), body: urgentRepairsTable(view.urgentRepairs, timeZone, now) })}
@@ -150,8 +163,10 @@ export function dashboardPages() {
   });
 
   pages.post('/requests/:issueId{[0-9]+}/confirm', async (c) =>
-    formAction(c, await requestBack(c), async () => {
-      const ticketId = await c.var.actions.confirmMaintenanceRequest(idParam(c, 'issueId'));
+    formAction(c, await requestBack(c), async (form) => {
+      // The review page sends the Summary as edited; an empty or unchanged one changes nothing.
+      const summary = text(form, 'summary');
+      const ticketId = await c.var.actions.confirmMaintenanceRequest(idParam(c, 'issueId'), summary ? { summary } : undefined);
       return { ok: 'Confirmed. The Ticket is open and the Tenant has been told.', redirect: `/tickets/${ticketId}` };
     }),
   );
@@ -245,50 +260,87 @@ function countBadge(count: number) {
 
 // Needs your decision
 
+type NeedsYouInput = {
+  view: Dashboard;
+  toCheck: BoardTicket[];
+  toBook: BoardTicket[];
+  toChoose: BoardTicket[];
+  toRate: Alert[];
+  otherAlerts: Alert[];
+  people: Person[];
+  q: string;
+  timeZone: string;
+  now: Date;
+  shareLink: string;
+};
+
 /**
- * Maintenance Requests (oldest first, as the core orders them), then alerts, then the
- * inbox: the decisions, each once and with its actions on it. Alerts and the inbox show
- * only when they hold something. `shareLink` is the Agency-wide list of Maintenance
+ * "Needs you": every decision once, in groups, each row with its action. Maintenance
+ * Requests first (oldest first, as the core orders them), then Quotes to check, Site
+ * quotes to book, Quotes to choose, Tradies to rate, other alerts and the inbox. A group
+ * with nothing in it is left out. `shareLink` is the Agency-wide list of Maintenance
  * Requests, which a Share button passes on when there are any.
  */
-function decisions(view: Dashboard, people: Person[], q: string, timeZone: string, now: Date, shareLink: string): Html {
-  const requests = view.maintenanceRequests;
-  return section({
-    title: 'Needs your decision',
+function needsYouSection(n: NeedsYouInput): Html {
+  const requests = n.view.maintenanceRequests;
+  const group = (id: string, title: string, rows: Html[], head?: Html) =>
+    rows.length
+      ? html`<div id="${id}" class="decision-group">
+          <div class="decision-group-head">
+            <h3 class="decision-group-title">${title}</h3>
+            ${head ?? ''}
+          </div>
+          ${rows}
+        </div>`
+      : '';
+  const groups = [
+    group(
+      'requests',
+      'Maintenance Requests to confirm',
+      requests.map((r) => requestRow(r, n.q, n.now)),
+      shareButton({
+        title: 'Maintenance Requests to confirm',
+        text: `${requests.length} ${requests.length === 1 ? 'Maintenance Request is' : 'Maintenance Requests are'} waiting for review in myEST8.`,
+        url: n.shareLink,
+        note: COLLEAGUES_ONLY,
+      }),
+    ),
+    group('quotes-to-check', 'Quotes to check', n.toCheck.map((t) => ticketDecisionRow(t, 'check_quotes', n.now))),
+    group('site-quotes', 'Site quotes to book', n.toBook.map((t) => ticketDecisionRow(t, 'book_site_quotes', n.now))),
+    group('quotes-to-choose', 'Quotes to choose', n.toChoose.map((t) => ticketDecisionRow(t, 'choose_quote', n.now))),
+    group('to-rate', 'Tradies to rate', n.toRate.map((a) => alertRow(a, n.timeZone))),
+    group('alerts', 'Alerts', n.otherAlerts.map((a) => alertRow(a, n.timeZone))),
+    group('inbox', 'In the inbox', n.view.inbox.map((item) => inboxItem(item, n.people, n.timeZone, n.q))),
+  ];
+  const any = requests.length + n.toCheck.length + n.toBook.length + n.toChoose.length + n.toRate.length + n.otherAlerts.length + n.view.inbox.length > 0;
+  return needsYou({
     id: 'decisions',
-    body: html`<div class="decision-groups">
-      <div id="requests" class="decision-group">
-        <div class="decision-group-head">
-          <h3 class="decision-group-title">Maintenance Requests to review</h3>
-          ${requests.length
-            ? shareButton({
-                title: 'Maintenance Requests to review',
-                text: `${requests.length} ${requests.length === 1 ? 'Maintenance Request is' : 'Maintenance Requests are'} waiting for review in myEST8.`,
-                url: shareLink,
-                note: COLLEAGUES_ONLY,
-              })
-            : ''}
-        </div>
-        ${requests.length ? requests.map((r) => requestRow(r, q, now)) : emptyState('No Maintenance Requests waiting for you.')}
-      </div>
-      ${view.alerts.length
-        ? html`<div id="alerts" class="decision-group">
-            <h3 class="decision-group-title">Alerts</h3>
-            ${view.alerts.map((a) => alertRow(a, timeZone))}
-          </div>`
-        : ''}
-      ${view.inbox.length
-        ? html`<div id="inbox" class="decision-group">
-            <h3 class="decision-group-title">In the inbox</h3>
-            ${view.inbox.map((item) => inboxItem(item, people, timeZone, q))}
-          </div>`
-        : ''}
-    </div>`,
+    body: any ? html`<div class="decision-groups">${groups}</div>` : emptyState('No Maintenance Requests waiting for you. Nothing else needs you right now.'),
+  });
+}
+
+const DECISION_ACTION: Record<'check_quotes' | 'book_site_quotes' | 'choose_quote', string> = {
+  check_quotes: 'Check Quotes',
+  book_site_quotes: 'Book site quotes',
+  choose_quote: 'Choose a Quote',
+};
+
+/** A Ticket waiting on a Quote decision: the issue, the Ticket and street, Urgency and Trade, with the step as its action. */
+function ticketDecisionRow(t: BoardTicket, decision: keyof typeof DECISION_ACTION, now: Date): Html {
+  const status = quotingStatus(t);
+  return queueRow({
+    href: `/tickets/${t.ticketId}`,
+    title: t.description,
+    detail: `Ticket ${t.ticketId}, ${streetOf(t.propertyAddress)}`,
+    badges: [urgencyBadge(t.urgency), ...t.trades.map((trade) => badge(humanise(trade))), ...(status ? [badge(status, 'info', { outline: true })] : [])],
+    meta: ageOf(t.reportedAt, now),
+    decision: true,
+    actions: linkButton(DECISION_ACTION[decision], `/tickets/${t.ticketId}`, { size: 'sm' }),
   });
 }
 
 /**
- * A Maintenance Request in "Needs your decision", read like a docket: the issue, the
+ * A Maintenance Request in "Needs you", read like a docket: the issue, the
  * street, then every badge (Urgency, Trade and each check that needs a second look),
  * with Confirm and Review on their own line.
  */
@@ -297,7 +349,7 @@ function requestRow(r: MaintenanceRequest, q: string, now: Date): Html {
   return queueRow({
     href: `/requests/${r.issueId}`,
     thumb: first ? html`<img src="/files/${first.fileId}" alt="Photo of the issue" width="56" height="56" loading="lazy" />` : undefined,
-    title: r.description,
+    title: r.summary ?? r.description,
     detail: streetOf(r.propertyAddress),
     badges: [urgencyBadge(r.urgency), badge(humanise(r.trade)), ...requestFlags(r).map((f) => badge(f.label, f.tone))],
     meta: ageOf(r.reportedAt, now),
@@ -343,7 +395,8 @@ function alertRow(alert: Alert, timeZone: string): Html {
 // Tickets by stage
 
 /**
- * The board: five lanes from 1024px, each scrolling inside itself, and on phones the
+ * The board: six lanes in one row from 1024px (scrolling sideways inside its own
+ * container if the width runs out), each scrolling inside itself, and on phones the
  * lanes stacked as a list grouped by stage. The core gives each Ticket its lane,
  * Trades, Quote counts, next visit and whether it needs a decision; this only draws
  * them. With no open Tickets at all it is one empty state, not five.
@@ -354,7 +407,7 @@ function ticketsByStage(tickets: BoardTicket[], filter: Filter, now: Date, timeZ
     id: 'tickets',
     actions: linkButton('See all Tickets', filter === 'all' ? '/tickets?filter=all' : '/tickets', { variant: 'ghost', size: 'sm' }),
     body: tickets.length
-      ? html`<div class="grid gap-3 lg:grid-cols-5">
+      ? html`<div class="board-lanes">
           ${STAGES.map((stage) => {
             const inLane = tickets.filter((t) => t.stage === stage);
             return lane({
@@ -379,6 +432,7 @@ export function quotingStatus(t: Pick<BoardTicket, 'quoting' | 'decision'>): str
     return `${toCheck} ${toCheck === 1 ? 'Quote' : 'Quotes'} to check`;
   }
   if (t.decision === 'choose_quote') return 'Ready to choose';
+  if (t.decision === 'book_site_quotes') return 'Book site quotes';
   if (!q.asked && !q.received) return 'No Quote Requests yet';
   const of = Math.max(q.asked, q.received);
   return `${q.received} of ${of} ${of === 1 ? 'Quote' : 'Quotes'} in`;

@@ -30,6 +30,7 @@ export function calendarPages() {
     const today = dayOf(actions.now(), timeZone);
     const monday = mondayOf(parseDay(c.req.query('week')) ?? today);
     const days = daysFrom(monday, 7);
+    const tradies = await actions.people('tradie');
     const every = await actions.calendar({ from: startOfDay(monday, timeZone).toISOString(), to: startOfDay(addDays(monday, 7), timeZone).toISOString() });
     const bookings = filter === 'mine' ? every.filter((b) => b.propertyManagerId === pm.id) : every;
     const hidden = every.length - bookings.length;
@@ -57,7 +58,7 @@ export function calendarPages() {
         })}`,
         body: html`
           ${summary(bookings, pm.id, hidden ? html`${hidden} more ${hidden === 1 ? 'visit' : 'visits'} this week on other Property Managers’ Properties. <a class="link" href="${hrefFor(monday, 'all')}">Show all</a>` : '')}
-          ${weekList(days, bookingsByDay(bookings, monday, timeZone), today, timeZone, filter, pm.id)}
+          ${weekList(days, bookingsByDay(bookings, monday, timeZone), today, timeZone, filter, pm.id, freeToday(tradies, every, today, timeZone))}
         `,
       }),
     );
@@ -99,13 +100,13 @@ function summary(bookings: Booking[], meId: number, more: Html | ''): Html {
  * written as one line; the CSS shows that line below 1024 px and the empty days, narrow,
  * from 1024 px, so each screen reads one of the two.
  */
-function weekList(days: string[], byDay: Map<string, Booking[]>, today: string, timeZone: string, filter: Filter, meId: number): Html {
+function weekList(days: string[], byDay: Map<string, Booking[]>, today: string, timeZone: string, filter: Filter, meId: number, free: string[]): Html {
   const items: Html[] = [];
   let quiet: string[] = [];
   const flush = () => {
     if (quiet.length) {
       items.push(html`<li class="schedule-quiet">Nothing booked ${dayRange(quiet)}</li>`);
-      items.push(...quiet.map((day) => dayItem(day, [], false, timeZone, filter, meId)));
+      items.push(...quiet.map((day) => dayItem(day, [], false, timeZone, filter, meId, [])));
     }
     quiet = [];
   };
@@ -116,14 +117,14 @@ function weekList(days: string[], byDay: Map<string, Booking[]>, today: string, 
       continue;
     }
     flush();
-    items.push(dayItem(day, bookings, day === today, timeZone, filter, meId));
+    items.push(dayItem(day, bookings, day === today, timeZone, filter, meId, day === today ? free : []));
   }
   flush();
   return html`<ol class="schedule-week" aria-label="The week, Monday to Sunday">${items}</ol>`;
 }
 
 /** One day: "Mon 12" (the month is in the page's subtitle) and how many visits, then its bookings or "Nothing booked". */
-function dayItem(day: string, bookings: Booking[], isToday: boolean, timeZone: string, filter: Filter, meId: number): Html {
+function dayItem(day: string, bookings: Booking[], isToday: boolean, timeZone: string, filter: Filter, meId: number, free: string[]): Html {
   const classes = ['schedule-day', bookings.length ? 'is-booked' : 'is-empty', isToday ? 'is-today' : ''].join(' ');
   return html`<li class="${classes}" ${isToday ? html`aria-current="date"` : ''}>
     <h2 class="schedule-day-title">
@@ -134,7 +135,14 @@ function dayItem(day: string, bookings: Booking[], isToday: boolean, timeZone: s
     ${bookings.length
       ? html`<ul class="booking-list">${bookings.map((b) => bookingCard(b, timeZone, { propertyManager: filter === 'all', decision: b.propertyManagerId === meId }))}</ul>`
       : html`<p class="text-sm text-muted">Nothing booked</p>`}
+    ${free.length ? html`<details class="schedule-free"><summary class="schedule-free-label">Free today (${free.length})</summary><ul class="schedule-free-list">${free.map((n) => html`<li>${n}</li>`)}</ul></details>` : ''}
   </li>`;
+}
+
+/** The Agency's Tradies with no visit starting or running today (the calendar returns all Agency visits, not only Mine). */
+function freeToday(tradies: { id: number; name: string; businessName: string | null }[], every: Booking[], today: string, timeZone: string): string[] {
+  const busy = new Set(every.filter((b) => dayOf(b.start, timeZone) <= today && dayOf(new Date(Date.parse(b.end) - 1).toISOString(), timeZone) >= today).map((b) => b.tradieId));
+  return tradies.filter((t) => !busy.has(t.id)).map((t) => t.businessName ?? t.name);
 }
 
 /** Previous, this week (only when another week is shown) and next, keeping Mine or All. */

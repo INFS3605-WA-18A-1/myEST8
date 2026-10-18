@@ -25,7 +25,7 @@ describe('the demo stories', () => {
   test('play without a task error and leave the clock at the real time', () => {
     expect(errors).toEqual([]);
     expect(Math.abs(d.clock.now().getTime() - Date.now())).toBeLessThan(5_000);
-    expect(d.stories).toMatchObject({ maintenanceRequests: 4, openTickets: 9, closedTickets: 5, urgentRepairs: 2, inbox: 4, alerts: 3 });
+    expect(d.stories).toMatchObject({ maintenanceRequests: 4, openTickets: 10, closedTickets: 5, urgentRepairs: 2, inbox: 4, alerts: 3 });
   });
 
   test('leave Maintenance Requests with clean photos, flagged photos, no photos, and an Urgency to check', async () => {
@@ -58,6 +58,18 @@ describe('the demo stories', () => {
     expect(tickets.some((t) => t.jobs.length === 2)).toBe(true);
     expect(tickets.some((t) => t.unreadMessages > 0)).toBe(true);
     expect(new Set(tickets.map((t) => t.urgency))).toEqual(new Set(['high', 'routine']));
+  });
+
+  test('leave a High Job in site quoting with two visits, and another waiting to book site quotes', async () => {
+    const board = (await dashboard()).tickets;
+    const jobs = (await Promise.all(board.map(async (t) => (await alice()).ticket(t.ticketId)))).flatMap((t) => t.jobs);
+    const siteQuoting = jobs.filter((j) => j.status === 'site_quoting');
+    expect(siteQuoting).toHaveLength(1);
+    expect(siteQuoting[0]!.quotes.filter((q) => q.confirmed)).toHaveLength(2);
+    expect(siteQuoting[0]!.siteQuotes.visits).toHaveLength(2);
+    expect(jobs.some((j) => j.decision === 'book_site_quotes')).toBe(true);
+    const calendar = (await dashboard()).calendar.filter((b) => b.kind === 'site_quote' && b.status === 'active');
+    expect(calendar).toHaveLength(2);
   });
 
   test('raise every kind of alert, Urgent Repairs in both states, and every kind of inbox message', async () => {

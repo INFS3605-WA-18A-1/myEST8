@@ -178,7 +178,7 @@ describe('Approvals', () => {
     expect(html).toContain(`href="/tickets/${ticketId}"`);
     for (const expected of [KING_ST, 'Olivia Owens', '$650.00', '$500.00', '$150.00', 'Reminder not due yet']) expect(readable).toContain(expected);
     // A Quote with the Property Owner waits on them, not the Property Manager: a quiet count, not Wattle.
-    expect(html).toMatch(/<span class="count-chip ">1<\/span><span class="count-label">Quotes waiting on a Property Owner/);
+    expect(html).toMatch(/<a href="#owners" class="count-link">1 Quote waiting on a Property Owner<\/a>/);
 
     await w.h.advance(25 * HOUR);
     expect(visible(await text(w, '/approvals'))).toContain('Reminder sent');

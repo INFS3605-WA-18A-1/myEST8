@@ -3,7 +3,7 @@
 //
 // Built on daisyUI 5 components (https://daisyui.com, MIT) styled by the "myest8"
 // theme and the tokens in static/app.css (docs/design-system.md), with Tailwind
-// utilities generated in the browser by Tailwind's browser build. Some layouts are
+// utilities prebuilt into static/tw.css (npm run css). Some layouts are
 // adapted from HyperUI (https://hyperui.dev, MIT); each component says where it came from.
 
 import { html, raw } from 'hono/html';
@@ -48,54 +48,6 @@ export type FieldType =
 const THEME = 'myest8';
 
 /**
- * Lets Tailwind generate utilities for daisyUI's colours (ring-primary,
- * divide-base-300, text-base-content/75...) and for the design tokens (text-muted,
- * border-line, bg-page, text-urgent...) without redefining them.
- */
-const TAILWIND_THEME = html`<style type="text/tailwindcss">
-  @theme inline reference {
-    --color-base-100: var(--color-base-100);
-    --color-base-200: var(--color-base-200);
-    --color-base-300: var(--color-base-300);
-    --color-base-content: var(--color-base-content);
-    --color-primary: var(--color-primary);
-    --color-primary-content: var(--color-primary-content);
-    --color-secondary: var(--color-secondary);
-    --color-secondary-content: var(--color-secondary-content);
-    --color-accent: var(--color-accent);
-    --color-accent-content: var(--color-accent-content);
-    --color-neutral: var(--color-neutral);
-    --color-neutral-content: var(--color-neutral-content);
-    --color-info: var(--color-info);
-    --color-info-content: var(--color-info-content);
-    --color-success: var(--color-success);
-    --color-success-content: var(--color-success-content);
-    --color-warning: var(--color-warning);
-    --color-warning-content: var(--color-warning-content);
-    --color-error: var(--color-error);
-    --color-error-content: var(--color-error-content);
-    --color-ink: var(--ink);
-    --color-page: var(--page);
-    --color-surface: var(--surface);
-    --color-muted: var(--muted);
-    --color-line: var(--line);
-    --color-control: var(--control);
-    --color-action: var(--action);
-    --color-action-hover: var(--action-hover);
-    --color-info-bg: var(--info-bg);
-    --color-hivis: var(--hivis);
-    --color-urgent: var(--urgent);
-    --color-urgent-bg: var(--urgent-bg);
-    --color-high: var(--high);
-    --color-high-bg: var(--high-bg);
-    --color-done: var(--done);
-    --color-done-bg: var(--done-bg);
-    --color-rail-text: var(--rail-text);
-    --color-rail-muted: var(--rail-muted);
-  }
-</style>`;
-
-/**
  * The document's head. The inline script marks the page as having JavaScript
  * before the first paint, so the rail can become a drawer only when it can open.
  */
@@ -105,12 +57,12 @@ export function head(title: string, o: { css?: string[]; runtime?: boolean } = {
     <title>${title} - myEST8</title>
     <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
     <script>document.documentElement.classList.add('js');try{if(localStorage.getItem('rail')==='collapsed')document.documentElement.classList.add('rail-collapsed')}catch(e){}</script>
-    <link rel="preload" href="/assets/fonts/red-hat-text-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="preload" href="/assets/fonts/lexend-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/assets/fonts/public-sans-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/assets/fonts/bricolage-grotesque-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="/assets/daisyui.css" />
     <link rel="stylesheet" href="/assets/app.css" />
     ${(o.css ?? []).map((file) => html`<link rel="stylesheet" href="/assets/${file}" />`)}
-    ${o.runtime === false ? '' : html`<script src="/assets/tailwind.js"></script>${TAILWIND_THEME}`}
+    ${o.runtime === false ? '' : html`<link rel="stylesheet" href="/assets/tw.css" />`}
     <script src="/assets/app.js" defer></script>`;
 }
 
@@ -140,12 +92,14 @@ const SIMULATOR = { key: 'simulator', label: 'Phone simulator (demo)', href: '/d
 
 /** One rail link with its icon, aria-current when it is the page shown, and an optional count. */
 function railLink(item: { key: NavKey; label: string; href: string }, active: NavKey | undefined, count: number | undefined, cls = 'rail-link'): Html {
-  return html`<a href="${item.href}" class="${cls}" ${item.key === active ? html`aria-current="page"` : ''}>${NAV_ICON[item.key]}<span class="rail-label">${item.label}${count ? html`<span class="rail-count num">${count}<span class="sr-only"> waiting</span></span>` : ''}</span></a>`;
+  // Only the counts that mean "needs you" (Requests, Approvals) are a Wattle chip; any other count is a plain numeral.
+  const decision = item.key === 'requests' || item.key === 'approvals' ? html` data-decision` : '';
+  return html`<a href="${item.href}" class="${cls}" ${item.key === active ? html`aria-current="page"` : ''}${decision}>${NAV_ICON[item.key]}<span class="rail-label">${item.label}${count ? html`<span class="rail-count num">${count}<span class="sr-only"> waiting</span></span>` : ''}</span></a>`;
 }
 
 /**
  * The rail: the logo and the places in NAV with their icons (the current one gets
- * the Wattle bar and aria-current; Requests and Approvals carry a count when
+ * the 4px Wattle bar, weight 600 and aria-current; Requests and Approvals carry a count when
  * something is waiting), then at the bottom the demo's Phone simulator, the
  * Collapse menu button and the Agency's name. From 1024px the button folds the
  * rail to a strip of icons whose labels show as tooltips (app.js remembers the
@@ -180,26 +134,29 @@ function userMenu(name: string): Html {
 }
 
 /**
- * The top bar: the menu button (drawer only), the page title, the page's controls,
- * then today's date and the user menu. Under 1024px the controls drop to a second
- * row under the title, so the title always has room.
+ * The page header, the first row of the content column: the menu button (drawer only)
+ * and the page title (the page's only <h1>) on the left; the page's controls, today's
+ * date and the user menu on the right of the same row. On phones the row wraps, the
+ * title first and the controls under it.
  */
-function topBar(
+function pageHeader(
   title: string,
   o: { menu: boolean; controls?: Html; today?: string; pm?: { name: string } | null },
 ): Html {
-  return html`<header class="topbar">
-    ${o.menu ? html`<button type="button" class="menu-button" data-drawer-toggle aria-controls="rail" aria-expanded="false" aria-label="Menu">${ICON.menu}</button>` : ''}
-    <h1 class="topbar-title">${title}</h1>
-    ${o.controls ? html`<div class="topbar-controls">${o.controls}</div>` : ''}
-    <div class="topbar-end">
-      ${o.today ? html`<time class="topbar-date">${o.today}</time>` : ''}
+  return html`<header class="page-header">
+    <div class="page-header-lead">
+      ${o.menu ? html`<button type="button" class="menu-button" data-drawer-toggle aria-controls="rail" aria-expanded="false" aria-label="Menu">${ICON.menu}</button>` : ''}
+      <h1 class="page-title">${title}</h1>
+    </div>
+    <div class="page-header-end">
+      ${o.controls ? html`<div class="page-header-controls">${o.controls}</div>` : ''}
+      ${o.today ? html`<time class="page-header-date">${o.today}</time>` : ''}
       ${o.pm ? userMenu(o.pm.name) : ''}
     </div>
   </header>`;
 }
 
-/** The subtitle and buttons under the top bar (nothing when a page has neither). */
+/** The subtitle and buttons under the page header (nothing when a page has neither). */
 function contentHead(subtitle: Html | string | undefined, actions: Html | undefined): Html | string {
   if (!subtitle && !actions) return '';
   return html`<div class="page-head">
@@ -209,10 +166,11 @@ function contentHead(subtitle: Html | string | undefined, actions: Html | undefi
 }
 
 /**
- * A signed-in Property Manager's page: the rail (with the Agency's name), the top
- * bar with the title as the page's only <h1>, the flash under it, then `body`.
- * Top-level elements in `body` are spaced apart. `shell` (from shellInfo) adds the
- * Agency's name and today's date; `controls` sit in the top bar.
+ * A signed-in Property Manager's page: the rail (with the Agency's name), then the
+ * content column, whose first row is the page header (the title as the page's only
+ * <h1>, with the controls, date and user menu on its right), then the flash, then
+ * `body`. Top-level elements in `body` are spaced apart. `shell` (from shellInfo) adds
+ * the Agency's name and today's date; `controls` sit in the page header.
  */
 export function page(o: {
   title: string;
@@ -224,9 +182,9 @@ export function page(o: {
   subtitle?: Html | string;
   /** Buttons beside the subtitle. */
   actions?: Html;
-  /** Controls in the top bar, such as the Mine/All segmented control. */
+  /** Controls in the page header, such as the Mine/All segmented control. */
   controls?: Html;
-  /** The Agency's name for the rail and today's date for the top bar. */
+  /** The Agency's name for the rail and today's date for the page header. */
   shell?: ShellInfo;
   /** Counts shown beside rail links. */
   navCounts?: Partial<Record<NavKey, number>>;
@@ -246,9 +204,9 @@ export function page(o: {
         <div class="app-shell ${withRail ? 'has-rail' : ''}" data-shell>
           ${withRail ? rail(o.active, o.shell?.agencyName, o.navCounts ?? o.shell?.counts ?? {}, o.demo ?? o.shell?.demo ?? false) : ''}
           <div class="app-main">
-            ${topBar(o.title, { menu: withRail, controls: o.controls, today: o.shell?.today, pm: o.pm })}
-            ${o.flash ? html`<div class="app-flash">${flashMessage(o.flash)}</div>` : ''}
             <main id="main" class="app-content">
+              ${pageHeader(o.title, { menu: withRail, controls: o.controls, today: o.shell?.today, pm: o.pm })}
+              ${o.flash ? flashMessage(o.flash) : ''}
               ${contentHead(o.subtitle, o.actions)}
               <div class="app-body-stack">${o.body}</div>
             </main>
@@ -283,7 +241,7 @@ export function publicPage(o: {
   footer?: Html | string;
   /** Extra stylesheets under /assets/ for this page, after app.css: "landing.css" or "auth.css". */
   css?: string[];
-  /** False for a page that needs no Tailwind browser runtime (the Tenant pages): it is not loaded. */
+  /** False for a page that needs no Tailwind utilities (the Tenant pages): tw.css is not loaded. */
   runtime?: boolean;
   /** Who the page is from (a Tenant's Agency): its name leads the bar and the logo goes small at the right. */
   brand?: string;
@@ -334,7 +292,7 @@ export function withFlash(path: string, kind: Flash['kind'], message: string) {
   return `${path}${path.includes('?') ? '&' : '?'}${kind}=${encodeURIComponent(message)}`;
 }
 
-/** The message after an action, one line under the top bar. app.js adds a close button and fades "ok" ones. */
+/** The message after an action, one line under the page header. app.js adds a close button and fades "ok" ones. */
 export function flashMessage(flash: Flash): Html {
   const error = flash.kind === 'error';
   return html`<div role="${error ? 'alert' : 'status'}" data-flash="${flash.kind}" class="alert alert-soft ${error ? 'alert-error' : 'alert-success'} py-2 text-sm">
@@ -432,7 +390,7 @@ const TONE: Record<Tone, string> = { neutral: 'badge-neutral', info: 'badge-info
 /**
  * A short label (daisyUI badge, soft style). The text carries the meaning; colour only backs it up.
  * `outline` adds a hairline boundary and a white fill, keeping the tone's text colour: for a badge
- * that sits straight on the Paper page (a neutral badge's own fill is Paper, so it would read as loose text).
+ * that sits straight on the Gumleaf page (a neutral badge's own fill is Gumleaf, so it would read as loose text).
  */
 export function badge(text: string, tone: Tone = 'neutral', o: { wrap?: boolean; outline?: boolean } = {}): Html {
   return toneBadge(text, `${TONE[tone]}${o.outline ? ' is-outline' : ''}`, o.wrap);
@@ -491,6 +449,7 @@ const STATUS_LABEL: Record<string, string> = {
  */
 export const JOB_STAGES: { status: string; label: string }[] = [
   { status: 'quoting', label: 'Quoting' },
+  { status: 'site_quoting', label: 'Site quotes' },
   { status: 'awaiting_owner', label: 'With Property Owner' },
   { status: 'approved', label: 'Ready to book' },
   { status: 'scheduled', label: 'Booked' },
@@ -506,6 +465,7 @@ export function jobStageLabel(status: string): string {
 /** Each Job stage's badge tone, from the design doc's table. Cancelled is muted. */
 const JOB_TONE: Record<string, Tone | 'muted'> = {
   quoting: 'info',
+  site_quoting: 'info',
   awaiting_owner: 'warning',
   approved: 'info',
   scheduled: 'info',
@@ -514,7 +474,7 @@ const JOB_TONE: Record<string, Tone | 'muted'> = {
 };
 
 /** Statuses that name a Job stage on any screen, so their words need no `job` flag. */
-const JOB_WORDS = new Set(['quoting', 'awaiting_owner', 'scheduled', 'done', 'cancelled']);
+const JOB_WORDS = new Set(['quoting', 'site_quoting', 'awaiting_owner', 'scheduled', 'done', 'cancelled']);
 
 /**
  * Any status from the core (Job, Quote, Quote Request, approval...), in words. A Job's
@@ -745,8 +705,8 @@ const BUBBLE_TONE: Record<Tone, string> = { neutral: '', info: 'chat-bubble-info
 /**
  * One message in a conversation (daisyUI chat, https://daisyui.com/components/chat/).
  * Line breaks in `text` are kept; when it is a string, links in it can be
- * followed. Without a tone, `end` bubbles are Harbour with white text and `start`
- * bubbles sit on Paper. Links in a bubble take its text colour, underlined, so
+ * followed. Without a tone, `end` bubbles are Gum with white text and `start`
+ * bubbles sit on Gumleaf. Links in a bubble take its text colour, underlined, so
  * they read on every fill.
  */
 export function chatBubble(o: { side: 'start' | 'end'; header: Html | string; text: Html | string; footer?: Html | string; tone?: Tone }): Html {
@@ -761,7 +721,7 @@ export function chatBubble(o: { side: 'start' | 'end'; header: Html | string; te
 /**
  * Links that switch between views of one page (daisyUI tabs, border style). They
  * are links, so they use aria-current, not the ARIA tab pattern. For the Mine/All
- * control in a page's top bar, use `segmented`. Count chips here are quiet: Wattle is
+ * control in a page's header, use `segmented`. Count chips here are quiet: Wattle is
  * for decisions only.
  */
 export function tabs(items: { label: string; href: string; active: boolean; count?: number }[], label = 'Views'): Html {
@@ -883,17 +843,17 @@ export function ticketCell(o: { ticketId: number; issue: string; address?: strin
 }
 
 /**
- * A Ticket as a work-order docket, read in the order a Property Manager reads it:
- * the issue (up to three lines), the address, a dashed perforation, then the
- * tear-off stub with the status (the Urgency badge and `meta`, such as Trades and
- * what the Ticket waits on) and a foot with the number, the unread dot and `age`. The whole docket
- * is one link. `street` shows in place of the full address. `decision` adds the
- * Wattle stripe of anything waiting on the Property Manager. `unread` adds the
- * unread dot, with the words for screen readers. Without `href` it is a picture of
- * a docket, not a link (the landing page's workflow).
+ * A Ticket as a work-order docket, read in the order a Property Manager reads it: the
+ * stub (the number in the display face, the Urgency badge, the unread dot and `age`), a
+ * dashed perforation, then the issue (the Summary, up to three lines) at 16px, the
+ * address in Bark, and the stage line (`meta`: Trades and what the Ticket waits on). The
+ * whole docket is one link. `street` shows in place of the full address. `unread` adds the
+ * unread dot, with the words for screen readers. `decision` is kept for callers and adds
+ * the `is-decision` class, but a docket draws no Wattle of its own: decisions live in
+ * `needsYou`. Without `href` it is a picture of a docket, not a link (the landing page's
+ * workflow).
  *
- * `size: 'large'` is the Ticket page's header: the stub with a 26px number first,
- * then the address and the issue, as the page is already about that one Ticket.
+ * `size: 'large'` is the Ticket page's header: the same order with the number at 40px.
  * `lines` is how many lines the issue may take before its ellipsis: 3 on a board
  * docket and 2 on the large one by default (the dashboard's lanes ask for 2).
  */
@@ -911,60 +871,85 @@ export function docket(o: {
   size?: 'default' | 'large';
   lines?: 1 | 2 | 3;
 }): Html {
+  const large = o.size === 'large';
   const unread = o.unread
     ? html`<span><span class="unread-dot" aria-hidden="true"></span><span class="sr-only">unread messages</span></span>`
     : '';
-  const perf = html`<span class="docket-perf" aria-hidden="true"></span>`;
-  const inner =
-    o.size === 'large'
-      ? html`<span class="docket-stub">
-            <span class="docket-number num">#${o.number}</span>
-            ${urgencyBadge(o.urgency)}
-          </span>
-          ${perf}
-          <span class="docket-body">
-            ${clipped(o.street ?? o.address, 1, 'docket-address', o.address)}
-            ${clipped(o.issue, o.lines ?? 2, 'docket-issue')}
-            <span class="docket-meta">${o.meta.map((item) => html`<span>${item}</span>`)}${unread}</span>
-          </span>`
-      : html`<span class="docket-body">
-            ${clipped(o.issue, o.lines ?? 3, 'docket-issue')}
-            ${clipped(o.street ?? o.address, 1, 'docket-address', o.address)}
-          </span>
-          ${perf}
-          <span class="docket-status">
-            ${urgencyBadge(o.urgency)}
-            ${o.meta.map((item) => html`<span>${item}</span>`)}
-          </span>
-          <span class="docket-foot">
-            <span class="docket-number num">#${o.number}</span>${unread}
-            ${o.age ? html`<span class="ml-auto">${o.age}</span>` : ''}
-          </span>`;
-  const cls = `docket${o.size === 'large' ? ' is-large' : ''}${o.decision ? ' is-decision' : ''}`;
+  const inner = html`<span class="docket-stub">
+      <span class="docket-number num">#${o.number}</span>
+      ${urgencyBadge(o.urgency)}${unread}
+      ${o.age ? html`<span class="docket-age">${o.age}</span>` : ''}
+    </span>
+    <span class="docket-perf" aria-hidden="true"></span>
+    <span class="docket-body">
+      ${clipped(o.issue, o.lines ?? (large ? 2 : 3), 'docket-issue')}
+      ${clipped(o.street ?? o.address, 1, 'docket-address', o.address)}
+    </span>
+    ${o.meta.length > 0 ? html`<span class="docket-status">${o.meta.map((item) => html`<span>${item}</span>`)}</span>` : ''}`;
+  const cls = `docket${large ? ' is-large' : ''}${o.decision ? ' is-decision' : ''}`;
   return o.href ? html`<a href="${o.href}" class="${cls}">${inner}</a>` : html`<div class="${cls}">${inner}</div>`;
 }
 
+type Count = { label: string; count: number; href: string; decision?: boolean; /** The words for exactly one ("Quote to choose"), when `label` is the plural. */ one?: string };
+
 /**
- * The count strip: one row of counts that link into the queues. Decision counts
- * take the Wattle chip; the others a quiet one.
+ * The count sentence: one sentence under the page title in 16px, each count a link into
+ * its queue ("2 Maintenance Requests to confirm, 1 Quote to choose and 1 Tradie to
+ * rate."). Counts of zero are left out. A count that needs a decision is Ironbark on a
+ * Wattle chip; the others are plain links. When nothing is left, the sentence says so
+ * (`empty`, "Nothing needs you right now." by default).
  */
-export function countStrip(items: { label: string; count: number; href: string; decision?: boolean }[]): Html {
-  return html`<nav aria-label="Counts">
-    <ul class="count-strip">
-      ${items.map(
-        (item) =>
-          html`<li><a href="${item.href}" class="count-item"><span class="count-chip ${item.decision ? 'is-decision' : ''}">${item.count}</span><span class="count-label">${item.label}</span></a></li>`,
-      )}
-    </ul>
-  </nav>`;
+export function countSentence(items: Count[], o: { empty?: string; label?: string } = {}): Html {
+  const shown = items.filter((item) => item.count > 0);
+  if (shown.length === 0) return html`<p class="count-sentence">${o.empty ?? 'Nothing needs you right now.'}</p>`;
+  const link = (item: Count) =>
+    html`<a href="${item.href}" class="count-link${item.decision ? ' is-decision' : ''}">${item.count} ${item.count === 1 ? (item.one ?? item.label) : item.label}</a>`;
+  const parts = shown.map((item, i) => {
+    const sep = i === 0 ? '' : i === shown.length - 1 ? ' and ' : ', ';
+    return html`${sep}${link(item)}`;
+  });
+  return html`<nav aria-label="${o.label ?? 'Counts'}"><p class="count-sentence">${parts}.</p></nav>`;
+}
+
+/** The old name for `countSentence`, kept so a page not yet moved over still renders. */
+export const countStrip = countSentence;
+
+/**
+ * The decision queue: one section titled "Needs you" (or `title`) with a full-height 4px
+ * Wattle bar on its left edge, its own border and not a stripe per row. Put `queueRow`s
+ * in `body`; inside it they are hairline-separated, not cards. This bar is the one
+ * memorable element on the desk: nothing else on the page is Wattle except the rail's
+ * current item and the decision counts.
+ */
+export function needsYou(o: { body: Html; title?: string; actions?: Html; id?: string }): Html {
+  const id = o.id ?? 'needs-you';
+  return html`<section class="needs-you" id="${id}" aria-labelledby="${id}-title">
+    <div class="section-head">
+      <h2 class="section-title" id="${id}-title">${o.title ?? 'Needs you'}</h2>
+      ${o.actions ? html`<div class="section-actions">${o.actions}</div>` : ''}
+    </div>
+    <div class="needs-you-body">${o.body}</div>
+  </section>`;
+}
+
+/**
+ * Text the AI filled in (a Summary) on the info tint, with a quiet "Filled in by AI"
+ * label. Pass `edit` for the control that changes it (a pencil link). Text a person wrote
+ * or edited, or the Tenant's own words, is not tinted.
+ */
+export function aiFilled(content: Html | string, o: { label?: string; edit?: Html } = {}): Html {
+  return html`<div class="ai-filled">
+    <span class="ai-filled-label">${o.label ?? 'Filled in by AI'}</span>
+    <div class="flex items-start justify-between gap-3"><div class="min-w-0">${content}</div>${o.edit ?? ''}</div>
+  </div>`;
 }
 
 /**
  * A compact queue row: an optional photo thumbnail, then the title (a link when
  * `href` is given) with the actions such as Confirm and Review beside it, a detail
  * line, and the badges with the meta (an age) at the end of their row.
- * `decision` (default false) marks a row that needs the Property Manager's decision:
- * only those get the 4px Wattle stripe on the left.
+ * `decision` (default false) marks a row that needs the Property Manager's decision.
+ * Put those inside `needsYou`, which carries the one Wattle bar; a row draws none itself.
  */
 export function queueRow(o: {
   href?: string;
@@ -1002,7 +987,7 @@ export function segmented(items: { label: string; href: string; active: boolean 
 /**
  * A board column (a lane): a heading with its count, and a body that scrolls
  * inside about 300px. The body is focusable so the keyboard can scroll it. The
- * lane is a Paper tray; the dockets in it are white.
+ * lane is a Gumleaf tray; the dockets in it are white.
  */
 export function lane(o: { title: string; count: number; body: Html }): Html {
   return html`<section class="lane">
@@ -1118,10 +1103,10 @@ const LOGO_MARK =
   'M128 14 L208 94 L208 232 Q208 244 196 244 L60 244 Q48 244 48 232 L48 94 Z M128 46 A12 12 0 1 0 128.01 46 Z M146.49 152.53 A34 34 0 1 0 109.51 152.53 A40 40 0 1 0 146.49 152.53 Z M128 106 A16 16 0 1 0 128.01 106 Z M128 170 A20 20 0 1 0 128.01 170 Z';
 
 /**
- * The logo: the key tag beside the "myEST8" wordmark in Lexend, a light "my" and a
+ * The logo: the key tag beside the "myEST8" wordmark in Bricolage Grotesque, a light "my" and a
  * bold "EST8". The mark is hidden from screen readers, so the logo's accessible
  * name is "myEST8". Put it inside a link or heading; `sm` is a 20px mark, `md`
- * (default) 28px. The mark is Harbour on light surfaces and Wattle in the rail.
+ * (default) 28px. The mark is only ever Ironbark, White or Wattle.
  */
 export function logo(o: { size?: 'sm' | 'md' } = {}): Html {
   return html`<span class="logo is-${o.size ?? 'md'}"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" class="logo-mark" aria-hidden="true" focusable="false"><path fill-rule="evenodd" d="${LOGO_MARK}" /></svg><span class="logo-word"><span class="logo-my">my</span>EST8</span></span>`;

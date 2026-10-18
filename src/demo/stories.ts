@@ -309,6 +309,34 @@ function kaisLeakUnderSink(k: Kit) {
   s.on(8, '16:00', 'Alice books Dana three weekdays out', () => k.book(plumbing, k.upcoming(3, '10:00'), 120));
 }
 
+/** High, two confirmed Quotes, Site Quotes booked for tomorrow: Wei's leaking hot water system at Wilson St. The photo comes with the first message. */
+function weisHotWaterLeak(k: Kit) {
+  const { ids, alice } = k;
+  const s = k.story("Wei's hot water leak");
+  const text = 'The hot water system is leaking into the laundry';
+  let job: JobRef;
+  s.on(7, '08:30', 'Wei reports it with a photo in his first message', async () => {
+    const photos = [k.photo('hot-water-leak', await k.takenAt(ids.wilsonSt, 6))];
+    const token = await k.report(ids.wei, text, ['Laundry', 'This morning', "Yes, it's getting worse", '3'], photos);
+    if (!token) throw new Error('Wei should have been sent the upload link');
+  });
+  s.on(7, '11:00', 'Alice confirms it and asks Quinn and Dana to quote', async () => {
+    job = k.job(alice, await k.confirm(alice, text), 'plumbing');
+    await k.requestQuotes(job, [ids.quinn, ids.dana]);
+  });
+  s.on(7, '14:00', 'Quinn quotes by email', () =>
+    k.quote(ids.quinn, job, 'Quote: $1,320 + GST to replace the hot water unit at the Newtown job. Friday 8am.', 1320_00),
+  );
+  s.on(7, '15:30', 'Dana quotes', () => k.quote(ids.dana, job, '$1,180 incl GST for the Newtown hot water job, Thursday 7:30am', 1180_00));
+  s.on(7, '17:00', 'Alice confirms both Quotes', () => k.confirmQuotes(job));
+  s.on(9, '16:00', 'Alice books Quinn and Dana to look at it tomorrow', () =>
+    k.bookSiteQuotes(job, [
+      { tradieId: ids.quinn, start: k.upcoming(1, '09:00') },
+      { tradieId: ids.dana, start: k.upcoming(1, '11:00') },
+    ]),
+  );
+}
+
 /** Done, waiting for Alice's rating ("rating due"): Maya's bathroom door handle at Albion St. No photos sent. */
 function mayasDoorHandle(k: Kit) {
   const { ids, alice } = k;
@@ -552,6 +580,7 @@ const STORIES: ((k: Kit) => void)[] = [
   noahsBurstPipe,
   ethansLeakingRoof,
   priyasHotWater,
+  weisHotWaterLeak,
   kaisLeakUnderSink,
   mayasDoorHandle,
   mayasOven,
@@ -688,8 +717,8 @@ async function createKit({ app, simulator, seed, clock, end }: { app: App; simul
    * since when, getting worse, when they're home) a couple of minutes apart.
    * Returns the token of the upload link they're sent.
    */
-  async function report(tenantId: number, text: string, answers: readonly [string, string, string, string]) {
-    const first = await say(tenantId, text);
+  async function report(tenantId: number, text: string, answers: readonly [string, string, string, string], firstPhotos: Upload[] = []) {
+    const first = await say(tenantId, text, firstPhotos.length ? { attachments: firstPhotos } : {});
     expectSent(first, tenantId, 'tenant.acknowledgement');
     let sent = first;
     for (const [i, answer] of answers.entries()) {
@@ -782,6 +811,16 @@ async function createKit({ app, simulator, seed, clock, end }: { app: App; simul
     await tick();
   }
 
+  /** The Property Manager books a Site Quote visit with each Tradie; the Job moves to site quoting. */
+  async function bookSiteQuotes(ref: JobRef, visits: { tradieId: number; start: Date; minutes?: number }[]) {
+    await ref.pm.bookSiteQuotes(
+      (await view(ref)).jobId,
+      visits.map((v) => ({ tradieId: v.tradieId, start: v.start.toISOString(), ...(v.minutes ? { durationMinutes: v.minutes } : {}) })),
+    );
+    await tick();
+    if ((await view(ref)).status !== 'site_quoting') throw new Error(`The ${ref.trade} Job should be site quoting`);
+  }
+
   async function confirmVisit(tenantId: number, ref: JobRef, text: string) {
     await say(tenantId, text);
     if (!(await view(ref)).workOrder?.visitConfirmed) throw new Error(`"${text}" should have confirmed the visit`);
@@ -841,6 +880,7 @@ async function createKit({ app, simulator, seed, clock, end }: { app: App; simul
     confirmQuotes,
     choose,
     book,
+    bookSiteQuotes,
     confirmVisit,
     done,
     tenantRates,

@@ -7,7 +7,7 @@ import type { PropertyManagerActions } from '../../app.ts';
 import type { Urgency } from '../../shared.ts';
 import type { WebEnv } from '../env.ts';
 import { shellInfo } from '../shell.ts';
-import { badge, countStrip, emptyState, flashFrom, formatAge, humanise, linkButton, page, segmented, statusBadge, table, tabs, ticketCell, urgencyBadge, type Html } from '../ui.ts';
+import { badge, countSentence, emptyState, flashFrom, formatAge, humanise, linkButton, page, segmented, statusBadge, table, tabs, ticketCell, urgencyBadge, type Html } from '../ui.ts';
 
 type TicketList = Awaited<ReturnType<PropertyManagerActions['tickets']>>;
 type Status = 'open' | 'closed';
@@ -55,7 +55,7 @@ export function ticketListPages() {
             ],
             'Status',
           )}
-          ${countStrip(
+          ${countSentence(
             URGENCY_FILTERS.map((urgency) => ({
               label: humanise(urgency),
               count: list.counts[urgency],

@@ -4,6 +4,16 @@
 // and closing the user menu.
 
 (() => {
+  // A button with data-fill="<input id>" and data-value puts that value in the input (a quick choice of time).
+  document.addEventListener('click', (event) => {
+    const button = event.target instanceof Element ? event.target.closest('[data-fill]') : null;
+    const input = button && document.getElementById(button.dataset.fill);
+    if (input instanceof HTMLInputElement) {
+      input.value = button.dataset.value ?? '';
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  });
+
   // Forms with data-confirm (postButton's `confirm`) ask first. A form already
   // on its way isn't sent twice; the guard lifts after a while in case the
   // response didn't navigate (a download, say).

@@ -11,7 +11,7 @@ const CALENDAR_DAYS = 14;
 export type Stage = Exclude<JobStatus, 'cancelled'>;
 
 /** The lanes in workflow order. */
-export const STAGES: Stage[] = ['quoting', 'awaiting_owner', 'approved', 'scheduled', 'done'];
+export const STAGES: Stage[] = ['quoting', 'site_quoting', 'awaiting_owner', 'approved', 'scheduled', 'done'];
 
 /** Across a Ticket's Jobs being quoted: Quote Requests not declined, Quotes in, and Quotes the Property Manager confirmed. */
 export type Quoting = { asked: number; received: number; confirmed: number };
@@ -20,7 +20,13 @@ export type Quoting = { asked: number; received: number; confirmed: number };
  * What a Ticket being quoted needs from the Property Manager: Quotes in but not yet
  * confirmed are to check; once a Job has MIN_QUOTES confirmed Quotes one can be chosen.
  */
-export type QuotingDecision = 'check_quotes' | 'choose_quote';
+export type QuotingDecision = 'check_quotes' | 'choose_quote' | 'book_site_quotes';
+
+/** Where a Ticket's Site Quotes stand: whether they were booked or skipped, and visits still to happen. */
+export type SiteQuoteState = { booked: boolean; skipped: boolean; open: number };
+
+/** What `quotingDecision` needs beyond the Quote counts: the Job's lane, the Ticket's Urgency and its Site Quotes. */
+export type QuotingContext = { status?: 'quoting' | 'site_quoting'; urgency?: Ticket['urgency']; siteQuotes?: SiteQuoteState };
 
 /**
  * The lane of a Ticket: its least advanced open Job (quoting < awaiting_owner <
@@ -34,10 +40,15 @@ export function stageOf(jobs: { status: JobStatus }[]): Stage {
 }
 
 /** Unconfirmed Quotes come first: they are what stands between the Property Manager and choosing. */
-export function quotingDecision(q: Quoting): QuotingDecision | null {
+export function quotingDecision(q: Quoting, context: QuotingContext = {}): QuotingDecision | null {
   if (q.received > q.confirmed) return 'check_quotes';
-  if (q.confirmed >= MIN_QUOTES) return 'choose_quote';
-  return null;
+  if (q.confirmed < MIN_QUOTES) return null;
+  const site = context.siteQuotes ?? { booked: false, skipped: false, open: 0 };
+  // Getting Site Quotes: choose once every booked visit is done.
+  if (context.status === 'site_quoting') return site.open > 0 ? null : 'choose_quote';
+  // A High Ticket with two confirmed Quotes leads with Site Quotes; choosing without them stays allowed.
+  if (context.urgency === 'high' && !site.booked && !site.skipped) return 'book_site_quotes';
+  return 'choose_quote';
 }
 
 /** Caches an async lookup for one read, so Tickets on the same Property share it. */
@@ -88,6 +99,9 @@ export function createViews({ clock, modules }: Context) {
     trade: issue.trade,
     checkTrade: issue.checkTrade,
     reportedAt: issue.reportedAt,
+    summary: issue.summary,
+    summaryBy: issue.summaryBy,
+    photosOnArrival: issue.photosOnArrival,
     unreadMessages: await tickets.unreadCount(issue.id),
   });
 
@@ -107,7 +121,8 @@ export function createViews({ clock, modules }: Context) {
       tickets.issuesWithUnread(open.map((t) => t.issueId)),
       modules.scheduling.visitsOfTickets(ids),
     ]);
-    const quoting = await modules.quotes.quotingOf(jobs.filter((j) => j.status === 'quoting').map((j) => j.id));
+    const quotingJobIds = jobs.filter((j) => j.status === 'quoting' || j.status === 'site_quoting').map((j) => j.id);
+    const [quoting, siteQuotes] = await Promise.all([modules.quotes.quotingOf(quotingJobIds), modules.scheduling.siteQuotesOf(quotingJobIds)]);
     const label = cached(propertyLabel);
     const person = cached(profiles.person);
     const jobsOf = new Map<number, Job[]>();
@@ -119,7 +134,7 @@ export function createViews({ clock, modules }: Context) {
         const stage = stageOf(ticketJobs);
         const inStage = ticketJobs.filter((j) => j.status === stage);
         const counts =
-          stage === 'quoting'
+          stage === 'quoting' || stage === 'site_quoting'
             ? inStage.reduce<Quoting>((sum, j) => {
                 const c = quoting.get(j.id);
                 return c ? { asked: sum.asked + c.asked, received: sum.received + c.received, confirmed: sum.confirmed + c.confirmed } : sum;
@@ -139,7 +154,19 @@ export function createViews({ clock, modules }: Context) {
           trades: [...new Set(ticketJobs.filter((j) => j.status !== 'cancelled').map((j) => j.trade))],
           quoting: counts,
           nextVisit: stage === 'scheduled' ? (inStage.map((j) => visits.get(j.id)).filter((v) => v !== undefined).sort()[0] ?? null) : null,
-          decision: counts ? quotingDecision(counts) : null,
+          decision: counts
+            ? quotingDecision(counts, {
+                status: stage as 'quoting' | 'site_quoting',
+                urgency: ticket.urgency,
+                siteQuotes: inStage.reduce<SiteQuoteState>(
+                  (sum, j) => {
+                    const state = siteQuotes.get(j.id);
+                    return state ? { booked: sum.booked || state.booked, skipped: sum.skipped || state.skipped, open: sum.open + state.open } : sum;
+                  },
+                  { booked: false, skipped: false, open: 0 },
+                ),
+              })
+            : null,
         };
       }),
     );
@@ -178,9 +205,11 @@ export function createViews({ clock, modules }: Context) {
       return { maintenanceRequests, tickets: boardTickets, urgentRepairs: repairs, inbox, alerts: [...quoteAlerts, ...schedulingAlerts], calendar };
     },
 
-    /** The Maintenance Requests waiting for a Property Manager to confirm, oldest first. */
+    /** The Maintenance Requests waiting for a Property Manager to confirm: Urgent, High, then Routine, oldest first within each. */
     async requests(agencyId: number, propertyManagerId: number, filter: 'mine' | 'all') {
-      return maintenanceRequestViews(agencyId, await scope(propertyManagerId, filter));
+      const rank = (u: string) => ['urgent', 'high', 'routine'].indexOf(u);
+      const views = await maintenanceRequestViews(agencyId, await scope(propertyManagerId, filter));
+      return views.sort((a, b) => rank(a.urgency) - rank(b.urgency) || a.reportedAt.localeCompare(b.reportedAt));
     },
 
     /** One Maintenance Request waiting for review anywhere in the Agency, or null when there is none with that number. */
@@ -433,19 +462,53 @@ export function createViews({ clock, modules }: Context) {
         ...(await ticketSummary(ticket)),
         ...(await issueDetails(issue)),
         status: ticket.status,
+        summary: issue.summary,
+        summaryBy: issue.summaryBy,
         propertyId: property.id,
         maxRepairCostCents: property.maxRepairCostCents,
         frequentIssues: await profiles.frequentIssues(property.id),
         repairCostCents: await modules.quotes.repairCost(ticket.id),
         jobs: await Promise.all(
-          (await tickets.jobsOf(ticket.id)).map(async (job) => ({
-            jobId: job.id,
-            trade: job.trade,
-            checkTrade: job.checkTrade,
-            status: job.status,
-            ...(await modules.quotes.jobView(agencyId, job.id)),
-            workOrder: await modules.scheduling.workOrderForJob(job.id),
-          })),
+          (await tickets.jobsOf(ticket.id)).map(async (job) => {
+            const quotesView = await modules.quotes.jobView(agencyId, job.id);
+            const siteState = (await modules.scheduling.siteQuotesOf([job.id])).get(job.id) ?? { booked: false, skipped: false, open: 0 };
+            const gettingQuotes = job.status === 'quoting' || job.status === 'site_quoting';
+            const counts: Quoting = {
+              asked: quotesView.quoteRequests.filter((r) => r.status !== 'declined').length,
+              received: quotesView.quotes.length,
+              confirmed: quotesView.quotes.filter((q) => q.confirmed).length,
+            };
+            return {
+              jobId: job.id,
+              trade: job.trade,
+              checkTrade: job.checkTrade,
+              status: job.status,
+              ...quotesView,
+              /** Each Quote with its Tradie's ratings, whether or not they are among the recommended Tradies. */
+              quotes: await Promise.all(
+                quotesView.quotes.map(async (q) => {
+                  const tradie = await profiles.personInAgency(agencyId, q.tradieId, 'tradie');
+                  return {
+                    ...q,
+                    myEst8Rating: await profiles.myEst8Rating(q.tradieId),
+                    googleRating: tradie.googlePlaceId ? { rating: tradie.googleRating, reviewCount: tradie.googleReviewCount } : null,
+                  };
+                }),
+              ),
+              /** What the Property Manager decides next while the Job is getting Quotes; null otherwise. */
+              decision: gettingQuotes ? quotingDecision(counts, { status: job.status as 'quoting' | 'site_quoting', urgency: ticket.urgency, siteQuotes: siteState }) : null,
+              workOrder: await modules.scheduling.workOrderForJob(job.id),
+              /** Site Quote visits (not cancelled), the state of Site Quotes, and free slots to prefill booking them. */
+              siteQuotes: {
+                booked: siteState.booked,
+                skipped: siteState.skipped,
+                openVisits: siteState.open,
+                visits: await modules.scheduling.siteQuoteVisits(job.id),
+                canBook: gettingQuotes && quotesView.quotes.some((q) => q.confirmed && q.status === 'open'),
+                slots: gettingQuotes && quotesView.quotes.some((q) => q.confirmed && q.status === 'open') ? await modules.scheduling.siteQuoteSlots(agencyId, job.id) : [],
+              },
+            };
+          }),
         ),
         timeline: await tickets.timeline(ticket.id),
         messages: await tickets.messages(ticket.issueId),

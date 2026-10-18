@@ -79,8 +79,8 @@ function hero(): Html {
           <span class="lp-line">myEST8 does the chasing.</span>
         </h1>
         <p class="lp-lead">
-          A maintenance desk for Property Managers at small Agencies. Tenants report repairs by SMS or email. myEST8 asks the follow-up questions, gets
-          the Quotes and books the Tradie. You confirm the repair and choose the Quote.
+          A maintenance desk for Property Managers at small Agencies. Tenants report repairs by SMS or email. myEST8 asks the follow-up questions,
+          checks the photos, writes the summary and gets the Quotes. You confirm the repair and choose the Quote.
         </p>
         <div class="lp-actions">${linkButton(SIGN_UP, '/signup', { variant: 'primary', size: 'lg' })} ${linkButton('Sign in', '/login', { size: 'lg' })}</div>
         <p class="lp-note">Tenants, Tradies and Property Owners never need an account. They reply by text or a link.</p>
@@ -126,6 +126,7 @@ function scene(): Html {
       <p class="lp-request-kind"><span>Maintenance Request</span><span class="lp-request-age">Waiting for you</span></p>
       <p class="lp-request-address">12 King St, Newtown</p>
       <p class="lp-request-issue">Kitchen tap dripping under the sink since Sunday.</p>
+      <p class="lp-ai"><span class="lp-ai-tag">Filled in by AI</span> You can edit the summary before you confirm.</p>
       <div class="lp-request-body">
         <dl class="lp-request-fields">
           <div>
@@ -139,7 +140,7 @@ function scene(): Html {
         </dl>
         ${tapPhoto()}
       </div>
-      <p class="lp-request-actions" aria-hidden="true"><span class="lp-fake-btn is-primary">Confirm</span><span class="lp-fake-btn">Review</span></p>
+      <p class="lp-request-actions" aria-hidden="true"><span class="lp-fake-btn is-primary">Confirm</span><span class="lp-fake-btn">Change</span></p>
     </div>
     <div class="lp-became">
       <p class="lp-became-note">Confirmed at 9:10 am. Now it’s a Ticket.</p>
@@ -148,7 +149,7 @@ function scene(): Html {
         urgency: 'routine',
         address: '12 King St, Newtown',
         issue: 'Kitchen tap dripping under the sink',
-        meta: [html`Plumbing`, html`0 of 3 Quotes in`],
+        meta: [html`Plumbing`, html`Quoting`],
         age: 'just now',
       })}
     </div>
@@ -238,13 +239,13 @@ const STAGES: Stage[] = [
   {
     when: 'Mon 7:46 am',
     who: 'myEST8',
-    title: 'It becomes a Maintenance Request',
+    title: 'Photos are checked and a summary is written',
     picture: () =>
       html`<div class="lp-card">
         <p class="lp-card-title">12 King St, Newtown</p>
         <p>Kitchen tap dripping under the sink</p>
         <p class="lp-badges">${urgencyBadge('routine')}${badge('Plumbing')}</p>
-        <p class="lp-card-meta">Two follow-up questions asked, one photo</p>
+        <p class="lp-card-meta">One photo, checked on arrival. Summary filled in by AI.</p>
       </div>`,
   },
   {
@@ -272,7 +273,7 @@ const STAGES: Stage[] = [
   {
     when: 'Mon 9:11 am',
     who: 'myEST8',
-    title: 'Quote Requests go to Tradies',
+    title: 'Quote Requests go to at least two Tradies',
     picture: () =>
       html`<div class="lp-card">
         <p class="lp-card-title">Quote Requests sent to 3 Tradies</p>
@@ -281,7 +282,7 @@ const STAGES: Stage[] = [
             (name) => html`<li>${icon('paper-plane-tilt', { size: 'size-4' })}<span>${name}</span></li>`,
           )}
         </ul>
-        <p class="lp-card-meta">Anyone who hasn’t quoted in 48 hours gets a reminder</p>
+        <p class="lp-card-meta">Up to four suggested. Anyone who hasn’t quoted in 48 hours gets a reminder.</p>
       </div>`,
   },
   {
@@ -364,23 +365,27 @@ function workflow(): Html {
 
 /* ----- Who does what ----- */
 
-/** The two calls that stay with the Property Manager. */
+/** The calls that stay with the Property Manager. */
 const DECISIONS = [
   {
     title: 'Confirm each Maintenance Request',
-    text: 'Check the Trade and Urgency myEST8 filled in, change them if you need to, and confirm. It becomes a Ticket.',
+    text: 'Check the summary, Trade and Urgency myEST8 filled in, edit them if you need to, and confirm. It becomes a Ticket.',
+  },
+  {
+    title: 'Book site quotes for a High repair',
+    text: 'Once two Quotes are in on a High repair, have Tradies visit the Property and revise their price, or skip the visits.',
   },
   {
     title: 'Choose the Quote',
-    text: 'Once two Quotes are in, pick one. If it takes the Repair Cost over the Property’s Max Repair Cost, myEST8 asks the Property Owner first.',
+    text: 'Pick one. If it takes the Repair Cost over the Property’s Max Repair Cost, myEST8 asks the Property Owner first.',
   },
 ];
 
 /** What myEST8 does without being asked. */
 const CHORES = [
-  { icon: 'chat-circle-dots', text: 'Asks the Tenant follow-up questions and for photos until the Maintenance Request is complete.' },
+  { icon: 'chat-circle-dots', text: 'Asks the Tenant follow-up questions, checks the photos when they arrive, and fills in a summary of the issue with AI.' },
   { icon: 'siren', text: 'Spots an Urgent Repair and reminds the Tenant to arrange it with a Nominated Tradie, so it never waits on Quotes.' },
-  { icon: 'paper-plane-tilt', text: 'Sends Quote Requests to the Agency’s Tradies for the Trade, and reminds them after 48 hours.' },
+  { icon: 'paper-plane-tilt', text: 'Suggests up to four Tradies for the Trade, sends Quote Requests to at least two, and reminds them after 48 hours.' },
   { icon: 'signature', text: 'Asks the Property Owner to approve a Quote over the Max Repair Cost, and reminds them after a day.' },
   { icon: 'calendar-check', text: 'Sends the Work Order, books the visit and tells the Tenant when the Tradie is coming.' },
 ];
@@ -436,6 +441,7 @@ function closing(): Html {
   return html`<section class="lp-close" aria-labelledby="lp-close-title">
     <div class="lp-wrap lp-close-inner">
       <div class="lp-close-copy">
+        <span class="lp-close-logo">${logo()}</span>
         <h2 id="lp-close-title" class="lp-h2">Put your Agency’s repairs on one desk</h2>
         <p>Create the Agency’s account, add your Properties and Tradies, and give Tenants the number to text.</p>
       </div>

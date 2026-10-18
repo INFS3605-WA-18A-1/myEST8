@@ -40,6 +40,7 @@ describe('completing a Job', () => {
 
     const nextJob = await alice.addJob(job.ticketId, 'plumbing');
     const { recommendations } = await jobView(w, { ticketId: job.ticketId, jobId: nextJob });
-    expect(recommendations.slice(0, 3).map((r) => r.businessName)).toEqual(['Drip Doctors', 'Flow Bros', "Pete's Plumbing"]);
+    // Nina is the Property's Nominated Tradie, so she leads; the rest follow by myEST8 rating.
+    expect(recommendations.slice(0, 4).map((r) => r.businessName)).toEqual(["Nina's Plumbing", 'Drip Doctors', 'Flow Bros', "Pete's Plumbing"]);
   });
 });

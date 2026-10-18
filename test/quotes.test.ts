@@ -16,20 +16,58 @@ describe('recommending Tradies', () => {
     for (const quote of (await jobView(w, job)).quotes) await alice.confirmQuote(quote.quoteId);
 
     const { recommendations } = await jobView(w, job);
-    expect(recommendations.map((r) => r.businessName)).toEqual([
-      'Drip Doctors',
-      "Pete's Plumbing",
-      "Nina's Plumbing",
-      'Quick Pipes',
-      'Flow Bros',
-    ]);
+    // The Property's Nominated Tradie (Nina) leads, then myEST8 rating, Google rating, median Quote; four at most.
+    expect(recommendations.map((r) => r.businessName)).toEqual(["Nina's Plumbing", 'Drip Doctors', "Pete's Plumbing", 'Quick Pipes']);
     expect(recommendations).toMatchObject([
-      { myEst8Rating: { average: 5, count: 1 }, googleRating: null, medianQuoteCents: null, requested: false },
-      { myEst8Rating: { average: 4, count: 1 }, googleRating: { rating: 4.8, reviewCount: 120 }, medianQuoteCents: null },
-      { googleRating: { rating: 4.2 }, previousQuotes: [{ priceCents: 180_00 }], medianQuoteCents: 180_00, requested: true },
+      { nominated: true, requested: true, preselected: false, googleRating: { rating: 4.2 }, previousQuotes: [{ priceCents: 180_00 }], medianQuoteCents: 180_00 },
+      { nominated: false, myEst8Rating: { average: 5, count: 1 }, googleRating: null, medianQuoteCents: null, requested: false, preselected: true },
+      { myEst8Rating: { average: 4, count: 1 }, googleRating: { rating: 4.8, reviewCount: 120 }, medianQuoteCents: null, preselected: true },
       { googleRating: { rating: 4.2 }, previousQuotes: [{ priceCents: 260_00 }], medianQuoteCents: 260_00, requested: true },
-      { myEst8Rating: { average: 3 }, googleRating: { rating: 4.9 } },
     ]);
+  });
+});
+
+describe('at least two Tradies', () => {
+  test('recommend returns four at most, Nominated first, with the first three preselected', async () => {
+    const w = await world();
+    const job = await tomsTapTicket(w);
+    const { recommendations } = await jobView(w, job);
+    expect(recommendations).toHaveLength(4);
+    expect(recommendations[0]).toMatchObject({ businessName: "Nina's Plumbing", nominated: true, preselected: true });
+    expect(recommendations.map((r) => r.preselected)).toEqual([true, true, true, false]);
+    expect(recommendations.slice(1).every((r) => !r.nominated)).toBe(true);
+  });
+
+  test('one Tradie is refused while two are available, with the reason in words', async () => {
+    const w = await world();
+    const { alice, tradies } = w;
+    const job = await tomsTapTicket(w);
+    expect((await jobView(w, job)).requestRule).toMatchObject({ minimum: 2, singleReason: null });
+    await expect(alice.sendQuoteRequests(job.jobId, [tradies.pete.id])).rejects.toThrow('Send Quote Requests to at least two Tradies');
+    expect(await w.alice.ticket(job.ticketId).then((t) => t.jobs[0]!.quoteRequests)).toEqual([]);
+  });
+
+  test('a second round may add a single Tradie, since Requests already sent count', async () => {
+    const w = await world();
+    const { alice, tradies } = w;
+    const job = await tomsTapTicket(w);
+    await alice.sendQuoteRequests(job.jobId, [tradies.pete.id, tradies.dana.id]);
+    expect((await jobView(w, job)).requestRule).toMatchObject({ minimum: 1 });
+    await alice.sendQuoteRequests(job.jobId, [tradies.finn.id]);
+    expect((await jobView(w, job)).quoteRequests).toHaveLength(3);
+  });
+
+  test('one Tradie is allowed when the Agency has only one for the Trade', async () => {
+    const w = await world();
+    const { alice, tradies } = w;
+    const ticket = await tomsTapTicket(w);
+    const sparky = await alice.addJob(ticket.ticketId, 'electrical');
+    const view = (await alice.ticket(ticket.ticketId)).jobs.find((j) => j.jobId === sparky)!;
+    expect(view.requestRule).toMatchObject({ minimum: 1, singleReason: expect.stringContaining('only one electrical Tradie') });
+
+    await alice.sendQuoteRequests(sparky, [tradies.sam.id]);
+
+    expect((await alice.ticket(ticket.ticketId)).jobs.find((j) => j.jobId === sparky)!.quoteRequests).toHaveLength(1);
   });
 });
 
@@ -45,7 +83,8 @@ describe('Quote Requests', () => {
       {
         channel: 'sms',
         template: 'tradie.quote_request',
-        data: { trade: 'plumbing', urgency: 'routine', description: 'The kitchen tap is dripping', suburb: 'Newtown' },
+        // The Summary stands in for the description once the summariser has run.
+        data: { trade: 'plumbing', urgency: 'routine', description: expect.stringContaining('The kitchen tap is dripping'), suburb: 'Newtown' },
       },
     ]);
     expect(h.messenger.to(tradies.quick.address)).toMatchObject([{ channel: 'email', template: 'tradie.quote_request' }]);
@@ -167,7 +206,7 @@ describe('reading and choosing Quotes', () => {
     const w = await world();
     const { alice, tradies } = w;
     const job = await tomsTapTicket(w);
-    await alice.sendQuoteRequests(job.jobId, [tradies.finn.id]);
+    await alice.sendQuoteRequests(job.jobId, [tradies.finn.id, tradies.dana.id]);
     await tradieQuotes(w, job, tradies.finn, '$200 Monday', { priceCents: 200_00 });
     const [quote] = (await jobView(w, job)).quotes;
     await alice.confirmQuote(quote!.quoteId);
@@ -220,10 +259,10 @@ describe("the Tenant's contact details", () => {
     const ticketId = await alice.confirmMaintenanceRequest(request!.issueId);
     const [job] = (await alice.ticket(ticketId)).jobs;
 
-    await alice.sendQuoteRequests(job!.jobId, [tradies.pete.id]);
+    await alice.sendQuoteRequests(job!.jobId, [tradies.pete.id, tradies.dana.id]);
 
     const sent = h.messenger.last(tradies.pete.address)!;
-    expect(sent.data.description).toBe('Tap dripping, call me on [contact removed] or [contact removed]');
+    expect(sent.data.description).toContain('Tap dripping, call me on [contact removed] or [contact removed]');
     expect(sent.text).not.toMatch(/0400|tom@example/);
   });
 });

@@ -8,7 +8,7 @@ import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
 import type { WebEnv } from '../env.ts';
 import { shellInfo } from '../shell.ts';
-import { badge, countStrip, emptyState, flashFrom, formatAge, formatMoney, formatWhen, humanise, linkButton, page, section, segmented, table, type Html } from '../ui.ts';
+import { badge, countSentence, emptyState, flashFrom, formatAge, formatMoney, formatWhen, humanise, linkButton, page, section, segmented, table, type Html } from '../ui.ts';
 
 type Approvals = Awaited<ReturnType<PropertyManagerActions['approvals']>>;
 
@@ -59,11 +59,11 @@ function body(waiting: Approvals, all: boolean, propertyIds: Map<string, number>
   }
   const silent = owners.filter((w) => w.silent).length;
   return html`
-    ${countStrip([
+    ${countSentence([
       // Only a silent Property Owner needs the Property Manager (a call); the rest wait on the Owner.
-      ...(owners.length ? [{ label: 'Quotes waiting on a Property Owner', count: owners.length, href: '#owners' }] : []),
-      ...(silent ? [{ label: 'No reply for 48 hours', count: silent, href: '#owners', decision: true }] : []),
-      ...(receipts.length ? [{ label: 'Urgent Repairs waiting on a receipt', count: receipts.length, href: '#receipts' }] : []),
+      ...(owners.length ? [{ label: 'Quotes waiting on a Property Owner', one: 'Quote waiting on a Property Owner', count: owners.length, href: '#owners' }] : []),
+      ...(silent ? [{ label: 'Property Owners with no reply for 48 hours', one: 'Property Owner with no reply for 48 hours', count: silent, href: '#owners', decision: true }] : []),
+      ...(receipts.length ? [{ label: 'Urgent Repairs waiting on a receipt', one: 'Urgent Repair waiting on a receipt', count: receipts.length, href: '#receipts' }] : []),
     ])}
     ${owners.length ? section({ title: 'Waiting on a Property Owner', id: 'owners', body: ownerTable(owners, now) }) : ''}
     ${receipts.length ? section({ title: 'Urgent Repairs waiting on a receipt', id: 'receipts', body: receiptTable(receipts, propertyIds, timeZone, now) }) : ''}

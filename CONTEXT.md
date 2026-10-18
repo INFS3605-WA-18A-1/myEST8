@@ -68,11 +68,19 @@ _Avoid_: task
 The kind of work a Job needs, from a fixed list: plumbing, electrical, carpentry, roofing, appliances, locksmith, pest control, general handyman.
 _Avoid_: job type, category
 
+**Summary**:
+One plain-English line describing a Maintenance Request's issue, written by AI from the Tenant's words and answers and editable by the Property Manager. Never adds facts the Tenant didn't give.
+_Avoid_: title, headline, AI description
+
 **Quote Request**:
 An invitation sent to a Tradie to quote for a Job.
 
 **Quote**:
-A Tradie's price and proposed time for a Job.
+A Tradie's price and proposed time for a Job. The first one a Tradie gives, from the description and photos, is their Initial Quote; after a Site Quote the same Quote is revised and the initial price stays on record.
+
+**Site Quote**:
+A Tradie's visit to a Property to inspect the issue before giving a final Quote. Booked by the Property Manager on a High Job once Initial Quotes are in. A Job with Site Quotes booked is getting site quotes.
+_Avoid_: inspection, site visit (on its own), onsite quote
 
 **Work Order**:
 The confirmation sent to the chosen Tradie that authorises them to do a Job.

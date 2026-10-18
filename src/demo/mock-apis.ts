@@ -4,6 +4,7 @@
 
 import { Hono, type Context } from 'hono';
 import { wallClock, zonedInstant } from '../zoned-time.ts';
+import type { Summariser } from '../ports.ts';
 import { mockClassify } from './mock-classifier.ts';
 
 /** Google listings the demo's mock Places API knows. Demo Tradies link to these. */
@@ -272,3 +273,13 @@ function geocodeResponse(address: string) {
     status: 'OK',
   };
 }
+
+/** The demo's Summariser: the description's first sentence trimmed to 120 characters, then the location when known. Deterministic. */
+export const mockSummariser: Summariser = {
+  async summarise({ description, answers }) {
+    const first = (description.trim().split(/(?<=[.!?])\s+|\n/)[0] ?? '').replace(/\s+/g, ' ').replace(/[.!?]+$/, '').trim();
+    const head = first.length > 120 ? `${first.slice(0, 119).trimEnd()}…` : first;
+    const location = answers.location?.trim();
+    return { summary: location ? `${head} (${location.slice(0, 30)})` : head };
+  },
+};

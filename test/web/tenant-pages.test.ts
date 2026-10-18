@@ -185,7 +185,7 @@ describe("the Tenant's progress tracker", () => {
     expect(page).toContain(`A plumber from Pete's Plumbing is booked for ${when}.`);
     expect(page).toContain(`<p class="tracker-detail">Pete's Plumbing</p>`);
     // No Tailwind runtime on the Tenant pages: the circles and lines are plain CSS.
-    expect(page).not.toContain('tailwind.js');
+    expect(page).not.toContain('tw.css');
     expect(page).toContain('/assets/tenant.css');
     expect(page).toContain(`Visit ${when}`);
     expect(page).toContain('Harbour Realty');
@@ -217,5 +217,27 @@ describe("the Tenant's progress tracker", () => {
 
     expect(res.status).toBe(404);
     expect(await readable(res)).toContain("We couldn't find that link");
+  });
+});
+
+describe('the tracker: Site Quote visits', () => {
+  test('shows a Site visit step with each Tradie and the time of their visit', async () => {
+    const w = await webWorld();
+    const job = await tomsTapTicket(w);
+    await w.alice.changeUrgency({ ticketId: job.ticketId }, 'high');
+    await confirmedQuotes(w, job, [[w.tradies.pete, 300_00], [w.tradies.dana, 340_00]]);
+    const tue = new Date('2026-10-13T10:00:00+11:00');
+    const wed = new Date('2026-10-14T10:00:00+11:00');
+    await w.alice.bookSiteQuotes(job.jobId, [
+      { tradieId: w.tradies.pete.id, start: tue.toISOString() },
+      { tradieId: w.tradies.dana.id, start: wed.toISOString() },
+    ]);
+    const path = new URL(w.h.messenger.to(TOM).find((m) => m.template === 'tenant.confirmed')!.data.trackerLink as string).pathname;
+
+    const page = await readable(await w.get(path));
+
+    expect(page).toContain('Site visit<span class="sr-only">');
+    expect(page).toContain(`Pete's Plumbing, ${formatWhen(tue.toISOString(), 'Australia/Sydney')}`);
+    expect(page).toContain(`Drip Doctors, ${formatWhen(wed.toISOString(), 'Australia/Sydney')}`);
   });
 });

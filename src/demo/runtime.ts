@@ -6,6 +6,7 @@
 
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
 import { createClaudeClassifier } from '../adapters/claude-classifier.ts';
+import { createClaudeSummariser } from '../adapters/claude-summariser.ts';
 import { createGooglePlaces } from '../adapters/google-places.ts';
 import { createImageMatcher } from '../adapters/image-matcher.ts';
 import { createJevClassifier } from '../adapters/jev.ts';
@@ -25,7 +26,7 @@ import { createSessions } from '../web/auth.ts';
 import { createWebApp } from '../web/server.ts';
 import { OffsetClock } from './clock.ts';
 import type { DemoContact, DemoControls, DemoInboundMessage, DemoOutboundMessage } from './controls.ts';
-import { mockApis } from './mock-apis.ts';
+import { mockApis, mockSummariser } from './mock-apis.ts';
 import { seedDemo, type DemoSeed } from './seed.ts';
 import { SimulatedMessenger } from './simulated-messenger.ts';
 import { seedStories, storiesStart } from './stories.ts';
@@ -276,6 +277,7 @@ export async function createDemo<Seeded extends boolean = true>(
     clock,
     messenger: outbound,
     classifier: anthropicKey ? createClaudeClassifier({ apiKey: anthropicKey, fetch }) : createJevClassifier({ ...jev, apiKey: env.JEV_API_KEY ?? 'demo' }),
+    summariser: anthropicKey ? createClaudeSummariser({ apiKey: anthropicKey, fetch }) : mockSummariser,
     imageMatcher: createImageMatcher({ ...vision, apiKey: env.VISION_API_KEY ?? 'demo' }),
     quoteReader: createQuoteReader({ ...quotes, apiKey: env.QUOTES_API_KEY ?? 'demo', clock, timeZone }),
     places: createGooglePlaces(google),
