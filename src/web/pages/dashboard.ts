@@ -1,5 +1,5 @@
 // The Property Manager's dispatch board. A count sentence, then "Needs you" (Maintenance
-// Requests to confirm, Quotes to check, Site quotes to book, Quotes to choose, Tradies to
+// Requests to confirm, Quotes to check, Site Inspections to book, Quotes to choose, Tradies to
 // rate, alerts and the inbox, each once with its actions), then Tickets by stage in one
 // row of lanes, then the next 7 days and Urgent Repairs. Also the actions on each, and
 // /files/:id for photos.
@@ -87,7 +87,6 @@ const MESSAGE_CLASS: Record<string, string> = {
 /** The board's lanes, named as the Property Manager says them. */
 const STAGE_TITLE: Record<Stage, string> = {
   quoting: 'Quoting',
-  site_quoting: 'Site quotes',
   awaiting_owner: 'With Property Owner',
   approved: 'Ready to book',
   scheduled: 'Booked',
@@ -115,7 +114,7 @@ export function dashboardPages() {
     const needReceipt = view.urgentRepairs.filter((u) => u.status === 'reminder_sent').length;
     const toReview = view.urgentRepairs.filter((u) => u.status === 'receipt_received').length;
     const toCheck = view.tickets.filter((t) => t.decision === 'check_quotes');
-    const toBook = view.tickets.filter((t) => t.decision === 'book_site_quotes');
+    const toBook = view.tickets.filter((t) => t.decision === 'book_inspection');
     const toChoose = view.tickets.filter((t) => t.decision === 'choose_quote');
     const toRate = view.alerts.filter((a) => a.kind === 'rating_due');
     const otherAlerts = view.alerts.filter((a) => a.kind !== 'rating_due');
@@ -137,7 +136,7 @@ export function dashboardPages() {
             [
               { label: 'Maintenance Requests to confirm', one: 'Maintenance Request to confirm', count: view.maintenanceRequests.length, href: '#requests', decision: true },
               { label: 'Quotes to check', one: 'Quote to check', count: toCheck.length, href: '#quotes-to-check', decision: true },
-              { label: 'Site quotes to book', one: 'Site quote to book', count: toBook.length, href: '#site-quotes', decision: true },
+              { label: 'Site Inspections to book', one: 'Site Inspection to book', count: toBook.length, href: '#inspections', decision: true },
               { label: 'Quotes to choose', one: 'Quote to choose', count: toChoose.length, href: '#quotes-to-choose', decision: true },
               { label: 'Tradies to rate', one: 'Tradie to rate', count: toRate.length, href: '#to-rate', decision: true },
               { label: 'Alerts', one: 'Alert', count: otherAlerts.length, href: '#alerts', decision: true },
@@ -304,7 +303,7 @@ function needsYouSection(n: NeedsYouInput): Html {
       }),
     ),
     group('quotes-to-check', 'Quotes to check', n.toCheck.map((t) => ticketDecisionRow(t, 'check_quotes', n.now))),
-    group('site-quotes', 'Site quotes to book', n.toBook.map((t) => ticketDecisionRow(t, 'book_site_quotes', n.now))),
+    group('inspections', 'Site Inspections to book', n.toBook.map((t) => ticketDecisionRow(t, 'book_inspection', n.now))),
     group('quotes-to-choose', 'Quotes to choose', n.toChoose.map((t) => ticketDecisionRow(t, 'choose_quote', n.now))),
     group('to-rate', 'Tradies to rate', n.toRate.map((a) => alertRow(a, n.timeZone))),
     group('alerts', 'Alerts', n.otherAlerts.map((a) => alertRow(a, n.timeZone))),
@@ -317,9 +316,9 @@ function needsYouSection(n: NeedsYouInput): Html {
   });
 }
 
-const DECISION_ACTION: Record<'check_quotes' | 'book_site_quotes' | 'choose_quote', string> = {
+const DECISION_ACTION: Record<'check_quotes' | 'book_inspection' | 'choose_quote', string> = {
   check_quotes: 'Check Quotes',
-  book_site_quotes: 'Book site quotes',
+  book_inspection: 'Book a Site Inspection',
   choose_quote: 'Choose a Quote',
 };
 
@@ -425,15 +424,13 @@ function ticketsByStage(tickets: BoardTicket[], filter: Filter, now: Date, timeZ
 export function quotingStatus(t: Pick<BoardTicket, 'quoting' | 'decision'>): string | null {
   const q = t.quoting;
   if (!q) return null;
-  if (t.decision === 'check_quotes') {
-    const toCheck = q.received - q.confirmed;
-    return `${toCheck} ${toCheck === 1 ? 'Quote' : 'Quotes'} to check`;
-  }
+  if (t.decision === 'check_quotes') return `${q.toCheck} ${q.toCheck === 1 ? 'Quote' : 'Quotes'} to check`;
   if (t.decision === 'choose_quote') return 'Ready to choose';
-  if (t.decision === 'book_site_quotes') return 'Book site quotes';
+  if (t.decision === 'book_inspection') return 'Site Inspection to book';
   if (!q.asked && !q.received) return 'No Quote Requests yet';
   const of = Math.max(q.asked, q.received);
-  return `${q.received} of ${of} ${of === 1 ? 'Quote' : 'Quotes'} in`;
+  // Estimates and Firm Quotes are counted apart, never added together.
+  return `${q.received} of ${of} ${of === 1 ? 'Estimate' : 'Estimates'} in${q.firm ? `, ${q.firm} ${q.firm === 1 ? 'Firm Quote' : 'Firm Quotes'}` : ''}`;
 }
 
 function ticketDocket(t: BoardTicket, now: Date, timeZone: string): Html {

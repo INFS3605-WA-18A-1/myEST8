@@ -83,11 +83,23 @@ describe('the demo script', () => {
         proposedTime: quote.proposedTime ? isoToLocal(quote.proposedTime, timeZone) : '',
       });
     }
-    const pete = (await d.alice.ticket(ticketId)).jobs[0]!.quotes.find((q) => q.businessName === "Pete's Plumbing")!;
-    expect(pete).toMatchObject({ priceCents: 650_00, proposedTime: new Date('2026-10-13T09:00:00+11:00').toISOString(), confirmed: true });
+    const estimate = (await d.alice.ticket(ticketId)).jobs[0]!.quotes.find((q) => q.businessName === "Pete's Plumbing")!;
+    expect(estimate).toMatchObject({ stage: 'estimate', priceCents: 650_00, proposedTime: new Date('2026-10-13T09:00:00+11:00').toISOString(), confirmed: true });
+
+    // Pete gives his Firm Quote on the quote page his Quote Request linked to.
+    const quoteRequest = (await d.demo.outbox(d.seed.ids.aliceId)).find((m) => m.to === '+61400000200' && m.template === 'tradie.quote_request')!;
+    const quotePath = new URL(/https?:\/\/\S+\/q\/[\w-]+/.exec(quoteRequest.text)![0]).pathname;
+    const firm = new FormData();
+    for (const [name, value] of Object.entries({ price: '650', scopeOfWork: 'Replace the tap cartridge and washer', durationDays: '1', availableDates: '2026-10-13', proposedTime: '2026-10-13T09:00' })) firm.set(name, value);
+    // The Estimate came by SMS, so the page asks for the Firm Quote next.
+    expect(await (await d.web.request(quotePath)).text()).not.toContain('Give your Estimate');
+    expect((await d.web.request(`${quotePath}/firm`, { method: 'POST', body: firm })).status).toBe(303);
+    await d.runWorker();
+    const pete = (await d.alice.ticket(ticketId)).jobs[0]!.quotes.find((q) => q.businessName === "Pete's Plumbing" && q.stage === 'firm')!;
+    expect(pete).toMatchObject({ priceCents: 650_00, scopeOfWork: 'Replace the tap cartridge and washer', confirmed: true });
 
     // $650 is over King St's $500 Max Repair Cost, so Olivia must approve.
-    await d.post(`${ticketPath}/quotes/${pete.quoteId}/choose`, {});
+    await d.post(`${ticketPath}/quotes/${pete.quoteId}/choose`, { reason: 'Finn only gave an Estimate' });
     expect((await d.lastTo('+61400000100')).template).toBe('owner.approval_request');
     await d.say('Olivia Owens', 'YES');
     expect((await d.alice.ticket(ticketId)).jobs[0]!.status).toBe('approved');

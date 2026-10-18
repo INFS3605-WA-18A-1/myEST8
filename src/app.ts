@@ -9,9 +9,9 @@ import { createNotifications } from './notifications.ts';
 import { createOnboarding } from './onboarding.ts';
 import type { BlobStore, ChannelType, Clock, InboundMessage } from './ports.ts';
 import { createProfiles, type SignUp } from './profiles.ts';
-import { createQuotes } from './quotes.ts';
+import { createQuotes, type EstimateInput, type FirmQuoteInput } from './quotes.ts';
 import { createScheduling } from './scheduling.ts';
-import { DEFAULT_SETTINGS, invalid, type Role, type Settings, type Trade, type Urgency } from './shared.ts';
+import { DEFAULT_SETTINGS, invalid, notFound, type Role, type Settings, type Trade, type Urgency } from './shared.ts';
 import { createTickets } from './tickets.ts';
 import { createViews, type ListOptions } from './views.ts';
 import { createWorker } from './worker.ts';
@@ -108,6 +108,21 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
 
     /** What a no-login upload link is for and whether it still takes files, or null for an unknown link. */
     uploadLink: (token: string) => tickets.uploadLink(token),
+
+    /** The Tradie's quote page, reached by the no-login link in their Quote Request: what it is for and where it stands, or null. */
+    quotePage: (token: string) => quotes.quotePage(token),
+
+    /** The Tradie's Estimate from their quote page. Refuses field by field (ActionError.fields); not_found for an unknown link. */
+    async submitEstimate(token: string, input: EstimateInput) {
+      const id = (await quotes.requestIdByToken(token)) ?? notFound('Quote Request');
+      await quotes.submitEstimate(id, input);
+    },
+
+    /** The Tradie's Firm Quote from their quote page, with an optional PDF. Refuses field by field; not_found for an unknown link. */
+    async submitFirmQuote(token: string, input: FirmQuoteInput) {
+      const id = (await quotes.requestIdByToken(token)) ?? notFound('Quote Request');
+      await quotes.submitFirmQuote(id, input);
+    },
 
     /** The Tenant's progress tracker, reached by its no-login link. */
     tracker: (token: string) => tickets.tracker(token),
@@ -240,7 +255,11 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
         sendQuoteRequests: (jobId: number, tradieIds: number[]) => quotes.sendQuoteRequests(agencyId, jobId, tradieIds),
         confirmQuote: (quoteId: number, edits?: { priceCents?: number; proposedTime?: string | null }) =>
           quotes.confirmQuote(agencyId, quoteId, edits),
+        /** Chooses a Firm Quote. An Estimate is refused: proceed on it instead. */
         chooseQuote: (quoteId: number, reason?: string) => quotes.chooseQuote(agencyId, quoteId, reason),
+        /** Goes ahead on an Estimate with a Not-to-exceed Cap, for a routine Job whose Tradie needs no Site Inspection. */
+        proceedOnEstimate: (quoteId: number, options: { capCents: number; reason?: string; confirm?: boolean }) =>
+          quotes.proceedOnEstimate(agencyId, quoteId, options),
 
         // Scheduling and completion
         calendar: (range: { from: string; to: string }) => scheduling.calendar(agencyId, range),
@@ -252,13 +271,16 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
         acceptTime: (workOrderId: number, start: string) => scheduling.acceptTime(agencyId, workOrderId, start),
         rateTradie: (jobId: number, score: number) => scheduling.rateTradie(agencyId, jobId, score),
 
-        // Site Quotes
-        siteQuoteSlots: (jobId: number) => scheduling.siteQuoteSlots(agencyId, jobId),
-        bookSiteQuotes: (jobId: number, visits: { tradieId: number; start: string; durationMinutes?: number }[]) =>
-          scheduling.bookSiteQuotes(agencyId, jobId, visits),
-        skipSiteQuotes: (jobId: number) => scheduling.skipSiteQuotes(agencyId, jobId),
-        markQuotesFinal: (jobId: number) => scheduling.markQuotesFinal(agencyId, jobId),
-        markSiteQuoteDone: (workOrderId: number) => scheduling.markSiteQuoteDoneForAgency(agencyId, workOrderId),
+        // Site Inspections, one Tradie at a time
+        /** For each Tradie who needs a Site Inspection not booked yet, three free one-hour slots to prefill booking it. */
+        inspectionSlots: (jobId: number) => scheduling.inspectionSlots(agencyId, jobId),
+        /** Books a Tradie's Site Inspection once they have given an Estimate; they and the Tenant are told. Returns the Work Order's id. */
+        bookInspection: (quoteRequestId: number, options: { start: string; durationMinutes?: number }) =>
+          scheduling.bookInspection(agencyId, quoteRequestId, options),
+        /** Overrides whether the Tradie needs a Site Inspection before their Firm Quote. */
+        setInspectionNeeded: (quoteRequestId: number, needed: boolean) => quotes.setInspectionNeeded(agencyId, quoteRequestId, needed),
+        /** Marks a Site Inspection done; the Tradie is asked for their Firm Quote. */
+        markInspected: (workOrderId: number) => scheduling.markInspectedForAgency(agencyId, workOrderId),
         quoteRequestRule: (jobId: number) => quotes.quoteRequestRule(agencyId, jobId),
       };
     },

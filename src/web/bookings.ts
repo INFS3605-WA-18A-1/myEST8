@@ -14,7 +14,7 @@ export type Booking = Awaited<ReturnType<PropertyManagerActions['calendar']>>[nu
  * What a visit that isn't the repair itself is for, by its kind: the Tradie's Site
  * Inspection before a Firm Quote. Read loosely, so the older name for the kind reads the same.
  */
-const VISIT_KINDS: Record<string, string> = { site_quote: 'Site inspection', inspection: 'Site inspection' };
+const VISIT_KINDS: Record<string, string> = { inspection: 'Site inspection' };
 
 /** "Site inspection" for a visit that isn't the repair, or null for the repair itself. */
 export function visitKind(b: Pick<Booking, 'kind'>): string | null {

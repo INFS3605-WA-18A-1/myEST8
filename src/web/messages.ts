@@ -91,6 +91,7 @@ function linkName(url: string): string {
     const { hostname, pathname } = new URL(url);
     if (pathname.startsWith('/t/')) return 'progress link';
     if (pathname.startsWith('/u/')) return 'upload link';
+    if (pathname.startsWith('/q/')) return 'quote page link';
     return `${hostname} link`;
   } catch {
     return 'link';

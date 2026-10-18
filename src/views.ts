@@ -15,22 +15,25 @@ const CALENDAR_DAYS = 14;
 export type Stage = Exclude<JobStatus, 'cancelled'>;
 
 /** The lanes in workflow order. */
-export const STAGES: Stage[] = ['quoting', 'site_quoting', 'awaiting_owner', 'approved', 'scheduled', 'done'];
-
-/** Across a Ticket's Jobs being quoted: Quote Requests not declined, Quotes in, and Quotes the Property Manager confirmed. */
-export type Quoting = { asked: number; received: number; confirmed: number };
+export const STAGES: Stage[] = ['quoting', 'awaiting_owner', 'approved', 'scheduled', 'done'];
 
 /**
- * What a Ticket being quoted needs from the Property Manager: Quotes in but not yet
- * confirmed are to check; once a Job has MIN_QUOTES confirmed Quotes one can be chosen.
+ * Across a Ticket's Jobs being quoted: Quote Requests not declined (`asked`), Estimates in
+ * (`received`) and confirmed (`confirmed`), Quotes of either stage still to check
+ * (`toCheck`), Firm Quotes ready to choose from (`firm`), and Tradies who need a Site
+ * Inspection that isn't booked yet (`toInspect`).
  */
-export type QuotingDecision = 'check_quotes' | 'choose_quote' | 'book_site_quotes';
+export type Quoting = { asked: number; received: number; confirmed: number; toCheck: number; firm: number; toInspect: number };
 
-/** Where a Ticket's Site Quotes stand: whether they were booked or skipped, and visits still to happen. */
-export type SiteQuoteState = { booked: boolean; skipped: boolean; open: number };
+/**
+ * What a Ticket being quoted needs from the Property Manager: Quotes read from a reply but
+ * not yet confirmed are to check; then Site Inspections a Tradie asked for are to book; once
+ * a Job has MIN_QUOTES Firm Quotes one can be chosen. Estimates never make a Job ready to
+ * choose: the Property Manager may still proceed on one for a routine Job.
+ */
+export type QuotingDecision = 'check_quotes' | 'book_inspection' | 'choose_quote';
 
-/** What `quotingDecision` needs beyond the Quote counts: the Job's lane, the Ticket's Urgency and its Site Quotes. */
-export type QuotingContext = { status?: 'quoting' | 'site_quoting'; urgency?: Ticket['urgency']; siteQuotes?: SiteQuoteState };
+const NO_QUOTING: Quoting = { asked: 0, received: 0, confirmed: 0, toCheck: 0, firm: 0, toInspect: 0 };
 
 /**
  * The lane of a Ticket: its least advanced open Job (quoting < awaiting_owner <
@@ -43,16 +46,12 @@ export function stageOf(jobs: { status: JobStatus }[]): Stage {
   return jobs.length ? 'done' : 'quoting';
 }
 
-/** Unconfirmed Quotes come first: they are what stands between the Property Manager and choosing. */
-export function quotingDecision(q: Quoting, context: QuotingContext = {}): QuotingDecision | null {
-  if (q.received > q.confirmed) return 'check_quotes';
-  if (q.confirmed < MIN_QUOTES) return null;
-  const site = context.siteQuotes ?? { booked: false, skipped: false, open: 0 };
-  // Getting Site Quotes: choose once every booked visit is done.
-  if (context.status === 'site_quoting') return site.open > 0 ? null : 'choose_quote';
-  // A High Ticket with two confirmed Quotes leads with Site Quotes; choosing without them stays allowed.
-  if (context.urgency === 'high' && !site.booked && !site.skipped) return 'book_site_quotes';
-  return 'choose_quote';
+/** Quotes to check come first: they are what stands between the Property Manager and the rest. */
+export function quotingDecision(q: Quoting): QuotingDecision | null {
+  if (q.toCheck > 0) return 'check_quotes';
+  if (q.toInspect > 0) return 'book_inspection';
+  if (q.firm >= MIN_QUOTES) return 'choose_quote';
+  return null;
 }
 
 /**
@@ -135,8 +134,8 @@ export function createViews({ clock, modules }: Context) {
       tickets.issuesWithUnread(open.map((t) => t.issueId)),
       modules.scheduling.visitsOfTickets(ids),
     ]);
-    const quotingJobIds = jobs.filter((j) => j.status === 'quoting' || j.status === 'site_quoting').map((j) => j.id);
-    const [quoting, siteQuotes] = await Promise.all([modules.quotes.quotingOf(quotingJobIds), modules.scheduling.siteQuotesOf(quotingJobIds)]);
+    const quotingJobIds = jobs.filter((j) => j.status === 'quoting').map((j) => j.id);
+    const quoting = await modules.quotes.quotingOf(quotingJobIds);
     const label = cached(propertyLabel);
     const person = cached(profiles.person);
     const jobsOf = new Map<number, Job[]>();
@@ -148,11 +147,20 @@ export function createViews({ clock, modules }: Context) {
         const stage = stageOf(ticketJobs);
         const inStage = ticketJobs.filter((j) => j.status === stage);
         const counts =
-          stage === 'quoting' || stage === 'site_quoting'
+          stage === 'quoting'
             ? inStage.reduce<Quoting>((sum, j) => {
                 const c = quoting.get(j.id);
-                return c ? { asked: sum.asked + c.asked, received: sum.received + c.received, confirmed: sum.confirmed + c.confirmed } : sum;
-              }, { asked: 0, received: 0, confirmed: 0 })
+                return c
+                  ? {
+                      asked: sum.asked + c.asked,
+                      received: sum.received + c.received,
+                      confirmed: sum.confirmed + c.confirmed,
+                      toCheck: sum.toCheck + c.toCheck,
+                      firm: sum.firm + c.firm,
+                      toInspect: sum.toInspect + c.toInspect,
+                    }
+                  : sum;
+              }, NO_QUOTING)
             : null;
         return {
           ticketId: ticket.id,
@@ -168,19 +176,7 @@ export function createViews({ clock, modules }: Context) {
           trades: [...new Set(ticketJobs.filter((j) => j.status !== 'cancelled').map((j) => j.trade))],
           quoting: counts,
           nextVisit: stage === 'scheduled' ? (inStage.map((j) => visits.get(j.id)).filter((v) => v !== undefined).sort()[0] ?? null) : null,
-          decision: counts
-            ? quotingDecision(counts, {
-                status: stage as 'quoting' | 'site_quoting',
-                urgency: ticket.urgency,
-                siteQuotes: inStage.reduce<SiteQuoteState>(
-                  (sum, j) => {
-                    const state = siteQuotes.get(j.id);
-                    return state ? { booked: sum.booked || state.booked, skipped: sum.skipped || state.skipped, open: sum.open + state.open } : sum;
-                  },
-                  { booked: false, skipped: false, open: 0 },
-                ),
-              })
-            : null,
+          decision: counts ? quotingDecision(counts) : null,
         };
       }),
     );
@@ -638,20 +634,15 @@ export function createViews({ clock, modules }: Context) {
         jobs: await Promise.all(
           (await tickets.jobsOf(ticket.id)).map(async (job) => {
             const quotesView = await modules.quotes.jobView(agencyId, job.id);
-            const siteState = (await modules.scheduling.siteQuotesOf([job.id])).get(job.id) ?? { booked: false, skipped: false, open: 0 };
-            const gettingQuotes = job.status === 'quoting' || job.status === 'site_quoting';
-            const counts: Quoting = {
-              asked: quotesView.quoteRequests.filter((r) => r.status !== 'declined').length,
-              received: quotesView.quotes.length,
-              confirmed: quotesView.quotes.filter((q) => q.confirmed).length,
-            };
+            const quoting = job.status === 'quoting';
+            const counts = (await modules.quotes.quotingOf([job.id])).get(job.id) ?? NO_QUOTING;
             return {
               jobId: job.id,
               trade: job.trade,
               checkTrade: job.checkTrade,
               status: job.status,
               ...quotesView,
-              /** Each Quote with its Tradie's ratings, whether or not they are among the recommended Tradies. */
+              /** Every Quote, Estimates and Firm Quotes alike, with its Tradie's ratings. */
               quotes: await Promise.all(
                 quotesView.quotes.map(async (q) => {
                   const tradie = await profiles.personInAgency(agencyId, q.tradieId, 'tradie');
@@ -662,17 +653,15 @@ export function createViews({ clock, modules }: Context) {
                   };
                 }),
               ),
+              /** The Job's Quote counts, as the board reads them. */
+              quoting: counts,
               /** What the Property Manager decides next while the Job is getting Quotes; null otherwise. */
-              decision: gettingQuotes ? quotingDecision(counts, { status: job.status as 'quoting' | 'site_quoting', urgency: ticket.urgency, siteQuotes: siteState }) : null,
+              decision: quoting ? quotingDecision(counts) : null,
               workOrder: await modules.scheduling.workOrderForJob(job.id),
-              /** Site Quote visits (not cancelled), the state of Site Quotes, and free slots to prefill booking them. */
-              siteQuotes: {
-                booked: siteState.booked,
-                skipped: siteState.skipped,
-                openVisits: siteState.open,
-                visits: await modules.scheduling.siteQuoteVisits(job.id),
-                canBook: gettingQuotes && quotesView.quotes.some((q) => q.confirmed && q.status === 'open'),
-                slots: gettingQuotes && quotesView.quotes.some((q) => q.confirmed && q.status === 'open') ? await modules.scheduling.siteQuoteSlots(agencyId, job.id) : [],
+              /** Site Inspections (not cancelled), and free slots to prefill booking the ones Tradies need. */
+              inspections: {
+                visits: await modules.scheduling.inspectionVisits(job.id),
+                slots: quoting && counts.toInspect ? await modules.scheduling.inspectionSlots(agencyId, job.id) : [],
               },
             };
           }),

@@ -425,6 +425,11 @@ const STATUS_TONE: Record<string, Tone> = {
   active: 'info',
   sent: 'info',
   quoted: 'info',
+  estimated: 'info',
+  inspection_booked: 'info',
+  inspected: 'info',
+  firm_quoted: 'success',
+  superseded: 'neutral',
   quoting: 'info',
   scheduled: 'info',
   awaiting_owner: 'warning',
@@ -445,6 +450,11 @@ const STATUS_LABEL: Record<string, string> = {
   maintenance_request: 'Maintenance Request',
   urgent: 'Urgent Repair',
   declined_by_owner: 'Declined by Property Owner',
+  estimated: 'Estimate in',
+  inspection_booked: 'Site Inspection booked',
+  inspected: 'Inspected',
+  firm_quoted: 'Firm Quote in',
+  superseded: 'Superseded by Firm Quote',
 };
 
 /**
@@ -453,7 +463,6 @@ const STATUS_LABEL: Record<string, string> = {
  */
 export const JOB_STAGES: { status: string; label: string }[] = [
   { status: 'quoting', label: 'Quoting' },
-  { status: 'site_quoting', label: 'Site quotes' },
   { status: 'awaiting_owner', label: 'With Property Owner' },
   { status: 'approved', label: 'Ready to book' },
   { status: 'scheduled', label: 'Booked' },
@@ -469,7 +478,6 @@ export function jobStageLabel(status: string): string {
 /** Each Job stage's badge tone, from the design doc's table. Cancelled is muted. */
 const JOB_TONE: Record<string, Tone | 'muted'> = {
   quoting: 'info',
-  site_quoting: 'info',
   awaiting_owner: 'warning',
   approved: 'info',
   scheduled: 'info',
@@ -478,7 +486,7 @@ const JOB_TONE: Record<string, Tone | 'muted'> = {
 };
 
 /** Statuses that name a Job stage on any screen, so their words need no `job` flag. */
-const JOB_WORDS = new Set(['quoting', 'site_quoting', 'awaiting_owner', 'scheduled', 'done', 'cancelled']);
+const JOB_WORDS = new Set(['quoting', 'awaiting_owner', 'scheduled', 'done', 'cancelled']);
 
 /**
  * Any status from the core (Job, Quote, Quote Request, approval...), in words. A Job's

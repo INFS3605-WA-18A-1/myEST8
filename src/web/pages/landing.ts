@@ -372,11 +372,11 @@ const DECISIONS = [
     text: 'Check the summary, Trade and Urgency myEST8 filled in, edit them if you need to, and confirm. It becomes a Ticket.',
   },
   {
-    title: 'Book site quotes for a High repair',
-    text: 'Once two Quotes are in on a High repair, have Tradies visit the Property and revise their price, or skip the visits.',
+    title: 'Book a Site Inspection when a Tradie needs one',
+    text: 'Each Tradie gives an Estimate and says if they need to see the issue before a Firm Quote. Book their visit, or proceed on an Estimate for a cheap routine Job.',
   },
   {
-    title: 'Choose the Quote',
+    title: 'Choose the Firm Quote',
     text: 'Pick one. If it takes the Repair Cost over the Property’s Max Repair Cost, myEST8 asks the Property Owner first.',
   },
 ];

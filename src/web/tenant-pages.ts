@@ -304,7 +304,7 @@ function statusLine(step: Step, agencyName: string, timeZone: string): string {
       return `${agencyName} has confirmed the repair and is arranging a tradie.`;
     case 'getting_quotes':
       return `${agencyName} is asking tradies to quote for the repair.`;
-    // The backend adds this stage when the Job had Site Quotes; the visits' times come through stepDetail.
+    // The backend adds this stage when a Tradie had a Site Inspection; the visits' times come through stepDetail.
     case 'site_visit':
       return step.visits?.length
         ? `${agencyName} has asked tradies to look at the problem before choosing who fixes it.`

@@ -8,7 +8,7 @@ export const IN_INTAKE: IssueStatus[] = ['gathering', 'awaiting_photos', 'checki
 /** An issue's photo link takes photos only while the issue is in these statuses (the same rule as intake.upload). */
 export const TAKES_PHOTOS: IssueStatus[] = ['awaiting_photos', 'checking', 'maintenance_request'];
 
-export type JobStatus = 'quoting' | 'site_quoting' | 'awaiting_owner' | 'approved' | 'scheduled' | 'done' | 'cancelled';
+export type JobStatus = 'quoting' | 'awaiting_owner' | 'approved' | 'scheduled' | 'done' | 'cancelled';
 /** Who wrote a Maintenance Request's Summary: the model, or a Property Manager who edited it (never overwritten by the model again). */
 export type SummaryBy = 'ai' | 'property_manager';
 /**
@@ -926,15 +926,15 @@ export function createTickets({ db, clock, settings, modules }: Context) {
       const doneAt = allDone ? (events.filter((e) => e.kind === 'job_done').at(-1)?.at ?? null) : null;
       // The latest visit, preferring a Job that is still going ahead.
       type VisitEvent = { kind: string; jobId?: number; tradie?: string; visitStart?: string };
-      const visits = events.filter((e) => (e.kind === 'work_order_sent' || e.kind === 'visit_moved') && !(e as { siteQuote?: boolean }).siteQuote) as VisitEvent[];
+      const visits = events.filter((e) => (e.kind === 'work_order_sent' || e.kind === 'visit_moved') && !(e as { inspection?: boolean }).inspection) as VisitEvent[];
       const visit = visits.findLast((e) => jobs.some((j) => j.id === e.jobId)) ?? visits.at(-1);
       const tradie = visits.findLast((e) => e.kind === 'work_order_sent' && e.jobId === visit?.jobId)?.tradie;
       const trade = jobs.find((j) => j.id === visit?.jobId)?.trade;
       const booked = visit?.visitStart ? { visitStart: visit.visitStart, ...(tradie ? { tradie } : {}), ...(trade ? { trade } : {}) } : {};
-      // Site Quote visits, only when the Job had them: who is coming and when, for the visits still to happen.
-      const siteQuotesBooked = events.find((e) => e.kind === 'site_quotes_booked');
+      // Site Inspections, only when a Tradie had one: who is coming and when, for the visits still to happen.
+      const siteQuotesBooked = events.find((e) => e.kind === 'inspection_booked' || e.kind === 'site_quotes_booked');
       const siteVisits = siteQuotesBooked
-        ? (await Promise.all(jobs.map((j) => modules.scheduling.siteQuoteVisits(j.id))))
+        ? (await Promise.all(jobs.map((j) => modules.scheduling.inspectionVisits(j.id))))
             .flat()
             .filter((v) => v.status === 'active')
             .map((v) => ({ tradie: v.businessName, visitStart: v.start }))
