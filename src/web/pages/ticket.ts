@@ -387,7 +387,7 @@ function ticketHeader(t: TicketView, x: Extras, share: Html): Html {
         ${summaryBlock(t)}
         <p class="ticket-address"><a class="link" href="/properties/${t.propertyId}">${t.propertyAddress}</a></p>
         <p class="ticket-meta">
-          <span>Tenant ${t.tenantName}</span>
+          <span>Tenant <a class="link" href="/tenants/${t.tenantId}">${t.tenantName}</a></span>
           <span>${statusBadge(t.status)}</span>
           <time datetime="${t.reportedAt}">${reportedAgo(t.reportedAt, x.now)}</time>
           ${t.repairCostCents > 0

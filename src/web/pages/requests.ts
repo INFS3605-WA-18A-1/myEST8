@@ -142,7 +142,7 @@ function review(r: MaintenanceRequest, timeZone: string, editing: boolean): Html
       <p class="request-address"><a href="/properties/${r.propertyId}" class="link">${r.propertyAddress}</a></p>
       ${facts(
         [
-          ['Tenant', r.tenantName],
+          ['Tenant', html`<a class="link" href="/tenants/${r.tenantId}">${r.tenantName}</a>`],
           ['Reported', formatWhen(r.reportedAt, timeZone)],
           ['Property Manager', r.propertyManager],
         ],

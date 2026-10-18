@@ -74,6 +74,7 @@ export function createViews({ clock, modules }: Context) {
     photos: (await tickets.photos(issue.id)).map(({ photoId, fileId, metadata, reasons }) => ({ photoId, fileId, metadata, reasons })),
     imageMatch: issue.imageMatch,
     noPhotos: issue.noPhotos,
+    tenantId: issue.tenantId,
     tenantName: (await profiles.person(issue.tenantId)).name,
   });
 
@@ -293,7 +294,7 @@ export function createViews({ clock, modules }: Context) {
           maxRepairCostCents: p.maxRepairCostCents,
           ownerName: (await profiles.person(p.ownerId)).name,
           propertyManager: (await profiles.propertyManager(p.propertyManagerId)).name,
-          tenants: tenants.filter((t) => t.propertyId === p.id).map((t) => t.name),
+          tenants: tenants.filter((t) => t.propertyId === p.id).map((t) => ({ personId: t.id, name: t.name })),
           openTickets: openTickets.filter((t) => t.propertyId === p.id).length,
         })),
       );
@@ -448,6 +449,106 @@ export function createViews({ clock, modules }: Context) {
               propertyManager: b.propertyManager,
               ticketId: b.ticketId,
               description: (await tickets.issue((await tickets.ticket(b.ticketId)).issueId)).description,
+            })),
+        ),
+      };
+    },
+
+    /**
+     * The Tenants, by name: each with their Property and its Property Manager, when the
+     * tenancy started, how to reach them and their open Tickets. Mine is the Tenants of
+     * the Property Manager's own Properties.
+     */
+    async tenants(agencyId: number, propertyManagerId: number, filter: 'mine' | 'all') {
+      const [people, properties, propertyManagers, every] = await Promise.all([
+        profiles.people(agencyId, 'tenant'),
+        profiles.properties(agencyId),
+        profiles.propertyManagers(agencyId),
+        tickets.list(agencyId, null),
+      ]);
+      const propertyOf = new Map(properties.map((p) => [p.id, p]));
+      const managerName = new Map(propertyManagers.map((m) => [m.id, m.name]));
+      const open = every.filter((t) => t.status === 'open');
+      return people
+        .map((t) => {
+          const property = t.propertyId === null ? undefined : propertyOf.get(t.propertyId);
+          return {
+            tenantId: t.id,
+            name: t.name,
+            property: property ? { propertyId: property.id, address: property.address } : null,
+            propertyManagerId: property?.propertyManagerId ?? null,
+            propertyManager: property ? (managerName.get(property.propertyManagerId) ?? null) : null,
+            tenancyStart: t.tenancyStart,
+            mobile: t.mobile,
+            email: t.email,
+            openTickets: open.filter((x) => x.tenantId === t.id).length,
+          };
+        })
+        .filter((t) => filter === 'all' || t.propertyManagerId === propertyManagerId)
+        .sort((a, b) => a.name.localeCompare(b.name) || a.tenantId - b.tenantId)
+        .map(({ propertyManagerId: _, ...t }) => t);
+    },
+
+    /**
+     * A Tenant's profile: their Property, contact details and when they are usually home,
+     * the Tickets they raised (open first, then the most recently closed), their
+     * Maintenance Requests still waiting and their Reimbursement Requests. Refuses
+     * (not_found) anyone who isn't a Tenant of the Agency.
+     */
+    async tenant(agencyId: number, tenantId: number) {
+      const tenant = await profiles.personInAgency(agencyId, tenantId, 'tenant');
+      const property = tenant.propertyId === null ? null : await profiles.property(tenant.propertyId);
+      const [every, waiting, repairs] = await Promise.all([
+        tickets.list(agencyId, null),
+        tickets.maintenanceRequests(agencyId, null),
+        tickets.urgentRepairs(agencyId, null),
+      ]);
+      const address = cached(async (propertyId: number) => (await profiles.property(propertyId)).address);
+      const raised = every.filter((t) => t.tenantId === tenant.id);
+      const closed = raised.filter((t) => t.status === 'closed').sort((a, b) => (b.closedAt ?? '').localeCompare(a.closedAt ?? '') || b.id - a.id);
+      return {
+        tenantId: tenant.id,
+        name: tenant.name,
+        property: property ? { propertyId: property.id, address: property.address } : null,
+        propertyManager: property ? (await profiles.propertyManager(property.propertyManagerId)).name : null,
+        tenancyStart: tenant.tenancyStart,
+        mobile: tenant.mobile,
+        email: tenant.email,
+        availability: tenant.availability,
+        tickets: await Promise.all(
+          [...raised.filter((t) => t.status === 'open'), ...closed].map(async (t) => ({
+            ticketId: t.id,
+            propertyId: t.propertyId,
+            propertyAddress: await address(t.propertyId),
+            description: (await tickets.issue(t.issueId)).description,
+            urgency: t.urgency,
+            status: t.status,
+            reportedAt: t.reportedAt,
+            closedAt: t.closedAt,
+          })),
+        ),
+        maintenanceRequests: await Promise.all(
+          waiting
+            .filter((i) => i.tenantId === tenant.id)
+            .map(async (i) => ({
+              issueId: i.id,
+              propertyAddress: await address(i.propertyId),
+              description: i.description,
+              summary: i.summary,
+              urgency: i.urgency,
+              reportedAt: i.reportedAt,
+            })),
+        ),
+        reimbursementRequests: await Promise.all(
+          repairs
+            .filter((u) => u.tenantId === tenant.id)
+            .map(async (u) => ({
+              urgentRepairId: u.id,
+              propertyAddress: await address(u.propertyId),
+              description: (await tickets.issue(u.issueId)).description,
+              status: u.status,
+              receipts: u.receiptFileIds.length,
+              reportedAt: u.createdAt,
             })),
         ),
       };

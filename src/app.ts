@@ -157,6 +157,10 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
         setTradieAddress: (tradieId: number, address: string) => profiles.setTradieAddress(agencyId, tradieId, address),
         ticket: (ticketId: number) => views.ticket(agencyId, ticketId),
         tradie: (tradieId: number) => views.tradie(agencyId, tradieId),
+        /** The Tenants by name, each with their Property and open Tickets: those of the Property Manager's own Properties, or all of the Agency's. */
+        tenants: ({ filter = 'mine' }: { filter?: 'mine' | 'all' } = {}) => views.tenants(agencyId, propertyManagerId, filter),
+        /** A Tenant's profile: their Property, contact details, Tickets, Maintenance Requests waiting and Reimbursement Requests. */
+        tenant: (tenantId: number) => views.tenant(agencyId, tenantId),
         /** The counts beside Requests and Approvals in the rail. */
         navCounts: () => views.navCounts(agencyId, propertyManagerId),
 
