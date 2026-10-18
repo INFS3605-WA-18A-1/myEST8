@@ -3883,58 +3883,6 @@
         min-width: 0;
       }
     }
-    /* Site Inspections, one per row: the Tradie, when, how it stands and Mark done. */
-    .site-visits,
-    .site-form {
-      display: grid;
-      gap: 8px;
-      margin: 0;
-      padding: 0;
-      list-style: none;
-    }
-    .site-visit {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      gap: 4px 12px;
-      align-items: center;
-      padding: 10px 12px;
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: 4px;
-    }
-    .site-visit-who {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 4px 8px;
-      min-width: 0;
-    }
-    .site-visit-when {
-      grid-column: 1;
-      font-size: 14px;
-      font-variant-numeric: tabular-nums;
-    }
-    .site-visit-state {
-      grid-column: 2;
-      grid-row: 1;
-      justify-self: end;
-    }
-    .site-visit-action {
-      grid-column: 2;
-      grid-row: 2;
-      justify-self: end;
-    }
-    @media (min-width: 48rem) {
-      .site-visit {
-        grid-template-columns: minmax(10rem, 1.2fr) minmax(0, 1.4fr) auto auto;
-      }
-      .site-visit-when,
-      .site-visit-state,
-      .site-visit-action {
-        grid-column: auto;
-        grid-row: auto;
-      }
-    }
     /* Booking: a time for each Tradie, the other free slots as quick choices under it. */
     .site-form-row {
       display: grid;
