@@ -269,7 +269,20 @@ function doneBox(message: string): Html {
   return html`<div role="status" class="tenant-done">${message}</div>`;
 }
 
-type Step = { stage: string; at: string | null; reached: boolean; visitStart?: string; tradie?: string; trade?: Trade; visits?: { tradie: string; visitStart: string }[] };
+type Step = {
+  stage: string;
+  at: string | null;
+  /** Begun. */
+  reached: boolean;
+  /** Really happened: never because a later stage began (a booked Site visit isn't done until it has taken place). */
+  done: boolean;
+  visitStart?: string;
+  tradie?: string;
+  trade?: Trade;
+  visitConfirmed?: boolean;
+  rescheduleRequested?: boolean;
+  visits?: { tradie: string; visitStart: string; done: boolean }[];
+};
 
 /**
  * The stages a Tenant sees. The core keeps Done and Closed apart; here they are
@@ -282,8 +295,8 @@ function tenantSteps(stages: Tracker['stages']): Step[] {
   const closed = stages.find((s) => s.stage === 'closed');
   const last: Step =
     !done?.reached && closed?.reached
-      ? { stage: 'closed', at: closed.at, reached: true }
-      : { stage: 'fixed', at: done?.at ?? null, reached: done?.reached ?? false };
+      ? { stage: 'closed', at: closed.at, reached: true, done: true }
+      : { stage: 'fixed', at: done?.at ?? null, reached: done?.reached ?? false, done: done?.reached ?? false };
   return [...stages.filter((s) => s.stage !== 'done' && s.stage !== 'closed'), last];
 }
 
@@ -305,18 +318,19 @@ function statusLine(step: Step, agencyName: string, timeZone: string): string {
     case 'getting_quotes':
       return `${agencyName} is asking tradies to quote for the repair.`;
     // The backend adds this stage when a Tradie had a Site Inspection; the visits' times come through stepDetail.
-    case 'site_visit':
-      return step.visits?.length
-        ? `${agencyName} has asked tradies to look at the problem before choosing who fixes it.`
-        : step.visitStart
-        ? `${agencyName} has asked tradies to look at the problem. The next visit is ${formatWhen(step.visitStart, timeZone)}.`
-        : `${agencyName} has asked tradies to visit and look at the problem before choosing who fixes it.`;
+    case 'site_visit': {
+      const next = step.visits?.find((v) => !v.done);
+      return next
+        ? `${agencyName} has asked tradies to look at the problem before choosing who fixes it. The next visit is ${formatWhen(next.visitStart, timeZone)}: please make sure someone is home or the tradie can get in.`
+        : `${agencyName} has asked tradies to look at the problem before choosing who fixes it.`;
+    }
     case 'approved':
       return `The repair is approved. ${agencyName} is booking a visit next.`;
-    case 'booked':
-      return step.visitStart
-        ? `${whoIsComing(step)} is booked for ${formatWhen(step.visitStart, timeZone)}.`
-        : `${whoIsComing(step)} is booked.`;
+    case 'booked': {
+      const booked = step.visitStart ? `${whoIsComing(step)} is booked for ${formatWhen(step.visitStart, timeZone)}.` : `${whoIsComing(step)} is booked.`;
+      if (step.rescheduleRequested) return `${booked} You asked for another time, so ${agencyName} will be in touch with a new one.`;
+      return step.visitConfirmed ? `${booked} Thanks for confirming you'll be there.` : `${booked} ${CONFIRM_VISIT}`;
+    }
     case 'fixed':
       return 'The repair is done. Thanks for letting us know about it.';
     default:
@@ -326,7 +340,9 @@ function statusLine(step: Step, agencyName: string, timeZone: string): string {
 
 function trackerPage(progress: Tracker, link: string): Html {
   const steps = tenantSteps(progress.stages);
-  const last = steps.findLastIndex((s) => s.reached);
+  // Where the repair is up to: the last stage begun and still going, else the last one reached.
+  const going = steps.findLastIndex((s) => s.reached && !s.done);
+  const last = going >= 0 ? going : steps.findLastIndex((s) => s.reached);
   const current = steps[last];
   return publicPage({
     css: ['tenant.css'],
@@ -353,17 +369,28 @@ function trackerPage(progress: Tracker, link: string): Html {
   });
 }
 
-/** The lines under a step: who is coming and when, for the visit, or else when it happened. */
+/** Asked of the Tenant until they have confirmed the repair visit, in the words of their booking message. */
+const CONFIRM_VISIT = "Please confirm you'll be home or can let the tradie in: reply YES to our message.";
+
+/**
+ * The lines under a step: each Site visit booked or done; for the repair visit, who is
+ * coming and when, then whether the Tenant has confirmed they'll be in; or else when it happened.
+ */
 function stepDetail(s: Step, timeZone: string): string[] {
-  if (s.visits?.length) return s.visits.map((v) => `${v.tradie}, ${formatWhen(v.visitStart, timeZone)}`);
-  if (s.visitStart) return [...(s.tradie ? [s.tradie] : []), `Visit ${formatWhen(s.visitStart, timeZone)}`];
+  if (s.visits?.length) return s.visits.map((v) => (v.done ? `${v.tradie}: visited ${formatWhen(v.visitStart, timeZone)}` : `${v.tradie}: booked for ${formatWhen(v.visitStart, timeZone)}`));
+  if (s.visitStart) {
+    const confirm = s.done ? [] : [s.rescheduleRequested ? 'You asked for another time' : s.visitConfirmed ? 'Confirmed' : CONFIRM_VISIT];
+    return [...(s.tradie ? [s.tradie] : []), `Visit ${formatWhen(s.visitStart, timeZone)}`, ...confirm];
+  }
   return s.at ? [formatWhen(s.at, timeZone)] : [];
 }
 
 /**
  * The stages as a vertical list. Done stages are a --done circle with a tick, the
- * current stage is an --action ring with its number, and stages still to come are
- * muted numbers. A line is coloured up to the current stage. Times are in the
+ * current stage (the last begun and still going) is an --action ring with its number, and the rest are
+ * muted numbers: those to come, and any begun before it that hasn't really finished
+ * (quotes still coming in while a Site visit is booked). Only a stage that has
+ * happened says Done. A line is coloured between done stages up to the current one. Times are in the
  * Agency's zone. Written here rather than with ui.ts `steps`, whose fixed row
  * heights clip stages that have a detail line.
  */
@@ -374,12 +401,12 @@ function progressList(steps: Step[], current: number, timeZone: string): Html {
       const detail = stepDetail(s, timeZone);
       const reached = s.reached;
       const isCurrent = i === current;
-      const lineDone = i < current;
+      const lineDone = i < current && s.done;
       // The last step, once reached, is finished rather than in progress.
       const finished = isCurrent && i === steps.length - 1;
-      const circle = isCurrent && !finished ? 'is-current' : reached ? 'is-done' : 'is-todo';
-      const status = isCurrent && !finished ? 'Now' : reached ? 'Done' : 'To come';
-      const mark = reached && (!isCurrent || finished) ? CHECK : i + 1;
+      const circle = isCurrent && !finished ? 'is-current' : s.done ? 'is-done' : 'is-todo';
+      const status = isCurrent && !finished ? 'Now' : s.done ? 'Done' : reached ? 'Still going' : 'To come';
+      const mark = s.done && (!isCurrent || finished) ? CHECK : i + 1;
       return html`<li class="tracker-step" ${isCurrent ? html`aria-current="step"` : ''}>
         ${i < steps.length - 1 ? html`<span aria-hidden="true" class="tracker-line${lineDone ? ' is-done' : ''}"></span>` : ''}
         <span aria-hidden="true" class="tracker-circle ${circle}">${mark}</span>

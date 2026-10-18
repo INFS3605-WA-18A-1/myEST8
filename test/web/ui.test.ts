@@ -373,6 +373,38 @@ describe('ui', () => {
     expect(two).toContain('title="The cupboard is falling apart"');
   });
 
+  it('gives each step its own state when asked: a skipped step is muted with no tick, and the current one is the one named', async () => {
+    const out = await render(
+      steps(
+        [
+          { label: 'Estimates', state: 'done' },
+          { label: 'Site inspection', state: 'skipped', detail: 'Not needed' },
+          { label: 'Firm Quote', state: 'upcoming' },
+          { label: 'Booked', state: 'current', detail: 'Waiting on Tenant to confirm' },
+          { label: 'Done', state: 'upcoming' },
+        ],
+        { horizontal: true },
+      ),
+    );
+    const items = out.split('<li').slice(1);
+    expect(items[0]).toContain('data-content="✓"');
+    expect(items[1]).toContain('step-skipped');
+    expect(items[1]).not.toContain('step-primary');
+    expect(items[1]).not.toContain('✓');
+    expect(items[1]).toContain('(skipped)');
+    expect(items[1]).toContain('Not needed');
+    expect(items[2]).not.toContain('aria-current');
+    expect(items[3]).toContain('aria-current="step"');
+    expect(items[3]).toContain('step-primary');
+    expect(items[3]).not.toContain('data-content');
+    expect(out.match(/aria-current="step"/g)).toHaveLength(1);
+  });
+
+  it('skips skipped steps when finding the first step not done', async () => {
+    const out = await render(steps([{ label: 'Quote', done: true }, { label: 'Owner', state: 'skipped' }, { label: 'Book', done: false }], { horizontal: true }));
+    expect(out.split('<li').slice(1)[2]).toContain('aria-current="step"');
+  });
+
   it('keeps a done step that is the one on screen marked as both done and current', async () => {
     const out = await render(steps([{ label: 'Email', done: true }, { label: 'SMS', done: false }], { horizontal: true, current: 0 }));
     const first = out.split('<li').slice(1)[0]!;

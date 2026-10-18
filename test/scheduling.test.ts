@@ -214,3 +214,32 @@ describe('rescheduling', () => {
     await expect(alice.acceptTime(workOrder!.workOrderId, sydney('2026-10-12T10:00:00').toISOString())).rejects.toThrow(/booked/);
   });
 });
+
+describe("the Tenant's tracker and the booked visit", () => {
+  test('the booked stage says whether the Tenant has confirmed, and is done only once the Job is', async () => {
+    const w = await world();
+    const { h, alice, tradies } = w;
+    const job = await approvedTapJob(w, tradies.pete, TUE_9AM);
+    await alice.sendWorkOrder(job.jobId);
+    const link = h.messenger.to(TOM).find((m) => m.template === 'tenant.confirmed')!.data.trackerLink as string;
+    const booked = async () => (await h.tracker(link)).stages.find((s) => s.stage === 'booked');
+
+    expect(await booked()).toMatchObject({ reached: true, done: false, visitConfirmed: false, rescheduleRequested: false });
+    expect((await h.tracker(link)).stages.find((s) => s.stage === 'approved')).toMatchObject({ reached: true, done: true });
+
+    await h.answer(TOM, 'Yes that works', 'confirm');
+    expect(await booked()).toMatchObject({ done: false, visitConfirmed: true });
+  });
+
+  test('the booked stage says when the Tenant asked for another time', async () => {
+    const w = await world();
+    const { h, alice, tradies } = w;
+    const job = await approvedTapJob(w, tradies.pete, TUE_9AM);
+    await alice.sendWorkOrder(job.jobId);
+    const link = h.messenger.to(TOM).find((m) => m.template === 'tenant.confirmed')!.data.trackerLink as string;
+
+    await h.answer(TOM, 'I have work on Tuesday, can we do another day?', 'reschedule');
+
+    expect((await h.tracker(link)).stages.find((s) => s.stage === 'booked')).toMatchObject({ done: false, visitConfirmed: false, rescheduleRequested: true });
+  });
+});

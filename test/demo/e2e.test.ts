@@ -110,6 +110,11 @@ describe('the demo script', () => {
     await d.say('Tom Tran', 'Yes that works');
     expect((await d.alice.ticket(ticketId)).jobs[0]!.workOrder).toMatchObject({ visitConfirmed: true });
 
+    // A visit is never done before it starts: Pete is told so, then the clock moves past it.
+    await d.say('Pete Park', 'All done, washer replaced');
+    expect((await d.lastTo('+61400000200')).template).toBe('tradie.done_too_early');
+    const visitStart = (await d.alice.ticket(ticketId)).jobs[0]!.workOrder!.start;
+    await d.post('/demo/advance', { hours: String(Math.ceil((Date.parse(visitStart) - d.demo.now().getTime()) / 3_600_000) + 1) });
     await d.say('Pete Park', 'All done, washer replaced');
     expect((await d.lastTo(TOM)).template).toBe('tenant.fixed_properly');
     await d.say('Tom Tran', '5');

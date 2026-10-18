@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { formatWhen } from '../../src/web/ui.ts';
 import { photo } from '../support/photos.ts';
 import { webWorld } from '../support/web.ts';
-import { confirmedQuotes, inspectionBooked, KING_ST, OLIVIA_EMAIL, TOM, tomsTapTicket } from '../support/world.ts';
+import { confirmedQuotes, inspectionBooked, jobView, KING_ST, OLIVIA_EMAIL, PETE, TOM, tomsTapTicket, visitStarted } from '../support/world.ts';
 
 type WebWorld = Awaited<ReturnType<typeof webWorld>>;
 
@@ -268,8 +268,72 @@ describe('the tracker: Site Inspections', () => {
 
     const page = await readable(await w.get(path));
 
-    expect(page).toContain('Site visit<span class="sr-only">');
-    expect(page).toContain(`Pete's Plumbing, ${formatWhen(tue.toISOString(), 'Australia/Sydney')}`);
-    expect(page).toContain(`Drip Doctors, ${formatWhen(wed.toISOString(), 'Australia/Sydney')}`);
+    expect(page).toContain('Site visit<span class="sr-only"> (Now)</span>');
+    expect(page).toContain(`Pete's Plumbing: booked for ${formatWhen(tue.toISOString(), 'Australia/Sydney')}`);
+    expect(page).toContain(`Drip Doctors: booked for ${formatWhen(wed.toISOString(), 'Australia/Sydney')}`);
+    // Quotes are still coming in: Getting quotes isn't done just because a Site visit is booked.
+    expect(page).toContain('Getting quotes<span class="sr-only"> (Still going)</span>');
+  });
+
+  test('a Site visit is Done only once every inspection has happened', async () => {
+    const w = await webWorld();
+    const job = await tomsTapTicket(w);
+    await w.alice.sendQuoteRequests(job.jobId, [w.tradies.pete.id, w.tradies.dana.id]);
+    const tue = new Date('2026-10-13T10:00:00+11:00');
+    const visitId = await inspectionBooked(w, job, w.tradies.pete, tue);
+    const path = new URL(w.h.messenger.to(TOM).find((m) => m.template === 'tenant.confirmed')!.data.trackerLink as string).pathname;
+    visitStarted(w, tue);
+    await w.alice.markInspected(visitId);
+
+    const page = await readable(await w.get(path));
+
+    expect(page).toContain('Site visit<span class="sr-only"> (Done)</span>');
+    expect(page).toContain(`Pete's Plumbing: visited ${formatWhen(tue.toISOString(), 'Australia/Sydney')}`);
+    // Pete's Firm Quote is still to come, so the current step is still Getting quotes.
+    expect(page).toContain('Getting quotes<span class="sr-only"> (Now)</span>');
+  });
+});
+
+describe('the tracker: the booked visit', () => {
+  async function bookedTap() {
+    const w = await webWorld();
+    const job = await tomsTapTicket(w);
+    const tuesday9am = new Date('2026-10-13T09:00:00+11:00');
+    const [quote] = await confirmedQuotes(w, job, [[w.tradies.pete, 180_00, tuesday9am]]);
+    await w.alice.chooseQuote(quote!.quoteId, 'Usual plumber');
+    await w.alice.sendWorkOrder(job.jobId);
+    const path = new URL(w.h.messenger.to(TOM).find((m) => m.template === 'tenant.confirmed')!.data.trackerLink as string).pathname;
+    return { w, job, path, tuesday9am };
+  }
+
+  test("asks the Tenant to confirm they'll be in until they have, then says Confirmed", async () => {
+    const { w, path } = await bookedTap();
+
+    const asking = await readable(await w.get(path));
+    expect(asking).toContain(`<p class="tracker-detail">Please confirm you'll be home or can let the tradie in: reply YES to our message.</p>`);
+    expect(asking).toContain('Booked<span class="sr-only"> (Now)</span>');
+    // Repair approved happened; it is done.
+    expect(asking).toContain('Repair approved<span class="sr-only"> (Done)</span>');
+
+    await w.h.answer(TOM, 'Yes that works', 'confirm');
+    const confirmed = await readable(await w.get(path));
+
+    expect(confirmed).toContain('<p class="tracker-detail">Confirmed</p>');
+    expect(confirmed).not.toContain('Please confirm you');
+    expect(confirmed).toContain("Thanks for confirming you'll be there.");
+    expect(confirmed).toContain('Booked<span class="sr-only"> (Now)</span>');
+  });
+
+  test('is Done only once the repair is, and no longer asks for a confirmation then', async () => {
+    const { w, job, path, tuesday9am } = await bookedTap();
+    const { workOrder } = await jobView(w, job);
+    visitStarted(w, tuesday9am);
+    w.h.classifier.when('All done', { replyType: 'done', relatedItem: `work_order:${workOrder!.workOrderId}` });
+    await w.h.receive(PETE, 'All done');
+
+    const page = await readable(await w.get(path));
+
+    expect(page).toContain('Booked<span class="sr-only"> (Done)</span>');
+    expect(page).not.toContain('Please confirm you');
   });
 });

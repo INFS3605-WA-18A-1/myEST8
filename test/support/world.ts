@@ -153,6 +153,12 @@ export function dateAhead(w: World, days: number) {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
+/** Moves the clock to a minute after `start` (without running the worker), so a visit booked then has begun and can be marked done. */
+export function visitStarted(w: World, start: Date | string) {
+  const ms = new Date(start).getTime() + 60_000 - w.h.clock.now().getTime();
+  if (ms > 0) w.h.clock.advance(ms);
+}
+
 /** The Tradie gives a Firm Quote on their quote page (after their Estimate, and their Site Inspection if they needed one). */
 export async function firmQuote(
   w: World,
