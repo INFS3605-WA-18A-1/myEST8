@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { formatWhen } from '../../src/web/ui.ts';
 import { photo } from '../support/photos.ts';
 import { webWorld } from '../support/web.ts';
-import { confirmedQuotes, KING_ST, OLIVIA_EMAIL, TOM, tomsTapTicket } from '../support/world.ts';
+import { confirmedQuotes, inspectionBooked, KING_ST, OLIVIA_EMAIL, TOM, tomsTapTicket } from '../support/world.ts';
 
 type WebWorld = Awaited<ReturnType<typeof webWorld>>;
 
@@ -220,18 +220,15 @@ describe("the Tenant's progress tracker", () => {
   });
 });
 
-describe('the tracker: Site Quote visits', () => {
+describe('the tracker: Site Inspections', () => {
   test('shows a Site visit step with each Tradie and the time of their visit', async () => {
     const w = await webWorld();
     const job = await tomsTapTicket(w);
-    await w.alice.changeUrgency({ ticketId: job.ticketId }, 'high');
-    await confirmedQuotes(w, job, [[w.tradies.pete, 300_00], [w.tradies.dana, 340_00]]);
+    await w.alice.sendQuoteRequests(job.jobId, [w.tradies.pete.id, w.tradies.dana.id]);
     const tue = new Date('2026-10-13T10:00:00+11:00');
     const wed = new Date('2026-10-14T10:00:00+11:00');
-    await w.alice.bookSiteQuotes(job.jobId, [
-      { tradieId: w.tradies.pete.id, start: tue.toISOString() },
-      { tradieId: w.tradies.dana.id, start: wed.toISOString() },
-    ]);
+    await inspectionBooked(w, job, w.tradies.pete, tue);
+    await inspectionBooked(w, job, w.tradies.dana, wed);
     const path = new URL(w.h.messenger.to(TOM).find((m) => m.template === 'tenant.confirmed')!.data.trackerLink as string).pathname;
 
     const page = await readable(await w.get(path));

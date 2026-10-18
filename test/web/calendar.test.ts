@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { visible, webWorld } from '../support/web.ts';
-import { confirmedQuotes, jobView, TOM, tomsTapTicket } from '../support/world.ts';
+import { confirmedQuotes, inspectionBooked, jobView, TOM, tomsTapTicket } from '../support/world.ts';
 
 type Web = Awaited<ReturnType<typeof webWorld>>;
 
@@ -143,18 +143,17 @@ describe('Schedule: Mine and All', () => {
   });
 });
 
-describe('Schedule: Site Quotes and who is free', () => {
-  test('a Site Quote visit carries a Site quote badge and links to the Job on the Ticket', async () => {
+describe('Schedule: Site Inspections and who is free', () => {
+  test('a Site Inspection carries a Site inspection badge and links to the Job on the Ticket', async () => {
     const w = await webWorld();
     const job = await tomsTapTicket(w);
-    await w.alice.changeUrgency({ ticketId: job.ticketId }, 'high');
-    await confirmedQuotes(w, job, [[w.tradies.pete, 300_00], [w.tradies.dana, 340_00]]);
-    await w.alice.bookSiteQuotes(job.jobId, [{ tradieId: w.tradies.pete.id, start: TUE_9AM.toISOString() }]);
+    await w.alice.sendQuoteRequests(job.jobId, [w.tradies.pete.id, w.tradies.dana.id]);
+    await inspectionBooked(w, job, w.tradies.pete, TUE_9AM);
     const cookie = await w.signIn();
 
     const html = week(await page(w, '/calendar?week=2026-10-14', cookie));
 
-    expect(visible(html)).toContain('Site quote');
+    expect(visible(html)).toContain('Site inspection');
     expect(html).toContain('is-outline');
     expect(html).toContain(`href="/tickets/${job.ticketId}#job-${job.jobId}"`);
   });

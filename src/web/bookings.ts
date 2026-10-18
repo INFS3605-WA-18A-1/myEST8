@@ -23,12 +23,12 @@ export type Booking = Awaited<ReturnType<PropertyManagerActions['calendar']>>[nu
 export function bookingCard(b: Booking, timeZone: string, o: { day?: boolean; tradie?: boolean; propertyManager?: boolean; decision?: boolean } = {}): Html {
   const note = visitNote(b);
   const reschedule = b.visit === 'reschedule_requested';
-  const siteQuote = b.kind === 'site_quote';
-  const classes = ['booking', siteQuote ? 'is-site-quote' : '', reschedule ? 'is-reschedule' : '', reschedule && o.decision ? 'is-decision' : '', b.visit === 'done' ? 'is-done' : ''].filter(Boolean).join(' ');
+  const inspection = b.kind === 'inspection';
+  const classes = ['booking', inspection ? 'is-inspection' : '', reschedule ? 'is-reschedule' : '', reschedule && o.decision ? 'is-decision' : '', b.visit === 'done' ? 'is-done' : ''].filter(Boolean).join(' ');
   return html`<li class="${classes}">
-    ${siteQuote ? html`<p class="booking-kind">${badge('Site quote', 'info', { outline: true })}</p>` : ''}
+    ${inspection ? html`<p class="booking-kind">${badge('Site inspection', 'info', { outline: true })}</p>` : ''}
     <p class="booking-time num">${o.day ? html`${formatDay(b.start, timeZone)}, ` : ''}<time datetime="${b.start}">${formatTime(b.start, timeZone)}</time> – <time datetime="${b.end}">${formatTime(b.end, timeZone)}</time></p>
-    <a class="booking-issue" href="/tickets/${b.ticketId}${siteQuote ? `#job-${b.jobId}` : ''}">${clip(b.issue, { lines: 2 })}</a>
+    <a class="booking-issue" href="/tickets/${b.ticketId}${inspection ? `#job-${b.jobId}` : ''}">${clip(b.issue, { lines: 2 })}</a>
     ${o.tradie === false ? '' : html`<a class="booking-tradie" href="/tradies/${b.tradieId}">${b.businessName}</a>`}
     <p class="booking-place" title="${b.propertyAddress}">${placeOf(b)}</p>
     ${o.propertyManager ? html`<p class="booking-meta"><span class="sr-only">Property Manager: </span>${b.propertyManager}</p>` : ''}

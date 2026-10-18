@@ -376,7 +376,7 @@
       color: var(--urgent);
       background-color: var(--urgent-bg);
     }
-    /* Outlined (badge(..., { outline: true }), e.g. "Site quote"): white with a border in the tone's own colour, so a
+    /* Outlined (badge(..., { outline: true }), e.g. "Site inspection"): white with a border in the tone's own colour, so a
        badge straight on the Paper page has a boundary (a neutral badge's own fill is Paper). */
     .badge.badge-soft.is-outline {
       background-color: var(--surface);
@@ -3925,7 +3925,7 @@
         min-width: 0;
       }
     }
-    /* Site quote visits, one per row: the Tradie, when, how it stands and Mark done. */
+    /* Site Inspections, one per row: the Tradie, when, how it stands and Mark done. */
     .site-visits,
     .site-form {
       display: grid;

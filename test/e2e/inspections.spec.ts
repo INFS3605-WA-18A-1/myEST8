@@ -1,10 +1,11 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Browser, type Page } from '@playwright/test';
 import { fixtureJpeg } from '../../src/demo/photo-exif.ts';
 import { signIn, unique } from './support/actions.ts';
 
-// A High repair, start to finish in a real browser: the Tenant texts in, the Property
-// Manager confirms it, asks two Tradies for Quotes, books a site quote visit with each,
-// sees both on the calendar, then checks the revised price and chooses. Roles and
+// Staged quoting in a real browser: the Tenant texts in, the Property Manager confirms
+// it and asks two Tradies, both text an Estimate, the Property Manager asks one of them
+// for a Site Inspection and books it, sees it on the calendar, each Tradie gives a Firm
+// Quote on their own quote page, and the Property Manager chooses one. Roles and
 // visible text only.
 
 /** Sends `text` from `person`'s phone in the simulator and waits for it to appear. */
@@ -17,6 +18,29 @@ async function say(page: Page, person: string, text: string) {
   await expect(phone.getByRole('region', { name: `Messages with ${person}` }).getByText(text, { exact: true }).last()).toBeVisible();
 }
 
+/** The quote page link the Tradie's Quote Request carried, from their thread in the simulator. */
+async function quoteLink(page: Page, person: string) {
+  await page.goto('/demo');
+  await page.getByRole('navigation', { name: 'People' }).getByRole('link', { name: new RegExp(`^${person}`) }).click();
+  const link = page.getByRole('region', { name: `Messages with ${person}` }).getByRole('link', { name: /\/q\// }).first();
+  await expect(link).toBeVisible();
+  return (await link.getAttribute('href'))!;
+}
+
+/** The Tradie gives a Firm Quote on their quote page, in a browser of their own. */
+async function giveFirmQuote(browser: Browser, link: string, price: string, scope: string) {
+  const tradie = await browser.newPage();
+  await tradie.goto(link);
+  await expect(tradie.getByRole('heading', { name: 'Give your Firm Quote' })).toBeVisible();
+  await tradie.getByLabel('Firm price ($)').fill(price);
+  await tradie.getByLabel('Scope of work').fill(scope);
+  await tradie.getByLabel('How many days it takes').fill('1');
+  await tradie.getByLabel('Start date 1').fill(new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10));
+  await tradie.getByRole('button', { name: 'Send Firm Quote' }).click();
+  await expect(tradie.getByRole('status')).toContainText('has your Firm Quote');
+  await tradie.close();
+}
+
 /** Reloads the page until `check` passes: the background worker reads each reply a moment after it is sent. */
 async function eventually(page: Page, check: () => Promise<void>) {
   await expect(async () => {
@@ -25,7 +49,7 @@ async function eventually(page: Page, check: () => Promise<void>) {
   }).toPass({ timeout: 15_000 });
 }
 
-test('a High request gets site quote visits from two Tradies, a revised price, and a chosen Quote', async ({ page, browser }) => {
+test('two Tradies on their own paths: one inspects first, both give Firm Quotes, and one is chosen', async ({ page, browser }) => {
   test.setTimeout(120_000);
   const report = `The kitchen tap is leaking ${unique()}`;
   await signIn(page);
@@ -53,13 +77,10 @@ test('a High request gets site quote visits from two Tradies, a revised price, a
   await expect(tenant.getByRole('status')).toContainText(/has your photo/i);
   await tenant.close();
 
-  // The Maintenance Request arrives; the Property Manager makes it High and confirms it.
+  // The Maintenance Request arrives; the Property Manager confirms it.
   await page.goto('/requests');
   await eventually(page, () => expect(page.getByText(report).first()).toBeVisible({ timeout: 1_000 }));
   await page.getByRole('link', { name: new RegExp(report) }).first().click();
-  await page.getByLabel('Urgency').selectOption('high');
-  await page.getByRole('button', { name: 'Change Urgency' }).click();
-  await expect(page.getByLabel('Urgency')).toHaveValue('high');
   const confirm = page.getByRole('button', { name: /^Confirm( anyway)?$/ });
   if (!(await confirm.isVisible())) await page.getByText('Confirm', { exact: true }).click(); // photos in doubt: the disclosure asks first
   await confirm.click();
@@ -77,7 +98,7 @@ test('a High request gets site quote visits from two Tradies, a revised price, a
   await page.getByRole('button', { name: 'Send Quote Requests' }).click();
   await expect(page.getByText(/Quote Requests? sent/i).first()).toBeVisible();
 
-  // Both Tradies reply with a price; the Property Manager checks and confirms each.
+  // Both Tradies text a ballpark price, an Estimate each; the Property Manager checks and confirms each.
   await say(page, 'Pete Park', '$300, Tue 9am');
   await say(page, 'Dana Drip', '$340 Wednesday 10am');
   await page.goto(ticketUrl);
@@ -92,32 +113,32 @@ test('a High request gets site quote visits from two Tradies, a revised price, a
     await expect(page.getByText(/Quote from .* confirmed/)).toBeVisible();
   }
 
-  // A High repair with two confirmed Quotes leads with booking site quotes, with the first free times filled in.
-  await expect(page.getByText(/Book site quotes: 2 confirmed Quotes/).first()).toBeVisible();
-  for (const { business } of asked) await expect(page.getByLabel(business, { exact: true })).not.toHaveValue('');
-  await page.getByRole('button', { name: 'Book site quotes' }).click();
-  await expect(page.getByText('Site quotes booked with 2 Tradies')).toBeVisible();
-  await expect(page.getByText('Site quote', { exact: true }).first()).toBeVisible();
+  // Two confirmed Estimates are not Quotes to choose from. The Property Manager asks Dana to inspect first and books it.
+  const dana = page.getByRole('row', { name: /Drip Doctors/ });
+  await dana.getByRole('button', { name: 'Ask for one' }).click();
+  await expect(page.getByText('Drip Doctors will give a Firm Quote after a Site Inspection').first()).toBeVisible();
+  await expect(page.getByText('Book a Site Inspection with Drip Doctors').first()).toBeVisible();
+  await expect(page.getByLabel('Drip Doctors needs a Site Inspection')).not.toHaveValue('');
+  await page.getByRole('button', { name: 'Book Site Inspection' }).click();
+  await expect(page.getByText('Site Inspection booked with Drip Doctors. They and the Tenant have been told.')).toBeVisible();
+  await expect(page.getByText('Site inspection', { exact: true }).first()).toBeVisible();
 
-  // The calendar shows both visits with the Site quote badge, in the week they fall in.
+  // The calendar shows the visit with the Site inspection badge, in the week it falls in.
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Schedule' }).click();
-  const visits = page.getByRole('list', { name: 'The week, Monday to Sunday' }).getByText('Site quote', { exact: true });
-  for (let week = 0; week < 4 && (await visits.count()) < 2; week++) await page.getByRole('link', { name: 'Next week' }).click();
+  const visits = page.getByRole('list', { name: 'The week, Monday to Sunday' }).getByText('Site inspection', { exact: true });
+  for (let week = 0; week < 4 && (await visits.count()) < 1; week++) await page.getByRole('link', { name: 'Next week' }).click();
   await expect(visits.first()).toBeVisible();
-  expect(await visits.count()).toBeGreaterThanOrEqual(2);
 
-  // Pete looks at the job and sends a lower price; it needs checking again, and the first price is still shown.
-  await say(page, 'Pete Park', 'After looking, $280 all in');
+  // Pete quotes firm straight away; Dana does after her visit, which she reports DONE.
+  await giveFirmQuote(browser, await quoteLink(page, 'Pete Park'), '310', 'Replace the tap cartridge and both washers');
+  await say(page, 'Dana Drip', 'Done');
+  await giveFirmQuote(browser, await quoteLink(page, 'Dana Drip'), '360', 'Replace the mixer tap');
+
+  // Two Firm Quotes, compared apart from the Estimates; choosing Pete's.
   await page.goto(ticketUrl);
-  await eventually(page, () => expect(page.getByText('Check and confirm', { exact: true }).first()).toBeVisible({ timeout: 1_000 }));
-  await page.getByText('Check and confirm', { exact: true }).first().click();
-  await expect(page.getByLabel('Price ($)')).toHaveValue('280.00');
-  await page.getByRole('button', { name: 'Confirm Quote' }).click();
-  await expect(page.getByText(/Quote from Pete's Plumbing confirmed/)).toBeVisible();
-  await expect(page.getByText(/\$300/).first()).toBeVisible();
-
-  // Choosing Pete's revised Quote.
+  await eventually(page, () => expect(page.getByText('Choose a Firm Quote: 2 in').first()).toBeVisible({ timeout: 1_000 }));
+  await expect(page.getByText('Superseded by Firm Quote').first()).toBeVisible();
   page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('row', { name: /Pete's Plumbing/ }).getByRole('button', { name: 'Choose this Quote' }).click();
+  await page.getByRole('row', { name: /Pete's Plumbing.*Replace the tap cartridge/ }).getByRole('button', { name: 'Choose this Quote' }).click();
   await expect(page.getByText("Quote from Pete's Plumbing chosen and approved", { exact: true })).toBeVisible();
 });

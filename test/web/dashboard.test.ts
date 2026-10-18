@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { HOUR } from '../support/harness.ts';
 import { upload } from '../support/photos.ts';
 import { webWorld } from '../support/web.ts';
-import { confirmedQuotes, jobView, KING_ST, STRANGER, TOM, tomsTapTicket, tradieQuotes, type World } from '../support/world.ts';
+import { confirmedQuotes, firmQuote, jobView, KING_ST, quoteToken, STRANGER, TOM, tomsTapTicket, tradieQuotes, type World } from '../support/world.ts';
 
 type Web = Awaited<ReturnType<typeof webWorld>>;
 
@@ -139,7 +139,7 @@ describe('Maintenance Requests on the dashboard', () => {
 });
 
 describe('the count sentence and Needs you', () => {
-  /** Alice's dashboard with one Routine Ticket to choose from and one High Ticket whose site quotes are to book. */
+  /** Alice's dashboard with one Ticket's Firm Quotes to choose from and another whose Tradie's Site Inspection is to book. */
   async function quoteDecisions() {
     const w = await webWorld();
     const routine = await tomsTapTicket(w);
@@ -148,11 +148,9 @@ describe('the count sentence and Needs you', () => {
       [w.tradies.dana, 340_00],
     ]);
     const high = await tomsTapTicket(w);
-    await w.alice.changeUrgency({ ticketId: high.ticketId }, 'high');
-    await confirmedQuotes(w, high, [
-      [w.tradies.pete, 300_00],
-      [w.tradies.dana, 340_00],
-    ]);
+    await w.alice.sendQuoteRequests(high.jobId, [w.tradies.pete.id, w.tradies.dana.id]);
+    await w.h.app.submitEstimate(await quoteToken(w, high, w.tradies.dana), { priceCents: 340_00, needsInspection: true });
+    await w.h.drain();
     return { w, cookie: await w.signIn(), routine, high };
   }
 
@@ -161,8 +159,8 @@ describe('the count sentence and Needs you', () => {
     const dashboard = await page(w, '/', cookie);
     const sentence = match(dashboard, /<p class="count-sentence">([\s\S]*?)<\/p>/).replace(/<[^>]+>/g, '');
     expect(sentence).toContain('1 Quote to choose');
-    expect(sentence).toContain('1 Site quote to book');
-    expect(sentence).not.toMatch(/\b1 (Quotes|Site quotes|Alerts)/);
+    expect(sentence).toContain('1 Site Inspection to book');
+    expect(sentence).not.toMatch(/\b1 (Quotes|Site Inspections|Alerts)/);
     expect(sentence).not.toContain('Open Tickets');
   });
 
@@ -172,23 +170,24 @@ describe('the count sentence and Needs you', () => {
     expect(await page(w, '/', cookie)).toContain('Nothing needs you right now.');
   });
 
-  test('Needs you leads the page and holds Quotes to choose and Book site quotes once each', async () => {
+  test('Needs you leads the page and holds Quotes to choose and Site Inspections to book once each', async () => {
     const { w, cookie, routine, high } = await quoteDecisions();
     const dashboard = await page(w, '/', cookie);
     expect(dashboard.indexOf('id="decisions"')).toBeLessThan(dashboard.indexOf('id="tickets"'));
     expect(dashboard).toContain('class="needs-you"');
-    expect(dashboard).toContain('Site quotes to book');
-    expect(dashboard).toContain('Book site quotes');
+    expect(dashboard).toContain('Site Inspections to book');
+    expect(dashboard).toContain('Book a Site Inspection');
     expect(dashboard).toContain('Choose a Quote');
     const needs = dashboard.slice(dashboard.indexOf('id="decisions"'), dashboard.indexOf('id="tickets"'));
     expect(needs).toContain(`href="/tickets/${high.ticketId}"`);
     expect(needs).toContain(`href="/tickets/${routine.ticketId}"`);
   });
 
-  test('the board has a Site quotes lane and no inbox or Ticket list is repeated below it', async () => {
+  test('the board has no Site quotes lane (each Tradie inspects within Quoting), and no inbox or Ticket list is repeated below it', async () => {
     const { w, cookie } = await quoteDecisions();
     const dashboard = await page(w, '/', cookie);
-    expect(dashboard).toContain('Site quotes');
+    expect(dashboard).not.toContain('<h3 class="lane-title">Site quotes</h3>');
+    expect(dashboard).toContain('Site Inspection to book');
     expect(dashboard).toContain('class="board-lanes"');
     expect(dashboard.match(/id="inbox"/g) ?? []).toHaveLength(0);
     expect(dashboard.match(/All open Tickets/g) ?? []).toHaveLength(0);
@@ -214,7 +213,7 @@ function inBoard(page: string, ticketId: number) {
 }
 
 describe('Tickets on the dashboard', () => {
-  test('a Quoting docket says what the Property Manager has to do: check the Quotes in, then choose', async () => {
+  test('a Quoting docket says what the Property Manager has to do: check the Estimates in, wait for Firm Quotes, then choose', async () => {
     const w = await webWorld();
     const job = await tomsTapTicket(w);
     const cookie = await w.signIn();
@@ -237,6 +236,13 @@ describe('Tickets on the dashboard', () => {
     expect(toCheck).toContain('2 Quotes to check');
 
     for (const quote of (await jobView(w, job)).quotes) await w.alice.confirmQuote(quote.quoteId);
+    const waiting = docketOf(await page(w, '/', cookie));
+    expect(waiting).not.toContain('is-decision');
+    expect(waiting).toContain('2 of 2 Estimates in');
+
+    await firmQuote(w, job, w.tradies.pete, { priceCents: 150_00 });
+    expect(docketOf(await page(w, '/', cookie))).toContain('2 of 2 Estimates in, 1 Firm Quote');
+    await firmQuote(w, job, w.tradies.dana, { priceCents: 180_00 });
     const ready = docketOf(await page(w, '/', cookie));
     expect(ready).toContain('class="docket is-decision"');
     expect(ready).toContain('Ready to choose');
