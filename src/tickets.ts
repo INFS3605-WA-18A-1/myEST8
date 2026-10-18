@@ -707,14 +707,16 @@ export function createTickets({ db, clock, settings, modules }: Context) {
     },
 
     async cancelJob(agencyId: number, jobId: number) {
-      return transaction(db, async () => {
+      const inspections = await transaction(db, async () => {
         const cancelled = await jobInAgency(agencyId, jobId);
         if (cancelled.status === 'done' || cancelled.status === 'cancelled') invalid(`This Job is already ${cancelled.status}`);
         await run(db, `UPDATE jobs SET status = 'cancelled' WHERE id = ?`, jobId);
-        await modules.quotes.jobCancelled(jobId);
+        const inspections = await modules.quotes.jobCancelled(jobId);
         await modules.scheduling.jobCancelled(jobId);
         await recordEvent(cancelled.ticketId, 'job_cancelled', { jobId });
+        return inspections;
       });
+      await modules.quotes.inspectionsCancelled(inspections);
     },
 
     async closeTicket(agencyId: number, ticketId: number) {

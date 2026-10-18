@@ -446,6 +446,19 @@ describe('a cancelled Site Inspection is told to the people expecting it', () =>
     expect(w.h.messenger.last(w.tradies.dana.address)!.text).toMatch(/Your Site Inspection on .* is cancelled/);
     expect(w.h.messenger.templatesTo(w.tradies.pete.address)).toEqual([]);
   });
+
+  test('when the Job is cancelled, the Tenant is told the Site Inspection is off and stops being asked to confirm it', async () => {
+    const w = await world();
+    const { job, visitId } = await danaBooked(w);
+    expect(await pendingVisits(w)).toEqual([{ kind: 'visit', workOrderId: visitId }]);
+    w.h.messenger.clear();
+
+    await w.alice.cancelJob(job.jobId);
+
+    expect(w.h.messenger.last(TOM)).toMatchObject({ template: 'tenant.inspection_cancelled', data: { tradieBusinessName: 'Drip Doctors', visitStart: WED_10AM.toISOString() } });
+    expect(await pendingVisits(w)).toEqual([]);
+    expect((await w.alice.ticket(job.ticketId)).timeline.findLast((e) => e.kind === 'inspection_cancelled')).toMatchObject({ tradie: 'Drip Doctors', why: 'job_cancelled' });
+  });
 });
 
 describe('a price by message before a Firm Quote is allowed', () => {

@@ -200,10 +200,10 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
 
   /**
    * Cancels the active Site Inspections matching `where` (on `work_orders`), recording each on
-   * the timeline with `why`: another Quote was approved, or the Tradie declined. The Tenant is
+   * the timeline with `why`: another Quote was approved, the Tradie declined, or the Job was cancelled. The Tenant is
    * no longer asked to confirm them. Inside a transaction; returns the visits, to tell once it commits.
    */
-  async function cancelInspections(where: string, id: number, why: 'quote_approved' | 'declined') {
+  async function cancelInspections(where: string, id: number, why: 'quote_approved' | 'declined' | 'job_cancelled') {
     const cancelled = await all<CancelledVisit>(
       db,
       `UPDATE work_orders SET status = 'cancelled' WHERE ${where} AND kind = 'inspection' AND status = 'active' RETURNING id, ticket_id, job_id, tradie_id, start, "end"`,
@@ -998,9 +998,13 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
       return (await quoteRequestsOf(jobId)).length > 0;
     },
 
-    /** A cancelled Job stops waiting for Quotes and approval. */
+    /**
+     * A cancelled Job stops waiting for Quotes and approval, and its Site Inspections are off.
+     * Returns the cancelled inspections; pass them to `inspectionsCancelled` once the cancel commits.
+     */
     async jobCancelled(jobId: number) {
       return transaction(db, async () => {
+        const cancelled = await cancelInspections('job_id = ?', jobId, 'job_cancelled');
         await run(
           db,
           `UPDATE quote_requests SET status = 'closed' WHERE job_id = ? AND status IN ('sent', 'reminded', 'estimated', 'inspection_booked', 'inspected', 'firm_quoted')`,
@@ -1008,7 +1012,13 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
         );
         await run(db, `UPDATE quotes SET status = 'not_chosen' WHERE job_id = ? AND status IN ('open', 'awaiting_owner')`, jobId);
         await run(db, `UPDATE approvals SET status = 'cancelled' WHERE job_id = ? AND status IN ('requested', 'reminded')`, jobId);
+        return cancelled;
       });
+    },
+
+    /** Tells each Tenant their cancelled Site Inspection is off (after the cancel commits). */
+    async inspectionsCancelled(cancelled: CancelledVisit[]) {
+      await tellTenantsCancelled(cancelled);
     },
 
     /**

@@ -1598,7 +1598,7 @@ function describeEvent(t: TicketView, event: TimelineEvent, x: Extras): { title:
     case 'inspection_cancelled':
       return {
         title: `${tradie}'s Site Inspection cancelled`,
-        detail: details(job, visit, d.why === 'declined' ? `${tradie} declined the Quote Request` : 'Another Quote was approved'),
+        detail: details(job, visit, d.why === 'declined' ? `${tradie} declined the Quote Request` : d.why === 'job_cancelled' ? 'The Job was cancelled' : 'Another Quote was approved'),
       };
     case 'proceeded_on_estimate': {
       const cap = typeof d.capCents === 'number' ? `Not-to-exceed Cap ${formatMoney(d.capCents)}` : undefined;
