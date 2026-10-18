@@ -2623,24 +2623,6 @@
       display: block;
       margin-top: 4px;
     }
-    .dispatch-day {
-      display: block;
-      font-family: var(--font-body);
-      font-size: 12px;
-      font-weight: 400;
-      color: var(--muted);
-    }
-    .dispatch-schedule :where(th, td) {
-      vertical-align: top;
-    }
-    .dispatch-schedule tbody th {
-      font-weight: 500;
-      text-align: left;
-    }
-    /* A day with a visit takes the room for its card; an empty one stays as wide as its heading. */
-    .dispatch-schedule td.has-visits {
-      min-width: 11rem;
-    }
     .dispatch-board .dispatch-panel .btn,
     .dispatch-panel [data-dispatch-clear] {
       min-height: 2.75rem;
@@ -2653,22 +2635,16 @@
       background: var(--info-bg);
     }
 
-    /* The Properties and Tradie schedule tables. From 640px they are tables, their columns
-       wide enough to read; on phones each row is a block (like table({ stack: true }) in
-       ui.ts, which can't carry the row header and data-row these rows need), so nothing
-       scrolls sideways. */
-    .dispatch-cell-day {
-      display: none;
-    }
+    /* The Properties tables. From 640px they are tables, their columns wide enough to
+       read; on phones each row is a block (like table({ stack: true }) in ui.ts, which
+       can't carry the row header and data-row these rows need), so nothing scrolls
+       sideways. */
     @media (min-width: 640px) {
       .dispatch-stack .dispatch-address {
         min-width: 12rem;
       }
       .dispatch-stack .dispatch-tickets {
         min-width: 16rem;
-      }
-      .dispatch-stack .dispatch-tradie {
-        min-width: 10rem;
       }
     }
     @media (max-width: 639.98px) {
@@ -2729,24 +2705,6 @@
       .dispatch-stack tbody tr[data-selected] {
         background: var(--info-bg);
         border-color: var(--action);
-      }
-      /* A Tradie: name and Trades, then only the days with visits, each naming its day. */
-      .dispatch-schedule tbody td:not(.has-visits) {
-        display: none;
-      }
-      .dispatch-schedule tbody td.has-visits {
-        flex-basis: 100%;
-        min-width: 0;
-        margin: 0;
-        color: inherit;
-      }
-      .dispatch-cell-day {
-        display: block;
-        margin-bottom: 4px;
-        font-family: var(--font-head);
-        font-size: 12px;
-        font-weight: 600;
-        color: var(--muted);
       }
     }
   }
@@ -4333,11 +4291,10 @@
       color: var(--muted);
     }
 
-    /* The Schedule's week. Under 1024px a list of days, where a run of empty days is one
-       line (.schedule-quiet) and its days are hidden; from 1024px seven columns in a row,
-       a booked day taking the room and an empty one staying narrow. Booked days are white;
-       empty ones stay on Paper behind a hairline so the work stands out; today is ringed
-       in Harbour. */
+    /* The Schedule's Week under 768px: a list of days, where a run of empty days is one
+       line (.schedule-quiet). Booked days are white; empty ones stay on Gumleaf behind a
+       hairline so the work stands out; today is ringed in Gum. From 768px the time grid
+       below takes its place. */
     .schedule-week {
       display: grid;
       gap: 12px;
@@ -4362,10 +4319,8 @@
       border-color: var(--action);
       box-shadow: inset 0 0 0 1px var(--action);
     }
-    .schedule-day.is-empty:not(.is-today) {
-      display: none;
-    }
-    .schedule-day-title {
+    .schedule-day-title,
+    .schedule-col-title {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
@@ -4374,6 +4329,16 @@
       font-family: var(--font-head);
       font-size: 16px;
       font-weight: 600;
+    }
+    .schedule-day-title a,
+    .schedule-col-title a {
+      color: var(--ink);
+      text-decoration: none;
+    }
+    .schedule-day-title a:hover,
+    .schedule-col-title a:hover {
+      color: var(--action);
+      text-decoration: underline;
     }
     .schedule-day-count {
       margin-left: auto;
@@ -4387,26 +4352,320 @@
       font-size: 14px;
       color: var(--muted);
     }
-    @media (min-width: 1024px) {
+    .schedule-empty {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    /* The time grid (schedule-layout.ts places each visit): a Gumleaf tray of 15-minute
+       rows under hour lines, the times in a 3.5rem gutter, white visits on it. Rows are at
+       least --slot tall and grow to fit what is on them, and the hours, days and lanes are
+       subgrids of the one grid, so everything on a row lines up. The grid scrolls sideways
+       inside its frame (a focusable region) and never the page. */
+    .schedule-scroll {
+      min-width: 0;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--page);
+    }
+    .schedule-scroll:focus-visible {
+      outline: 2px solid var(--action);
+      outline-offset: 2px;
+    }
+    .schedule-scroll.is-week {
+      display: none;
+    }
+    @media (min-width: 768px) {
       .schedule-week {
-        display: flex;
-        align-items: stretch;
-        min-height: 24rem;
-      }
-      .schedule-quiet {
         display: none;
       }
-      .schedule-day,
-      .schedule-day.is-empty:not(.is-today) {
-        display: flex;
-        flex: 0 0 6.5rem;
+      .schedule-scroll.is-week {
+        display: block;
       }
-      .schedule-day.is-booked {
-        flex: 1 1 0;
+    }
+    .schedule-grid {
+      --gutter: 3.5rem;
+      --slot: 0.75rem;
+      display: grid;
+      grid-template-columns: var(--gutter) repeat(var(--cols), minmax(6rem, 1fr));
+      grid-template-rows: auto repeat(var(--slots), minmax(var(--slot), auto));
+    }
+    /* The Day has no row of day names, and each lane is wide enough for a whole card. */
+    .schedule-grid.is-day {
+      --slot: 1.25rem;
+      grid-template-columns: var(--gutter) repeat(var(--cols), minmax(14rem, 1fr));
+      grid-template-rows: repeat(var(--slots), minmax(var(--slot), auto));
+    }
+    .schedule-hours {
+      display: grid;
+      grid-column: 1 / -1;
+      grid-row: 2 / -1;
+      grid-template-columns: subgrid;
+      grid-template-rows: subgrid;
+    }
+    .schedule-grid.is-day .schedule-hours {
+      grid-row: 1 / -1;
+    }
+    .schedule-hour {
+      grid-column: 1 / -1;
+      padding: 2px 8px 0;
+      border-top: 1px solid var(--line);
+      font-size: 12px;
+      line-height: 1.2;
+      color: var(--muted);
+    }
+    .schedule-cols,
+    .schedule-lanes {
+      display: grid;
+      grid-column: 2 / -1;
+      grid-row: 1 / -1;
+      grid-template-columns: subgrid;
+      grid-template-rows: subgrid;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .schedule-col {
+      display: grid;
+      grid-row: 1 / -1;
+      grid-template-rows: subgrid;
+      min-width: 0;
+      border-left: 1px solid var(--line);
+    }
+    .schedule-col-title {
+      grid-row: 1;
+      gap: 0 6px;
+      padding: 8px;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
+      font-size: 14px;
+    }
+    .schedule-col.is-today .schedule-col-title {
+      box-shadow: inset 0 -2px 0 var(--action);
+    }
+    .schedule-col-title .schedule-day-count {
+      flex-basis: 100%;
+      margin-left: 0;
+    }
+    .schedule-slots {
+      display: grid;
+      grid-row: 2 / -1;
+      grid-template-rows: subgrid;
+      min-width: 0;
+      margin: 0;
+      padding: 0 4px;
+      list-style: none;
+    }
+    .schedule-block {
+      z-index: 1;
+      min-width: 0;
+      margin: 1px 0;
+    }
+    .schedule-block-link {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      height: 100%;
+      padding: 4px 6px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: var(--surface);
+      font-size: 12px;
+      line-height: 1.3;
+      color: var(--ink);
+      text-decoration: none;
+      overflow-wrap: anywhere;
+    }
+    .schedule-block-link:hover {
+      border-color: var(--action);
+    }
+    .schedule-block-link:focus-visible,
+    .schedule-chip a:focus-visible,
+    .schedule-mday :where(a):focus-visible {
+      outline: 2px solid var(--action);
+      outline-offset: 2px;
+    }
+    .schedule-block-time {
+      font-weight: 500;
+    }
+    .schedule-block-issue {
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .schedule-block-meta {
+      color: var(--muted);
+    }
+    .schedule-block.is-reschedule .schedule-block-link,
+    .schedule-chip.is-reschedule a {
+      border-left: 4px solid var(--high);
+    }
+    .schedule-block.is-reschedule.is-decision .schedule-block-link,
+    .schedule-chip.is-reschedule.is-decision a {
+      border-left-color: var(--hivis);
+    }
+    .schedule-block.is-done .schedule-block-link {
+      color: var(--muted);
+    }
+    /* Visits at the same time, folded into one block that opens the Day. */
+    .schedule-block.is-cluster .schedule-block-link {
+      border-color: var(--action);
+      background: var(--info-bg);
+      color: var(--action);
+    }
+    .schedule-block-count {
+      font-family: var(--font-head);
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .schedule-block.is-cluster .schedule-block-link:hover .schedule-block-count {
+      text-decoration: underline;
+    }
+    .schedule-lanes > .booking {
+      z-index: 1;
+      margin: 1px 4px;
+    }
+
+    /* The Month: a table of weeks, Monday to Sunday. The days of the months either side are
+       Gumleaf with muted numbers; today's number is a Gum chip. A day lists up to two
+       visits, else "N Jobs booked"; on phones every booked day says only how many. */
+    .schedule-month {
+      width: 100%;
+      table-layout: fixed;
+      border-collapse: collapse;
+    }
+    .schedule-month th {
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--line);
+      font-size: 12px;
+      font-weight: 600;
+      text-align: left;
+      color: var(--muted);
+    }
+    .schedule-month abbr {
+      text-decoration: none;
+    }
+    .schedule-mday {
+      height: 6.5rem;
+      padding: 4px;
+      border: 1px solid var(--line);
+      vertical-align: top;
+      background: var(--surface);
+      overflow: hidden;
+    }
+    .schedule-month tr > .schedule-mday:first-child {
+      border-left: 0;
+    }
+    .schedule-month tr > .schedule-mday:last-child {
+      border-right: 0;
+    }
+    .schedule-month tbody tr:last-child > .schedule-mday {
+      border-bottom: 0;
+    }
+    .schedule-mday.is-outside {
+      background: var(--page);
+    }
+    .schedule-mday-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 1.75rem;
+      height: 1.75rem;
+      border-radius: 4px;
+      font-weight: 600;
+      color: var(--ink);
+      text-decoration: none;
+    }
+    .schedule-mday-num:hover {
+      color: var(--action);
+      text-decoration: underline;
+    }
+    .schedule-mday.is-outside .schedule-mday-num {
+      font-weight: 400;
+      color: var(--muted);
+    }
+    .schedule-mday.is-today .schedule-mday-num {
+      background: var(--action);
+      color: var(--surface);
+    }
+    .schedule-chips {
+      display: grid;
+      gap: 2px;
+      margin: 4px 0 0;
+      padding: 0;
+      list-style: none;
+    }
+    .schedule-chip a {
+      display: block;
+      padding: 1px 4px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: var(--page);
+      font-size: 12px;
+      color: var(--ink);
+      text-decoration: none;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .schedule-chip a:hover {
+      border-color: var(--action);
+    }
+    .schedule-mday-more {
+      display: block;
+      margin-top: 4px;
+      padding: 1px 4px;
+      border-radius: 4px;
+      background: var(--info-bg);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--action);
+      text-decoration: none;
+    }
+    .schedule-mday-more:hover {
+      text-decoration: underline;
+    }
+    .schedule-mday-more.is-phone-only {
+      display: none;
+    }
+    @media (max-width: 639.98px) {
+      .schedule-month th {
+        padding: 4px 2px;
+        text-align: center;
+      }
+      .schedule-mday {
+        height: auto;
+        padding: 2px;
+        text-align: center;
+      }
+      .schedule-mday-num,
+      .schedule-mday-more,
+      .schedule-mday-more.is-phone-only {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        min-height: 2.75rem;
+      }
+      .schedule-mday-more {
+        margin-top: 2px;
+        padding: 0;
+      }
+      .schedule-chips {
+        display: none;
+      }
+      /* "2" seen, "2 Jobs booked" heard. */
+      .schedule-mday-words {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
       }
     }
 
-    /* Dispatch: the ratings side by side, and the disclosures under the two tables. */
+    /* Dispatch: the ratings side by side, and the disclosure under the Properties table. */
     .dispatch-ratings {
       display: flex;
       flex-wrap: wrap;

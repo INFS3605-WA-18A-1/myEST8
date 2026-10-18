@@ -1,11 +1,11 @@
 // Dispatch: a map of the Agency's Properties (a pin each, by the worst Urgency among
-// its open Tickets) and of its Tradies, a side panel for the one picked, the table of
-// the same Properties and the Tradie schedule.
+// its open Tickets) and of its Tradies, a side panel for the one picked, and the table
+// of the same Properties. Who is booked when is the Schedule's (pages/calendar.ts).
 //
 // A map alone can't be used with a keyboard or a screen reader, so the table carries
 // every fact the map does and every row picks its pin; the page works with JavaScript
-// off, as the table, per-Property panels reached by their row's link (:target) and
-// the schedule. static/dispatch-map.js adds the map: it reads the pin data from the
+// off, as the table and per-Property panels reached by their row's link (:target).
+// static/dispatch-map.js adds the map: it reads the pin data from the
 // JSON block this page writes, draws Leaflet markers and the Tradie search ring, and
 // shows the panel of the pin or row picked.
 //
@@ -18,8 +18,8 @@ import { html, raw } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
 import { nearest, TRADIE_SEARCH_RADIUS_KM } from '../../geo.ts';
 import type { Urgency } from '../../shared.ts';
-import { addDays, dayOf, daysFrom, startOfDay } from '../../zoned-time.ts';
-import { bookingCard, bookingsByDay, shortDay, type Booking } from '../bookings.ts';
+import { addDays, dayOf, startOfDay } from '../../zoned-time.ts';
+import { bookingCard, type Booking } from '../bookings.ts';
 import type { WebEnv } from '../env.ts';
 import { formAction } from '../forms.ts';
 import { mapTiles } from '../map-config.ts';
@@ -30,8 +30,8 @@ type Overview = Awaited<ReturnType<PropertyManagerActions['dispatch']>>;
 type PropertyView = Overview['properties'][number];
 type TradieView = Overview['tradies'][number];
 
-/** How many days the Tradie schedule shows, today first. */
-const SCHEDULE_DAYS = 7;
+/** How many days a Tradie's panel lists their bookings for, today first. */
+const BOOKED_DAYS = 7;
 
 /** How many nearest Tradies a Property's panel lists. */
 const NEAREST_TRADIES = 5;
@@ -46,10 +46,9 @@ export function dispatchPages() {
     const { actions, pm } = c.var;
     const { timeZone } = actions.agency();
     const today = dayOf(actions.now(), timeZone);
-    const days = daysFrom(today, SCHEDULE_DAYS);
     const [{ properties, tradies }, bookings, people] = await Promise.all([
       actions.dispatch(),
-      actions.calendar({ from: startOfDay(today, timeZone).toISOString(), to: startOfDay(addDays(today, SCHEDULE_DAYS), timeZone).toISOString() }),
+      actions.calendar({ from: startOfDay(today, timeZone).toISOString(), to: startOfDay(addDays(today, BOOKED_DAYS), timeZone).toISOString() }),
       actions.people('tradie'),
     ]);
     // A Tradie without a business address isn't missing from the map, just not on it.
@@ -78,7 +77,6 @@ export function dispatchPages() {
             ${panels(ordered, tradies, bookings, timeZone, tradiesPlaced > 0)}
           </div>
           ${section({ title: 'Properties', id: 'properties', body: propertyTable(ordered) })}
-          ${section({ title: 'Tradie schedule', id: 'tradie-schedule', body: scheduleTable(tradies, bookings, days, timeZone) })}
           ${pinData(ordered, tradies)}
           <link rel="stylesheet" href="/assets/leaflet.css" />
           <link rel="stylesheet" href="/assets/MarkerCluster.css" />
@@ -177,7 +175,7 @@ function tradiePanel(t: TradieView, bookings: Booking[], timeZone: string): Html
     <h3 class="dispatch-panel-heading">Booked</h3>
     ${bookings.length
       ? html`<ul class="booking-list">${bookings.map((b) => bookingCard(b, timeZone, { day: true, tradie: false }))}</ul>`
-      : html`<p class="text-muted">Nothing booked in the next ${SCHEDULE_DAYS} days.</p>`}
+      : html`<p class="text-muted">Nothing booked in the next ${BOOKED_DAYS} days.</p>`}
     <p><a class="link" href="/tradies/${t.tradieId}">Open the profile</a></p>
   </section>`;
 }
@@ -258,50 +256,6 @@ function addressCell(p: PropertyView): Html {
     <a class="link" href="#panel-property-${p.propertyId}" data-select="property-${p.propertyId}">${p.address}</a>
     ${p.location ? '' : html`<span class="dispatch-not-found">${badge('Address not found', 'warning')}</span>`}
   </th>`;
-}
-
-/**
- * Each Tradie's visits over the next days, from the same bookings the calendar shows: no
- * routes, just who is where and when. Only the Tradies with a booking are listed; every
- * Tradie, the free ones too, is in a disclosure under them.
- */
-function scheduleTable(tradies: TradieView[], bookings: Booking[], days: string[], timeZone: string): Html {
-  if (!tradies.length) return emptyState('No Tradies yet. Add one in Settings and their bookings will appear here.');
-  const byDay = bookingsByDay(bookings, days[0]!, timeZone);
-  const sorted = [...tradies].sort((a, b) => a.businessName.localeCompare(b.businessName));
-  const booked = sorted.filter((t) => bookings.some((b) => b.tradieId === t.tradieId));
-  const grid = (rows: TradieView[], caption: string) => html`<div class="table-frame dispatch-stack">
-    <table class="table table-sm dispatch-schedule">
-      <caption class="sr-only">${caption}</caption>
-      <thead>
-        <tr>
-          <th scope="col">Tradie</th>
-          ${days.map((d, i) => html`<th scope="col">${i === 0 ? html`Today<span class="dispatch-day">${shortDay(d, { month: true })}</span>` : shortDay(d, { month: true })}</th>`)}
-        </tr>
-      </thead>
-      <tbody>
-        ${rows.map(
-          (t) => html`<tr>
-            <th scope="row" class="dispatch-tradie"><a class="link" href="/tradies/${t.tradieId}">${t.businessName}</a><span class="dispatch-day">${t.trades.map(humanise).join(', ')}</span></th>
-            ${days.map((d, i) => {
-              const visits = (byDay.get(d) ?? []).filter((b) => b.tradieId === t.tradieId);
-              // On phones the header row is hidden and each day with visits is a block that names its day (hidden from 640px).
-              return visits.length
-                ? html`<td class="has-visits"><span class="dispatch-cell-day">${i === 0 ? 'Today, ' : ''}${shortDay(d, { month: true })}</span><ul class="booking-list">${visits.map((b) => bookingCard(b, timeZone, { tradie: false }))}</ul></td>`
-                : html`<td><span class="sr-only">Nothing booked</span></td>`;
-            })}
-          </tr>`,
-        )}
-      </tbody>
-    </table>
-  </div>`;
-  return html`${booked.length
-      ? grid(booked, `The Tradies with bookings, today and the next ${SCHEDULE_DAYS - 1} days`)
-      : emptyState(`No Tradie is booked in the next ${SCHEDULE_DAYS} days.`)}
-    <details class="dispatch-more">
-      <summary class="cursor-pointer text-sm font-medium text-action">Show all ${tradies.length} ${tradies.length === 1 ? 'Tradie' : 'Tradies'}</summary>
-      ${grid(sorted, `Bookings for every Tradie, today and the next ${SCHEDULE_DAYS - 1} days`)}
-    </details>`;
 }
 
 /**

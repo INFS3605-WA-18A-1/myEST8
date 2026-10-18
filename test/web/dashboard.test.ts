@@ -301,8 +301,8 @@ describe('the Next 7 days and Tradie profiles', () => {
 
     const week = await page(w, '/calendar?week=2026-10-14', cookie);
     expect(week).toContain('Week of Monday 12 October 2026');
-    expect(week).toContain('/calendar?week=2026-10-05');
-    expect(week).toContain('/calendar?week=2026-10-19');
+    expect(week).toContain('/calendar?view=week&amp;date=2026-10-05');
+    expect(week).toContain('/calendar?view=week&amp;date=2026-10-19');
     const booking = week.indexOf(`href="/tickets/${job.ticketId}"`);
     expect(week.indexOf('Tuesday 13 October')).toBeLessThan(booking);
     expect(week.indexOf('Wednesday 14 October')).toBeGreaterThan(booking);
