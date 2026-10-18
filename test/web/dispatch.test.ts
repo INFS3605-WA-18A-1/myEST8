@@ -265,8 +265,8 @@ describe('Dispatch: finding addresses again', () => {
   });
 });
 
-describe('Dispatch: the Tradie schedule', () => {
-  test("shows the Tradies with a visit booked from today, each visit with its issue, street and Ticket link", async () => {
+describe("Dispatch: a Tradie's bookings", () => {
+  test("a Tradie's panel lists their visits over the next 7 days, each with its day, issue, street and Ticket link", async () => {
     const w = await webWorld();
     const job = await tomsTapTicket(w);
     const [quote] = await confirmedQuotes(w, job, [[w.tradies.pete, 150_00, TUE_9AM]]);
@@ -276,32 +276,24 @@ describe('Dispatch: the Tradie schedule', () => {
 
     const html = await dispatch(w, cookie);
 
-    const schedule = sectionText(html, 'tradie-schedule');
-    const [booked, all] = schedule.split('<details');
-    expect(booked).toContain(`href="/tradies/${w.ids.pete}"`);
-    expect(booked).toContain(`href="/tickets/${job.ticketId}"`);
-    const text = visible(booked!);
-    expect(text).toContain("Pete's Plumbing");
-    expect(text).toContain('Tue 13 Oct');
+    const pete = sectionText(html, `panel-tradie-${w.ids.pete}`);
+    expect(pete).toContain(`href="/tickets/${job.ticketId}"`);
+    const text = visible(pete);
+    expect(text).toContain('Tue 13 Oct, 9:00 am – 11:00 am');
     expect(text).toContain('The kitchen tap is dripping');
     expect(text).toContain('12 King St, Newtown');
-    expect(text).toContain('Not confirmed yet');
-    // A Tradie with nothing booked is only in the full table, behind the disclosure, and empty days are blank.
-    expect(text).not.toContain("Nina's Plumbing");
-    expect(booked).not.toContain('<span aria-hidden="true">–</span>');
-    expect(visible(all!)).toContain(`Show all 6 Tradies`);
-    expect(visible(all!)).toContain("Nina's Plumbing");
-    expect(visible(all!)).toContain('Nothing booked');
+    expect(visible(sectionText(html, `panel-tradie-${w.ids.nina}`))).toContain('Nothing booked in the next 7 days.');
   });
 
-  test('with nothing booked it says so, and every Tradie is still a click away', async () => {
+  test('the page has no Tradie schedule: who is booked when is on the Schedule', async () => {
     const w = await webWorld();
     const cookie = await w.signIn();
 
-    const text = visible(sectionText(await dispatch(w, cookie), 'tradie-schedule'));
+    const html = await dispatch(w, cookie);
 
-    expect(text).toContain('No Tradie is booked in the next 7 days.');
-    expect(text).toContain('Show all 6 Tradies');
+    expect(html).not.toContain('id="tradie-schedule"');
+    expect(visible(html)).not.toContain('Tradie schedule');
+    expect(html).not.toContain('dispatch-schedule');
   });
 });
 

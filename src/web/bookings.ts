@@ -11,6 +11,22 @@ import { badge, clip, formatDay, formatTime, type Html } from './ui.ts';
 export type Booking = Awaited<ReturnType<PropertyManagerActions['calendar']>>[number];
 
 /**
+ * What a visit that isn't the repair itself is for, by its kind: the Tradie's Site
+ * Inspection before a Firm Quote. Read loosely, so the older name for the kind reads the same.
+ */
+const VISIT_KINDS: Record<string, string> = { site_quote: 'Site inspection', inspection: 'Site inspection' };
+
+/** "Site inspection" for a visit that isn't the repair, or null for the repair itself. */
+export function visitKind(b: Pick<Booking, 'kind'>): string | null {
+  return VISIT_KINDS[b.kind as string] ?? null;
+}
+
+/** The Ticket a booking is for; a Site Inspection lands on its Job. */
+export function ticketHref(b: Booking): string {
+  return `/tickets/${b.ticketId}${visitKind(b) ? `#job-${b.jobId}` : ''}`;
+}
+
+/**
  * One booking, read in the order a Property Manager reads it: the time, what the visit
  * is for (the issue, up to two lines, linking to the Ticket), the Tradie's business
  * (linking to the profile), the street and suburb, then how the visit stands. Names
@@ -19,21 +35,41 @@ export type Booking = Awaited<ReturnType<PropertyManagerActions['calendar']>>[nu
  * already names them; `propertyManager` names whose Property it is. `decision` marks a
  * reschedule request that waits on the Property Manager looking (it is on their own
  * Property) with the Wattle stripe; anyone else's request keeps the warning stripe.
+ * `style` places the card on the Schedule's time grid.
  */
-export function bookingCard(b: Booking, timeZone: string, o: { day?: boolean; tradie?: boolean; propertyManager?: boolean; decision?: boolean } = {}): Html {
+export function bookingCard(b: Booking, timeZone: string, o: { day?: boolean; tradie?: boolean; propertyManager?: boolean; decision?: boolean; style?: string } = {}): Html {
   const note = visitNote(b);
-  const reschedule = b.visit === 'reschedule_requested';
-  const siteQuote = b.kind === 'site_quote';
-  const classes = ['booking', siteQuote ? 'is-site-quote' : '', reschedule ? 'is-reschedule' : '', reschedule && o.decision ? 'is-decision' : '', b.visit === 'done' ? 'is-done' : ''].filter(Boolean).join(' ');
-  return html`<li class="${classes}">
-    ${siteQuote ? html`<p class="booking-kind">${badge('Site quote', 'info', { outline: true })}</p>` : ''}
+  const kind = visitKind(b);
+  const classes = ['booking', ...bookingFlags(b, o.decision)].join(' ');
+  return html`<li class="${classes}" ${o.style ? html`style="${o.style}"` : ''}>
+    ${kind ? html`<p class="booking-kind">${badge(kind, 'info', { outline: true })}</p>` : ''}
     <p class="booking-time num">${o.day ? html`${formatDay(b.start, timeZone)}, ` : ''}<time datetime="${b.start}">${formatTime(b.start, timeZone)}</time> – <time datetime="${b.end}">${formatTime(b.end, timeZone)}</time></p>
-    <a class="booking-issue" href="/tickets/${b.ticketId}${siteQuote ? `#job-${b.jobId}` : ''}">${clip(b.issue, { lines: 2 })}</a>
+    <a class="booking-issue" href="${ticketHref(b)}">${clip(b.issue, { lines: 2 })}</a>
     ${o.tradie === false ? '' : html`<a class="booking-tradie" href="/tradies/${b.tradieId}">${b.businessName}</a>`}
     <p class="booking-place" title="${b.propertyAddress}">${placeOf(b)}</p>
     ${o.propertyManager ? html`<p class="booking-meta"><span class="sr-only">Property Manager: </span>${b.propertyManager}</p>` : ''}
     ${note}
   </li>`;
+}
+
+/** The classes for how a visit stands: a Site Inspection, a reschedule request (`decision` when it waits on this Property Manager), done. */
+export function bookingFlags(b: Booking, decision = false): string[] {
+  const reschedule = b.visit === 'reschedule_requested';
+  return [visitKind(b) ? 'is-inspection' : '', reschedule ? 'is-reschedule' : '', reschedule && decision ? 'is-decision' : '', b.visit === 'done' ? 'is-done' : ''].filter(Boolean);
+}
+
+/** How the visit stands in a word or two, or null when it is confirmed: for places with no room for visitNote's link. */
+export function visitWords(b: Booking): string | null {
+  switch (b.visit) {
+    case 'done':
+      return 'Done';
+    case 'reschedule_requested':
+      return 'Reschedule requested';
+    case 'not_confirmed':
+      return 'Not confirmed yet';
+    case 'confirmed':
+      return null;
+  }
 }
 
 /**

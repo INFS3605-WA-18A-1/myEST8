@@ -99,12 +99,19 @@ test('a High request gets site quote visits from two Tradies, a revised price, a
   await expect(page.getByText('Site quotes booked with 2 Tradies')).toBeVisible();
   await expect(page.getByText('Site quote', { exact: true }).first()).toBeVisible();
 
-  // The calendar shows both visits with the Site quote badge, in the week they fall in.
+  // The Schedule shows both visits as Site inspections, in the week they fall in. Booked at
+  // the same time, they fold into one "2 Jobs booked" block that opens their Day, side by side.
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Schedule' }).click();
-  const visits = page.getByRole('list', { name: 'The week, Monday to Sunday' }).getByText('Site quote', { exact: true });
-  for (let week = 0; week < 4 && (await visits.count()) < 2; week++) await page.getByRole('link', { name: 'Next week' }).click();
-  await expect(visits.first()).toBeVisible();
-  expect(await visits.count()).toBeGreaterThanOrEqual(2);
+  const week = page.getByRole('list', { name: 'The week, Monday to Sunday' });
+  const visits = week.getByText('Site inspection', { exact: true });
+  const together = week.getByRole('link', { name: /Jobs booked/ });
+  for (let w = 0; w < 4 && (await visits.count()) < 2 && !(await together.count()); w++) await page.getByRole('link', { name: 'Next week' }).click();
+  if (await together.count()) {
+    await together.first().click();
+    await expect(page.getByRole('region', { name: /hour by hour/ }).getByText('Site inspection', { exact: true })).toHaveCount(2);
+  } else {
+    expect(await visits.count()).toBeGreaterThanOrEqual(2);
+  }
 
   // Pete looks at the job and sends a lower price; it needs checking again, and the first price is still shown.
   await say(page, 'Pete Park', 'After looking, $280 all in');

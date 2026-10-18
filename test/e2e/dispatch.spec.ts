@@ -115,7 +115,6 @@ test('on a phone the page never scrolls sideways, and the panel opens under the 
   await signIn(page);
   await page.goto('/dispatch');
   await page.getByText(/^Show the \d+ Properties with no open Tickets/).click();
-  await page.getByText(/^Show all \d+ Tradies/).click();
 
   const overflow = () => page.evaluate<number>('document.documentElement.scrollWidth - document.documentElement.clientWidth');
   expect(await overflow()).toBe(0);
@@ -123,7 +122,9 @@ test('on a phone the page never scrolls sideways, and the panel opens under the 
   await page.getByRole('table', { name: /^Properties with no open Tickets/ }).getByRole('link', { name: KING_ST }).click();
   const heading = page.getByRole('heading', { name: KING_ST, level: 2 });
   await expect(heading).toBeInViewport();
-  const mapBox = (await theMap(page).boundingBox())!;
-  expect((await heading.boundingBox())!.y).toBeGreaterThan(mapBox.y + mapBox.height);
+  // Measured together, as the page may still be scrolling to the panel.
+  const map = await theMap(page).elementHandle();
+  const gap = () => heading.evaluate((h, m) => h.getBoundingClientRect().top - m!.getBoundingClientRect().bottom, map);
+  await expect.poll(gap).toBeGreaterThan(0);
   expect(await overflow()).toBe(0);
 });
