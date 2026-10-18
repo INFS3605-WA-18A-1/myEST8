@@ -161,7 +161,9 @@ function list(properties: Overview[]): Html {
       html`<span class="${p.openTickets ? 'property-open' : 'text-muted'}">${p.openTickets}</span>`,
       html`${formatMoney(p.maxRepairCostCents)}`,
       html`${p.ownerName}`,
-      html`${p.tenants.length ? p.tenants.join(', ') : html`<span class="text-muted">No Tenants</span>`}`,
+      p.tenants.length
+        ? html`${p.tenants.map((t, i) => html`${i ? ', ' : ''}<a class="link" href="/tenants/${t.personId}">${t.name}</a>`)}`
+        : html`<span class="text-muted">No Tenants</span>`,
       html`${p.propertyManager}`,
     ]),
     { stack: 'labelled', caption: 'Properties', align: ['left', 'right', 'right', 'left', 'left', 'left'] },
@@ -204,7 +206,7 @@ function facts(p: PropertyView): Html {
 }
 
 /** "1 Jan 2025" from a date like 2025-01-01. */
-function formatDate(date: string): string {
+export function formatDate(date: string): string {
   const [year, month, day] = date.slice(0, 10).split('-').map(Number);
   if (!year || !month || !day) return date;
   return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).replace('Sept', 'Sep');
@@ -217,7 +219,7 @@ function tenants(p: PropertyView): Html {
       ? table(
           ['Tenant', 'Mobile', 'Email'],
           p.tenants.map((t) => [
-            html`<span class="font-medium">${t.name}</span>${t.tenancyStart ? html`<br /><span class="text-xs text-muted">Since ${formatDate(t.tenancyStart)}</span>` : ''}`,
+            html`<a class="link font-medium" href="/tenants/${t.personId}">${t.name}</a>${t.tenancyStart ? html`<br /><span class="text-xs text-muted">Since ${formatDate(t.tenancyStart)}</span>` : ''}`,
             html`${t.mobile ? html`<a class="link num" href="tel:${t.mobile}">${t.mobile}</a>` : '—'}`,
             html`${t.email ? html`<a class="link break-all" href="mailto:${t.email}">${t.email}</a>` : '—'}`,
           ]),

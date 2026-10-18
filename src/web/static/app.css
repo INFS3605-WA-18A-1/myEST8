@@ -4600,3 +4600,17 @@
     }
   }
 }
+
+/* Tenants (pages/tenants.ts): the list's Contact column puts the mobile and the email
+   on lines of their own, like a Property's contacts. A Tenant with open Tickets reuses
+   .property-open for the count. */
+@layer utilities {
+  @layer app {
+    .tenant-contact {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
+    }
+  }
+}
