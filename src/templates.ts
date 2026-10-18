@@ -87,12 +87,11 @@ export const templates = {
     'Repair visit moved',
     (d, a) => `Your visit from ${d.tradieBusinessName} has moved to ${visit(d.visitStart, a)}. Reply YES to confirm or tell us if you need another time.`,
   ),
-  'tenant.site_quotes': template<{ visits: { tradieBusinessName: string; visitStart: string }[] }>(
-    'Tradies are coming to quote',
+  'tenant.inspection': template<{ tradieBusinessName: string; trade: Trade; visitStart: string }>(
+    'A tradie is coming to inspect',
     (d, a) =>
-      `Before we fix it, ${d.visits.length} ${d.visits.length === 1 ? 'tradie' : 'tradies'} will come to look and quote: ` +
-      `${d.visits.map((v) => `${v.tradieBusinessName} on ${visit(v.visitStart, a)}`).join('; ')}. ` +
-      'Reply YES if those times work, or tell us if you need another time.',
+      `Before we fix it, ${d.tradieBusinessName} (${trade(d.trade)}) will come to inspect the issue so they can give a firm price: ${visit(d.visitStart, a)}. ` +
+      'Reply YES if that time works, or tell us if you need another time.',
   ),
   'tenant.fixed_properly': template<{ trade: Trade; tradieBusinessName: string }>(
     'Was it fixed properly?',
@@ -103,13 +102,18 @@ export const templates = {
     (d) => `The repair at ${d.propertyAddress} is complete and we've closed it. Thanks for your patience.`,
   ),
 
-  'tradie.quote_request': template<{ trade: Trade; urgency: Urgency; description: string; suburb: string }>(
+  'tradie.quote_request': template<{ trade: Trade; urgency: Urgency; description: string; suburb: string; quoteLink: string }>(
     'Quote request',
-    (d, a) => `${a.name} is asking for a quote: ${trade(d.trade)} job in ${d.suburb} (${d.urgency}). Issue: ${d.description}. Reply with your price and earliest time, or reply NO to decline.`,
+    (d, a) =>
+      `${a.name} is asking for a quote: ${trade(d.trade)} job in ${d.suburb} (${d.urgency}). Issue: ${d.description}. ` +
+      `Give your Estimate (a ballpark from the description and photos) here, and say if you need to inspect before your Firm Quote (your fixed price): ${d.quoteLink} ` +
+      'Or reply with a ballpark price and earliest time, or NO to decline.',
   ),
-  'tradie.quote_reminder': template<{ trade: Trade; suburb: string }>(
+  'tradie.quote_reminder': template<{ trade: Trade; suburb: string; quoteLink: string }>(
     'Reminder: quote request',
-    (d, a) => `Reminder from ${a.name}: can you quote for the ${trade(d.trade)} job in ${d.suburb}? Reply with your price and earliest time, or NO to decline.`,
+    (d, a) =>
+      `Reminder from ${a.name}: can you give an Estimate for the ${trade(d.trade)} job in ${d.suburb}? ${d.quoteLink} ` +
+      'Or reply with a ballpark price and earliest time, or NO to decline.',
   ),
   'tradie.not_chosen': template<{ trade: Trade; suburb: string }>(
     'Quote not chosen',
@@ -124,20 +128,27 @@ export const templates = {
     (d, a) => `Your visit to ${d.propertyAddress} has moved to ${visit(d.visitStart, a)}.`,
   ),
 
-  'tradie.site_quote': template<{ propertyAddress: string; trade: Trade; summary: string; visitStart: string; visitEnd: string }>(
-    'Site quote visit',
+  'tradie.inspection': template<{ propertyAddress: string; trade: Trade; summary: string; visitStart: string; visitEnd: string }>(
+    'Site Inspection booked',
     (d, a) =>
-      `Site quote for ${a.name}: ${trade(d.trade)} at ${d.propertyAddress}, ${visit(d.visitStart, a)}. Issue: ${d.summary}. ` +
-      'Reply with your revised price after the visit, DONE if your price stands, or tell us if you need another time.',
+      `Site Inspection for ${a.name}: ${trade(d.trade)} at ${d.propertyAddress}, ${visit(d.visitStart, a)}. Issue: ${d.summary}. ` +
+      'Reply DONE after your visit and we will ask for your Firm Quote, or tell us if you need another time.',
   ),
-  'tradie.site_quote_reminder': template<{ propertyAddress: string; trade: Trade }>(
-    'Reminder: revised quote',
+  'tradie.firm_quote_request': template<{ trade: Trade; suburb: string; propertyAddress: string; quoteLink: string }>(
+    'Your Firm Quote',
     (d, a) =>
-      `Reminder from ${a.name}: after your visit to ${d.propertyAddress}, please send your revised price for the ${trade(d.trade)} job, or DONE if your quote stands.`,
+      `Thanks for inspecting the ${trade(d.trade)} job at ${d.propertyAddress}. Please give ${a.name} your Firm Quote: ` +
+      `your fixed price, the scope of work, how long it takes and the dates you can start: ${d.quoteLink}`,
   ),
-  'tradie.site_quote_cancelled': template<{ propertyAddress: string; trade: Trade }>(
-    'Site quote visit cancelled',
-    (d, a) => `${a.name} no longer needs your site visit to ${d.propertyAddress} for the ${trade(d.trade)} job. Thanks for your time.`,
+  'tradie.firm_quote_reminder': template<{ trade: Trade; suburb: string; propertyAddress: string; quoteLink: string }>(
+    'Reminder: your Firm Quote',
+    (d, a) => `Reminder from ${a.name}: after your Site Inspection at ${d.propertyAddress}, please give your Firm Quote for the ${trade(d.trade)} job: ${d.quoteLink}`,
+  ),
+  'tradie.firm_quote_link': template<{ trade: Trade; suburb: string; propertyAddress: string; quoteLink: string }>(
+    'Give your Firm Quote',
+    (d, a) =>
+      `Thanks. ${a.name} already has your Estimate for the ${trade(d.trade)} job in ${d.suburb}. ` +
+      `A Firm Quote needs your fixed price, the scope of work, how long it takes and the dates you can start, so please give it here: ${d.quoteLink}`,
   ),
 
   'owner.approval_request': template<{

@@ -1,25 +1,49 @@
 import type { Context } from './context.ts';
 import { all, one, run, transaction } from './db.ts';
-import { addMs, HOUR_MS, invalid, iso, median, notFound, withoutContactDetails, type Trade } from './shared.ts';
+import { addMs, dollars, HOUR_MS, invalid, iso, median, newToken, notFound, withoutContactDetails, type Trade } from './shared.ts';
 import type { OpenItem } from './tickets.ts';
+import { wallClock } from './zoned-time.ts';
 
 const QUOTE_REMINDER_MS = 48 * HOUR_MS;
+const FIRM_QUOTE_REMINDER_MS = 48 * HOUR_MS;
 const MORE_QUOTES_PROMPT_MS = 72 * HOUR_MS;
 const OWNER_REMINDER_MS = 24 * HOUR_MS;
 const OWNER_ALERT_MS = 48 * HOUR_MS;
-/** Confirmed Quotes a Job needs before a Quote can be chosen without a reason. */
+/** Firm Quotes a Job needs before one can be chosen without a reason (and Estimates, to proceed on one without a reason). */
 export const MIN_QUOTES = 2;
 /** Quote Requests a Job needs (sent and new together) before the Property Manager compares prices. */
 export const MIN_QUOTE_REQUESTS = 2;
 /** The most Tradies `recommend` returns, and how many of them start ticked. */
 export const MAX_RECOMMENDED = 4;
 export const PRESELECTED = 3;
+/** The most start dates a Firm Quote lists. */
+export const MAX_AVAILABLE_DATES = 3;
+const MAX_SCOPE_LENGTH = 2000;
+const MAX_DURATION_DAYS = 365;
 
-type QuoteRequestStatus = 'sent' | 'reminded' | 'quoted' | 'declined' | 'closed';
-type QuoteStatus = 'open' | 'awaiting_owner' | 'approved' | 'declined_by_owner' | 'not_chosen';
+/**
+ * Where one Tradie's Quote Request stands. Each moves on its own (ADR 0009):
+ * sent -> (reminded) -> estimated -> [inspection_booked -> inspected] -> firm_quoted,
+ * or declined, or closed (another Quote was approved, or the Job was cancelled).
+ */
+export type QuoteRequestStatus = 'sent' | 'reminded' | 'estimated' | 'inspection_booked' | 'inspected' | 'firm_quoted' | 'declined' | 'closed';
+/** An Estimate (a ballpark, non-binding) or a Firm Quote (a fixed price for a defined scope). Never compared as if equal. */
+export type QuoteStage = 'estimate' | 'firm';
+/** `superseded`: an Estimate the same Tradie's Firm Quote has replaced; it stays on record. */
+export type QuoteStatus = 'open' | 'superseded' | 'awaiting_owner' | 'approved' | 'declined_by_owner' | 'not_chosen';
 type ApprovalStatus = 'requested' | 'reminded' | 'approved' | 'declined' | 'cancelled';
 
-type QuoteRequestRow = { id: number; agency_id: number; job_id: number; ticket_id: number; tradie_id: number; status: QuoteRequestStatus; sent_at: string };
+type QuoteRequestRow = {
+  id: number;
+  agency_id: number;
+  job_id: number;
+  ticket_id: number;
+  tradie_id: number;
+  status: QuoteRequestStatus;
+  sent_at: string;
+  token: string;
+  inspection_override: boolean | null;
+};
 type QuoteRow = {
   id: number;
   agency_id: number;
@@ -28,6 +52,7 @@ type QuoteRow = {
   quote_request_id: number;
   tradie_id: number;
   trade: Trade;
+  stage: QuoteStage;
   price_cents: number | null;
   proposed_time: string | null;
   confirmed: number;
@@ -35,34 +60,80 @@ type QuoteRow = {
   pdf_file_id: number | null;
   single_quote_reason: string | null;
   received_at: string;
-  initial_price_cents: number | null;
-  initial_proposed_time: string | null;
-  revised_at: string | null;
+  supersedes_quote_id: number | null;
+  needs_inspection: boolean;
+  callout_fee_cents: number | null;
+  scope_of_work: string | null;
+  duration_days: number | null;
+  available_dates: unknown;
+  not_to_exceed_cents: number | null;
 };
 type ApprovalRow = { id: number; agency_id: number; quote_id: number; job_id: number; ticket_id: number; owner_id: number; status: ApprovalStatus; requested_at: string };
 
-const WAITING: QuoteRequestStatus[] = ['sent', 'reminded'];
+/** Waiting on the Tradie's Estimate. */
+const AWAITING_ESTIMATE: QuoteRequestStatus[] = ['sent', 'reminded'];
+/** Still in the running: not declined, closed or done. */
+const LIVE: QuoteRequestStatus[] = ['sent', 'reminded', 'estimated', 'inspection_booked', 'inspected', 'firm_quoted'];
 const OPEN_APPROVAL: ApprovalStatus[] = ['requested', 'reminded'];
 
-/** Tradie recommendation, Quote Requests, Quotes, choosing a Quote, Property Owner approval and Repair Cost. */
-export function createQuotes({ db, clock, worker, ports, files, modules }: Context) {
+/** What a Tradie gives with an Estimate on the quote page. */
+export type EstimateInput = { priceCents: number; proposedTime?: string | null; needsInspection: boolean; calloutFeeCents?: number | null };
+/** What a Tradie gives with a Firm Quote on the quote page. `availableDates` are ISO dates ("2026-10-20"). */
+export type FirmQuoteInput = {
+  priceCents: number;
+  scopeOfWork: string;
+  durationDays: number;
+  availableDates: string[];
+  proposedTime?: string | null;
+  pdf?: { filename: string; contentType: string; content: Uint8Array } | null;
+};
+
+/** The ISO dates stored for a Firm Quote. */
+function datesOf(value: unknown): string[] {
+  const parsed = typeof value === 'string' ? (JSON.parse(value) as unknown) : value;
+  return Array.isArray(parsed) ? parsed.filter((d): d is string => typeof d === 'string') : [];
+}
+
+/** What a Quote counts towards the Repair Cost: the Not-to-exceed Cap when proceeding on an Estimate, else its price. */
+const costOf = (q: QuoteRow) => q.not_to_exceed_cents ?? q.price_cents!;
+
+/** Whether a whole number of cents above zero. */
+const isCents = (n: unknown): n is number => typeof n === 'number' && Number.isInteger(n) && n > 0;
+
+/** Tradie recommendation, Quote Requests, Estimates and Firm Quotes, choosing, Property Owner approval and Repair Cost. */
+export function createQuotes({ db, clock, worker, ports, files, settings, modules }: Context) {
 
   const { profiles, tickets, notifications } = modules;
   const businessName = async (tradieId: number) => {
     const tradie = await profiles.person(tradieId);
     return tradie.businessName ?? tradie.name;
   };
+  const quoteLink = (request: QuoteRequestRow) => `${settings.baseUrl}/q/${request.token}`;
 
   async function quoteRequestsOf(jobId: number) {
     return await all<QuoteRequestRow>(db, 'SELECT * FROM quote_requests WHERE job_id = ? ORDER BY id', jobId);
+  }
+
+  async function quoteRequestRow(id: number) {
+    return await one<QuoteRequestRow>(db, 'SELECT * FROM quote_requests WHERE id = ?', id);
   }
 
   async function quotesOf(jobId: number) {
     return await all<QuoteRow>(db, 'SELECT * FROM quotes WHERE job_id = ? ORDER BY id', jobId);
   }
 
-  async function confirmedCount(jobId: number) {
-    return (await one<{ n: number }>(db, 'SELECT count(*) AS n FROM quotes WHERE job_id = ? AND confirmed = 1', jobId))!.n;
+  async function quoteOf(quoteRequestId: number, stage: QuoteStage) {
+    return await one<QuoteRow>(db, 'SELECT * FROM quotes WHERE quote_request_id = ? AND stage = ?', quoteRequestId, stage);
+  }
+
+  /** Tradies on the Job with a confirmed Quote of either stage. */
+  async function pricedCount(jobId: number) {
+    return (await one<{ n: number }>(db, 'SELECT count(DISTINCT quote_request_id) AS n FROM quotes WHERE job_id = ? AND confirmed = 1', jobId))!.n;
+  }
+
+  /** Confirmed Firm Quotes on the Job, whatever became of them. */
+  async function firmCount(jobId: number) {
+    return (await one<{ n: number }>(db, `SELECT count(*) AS n FROM quotes WHERE job_id = ? AND stage = 'firm' AND confirmed = 1`, jobId))!.n;
   }
 
   async function quoteInAgency(agencyId: number, quoteId: number) {
@@ -71,19 +142,40 @@ export function createQuotes({ db, clock, worker, ports, files, modules }: Conte
     return quote;
   }
 
-  async function previousQuotes(tradieId: number, trade: Trade) {
-    return (await all<{ price_cents: number; received_at: string; job_id: number }>(
-      db,
-      'SELECT price_cents, received_at, job_id FROM quotes WHERE tradie_id = ? AND trade = ? AND confirmed = 1 ORDER BY received_at, id',
-      tradieId,
-      trade,
-    )).map((q) => ({ priceCents: q.price_cents, at: q.received_at, jobId: q.job_id }));
+  async function requestInAgency(agencyId: number, quoteRequestId: number) {
+    const request = await one<QuoteRequestRow>(db, 'SELECT * FROM quote_requests WHERE id = ? AND agency_id = ?', quoteRequestId, agencyId);
+    if (!request) notFound('Quote Request');
+    return request;
   }
 
-  /** The total of a Ticket's approved Quotes. */
+  /** Whether the Tradie must inspect before a Firm Quote: the Property Manager's say, else the Tradie's on their Estimate. */
+  function inspectionNeeded(request: QuoteRequestRow, estimate: QuoteRow | undefined) {
+    return request.inspection_override ?? estimate?.needs_inspection ?? false;
+  }
+
+  /**
+   * Each Quote Request's latest confirmed Quote with the Trade: the Firm Quote where
+   * there is one, else the Estimate. Oldest first.
+   */
+  async function previousQuotes(tradieId: number, trade: Trade) {
+    return (await all<{ price_cents: number; received_at: string; job_id: number; stage: QuoteStage; id: number }>(
+      db,
+      `SELECT * FROM (
+         SELECT DISTINCT ON (quote_request_id) id, price_cents, received_at, job_id, stage FROM quotes
+         WHERE tradie_id = ? AND trade = ? AND confirmed = 1 ORDER BY quote_request_id, (stage = 'firm') DESC, id DESC
+       ) latest ORDER BY received_at, id`,
+      tradieId,
+      trade,
+    )).map((q) => ({ priceCents: q.price_cents, at: q.received_at, jobId: q.job_id, stage: q.stage }));
+  }
+
+  /** The total of a Ticket's approved Quotes: each Firm Quote's price, or the Not-to-exceed Cap of an Estimate proceeded on. */
   async function repairCost(ticketId: number) {
-    return (await one<{ total: number }>(db, `SELECT coalesce(sum(price_cents), 0) AS total FROM quotes WHERE ticket_id = ? AND status = 'approved'`, ticketId))!
-      .total;
+    return (await one<{ total: number }>(
+      db,
+      `SELECT coalesce(sum(coalesce(not_to_exceed_cents, price_cents)), 0) AS total FROM quotes WHERE ticket_id = ? AND status = 'approved'`,
+      ticketId,
+    ))!.total;
   }
 
   async function jobPlace(jobId: number) {
@@ -92,20 +184,24 @@ export function createQuotes({ db, clock, worker, ports, files, modules }: Conte
     return { job, ticket, property: await profiles.property(ticket.propertyId) };
   }
 
-  /** Approves a chosen Quote and closes the Job's other Quote Requests. Returns the requests passed over, to tell. */
+  /**
+   * Approves a chosen Quote, cancels every Site Inspection still to happen on the Job (the
+   * chosen Tradie's included) and closes the other Quote Requests. Returns the requests
+   * passed over, to tell.
+   */
   async function approveQuote(quote: QuoteRow) {
     const job = await tickets.job(quote.job_id);
     return transaction(db, async () => {
       await run(db, `UPDATE quotes SET status = 'approved' WHERE id = ?`, quote.id);
       await tickets.setJobStatus(job.id, 'approved');
-      await tickets.recordEvent(job.ticketId, 'quote_approved', { jobId: job.id, tradie: await businessName(quote.tradie_id), priceCents: quote.price_cents });
-      await run(
-        db,
-        `UPDATE work_orders SET status = 'cancelled' WHERE job_id = ? AND kind = 'site_quote' AND status = 'active' AND tradie_id != ?`,
-        job.id,
-        quote.tradie_id,
-      );
-      const others = (await quoteRequestsOf(job.id)).filter((r) => r.id !== quote.quote_request_id && r.status !== 'declined' && r.status !== 'closed');
+      await tickets.recordEvent(job.ticketId, 'quote_approved', {
+        jobId: job.id,
+        tradie: await businessName(quote.tradie_id),
+        priceCents: costOf(quote),
+        stage: quote.stage,
+      });
+      await run(db, `UPDATE work_orders SET status = 'cancelled' WHERE job_id = ? AND kind = 'inspection' AND status = 'active'`, job.id);
+      const others = (await quoteRequestsOf(job.id)).filter((r) => r.id !== quote.quote_request_id && LIVE.includes(r.status));
       for (const request of others) {
         await run(db, `UPDATE quote_requests SET status = 'closed' WHERE id = ?`, request.id);
         await run(db, `UPDATE quotes SET status = 'not_chosen' WHERE quote_request_id = ? AND status = 'open'`, request.id);
@@ -122,12 +218,121 @@ export function createQuotes({ db, clock, worker, ports, files, modules }: Conte
     }
   }
 
+  /**
+   * Approves `quote` when `costCents` keeps the Ticket's Repair Cost within the Max Repair
+   * Cost, else asks the Property Owner. Runs inside the caller's transaction; returns what
+   * to send once it commits.
+   */
+  async function approveOrAskOwner(quote: QuoteRow, costCents: number) {
+    const { job, ticket, property } = await jobPlace(quote.job_id);
+    const repairCostCents = (await repairCost(ticket.id)) + costCents;
+    if (repairCostCents <= property.maxRepairCostCents) return { approved: true as const, quote, passedOver: await approveQuote(quote) };
+
+    await run(db, `UPDATE quotes SET status = 'awaiting_owner' WHERE id = ?`, quote.id);
+    await tickets.setJobStatus(job.id, 'awaiting_owner');
+    await tickets.recordEvent(ticket.id, 'approval_requested', { jobId: job.id, repairCostCents });
+    const approvalId = await run(
+      db,
+      `INSERT INTO approvals (agency_id, quote_id, job_id, ticket_id, owner_id, status, requested_at) VALUES (?, ?, ?, ?, ?, 'requested', ?) RETURNING id`,
+      quote.agency_id,
+      quote.id,
+      job.id,
+      ticket.id,
+      property.ownerId,
+      iso(clock.now()),
+    );
+    return { approved: false as const, quote, job, ticket, property, repairCostCents, approvalId, costCents };
+  }
+
+  async function afterDecision(outcome: Awaited<ReturnType<typeof approveOrAskOwner>>) {
+    if (outcome.approved) return tellPassedOver(outcome.quote, outcome.passedOver);
+    const { quote, job, ticket, property, repairCostCents, approvalId, costCents } = outcome;
+    await notifications.send(
+      property.ownerId,
+      'owner.approval_request',
+      {
+        propertyAddress: property.address,
+        trade: job.trade,
+        tradieBusinessName: await businessName(quote.tradie_id),
+        quotePriceCents: costCents,
+        repairCostCents,
+        maxRepairCostCents: property.maxRepairCostCents,
+      },
+      { issueId: ticket.issueId },
+    );
+    await worker.schedule('quotes.owner_reminder', { approvalId }, addMs(clock.now(), OWNER_REMINDER_MS));
+  }
+
+  /** Inserts an Estimate for a request still waiting on one, and moves the request on. Inside a transaction. */
+  async function insertEstimate(
+    request: QuoteRequestRow,
+    e: { priceCents: number | null; proposedTime: string | null; needsInspection: boolean; calloutFeeCents: number | null; pdfFileId: number | null; confirmed: boolean },
+  ) {
+    const job = await tickets.job(request.job_id);
+    await run(
+      db,
+      `INSERT INTO quotes (agency_id, job_id, ticket_id, quote_request_id, tradie_id, trade, stage, price_cents, proposed_time, confirmed, status,
+         pdf_file_id, received_at, needs_inspection, callout_fee_cents)
+       VALUES (?, ?, ?, ?, ?, ?, 'estimate', ?, ?, ?, 'open', ?, ?, ?, ?)`,
+      request.agency_id,
+      job.id,
+      request.ticket_id,
+      request.id,
+      request.tradie_id,
+      job.trade,
+      e.priceCents,
+      e.proposedTime,
+      e.confirmed ? 1 : 0,
+      e.pdfFileId,
+      iso(clock.now()),
+      e.needsInspection,
+      e.needsInspection ? e.calloutFeeCents : null,
+    );
+    await run(db, `UPDATE quote_requests SET status = 'estimated' WHERE id = ?`, request.id);
+    await tickets.recordEvent(request.ticket_id, 'estimate_received', {
+      jobId: job.id,
+      tradie: await businessName(request.tradie_id),
+      ...(e.needsInspection ? { needsInspection: true } : {}),
+    });
+  }
+
+  /** A future instant from a form or reply, or null when left out. */
+  function futureTime(value: string | null | undefined, field: string) {
+    if (value === undefined || value === null || value === '') return null;
+    const at = new Date(value);
+    if (Number.isNaN(at.getTime())) invalid(`${value} is not a time`, field);
+    if (at < clock.now()) invalid('Pick a time in the future', field);
+    return iso(at);
+  }
+
+  /** Sends the Tradie their quote page for the Firm Quote, when a price arrives by message after their Estimate. */
+  async function sendFirmQuoteLink(request: QuoteRequestRow, template: 'tradie.firm_quote_link' | 'tradie.firm_quote_request' | 'tradie.firm_quote_reminder') {
+    const { job, ticket, property } = await jobPlace(request.job_id);
+    await notifications.send(
+      request.tradie_id,
+      template,
+      { trade: job.trade, suburb: property.suburb, propertyAddress: property.address, quoteLink: quoteLink(request) },
+      { issueId: ticket.issueId },
+    );
+  }
+
   worker.on<{ quoteRequestId: number }>('quotes.reminder', async ({ quoteRequestId }) => {
     // Only a request still waiting is reminded, even if the Tradie's reply lands at the same moment.
     const request = await one<QuoteRequestRow>(db, `UPDATE quote_requests SET status = 'reminded' WHERE id = ? AND status = 'sent' RETURNING *`, quoteRequestId);
     if (!request) return;
     const { job, ticket, property } = await jobPlace(request.job_id);
-    await notifications.send(request.tradie_id, 'tradie.quote_reminder', { trade: job.trade, suburb: property.suburb }, { issueId: ticket.issueId });
+    await notifications.send(
+      request.tradie_id,
+      'tradie.quote_reminder',
+      { trade: job.trade, suburb: property.suburb, quoteLink: quoteLink(request) },
+      { issueId: ticket.issueId },
+    );
+  });
+
+  worker.on<{ quoteRequestId: number }>('quotes.firm_quote_reminder', async ({ quoteRequestId }) => {
+    const request = await quoteRequestRow(quoteRequestId);
+    if (request?.status !== 'inspected' || (await tickets.job(request.job_id)).status !== 'quoting') return;
+    await sendFirmQuoteLink(request, 'tradie.firm_quote_reminder');
   });
 
   worker.on<{ approvalId: number }>('quotes.owner_reminder', async ({ approvalId }) => {
@@ -138,7 +343,7 @@ export function createQuotes({ db, clock, worker, ports, files, modules }: Conte
     await notifications.send(
       approval.owner_id,
       'owner.approval_reminder',
-      { propertyAddress: property.address, trade: job.trade, quotePriceCents: quote.price_cents! },
+      { propertyAddress: property.address, trade: job.trade, quotePriceCents: costOf(quote) },
       { issueId: ticket.issueId },
     );
   });
@@ -157,6 +362,123 @@ export function createQuotes({ db, clock, worker, ports, files, modules }: Conte
       /** Set when the Agency has too few Tradies for the Trade to ask two, so one is allowed. */
       singleReason: !canReachTwo
         ? `Your Agency has only ${askedIds.size + available === 1 ? 'one' : 'no'} ${trade.replace('_', ' ')} Tradie, so one Quote Request is allowed`
+        : null,
+    };
+  }
+
+  /** A Quote as the Property Manager's screens show it. Estimate and Firm Quote fields are null on the other stage. */
+  async function quoteView(q: QuoteRow, supersededBy: number | null) {
+    return {
+      quoteId: q.id,
+      quoteRequestId: q.quote_request_id,
+      tradieId: q.tradie_id,
+      businessName: await businessName(q.tradie_id),
+      stage: q.stage,
+      priceCents: q.price_cents,
+      proposedTime: q.proposed_time,
+      confirmed: !!q.confirmed,
+      status: q.status,
+      hasPdf: q.pdf_file_id !== null,
+      pdfFileId: q.pdf_file_id,
+      reason: q.single_quote_reason,
+      receivedAt: q.received_at,
+      /** Estimate: whether the Tradie said they need a Site Inspection, and its Call-out Fee. */
+      needsInspection: q.stage === 'estimate' ? q.needs_inspection : null,
+      calloutFeeCents: q.stage === 'estimate' ? q.callout_fee_cents : null,
+      /** Firm Quote: the scope of work, the projected timeline in days, and the ISO dates the Tradie can start. */
+      scopeOfWork: q.scope_of_work,
+      durationDays: q.duration_days,
+      availableDates: q.stage === 'firm' ? datesOf(q.available_dates) : [],
+      /** The Estimate a Firm Quote supersedes, and the Firm Quote that superseded an Estimate. */
+      supersedesQuoteId: q.supersedes_quote_id,
+      supersededByQuoteId: supersededBy,
+      /** Set on an Estimate the Property Manager proceeded on: the most the Tradie may charge. */
+      notToExceedCents: q.not_to_exceed_cents,
+    };
+  }
+
+  /** Whether the Property Manager may proceed on this Estimate (before the Routine check, which `confirm` can pass). */
+  function proceedRefusal(request: QuoteRequestRow, estimate: QuoteRow): string | null {
+    if (estimate.stage !== 'estimate') return 'Only an Estimate can be proceeded on';
+    if (estimate.status !== 'open') return 'This Estimate can no longer be proceeded on';
+    if (!estimate.confirmed) return 'Confirm the Estimate before proceeding on it';
+    if (inspectionNeeded(request, estimate)) return 'This Tradie needs a Site Inspection before they can give a Firm Quote, so you cannot proceed on their Estimate';
+    if (request.status !== 'estimated') return 'This Tradie has a Site Inspection on the way: wait for their Firm Quote';
+    return null;
+  }
+
+  /** The no-login quote page's view of one Quote Request: no Tenant, no address until a Site Inspection is booked. */
+  async function quotePage(request: QuoteRequestRow) {
+    const { job, ticket, property } = await jobPlace(request.job_id);
+    const issue = await tickets.issue(ticket.issueId);
+    const agency = await profiles.agency(request.agency_id);
+    const estimate = await quoteOf(request.id, 'estimate');
+    const firm = await quoteOf(request.id, 'firm');
+    const inspection = await modules.scheduling.inspectionFor(request.id);
+    const approved = await one<QuoteRow>(db, `SELECT * FROM quotes WHERE job_id = ? AND status = 'approved'`, job.id);
+    const outcome: 'open' | 'chosen' | 'not_chosen' | 'declined' | 'closed' =
+      approved?.quote_request_id === request.id
+        ? 'chosen'
+        : request.status === 'declined'
+          ? 'declined'
+          : request.status === 'closed'
+            ? approved || job.status === 'awaiting_owner'
+              ? 'not_chosen'
+              : 'closed'
+            : job.status === 'quoting'
+              ? 'open'
+              : 'closed';
+    const needed = inspectionNeeded(request, estimate);
+    const next: 'estimate' | 'wait_for_booking' | 'wait_for_inspection' | 'firm_quote' | 'done' =
+      outcome !== 'open'
+        ? 'done'
+        : AWAITING_ESTIMATE.includes(request.status)
+          ? 'estimate'
+          : request.status === 'inspection_booked'
+            ? 'wait_for_inspection'
+            : request.status === 'inspected' || (request.status === 'estimated' && !needed)
+              ? 'firm_quote'
+              : request.status === 'estimated'
+                ? 'wait_for_booking'
+                : 'done';
+    return {
+      quoteRequestId: request.id,
+      agencyName: agency.name,
+      timeZone: agency.timeZone,
+      tradieName: await businessName(request.tradie_id),
+      trade: job.trade,
+      urgency: ticket.urgency,
+      suburb: property.suburb,
+      /** The street address, only once the Tradie has a Site Inspection booked there. */
+      propertyAddress: inspection ? property.address : null,
+      issue: withoutContactDetails(issue.summary ?? issue.description),
+      status: request.status,
+      /** `open` while the Tradie can still quote; otherwise how it ended for them. */
+      outcome,
+      /** What the page asks for next. */
+      next,
+      inspectionNeeded: needed,
+      inspection: inspection ? { start: inspection.start, end: inspection.end, status: inspection.status } : null,
+      estimate: estimate
+        ? {
+            priceCents: estimate.price_cents,
+            proposedTime: estimate.proposed_time,
+            needsInspection: estimate.needs_inspection,
+            calloutFeeCents: estimate.callout_fee_cents,
+            receivedAt: estimate.received_at,
+            notToExceedCents: estimate.not_to_exceed_cents,
+          }
+        : null,
+      firmQuote: firm
+        ? {
+            priceCents: firm.price_cents,
+            scopeOfWork: firm.scope_of_work,
+            durationDays: firm.duration_days,
+            availableDates: datesOf(firm.available_dates),
+            proposedTime: firm.proposed_time,
+            hasPdf: firm.pdf_file_id !== null,
+            receivedAt: firm.received_at,
+          }
         : null,
     };
   }
@@ -211,9 +533,10 @@ export function createQuotes({ db, clock, worker, ports, files, modules }: Conte
       return requestRule(agencyId, job.id, job.trade);
     },
 
+    /** Asks each Tradie for an Estimate, each with their own quote page link. */
     async sendQuoteRequests(agencyId: number, jobId: number, tradieIds: number[]) {
       // Checked and recorded in one transaction, so a double submit can't ask a Tradie twice.
-      const { job, ticket, property, tradies, requestIds } = await transaction(db, async () => {
+      const { job, ticket, property, tradies, requests } = await transaction(db, async () => {
         const { job, ticket, property } = await jobPlace((await tickets.jobInAgency(agencyId, jobId)).id);
         if (job.status !== 'quoting') invalid('Quote Requests can only be sent while the Job is getting Quotes');
         if (!tradieIds.length) invalid('Choose at least one Tradie');
@@ -226,22 +549,23 @@ export function createQuotes({ db, clock, worker, ports, files, modules }: Conte
         }
         const rule = await requestRule(agencyId, jobId, job.trade);
         if (tradies.length < rule.minimum) invalid('Send Quote Requests to at least two Tradies');
-        const requestIds: number[] = [];
+        const requests: QuoteRequestRow[] = [];
         for (const tradie of tradies) {
-          requestIds.push(
-            await run(
+          requests.push(
+            (await one<QuoteRequestRow>(
               db,
-              `INSERT INTO quote_requests (agency_id, job_id, ticket_id, tradie_id, status, sent_at) VALUES (?, ?, ?, ?, 'sent', ?) RETURNING id`,
+              `INSERT INTO quote_requests (agency_id, job_id, ticket_id, tradie_id, status, sent_at, token) VALUES (?, ?, ?, ?, 'sent', ?, ?) RETURNING *`,
               agencyId,
               jobId,
               ticket.id,
               tradie.id,
               iso(clock.now()),
-            ),
+              newToken(),
+            ))!,
           );
         }
         await tickets.recordEvent(ticket.id, 'quote_requests_sent', { jobId, tradies: tradies.map((t) => t.businessName ?? t.name) });
-        return { job, ticket, property, tradies, requestIds };
+        return { job, ticket, property, tradies, requests };
       });
       const issue = await tickets.issue(ticket.issueId);
       const photoFileIds = (await tickets.photos(issue.id)).map((p) => p.fileId);
@@ -250,20 +574,36 @@ export function createQuotes({ db, clock, worker, ports, files, modules }: Conte
         await notifications.send(
           tradie.id,
           'tradie.quote_request',
-          { trade: job.trade, urgency: ticket.urgency, description: withoutContactDetails(issue.summary ?? issue.description), suburb: property.suburb },
+          {
+            trade: job.trade,
+            urgency: ticket.urgency,
+            description: withoutContactDetails(issue.summary ?? issue.description),
+            suburb: property.suburb,
+            quoteLink: quoteLink(requests[i]!),
+          },
           { issueId: issue.id, attachmentFileIds: byEmail ? photoFileIds : [] },
         );
-        await worker.schedule('quotes.reminder', { quoteRequestId: requestIds[i] }, addMs(clock.now(), QUOTE_REMINDER_MS));
+        await worker.schedule('quotes.reminder', { quoteRequestId: requests[i]!.id }, addMs(clock.now(), QUOTE_REMINDER_MS));
       }
     },
 
-    /** A Tradie's reply to a Quote Request: an unconfirmed Quote read from the text and any PDF, or a decline. */
-    async recordTradieReply(quoteRequestId: number, reply: { kind: 'quote' | 'decline'; text: string; pdfFileId: number | null }) {
-      const waiting = (await one<QuoteRequestRow>(db, 'SELECT * FROM quote_requests WHERE id = ?', quoteRequestId))!;
-      // A Quote already given can be revised, but only after a Site Quote visit.
-      const revisable = async (request: QuoteRequestRow) =>
-        request.status === 'quoted' && reply.kind === 'quote' && (await tickets.job(request.job_id)).status === 'site_quoting';
-      if (!WAITING.includes(waiting.status) && !(await revisable(waiting))) return;
+    /**
+     * A Tradie's SMS or email reply to their Quote Request. Before an Estimate, a price is an
+     * unconfirmed Estimate read from the text and any PDF (a message can't say what a Firm
+     * Quote needs), and NO declines. Once they have an Estimate, a price changes nothing:
+     * they are sent their quote page link to give the Firm Quote there (`firm_quote_link`).
+     */
+    async recordTradieReply(
+      quoteRequestId: number,
+      reply: { kind: 'quote' | 'decline'; text: string; pdfFileId: number | null },
+    ): Promise<'estimate' | 'declined' | 'firm_quote_link' | 'ignored'> {
+      const waiting = await quoteRequestRow(quoteRequestId);
+      if (!waiting || !LIVE.includes(waiting.status)) return 'ignored';
+      if (reply.kind === 'quote' && !AWAITING_ESTIMATE.includes(waiting.status)) {
+        if ((await tickets.job(waiting.job_id)).status !== 'quoting') return 'ignored';
+        await sendFirmQuoteLink(waiting, 'tradie.firm_quote_link');
+        return 'firm_quote_link';
+      }
       const read =
         reply.kind === 'quote'
           ? await ports.quoteReader.read({
@@ -271,58 +611,140 @@ export function createQuotes({ db, clock, worker, ports, files, modules }: Conte
               ...(reply.pdfFileId !== null ? { pdf: (await files.get(reply.pdfFileId)).content } : {}),
             })
           : null;
-      await transaction(db, async () => {
+      return transaction(db, async () => {
         // Checked again: another reply may have been recorded while the quote reader read this one.
-        const request = (await one<QuoteRequestRow>(db, 'SELECT * FROM quote_requests WHERE id = ?', quoteRequestId))!;
-        const revising = await revisable(request);
-        if (!WAITING.includes(request.status) && !revising) return;
-        const job = await tickets.job(request.job_id);
-        if (revising) {
-          const quote = (await one<QuoteRow>(db, `SELECT * FROM quotes WHERE quote_request_id = ? AND status = 'open'`, request.id))!;
-          const toCents = read!.priceCents ?? quote.price_cents;
-          const toTime = read!.proposedTime ? iso(read!.proposedTime) : quote.proposed_time;
-          await run(
-            db,
-            `UPDATE quotes SET initial_price_cents = ?, initial_proposed_time = ?, price_cents = ?, proposed_time = ?, confirmed = 0, revised_at = ?,
-               pdf_file_id = ? WHERE id = ?`,
-            quote.initial_price_cents ?? quote.price_cents,
-            quote.initial_price_cents === null ? quote.proposed_time : quote.initial_proposed_time,
-            toCents,
-            toTime,
-            iso(clock.now()),
-            reply.pdfFileId ?? quote.pdf_file_id,
-            quote.id,
-          );
-          await tickets.recordEvent(request.ticket_id, 'quote_revised', {
-            jobId: job.id,
-            tradie: await businessName(request.tradie_id),
-            fromCents: quote.price_cents,
-            toCents,
-          });
-          return;
-        }
+        const request = (await quoteRequestRow(quoteRequestId))!;
         if (!read) {
+          if (!LIVE.includes(request.status) || request.status === 'firm_quoted') return 'ignored';
           await run(db, `UPDATE quote_requests SET status = 'declined' WHERE id = ?`, request.id);
-          await tickets.recordEvent(request.ticket_id, 'tradie_declined', { jobId: job.id, tradie: await businessName(request.tradie_id) });
-          return;
+          await run(db, `UPDATE quotes SET status = 'not_chosen' WHERE quote_request_id = ? AND status = 'open'`, request.id);
+          await run(db, `UPDATE work_orders SET status = 'cancelled' WHERE quote_request_id = ? AND kind = 'inspection' AND status = 'active'`, request.id);
+          await tickets.recordEvent(request.ticket_id, 'tradie_declined', { jobId: request.job_id, tradie: await businessName(request.tradie_id) });
+          return 'declined';
         }
+        if (!AWAITING_ESTIMATE.includes(request.status)) return 'ignored';
+        await insertEstimate(request, {
+          priceCents: read.priceCents ?? null,
+          proposedTime: read.proposedTime ? iso(read.proposedTime) : null,
+          needsInspection: false,
+          calloutFeeCents: null,
+          pdfFileId: reply.pdfFileId,
+          confirmed: false,
+        });
+        return 'estimate';
+      });
+    },
+
+    /**
+     * The Tradie's Estimate from their quote page: a price, optionally their earliest time,
+     * and whether they need a Site Inspection before a Firm Quote (with its Call-out Fee).
+     * Typed by the Tradie, so it needs no checking. Refuses field by field.
+     */
+    async submitEstimate(quoteRequestId: number, input: EstimateInput) {
+      if (!isCents(input.priceCents)) invalid('Enter your Estimate in dollars', 'price');
+      const proposedTime = futureTime(input.proposedTime, 'proposedTime');
+      const fee = input.needsInspection ? (input.calloutFeeCents ?? null) : null;
+      if (fee !== null && (!Number.isInteger(fee) || fee < 0)) invalid('Enter the Call-out Fee in dollars, or leave it empty', 'calloutFee');
+      await transaction(db, async () => {
+        const request = await quoteRequestRow(quoteRequestId);
+        if (!request) notFound('Quote Request');
+        if ((await tickets.job(request.job_id)).status !== 'quoting' || !LIVE.includes(request.status)) invalid('This Quote Request has closed');
+        if (!AWAITING_ESTIMATE.includes(request.status)) invalid('You have already given an Estimate');
+        await insertEstimate(request, {
+          priceCents: input.priceCents,
+          proposedTime,
+          needsInspection: !!input.needsInspection,
+          calloutFeeCents: fee,
+          pdfFileId: null,
+          confirmed: true,
+        });
+      });
+    },
+
+    /**
+     * The Tradie's Firm Quote from their quote page: a fixed price, the scope of work, how many
+     * days it takes, and one to three dates they can start. Allowed once they have an Estimate,
+     * and after the Site Inspection when one is needed. It is a new Quote that supersedes the
+     * Estimate, which stays on record.
+     */
+    async submitFirmQuote(quoteRequestId: number, input: FirmQuoteInput) {
+      const request = await quoteRequestRow(quoteRequestId);
+      if (!request) notFound('Quote Request');
+      const { timeZone } = await profiles.agency(request.agency_id);
+      if (!isCents(input.priceCents)) invalid('Enter your Firm Quote in dollars', 'price');
+      const scope = (input.scopeOfWork ?? '').trim();
+      if (!scope) invalid('Describe the scope of work: what you will do for this price', 'scopeOfWork');
+      if (scope.length > MAX_SCOPE_LENGTH) invalid(`Keep the scope of work under ${MAX_SCOPE_LENGTH} characters`, 'scopeOfWork');
+      if (!Number.isInteger(input.durationDays) || input.durationDays < 1 || input.durationDays > MAX_DURATION_DAYS) {
+        invalid(`Enter how many days the work takes, from 1 to ${MAX_DURATION_DAYS}`, 'durationDays');
+      }
+      const today = wallClock(clock.now(), timeZone);
+      const todayIso = `${today.year}-${String(today.month).padStart(2, '0')}-${String(today.day).padStart(2, '0')}`;
+      const dates = [...new Set((input.availableDates ?? []).map((d) => d.trim()).filter(Boolean))].sort();
+      if (!dates.length) invalid('Give at least one date you can start', 'availableDates');
+      if (dates.length > MAX_AVAILABLE_DATES) invalid(`Give at most ${MAX_AVAILABLE_DATES} dates you can start`, 'availableDates');
+      for (const date of dates) {
+        const valid = /^\d{4}-\d{2}-\d{2}$/.test(date) && new Date(`${date}T00:00:00Z`).toISOString().startsWith(date);
+        if (!valid) invalid(`${date} is not a date`, 'availableDates');
+        if (date < todayIso) invalid('Pick start dates from today on', 'availableDates');
+      }
+      const proposedTime = futureTime(input.proposedTime, 'proposedTime');
+      if (input.pdf && input.pdf.contentType !== 'application/pdf') invalid('Attach your quote as a PDF', 'pdf');
+
+      const pdfFileId = input.pdf ? await files.save(request.agency_id, input.pdf) : null;
+      await transaction(db, async () => {
+        const current = (await quoteRequestRow(quoteRequestId))!;
+        if ((await tickets.job(current.job_id)).status !== 'quoting' || !LIVE.includes(current.status)) invalid('This Quote Request has closed');
+        if (current.status === 'firm_quoted') invalid('You have already given a Firm Quote');
+        const estimate = await quoteOf(current.id, 'estimate');
+        if (!estimate || AWAITING_ESTIMATE.includes(current.status)) invalid('Give your Estimate first');
+        if (current.status === 'inspection_booked') invalid('Give your Firm Quote after your Site Inspection');
+        if (current.status === 'estimated' && inspectionNeeded(current, estimate)) {
+          invalid('Your Site Inspection comes first: the Property Manager will book it with you');
+        }
+        const job = await tickets.job(current.job_id);
         await run(
           db,
-          `INSERT INTO quotes (agency_id, job_id, ticket_id, quote_request_id, tradie_id, trade, price_cents, proposed_time, status, pdf_file_id, received_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)`,
-          request.agency_id,
+          `INSERT INTO quotes (agency_id, job_id, ticket_id, quote_request_id, tradie_id, trade, stage, price_cents, proposed_time, confirmed, status,
+             pdf_file_id, received_at, supersedes_quote_id, scope_of_work, duration_days, available_dates)
+           VALUES (?, ?, ?, ?, ?, ?, 'firm', ?, ?, 1, 'open', ?, ?, ?, ?, ?, ?::jsonb)`,
+          current.agency_id,
           job.id,
-          request.ticket_id,
-          request.id,
-          request.tradie_id,
+          current.ticket_id,
+          current.id,
+          current.tradie_id,
           job.trade,
-          read.priceCents ?? null,
-          read.proposedTime ? iso(read.proposedTime) : null,
-          reply.pdfFileId,
+          input.priceCents,
+          proposedTime,
+          pdfFileId,
           iso(clock.now()),
+          estimate.id,
+          scope,
+          input.durationDays,
+          JSON.stringify(dates),
         );
-        await run(db, `UPDATE quote_requests SET status = 'quoted' WHERE id = ?`, request.id);
-        await tickets.recordEvent(request.ticket_id, 'quote_received', { jobId: job.id, tradie: await businessName(request.tradie_id) });
+        await run(db, `UPDATE quotes SET status = 'superseded' WHERE id = ? AND status = 'open'`, estimate.id);
+        await run(db, `UPDATE quote_requests SET status = 'firm_quoted' WHERE id = ?`, current.id);
+        await tickets.recordEvent(current.ticket_id, 'firm_quote_received', {
+          jobId: job.id,
+          tradie: await businessName(current.tradie_id),
+          priceCents: input.priceCents,
+        });
+      });
+    },
+
+    /**
+     * The Property Manager overrides whether this Tradie needs a Site Inspection before their
+     * Firm Quote: `true` to ask for one, `false` to let them quote firm without it.
+     */
+    async setInspectionNeeded(agencyId: number, quoteRequestId: number, needed: boolean) {
+      await transaction(db, async () => {
+        const request = await requestInAgency(agencyId, quoteRequestId);
+        if (!['sent', 'reminded', 'estimated'].includes(request.status) || (await tickets.job(request.job_id)).status !== 'quoting') {
+          invalid('Whether a Site Inspection is needed can only change before one is booked');
+        }
+        await run(db, 'UPDATE quote_requests SET inspection_override = ? WHERE id = ?', needed, request.id);
+        await tickets.recordEvent(request.ticket_id, 'inspection_need_set', { jobId: request.job_id, tradie: await businessName(request.tradie_id), needed });
       });
     },
 
@@ -345,21 +767,26 @@ export function createQuotes({ db, clock, worker, ports, files, modules }: Conte
       });
     },
 
-    /** Chooses a Quote, then approves it or asks the Property Owner if it takes the Repair Cost over the Max Repair Cost. */
+    /**
+     * Chooses a Firm Quote, then approves it or asks the Property Owner if it takes the Repair
+     * Cost over the Max Repair Cost. An Estimate is never chosen: see `proceedOnEstimate`.
+     */
     async chooseQuote(agencyId: number, quoteId: number, reason?: string) {
       // Decided in one transaction: two Quotes chosen for a Job at once can't both be approved.
       const outcome = await transaction(db, async () => {
         const quote = await quoteInAgency(agencyId, quoteId);
+        if (quote.stage !== 'firm') {
+          invalid('An Estimate is not a Firm Quote and is never chosen as one. Wait for Firm Quotes, or proceed on the Estimate with a Not-to-exceed Cap.');
+        }
         if (!quote.confirmed) invalid('Confirm the Quote before choosing it');
         if (quote.status !== 'open') invalid('This Quote can no longer be chosen');
-        const { job, ticket, property } = await jobPlace(quote.job_id);
-        if (job.status !== 'quoting' && job.status !== 'site_quoting') invalid('This Job is not choosing a Quote');
+        const { job, ticket } = await jobPlace(quote.job_id);
+        if (job.status !== 'quoting') invalid('This Job is not choosing a Quote');
         const why = reason?.trim() || null;
-        const onlyOne = (await confirmedCount(job.id)) < MIN_QUOTES;
+        const onlyOne = (await firmCount(job.id)) < MIN_QUOTES;
         if (onlyOne && !why) {
-          invalid('Choose a Quote once the Job has at least two confirmed Quotes, or record why you are going ahead with one');
+          invalid('Choose a Firm Quote once the Job has at least two, or record why you are going ahead with one');
         }
-        const repairCostCents = (await repairCost(ticket.id)) + quote.price_cents!;
         await run(db, 'UPDATE quotes SET single_quote_reason = ? WHERE id = ?', onlyOne ? why : null, quote.id);
         await tickets.recordEvent(ticket.id, 'quote_chosen', {
           jobId: job.id,
@@ -367,40 +794,48 @@ export function createQuotes({ db, clock, worker, ports, files, modules }: Conte
           priceCents: quote.price_cents,
           ...(onlyOne ? { reason: why } : {}),
         });
-        if (repairCostCents <= property.maxRepairCostCents) return { approved: true as const, quote, passedOver: await approveQuote(quote) };
-
-        await run(db, `UPDATE quotes SET status = 'awaiting_owner' WHERE id = ?`, quote.id);
-        await tickets.setJobStatus(job.id, 'awaiting_owner');
-        await tickets.recordEvent(ticket.id, 'approval_requested', { jobId: job.id, repairCostCents });
-        const approvalId = await run(
-          db,
-          `INSERT INTO approvals (agency_id, quote_id, job_id, ticket_id, owner_id, status, requested_at) VALUES (?, ?, ?, ?, ?, 'requested', ?) RETURNING id`,
-          agencyId,
-          quote.id,
-          job.id,
-          ticket.id,
-          property.ownerId,
-          iso(clock.now()),
-        );
-        return { approved: false as const, quote, job, ticket, property, repairCostCents, approvalId };
+        return approveOrAskOwner(quote, quote.price_cents!);
       });
-      if (outcome.approved) return tellPassedOver(outcome.quote, outcome.passedOver);
+      await afterDecision(outcome);
+    },
 
-      const { quote, job, ticket, property, repairCostCents, approvalId } = outcome;
-      await notifications.send(
-        property.ownerId,
-        'owner.approval_request',
-        {
-          propertyAddress: property.address,
-          trade: job.trade,
-          tradieBusinessName: await businessName(quote.tradie_id),
-          quotePriceCents: quote.price_cents!,
-          repairCostCents,
-          maxRepairCostCents: property.maxRepairCostCents,
-        },
-        { issueId: ticket.issueId },
-      );
-      await worker.schedule('quotes.owner_reminder', { approvalId }, addMs(clock.now(), OWNER_REMINDER_MS));
+    /**
+     * Goes ahead on a Tradie's Estimate without waiting for a Firm Quote, for a cheap routine
+     * Job: the Tradie may charge at most `capCents`, the Not-to-exceed Cap, which counts towards
+     * the Repair Cost. Refused when the Tradie needs a Site Inspection, when the cap is below the
+     * Estimate, and on a Ticket that isn't Routine unless `confirm` is set. A reason is needed
+     * while the Job has fewer than two Tradies' confirmed Quotes.
+     */
+    async proceedOnEstimate(agencyId: number, quoteId: number, options: { capCents: number; reason?: string; confirm?: boolean }) {
+      const outcome = await transaction(db, async () => {
+        const estimate = await quoteInAgency(agencyId, quoteId);
+        const request = (await quoteRequestRow(estimate.quote_request_id))!;
+        const refusal = proceedRefusal(request, estimate);
+        if (refusal) invalid(refusal);
+        const { job, ticket } = await jobPlace(estimate.job_id);
+        if (job.status !== 'quoting') invalid('This Job is not choosing a Quote');
+        if (!isCents(options.capCents)) invalid('Enter the Not-to-exceed Cap in dollars', 'cap');
+        if (options.capCents < estimate.price_cents!) {
+          invalid(`The Not-to-exceed Cap can't be below the Estimate of ${dollars(estimate.price_cents!)}`, 'cap');
+        }
+        if (ticket.urgency !== 'routine' && !options.confirm) {
+          invalid(`Proceeding on an Estimate is for Routine Jobs, and this Ticket is ${ticket.urgency === 'high' ? 'High' : ticket.urgency}. Wait for Firm Quotes, or confirm to go ahead anyway.`);
+        }
+        const why = options.reason?.trim() || null;
+        const onlyOne = (await pricedCount(job.id)) < MIN_QUOTES;
+        if (onlyOne && !why) invalid('Proceed on an Estimate once the Job has at least two, or record why you are going ahead with one');
+        await run(db, 'UPDATE quotes SET not_to_exceed_cents = ?, single_quote_reason = ? WHERE id = ?', options.capCents, why, estimate.id);
+        await tickets.recordEvent(ticket.id, 'proceeded_on_estimate', {
+          jobId: job.id,
+          tradie: await businessName(estimate.tradie_id),
+          priceCents: estimate.price_cents,
+          capCents: options.capCents,
+          ...(why ? { reason: why } : {}),
+          ...(ticket.urgency !== 'routine' ? { notRoutine: true } : {}),
+        });
+        return approveOrAskOwner({ ...estimate, not_to_exceed_cents: options.capCents }, options.capCents);
+      });
+      await afterDecision(outcome);
     },
 
     /** YES approves the Quote. NO declines it, and the Property Manager can choose another. */
@@ -413,26 +848,50 @@ export function createQuotes({ db, clock, worker, ports, files, modules }: Conte
         if (answer === 'yes') return { quote, passedOver: await approveQuote(quote) };
         await run(db, `UPDATE quotes SET status = 'declined_by_owner' WHERE id = ?`, quote.id);
         await tickets.setJobStatus(approval.job_id, 'quoting');
-        await tickets.recordEvent(approval.ticket_id, 'owner_declined', { jobId: approval.job_id, priceCents: quote.price_cents });
+        await tickets.recordEvent(approval.ticket_id, 'owner_declined', { jobId: approval.job_id, priceCents: costOf(quote) });
         return null;
       });
       if (approved) await tellPassedOver(approved.quote, approved.passedOver);
     },
 
-    /** The Job's confirmed, still-open Quote from this Tradie, and the Quote Request it answers. */
-    async confirmedQuoteFor(jobId: number, tradieId: number) {
-      const row = await one<QuoteRow>(db, `SELECT * FROM quotes WHERE job_id = ? AND tradie_id = ? AND confirmed = 1 AND status = 'open' ORDER BY id LIMIT 1`, jobId, tradieId);
-      return row ? { quoteId: row.id, quoteRequestId: row.quote_request_id } : null;
+    /** A Site Inspection is booked for this request (scheduling.bookInspection checks it may be). Inside its transaction. */
+    async inspectionBooked(quoteRequestId: number) {
+      await run(db, `UPDATE quote_requests SET status = 'inspection_booked' WHERE id = ? AND status = 'estimated'`, quoteRequestId);
     },
 
-    /** Tradies with a confirmed, open Quote on the Job, in the order they quoted. */
-    async confirmedQuoteTradies(jobId: number) {
-      return (await all<{ tradie_id: number }>(db, `SELECT tradie_id FROM quotes WHERE job_id = ? AND confirmed = 1 AND status = 'open' ORDER BY id`, jobId)).map((r) => r.tradie_id);
+    /**
+     * The Tradie's Site Inspection is done: they are asked for their Firm Quote on their quote
+     * page, and reminded after 48 hours if it hasn't come.
+     */
+    async inspected(quoteRequestId: number) {
+      const request = await one<QuoteRequestRow>(
+        db,
+        `UPDATE quote_requests SET status = 'inspected' WHERE id = ? AND status = 'inspection_booked' RETURNING *`,
+        quoteRequestId,
+      );
+      if (!request) return;
+      await sendFirmQuoteLink(request, 'tradie.firm_quote_request');
+      await worker.schedule('quotes.firm_quote_reminder', { quoteRequestId }, addMs(clock.now(), FIRM_QUOTE_REMINDER_MS));
     },
 
-    /** Whether the Quote answering this Quote Request has been revised since the visit. */
-    async hasRevisedQuote(quoteRequestId: number) {
-      return !!(await one(db, 'SELECT 1 FROM quotes WHERE quote_request_id = ? AND revised_at IS NOT NULL', quoteRequestId));
+    /** Whether this Quote Request may have a Site Inspection booked now, or why not. */
+    async inspectionBookable(agencyId: number, quoteRequestId: number) {
+      const request = await requestInAgency(agencyId, quoteRequestId);
+      if ((await tickets.job(request.job_id)).status !== 'quoting') invalid('Site Inspections can only be booked while the Job is getting Quotes');
+      if (AWAITING_ESTIMATE.includes(request.status)) invalid('Book a Site Inspection once the Tradie has given an Estimate');
+      if (request.status === 'inspection_booked') invalid('This Tradie already has a Site Inspection booked');
+      if (request.status !== 'estimated') invalid('This Tradie is past the Site Inspection');
+      return { quoteRequestId: request.id, jobId: request.job_id, ticketId: request.ticket_id, tradieId: request.tradie_id };
+    },
+
+    /** Quote Requests on the Job whose Tradie needs a Site Inspection that isn't booked yet. */
+    async needingInspection(jobId: number) {
+      const out = [];
+      for (const r of await quoteRequestsOf(jobId)) {
+        if (r.status !== 'estimated') continue;
+        if (inspectionNeeded(r, await quoteOf(r.id, 'estimate'))) out.push({ quoteRequestId: r.id, tradieId: r.tradie_id });
+      }
+      return out;
     },
 
     async hasQuoteRequests(jobId: number) {
@@ -442,24 +901,32 @@ export function createQuotes({ db, clock, worker, ports, files, modules }: Conte
     /** A cancelled Job stops waiting for Quotes and approval. */
     async jobCancelled(jobId: number) {
       return transaction(db, async () => {
-        await run(db, `UPDATE quote_requests SET status = 'closed' WHERE job_id = ? AND status IN ('sent', 'reminded', 'quoted')`, jobId);
+        await run(
+          db,
+          `UPDATE quote_requests SET status = 'closed' WHERE job_id = ? AND status IN ('sent', 'reminded', 'estimated', 'inspection_booked', 'inspected', 'firm_quoted')`,
+          jobId,
+        );
         await run(db, `UPDATE quotes SET status = 'not_chosen' WHERE job_id = ? AND status IN ('open', 'awaiting_owner')`, jobId);
         await run(db, `UPDATE approvals SET status = 'cancelled' WHERE job_id = ? AND status IN ('requested', 'reminded')`, jobId);
       });
     },
 
+    /**
+     * What a Tradie's message may answer: a Quote Request waiting on their Estimate, or on
+     * their Firm Quote after the Site Inspection. A booked Site Inspection is a Work Order
+     * (scheduling.itemsWaitingOn).
+     */
     async itemsWaitingOn(tradieId: number): Promise<OpenItem[]> {
-      // A Quote already given waits for its revised price while the Job is getting Site Quotes.
       return Promise.all((await all<QuoteRequestRow>(
         db,
         `SELECT r.* FROM quote_requests r JOIN jobs j ON j.id = r.job_id
-         WHERE r.tradie_id = ? AND (r.status IN ('sent', 'reminded') OR (r.status = 'quoted' AND j.status = 'site_quoting')) ORDER BY r.id DESC`,
+         WHERE r.tradie_id = ? AND j.status = 'quoting' AND r.status IN ('sent', 'reminded', 'inspected') ORDER BY r.id DESC`,
         tradieId,
       )).map(async (r) => {
         const { job, property } = await jobPlace(r.job_id);
         return {
           ref: `quote_request:${r.id}`,
-          summary: r.status === 'quoted' ? `Revised Quote: ${job.trade} job at ${property.address}` : `Quote Request: ${job.trade} job in ${property.suburb}`,
+          summary: r.status === 'inspected' ? `Firm Quote: ${job.trade} job at ${property.address}` : `Quote Request: ${job.trade} job in ${property.suburb}`,
         };
       }));
     },
@@ -475,9 +942,10 @@ export function createQuotes({ db, clock, worker, ports, files, modules }: Conte
       }));
     },
 
+    /** The Ticket a Quote Request is for, and whether the Tradie has given their Estimate. */
     async quoteRequest(id: number) {
-      const row = await one<QuoteRequestRow>(db, 'SELECT * FROM quote_requests WHERE id = ?', id);
-      return row ? { ticketId: row.ticket_id } : null;
+      const row = await quoteRequestRow(id);
+      return row ? { ticketId: row.ticket_id, status: row.status, estimated: !AWAITING_ESTIMATE.includes(row.status) } : null;
     },
 
     async approval(id: number) {
@@ -485,79 +953,114 @@ export function createQuotes({ db, clock, worker, ports, files, modules }: Conte
       return row ? { ticketId: row.ticket_id } : null;
     },
 
-    /** The Job's approved Quote: who does the work, and when they proposed. */
+    /** The Job's approved Quote: who does the work, what it counts towards the Repair Cost, and when they proposed. */
     async approvedQuote(jobId: number) {
       const row = await one<QuoteRow>(db, `SELECT * FROM quotes WHERE job_id = ? AND status = 'approved'`, jobId);
-      return row ? { tradieId: row.tradie_id, priceCents: row.price_cents!, proposedTime: row.proposed_time } : null;
+      return row
+        ? { tradieId: row.tradie_id, stage: row.stage, priceCents: costOf(row), notToExceedCents: row.not_to_exceed_cents, proposedTime: row.proposed_time }
+        : null;
     },
 
     repairCost,
     previousQuotes,
 
-    /** Quote Requests, the side-by-side Quotes, and approval status for one Job. */
+    /** The Quote Request a quote page link is for, or null for an unknown link. */
+    async requestIdByToken(token: string) {
+      const row = await one<{ id: number }>(db, 'SELECT id FROM quote_requests WHERE token = ?', token);
+      return row?.id ?? null;
+    },
+
+    /** What the Tradie's quote page shows, or null for an unknown link. */
+    async quotePage(token: string) {
+      const request = await one<QuoteRequestRow>(db, 'SELECT * FROM quote_requests WHERE token = ?', token);
+      return request ? quotePage(request) : null;
+    },
+
+    /**
+     * Quote Requests, each with its Tradie's Estimate, Site Inspection and Firm Quote, every
+     * Quote of both stages, and approval status for one Job.
+     */
     async jobView(agencyId: number, jobId: number) {
       const job = await tickets.job(jobId);
       const approval = await one<ApprovalRow>(db, 'SELECT * FROM approvals WHERE job_id = ? ORDER BY id DESC LIMIT 1', jobId);
+      const { ticket } = await jobPlace(jobId);
+      const rows = await quotesOf(jobId);
+      const supersededBy = new Map(rows.filter((q) => q.supersedes_quote_id !== null).map((q) => [q.supersedes_quote_id!, q.id]));
+      const quotes = await Promise.all(rows.map((q) => quoteView(q, supersededBy.get(q.id) ?? null)));
       return {
         recommendations: job.status === 'quoting' ? await this.recommend(agencyId, jobId) : [],
         /** For the send form: new requests it must hold (`minimum`), and why one is enough when it is. */
         requestRule: job.status === 'quoting' ? await requestRule(agencyId, jobId, job.trade) : null,
-        quoteRequests: await Promise.all((await quoteRequestsOf(jobId)).map(async (r) => ({
-          quoteRequestId: r.id,
-          tradieId: r.tradie_id,
-          businessName: await businessName(r.tradie_id),
-          status: r.status,
-          sentAt: r.sent_at,
-        }))),
-        quotes: await Promise.all((await quotesOf(jobId)).map(async (q) => ({
-          quoteId: q.id,
-          tradieId: q.tradie_id,
-          businessName: await businessName(q.tradie_id),
-          priceCents: q.price_cents,
-          proposedTime: q.proposed_time,
-          confirmed: !!q.confirmed,
-          status: q.status,
-          hasPdf: q.pdf_file_id !== null,
-          reason: q.single_quote_reason,
-          initialPriceCents: q.initial_price_cents,
-          initialProposedTime: q.initial_proposed_time,
-          revisedAt: q.revised_at,
-        }))),
+        quoteRequests: await Promise.all((await quoteRequestsOf(jobId)).map(async (r) => {
+          const estimateRow = rows.find((q) => q.quote_request_id === r.id && q.stage === 'estimate');
+          const estimate = quotes.find((q) => q.quoteRequestId === r.id && q.stage === 'estimate') ?? null;
+          const refusal = estimateRow ? proceedRefusal(r, estimateRow) : 'No Estimate yet';
+          return {
+            quoteRequestId: r.id,
+            tradieId: r.tradie_id,
+            businessName: await businessName(r.tradie_id),
+            status: r.status,
+            sentAt: r.sent_at,
+            /** Whether a Site Inspection comes before the Firm Quote: the Property Manager's override, else the Tradie's answer. */
+            inspectionNeeded: inspectionNeeded(r, estimateRow),
+            /** Set when the Property Manager overrode the Tradie's answer. */
+            inspectionOverride: r.inspection_override,
+            estimate,
+            /** The latest Site Inspection not cancelled, or null. */
+            inspection: await modules.scheduling.inspectionFor(r.id),
+            firmQuote: quotes.find((q) => q.quoteRequestId === r.id && q.stage === 'firm') ?? null,
+            /** Whether the Property Manager may proceed on this Estimate now; `proceedNeedsConfirm` when the Ticket isn't Routine. */
+            canProceedOnEstimate: job.status === 'quoting' && refusal === null,
+            proceedNeedsConfirm: ticket.urgency !== 'routine',
+          };
+        })),
+        /** Every Quote on the Job, Estimates and Firm Quotes alike, oldest first. Compare by `stage`, never across it. */
+        quotes,
         approval: approval
           ? { approvalId: approval.id, quoteId: approval.quote_id, status: approval.status, requestedAt: approval.requested_at }
           : null,
       };
     },
 
-    /** How many Quotes a Tradie has given that a Property Manager confirmed. */
+    /** How many Quote Requests a Tradie has answered with a Quote a Property Manager confirmed. */
     async quoteCount(tradieId: number) {
-      return (await one<{ n: number }>(db, 'SELECT count(*) AS n FROM quotes WHERE tradie_id = ? AND confirmed = 1', tradieId))!.n;
+      return (await one<{ n: number }>(db, 'SELECT count(DISTINCT quote_request_id) AS n FROM quotes WHERE tradie_id = ? AND confirmed = 1', tradieId))!.n;
     },
 
     /**
-     * For many Jobs in two queries, by Job id: Quote Requests not declined (`asked`),
-     * Quotes in (`received`), and how many of those the Property Manager confirmed.
-     * A Job with neither is left out.
+     * For many Jobs in three queries, by Job id: Quote Requests not declined (`asked`),
+     * Estimates in (`received`) and confirmed (`confirmed`), open Quotes of either stage
+     * still to check (`toCheck`), confirmed open Firm Quotes (`firm`), and Tradies who need a
+     * Site Inspection not yet booked (`toInspect`). A Job with none of these is left out.
      */
     async quotingOf(jobIds: number[]) {
-      const counts = new Map<number, { asked: number; received: number; confirmed: number }>();
+      const counts = new Map<number, { asked: number; received: number; confirmed: number; toCheck: number; firm: number; toInspect: number }>();
       if (!jobIds.length) return counts;
       const ids = JSON.stringify(jobIds);
-      const inJobs = 'job_id IN (SELECT value::bigint FROM jsonb_array_elements_text(?::text::jsonb) AS ids (value))';
-      const of = (jobId: number) => counts.get(jobId) ?? counts.set(jobId, { asked: 0, received: 0, confirmed: 0 }).get(jobId)!;
-      for (const r of await all<{ job_id: number; asked: number }>(
+      const inJobs = (column = 'job_id') => `${column} IN (SELECT value::bigint FROM jsonb_array_elements_text(?::text::jsonb) AS ids (value))`;
+      const of = (jobId: number) =>
+        counts.get(jobId) ?? counts.set(jobId, { asked: 0, received: 0, confirmed: 0, toCheck: 0, firm: 0, toInspect: 0 }).get(jobId)!;
+      for (const r of await all<{ job_id: number; asked: number; to_inspect: number }>(
         db,
-        `SELECT job_id, count(*) AS asked FROM quote_requests WHERE ${inJobs} AND status != 'declined' GROUP BY job_id`,
+        `SELECT r.job_id, count(*) FILTER (WHERE r.status != 'declined') AS asked,
+           count(*) FILTER (WHERE r.status = 'estimated' AND coalesce(r.inspection_override, e.needs_inspection, false)) AS to_inspect
+         FROM quote_requests r LEFT JOIN quotes e ON e.quote_request_id = r.id AND e.stage = 'estimate'
+         WHERE ${inJobs('r.job_id')} GROUP BY r.job_id`,
         ids,
       )) {
-        of(r.job_id).asked = r.asked;
+        Object.assign(of(r.job_id), { asked: r.asked, toInspect: r.to_inspect });
       }
-      for (const r of await all<{ job_id: number; received: number; confirmed: number }>(
+      for (const r of await all<{ job_id: number; received: number; confirmed: number; to_check: number; firm: number }>(
         db,
-        `SELECT job_id, count(*) AS received, count(*) FILTER (WHERE confirmed = 1) AS confirmed FROM quotes WHERE ${inJobs} GROUP BY job_id`,
+        `SELECT job_id,
+           count(*) FILTER (WHERE stage = 'estimate') AS received,
+           count(*) FILTER (WHERE stage = 'estimate' AND confirmed = 1) AS confirmed,
+           count(*) FILTER (WHERE status = 'open' AND confirmed = 0) AS to_check,
+           count(*) FILTER (WHERE stage = 'firm' AND status = 'open' AND confirmed = 1) AS firm
+         FROM quotes WHERE ${inJobs()} GROUP BY job_id`,
         ids,
       )) {
-        Object.assign(of(r.job_id), { received: r.received, confirmed: r.confirmed });
+        Object.assign(of(r.job_id), { received: r.received, confirmed: r.confirmed, toCheck: r.to_check, firm: r.firm });
       }
       return counts;
     },
@@ -580,7 +1083,7 @@ export function createQuotes({ db, clock, worker, ports, files, modules }: Conte
         if (propertyIds !== null && !propertyIds.includes(property.id)) continue;
         const quote = (await one<QuoteRow>(db, 'SELECT * FROM quotes WHERE id = ?', a.quote_id))!;
         const owner = await profiles.person(a.owner_id);
-        const repairCostCents = (await repairCost(ticket.id)) + quote.price_cents!;
+        const repairCostCents = (await repairCost(ticket.id)) + costOf(quote);
         waiting.push({
           approvalId: a.id,
           ticketId: ticket.id,
@@ -591,7 +1094,8 @@ export function createQuotes({ db, clock, worker, ports, files, modules }: Conte
           ownerName: owner.name,
           ownerMobile: owner.mobile,
           tradieBusinessName: await businessName(quote.tradie_id),
-          quotePriceCents: quote.price_cents!,
+          quotePriceCents: costOf(quote),
+          quoteStage: quote.stage,
           repairCostCents,
           maxRepairCostCents: property.maxRepairCostCents,
           overByCents: repairCostCents - property.maxRepairCostCents,
@@ -616,7 +1120,7 @@ export function createQuotes({ db, clock, worker, ports, files, modules }: Conte
       for (const r of firstRequests) {
         if (!(await mine(r.ticket_id)) || (await tickets.job(r.job_id)).status !== 'quoting') continue;
         if (addMs(r.first_sent, MORE_QUOTES_PROMPT_MS) > now) continue;
-        const confirmedQuotes = await confirmedCount(r.job_id);
+        const confirmedQuotes = await pricedCount(r.job_id);
         if (confirmedQuotes >= MIN_QUOTES) continue;
         quotePrompts.push({
           kind: 'invite_more_tradies' as const,

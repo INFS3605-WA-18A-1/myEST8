@@ -5,8 +5,7 @@ import type { OpenItem } from './tickets.ts';
 import { formatVisit, wallClock, zonedInstant } from './zoned-time.ts';
 
 const DEFAULT_SLOT_MINUTES = 120;
-const SITE_QUOTE_MINUTES = 60;
-const SITE_QUOTE_REMINDER_MS = 48 * HOUR_MS;
+const INSPECTION_MINUTES = 60;
 const SUGGESTION_COUNT = 3;
 const SUGGESTION_DAYS = 14;
 const MINUTE_MS = 60_000;
@@ -40,8 +39,8 @@ type WorkOrderRow = {
   quote_request_id: number | null;
 };
 
-/** A repair visit, or a Tradie's visit to look at the job and revise their Quote. */
-export type WorkOrderKind = 'repair' | 'site_quote';
+/** A repair visit, or a Tradie's Site Inspection before their Firm Quote. */
+export type WorkOrderKind = 'repair' | 'inspection';
 
 /**
  * How a booked visit stands: done, waiting on new times, or booked and either
@@ -185,17 +184,13 @@ export function createScheduling({ db, clock, worker, modules }: Context) {
     await modules.intake.expectAnswer(ticket.tenantId, { kind: 'visit', workOrderId: row.id });
   }
 
-  async function siteQuotesOpen(jobId: number) {
-    return (await one<{ n: number }>(db, `SELECT count(*) AS n FROM work_orders WHERE job_id = ? AND kind = 'site_quote' AND status = 'active'`, jobId))!.n;
-  }
-
   /** Free one-hour slots over the next 14 days inside the Tenant's availability. */
   async function slotsFor(agencyId: number, tradieId: number, tenantId: number, limit: number) {
     const tenant = await profiles.person(tenantId);
     return findSlots({
       agencyId,
       tradieId,
-      durationMs: SITE_QUOTE_MINUTES * MINUTE_MS,
+      durationMs: INSPECTION_MINUTES * MINUTE_MS,
       windows: AVAILABILITY_WINDOWS[tenant.availability ?? 'any_time'],
       from: clock.now(),
       days: SUGGESTION_DAYS,
@@ -204,166 +199,90 @@ export function createScheduling({ db, clock, worker, modules }: Context) {
   }
 
   /**
-   * Books Site Quote visits: one per Tradie with a confirmed Quote on the Job (default an hour each).
-   * The Job moves to `site_quoting`; the Tradies and the Tenant are told.
+   * Books one Tradie's Site Inspection (an hour unless `durationMinutes` says otherwise), once
+   * they have given an Estimate. It is a Work Order with kind `inspection`, so it blocks the
+   * Tradie's slot; the Tradie and the Tenant are told. The Job stays `quoting`.
    */
-  async function bookSiteQuotes(
-    agencyId: number,
-    jobId: number,
-    visits: { tradieId: number; start: string; durationMinutes?: number }[],
-  ) {
-    const job = await tickets.jobInAgency(agencyId, jobId);
-    if (!visits.length) invalid('Pick a time for at least one Tradie');
-    if (new Set(visits.map((v) => v.tradieId)).size !== visits.length) invalid('Book each Tradie once');
-    const planned: { tradie: Awaited<ReturnType<typeof profiles.personInAgency>>; name: string; start: Date; end: Date }[] = [];
-    for (const v of visits) {
-      const tradie = await profiles.personInAgency(agencyId, v.tradieId, 'tradie');
-      const name = tradie.businessName ?? tradie.name;
-      const minutes = v.durationMinutes ?? SITE_QUOTE_MINUTES;
-      if (!Number.isInteger(minutes) || minutes <= 0 || minutes > 24 * 60) invalid('The visit must be between 1 minute and 24 hours long');
-      const start = new Date(v.start);
-      if (Number.isNaN(start.getTime())) invalid(`${v.start} is not a time`);
-      if (start < clock.now()) invalid('Pick a start time in the future');
-      planned.push({ tradie, name, start, end: addMs(start, minutes * MINUTE_MS) });
-    }
-    const ticket = await tickets.ticket(job.ticketId);
-    const ids = await transaction(db, async () => {
+  async function bookInspection(agencyId: number, quoteRequestId: number, options: { start: string; durationMinutes?: number }) {
+    const request = await modules.quotes.inspectionBookable(agencyId, quoteRequestId);
+    const tradie = await profiles.person(request.tradieId);
+    const name = tradie.businessName ?? tradie.name;
+    const minutes = options.durationMinutes ?? INSPECTION_MINUTES;
+    if (!Number.isInteger(minutes) || minutes <= 0 || minutes > 24 * 60) invalid('The visit must be between 1 minute and 24 hours long');
+    const start = new Date(options.start);
+    if (Number.isNaN(start.getTime())) invalid(`${options.start} is not a time`);
+    if (start < clock.now()) invalid('Pick a start time in the future');
+    const end = addMs(start, minutes * MINUTE_MS);
+    const id = await transaction(db, async () => {
       // Checked again inside, so two bookings at once can't both pass.
-      const current = await tickets.job(jobId);
-      if (current.status !== 'quoting' && current.status !== 'site_quoting') invalid('Site Quotes can only be booked while the Job is getting Quotes');
-      const out: { id: number; tradieId: number }[] = [];
-      for (const p of planned) {
-        const quote = await modules.quotes.confirmedQuoteFor(jobId, p.tradie.id);
-        if (!quote) invalid(`${p.name} has no confirmed Quote on this Job`);
-        if (await one(db, `SELECT 1 FROM work_orders WHERE job_id = ? AND tradie_id = ? AND kind = 'site_quote' AND status = 'active'`, jobId, p.tradie.id)) {
-          invalid(`${p.name} already has a Site Quote visit booked`);
-        }
-        if (!(await isFree(agencyId, p.tradie.id, p.start, p.end))) throw new ActionError('conflict', `${p.name} is already booked then`);
-        const id = await run(
-          db,
-          `INSERT INTO work_orders (agency_id, job_id, ticket_id, tradie_id, start, "end", status, kind, quote_request_id)
-           VALUES (?, ?, ?, ?, ?, ?, 'active', 'site_quote', ?) RETURNING id`,
-          agencyId,
-          jobId,
-          ticket.id,
-          p.tradie.id,
-          iso(p.start),
-          iso(p.end),
-          quote.quoteRequestId,
-        );
-        out.push({ id, tradieId: p.tradie.id });
-      }
-      await tickets.setJobStatus(jobId, 'site_quoting');
-      await tickets.recordEvent(ticket.id, 'site_quotes_booked', {
-        jobId,
-        visits: planned.map((p) => ({ tradie: p.name, visitStart: iso(p.start) })),
-      });
-      return out;
+      await modules.quotes.inspectionBookable(agencyId, quoteRequestId);
+      if (!(await isFree(agencyId, tradie.id, start, end))) throw new ActionError('conflict', `${name} is already booked then`);
+      const id = await run(
+        db,
+        `INSERT INTO work_orders (agency_id, job_id, ticket_id, tradie_id, start, "end", status, kind, quote_request_id)
+         VALUES (?, ?, ?, ?, ?, ?, 'active', 'inspection', ?) RETURNING id`,
+        agencyId,
+        request.jobId,
+        request.ticketId,
+        tradie.id,
+        iso(start),
+        iso(end),
+        quoteRequestId,
+      );
+      await modules.quotes.inspectionBooked(quoteRequestId);
+      await tickets.recordEvent(request.ticketId, 'inspection_booked', { jobId: request.jobId, tradie: name, visitStart: iso(start), visitEnd: iso(end) });
+      return id;
     });
 
-    const property = await profiles.property(ticket.propertyId);
+    const row = (await workOrderRow(id))!;
+    const { job, ticket, property } = await place(row);
     const issue = await tickets.issue(ticket.issueId);
     const photoFileIds = (await tickets.photos(issue.id)).map((x) => x.fileId);
-    for (const p of planned) {
-      const byEmail = (await notifications.channelFor(p.tradie.id)) === 'email';
-      await notifications.send(
-        p.tradie.id,
-        'tradie.site_quote',
-        {
-          propertyAddress: property.address,
-          trade: job.trade,
-          summary: withoutContactDetails(issue.summary ?? issue.description),
-          visitStart: iso(p.start),
-          visitEnd: iso(p.end),
-        },
-        { issueId: issue.id, attachmentFileIds: byEmail ? photoFileIds : [] },
-      );
-    }
+    const byEmail = (await notifications.channelFor(tradie.id)) === 'email';
     await notifications.send(
-      ticket.tenantId,
-      'tenant.site_quotes',
-      { visits: planned.map((p) => ({ tradieBusinessName: p.name, visitStart: iso(p.start) })) },
-      { issueId: issue.id },
+      tradie.id,
+      'tradie.inspection',
+      {
+        propertyAddress: property.address,
+        trade: job.trade,
+        summary: withoutContactDetails(issue.summary ?? issue.description),
+        visitStart: row.start,
+        visitEnd: row.end,
+      },
+      { issueId: issue.id, attachmentFileIds: byEmail ? photoFileIds : [] },
     );
-    await modules.intake.expectAnswer(ticket.tenantId, { kind: 'visit', workOrderId: ids.at(-1)!.id });
+    await notifications.send(ticket.tenantId, 'tenant.inspection', { tradieBusinessName: name, trade: job.trade, visitStart: row.start }, { issueId: issue.id });
+    await modules.intake.expectAnswer(ticket.tenantId, { kind: 'visit', workOrderId: id });
+    return id;
   }
 
-  /** For each Tradie with a confirmed Quote on the Job, up to three free one-hour slots to prefill the booking form. */
-  async function siteQuoteSlots(agencyId: number, jobId: number) {
+  /** For each Tradie on the Job who needs a Site Inspection not booked yet, up to three free one-hour slots to prefill booking it. */
+  async function inspectionSlots(agencyId: number, jobId: number) {
     const job = await tickets.jobInAgency(agencyId, jobId);
     const ticket = await tickets.ticket(job.ticketId);
     const out = [];
-    for (const tradieId of await modules.quotes.confirmedQuoteTradies(jobId)) {
+    for (const { quoteRequestId, tradieId } of await modules.quotes.needingInspection(jobId)) {
       const tradie = await profiles.person(tradieId);
-      const booked = !!(await one(db, `SELECT 1 FROM work_orders WHERE job_id = ? AND tradie_id = ? AND kind = 'site_quote' AND status = 'active'`, jobId, tradieId));
-      out.push({
-        tradieId,
-        businessName: tradie.businessName ?? tradie.name,
-        booked,
-        slots: booked ? [] : await slotsFor(agencyId, tradieId, ticket.tenantId, SUGGESTION_COUNT),
-      });
+      out.push({ quoteRequestId, tradieId, businessName: tradie.businessName ?? tradie.name, slots: await slotsFor(agencyId, tradieId, ticket.tenantId, SUGGESTION_COUNT) });
     }
     return out;
   }
 
-  /** The Property Manager goes without Site Quotes for this Job. It stays `quoting`. */
-  async function skipSiteQuotes(agencyId: number, jobId: number) {
-    const job = await tickets.jobInAgency(agencyId, jobId);
-    if (job.status !== 'quoting') invalid('Site Quotes can only be skipped while the Job is getting Quotes');
-    const state = await siteQuoteDecisionOf(jobId);
-    if (state.skipped || state.booked) invalid('Site Quotes have already been decided for this Job');
-    await tickets.recordEvent(job.ticketId, 'site_quotes_skipped', { jobId });
-  }
-
-  async function siteQuoteDecisionOf(jobId: number) {
-    const kinds = await all<{ kind: string }>(
-      db,
-      `SELECT DISTINCT kind FROM timeline WHERE kind IN ('site_quotes_booked', 'site_quotes_skipped') AND (data::jsonb->>'jobId')::bigint = ?`,
-      jobId,
-    );
-    return { booked: kinds.some((k) => k.kind === 'site_quotes_booked'), skipped: kinds.some((k) => k.kind === 'site_quotes_skipped') };
-  }
-
-  /** A Site Quote visit is over (the Tradie replied DONE, or the Property Manager marked it). */
-  async function markSiteQuoteDone(workOrderId: number) {
+  /**
+   * A Site Inspection is over (the Tradie replied DONE, or the Property Manager marked it):
+   * the Tradie is asked for their Firm Quote.
+   */
+  async function markInspected(workOrderId: number) {
     const done = await transaction(db, async () => {
       const row = await workOrderRow(workOrderId);
-      if (row?.status !== 'active' || row.kind !== 'site_quote') return null;
+      if (row?.status !== 'active' || row.kind !== 'inspection') return null;
       const { tradieBusinessName } = await place(row);
       await run(db, `UPDATE work_orders SET status = 'done' WHERE id = ?`, row.id);
-      await tickets.recordEvent(row.ticket_id, 'site_quote_done', { jobId: row.job_id, tradie: tradieBusinessName });
+      await tickets.recordEvent(row.ticket_id, 'inspected', { jobId: row.job_id, tradie: tradieBusinessName });
       return row;
     });
-    if (!done) return;
-    await worker.schedule('scheduling.site_quote_reminder', { workOrderId }, addMs(clock.now(), SITE_QUOTE_REMINDER_MS));
+    if (done?.quote_request_id) await modules.quotes.inspected(done.quote_request_id);
   }
-
-  /** The Property Manager says the visits are over: remaining visits are cancelled and the Job goes back to choosing a Quote. */
-  async function markQuotesFinal(agencyId: number, jobId: number) {
-    const job = await tickets.jobInAgency(agencyId, jobId);
-    const cancelled = await transaction(db, async () => {
-      if ((await tickets.job(jobId)).status !== 'site_quoting') invalid('The Job is not getting Site Quotes');
-      const rows = await all<WorkOrderRow>(db, `SELECT * FROM work_orders WHERE job_id = ? AND kind = 'site_quote' AND status = 'active' ORDER BY id`, jobId);
-      await run(db, `UPDATE work_orders SET status = 'cancelled' WHERE job_id = ? AND kind = 'site_quote' AND status = 'active'`, jobId);
-      await tickets.setJobStatus(jobId, 'quoting');
-      await tickets.recordEvent(job.ticketId, 'quotes_final', { jobId });
-      return rows;
-    });
-    const ticket = await tickets.ticket(job.ticketId);
-    const property = await profiles.property(ticket.propertyId);
-    for (const row of cancelled) {
-      await notifications.send(row.tradie_id, 'tradie.site_quote_cancelled', { propertyAddress: property.address, trade: job.trade }, { issueId: ticket.issueId });
-    }
-  }
-
-  worker.on<{ workOrderId: number }>('scheduling.site_quote_reminder', async ({ workOrderId }) => {
-    const row = await workOrderRow(workOrderId);
-    if (!row || row.kind !== 'site_quote' || !row.quote_request_id) return;
-    if ((await tickets.job(row.job_id)).status !== 'site_quoting') return;
-    if (await modules.quotes.hasRevisedQuote(row.quote_request_id)) return;
-    const { job, ticket, property } = await place(row);
-    await notifications.send(row.tradie_id, 'tradie.site_quote_reminder', { propertyAddress: property.address, trade: job.trade }, { issueId: ticket.issueId });
-  });
 
   return {
     isFree,
@@ -456,10 +375,6 @@ export function createScheduling({ db, clock, worker, modules }: Context) {
       return transaction(db, async () => {
         const row = await workOrderRow(workOrderId);
         if (row?.status !== 'active') return;
-        // One YES from the Tenant confirms every Site Quote visit listed in the same message.
-        if (row.kind === 'site_quote') {
-          await run(db, `UPDATE work_orders SET visit_confirmed = 1 WHERE job_id = ? AND kind = 'site_quote' AND status = 'active' AND reschedule_requested_by IS NULL`, row.job_id);
-        }
         await run(db, 'UPDATE work_orders SET visit_confirmed = 1 WHERE id = ?', workOrderId);
         await tickets.recordEvent(row.ticket_id, 'visit_confirmed', { jobId: row.job_id });
       });
@@ -500,7 +415,7 @@ export function createScheduling({ db, clock, worker, modules }: Context) {
           iso(end),
           row.id,
         );
-        await tickets.recordEvent(row.ticket_id, 'visit_moved', { jobId: row.job_id, visitStart: iso(start), visitEnd: iso(end), ...(row.kind === 'site_quote' ? { siteQuote: true } : {}) });
+        await tickets.recordEvent(row.ticket_id, 'visit_moved', { jobId: row.job_id, visitStart: iso(start), visitEnd: iso(end), ...(row.kind === 'inspection' ? { inspection: true } : {}) });
       });
       const moved = (await workOrderRow(row.id))!;
       await notifications.send(
@@ -514,10 +429,10 @@ export function createScheduling({ db, clock, worker, modules }: Context) {
 
     /**
      * The Tradie replied "done". On a repair the Job is done and the Tenant is asked if it was
-     * fixed properly; on a Site Quote visit only the visit is done.
+     * fixed properly; on a Site Inspection only the visit is done, and the Tradie is asked for their Firm Quote.
      */
     async markDone(workOrderId: number) {
-      if ((await workOrderRow(workOrderId))?.kind === 'site_quote') return markSiteQuoteDone(workOrderId);
+      if ((await workOrderRow(workOrderId))?.kind === 'inspection') return markInspected(workOrderId);
       const done = await transaction(db, async () => {
         const row = await workOrderRow(workOrderId);
         if (row?.status !== 'active' || row.kind !== 'repair') return null;
@@ -608,7 +523,7 @@ export function createScheduling({ db, clock, worker, modules }: Context) {
           const when = formatVisit(row.start, timeZone);
           return {
             ref: `work_order:${row.id}`,
-            summary: row.kind === 'site_quote' ? `Site quote: ${job.trade} at ${property.address}, ${when}` : `Work Order: ${job.trade} at ${property.address}, ${when}`,
+            summary: row.kind === 'inspection' ? `Site Inspection: ${job.trade} at ${property.address}, ${when}` : `Work Order: ${job.trade} at ${property.address}, ${when}`,
           };
         }),
       );
@@ -619,7 +534,7 @@ export function createScheduling({ db, clock, worker, modules }: Context) {
       return row ? { id: row.id, jobId: row.job_id, ticketId: row.ticket_id, kind: row.kind, quoteRequestId: row.quote_request_id } : null;
     },
 
-    /** The Job's active visit the Tenant or Tradie is talking about: the repair, else a Site Quote visit. */
+    /** The Job's active visit the Tenant or Tradie is talking about: the repair, else a Site Inspection. */
     async activeWorkOrderForJob(jobId: number) {
       return await one<{ id: number }>(
         db,
@@ -643,58 +558,34 @@ export function createScheduling({ db, clock, worker, modules }: Context) {
       return row ? toView(row) : null;
     },
 
-    /** The Job's Site Quote visits that haven't been cancelled, earliest first. */
-    async siteQuoteVisits(jobId: number) {
+    /** The Job's Site Inspections that haven't been cancelled, earliest first. */
+    async inspectionVisits(jobId: number) {
       return Promise.all(
-        (await all<WorkOrderRow>(db, `SELECT * FROM work_orders WHERE job_id = ? AND kind = 'site_quote' AND status != 'cancelled' ORDER BY start, id`, jobId)).map(toView),
+        (await all<WorkOrderRow>(db, `SELECT * FROM work_orders WHERE job_id = ? AND kind = 'inspection' AND status != 'cancelled' ORDER BY start, id`, jobId)).map(toView),
       );
     },
 
-    /** Site Quote visits still to happen on the Job. */
-    siteQuotesOpen,
-
-    /**
-     * For many Jobs in two queries, by Job id: whether Site Quotes were `booked` or `skipped`,
-     * and how many visits are still `open`. A Job with none of these is left out.
-     */
-    async siteQuotesOf(jobIds: number[]) {
-      const states = new Map<number, { booked: boolean; skipped: boolean; open: number }>();
-      if (!jobIds.length) return states;
-      const ids = JSON.stringify(jobIds);
-      const of = (jobId: number) => states.get(jobId) ?? states.set(jobId, { booked: false, skipped: false, open: 0 }).get(jobId)!;
-      for (const e of await all<{ job_id: number; kind: string }>(
+    /** A Quote Request's latest Site Inspection that hasn't been cancelled, or null. */
+    async inspectionFor(quoteRequestId: number) {
+      const row = await one<WorkOrderRow>(
         db,
-        `SELECT DISTINCT (data::jsonb->>'jobId')::bigint AS job_id, kind FROM timeline
-         WHERE kind IN ('site_quotes_booked', 'site_quotes_skipped')
-         AND (data::jsonb->>'jobId')::bigint IN (SELECT value::bigint FROM jsonb_array_elements_text(?::text::jsonb) AS ids (value))`,
-        ids,
-      )) {
-        if (e.kind === 'site_quotes_booked') of(e.job_id).booked = true;
-        else of(e.job_id).skipped = true;
-      }
-      for (const r of await all<{ job_id: number; open: number }>(
-        db,
-        `SELECT job_id, count(*) AS open FROM work_orders WHERE kind = 'site_quote' AND status = 'active'
-         AND job_id IN (SELECT value::bigint FROM jsonb_array_elements_text(?::text::jsonb) AS ids (value)) GROUP BY job_id`,
-        ids,
-      )) {
-        of(r.job_id).open = r.open;
-      }
-      return states;
+        `SELECT * FROM work_orders WHERE quote_request_id = ? AND kind = 'inspection' AND status != 'cancelled' ORDER BY id DESC LIMIT 1`,
+        quoteRequestId,
+      );
+      if (!row) return null;
+      return { workOrderId: row.id, start: row.start, end: row.end, status: row.status, visit: visitOf(row), visitConfirmed: !!row.visit_confirmed, rescheduleRequestedBy: row.reschedule_requested_by };
     },
 
-    /** The Property Manager marks a Site Quote visit done (the Tradie may not reply). */
-    async markSiteQuoteDoneForAgency(agencyId: number, workOrderId: number) {
+    /** The Property Manager marks a Site Inspection done (the Tradie may not reply). */
+    async markInspectedForAgency(agencyId: number, workOrderId: number) {
       const row = await activeWorkOrder(agencyId, workOrderId);
-      if (row.kind !== 'site_quote') invalid('This is not a Site Quote visit');
-      await markSiteQuoteDone(workOrderId);
+      if (row.kind !== 'inspection') invalid('This is not a Site Inspection');
+      await markInspected(workOrderId);
     },
 
-    bookSiteQuotes,
-    siteQuoteSlots,
-    skipSiteQuotes,
-    markSiteQuoteDone,
-    markQuotesFinal,
+    bookInspection,
+    inspectionSlots,
+    markInspected,
 
     /** When each Job of many Tickets is booked, from its current Work Order, in one query. Jobs never booked are left out. */
     async visitsOfTickets(ticketIds: number[]) {

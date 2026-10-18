@@ -456,17 +456,21 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
     const issueId = await issueIdOf(ref);
 
     if (kind === 'quote_request' && (replyType === 'quote' || replyType === 'decline')) {
-      await logInbound(msg, tradie.id, issueId);
+      // A price after the Estimate can't be a Firm Quote (a message can't carry its scope and
+      // dates): the Tradie is sent their quote page, and the message is left unread.
+      const afterEstimate = replyType === 'quote' && !!(await modules.quotes.quoteRequest(id))?.estimated;
+      await logInbound(msg, tradie.id, issueId, afterEstimate);
       const pdf = (await Promise.all(msg.fileIds.map((fileId) => files.get(fileId)))).find((f) => f.contentType === 'application/pdf');
-      return modules.quotes.recordTradieReply(id, { kind: replyType, text: msg.text, pdfFileId: pdf?.id ?? null });
+      await modules.quotes.recordTradieReply(id, { kind: replyType, text: msg.text, pdfFileId: pdf?.id ?? null });
+      return;
     }
     if (kind === 'work_order' && replyType === 'quote') {
-      // A price sent about a Site Quote visit is the revised Quote for the request that visit belongs to.
+      // A price sent about a Site Inspection is for that request's Firm Quote, given on the quote page.
       const visit = await modules.scheduling.workOrder(id);
-      if (visit?.kind !== 'site_quote' || !visit.quoteRequestId) return toInbox(msg, tradie.id, 'low_confidence', answers);
-      await logInbound(msg, tradie.id, issueId);
-      const pdf = (await Promise.all(msg.fileIds.map((fileId) => files.get(fileId)))).find((f) => f.contentType === 'application/pdf');
-      return modules.quotes.recordTradieReply(visit.quoteRequestId, { kind: 'quote', text: msg.text, pdfFileId: pdf?.id ?? null });
+      if (visit?.kind !== 'inspection' || !visit.quoteRequestId) return toInbox(msg, tradie.id, 'low_confidence', answers);
+      await logInbound(msg, tradie.id, issueId, true);
+      await modules.quotes.recordTradieReply(visit.quoteRequestId, { kind: 'quote', text: msg.text, pdfFileId: null });
+      return;
     }
     if (kind === 'work_order' && replyType === 'reschedule_request') {
       await logInbound(msg, tradie.id, issueId, true);
