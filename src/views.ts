@@ -219,18 +219,17 @@ export function createViews({ clock, modules }: Context) {
     },
 
     /**
-     * The rail's counts for a Property Manager's own Properties: Requests is the
-     * Maintenance Requests to confirm plus the Agency's inbox; Approvals is the Jobs
-     * ready for a Work Order plus the alerts (Quotes short, Property Owner silent, rating due).
+     * The rail's counts for a Property Manager's own Properties: Tickets is the new
+     * Maintenance Requests to confirm; Approvals is the Quotes waiting on a Property Owner.
      */
     async navCounts(agencyId: number, propertyManagerId: number) {
       const propertyIds = await profiles.propertyIdsOf(propertyManagerId);
-      // Requests counts what /requests lists; inbox messages wait on the dashboard instead.
+      // Tickets counts the new Maintenance Requests /tickets lists; inbox messages wait on the dashboard instead.
       const [requests, waitingOnOwner] = await Promise.all([
         tickets.maintenanceRequests(agencyId, propertyIds),
         modules.quotes.waitingOnOwner(agencyId, propertyIds),
       ]);
-      return { requests: requests.length, approvals: waitingOnOwner.length };
+      return { tickets: requests.length, approvals: waitingOnOwner.length };
     },
 
     /**

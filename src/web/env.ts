@@ -12,6 +12,6 @@ export type WebEnv = {
     demo?: boolean;
     /** Channels this server can't deliver on, so setup doesn't wait for them (see ChannelConnectors.unavailable). */
     unavailableChannels?: ChannelType[];
-    navCounts?: { requests: number; approvals: number };
+    navCounts?: { tickets: number; approvals: number };
   };
 };

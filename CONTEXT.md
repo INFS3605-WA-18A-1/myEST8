@@ -60,6 +60,10 @@ _Avoid_: priority, severity
 A repair needed because something threatens safety, the structure, security or an essential service. The Tenant arranges it, with a Nominated Tradie where possible, and claims up to $1,000 back from the Property Owner.
 _Avoid_: emergency repair
 
+**Reimbursement Request**:
+A Tenant's claim to be paid back for an Urgent Repair they arranged. It needs the job's receipt (a PDF, photo or other file). The Property Manager checks it and forwards it to the Property Owner, who reimburses the Tenant.
+_Avoid_: urgent repair waiting on a receipt, receipt claim
+
 **Job**:
 The work one Tradie does under a Ticket.
 _Avoid_: task
@@ -73,21 +77,36 @@ One plain-English line describing a Maintenance Request's issue, written by AI f
 _Avoid_: title, headline, AI description
 
 **Quote Request**:
-An invitation sent to a Tradie to quote for a Job.
+An invitation sent to a Tradie to quote for a Job. Each Tradie's Quote Request moves on its own: one Tradie may give a Firm Quote remotely while another needs a Site Inspection.
 
 **Quote**:
-A Tradie's price and proposed time for a Job. The first one a Tradie gives, from the description and photos, is their Initial Quote; after a Site Quote the same Quote is revised and the initial price stays on record.
+A Tradie's price for a Job: an Estimate or a Firm Quote. The two are never compared as if equal.
 
-**Site Quote**:
-A Tradie's visit to a Property to inspect the issue before giving a final Quote. Booked by the Property Manager on a High Job once Initial Quotes are in. A Job with Site Quotes booked is getting site quotes.
-_Avoid_: inspection, site visit (on its own), onsite quote
+**Estimate**:
+A Tradie's ballpark price from the Tenant's description and photos. Non-binding: the final bill can legally differ. The Tradie says with it whether they need a Site Inspection before they can give a Firm Quote.
+_Avoid_: initial quote, rough quote
+
+**Site Inspection**:
+A Tradie's visit to a Property to see the issue before giving a Firm Quote, sometimes for a Call-out Fee. Optional and per Tradie: routine jobs skip it.
+_Avoid_: site quote, site visit (on its own), onsite quote
+
+**Call-out Fee**:
+What a Tradie charges for a Site Inspection, owed whether or not they get the Job.
+
+**Firm Quote**:
+A Tradie's fixed price for a defined scope of work, with a projected timeline and the dates they can start. Binding once accepted. It supersedes the same Tradie's Estimate, which stays on record.
+_Avoid_: final quote, formal quote
+
+**Not-to-exceed Cap**:
+The most a Tradie may charge when the Property Manager proceeds on an Estimate for a cheap routine Job instead of waiting for a Firm Quote.
+_Avoid_: limit, ceiling
 
 **Work Order**:
 The confirmation sent to the chosen Tradie that authorises them to do a Job.
 _Avoid_: notice of work confirmation, job confirmation
 
 **Repair Cost**:
-The total of the approved Quotes across a Ticket's Jobs.
+The total of the approved Quotes across a Ticket's Jobs: each Firm Quote's price, or the Not-to-exceed Cap where the Property Manager proceeded on an Estimate.
 _Avoid_: repair amount, total cost
 
 **Max Repair Cost**:

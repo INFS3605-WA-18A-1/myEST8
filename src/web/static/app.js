@@ -330,3 +330,13 @@
     }
   });
 })();
+
+// === filter bar ===
+// A filter bar's selects apply as soon as one changes, so its Apply button is only
+// for pages without this file.
+(() => {
+  for (const form of document.querySelectorAll('form[data-autosubmit]')) {
+    form.addEventListener('change', () => form.requestSubmit());
+    form.querySelector('.filter-bar-apply')?.setAttribute('hidden', '');
+  }
+})();

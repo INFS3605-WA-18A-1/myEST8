@@ -8,7 +8,7 @@ import { BELLA, confirmedQuotes, HANA, KING_ST, OCEAN_AVE, OLIVIA, STRANGER, TOM
 
 type Web = Awaited<ReturnType<typeof webWorld>>;
 
-const RAIL = ['/', '/dispatch', '/requests', '/tickets', '/approvals', '/calendar', '/properties', '/tradies', '/settings'];
+const RAIL = ['/', '/dispatch', '/tickets', '/archive', '/approvals', '/calendar', '/properties', '/tradies', '/tenants', '/settings'];
 
 /** The page as the Property Manager sees it; signs in afresh, as the scenarios move the clock past a session's life. */
 async function text(w: Web, path: string, cookie?: string) {
@@ -93,7 +93,7 @@ describe('the rail', () => {
     for (const path of paths) expect(await text(demo, path, demoCookie), path).toContain('href="/demo"');
   });
 
-  test('lists every place in order on every signed-in page, with counts for Requests and Approvals', async () => {
+  test('lists every place in order on every signed-in page, with counts for new Maintenance Requests (on Tickets) and Approvals', async () => {
     const w = await webWorld();
     const { ticketId } = await busyDesk(w);
 
@@ -101,9 +101,8 @@ describe('the rail', () => {
     for (const path of paths) {
       const html = await text(w, path);
       expect(railLinks(html), path).toEqual(RAIL);
-      expect(railCount(html, '/requests'), path).toBe('1');
+      expect(railCount(html, '/tickets'), path).toBe('1');
       expect(railCount(html, '/approvals'), path).toBe('1');
-      expect(railCount(html, '/tickets'), path).toBeNull();
     }
   });
 
@@ -111,7 +110,7 @@ describe('the rail', () => {
     const w = await webWorld();
     const html = await text(w, '/', await w.signIn());
     expect(railLinks(html)).toEqual(RAIL);
-    expect(railCount(html, '/requests')).toBeNull();
+    expect(railCount(html, '/tickets')).toBeNull();
     expect(railCount(html, '/approvals')).toBeNull();
   });
 
@@ -120,12 +119,14 @@ describe('the rail', () => {
     const current = (html: string) => [...html.matchAll(/<a href="([^"]+)" class="rail-link[^"]*" aria-current="page"/g)].map((m) => m[1]);
     const expected: Record<string, string> = {
       '/': '/',
-            '/requests': '/requests',
+      '/requests': '/tickets',
       '/tickets': '/tickets',
+      '/archive': '/archive',
       '/approvals': '/approvals',
       '/calendar': '/calendar',
       '/properties': '/properties',
       '/tradies': '/tradies',
+      '/tenants': '/tenants',
       '/settings': '/settings',
       '/setup': '/settings',
     };
@@ -153,14 +154,14 @@ describe('signed out', () => {
 });
 
 
-describe('the Requests count', () => {
-  test('counts what /requests lists: inbox messages are on the dashboard, not counted here', async () => {
+describe('the new Maintenance Requests count', () => {
+  test('counts the Maintenance Requests waiting: inbox messages are on the dashboard, not counted here', async () => {
     const w = await webWorld();
     await w.h.receive(STRANGER, 'Hi, this is Tom on my work phone');
     const cookie = await w.signIn();
 
     const dashboard = await text(w, '/', cookie);
     expect(dashboard).toContain('Hi, this is Tom on my work phone');
-    expect(railCount(dashboard, '/requests')).toBeNull();
+    expect(railCount(dashboard, '/tickets')).toBeNull();
   });
 });

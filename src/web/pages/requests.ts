@@ -32,7 +32,7 @@ export function requestPages() {
       page({
         title: 'Requests',
         pm,
-        active: 'requests',
+        active: 'tickets',
         flash: flashFrom(c.req.url),
         shell: await shellInfo(c),
         subtitle: 'Maintenance Requests that passed the automatic checks and are waiting for you to confirm or reject.',
@@ -59,7 +59,7 @@ export function requestPages() {
     const flash = flashFrom(c.req.url);
     if (!request) {
       const body = emptyState('There is no Maintenance Request waiting for you with that number.', linkButton('Back to Requests', '/requests'));
-      return c.html(page({ title: 'Maintenance Request not found', pm, active: 'requests', flash, shell: await shellInfo(c), body }), 404);
+      return c.html(page({ title: 'Maintenance Request not found', pm, active: 'tickets', flash, shell: await shellInfo(c), body }), 404);
     }
     const { timeZone } = actions.agency();
     const lead = headline(request);
@@ -67,7 +67,7 @@ export function requestPages() {
       page({
         title: 'Maintenance Request',
         pm,
-        active: 'requests',
+        active: 'tickets',
         flash,
         shell: await shellInfo(c),
         actions: html`${linkButton('Back to Requests', '/requests', { variant: 'ghost', size: 'sm' })}${shareButton({

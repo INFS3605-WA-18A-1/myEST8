@@ -20,12 +20,13 @@ export type Flash = { kind: 'ok' | 'error'; message: string };
 export type NavKey =
   | 'dashboard'
   | 'dispatch'
-  | 'requests'
   | 'tickets'
+  | 'archive'
   | 'approvals'
   | 'schedule'
   | 'properties'
   | 'tradies'
+  | 'tenants'
   | 'settings'
   | 'simulator';
 export type Variant = 'primary' | 'secondary' | 'danger' | 'ghost';
@@ -68,23 +69,29 @@ export function head(title: string, o: { css?: string[]; runtime?: boolean } = {
 
 /**
  * The places a Property Manager works, in three groups with a gap between them: the
- * day's work (Dashboard to Schedule), what the Agency looks after (Properties and
- * Tradies), then Settings.
+ * day's work (Dashboard to Schedule), the Profiles of who and what the Agency looks
+ * after (Properties, Tradies and Tenants, under a quiet heading), then Settings.
  */
-const NAV: { key: NavKey; label: string; href: string }[][] = [
-  [
-    { key: 'dashboard', label: 'Dashboard', href: '/' },
-    { key: 'dispatch', label: 'Dispatch', href: '/dispatch' },
-    { key: 'requests', label: 'Requests', href: '/requests' },
-    { key: 'tickets', label: 'Tickets', href: '/tickets' },
-    { key: 'approvals', label: 'Approvals', href: '/approvals' },
-    { key: 'schedule', label: 'Schedule', href: '/calendar' },
-  ],
-  [
-    { key: 'properties', label: 'Properties', href: '/properties' },
-    { key: 'tradies', label: 'Tradies', href: '/tradies' },
-  ],
-  [{ key: 'settings', label: 'Settings', href: '/settings' }],
+const NAV: { label?: string; items: { key: NavKey; label: string; href: string }[] }[] = [
+  {
+    items: [
+      { key: 'dashboard', label: 'Dashboard', href: '/' },
+      { key: 'dispatch', label: 'Dispatch', href: '/dispatch' },
+      { key: 'tickets', label: 'Tickets', href: '/tickets' },
+      { key: 'archive', label: 'Archive', href: '/archive' },
+      { key: 'approvals', label: 'Approvals', href: '/approvals' },
+      { key: 'schedule', label: 'Schedule', href: '/calendar' },
+    ],
+  },
+  {
+    label: 'Profiles',
+    items: [
+      { key: 'properties', label: 'Properties', href: '/properties' },
+      { key: 'tradies', label: 'Tradies', href: '/tradies' },
+      { key: 'tenants', label: 'Tenants', href: '/tenants' },
+    ],
+  },
+  { items: [{ key: 'settings', label: 'Settings', href: '/settings' }] },
 ];
 
 /** The demo's Phone simulator: not a place to work, so it sits quietly at the bottom of the rail. */
@@ -92,14 +99,14 @@ const SIMULATOR = { key: 'simulator', label: 'Phone simulator (demo)', href: '/d
 
 /** One rail link with its icon, aria-current when it is the page shown, and an optional count. */
 function railLink(item: { key: NavKey; label: string; href: string }, active: NavKey | undefined, count: number | undefined, cls = 'rail-link'): Html {
-  // Only the counts that mean "needs you" (Requests, Approvals) are a Wattle chip; any other count is a plain numeral.
-  const decision = item.key === 'requests' || item.key === 'approvals' ? html` data-decision` : '';
+  // Only the counts that mean "needs you" (Tickets' new Maintenance Requests, Approvals) are a Wattle chip; any other count is a plain numeral.
+  const decision = item.key === 'tickets' || item.key === 'approvals' ? html` data-decision` : '';
   return html`<a href="${item.href}" class="${cls}" ${item.key === active ? html`aria-current="page"` : ''}${decision}>${NAV_ICON[item.key]}<span class="rail-label">${item.label}${count ? html`<span class="rail-count num">${count}<span class="sr-only"> waiting</span></span>` : ''}</span></a>`;
 }
 
 /**
  * The rail: the logo and the places in NAV with their icons (the current one gets
- * the 4px Wattle bar, weight 600 and aria-current; Requests and Approvals carry a count when
+ * the 4px Wattle bar, weight 600 and aria-current; Tickets and Approvals carry a count when
  * something is waiting), then at the bottom the demo's Phone simulator, the
  * Collapse menu button and the Agency's name. From 1024px the button folds the
  * rail to a strip of icons whose labels show as tooltips (app.js remembers the
@@ -110,12 +117,9 @@ function rail(active: NavKey | undefined, agencyName: string | undefined, counts
   return html`<aside id="rail" class="rail" aria-label="Sections">
     <a href="/" class="rail-logo">${logo()}</a>
     <nav aria-label="Main" class="rail-menu">
-      <ul class="rail-nav">
-        ${NAV[0]!.map((item) => html`<li>${railLink(item, active, counts[item.key])}</li>`)}
-      </ul>
-      ${NAV.slice(1).map(
-        (group) => html`<ul class="rail-nav rail-gap">
-          ${group.map((item) => html`<li>${railLink(item, active, counts[item.key])}</li>`)}
+      ${NAV.map(
+        (group, i) => html`${group.label ? html`<p class="rail-group" id="rail-group-${i}">${group.label}</p>` : ''}<ul class="rail-nav${i > 0 && !group.label ? ' rail-gap' : ''}" ${group.label ? html`aria-labelledby="rail-group-${i}"` : ''}>
+          ${group.items.map((item) => html`<li>${railLink(item, active, counts[item.key])}</li>`)}
         </ul>`,
       )}
       ${demo ? html`<ul class="rail-nav rail-foot"><li>${railLink(SIMULATOR, active, counts.simulator, 'rail-link is-quiet')}</li></ul>` : ''}
@@ -977,6 +981,39 @@ export function queueRow(o: {
   </article>`;
 }
 
+/**
+ * The filter bar over a list (Tickets, Archive): a GET form of selects for Urgency,
+ * Trade and Property that keeps the Mine/All scope in a hidden field, with an Apply
+ * button (app.js submits on change when JavaScript runs) and a Clear link when any
+ * filter is set. `filter` is what `listFilterOf` read from the query.
+ */
+export function filterBar(o: {
+  action: string;
+  filter: { scope: 'mine' | 'all'; urgency?: string; trade?: string; propertyId?: number };
+  urgencies?: { value: string; label: string }[];
+  trades?: { value: string; label: string }[];
+  properties?: { value: string; label: string }[];
+}): Html {
+  const f = o.filter;
+  const select = (name: string, label: string, all: string, options: { value: string; label: string }[] | undefined, value: string | undefined) =>
+    options?.length
+      ? html`<label class="filter-bar-field"><span class="filter-bar-label">${label}</span>
+          <select name="${name}" class="select select-sm">
+            <option value="">${all}</option>
+            ${options.map((opt) => html`<option value="${opt.value}" ${value === opt.value ? 'selected' : ''}>${opt.label}</option>`)}
+          </select></label>`
+      : '';
+  const any = Boolean(f.urgency || f.trade || f.propertyId);
+  return html`<form method="get" action="${o.action}" class="filter-bar" data-autosubmit role="search" aria-label="Filter">
+    ${f.scope === 'all' ? html`<input type="hidden" name="filter" value="all" />` : ''}
+    ${select('urgency', 'Urgency', 'Any Urgency', o.urgencies, f.urgency)}
+    ${select('trade', 'Trade', 'Any Trade', o.trades, f.trade)}
+    ${select('property', 'Property', 'Any Property', o.properties, f.propertyId ? String(f.propertyId) : undefined)}
+    <button type="submit" class="btn btn-sm filter-bar-apply">Apply</button>
+    ${any ? html`<a class="link filter-bar-clear" href="${o.action}${f.scope === 'all' ? '?filter=all' : ''}">Clear filters</a>` : ''}
+  </form>`;
+}
+
 /** The Mine/All control: links with the current one filled and aria-current. */
 export function segmented(items: { label: string; href: string; active: boolean }[]): Html {
   return html`<nav class="segmented" aria-label="Views">
@@ -1083,12 +1120,13 @@ const ICON = {
 const NAV_ICON: Record<NavKey, Html> = {
   dashboard: icon('squares-four', { size: 'size-[18px]' }),
   dispatch: icon('map-pin', { size: 'size-[18px]' }),
-  requests: icon('tray', { size: 'size-[18px]' }),
   tickets: icon('ticket', { size: 'size-[18px]' }),
+  archive: icon('archive', { size: 'size-[18px]' }),
   approvals: icon('seal-check', { size: 'size-[18px]' }),
   schedule: icon('calendar-blank', { size: 'size-[18px]' }),
   properties: icon('house-line', { size: 'size-[18px]' }),
   tradies: icon('wrench', { size: 'size-[18px]' }),
+  tenants: icon('users', { size: 'size-[18px]' }),
   settings: icon('gear-six', { size: 'size-[18px]' }),
   simulator: icon('device-mobile', { size: 'size-4' }),
 };

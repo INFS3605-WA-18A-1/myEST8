@@ -1,5 +1,7 @@
 # Site Quotes for High Jobs
 
+Superseded by 0009.
+
 A Quote given from a description and a photo is a guess. For a Routine repair the guess is good enough and the Property Manager chooses from the Initial Quotes. For a High Job the Agency gets the Tradies on site before committing: once two Initial Quotes are confirmed, the Property Manager is prompted to book Site Quotes with those Tradies, each Tradie revises their Quote after the visit, and the Property Manager chooses from the revised prices with the initial ones still showing.
 
 The gate is the Ticket's Urgency being High. Urgent issues never reach Quotes (they are Urgent Repairs the Tenant arranges), and Routine Jobs are not worth two extra visits. The Property Manager can skip the Site Quotes on a High Job, book them on a Routine one, or mark the Quotes final before every visit is done.

@@ -9,6 +9,7 @@ import {
   docket,
   dl,
   field,
+  filterBar,
   formatAge,
   flashMessage,
   formatWhen,
@@ -119,12 +120,13 @@ describe('ui', () => {
     expect(out.match(/aria-current="page"/g)).toHaveLength(1);
   });
 
-  it('lists every place in the rail in three groups, with the Phone simulator at its foot only in the demo', async () => {
+  it('lists every place in the rail in three groups, Profiles under its heading, with the Phone simulator at its foot only in the demo', async () => {
     const out = await render(page({ title: 'Dashboard', pm: { name: 'Alice' }, active: 'dashboard', body: html`<p>x</p>`, demo: true }));
     const links = [...out.matchAll(/<a href="([^"]+)" class="rail-link[^"]*"/g)].map((m) => m[1]);
-    expect(links).toEqual(['/', '/dispatch', '/requests', '/tickets', '/approvals', '/calendar', '/properties', '/tradies', '/settings', '/demo']);
+    expect(links).toEqual(['/', '/dispatch', '/tickets', '/archive', '/approvals', '/calendar', '/properties', '/tradies', '/tenants', '/settings', '/demo']);
     expect(out.match(/<ul class="rail-nav[ "]/g)).toHaveLength(4);
-    expect(out.match(/<ul class="rail-nav rail-gap">/g)).toHaveLength(2);
+    expect(out).toMatch(/<p class="rail-group" id="rail-group-1">Profiles<\/p><ul class="rail-nav" aria-labelledby="rail-group-1">\s*<li><a href="\/properties"/);
+    expect(out.match(/<ul class="rail-nav rail-gap"/g)).toHaveLength(1);
     expect(out).toMatch(/<ul class="rail-nav rail-foot"><li><a href="\/demo" class="rail-link is-quiet"/);
     expect(out).toContain('Phone simulator (demo)');
     expect(out).not.toContain('href="/setup"');
@@ -137,9 +139,9 @@ describe('ui', () => {
 
   it('shows a count beside a rail link only when something is waiting', async () => {
     const out = await render(
-      page({ title: 'Dashboard', pm: { name: 'Alice' }, active: 'dashboard', body: html`<p>x</p>`, shell: { agencyName: 'Harbour Realty', today: 'Fri 9 Oct', counts: { requests: 3, approvals: 0 } } }),
+      page({ title: 'Dashboard', pm: { name: 'Alice' }, active: 'dashboard', body: html`<p>x</p>`, shell: { agencyName: 'Harbour Realty', today: 'Fri 9 Oct', counts: { tickets: 3, approvals: 0 } } }),
     );
-    expect(out).toMatch(/href="\/requests" class="rail-link"[^>]*>(?:(?!<\/a>)[\s\S])*rail-count num">3</);
+    expect(out).toMatch(/href="\/tickets" class="rail-link"[^>]*>(?:(?!<\/a>)[\s\S])*rail-count num">3</);
     expect(out).not.toMatch(/href="\/approvals" class="rail-link"[^>]*>(?:(?!<\/a>)[\s\S])*rail-count/);
   });
 
@@ -150,6 +152,19 @@ describe('ui', () => {
     expect(out).toContain('Harbour Realty');
     expect(out).toContain('Fri 9 Oct');
     expect(out).toMatch(/<details class="user-menu" data-menu>[\s\S]*action="\/logout"/);
+  });
+
+  it('draws the filter bar as a GET form that keeps the All scope and offers Clear only when a filter is set', async () => {
+    const urgencies = [{ value: 'high', label: 'High' }, { value: 'routine', label: 'Routine' }];
+    const plain = await render(filterBar({ action: '/tickets', filter: { scope: 'mine' }, urgencies }));
+    expect(plain).toMatch(/<form method="get" action="\/tickets" class="filter-bar" data-autosubmit/);
+    expect(plain).not.toContain('name="filter"');
+    expect(plain).not.toContain('Clear filters');
+    expect(plain).not.toContain('name="trade"');
+    const set = await render(filterBar({ action: '/tickets', filter: { scope: 'all', urgency: 'high' }, urgencies }));
+    expect(set).toContain('<input type="hidden" name="filter" value="all" />');
+    expect(set).toMatch(/<option value="high" selected>High<\/option>/);
+    expect(set).toContain('href="/tickets?filter=all">Clear filters');
   });
 
   it('builds the Agency name and today in the Agency time zone', () => {
@@ -494,8 +509,8 @@ describe('ui', () => {
   it('draws the rail, menu and message icons from Phosphor', async () => {
     const out = await render(page({ title: 'Dashboard', pm: { name: 'Alice' }, active: 'dashboard', body: alert('Check the photo', 'warning'), demo: true }));
     const phosphor = /<svg (?![^>]*logo-mark)[^>]*viewBox="0 0 256 256"/g;
-    // ten rail links (nine places and the Phone simulator), Collapse menu, the menu button, the user menu caret, the alert (the logo's key tag is our own)
-    expect(out.match(phosphor)).toHaveLength(14);
+    // eleven rail links (ten places and the Phone simulator), Collapse menu, the menu button, the user menu caret, the alert (the logo's key tag is our own)
+    expect(out.match(phosphor)).toHaveLength(15);
     expect(out).not.toContain('viewBox="0 0 24 24"');
     expect(out).toMatch(/class="rail-link" aria-current="page"><svg [^>]*class="size-\[18px\] shrink-0"/);
     expect(await render(flashMessage({ kind: 'ok', message: 'Saved' }))).toMatch(/<svg [^>]*viewBox="0 0 256 256"/);
