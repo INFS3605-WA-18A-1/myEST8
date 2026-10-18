@@ -1,7 +1,8 @@
-// The desk pages behind the rail's entries: Requests, Tickets and Approvals, read the
-// way the Property Manager sees them, through the web app.
+// The desk pages behind the rail's entries: Tickets (new Maintenance Requests and open
+// Tickets), Archive and Approvals, read the way the Property Manager sees them, through the web app.
 
 import { describe, expect, test } from 'vitest';
+import type { Trade } from '../../src/shared.ts';
 import { HOUR } from '../support/harness.ts';
 import { visible, webWorld } from '../support/web.ts';
 import { BELLA, confirmedQuotes, HANA, KING_ST, OCEAN_AVE, OLIVIA, TOM } from '../support/world.ts';
@@ -22,8 +23,8 @@ function railCount(html: string, href: string) {
 }
 
 /** A Tenant reports `description` and answers every question; with no photos it becomes a Maintenance Request after 48 hours. */
-async function report(w: Web, from: string, description: string, urgency: 'routine' | 'high' = 'routine') {
-  w.h.classifier.when(description, { messageClass: 'new_issue', relatedItem: 'none', urgency, trade: 'plumbing' });
+async function report(w: Web, from: string, description: string, urgency: 'routine' | 'high' = 'routine', trade: Trade = 'plumbing') {
+  w.h.classifier.when(description, { messageClass: 'new_issue', relatedItem: 'none', urgency, trade });
   await w.h.receive(from, description);
   await w.h.answer(from, 'In the kitchen');
   await w.h.answer(from, 'Since Monday');
@@ -66,30 +67,57 @@ async function busyDesk(w: Web) {
   return { ticketId, jobId };
 }
 
-describe('Requests', () => {
-  test('lists the Maintenance Requests waiting for the Property Manager, oldest first, each linking to its review', async () => {
+/** The part of the Tickets page from one section's heading to the next one's (or the end). */
+function sectionOf(html: string, title: string) {
+  const from = html.indexOf(`>${title}</h2>`);
+  expect(from, title).toBeGreaterThan(-1);
+  const next = html.indexOf('class="section-title"', from + title.length);
+  return html.slice(from, next === -1 ? undefined : next);
+}
+
+/** The table row that links to Ticket `id`, or '' when there is none. */
+const rowOf = (html: string, id: number) => html.split('<tr>').find((r) => r.includes(`href="/tickets/${id}"`)) ?? '';
+
+describe('Tickets: new Maintenance Requests', () => {
+  test('lists the Maintenance Requests waiting above the open Tickets, oldest first, each with Confirm and a link to its review', async () => {
     const w = await webWorld();
     await report(w, TOM, 'The kitchen tap is dripping');
     await w.h.advance(HOUR);
     await report(w, HANA, 'The bathroom fan is rattling');
     await w.h.advance(49 * HOUR);
 
-    const html = await text(w, '/requests');
-    const readable = visible(html);
+    const html = await text(w, '/tickets');
+    const requests = sectionOf(html, 'New Maintenance Requests');
+    const readable = visible(requests);
     expect(readable.indexOf('The kitchen tap is dripping')).toBeGreaterThan(-1);
     expect(readable.indexOf('The kitchen tap is dripping')).toBeLessThan(readable.indexOf('The bathroom fan is rattling'));
     expect(readable).toContain(KING_ST);
+    expect(html.indexOf('New Maintenance Requests')).toBeLessThan(html.indexOf('Open Tickets'));
     const { maintenanceRequests } = await w.alice.dashboard();
-    for (const r of maintenanceRequests) expect(html).toContain(`href="/requests/${r.issueId}"`);
+    for (const r of maintenanceRequests) {
+      expect(requests).toContain(`href="/requests/${r.issueId}"`);
+      expect(requests).toContain(`action="/requests/${r.issueId}/confirm"`);
+    }
   });
 
   test('says so when nothing is waiting', async () => {
     const w = await webWorld();
-    expect(visible(await text(w, '/requests', await w.signIn()))).toContain('No Maintenance Requests waiting for you.');
+    expect(visible(await text(w, '/tickets', await w.signIn()))).toContain('No Maintenance Requests waiting for you.');
+  });
+
+  test('the old Requests list sends the Property Manager to Tickets, keeping the filters', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+    const plain = await w.get('/requests', cookie);
+    expect(plain.status).toBe(303);
+    expect(plain.headers.get('location')).toBe('/tickets');
+    const filtered = await w.get('/requests?filter=all&urgency=high', cookie);
+    expect(filtered.status).toBe(303);
+    expect(filtered.headers.get('location')).toBe('/tickets?filter=all&urgency=high');
   });
 });
 
-describe('Tickets', () => {
+describe('Tickets: open Tickets', () => {
   test('lists open Tickets by urgency, then by when they were reported, each linking to its page', async () => {
     const w = await webWorld();
     const ids = await threeTickets(w);
@@ -106,12 +134,20 @@ describe('Tickets', () => {
     const ids = await threeTickets(w);
 
     const html = await text(w, '/tickets');
-    const row = html.split('<tr>').find((r) => r.includes(`href="/tickets/${ids.tap}"`)) ?? '';
+    const row = rowOf(html, ids.tap);
     const issue = row.indexOf('The kitchen tap is dripping');
     expect(issue).toBeGreaterThan(-1);
     expect(row.indexOf(`#${ids.tap}`)).toBeGreaterThan(issue);
     expect(row.indexOf(KING_ST)).toBeGreaterThan(issue);
     expect(row).toContain(`href="/properties/${w.ids.kingSt}"`);
+  });
+
+  test('a Ticket without photos shows the same quiet placeholder as a request without one', async () => {
+    const w = await webWorld();
+    const ids = await threeTickets(w);
+    const row = rowOf(await text(w, '/tickets'), ids.tap);
+    expect(row).toContain('class="issue-thumb-none"');
+    expect(row).not.toContain('<img');
   });
 
   test('shows only the Property Manager’s own Tickets until All is chosen', async () => {
@@ -123,26 +159,20 @@ describe('Tickets', () => {
     expect(mine).not.toContain(`href="/tickets/${ids.leak}"`);
   });
 
-  test('filters by urgency and by whether the Ticket is open or closed, with counts', async () => {
+  test('leaves closed Tickets to the Archive, and sends the old closed tab there with its filters', async () => {
     const w = await webWorld();
     const ids = await threeTickets(w);
-    const fan = (await w.alice.ticket(ids.fan)).jobs[0]!.jobId;
-    await w.alice.cancelJob(fan);
+    await w.alice.cancelJob((await w.alice.ticket(ids.fan)).jobs[0]!.jobId);
     await w.alice.closeTicket(ids.fan);
 
-    const high = await text(w, '/tickets?filter=all&urgency=high');
-    expect(high).toContain(`href="/tickets/${ids.leak}"`);
-    expect(high).not.toContain(`href="/tickets/${ids.tap}"`);
+    const html = await text(w, '/tickets?filter=all');
+    expect(html).toContain(`href="/tickets/${ids.tap}"`);
+    expect(html).not.toContain(`href="/tickets/${ids.fan}"`);
+    expect(html).not.toContain('aria-label="Status"');
 
-    const closed = await text(w, '/tickets?filter=all&status=closed');
-    expect(closed).toContain(`href="/tickets/${ids.fan}"`);
-    expect(closed).not.toContain(`href="/tickets/${ids.tap}"`);
-
-    const open = visible(await text(w, '/tickets?filter=all'));
-    expect(open).toMatch(/Open 2/);
-    expect(open).toMatch(/Closed 1/);
-    expect(open).toMatch(/1 High/);
-    expect(open).toMatch(/1 Routine/);
+    const res = await w.get('/tickets?filter=all&status=closed&urgency=routine', await w.signIn());
+    expect(res.status).toBe(303);
+    expect(res.headers.get('location')).toBe('/archive?filter=all&urgency=routine');
   });
 
   test('pairs each Job’s Trade with its stage, and says when an open Ticket is ready to close', async () => {
@@ -151,13 +181,12 @@ describe('Tickets', () => {
     await w.alice.cancelJob((await w.alice.ticket(ids.fan)).jobs[0]!.jobId);
 
     const html = await text(w, '/tickets?filter=all');
-    const rowOf = (id: number) => html.split('<tr>').find((r) => r.includes(`href="/tickets/${id}"`)) ?? '';
     // Each Job is its own item, its Trade then its stage.
-    const jobsOf = (id: number) => [...rowOf(id).matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/g)].map((m) => visible(m[1]!).trim());
+    const jobsOf = (id: number) => [...rowOf(html, id).matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/g)].map((m) => visible(m[1]!).trim());
     expect(jobsOf(ids.tap)).toEqual(['Plumbing Quoting']);
-    expect(visible(rowOf(ids.tap))).not.toContain('Ready to close');
+    expect(visible(rowOf(html, ids.tap))).not.toContain('Ready to close');
     expect(jobsOf(ids.fan)).toEqual(['Plumbing Cancelled']);
-    expect(visible(rowOf(ids.fan))).toContain('Ready to close');
+    expect(visible(rowOf(html, ids.fan))).toContain('Ready to close');
   });
 
   test('says so when there are none, with the way to every Property Manager’s', async () => {
@@ -165,6 +194,117 @@ describe('Tickets', () => {
     const html = await text(w, '/tickets', await w.signIn());
     expect(visible(html)).toContain('No open Tickets on your Properties.');
     expect(html).toMatch(/href="\/tickets\?filter=all"[^>]*>\s*Show all Tickets/);
+  });
+});
+
+describe('Tickets: the filter bar', () => {
+  test('offers the Urgencies a Ticket can have, every Trade and the Agency’s Properties, keeping Mine or All', async () => {
+    const w = await webWorld();
+    const html = await text(w, '/tickets?filter=all');
+    const start = html.indexOf('<form method="get"');
+    const bar = html.slice(start, html.indexOf('</form>', start));
+    expect(bar).toContain('action="/tickets"');
+    expect(bar).toContain('name="filter" value="all"');
+    const options = (name: string) => {
+      const select = new RegExp(`<select name="${name}"[^>]*>([\\s\\S]*?)</select>`).exec(bar)?.[1] ?? '';
+      return [...select.matchAll(/<option value="([^"]*)"[^>]*>([^<]*)</g)].map((m) => [m[1], m[2]]);
+    };
+    expect(options('urgency')).toEqual([['', 'Any Urgency'], ['high', 'High'], ['routine', 'Routine']]);
+    expect(options('trade')).toContainEqual(['pest_control', 'Pest control']);
+    expect(options('trade')).toHaveLength(9);
+    // By address: "12 King St" before "5/40 Ocean Ave".
+    expect(options('property')).toEqual([['', 'Any Property'], [String(w.ids.kingSt), KING_ST], [String(w.ids.oceanAve), OCEAN_AVE]]);
+  });
+
+  test('Mine and All keep the filters', async () => {
+    const w = await webWorld();
+    const html = await text(w, '/tickets?urgency=high');
+    expect(html).toContain('href="/tickets?filter=all&amp;urgency=high"');
+  });
+
+  test('narrows the new Maintenance Requests and the open Tickets alike, by Urgency, Trade and Property', async () => {
+    const w = await webWorld();
+    const ids = await threeTickets(w);
+    await w.alice.setJobTrade((await w.alice.ticket(ids.fan)).jobs[0]!.jobId, 'electrical');
+    await report(w, TOM, 'The oven will not heat', 'high', 'appliances');
+    await report(w, BELLA, 'The front door lock sticks', 'routine', 'locksmith');
+    await w.h.advance(49 * HOUR);
+
+    const high = await text(w, '/tickets?filter=all&urgency=high');
+    expect(high).toContain(`href="/tickets/${ids.leak}"`);
+    expect(high).not.toContain(`href="/tickets/${ids.tap}"`);
+    expect(visible(high)).toContain('The oven will not heat');
+    expect(visible(high)).not.toContain('The front door lock sticks');
+
+    const electrical = await text(w, '/tickets?filter=all&trade=electrical');
+    expect(electrical).toContain(`href="/tickets/${ids.fan}"`);
+    expect(electrical).not.toContain(`href="/tickets/${ids.tap}"`);
+    expect(visible(electrical)).not.toContain('The oven will not heat');
+    expect(visible(electrical)).toContain('No Maintenance Requests match these filters.');
+
+    const locks = visible(await text(w, '/tickets?filter=all&trade=locksmith'));
+    expect(locks).toContain('The front door lock sticks');
+    expect(locks).toContain('No open Tickets match these filters.');
+
+    const ocean = await text(w, `/tickets?filter=all&property=${w.ids.oceanAve}`);
+    expect(ocean).toContain(`href="/tickets/${ids.leak}"`);
+    expect(ocean).not.toContain(`href="/tickets/${ids.tap}"`);
+    expect(visible(ocean)).toContain('The front door lock sticks');
+    expect(visible(ocean)).not.toContain('The oven will not heat');
+
+    // Mine still limits a Property filter to the Property Manager's own Properties.
+    const notMine = await text(w, `/tickets?property=${w.ids.oceanAve}`);
+    expect(notMine).not.toContain(`href="/tickets/${ids.leak}"`);
+  });
+});
+
+describe('Archive', () => {
+  /** The three Tickets, with the tap closed before the leak: the fan stays open. */
+  async function twoClosed(w: Web) {
+    const ids = await threeTickets(w);
+    for (const id of [ids.tap, ids.leak]) {
+      const actor = id === ids.leak ? w.bob : w.alice;
+      await actor.cancelJob((await actor.ticket(id)).jobs[0]!.jobId);
+      await actor.closeTicket(id);
+      await w.h.advance(HOUR);
+    }
+    return ids;
+  }
+
+  test('lists closed Tickets, the most recently closed first, and no open ones', async () => {
+    const w = await webWorld();
+    const ids = await twoClosed(w);
+
+    const html = await text(w, '/archive?filter=all');
+    const leak = html.indexOf(`href="/tickets/${ids.leak}"`);
+    const tap = html.indexOf(`href="/tickets/${ids.tap}"`);
+    expect(leak).toBeGreaterThan(-1);
+    expect(tap).toBeGreaterThan(leak);
+    expect(html).not.toContain(`href="/tickets/${ids.fan}"`);
+    expect(visible(rowOf(html, ids.tap))).toMatch(/Plumbing Cancelled/);
+    expect(visible(rowOf(html, ids.tap))).toMatch(/Closed/);
+    expect(rowOf(html, ids.tap)).toContain('queue-thumb');
+  });
+
+  test('shows the Property Manager’s own until All is chosen, and takes the same filters', async () => {
+    const w = await webWorld();
+    const ids = await twoClosed(w);
+
+    const mine = await text(w, '/archive');
+    expect(mine).toContain(`href="/tickets/${ids.tap}"`);
+    expect(mine).not.toContain(`href="/tickets/${ids.leak}"`);
+    expect(mine).toContain('action="/archive"');
+
+    const high = await text(w, '/archive?filter=all&urgency=high');
+    expect(high).toContain(`href="/tickets/${ids.leak}"`);
+    expect(high).not.toContain(`href="/tickets/${ids.tap}"`);
+  });
+
+  test('says so when nothing is closed yet', async () => {
+    const w = await webWorld();
+    const html = await text(w, '/archive', await w.signIn());
+    expect(visible(html)).toContain('No closed Tickets on your Properties yet.');
+    expect(html).toMatch(/href="\/archive\?filter=all"[^>]*>\s*Show all closed Tickets/);
   });
 });
 

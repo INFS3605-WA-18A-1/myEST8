@@ -4559,17 +4559,6 @@
     }
 
     /* Tickets list page */
-    /* Open and Closed on the left, the Urgency counts on the right, on one line. */
-    .ticket-list-filters {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px 24px;
-    }
-    .ticket-list-filters > nav:last-child {
-      flex: 0 1 auto;
-    }
     /* Each Job on its own line: the Trade, then its stage. */
     .ticket-list-jobs {
       display: grid;
@@ -4597,6 +4586,34 @@
       color: var(--ink);
       background: var(--hivis);
       border-radius: 4px;
+    }
+  }
+}
+
+/* === Tickets and Archive lists (desk feedback T1) === */
+@layer utilities {
+  @layer app {
+    /* The issue's photo beside the issue in a Tickets or Archive row: the request list's thumbnail, a little smaller. */
+    .ticket-list-issue {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .ticket-list-issue > .queue-thumb {
+      flex-basis: 48px;
+      width: 48px;
+      height: 48px;
+    }
+    .ticket-list-issue > .ticket-cell {
+      min-width: 0;
+    }
+    /* No photo: a quiet picture icon on the Gumleaf thumbnail, in a request's row and a Ticket's alike. */
+    .issue-thumb-none {
+      display: grid;
+      place-items: center;
+      width: 100%;
+      height: 100%;
+      color: var(--muted);
     }
   }
 }

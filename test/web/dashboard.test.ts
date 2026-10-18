@@ -89,7 +89,7 @@ describe('Maintenance Requests on the dashboard', () => {
     expect(after).toContain('No Maintenance Requests waiting for you.');
   });
 
-  test('an action taken on the review page or Requests list goes back there, and anywhere else goes to the dashboard', async () => {
+  test('an action taken on the review page or the Tickets list goes back there, and anywhere else goes to the dashboard', async () => {
     const w = await webWorld();
     const { cookie, issueId } = await tomsTapRequest(w);
 
@@ -100,8 +100,8 @@ describe('Maintenance Requests on the dashboard', () => {
     const sideways = await w.post(`/requests/${issueId}/reject`, { reason: '', return: '/requests/1/../../settings' }, cookie);
     expect(sideways.headers.get('location')).toMatch(/^\/\?error=/);
 
-    const fromList = await w.post(`/requests/${issueId}/urgency`, { urgency: 'high', return: '/requests' }, cookie);
-    expect(fromList.headers.get('location')).toMatch(/^\/requests\?ok=/);
+    const fromList = await w.post(`/requests/${issueId}/urgency`, { urgency: 'high', return: '/tickets' }, cookie);
+    expect(fromList.headers.get('location')).toMatch(/^\/tickets\?ok=/);
   });
 
   test('changing the Urgency to Urgent turns it into an Urgent Repair', async () => {

@@ -13,7 +13,7 @@ import { createQuotes } from './quotes.ts';
 import { createScheduling } from './scheduling.ts';
 import { DEFAULT_SETTINGS, invalid, type Role, type Settings, type Trade, type Urgency } from './shared.ts';
 import { createTickets } from './tickets.ts';
-import { createViews } from './views.ts';
+import { createViews, type ListOptions } from './views.ts';
 import { createWorker } from './worker.ts';
 
 export type Upload = { filename: string; contentType: string; content: Uint8Array };
@@ -137,13 +137,13 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
         /** A photo, receipt or PDF Quote stored for the Agency, or null. */
         file: (fileId: number) => files.getInAgency(agencyId, fileId),
         dashboard: ({ filter = 'mine' }: { filter?: 'mine' | 'all' } = {}) => views.dashboard(agencyId, propertyManagerId, filter),
-        /** The Maintenance Requests waiting for review: the Property Manager's own, or all of the Agency's. */
-        requests: ({ filter = 'mine' }: { filter?: 'mine' | 'all' } = {}) => views.requests(agencyId, propertyManagerId, filter),
+        /** The Maintenance Requests waiting for review: the Property Manager's own (the default) or all of the Agency's, optionally by Urgency, Trade and Property. */
+        requests: (o: Partial<ListOptions> = {}) => views.requests(agencyId, propertyManagerId, { ...o, filter: o.filter ?? 'mine' }),
         /** One Maintenance Request waiting for review, or null. */
         request: (issueId: number) => views.request(agencyId, issueId),
-        /** Tickets by status (open by default) and optionally Urgency, most urgent first then oldest, with the counts for the filters. */
-        tickets: (o: { filter?: 'mine' | 'all'; status?: 'open' | 'closed'; urgency?: Urgency | null } = {}) =>
-          views.tickets(agencyId, propertyManagerId, { filter: o.filter ?? 'mine', status: o.status ?? 'open', urgency: o.urgency ?? null }),
+        /** Tickets by status (open by default, or closed for the Archive), optionally by Urgency, Trade and Property. */
+        tickets: (o: Partial<ListOptions> & { status?: 'open' | 'closed' } = {}) =>
+          views.tickets(agencyId, propertyManagerId, { ...o, filter: o.filter ?? 'mine', status: o.status ?? 'open' }),
         /** Quotes waiting on a Property Owner over the Max Repair Cost, and Urgent Repairs waiting on a receipt. */
         approvals: ({ filter = 'mine' }: { filter?: 'mine' | 'all' } = {}) => views.approvals(agencyId, propertyManagerId, filter),
         propertyOverviews: () => views.propertyOverviews(agencyId),

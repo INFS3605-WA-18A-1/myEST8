@@ -77,7 +77,7 @@ async function onlyRequest(w: Web) {
   return request!;
 }
 
-describe('the Requests list', () => {
+describe('the new Maintenance Requests on Tickets', () => {
   test('reads like a docket: the issue, then the address, ranked by Urgency', async () => {
     const w = await webWorld();
     await report(w, HANA, 'The bathroom fan is rattling');
@@ -85,7 +85,9 @@ describe('the Requests list', () => {
     await report(w, TOM, 'The kitchen tap is pouring water', 'high');
     await w.h.advance(49 * HOUR);
 
-    const html = visible(await page(w, '/requests?filter=all', await w.signIn()));
+    const full = await page(w, '/tickets?filter=all', await w.signIn());
+    // From the list itself: the filter bar above it names every Property.
+    const html = visible(full.slice(full.indexOf('class="request-list')));
     const tap = html.indexOf('The kitchen tap is pouring water');
     expect(tap).toBeGreaterThan(-1);
     expect(tap).toBeLessThan(html.indexOf('The bathroom fan is rattling'));
@@ -93,15 +95,32 @@ describe('the Requests list', () => {
   });
 });
 
-describe('the Requests list with photos', () => {
+describe('photos on the Tickets page', () => {
   test("shows each request's first photo beside it, as the dashboard does", async () => {
     const w = await webWorld();
     await w.h.upload(await report(w, TOM, 'The kitchen tap is dripping'), [upload('tap.jpg')]);
     const r = await onlyRequest(w);
 
-    const html = await page(w, '/requests?filter=all', await w.signIn());
+    const html = await page(w, '/tickets?filter=all', await w.signIn());
     expect(html).toContain(`src="/files/${r.photos[0]!.fileId}"`);
     expect(visible(html)).not.toContain('Check Urgency');
+  });
+
+  test("keeps the issue's first photo beside its Ticket once confirmed, and a quiet placeholder for a request without one", async () => {
+    const w = await webWorld();
+    await w.h.upload(await report(w, TOM, 'The kitchen tap is dripping'), [upload('tap.jpg'), upload('tap-close.jpg')]);
+    const r = await onlyRequest(w);
+    const ticketId = await w.alice.confirmMaintenanceRequest(r.issueId);
+    await report(w, HANA, 'The bathroom fan is rattling');
+    await w.h.advance(49 * HOUR);
+
+    const html = await page(w, '/tickets?filter=all', await w.signIn());
+    const row = html.split('<tr>').find((t) => t.includes(`href="/tickets/${ticketId}"`)) ?? '';
+    expect(row).toContain(`src="/files/${r.photos[0]!.fileId}"`);
+    expect(row).not.toContain(`src="/files/${r.photos[1]!.fileId}"`);
+    const fan = html.split('<article').find((a) => a.includes('The bathroom fan is rattling'))?.split('</article>')[0] ?? '';
+    expect(fan).toContain('class="issue-thumb-none"');
+    expect(fan).not.toContain('<img');
   });
 });
 
@@ -126,7 +145,7 @@ describe('the Maintenance Request review', () => {
     expect(text).not.toContain('What the Tenant reported');
   });
 
-  test('Confirm is the one primary action; Reject and Change Urgency come back to Requests', async () => {
+  test('Confirm is the one primary action; Change Urgency comes back to the review and Reject to Tickets', async () => {
     const w = await webWorld();
     await report(w, TOM, 'The kitchen tap is dripping');
     await w.h.advance(48 * HOUR);
@@ -136,15 +155,15 @@ describe('the Maintenance Request review', () => {
     const review = html.slice(html.indexOf('class="request-review"'));
     expect(review.match(/btn-primary/g)).toHaveLength(1);
     expect(html).toMatch(new RegExp(`<form method="post" action="/requests/${r.issueId}/confirm"`));
-    expect(html).toMatch(/<details class="request-reject">\s*<summary>Reject this Maintenance Request…<\/summary>[\s\S]*name="return" value="\/requests"[\s\S]*name="reason"/);
+    expect(html).toMatch(/<details class="request-reject">\s*<summary>Reject this Maintenance Request…<\/summary>[\s\S]*name="return" value="\/tickets"[\s\S]*name="reason"/);
     expect(html).toMatch(new RegExp(`action="/requests/${r.issueId}/urgency"[^>]*>\\s*<input type="hidden" name="return" value="/requests/${r.issueId}"`));
     expect(visible(html)).toContain('No photos');
 
     const cookie = await w.signIn();
     const changed = await w.post(`/requests/${r.issueId}/urgency`, { urgency: 'high', return: `/requests/${r.issueId}` }, cookie);
     expect(changed.headers.get('location')).toMatch(new RegExp(`^/requests/${r.issueId}\\?ok=`));
-    const rejected = await w.post(`/requests/${r.issueId}/reject`, { reason: 'A new washer fixes this', return: '/requests' }, cookie);
-    expect(rejected.headers.get('location')).toMatch(/^\/requests\?ok=/);
+    const rejected = await w.post(`/requests/${r.issueId}/reject`, { reason: 'A new washer fixes this', return: '/tickets' }, cookie);
+    expect(rejected.headers.get('location')).toMatch(/^\/tickets\?ok=/);
   });
 
   test('with flagged photos, Confirm asks first', async () => {
@@ -207,7 +226,7 @@ describe('the Summary on a Maintenance Request', () => {
 
   test('the list leads each row with the Summary, and the photo strip names where the photos came from', async () => {
     const { w, r, cookie } = await summarised();
-    expect(visible(await page(w, '/requests?filter=all', cookie))).toContain(r.summary!);
+    expect(visible(await page(w, '/tickets?filter=all', cookie))).toContain(r.summary!);
     const text = visible(await page(w, `/requests/${r.issueId}`, cookie));
     expect(text).toMatch(/1 photo, (sent with the message|uploaded)/);
   });

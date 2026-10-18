@@ -1,6 +1,6 @@
 import type { Context } from './context.ts';
 import { MIN_QUOTES } from './quotes.ts';
-import { addMs, HOUR_MS, iso, URGENCIES } from './shared.ts';
+import { addMs, HOUR_MS, iso, URGENCIES, type Trade, type Urgency } from './shared.ts';
 import type { Issue, Job, JobStatus, Ticket } from './tickets.ts';
 
 /** What the Property Manager's screens show, composed from each module's queries. */
@@ -51,6 +51,12 @@ export function quotingDecision(q: Quoting, context: QuotingContext = {}): Quoti
   return 'choose_quote';
 }
 
+/**
+ * What a list of Maintenance Requests or Tickets is narrowed to: Mine or All, then
+ * optionally one Urgency, one Trade and one Property. A Property outside Mine shows nothing.
+ */
+export type ListOptions = { filter: 'mine' | 'all'; urgency?: Urgency; trade?: Trade; propertyId?: number };
+
 /** Caches an async lookup for one read, so Tickets on the same Property share it. */
 function cached<K, V>(lookup: (key: K) => Promise<V>) {
   const seen = new Map<K, Promise<V>>();
@@ -79,6 +85,7 @@ export function createViews({ clock, modules }: Context) {
 
   const ticketSummary = async (ticket: Ticket) => ({
     ticketId: ticket.id,
+    propertyId: ticket.propertyId,
     ...(await propertyLabel(ticket.propertyId)),
     tenantName: (await profiles.person(ticket.tenantId)).name,
     description: (await tickets.issue(ticket.issueId)).description,
@@ -87,6 +94,8 @@ export function createViews({ clock, modules }: Context) {
     reportedAt: ticket.reportedAt,
     jobs: (await tickets.jobsOf(ticket.id)).map((j) => ({ jobId: j.id, trade: j.trade, status: j.status })),
     unreadMessages: await tickets.unreadCount(ticket.issueId),
+    // The issue's photos, for a list's thumbnail (the first) and anything that counts them.
+    photos: (await tickets.photos(ticket.issueId)).map(({ photoId, fileId }) => ({ photoId, fileId })),
   });
 
   const maintenanceRequestView = async (issue: Issue) => ({
@@ -175,6 +184,13 @@ export function createViews({ clock, modules }: Context) {
   /** The Properties a list is limited to: the Property Manager's own, or all of the Agency's. */
   const scope = (propertyManagerId: number, filter: 'mine' | 'all') => (filter === 'mine' ? profiles.propertyIdsOf(propertyManagerId) : Promise.resolve(null));
 
+  /** `scope`, narrowed to the one Property a list is filtered to: none at all when it is not among them. */
+  const listScope = async (propertyManagerId: number, o: ListOptions) => {
+    const ids = await scope(propertyManagerId, o.filter);
+    if (o.propertyId === undefined) return ids;
+    return ids === null || ids.includes(o.propertyId) ? [o.propertyId] : [];
+  };
+
   return {
     async dashboard(agencyId: number, propertyManagerId: number, filter: 'mine' | 'all') {
       const now = clock.now();
@@ -205,10 +221,16 @@ export function createViews({ clock, modules }: Context) {
       return { maintenanceRequests, tickets: boardTickets, urgentRepairs: repairs, inbox, alerts: [...quoteAlerts, ...schedulingAlerts], calendar };
     },
 
-    /** The Maintenance Requests waiting for a Property Manager to confirm: Urgent, High, then Routine, oldest first within each. */
-    async requests(agencyId: number, propertyManagerId: number, filter: 'mine' | 'all') {
+    /**
+     * The Maintenance Requests waiting for a Property Manager to confirm, narrowed by `o`
+     * (Trade is the Trade it was classified as): Urgent, High, then Routine, oldest first within each.
+     */
+    async requests(agencyId: number, propertyManagerId: number, o: ListOptions) {
       const rank = (u: string) => ['urgent', 'high', 'routine'].indexOf(u);
-      const views = await maintenanceRequestViews(agencyId, await scope(propertyManagerId, filter));
+      const waiting = (await tickets.maintenanceRequests(agencyId, await listScope(propertyManagerId, o))).filter(
+        (i) => (!o.urgency || i.urgency === o.urgency) && (!o.trade || i.trade === o.trade),
+      );
+      const views = await Promise.all(waiting.map(maintenanceRequestView));
       return views.sort((a, b) => rank(a.urgency) - rank(b.urgency) || a.reportedAt.localeCompare(b.reportedAt));
     },
 
@@ -233,30 +255,18 @@ export function createViews({ clock, modules }: Context) {
     },
 
     /**
-     * Tickets of one status, Urgent before High before Routine and then oldest first,
-     * optionally of one Urgency. `counts` are for the same Properties: open and closed
-     * Tickets, and the open or closed ones (whichever `status` is) by Urgency.
+     * Tickets of one status, narrowed by `o` (a Ticket has a Trade when any of its Jobs
+     * does). Open ones come Urgent before High before Routine and then oldest first; closed
+     * ones (the Archive) the most recently closed first.
      */
-    async tickets(
-      agencyId: number,
-      propertyManagerId: number,
-      o: { filter: 'mine' | 'all'; status: 'open' | 'closed'; urgency: Ticket['urgency'] | null },
-    ) {
-      const every = await tickets.list(agencyId, await scope(propertyManagerId, o.filter));
-      const inStatus = every.filter((t) => t.status === o.status);
-      const countOf = (urgency: Ticket['urgency']) => inStatus.filter((t) => t.urgency === urgency).length;
-      return {
-        counts: {
-          open: every.filter((t) => t.status === 'open').length,
-          closed: every.filter((t) => t.status === 'closed').length,
-          urgent: countOf('urgent'),
-          high: countOf('high'),
-          routine: countOf('routine'),
-        },
-        tickets: await Promise.all(
-          inStatus.filter((t) => o.urgency === null || t.urgency === o.urgency).map(async (t) => ({ ...(await ticketSummary(t)), status: t.status })),
-        ),
-      };
+    async tickets(agencyId: number, propertyManagerId: number, o: ListOptions & { status: 'open' | 'closed' }) {
+      const inStatus = (await tickets.list(agencyId, await listScope(propertyManagerId, o))).filter(
+        (t) => t.status === o.status && (!o.urgency || t.urgency === o.urgency),
+      );
+      const withTrade = o.trade ? new Set((await tickets.jobsOfTickets(inStatus.map((t) => t.id))).filter((j) => j.trade === o.trade).map((j) => j.ticketId)) : null;
+      const shown = withTrade ? inStatus.filter((t) => withTrade.has(t.id)) : inStatus;
+      if (o.status === 'closed') shown.sort((a, b) => (b.closedAt ?? '').localeCompare(a.closedAt ?? '') || b.id - a.id);
+      return Promise.all(shown.map(async (t) => ({ ...(await ticketSummary(t)), status: t.status, closedAt: t.closedAt })));
     },
 
     /** What is waiting on someone outside the Agency: Quotes on a Property Owner, and Urgent Repairs on a Tenant's receipt. */

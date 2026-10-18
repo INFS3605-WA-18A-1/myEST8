@@ -84,7 +84,7 @@ const noDemo = (): DemoControls => ({
 
 describe('the rail', () => {
   test('links to the Phone simulator on every signed-in page only when the app runs as the demo', async () => {
-    const paths = ['/', '/requests', '/tickets', '/properties', '/tradies', '/settings', '/setup', '/dispatch', '/calendar', '/approvals'];
+    const paths = ['/', '/tickets', '/archive', '/properties', '/tradies', '/settings', '/setup', '/dispatch', '/calendar', '/approvals'];
     const live = await webWorld();
     const cookie = await live.signIn();
     for (const path of paths) expect(await text(live, path, cookie), path).not.toContain('href="/demo"');
@@ -97,7 +97,7 @@ describe('the rail', () => {
     const w = await webWorld();
     const { ticketId } = await busyDesk(w);
 
-    const paths = ['/', '/requests', '/tickets', '/approvals', '/calendar', '/properties', '/tradies', '/settings', '/setup', `/tickets/${ticketId}`, `/tradies/${w.ids.pete}`];
+    const paths = ['/', '/tickets', '/archive', '/approvals', '/calendar', '/properties', '/tradies', '/settings', '/setup', `/tickets/${ticketId}`, `/tradies/${w.ids.pete}`];
     for (const path of paths) {
       const html = await text(w, path);
       expect(railLinks(html), path).toEqual(RAIL);
@@ -119,7 +119,6 @@ describe('the rail', () => {
     const current = (html: string) => [...html.matchAll(/<a href="([^"]+)" class="rail-link[^"]*" aria-current="page"/g)].map((m) => m[1]);
     const expected: Record<string, string> = {
       '/': '/',
-      '/requests': '/tickets',
       '/tickets': '/tickets',
       '/archive': '/archive',
       '/approvals': '/approvals',
@@ -145,7 +144,7 @@ describe('the rail', () => {
 describe('signed out', () => {
   test('every new page sends a visitor to sign in', async () => {
     const w = await webWorld();
-    for (const path of ['/requests', '/tickets', '/approvals', '/calendar', '/properties', `/properties/${w.ids.kingSt}`, '/tradies', '/settings']) {
+    for (const path of ['/requests', '/tickets', '/archive', '/approvals', '/calendar', '/properties', `/properties/${w.ids.kingSt}`, '/tradies', '/settings']) {
       const res = await w.get(path);
       expect(res.status, path).toBe(303);
       expect(res.headers.get('location'), path).toBe(`/login?next=${encodeURIComponent(path)}`);

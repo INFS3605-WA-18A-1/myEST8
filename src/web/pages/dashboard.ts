@@ -98,8 +98,8 @@ const STAGE_TITLE: Record<Stage, string> = {
   done: 'Done',
 };
 
-/** Where a Maintenance Request's action may send the Property Manager back to: the Requests list or one request's review. */
-const REQUEST_RETURN = /^\/requests(\/\d+)?$/;
+/** Where a Maintenance Request's action may send the Property Manager back to: the Tickets list, or one request's review (/requests itself sends on to Tickets). */
+const REQUEST_RETURN = /^\/(tickets|requests(\/\d+)?)$/;
 
 /** File types safe to show in the browser. Anything else (HTML, SVG...) downloads instead. */
 const INLINE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'image/heif', 'application/pdf']);
@@ -242,7 +242,7 @@ function back(c: Context<WebEnv>) {
 
 /**
  * Back from a Maintenance Request's action: to the page it was taken on when the form
- * names one (its hidden `return` field, the Requests list or a review), else the dashboard.
+ * names one (its hidden `return` field, the Tickets list or a review), else the dashboard.
  */
 async function requestBack(c: Context<WebEnv>) {
   const form = (await c.req.parseBody({ all: true })) as FormValues;
