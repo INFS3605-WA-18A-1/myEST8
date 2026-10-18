@@ -1,9 +1,9 @@
-// Maintenance Requests waiting for review: the list at /requests, and one request
-// at /requests/:issueId. The review reads Summary first (tinted "Filled in by AI" while
-// the AI wrote it, with a pencil to edit), then one photo strip, then the Tenant's
-// answers; Decide sits beside it from 1024px and under the Summary on a phone. The
-// confirm, reject and urgency forms post to the dashboard's /requests endpoints with a
-// `return` path; editing the Summary posts to /requests/:issueId/summary.
+// One Maintenance Request waiting for review, at /requests/:issueId; the list of them is
+// on /tickets, and /requests sends the Property Manager there. The review reads Summary
+// first (tinted "Filled in by AI" while the AI wrote it, with a pencil to edit), then one
+// photo strip, then the Tenant's answers; Decide sits beside it from 1024px and under the
+// Summary on a phone. The confirm, reject and urgency forms post to the dashboard's
+// /requests endpoints with a `return` path; editing the Summary posts to /requests/:issueId/summary.
 
 import { Hono } from 'hono';
 import { html } from 'hono/html';
@@ -15,42 +15,16 @@ import { doubtsPhotos, passedChecks, photoCaption, requestFlags, type Check } fr
 import { formAction, text } from '../forms.ts';
 import { COLLEAGUES_ONLY, shareButton, shareUrl } from '../share.ts';
 import { shellInfo } from '../shell.ts';
-import { aiFilled, badge, button, countSentence, emptyState, field, flashFrom, formatAge, formatWhen, humanise, linkButton, page, photoGrid, postButton, queueRow, section, segmented, urgencyBadge, type Html } from '../ui.ts';
+import { aiFilled, badge, button, emptyState, field, flashFrom, formatWhen, humanise, linkButton, page, photoGrid, section, type Html } from '../ui.ts';
 
 type MaintenanceRequest = Awaited<ReturnType<PropertyManagerActions['requests']>>[number];
 
-/** The Maintenance Request review page under /requests. */
+/** The Maintenance Request review page under /requests, and /requests itself sending on to /tickets. */
 export function requestPages() {
   const pages = new Hono<WebEnv>();
 
-  pages.get('/', async (c) => {
-    const { actions, pm } = c.var;
-    const all = c.req.query('filter') === 'all';
-    const requests = byUrgency(await actions.requests({ filter: all ? 'all' : 'mine' }));
-    const now = actions.now();
-    return c.html(
-      page({
-        title: 'Requests',
-        pm,
-        active: 'tickets',
-        flash: flashFrom(c.req.url),
-        shell: await shellInfo(c),
-        subtitle: 'Maintenance Requests that passed the automatic checks and are waiting for you to confirm or reject.',
-        controls: segmented([
-          { label: 'Mine', href: '/requests', active: !all },
-          { label: 'All', href: '/requests?filter=all', active: all },
-        ]),
-        body: html`
-          ${countSentence([
-            { label: 'Maintenance Requests to review', one: 'Maintenance Request to review', count: requests.length, href: '#requests', decision: true },
-            { label: 'to check for Urgency', count: requests.filter((r) => r.checkUrgency).length, href: '#requests' },
-            { label: 'without photos', one: 'without photos', count: requests.filter((r) => r.noPhotos).length, href: '#requests' },
-          ])}
-          ${section({ title: 'Waiting for review', id: 'requests', body: requestList(requests, now, all) })}
-        `,
-      }),
-    );
-  });
+  // The list moved to /tickets, with the open Tickets under it.
+  pages.get('/', (c) => c.redirect(`/tickets${new URL(c.req.url).search}`, 303));
 
   pages.get('/:issueId{[0-9]+}', async (c) => {
     const { actions, pm } = c.var;
@@ -58,7 +32,7 @@ export function requestPages() {
     const request = await actions.request(issueId);
     const flash = flashFrom(c.req.url);
     if (!request) {
-      const body = emptyState('There is no Maintenance Request waiting for you with that number.', linkButton('Back to Requests', '/requests'));
+      const body = emptyState('There is no Maintenance Request waiting for you with that number.', linkButton('Back to Tickets', '/tickets'));
       return c.html(page({ title: 'Maintenance Request not found', pm, active: 'tickets', flash, shell: await shellInfo(c), body }), 404);
     }
     const { timeZone } = actions.agency();
@@ -70,7 +44,7 @@ export function requestPages() {
         active: 'tickets',
         flash,
         shell: await shellInfo(c),
-        actions: html`${linkButton('Back to Requests', '/requests', { variant: 'ghost', size: 'sm' })}${shareButton({
+        actions: html`${linkButton('Back to Tickets', '/tickets', { variant: 'ghost', size: 'sm' })}${shareButton({
           title: `Maintenance Request: ${lead}`,
           text: `Maintenance Request at ${request.propertyAddress}, waiting for review: ${lead}`,
           url: shareUrl(c, `/requests/${issueId}`),
@@ -102,30 +76,6 @@ function headline(r: Pick<MaintenanceRequest, 'summary' | 'description'>): strin
 export function byUrgency<T extends { urgency: string; reportedAt: string }>(requests: T[]): T[] {
   const rank = (u: string) => (URGENCIES as readonly string[]).indexOf(u);
   return [...requests].sort((a, b) => rank(a.urgency) - rank(b.urgency) || a.reportedAt.localeCompare(b.reportedAt));
-}
-
-/** Each request leads with its Summary, then the address, its badges, who reported it and when, with Confirm or Review. */
-function requestList(requests: MaintenanceRequest[], now: Date, all: boolean): Html {
-  if (!requests.length) {
-    return emptyState(
-      'No Maintenance Requests waiting for you. A Tenant’s report lands here once its photos are in, or after 48 hours without them.',
-      all ? undefined : linkButton('Show all Maintenance Requests', '/requests?filter=all'),
-    );
-  }
-  return html`<div class="request-list grid gap-2">
-    ${requests.map((r) =>
-      queueRow({
-        href: `/requests/${r.issueId}`,
-        thumb: r.photos[0] ? html`<img src="/files/${r.photos[0].fileId}" alt="Photo of the issue" width="56" height="56" loading="lazy" />` : undefined,
-        title: headline(r),
-        detail: r.propertyAddress,
-        badges: [urgencyBadge(r.urgency), badge(humanise(r.trade)), ...requestFlags(r).map((f) => badge(f.label, f.tone))],
-        meta: `${r.tenantName}, ${formatAge(r.reportedAt, now)}`,
-        decision: true,
-        actions: html`${postButton(`/requests/${r.issueId}/confirm`, 'Confirm', { size: 'sm' })}${linkButton('Review', `/requests/${r.issueId}`, { variant: 'secondary', size: 'sm' })}`,
-      }),
-    )}
-  </div>`;
 }
 
 /**
@@ -296,7 +246,7 @@ function decide(r: MaintenanceRequest, editing: boolean): Html {
     <details class="request-reject">
       <summary>Reject this Maintenance Request…</summary>
       <form method="post" action="${base}/reject" class="request-reject-form">
-        <input type="hidden" name="return" value="/requests" />
+        <input type="hidden" name="return" value="/tickets" />
         ${field({ label: 'Reason for the Tenant', name: 'reason', id: `reason-${r.issueId}`, type: 'textarea', rows: 3, required: true, placeholder: 'Why this is rejected' })}
         ${button('Reject', { variant: 'danger', size: 'sm' })}
       </form>

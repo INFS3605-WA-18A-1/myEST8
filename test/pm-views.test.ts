@@ -11,14 +11,39 @@ async function unknownProperty(w: World) {
 }
 
 describe('tickets.list and the Tickets view', () => {
-  test('lists open and closed Tickets, and counts them by status', async () => {
+  test('lists open or closed Tickets, Mine or All', async () => {
     const w = await world();
     const { ticketId } = await tomsTapTicket(w);
-    expect((await w.alice.tickets()).counts).toMatchObject({ open: 1, closed: 0 });
-    expect((await w.alice.tickets()).tickets.map((t) => t.ticketId)).toEqual([ticketId]);
-    expect((await w.alice.tickets({ status: 'closed' })).tickets).toEqual([]);
-    expect((await w.bob.tickets({ filter: 'mine' })).tickets).toEqual([]);
-    expect((await w.bob.tickets({ filter: 'all' })).tickets.map((t) => t.ticketId)).toEqual([ticketId]);
+    expect((await w.alice.tickets()).map((t) => t.ticketId)).toEqual([ticketId]);
+    expect(await w.alice.tickets({ status: 'closed' })).toEqual([]);
+    expect(await w.bob.tickets({ filter: 'mine' })).toEqual([]);
+    expect((await w.bob.tickets({ filter: 'all' })).map((t) => t.ticketId)).toEqual([ticketId]);
+  });
+
+  test('narrows by Urgency, by the Trade of any Job, and by Property, only within Mine', async () => {
+    const w = await world();
+    const { ticketId, jobId } = await tomsTapTicket(w);
+    const ids = async (o: Parameters<World['alice']['tickets']>[0]) => (await w.alice.tickets(o)).map((t) => t.ticketId);
+    expect(await ids({ urgency: 'routine' })).toEqual([ticketId]);
+    expect(await ids({ urgency: 'high' })).toEqual([]);
+    expect(await ids({ trade: 'plumbing' })).toEqual([ticketId]);
+    expect(await ids({ trade: 'electrical' })).toEqual([]);
+    await w.alice.setJobTrade(jobId, 'electrical');
+    expect(await ids({ trade: 'electrical' })).toEqual([ticketId]);
+    expect(await ids({ propertyId: w.ids.kingSt })).toEqual([ticketId]);
+    expect(await ids({ propertyId: w.ids.oceanAve, filter: 'all' })).toEqual([]);
+    // Bob's own Properties don't include King St, so filtering to it in Mine shows nothing.
+    expect(await w.bob.tickets({ propertyId: w.ids.kingSt })).toEqual([]);
+    expect((await w.bob.tickets({ propertyId: w.ids.kingSt, filter: 'all' })).map((t) => t.ticketId)).toEqual([ticketId]);
+  });
+
+  test('closed Tickets carry when they were closed', async () => {
+    const w = await world();
+    const { ticketId, jobId } = await tomsTapTicket(w);
+    await w.alice.cancelJob(jobId);
+    await w.alice.closeTicket(ticketId);
+    const [closed] = await w.alice.tickets({ status: 'closed' });
+    expect(closed).toMatchObject({ ticketId, status: 'closed', closedAt: expect.any(String), photos: [] });
   });
 });
 

@@ -54,7 +54,7 @@ test('a High request gets site quote visits from two Tradies, a revised price, a
   await tenant.close();
 
   // The Maintenance Request arrives; the Property Manager makes it High and confirms it.
-  await page.goto('/requests');
+  await page.goto('/tickets');
   await eventually(page, () => expect(page.getByText(report).first()).toBeVisible({ timeout: 1_000 }));
   await page.getByRole('link', { name: new RegExp(report) }).first().click();
   await page.getByLabel('Urgency').selectOption('high');
