@@ -171,7 +171,7 @@ function header(r: Reimbursement, now: Date): Html {
     <h2 class="reimbursement-issue">${r.summary ?? r.description}</h2>
     <p><a class="link" href="/properties/${r.propertyId}">${r.propertyAddress}</a></p>
     <p class="reimbursement-meta">
-      <span>Tenant ${r.tenant.name}</span>
+      <span>Tenant <a class="link" href="/tenants/${r.tenant.personId}">${r.tenant.name}</a></span>
       <span>${reimbursementBadge(r.status)}</span>
       ${amount}
       <time datetime="${r.reportedAt}">Reported ${formatAge(r.reportedAt, now)}</time>
