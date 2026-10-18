@@ -168,9 +168,10 @@ The mock classifier and quote reader read messages by keywords, much as the real
 
 ### 3. Done, ratings and closing (about 1 minute)
 
-1. **As Pete:** "All done, washer replaced". Tom is asked whether it was fixed properly.
-2. **As Tom:** "5". On the Ticket, Alice rates Pete as well.
-3. **Close the Ticket.** Tom and Olivia are told the repair is complete.
+1. **As Pete:** "All done, washer replaced". The visit hasn't started yet, so nothing changes: Pete is told when it is booked for, and the message waits unread on the Ticket. A visit is never done before it starts.
+2. **Time travel** past Pete's visit (+24h or +72h in the simulator, until the clock is past its start), then **as Pete** send "All done, washer replaced" again. Tom is asked whether it was fixed properly.
+3. **As Tom:** "5". On the Ticket, Alice rates Pete as well.
+4. **Close the Ticket.** Tom and Olivia are told the repair is complete.
 
 ### 4. An Urgent Repair (about 1 minute)
 

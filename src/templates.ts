@@ -129,6 +129,12 @@ export const templates = {
     'Work order',
     (d, a) => `Work order from ${a.name}: ${trade(d.trade)} at ${d.propertyAddress}, ${visit(d.visitStart, a)}. Issue: ${d.description}. Reply DONE when finished, or tell us if you need another time.`,
   ),
+  'tradie.done_too_early': template<{ propertyAddress: string; visitStart: string; inspection: boolean }>(
+    'Not done yet',
+    (d, a) =>
+      `Thanks. Your ${d.inspection ? 'Site Inspection' : 'visit'} at ${d.propertyAddress} is booked for ${visit(d.visitStart, a)}, so ${a.name} can't mark it done yet. ` +
+      `Reply DONE after the visit${d.inspection ? ' and we will ask for your Firm Quote' : ''}, or tell us if you need another time.`,
+  ),
   'tradie.visit_moved': template<{ propertyAddress: string; visitStart: string }>(
     'Visit moved',
     (d, a) => `Your visit to ${d.propertyAddress} has moved to ${visit(d.visitStart, a)}.`,

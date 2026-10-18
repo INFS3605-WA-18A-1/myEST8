@@ -4,12 +4,14 @@
 // and every POST goes through formAction back to the Ticket.
 
 import { Hono } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
 import { ActionError, notFound, TRADES, type Trade, type Urgency } from '../../shared.ts';
 import { AVAILABILITY_LABELS } from '../../templates.ts';
 import type { WebEnv } from '../env.ts';
 import { PHOTO_FLAG } from './dashboard.ts';
+import { DATE_INPUTS, firmQuoteFrom } from './quote-form.ts';
 import { cents, formAction, int, isoToLocal, list, localToIso, text, type FormValues } from '../forms.ts';
 import { collapsible, messageLog } from '../messages.ts';
 import { COLLEAGUES_ONLY, shareButton, shareUrl } from '../share.ts';
@@ -28,7 +30,7 @@ import {
   formatMoney,
   formatWhen,
   humanise,
-  jobStageLabel,
+  JOB_TRACKER_STAGES,
   linkButton,
   page,
   photoGrid,
@@ -39,13 +41,17 @@ import {
   table,
   timeline,
   urgencyBadge,
+  withFlash,
   type Html,
+  type StepState,
 } from '../ui.ts';
 
 type TicketView = Awaited<ReturnType<PropertyManagerActions['ticket']>>;
 type JobView = TicketView['jobs'][number];
 type QuoteView = JobView['quotes'][number];
 type RequestView = JobView['quoteRequests'][number];
+/** An Estimate as a Tradie's Quote Request carries it (without the Tradie's ratings). */
+type EstimateView = NonNullable<RequestView['estimate']>;
 type WorkOrderView = NonNullable<JobView['workOrder']>;
 type Recommendation = JobView['recommendations'][number];
 type Photo = TicketView['photos'][number];
@@ -67,6 +73,7 @@ type Extras = {
 const MIN_QUOTES = 2;
 const FREE_SLOTS_SHOWN = 3;
 const DEFAULT_VISIT_HOURS = 2;
+const MB = 1024 * 1024;
 const nothing = html``;
 
 /** The Ticket view under /tickets/:id and every Job action on it. */
@@ -157,7 +164,7 @@ export function ticketPages() {
       proposedTime: time ? localToIso(time, timeZone) : null,
     });
     const confirmed = quoteIn(await actions.ticket(ticket.ticketId), params.quoteId).quote;
-    return `Quote from ${confirmed.businessName} confirmed at ${formatMoney(confirmed.priceCents)}`;
+    return `${confirmed.stage === 'estimate' ? 'Estimate' : 'Quote'} from ${confirmed.businessName} confirmed at ${formatMoney(confirmed.priceCents)}`;
   });
 
   onPost(pages, '/:id/quotes/:quoteId/choose', async ({ actions, ticket, form, params }) => {
@@ -165,8 +172,8 @@ export function ticketPages() {
     await actions.chooseQuote(quote.quoteId, text(form, 'reason') || undefined);
     const chosen = quoteIn(await actions.ticket(ticket.ticketId), params.quoteId).quote;
     return chosen.status === 'awaiting_owner'
-      ? `Quote from ${chosen.businessName} chosen. It takes the Repair Cost over the Max Repair Cost, so the Property Owner has been asked to approve it.`
-      : `Quote from ${chosen.businessName} chosen and approved`;
+      ? `Firm Quote from ${chosen.businessName} chosen. It takes the Repair Cost over the Max Repair Cost, so the Property Owner has been asked to approve it.`
+      : `Firm Quote from ${chosen.businessName} chosen and approved`;
   });
 
   onPost(pages, '/:id/jobs/:jobId/work-order', async ({ actions, ticket, form, params, timeZone }) => {
@@ -225,6 +232,23 @@ export function ticketPages() {
     return needed
       ? `${request.businessName} will give a Firm Quote after a Site Inspection`
       : `${request.businessName} can give a Firm Quote without a Site Inspection`;
+  });
+
+  // A Firm Quote the Tradie sent another way (a PDF by email, say), entered by the Property
+  // Manager: the same fields as the Tradie's quote page, read by the same parser and checked
+  // by the core the same way. A PDF of up to 10 MB, plus the form.
+  pages.use(
+    '/:id/quote-requests/:quoteRequestId/firm-quote',
+    bodyLimit({
+      maxSize: 11 * MB,
+      onError: (c) => c.redirect(withFlash(`/tickets/${encodeURIComponent(c.req.param('id') ?? '')}`, 'error', 'That PDF is too big. Attach one under 10 MB.'), 303),
+    }),
+  );
+  onPost(pages, '/:id/quote-requests/:quoteRequestId/firm-quote', async ({ actions, ticket, form, params, timeZone }) => {
+    const request = requestIn(ticket, params.quoteRequestId);
+    const input = await firmQuoteFrom(form, timeZone);
+    await actions.enterFirmQuote(request.quoteRequestId, input);
+    return `Firm Quote from ${request.businessName} saved at ${formatMoney(input.priceCents)}. It supersedes their Estimate, which stays on record.`;
   });
 
   onPost(pages, '/:id/work-orders/:workOrderId/inspected', async ({ actions, ticket, params }) => {
@@ -382,11 +406,12 @@ function ticketBody(t: TicketView, x: Extras, share: Html): Html {
  * The Ticket's header, hand-built in the docket's large shape (the number at 40px and
  * Urgency in the stub, a dashed perforation) because it reads the Summary first, with
  * the address linked under it: then the Tenant, status, age, Repair Cost (once there
- * is one) and Max Repair Cost in one line. Share, Change Urgency and Close Ticket
+ * is one), Max Repair Cost and any Call-out Fees owed (never part of the Repair Cost) in one line. Share, Change Urgency and Close Ticket
  * (once it can work) sit at its top right from 1024px and under the facts on phones.
  */
 function ticketHeader(t: TicketView, x: Extras, share: Html): Html {
   const overMax = t.repairCostCents > t.maxRepairCostCents;
+  const fees = t.jobs.reduce((sum, job) => sum + calloutFeesOwed(job).cents, 0);
   const stub = t.urgency === 'high' ? 'bg-high-bg text-high' : 'bg-page text-ink';
   return html`<header class="ticket-head">
     <div class="ticket-stub ${stub}">
@@ -406,6 +431,7 @@ function ticketHeader(t: TicketView, x: Extras, share: Html): Html {
             ? html`<span class="num ${overMax ? 'text-high' : 'text-ink'}">Repair Cost <strong>${formatMoney(t.repairCostCents)}</strong>${overMax ? ", over the Max Repair Cost with the Property Owner's approval" : ''}</span>`
             : nothing}
           <span class="num">Max Repair Cost ${formatMoney(t.maxRepairCostCents)}</span>
+          ${fees > 0 ? html`<span class="num" data-callout-fees>Call-out Fees owed ${formatMoney(fees)}, on top of the Repair Cost</span>` : nothing}
           ${t.checkUrgency ? html`<span class="flex items-center gap-2">${badge('Check urgency', 'warning')} The intake agent wasn't sure.</span>` : nothing}
         </p>
       </div>
@@ -472,13 +498,18 @@ function jobStep(t: TicketView, job: JobView, x: Extras): NextStep | null {
       const waiting = job.quoteRequests.filter((r) => r.status === 'sent' || r.status === 'reminded');
       const forFirm = job.quoteRequests.filter((r) => r.status === 'inspected' || (r.status === 'estimated' && !r.inspectionNeeded));
       const booked = job.quoteRequests.filter((r) => r.status === 'inspection_booked');
+      const toBook = job.quoteRequests.filter((r) => r.status === 'estimated' && r.inspectionNeeded);
+      // A Tradie's own row on the Job, where their next action is.
+      const row = (r: { quoteRequestId: number } | undefined) => (r ? `#quote-request-${r.quoteRequestId}` : at('requests'));
+      const decideAt = (text: string, href: string): NextStep => ({ text, href, decision: true, job });
       if (job.decision === 'check_quotes' && unchecked.length) {
         const names = andList(unchecked.map((q) => q.businessName));
-        return decide(`Check ${unchecked.length} ${plural(unchecked.length, 'Quote')} from ${names}`, 'quotes');
+        const noun = unchecked.every((q) => q.stage === 'estimate') ? 'Estimate' : 'Quote';
+        const first = job.quoteRequests.find((r) => r.quoteRequestId === unchecked[0]!.quoteRequestId);
+        return decideAt(`Check ${unchecked.length} ${plural(unchecked.length, noun)} from ${names}`, row(first));
       }
-      if (job.decision === 'book_inspection') {
-        const names = andList(job.quoteRequests.filter((r) => r.status === 'estimated' && r.inspectionNeeded).map((r) => r.businessName));
-        return decide(`Book a Site Inspection with ${names}`, 'inspections');
+      if (job.decision === 'book_inspection' && toBook.length) {
+        return decideAt(`Book a Site Inspection with ${andList(toBook.map((r) => r.businessName))}`, row(toBook[0]));
       }
       if (job.decision === 'choose_quote') return decide(`Choose a Firm Quote: ${firm.length} in`, 'quotes');
       if (!job.quoteRequests.length) return decide(job.checkTrade ? 'Check the Trade, then send Quote Requests' : 'Send Quote Requests', 'tradies');
@@ -487,8 +518,16 @@ function jobStep(t: TicketView, job: JobView, x: Extras): NextStep | null {
         const names = andList(waiting.map((r) => r.businessName));
         return wait(`Waiting on ${plural(waiting.length, 'an Estimate', 'Estimates')} from ${names}, asked ${formatAge(oldest.sentAt, x.now)}`, 'requests');
       }
-      if (booked.length) return wait(`Waiting on the Site ${plural(booked.length, 'Inspection')} with ${andList(booked.map((r) => r.businessName))}`, 'inspections');
-      if (forFirm.length) return wait(`Waiting on ${plural(forFirm.length, 'a Firm Quote', 'Firm Quotes')} from ${andList(forFirm.map((r) => r.businessName))}`, 'quotes');
+      if (booked.length) {
+        const names = andList(booked.map((r) => r.businessName));
+        return { text: `Waiting on the Site ${plural(booked.length, 'Inspection')} with ${names}`, href: row(booked[0]), decision: false, job };
+      }
+      if (forFirm.length) {
+        const names = andList(forFirm.map((r) => r.businessName));
+        // A cheap routine Job can go ahead on an Estimate instead (ADR 0009).
+        const orProceed = job.quoteRequests.some((r) => r.canProceedOnEstimate && !r.proceedNeedsConfirm) ? ', or proceed on an Estimate' : '';
+        return wait(`Waiting on ${plural(forFirm.length, 'a Firm Quote', 'Firm Quotes')} from ${names}${orProceed}`, 'requests');
+      }
       if (firm.length === 1) return decide(`Choose ${firm[0]!.businessName}'s Firm Quote with a reason, or ask more Tradies`, 'quotes');
       return decide('Ask more Tradies to quote', 'tradies');
     }
@@ -507,7 +546,8 @@ function jobStep(t: TicketView, job: JobView, x: Extras): NextStep | null {
       if (wo.status === 'active' && wo.rescheduleRequestedBy) {
         return decide(`Find a new time: the ${wo.rescheduleRequestedBy === 'tenant' ? 'Tenant' : 'Tradie'} asked for another`, 'work-order');
       }
-      return wait(`Visit ${formatWhen(wo.start, x.timeZone)} with ${wo.businessName}`, 'work-order');
+      const confirmed = wo.visitConfirmed ? '' : ', waiting on the Tenant to confirm';
+      return wait(`Visit ${formatWhen(wo.start, x.timeZone)} with ${wo.businessName}${confirmed}`, 'work-order');
     }
     case 'done':
       return lastEvent(t, 'tradie_rated', job.jobId) ? null : decide(`Rate the Tradie: ${job.workOrder?.businessName ?? 'how did they do'}`, 'rating');
@@ -517,19 +557,86 @@ function jobStep(t: TicketView, job: JobView, x: Extras): NextStep | null {
 }
 
 /**
- * Where the Ticket stands across the top: Quoting (Site Inspections included), With
- * Property Owner, Ready to book, Booked, Done. It
- * follows the Job the Next block is about, named when the Ticket has several.
+ * Where the Ticket stands across the top, for the Job the Next block is about (named
+ * when the Ticket has several): Estimates, Site inspection, Firm Quote, With Property
+ * Owner, Ready to book, Booked, Done. A stage is ticked only once it has really
+ * happened, never because a later one began.
  */
 function stageTracker(t: TicketView, x: Extras): Html {
   const live = t.jobs.filter((j) => j.status !== 'cancelled');
   const job = nextStep(t, x)?.job ?? live.find(isOpen) ?? live.at(-1);
   if (!job) return nothing;
-  const order = ['quoting', 'awaiting_owner', 'approved', 'scheduled', 'done'];
-  const current = order.indexOf(job.status);
-  const items = order.map((status, i) => ({ label: jobStageLabel(status), done: job.status === 'done' || i < current }));
   const name = t.jobs.length > 1 ? html`<p class="ticket-stages-job">${jobLabel(t, job.jobId)}</p>` : nothing;
-  return html`<nav class="ticket-stages" aria-label="Where the Ticket stands">${name}${steps(items, { horizontal: true, ...(job.status === 'done' ? {} : { current }) })}</nav>`;
+  return html`<nav class="ticket-stages" aria-label="Where the Ticket stands">${name}${steps(jobStages(job, x), { horizontal: true })}</nav>`;
+}
+
+type Stage = { label: string; state: StepState; detail?: string };
+
+/**
+ * A Job's stages and how each stands. While the Job is getting Quotes, the current stage
+ * is Firm Quote once one is in (or once every Tradie can quote firm), Site inspection while
+ * one is still to happen, else Estimates. Site inspection is Not needed when no Tradie
+ * needed one, and left out when the Job went ahead on an Estimate without one; Firm Quote
+ * then says the Job is proceeding on an Estimate, and With Property Owner is Not needed
+ * when the Repair Cost stayed within the Max Repair Cost. Booked waits on the Tenant to
+ * confirm the visit, and is ticked only once they have (or the Job is done).
+ */
+function jobStages(job: JobView, x: Extras): Stage[] {
+  const [ESTIMATES, SITE, FIRM, OWNER, READY, BOOKED, DONE] = JOB_TRACKER_STAGES;
+  const quoting = job.status === 'quoting';
+  const decided = ['awaiting_owner', 'approved', 'scheduled', 'done'].includes(job.status);
+  const chosen = decided ? job.quotes.find((q) => q.status === 'approved' || q.status === 'awaiting_owner') : undefined;
+  const proceeded = chosen?.stage === 'estimate';
+  const requests = job.quoteRequests;
+  const estimatesIn = job.quotes.some((q) => q.stage === 'estimate');
+  const firmIn = job.quotes.filter((q) => q.stage === 'firm' && q.confirmed && q.status === 'open').length;
+  const inspected = requests.some((r) => r.inspection?.status === 'done');
+  const needed = requests.some((r) => (r.inspectionNeeded || r.inspection) && r.status !== 'declined');
+  const toInspect = requests.some((r) => r.inspectionNeeded && (r.status === 'estimated' || r.status === 'inspection_booked'));
+  const stillAsked = requests.some((r) => r.status === 'sent' || r.status === 'reminded');
+  const at = !quoting ? null : !estimatesIn ? ESTIMATES : toInspect && !firmIn ? SITE : FIRM;
+  const state = (label: string, done: boolean): StepState => (done ? 'done' : label === at ? 'current' : 'upcoming');
+
+  const stages: Stage[] = [{ label: ESTIMATES, state: state(ESTIMATES, estimatesIn) }];
+  if (inspected) stages.push({ label: SITE, state: 'done' });
+  else if (!proceeded) {
+    // Not needed once every Tradie has answered and none needs one (or the Job has moved on without one).
+    const notNeeded = !needed && (decided || (estimatesIn && !stillAsked));
+    // While a visit is booked, when the next one is.
+    const next = requests.flatMap((r) => (r.inspection?.status === 'active' ? [r.inspection.start] : [])).sort()[0];
+    stages.push(
+      notNeeded
+        ? { label: SITE, state: 'skipped', detail: 'Not needed' }
+        : { label: SITE, state: state(SITE, false), ...(next ? { detail: `Booked ${formatWhen(next, x.timeZone)}` } : {}) },
+    );
+  }
+  if (proceeded) stages.push({ label: FIRM, state: 'skipped', detail: `Proceeding on Estimate (cap ${formatMoney(chosen!.notToExceedCents)})` });
+  else stages.push({ label: FIRM, state: state(FIRM, decided), ...(quoting && firmIn ? { detail: `${firmIn} in` } : {}) });
+
+  const approval = job.approval;
+  if (job.status === 'awaiting_owner') stages.push({ label: OWNER, state: 'current', detail: 'Waiting on approval' });
+  else if (decided && approval?.status === 'approved' && approval.quoteId === chosen?.quoteId) stages.push({ label: OWNER, state: 'done' });
+  else if (decided) stages.push({ label: OWNER, state: 'skipped', detail: 'Not needed' });
+  else stages.push({ label: OWNER, state: 'upcoming', ...(approval?.status === 'declined' ? { detail: 'Said no to the last one' } : {}) });
+
+  const booked = job.status === 'scheduled' || job.status === 'done';
+  stages.push({ label: READY, state: booked ? 'done' : job.status === 'approved' ? 'current' : 'upcoming' });
+
+  const wo = job.workOrder;
+  if (job.status === 'done') stages.push({ label: BOOKED, state: 'done', ...(wo?.visitConfirmed ? { detail: 'Tenant confirmed' } : {}) });
+  else if (job.status === 'scheduled' && wo?.rescheduleRequestedBy) {
+    stages.push({ label: BOOKED, state: 'current', detail: `${wo.rescheduleRequestedBy === 'tenant' ? 'Tenant' : 'Tradie'} asked to move it` });
+  } else if (job.status === 'scheduled' && wo?.visitConfirmed) stages.push({ label: BOOKED, state: 'done', detail: 'Tenant confirmed' });
+  else if (job.status === 'scheduled') stages.push({ label: BOOKED, state: 'current', detail: 'Waiting on Tenant to confirm' });
+  else stages.push({ label: BOOKED, state: 'upcoming' });
+
+  const visitDue = job.status === 'scheduled' && wo?.visitConfirmed && !wo.rescheduleRequestedBy;
+  stages.push({
+    label: DONE,
+    state: job.status === 'done' ? 'done' : visitDue ? 'current' : 'upcoming',
+    ...(visitDue && wo ? { detail: `Visit ${formatWhen(wo.start, x.timeZone)}` } : {}),
+  });
+  return stages;
 }
 
 /** "Reported 2 days ago", in the Agency's clock's hours and days. */
@@ -640,8 +747,25 @@ function jobCard(t: TicketView, job: JobView, x: Extras): Html {
     title: jobLabel(t, job.jobId),
     actions: html`${statusBadge(job.status, { job: true })} ${job.checkTrade ? badge('Check trade', 'warning') : nothing}`,
     body: html`${nextAction(t, job, x)}
+      ${calloutFeesLine(job)}
       ${jobMore(t, job, x)}`,
   });
+}
+
+/** The Call-out Fees the Job owes: each Tradie's whose Site Inspection has happened, whether or not they get the Job. */
+function calloutFeesOwed(job: JobView): { cents: number; tradies: string[] } {
+  const owed = job.quoteRequests.filter((r) => r.inspection?.status === 'done' && r.estimate?.calloutFeeCents);
+  return { cents: owed.reduce((sum, r) => sum + r.estimate!.calloutFeeCents!, 0), tradies: owed.map((r) => r.businessName) };
+}
+
+/** The Call-out Fees owed, on a line of their own near the Job's costs: they are not part of the Repair Cost. */
+function calloutFeesLine(job: JobView): Html {
+  const { cents, tradies } = calloutFeesOwed(job);
+  if (!cents) return nothing;
+  return html`<p class="callout-fees" id="job-${job.jobId}-fees">
+    <span class="num font-semibold">Call-out Fees owed ${formatMoney(cents)}</span>
+    <span class="text-muted">to ${andList(tradies)} for ${plural(tradies.length, 'a Site Inspection', 'Site Inspections')} done. Owed whether or not they get the Job, and not part of the Repair Cost.</span>
+  </p>`;
 }
 
 /** A cancelled Job stays on the record, closed until someone opens it. */
@@ -679,18 +803,18 @@ function nextAction(t: TicketView, job: JobView, x: Extras): Html {
 }
 
 /**
- * While quoting: the Trade if the intake agent wasn't sure, the Quotes compared
- * side by side, who has been asked and who hasn't replied, then the Tradies to ask
- * (folded away once the first round has gone).
+ * While quoting: the Trade if the intake agent wasn't sure, then each Tradie asked on
+ * their own row (where they are and their next action), then the Firm Quotes and the
+ * Estimates in two tables that are never merged, then the Tradies to ask (folded away
+ * once the first round has gone).
  */
 function quotingAction(t: TicketView, job: JobView, x: Extras): Html {
   const declined = job.approval?.status === 'declined';
   return html`<div class="space-y-6">
-    ${declined ? alert('The Property Owner said NO. Choose another Quote.', 'warning') : nothing}
+    ${declined ? alert('The Property Owner said NO. Choose another Firm Quote, or proceed on another Estimate.', 'warning') : nothing}
     ${job.checkTrade && !job.quoteRequests.length ? tradeForm(t, job) : nothing}
+    ${job.quoteRequests.length ? tradieProgress(t, job, x) : nothing}
     ${job.quotes.length ? quotesSection(t, job, x) : nothing}
-    ${inspectionsSection(t, job, x)}
-    ${job.quoteRequests.length ? quoteRequestsWaiting(job, x) : nothing}
     ${job.quoteRequests.length
       ? html`<details class="group" id="job-${job.jobId}-tradies">
           <summary class="cursor-pointer text-sm font-medium text-action">Ask more Tradies</summary>
@@ -840,43 +964,176 @@ function quoteRequestsSection(job: JobView, x: Extras): Html {
   return html`<section class="space-y-3">${sectionHeader('Quote Requests')} ${table(['Tradie', 'Sent', 'Status'], rows)}</section>`;
 }
 
-const REPLY: Record<string, string> = {
-  sent: 'No reply yet',
-  reminded: 'No reply after a reminder',
-  estimated: 'Estimate in',
-  inspection_booked: 'Site Inspection booked',
-  inspected: 'Inspected, Firm Quote to come',
-  firm_quoted: 'Firm Quote in',
-  declined: 'Declined',
-  closed: 'Closed',
-};
+/** What a Tradie who hasn't given an Estimate yet has done. */
+const NO_REPLY: Record<string, string> = { sent: 'No reply yet', reminded: 'No reply after a reminder' };
 
 /**
- * Every Quote Request on the Job while it is getting Quotes: how many were asked and
- * have given an Estimate, then each Tradie with how their request stands and how long
- * ago they were asked. Each moves on its own.
+ * Each Tradie asked, on their own row, as each moves on their own (ADR 0009): how many
+ * were asked and have given an Estimate, then per Tradie a chip for where they are,
+ * what they have given (the Estimate, the Site Inspection, the Firm Quote) and their
+ * next action: check the Estimate, book or mark the Site Inspection, say whether one is
+ * needed, proceed on the Estimate, or enter a Firm Quote they sent another way.
  */
-function quoteRequestsWaiting(job: JobView, x: Extras): Html {
+function tradieProgress(t: TicketView, job: JobView, x: Extras): Html {
   const waiting = job.quoteRequests.filter((r) => r.status === 'sent' || r.status === 'reminded').length;
   const estimated = job.quoteRequests.filter((r) => r.estimate !== null).length;
   const asked = job.quoteRequests.length;
   return html`<section class="space-y-2" id="job-${job.jobId}-requests">
-    ${sectionHeader('Quote Requests')}
-    <p class="text-sm text-muted">${asked} asked: ${estimated} gave an Estimate, ${waiting} waiting on a reply.</p>
-    <ul role="list" class="divide-y divide-line rounded-[4px] border border-line text-sm">
-      ${job.quoteRequests.map((r) => {
-        const live = r.status !== 'declined' && r.status !== 'closed';
-        return html`<li class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-3 py-2">
-          ${tradieLink(r.tradieId, r.businessName)}
-          <span class="${live ? '' : 'text-muted'}"
-            >${REPLY[r.status] ?? humanise(r.status)}, <span class="text-muted"
-              >asked <time datetime="${r.sentAt}" title="${formatWhen(r.sentAt, x.timeZone)}">${formatAge(r.sentAt, x.now)}</time></span
-            ></span
-          >
-        </li>`;
-      })}
+    ${sectionHeader('Tradies quoting')}
+    <p class="text-sm text-muted">${asked} asked: ${estimated} gave an Estimate, ${waiting} waiting on a reply. Each Tradie moves on their own.</p>
+    <ul role="list" class="tradie-progress" aria-label="Tradies quoting for the ${humanise(job.trade)} Job">
+      ${job.quoteRequests.map((r) => tradieRow(t, job, r, x))}
     </ul>
   </section>`;
+}
+
+/** A Tradie's place in staged quoting, as a chip with its word. */
+function requestChip(r: RequestView): Html {
+  switch (r.status) {
+    case 'sent':
+    case 'reminded':
+      return badge('Asked');
+    case 'estimated':
+      return r.inspectionNeeded ? badge('Needs inspection', 'warning') : badge('Estimate in', 'info');
+    case 'inspection_booked':
+      return badge('Inspection booked', 'info');
+    case 'inspected':
+      return badge('Inspected', 'info');
+    case 'firm_quoted':
+      return badge('Firm Quote in', 'success');
+    case 'declined':
+      return badge('Declined');
+    default:
+      return badge('Closed');
+  }
+}
+
+function tradieRow(t: TicketView, job: JobView, r: RequestView, x: Extras): Html {
+  const live = r.status !== 'declined' && r.status !== 'closed';
+  const asked = html`<span class="text-muted">asked <time datetime="${r.sentAt}" title="${formatWhen(r.sentAt, x.timeZone)}">${formatAge(r.sentAt, x.now)}</time></span>`;
+  const e = r.estimate;
+  const facts: Html[] = [];
+  if (e) {
+    facts.push(html`<span>Estimate <strong class="num">${formatMoney(e.priceCents)}</strong> <span class="text-muted">(non-binding)</span>${e.confirmed ? nothing : html` ${badge('Needs checking', 'warning')}`}</span>`);
+    if (e.proposedTime) facts.push(html`<span>Earliest ${formatWhen(e.proposedTime, x.timeZone)}</span>`);
+    if (r.inspectionNeeded) {
+      const fee = e.calloutFeeCents ? ` for a Call-out Fee of ${formatMoney(e.calloutFeeCents)}` : '';
+      facts.push(html`<span>Site Inspection needed${fee}${r.inspectionOverride !== null ? html` <span class="text-xs text-muted">(set by you)</span>` : nothing}</span>`);
+    } else if (r.inspectionOverride === false) {
+      facts.push(html`<span>No Site Inspection <span class="text-xs text-muted">(set by you)</span></span>`);
+    }
+  }
+  if (r.firmQuote) facts.push(html`<span>Firm Quote <strong class="num">${formatMoney(r.firmQuote.priceCents)}</strong></span>`);
+  return html`<li class="tradie-row${live ? '' : ' is-ended'}" id="quote-request-${r.quoteRequestId}">
+    <div class="tradie-row-head">
+      ${tradieLink(r.tradieId, r.businessName)} ${requestChip(r)}
+      <span class="text-sm">${NO_REPLY[r.status] ? html`${NO_REPLY[r.status]}, ` : nothing}${asked}</span>
+    </div>
+    ${facts.length ? html`<p class="tradie-row-facts">${facts}</p>` : nothing}
+    ${r.inspection ? inspectionLine(t, r.inspection, x) : nothing}
+    ${job.status === 'quoting' && live ? requestActions(t, job, r, x) : nothing}
+  </li>`;
+}
+
+/** A Tradie's Site Inspection: when, whether the Tenant has confirmed they'll be in, and Mark inspected once it has started. */
+function inspectionLine(t: TicketView, v: NonNullable<RequestView['inspection']>, x: Extras): Html {
+  const done = v.status === 'done';
+  const tenant = done
+    ? badge('Inspected', 'success')
+    : v.rescheduleRequestedBy
+      ? badge(`${v.rescheduleRequestedBy === 'tenant' ? 'Tenant' : 'Tradie'} asked for another time`, 'warning')
+      : v.visitConfirmed
+        ? badge('Tenant confirmed', 'success')
+        : badge('Tenant not confirmed yet', 'warning');
+  const started = x.now >= new Date(v.start);
+  const mark = done
+    ? nothing
+    : started
+      ? postButton(`/tickets/${t.ticketId}/work-orders/${v.workOrderId}/inspected`, 'Mark inspected', { variant: 'secondary', size: 'sm' })
+      : html`<span class="text-xs text-muted">Mark it inspected once the visit has started.</span>`;
+  return html`<div class="tradie-row-visit">
+    <span>${badge('Site inspection', 'neutral', { outline: true })} <span class="num">${formatRange(v.start, v.end, x.timeZone)}</span></span>
+    ${tenant} ${mark}
+  </div>`;
+}
+
+/** The Tradie's next action on their row while the Job is getting Quotes. */
+function requestActions(t: TicketView, job: JobView, r: RequestView, x: Extras): Html {
+  const e = r.estimate;
+  const actions: Html[] = [];
+  if (e && e.status === 'open' && !e.confirmed) actions.push(confirmForm(t, e, x));
+  if (r.status === 'estimated') {
+    if (r.inspectionNeeded) actions.push(bookingForm(t, job, r, x));
+    actions.push(inspectionToggle(t, r));
+  }
+  if (r.canProceedOnEstimate && e) actions.push(proceedForm(t, job, e, r));
+  const firmNext = r.status === 'inspected' || (r.status === 'estimated' && !r.inspectionNeeded && !!e?.confirmed);
+  if (r.status === 'inspected') actions.push(html`<p class="text-sm text-muted">Waiting on their Firm Quote, asked for after the Site Inspection.</p>`);
+  if (firmNext) actions.push(firmQuoteEntry(t, r, x));
+  if (r.firmQuote && r.firmQuote.status === 'open') actions.push(html`<a class="link text-sm" href="#quote-${r.firmQuote.quoteId}">Compare in Firm Quotes</a>`);
+  return actions.length ? html`<div class="tradie-row-actions">${actions}</div>` : nothing;
+}
+
+/** "Inspection needed" or "Not needed", the Property Manager's say over the Tradie's, until one is booked. */
+function inspectionToggle(t: TicketView, r: RequestView): Html {
+  const needed = r.inspectionNeeded;
+  return postButton(`/tickets/${t.ticketId}/quote-requests/${r.quoteRequestId}/inspection-needed`, needed ? 'Site Inspection not needed' : 'Ask for a Site Inspection', {
+    variant: 'ghost',
+    size: 'sm',
+    fields: { needed: needed ? 'no' : 'yes' },
+  });
+}
+
+/** Books this Tradie's Site Inspection, prefilled with their first free slot, the others one click away. */
+function bookingForm(t: TicketView, job: JobView, r: RequestView, x: Extras): Html {
+  const free = job.inspections.slots.find((s) => s.quoteRequestId === r.quoteRequestId)?.slots ?? [];
+  const id = `request-${r.quoteRequestId}-inspection`;
+  return html`<form method="post" action="/tickets/${t.ticketId}/quote-requests/${r.quoteRequestId}/inspection" class="site-form-row">
+    <div class="site-form-field">
+      ${field({
+        id,
+        label: `Site Inspection with ${r.businessName}`,
+        name: 'start',
+        type: 'datetime-local',
+        value: free[0] ? isoToLocal(free[0].start, x.timeZone) : '',
+        required: true,
+        hint: free.length ? `${x.timeZone} time, one hour, inside the Tenant's availability.` : 'No free time found in the next 14 days. Pick one.',
+      })}
+    </div>
+    ${free.length > 1
+      ? html`<div class="site-form-slots" role="group" aria-label="Other times for ${r.businessName}">
+          <span class="text-sm text-muted">Other times:</span>
+          ${free.slice(1).map((slot) => html`<button type="button" class="btn btn-outline btn-sm" data-fill="${id}" data-value="${isoToLocal(slot.start, x.timeZone)}">${formatWhen(slot.start, x.timeZone)}</button>`)}
+        </div>`
+      : nothing}
+    ${button('Book Site Inspection', { size: 'sm' })}
+  </form>`;
+}
+
+/** A Firm Quote the Tradie sent another way (a PDF by email, say), entered by the Property Manager: the quote page's fields, folded away. */
+function firmQuoteEntry(t: TicketView, r: RequestView, x: Extras): Html {
+  const id = (name: string) => `request-${r.quoteRequestId}-firm-${name}`;
+  return html`<details class="ticket-fold">
+    <summary>Enter a Firm Quote they sent</summary>
+    <form method="post" action="/tickets/${t.ticketId}/quote-requests/${r.quoteRequestId}/firm-quote" enctype="multipart/form-data" class="ticket-fold-body space-y-2">
+      <p class="text-xs text-muted">
+        For a Firm Quote ${r.businessName} emailed or sent as a PDF instead of giving it on their quote page. It supersedes their Estimate, which stays on record.
+      </p>
+      ${field({ id: id('price'), label: 'Firm price ($)', name: 'price', required: true })}
+      ${field({ id: id('scope'), label: 'Scope of work', name: 'scopeOfWork', type: 'textarea', rows: 3, required: true, hint: 'What they will do for this price.' })}
+      ${field({ id: id('days'), label: 'How many days it takes', name: 'durationDays', type: 'number', min: 1, step: '1', required: true })}
+      <fieldset class="fieldset">
+        <legend class="fieldset-legend">Dates they can start</legend>
+        ${Array.from({ length: DATE_INPUTS }, (_, i) =>
+          html`<input id="${id(`date-${i + 1}`)}" name="availableDates" type="date" class="input w-full" aria-label="Start date ${i + 1}" ${i === 0 ? 'required' : ''} />`,
+        )}
+        <p class="field-hint">At least one, up to three.</p>
+      </fieldset>
+      ${field({ id: id('time'), label: 'Proposed start time', name: 'proposedTime', type: 'datetime-local', hint: `${x.timeZone} time. Optional.` })}
+      ${field({ id: id('pdf'), label: 'Their quote as a PDF', name: 'pdf', type: 'file', accept: 'application/pdf', hint: 'Optional, under 10 MB.' })}
+      ${button('Save Firm Quote', { size: 'sm', variant: 'secondary' })}
+    </form>
+  </details>`;
 }
 
 function ratingsCell(q: QuoteView): Html {
@@ -885,21 +1142,24 @@ function ratingsCell(q: QuoteView): Html {
 
 function quoteTradieCell(q: QuoteView): Html {
   return html`<div class="space-y-1">
-    <div>${tradieLink(q.tradieId, q.businessName)}${q.hasPdf ? html` <span class="text-xs text-muted">PDF attached</span>` : nothing}</div>
-    <div class="flex flex-wrap gap-1">${q.confirmed ? badge('Confirmed', 'success') : badge('Needs checking', 'warning')}</div>
+    <div>${tradieLink(q.tradieId, q.businessName)}</div>
     ${q.reason ? html`<p class="text-sm">Gone ahead with one Quote: ${q.reason}</p>` : nothing}
   </div>`;
 }
 
 /**
- * The Job's Quotes in two tables that are never merged: Firm Quotes (fixed prices for a
- * defined scope, the ones to choose from) and Estimates (ballparks, each saying whether
- * the Tradie needs a Site Inspection). An Estimate a Firm Quote superseded stays, marked.
- * A Quote that still needs checking folds its correct-and-confirm form into its action.
+ * The Job's Quotes in two tables that are never merged and never share a price column:
+ * Firm Quotes (fixed prices for a defined scope, binding once accepted: the only ones
+ * chosen, ranked by price among themselves) and Estimates (non-binding ballparks, each
+ * saying whether the Tradie needs a Site Inspection and its Call-out Fee). An Estimate a
+ * Firm Quote superseded stays listed, muted, and is never offered to choose.
  */
 function quotesSection(t: TicketView, job: JobView, x: Extras): Html {
   const getting = job.status === 'quoting';
-  const firm = job.quotes.filter((q) => q.stage === 'firm');
+  // Open Firm Quotes first, cheapest first; then the rest as they came.
+  const firm = job.quotes
+    .filter((q) => q.stage === 'firm')
+    .sort((a, b) => Number(b.status === 'open') - Number(a.status === 'open') || (a.status === 'open' ? (a.priceCents ?? 0) - (b.priceCents ?? 0) : a.quoteId - b.quoteId));
   const estimates = job.quotes.filter((q) => q.stage === 'estimate');
   const firmIn = firm.filter((q) => q.confirmed).length;
   const unchecked = job.quotes.filter((q) => q.status === 'open' && !q.confirmed).length;
@@ -908,42 +1168,58 @@ function quotesSection(t: TicketView, job: JobView, x: Extras): Html {
       ? 'myEST8 needs two Firm Quotes before you choose one. To go ahead with fewer, record why.'
       : 'Compare the Firm Quotes and choose one.';
   const firmTable = firm.length
-    ? html`<h3 class="font-semibold">Firm Quotes</h3>
+    ? html`<div class="quote-table is-firm">
+        <h3 class="quote-table-title">Firm Quotes</h3>
+        <p class="text-sm text-muted">Fixed prices for a defined scope of work, binding once accepted. Compared only with each other.</p>
         ${table(
-          ['Tradie', 'Price', 'Scope of work', 'Takes', 'Can start', 'Proposed time', 'Ratings', 'Action'],
+          ['Tradie', 'Firm Quote', 'Scope of work', 'Takes', 'Can start', 'PDF', 'Ratings', getting ? 'Action' : 'Status'],
           firm.map((q) => [
             quoteTradieCell(q),
             html`<span class="num font-semibold">${formatMoney(q.priceCents)}</span>`,
             html`${q.scopeOfWork ?? 'Not given'}`,
             html`${q.durationDays ? `${q.durationDays} ${plural(q.durationDays, 'day')}` : 'Not given'}`,
-            html`${q.availableDates.length ? q.availableDates.map(formatDate).join(', ') : 'Not given'}`,
-            html`${q.proposedTime ? formatWhen(q.proposedTime, x.timeZone) : 'None given'}`,
+            html`${q.availableDates.length ? q.availableDates.map(formatDate).join(', ') : 'Not given'}${q.proposedTime ? html`<br /><span class="text-xs text-muted">Proposed ${formatWhen(q.proposedTime, x.timeZone)}</span>` : nothing}`,
+            q.pdfFileId !== null ? html`<a class="link" href="/files/${q.pdfFileId}">PDF</a>` : html`<span class="text-muted">None</span>`,
             ratingsCell(q),
-            quoteAction(t, job, q, firmIn, x),
+            firmAction(t, job, q, firmIn),
           ]),
-          { caption: `Firm Quotes for the ${humanise(job.trade)} Job`, rowHeader: true, stack: 'labelled', align: ['left', 'right'] },
-        )}`
+          {
+            caption: `Firm Quotes for the ${humanise(job.trade)} Job`,
+            rowHeader: true,
+            stack: 'labelled',
+            align: ['left', 'right'],
+            rowAttributes: firm.map((q) => ({ id: `quote-${q.quoteId}` })),
+          },
+        )}
+      </div>`
     : nothing;
   const estimateTable = estimates.length
-    ? html`<h3 class="font-semibold">Estimates</h3>
-        <p class="text-sm text-muted">Ballparks from the description and photos. Not binding, and not compared with Firm Quotes.</p>
+    ? html`<div class="quote-table is-estimates">
+        <h3 class="quote-table-title">Estimates ${badge('Non-binding')}</h3>
+        <p class="text-sm text-muted">Ballparks from the description and photos: the final bill can differ. Never compared with Firm Quotes, and never chosen as one.</p>
         ${table(
-          ['Tradie', 'Estimate', 'Site Inspection', 'Proposed time', 'Ratings', 'Action'],
+          ['Tradie', 'Estimate', 'Site Inspection', 'Call-out Fee', 'Where it stands'],
           estimates.map((q) => {
             const request = job.quoteRequests.find((r) => r.quoteRequestId === q.quoteRequestId);
             return [
               quoteTradieCell(q),
               html`<span class="num">${formatMoney(q.priceCents)}</span>`,
-              inspectionCell(t, q, request),
-              html`${q.proposedTime ? formatWhen(q.proposedTime, x.timeZone) : 'None given'}`,
-              ratingsCell(q),
-              quoteAction(t, job, q, firmIn, x),
+              inspectionCell(q, request),
+              html`<span class="num">${q.calloutFeeCents ? formatMoney(q.calloutFeeCents) : 'None'}</span>`,
+              estimateStanding(job, q),
             ];
           }),
-          { caption: `Estimates for the ${humanise(job.trade)} Job`, rowHeader: true, stack: 'labelled', align: ['left', 'right'] },
-        )}`
+          {
+            caption: `Estimates for the ${humanise(job.trade)} Job`,
+            rowHeader: true,
+            stack: 'labelled',
+            align: ['left', 'right'],
+            rowAttributes: estimates.map((q) => ({ id: `quote-${q.quoteId}`, 'data-superseded': q.status === 'superseded' })),
+          },
+        )}
+      </div>`
     : nothing;
-  return html`<section class="space-y-3" id="job-${job.jobId}-quotes">
+  return html`<section class="space-y-4" id="job-${job.jobId}-quotes">
     ${sectionHeader('Quotes')}
     ${getting
       ? html`<p class="text-sm text-muted">${firmIn} ${plural(firmIn, 'Firm Quote')}, ${estimates.length} ${plural(estimates.length, 'Estimate')}${unchecked ? `, ${unchecked} to check` : ''}. ${advice}</p>`
@@ -952,42 +1228,60 @@ function quotesSection(t: TicketView, job: JobView, x: Extras): Html {
   </section>`;
 }
 
-/** Whether the Tradie needs a Site Inspection (with the Call-out Fee), and the Property Manager's override while it can change. */
-function inspectionCell(t: TicketView, q: QuoteView, request: RequestView | undefined): Html {
+/** Whether the Tradie needs a Site Inspection before their Firm Quote, and whether the Property Manager said so. */
+function inspectionCell(q: QuoteView, request: RequestView | undefined): Html {
   const needed = request?.inspectionNeeded ?? !!q.needsInspection;
-  const fee = q.calloutFeeCents ? ` (Call-out Fee ${formatMoney(q.calloutFeeCents)})` : '';
-  const words = needed ? `Needed${fee}` : 'Not needed';
   const overridden = request?.inspectionOverride !== null && request?.inspectionOverride !== undefined;
-  const toggle = request && request.status === 'estimated' && q.status === 'open'
-    ? postButton(`/tickets/${t.ticketId}/quote-requests/${request.quoteRequestId}/inspection-needed`, needed ? 'Not needed' : 'Ask for one', {
-        variant: 'ghost',
-        size: 'sm',
-        fields: { needed: needed ? 'no' : 'yes' },
-      })
-    : nothing;
-  return html`<span>${words}${overridden ? html` <span class="text-xs text-muted">(set by you)</span>` : nothing}</span> ${toggle}`;
+  return html`<span>${needed ? 'Needed' : 'Not needed'}${overridden ? html` <span class="text-xs text-muted">(set by you)</span>` : nothing}</span>`;
 }
 
-/** What can be done to one Quote: check it, choose a Firm Quote, proceed on an Estimate, or nothing (its status says where it stands). */
-function quoteAction(t: TicketView, job: JobView, q: QuoteView, firmIn: number, x: Extras): Html {
-  const open = q.status === 'open';
-  if (open && !q.confirmed) return confirmForm(t, q, x);
-  if (open && job.status === 'quoting' && q.stage === 'firm') return chooseForm(t, q, firmIn);
-  const request = job.quoteRequests.find((r) => r.quoteRequestId === q.quoteRequestId);
-  if (open && q.stage === 'estimate' && request?.canProceedOnEstimate) return proceedForm(t, job, q, request);
-  if (q.status === 'approved' && q.notToExceedCents !== null) return html`${statusBadge(q.status)} <span class="text-sm">Capped at ${formatMoney(q.notToExceedCents)}</span>`;
-  return open ? nothing : statusBadge(q.status);
+/** Where an Estimate stands. Never Choose: a superseded one names the Firm Quote that replaced it. */
+function estimateStanding(job: JobView, q: QuoteView): Html {
+  const by = job.quotes.find((f) => f.quoteId === q.supersededByQuoteId);
+  switch (q.status) {
+    case 'superseded':
+      return html`<span class="text-muted">Superseded by Firm Quote ${by ? formatMoney(by.priceCents) : ''}</span>`;
+    case 'approved':
+      return html`${statusBadge(q.status)} <span class="text-sm">Capped at ${formatMoney(q.notToExceedCents)}</span>`;
+    case 'awaiting_owner':
+      return html`${statusBadge(q.status)} <span class="text-sm">Capped at ${formatMoney(q.notToExceedCents)}</span>`;
+    case 'open':
+      return q.confirmed ? badge('Confirmed', 'success') : badge('Needs checking', 'warning');
+    default:
+      return statusBadge(q.status);
+  }
 }
 
-/** Proceed on an Estimate with a Not-to-exceed Cap, folded away: for a cheap routine Job, instead of waiting for Firm Quotes. */
-function proceedForm(t: TicketView, job: JobView, q: QuoteView, request: RequestView): Html {
-  const estimates = job.quoteRequests.filter((r) => r.estimate?.confirmed).length;
+/** What can be done to a Firm Quote: choose it while the Job is getting Quotes, else where it stands. */
+function firmAction(t: TicketView, job: JobView, q: QuoteView, firmIn: number): Html {
+  if (q.status === 'open' && job.status === 'quoting' && q.confirmed) return chooseForm(t, q, firmIn);
+  return q.status === 'open' ? badge('Confirmed', 'success') : statusBadge(q.status);
+}
+
+/**
+ * Proceed on an Estimate with a Not-to-exceed Cap, folded away: for a cheap routine Job,
+ * instead of waiting for Firm Quotes. Offered only when the core would allow it; the cap
+ * starts at the Estimate, the reason is asked for while the Job has fewer than two
+ * Tradies' Estimates, and the Ticket's Urgency must be confirmed when it isn't Routine.
+ */
+function proceedForm(t: TicketView, job: JobView, e: EstimateView, request: RequestView): Html {
+  const estimates = job.quoteRequests.filter((r) => r.estimate?.confirmed || r.firmQuote?.confirmed).length;
   return html`<details class="quote-check">
-    <summary class="btn btn-outline btn-sm btn-block">Proceed on Estimate</summary>
-    <form method="post" action="/tickets/${t.ticketId}/quotes/${q.quoteId}/proceed" class="mt-3 space-y-2">
-      <p class="text-xs text-muted">The Tradie may charge up to the Not-to-exceed Cap, which counts towards the Repair Cost.</p>
-      ${field({ id: `quote-${q.quoteId}-cap`, label: 'Not-to-exceed Cap ($)', name: 'cap', value: q.priceCents === null ? '' : (q.priceCents / 100).toFixed(2), required: true })}
-      ${estimates < MIN_QUOTES ? field({ id: `quote-${q.quoteId}-proceed-reason`, label: 'Why go ahead with one Estimate?', name: 'reason', type: 'textarea', rows: 2 }) : nothing}
+    <summary class="btn btn-outline btn-sm">Proceed on Estimate</summary>
+    <form method="post" action="/tickets/${t.ticketId}/quotes/${e.quoteId}/proceed" class="mt-3 space-y-2">
+      <p class="text-xs text-muted">
+        For a cheap routine Job, go ahead now instead of waiting for a Firm Quote. The Not-to-exceed Cap is the most ${request.businessName} may
+        charge; it counts towards the Repair Cost, and the Property Owner is asked if it takes the Repair Cost over the Max Repair Cost.
+      </p>
+      ${field({
+        id: `quote-${e.quoteId}-cap`,
+        label: 'Not-to-exceed Cap ($)',
+        name: 'cap',
+        value: e.priceCents === null ? '' : (e.priceCents / 100).toFixed(2),
+        required: true,
+        hint: `At least the Estimate of ${formatMoney(e.priceCents)}.`,
+      })}
+      ${estimates < MIN_QUOTES ? field({ id: `quote-${e.quoteId}-proceed-reason`, label: 'Why go ahead with one Estimate?', name: 'reason', type: 'textarea', rows: 2, required: true }) : nothing}
       ${request.proceedNeedsConfirm
         ? html`<label class="flex items-center gap-2 text-sm"><input type="checkbox" class="checkbox checkbox-sm" name="confirm" value="yes" /> This Ticket isn't Routine. Go ahead anyway.</label>`
         : nothing}
@@ -996,79 +1290,22 @@ function proceedForm(t: TicketView, job: JobView, q: QuoteView, request: Request
   </details>`;
 }
 
-const VISIT_WORDS: Record<string, string> = {
-  confirmed: 'Confirmed',
-  not_confirmed: 'Not confirmed yet',
-  reschedule_requested: 'Asked for another time',
-  done: 'Done',
-};
-
-/**
- * Site Inspections, per Tradie: each booked one with its state and Mark done, then a
- * booking form for each Tradie who needs one and hasn't got it, prefilled with their
- * first free slot. A Tradie who doesn't need one never shows here.
- */
-function inspectionsSection(t: TicketView, job: JobView, x: Extras): Html {
-  const { visits, slots } = job.inspections;
-  if (!visits.length && !slots.length) return nothing;
-  const rows = visits.map((v) => {
-    const done = v.visit === 'done';
-    return html`<li class="site-visit">
-      <div class="site-visit-who">${tradieLink(v.tradieId, v.businessName)} ${badge('Site inspection', 'neutral', { outline: true })}</div>
-      <div class="site-visit-when">${formatRange(v.start, v.end, x.timeZone)}</div>
-      <div class="site-visit-state">${badge(VISIT_WORDS[v.visit] ?? humanise(v.visit), done ? 'success' : v.visit === 'reschedule_requested' ? 'warning' : 'neutral')}</div>
-      <div class="site-visit-action">
-        ${done ? nothing : postButton(`/tickets/${t.ticketId}/work-orders/${v.workOrderId}/inspected`, 'Mark done', { variant: 'secondary', size: 'sm' })}
-      </div>
-    </li>`;
-  });
-  const forms = slots.map((s) => {
-    const id = `request-${s.quoteRequestId}-inspection`;
-    return html`<form method="post" action="/tickets/${t.ticketId}/quote-requests/${s.quoteRequestId}/inspection" class="site-form-row">
-      <div class="site-form-field">
-        ${field({
-          id,
-          label: `${s.businessName} needs a Site Inspection`,
-          name: 'start',
-          type: 'datetime-local',
-          value: s.slots[0] ? isoToLocal(s.slots[0].start, x.timeZone) : '',
-          required: true,
-          hint: s.slots.length ? `${x.timeZone} time, one hour.` : 'No free time found in the next 14 days. Pick one.',
-        })}
-      </div>
-      ${s.slots.length > 1
-        ? html`<div class="site-form-slots" role="group" aria-label="Other times for ${s.businessName}">
-            <span class="text-sm text-muted">Other times:</span>
-            ${s.slots.slice(1).map((slot) => html`<button type="button" class="btn btn-outline btn-sm" data-fill="${id}" data-value="${isoToLocal(slot.start, x.timeZone)}">${formatWhen(slot.start, x.timeZone)}</button>`)}
-          </div>`
-        : nothing}
-      ${button('Book Site Inspection', { size: 'sm' })}
-    </form>`;
-  });
-  return html`<section class="space-y-3" id="job-${job.jobId}-inspections">
-    ${sectionHeader('Site Inspections')}
-    <p class="text-sm text-muted">Only for Tradies who need to see the issue before a Firm Quote. Each visit is booked on its own; the Tradie and the Tenant are told.</p>
-    ${rows.length ? html`<ul role="list" class="site-visits">${rows}</ul>` : nothing}
-    ${forms.length ? html`<div class="site-form space-y-3">${forms}</div>` : nothing}
-  </section>`;
-}
-
 /** An ISO date ("2026-10-20") as "Tue 20 Oct". */
 function formatDate(date: string): string {
   return new Intl.DateTimeFormat('en-AU', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' }).format(new Date(`${date}T00:00:00Z`));
 }
 
-/** The fields read from the Tradie's reply, folded under "Check and confirm" until the Property Manager opens them. */
-function confirmForm(t: TicketView, q: QuoteView, x: Extras): Html {
+/** What was read from the Tradie's reply, folded under "Check Estimate" until the Property Manager opens it to correct and confirm it. */
+function confirmForm(t: TicketView, q: EstimateView, x: Extras): Html {
   return html`<details class="quote-check">
-    <summary class="btn btn-primary btn-sm btn-block">Check and confirm</summary>
+    <summary class="btn btn-primary btn-sm">Check Estimate</summary>
     <form method="post" action="/tickets/${t.ticketId}/quotes/${q.quoteId}/confirm" class="mt-3 space-y-2">
       <p class="text-xs text-muted">
-        Check what was read from the reply${q.hasPdf ? ' and its PDF' : ''} and correct anything wrong. Only confirmed Quotes count.
+        Check what was read from the reply${q.hasPdf ? ' and its PDF' : ''} and correct anything wrong. Only confirmed Estimates count.
       </p>
       ${field({
         id: `quote-${q.quoteId}-price`,
-        label: 'Price ($)',
+        label: 'Estimate ($)',
         name: 'price',
         value: q.priceCents === null ? '' : (q.priceCents / 100).toFixed(2),
         required: true,
@@ -1081,25 +1318,25 @@ function confirmForm(t: TicketView, q: QuoteView, x: Extras): Html {
         value: q.proposedTime ? isoToLocal(q.proposedTime, x.timeZone) : '',
         hint: `${x.timeZone} time. Leave empty if the Tradie gave none.`,
       })}
-      ${button('Confirm Quote', { size: 'sm', block: true })}
+      ${button('Confirm Estimate', { size: 'sm', block: true })}
     </form>
   </details>`;
 }
 
 function chooseForm(t: TicketView, q: QuoteView, confirmed: number): Html {
-  const question = `Choose ${q.businessName}'s Quote of ${formatMoney(q.priceCents)}?`;
+  const question = `Choose ${q.businessName}'s Firm Quote of ${formatMoney(q.priceCents)}?`;
   return html`<form method="post" action="/tickets/${t.ticketId}/quotes/${q.quoteId}/choose" class="space-y-2" data-confirm="${question}">
     ${confirmed < MIN_QUOTES
       ? field({
           id: `quote-${q.quoteId}-reason`,
-          label: 'Why go ahead with one Quote?',
+          label: 'Why go ahead with one Firm Quote?',
           name: 'reason',
           type: 'textarea',
           rows: 2,
           hint: 'For example a specialist or time-critical Job.',
         })
       : nothing}
-    ${button('Choose this Quote', { size: 'sm', block: true })}
+    ${button('Choose this Firm Quote', { size: 'sm', block: true })}
   </form>`;
 }
 
@@ -1273,7 +1510,7 @@ function describeGroup(t: TicketView, group: TimelineEvent[], x: Extras): { at: 
   const d = group as Record<string, unknown>[];
   if (last.kind === 'quote_approved') {
     const chosen = describeEvent(t, first, x);
-    return { at, title: `Quote from ${String(d[0]!.tradie)} chosen and approved`, ...(chosen.detail ? { detail: chosen.detail } : {}) };
+    return { at, title: `Firm Quote from ${String(d[0]!.tradie)} chosen and approved`, ...(chosen.detail ? { detail: chosen.detail } : {}) };
   }
   // Per Job, the Tradies each event names, when the Ticket has several Jobs.
   const tradiesOf = (e: Record<string, unknown>) => (Array.isArray(e.tradies) ? e.tradies.map(String) : typeof e.tradie === 'string' ? [e.tradie] : []);
@@ -1338,40 +1575,53 @@ function describeEvent(t: TicketView, event: TimelineEvent, x: Extras): { title:
     case 'quote_received':
       return { title: `Quote received from ${tradie}`, detail: job };
     case 'estimate_received':
-      return { title: `Estimate received from ${tradie}`, detail: details(job, d.needsInspection ? 'Needs a Site Inspection first' : undefined) };
+      return { title: `Estimate received from ${tradie}`, detail: details(job, d.needsInspection ? 'Needs a Site Inspection before a Firm Quote' : undefined) };
     case 'firm_quote_received':
-      return { title: `Firm Quote received from ${tradie}`, detail: details(job, price) };
+      return {
+        title: d.enteredBy === 'property_manager' ? `Firm Quote from ${tradie} entered by a Property Manager` : `Firm Quote received from ${tradie}`,
+        detail: details(job, price, 'It supersedes their Estimate, which stays on record'),
+      };
     case 'inspection_need_set':
-      return { title: d.needed ? `Site Inspection asked of ${tradie}` : `${tradie} can quote firm without a Site Inspection`, detail: job };
+      return { title: d.needed ? `Site Inspection asked of ${tradie}` : `${tradie} can give a Firm Quote without a Site Inspection`, detail: details(job, 'Set by a Property Manager') };
     case 'inspection_booked':
       return { title: `Site Inspection booked with ${tradie}`, detail: details(job, visit) };
     case 'inspected':
-      return { title: `${tradie} inspected the site`, detail: job };
+      return { title: `${tradie}'s Site Inspection done`, detail: details(job, 'They were asked for their Firm Quote') };
+    case 'inspection_cancelled':
+      return {
+        title: `${tradie}'s Site Inspection cancelled`,
+        detail: details(job, visit, d.why === 'declined' ? `${tradie} declined the Quote Request` : 'Another Quote was approved'),
+      };
     case 'proceeded_on_estimate': {
       const cap = typeof d.capCents === 'number' ? `Not-to-exceed Cap ${formatMoney(d.capCents)}` : undefined;
       const reason = typeof d.reason === 'string' ? `Only one Estimate: ${d.reason}` : undefined;
-      return { title: `Proceeding on ${tradie}'s Estimate`, detail: details(job, price ? `Estimate ${price}` : undefined, cap, reason) };
+      return {
+        title: `Proceeding on ${tradie}'s Estimate`,
+        detail: details(job, price ? `Estimate ${price}` : undefined, cap, reason, d.notRoutine ? "Gone ahead although the Ticket isn't Routine" : undefined),
+      };
     }
     case 'quote_chosen': {
       const reason = typeof d.reason === 'string' ? `Only one Quote: ${d.reason}` : undefined;
-      return { title: `Quote from ${tradie} chosen`, detail: details(job, price, reason) };
+      return { title: `Firm Quote from ${tradie} chosen`, detail: details(job, price, reason) };
     }
     case 'approval_requested': {
       const total = typeof d.repairCostCents === 'number' ? `Repair Cost would be ${formatMoney(d.repairCostCents)}` : undefined;
       return { title: 'Property Owner asked to approve', detail: details(job, total) };
     }
     case 'quote_approved':
-      return { title: `Quote from ${tradie} approved`, detail: details(job, price) };
+      return d.stage === 'estimate'
+        ? { title: `${tradie}'s Estimate approved, capped`, detail: details(job, price ? `Not-to-exceed Cap ${price}` : undefined) }
+        : { title: `${d.stage === 'firm' ? 'Firm Quote' : 'Quote'} from ${tradie} approved`, detail: details(job, price) };
     case 'owner_declined':
       return { title: 'Property Owner declined the Quote', detail: details(job, price) };
     case 'work_order_sent':
       return { title: `Work Order sent to ${tradie}`, detail: details(job, visit) };
     case 'reschedule_requested':
-      return { title: `${d.by === 'tenant' ? 'Tenant' : 'Tradie'} asked for another time`, detail: job };
+      return { title: `${d.by === 'tenant' ? 'Tenant' : 'Tradie'} asked for another time${d.inspection ? ' for the Site Inspection' : ''}`, detail: job };
     case 'visit_confirmed':
-      return { title: 'Tenant confirmed the visit', detail: job };
+      return { title: d.inspection ? 'Tenant confirmed the Site Inspection' : 'Tenant confirmed the visit', detail: details(job, "They'll be home or can let the Tradie in") };
     case 'visit_moved':
-      return { title: 'Visit moved', detail: details(job, visit) };
+      return { title: d.inspection || d.siteQuote ? 'Site Inspection moved' : 'Visit moved', detail: details(job, visit) };
     case 'job_done':
       return { title: `${tradie} finished the Job`, detail: job };
     case 'tenant_rated':
@@ -1380,6 +1630,17 @@ function describeEvent(t: TicketView, event: TimelineEvent, x: Extras): { title:
       return { title: `Tradie rated ${String(d.score)} out of 5`, detail: job };
     case 'closed':
       return { title: 'Ticket closed' };
+    case 'summary_edited':
+      return { title: 'Summary edited', detail: typeof d.summary === 'string' ? d.summary : undefined };
+    // Kept from before staged quoting (ADR 0007), for Tickets that have them.
+    case 'site_quotes_booked':
+      return { title: 'Site visits booked for quotes', detail: job };
+    case 'site_quotes_skipped':
+      return { title: 'Quotes given without site visits', detail: job };
+    case 'site_quote_done':
+      return { title: `${tradie} visited to quote`, detail: job };
+    case 'quotes_final':
+      return { title: 'Final Quotes in', detail: job };
     default:
       return { title: humanise(event.kind), detail: job };
   }

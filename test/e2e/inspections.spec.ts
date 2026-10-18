@@ -4,9 +4,27 @@ import { signIn, unique } from './support/actions.ts';
 
 // Staged quoting in a real browser: the Tenant texts in, the Property Manager confirms
 // it and asks two Tradies, both text an Estimate, the Property Manager asks one of them
-// for a Site Inspection and books it, sees it on the calendar, each Tradie gives a Firm
-// Quote on their own quote page, and the Property Manager chooses one. Roles and
-// visible text only.
+// for a Site Inspection on their own row and books it, sees it on the calendar, the
+// Tradie's DONE counts only once the visit has started, each Tradie gives a Firm Quote on
+// their own quote page, and the Property Manager chooses one. Roles and visible text only.
+
+const TIME_ZONE = 'Australia/Sydney'; // the demo Agency's
+
+/** The demo clock's time, from the simulator's top bar. */
+async function demoNow(page: Page) {
+  await page.goto('/demo');
+  return new Date((await page.locator('time[datetime]').first().getAttribute('datetime'))!);
+}
+
+/** An instant as a datetime-local value in the Agency's time zone. */
+function localValue(at: Date) {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+      .formatToParts(at)
+      .map((x) => [x.type, x.value]),
+  );
+  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
+}
 
 /** Sends `text` from `person`'s phone in the simulator and waits for it to appear. */
 async function say(page: Page, person: string, text: string) {
@@ -103,25 +121,31 @@ test('two Tradies on their own paths: one inspects first, both give Firm Quotes,
   await say(page, 'Dana Drip', '$340 Wednesday 10am');
   await page.goto(ticketUrl);
   for (let i = 0; i < asked.length; i++) {
-    const check = page.getByText('Check and confirm', { exact: true }).first();
+    const check = page.getByText('Check Estimate', { exact: true }).first();
     await expect(async () => {
       await page.reload();
       await expect(check).toBeVisible({ timeout: 1_000 });
     }).toPass({ timeout: 15_000 });
     await check.click();
-    await page.getByRole('button', { name: 'Confirm Quote' }).click();
-    await expect(page.getByText(/Quote from .* confirmed/)).toBeVisible();
+    await page.getByRole('button', { name: 'Confirm Estimate' }).click();
+    await expect(page.getByText(/Estimate from .* confirmed/)).toBeVisible();
   }
 
-  // Two confirmed Estimates are not Quotes to choose from. The Property Manager asks Dana to inspect first and books it.
-  const dana = page.getByRole('row', { name: /Drip Doctors/ });
-  await dana.getByRole('button', { name: 'Ask for one' }).click();
+  // Two confirmed Estimates are not Quotes to choose from. On Dana's own row, the Property Manager asks her to inspect first and books it.
+  const dana = page.getByRole('list', { name: /Tradies quoting/ }).getByRole('listitem').filter({ hasText: 'Drip Doctors' });
+  await dana.getByRole('button', { name: 'Ask for a Site Inspection' }).click();
   await expect(page.getByText('Drip Doctors will give a Firm Quote after a Site Inspection').first()).toBeVisible();
   await expect(page.getByText('Book a Site Inspection with Drip Doctors').first()).toBeVisible();
-  await expect(page.getByLabel('Drip Doctors needs a Site Inspection')).not.toHaveValue('');
-  await page.getByRole('button', { name: 'Book Site Inspection' }).click();
+  const when = dana.getByLabel('Site Inspection with Drip Doctors');
+  await expect(when).not.toHaveValue('');
+  // Booked for a few minutes from now on the demo clock, so the visit can start within the test.
+  const soon = localValue(new Date((await demoNow(page)).getTime() + 10 * 60_000));
+  await page.goto(ticketUrl);
+  await when.fill(soon);
+  await dana.getByRole('button', { name: 'Book Site Inspection' }).click();
   await expect(page.getByText('Site Inspection booked with Drip Doctors. They and the Tenant have been told.')).toBeVisible();
-  await expect(page.getByText('Site inspection', { exact: true }).first()).toBeVisible();
+  await expect(dana.getByText('Site inspection', { exact: true })).toBeVisible();
+  await expect(dana.getByText('Mark it inspected once the visit has started.')).toBeVisible();
 
   // The calendar shows the visit with the Site inspection badge, in the week it falls in.
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Schedule' }).click();
@@ -129,8 +153,11 @@ test('two Tradies on their own paths: one inspects first, both give Firm Quotes,
   for (let week = 0; week < 4 && (await visits.count()) < 1; week++) await page.getByRole('link', { name: 'Next week' }).click();
   await expect(visits.first()).toBeVisible();
 
-  // Pete quotes firm straight away; Dana does after her visit, which she reports DONE.
+  // Pete quotes firm straight away; Dana does after her visit, which she reports DONE once it has started.
   await giveFirmQuote(browser, await quoteLink(page, 'Pete Park'), '310', 'Replace the tap cartridge and both washers');
+  await page.goto('/demo');
+  await page.getByRole('button', { name: 'Move the clock +1 hour' }).click();
+  await expect(page.getByText(/Clock moved to/)).toBeVisible();
   await say(page, 'Dana Drip', 'Done');
   await giveFirmQuote(browser, await quoteLink(page, 'Dana Drip'), '360', 'Replace the mixer tap');
 
@@ -139,6 +166,6 @@ test('two Tradies on their own paths: one inspects first, both give Firm Quotes,
   await eventually(page, () => expect(page.getByText('Choose a Firm Quote: 2 in').first()).toBeVisible({ timeout: 1_000 }));
   await expect(page.getByText('Superseded by Firm Quote').first()).toBeVisible();
   page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('row', { name: /Pete's Plumbing.*Replace the tap cartridge/ }).getByRole('button', { name: 'Choose this Quote' }).click();
-  await expect(page.getByText("Quote from Pete's Plumbing chosen and approved", { exact: true })).toBeVisible();
+  await page.getByRole('row', { name: /Pete's Plumbing.*Replace the tap cartridge/ }).getByRole('button', { name: 'Choose this Firm Quote' }).click();
+  await expect(page.getByText("Firm Quote from Pete's Plumbing chosen and approved", { exact: true })).toBeVisible();
 });

@@ -11,6 +11,7 @@ import {
   tomsTapTicket,
   tradieQuotes,
   world,
+  visitStarted,
   type JobRef,
   type TradieRef,
   type World,
@@ -87,8 +88,14 @@ describe('requirement 1: each Tradie progresses on their own', () => {
     expect(await alice.calendar({ from: TUE_10AM.toISOString(), to: WED_10AM.toISOString() })).toMatchObject([{ kind: 'inspection', businessName: 'Drip Doctors' }]);
     await expect(alice.bookInspection(danaRequest.quoteRequestId, { start: WED_10AM.toISOString() })).rejects.toThrow(/already/);
 
-    // DONE after the visit: the Tradie is asked for the Firm Quote with their link, and reminded after 48 hours.
+    // DONE before the visit has started is answered politely and changes nothing.
     h.classifier.when('Been and had a look', { replyType: 'done', relatedItem: `work_order:${view.inspections.visits[0]!.workOrderId}` });
+    await h.receive(tradies.dana.address, 'Been and had a look');
+    expect(await quoteRequestFor(w, job, tradies.dana)).toMatchObject({ status: 'inspection_booked', inspection: { status: 'active' } });
+    expect(h.messenger.last(tradies.dana.address)).toMatchObject({ template: 'tradie.done_too_early', data: { visitStart: TUE_10AM.toISOString() } });
+
+    // DONE after the visit: the Tradie is asked for the Firm Quote with their link, and reminded after 48 hours.
+    visitStarted(w, TUE_10AM);
     await h.receive(tradies.dana.address, 'Been and had a look');
     expect(await quoteRequestFor(w, job, tradies.dana)).toMatchObject({ status: 'inspected', inspection: { status: 'done' } });
     expect(h.messenger.last(tradies.dana.address)).toMatchObject({ template: 'tradie.firm_quote_request', data: { quoteLink: expect.stringContaining('/q/') } });
@@ -132,6 +139,10 @@ describe('requirement 1: each Tradie progresses on their own', () => {
 
     const id = await w.alice.bookInspection(dana.quoteRequestId, { start: TUE_10AM.toISOString(), durationMinutes: 30 });
     await expect(w.alice.setInspectionNeeded(dana.quoteRequestId, false)).rejects.toThrow(/before one is booked/);
+    // Not before the visit has started.
+    await expect(w.alice.markInspected(id)).rejects.toThrow(/once it has started/);
+    expect((await quoteRequestFor(w, job, w.tradies.dana)).status).toBe('inspection_booked');
+    visitStarted(w, TUE_10AM);
     await w.alice.markInspected(id);
     expect((await quoteRequestFor(w, job, w.tradies.dana)).status).toBe('inspected');
     expect((await w.alice.ticket(job.ticketId)).timeline.map((e) => e.kind)).toEqual(expect.arrayContaining(['inspection_need_set', 'inspection_booked', 'inspected']));
@@ -218,6 +229,7 @@ describe('requirements 3 and 4: Estimates and Firm Quotes are apart, and a Firm 
     await estimate(w, job, tradies.dana, { priceCents: 160_00, needsInspection: true });
     const dana = await quoteRequestFor(w, job, tradies.dana);
     const visitId = await w.alice.bookInspection(dana.quoteRequestId, { start: TUE_10AM.toISOString() });
+    visitStarted(w, TUE_10AM);
     await w.alice.markInspected(visitId);
     h.messenger.clear();
 
@@ -335,5 +347,71 @@ describe('the Tenant', () => {
     expect((await quoteRequestFor(w, job, w.tradies.dana)).inspection).toMatchObject({ visitConfirmed: true });
     const tracker = await h.tracker(trackerLink);
     expect(tracker.stages.find((s) => s.stage === 'site_visit')).toMatchObject({ reached: true, visits: [{ tradie: 'Drip Doctors' }] });
+  });
+});
+
+describe('the Property Manager enters a Firm Quote the Tradie sent another way', () => {
+  test('it is recorded like one from the quote page, marked as entered by the Property Manager, and checked the same way', async () => {
+    const w = await world();
+    const job = await askPeteAndDana(w);
+    await estimate(w, job, w.tradies.pete, { priceCents: 180_00, needsInspection: false });
+    const pete = await quoteRequestFor(w, job, w.tradies.pete);
+
+    await expect(w.alice.enterFirmQuote(pete.quoteRequestId, { priceCents: 190_00, scopeOfWork: ' ', durationDays: 1, availableDates: [dateAhead(w, 2)] })).rejects.toThrow(/scope of work/);
+    await w.alice.enterFirmQuote(pete.quoteRequestId, { priceCents: 190_00, scopeOfWork: 'Replace the cartridge', durationDays: 2, availableDates: [dateAhead(w, 2), dateAhead(w, 3)] });
+
+    const view = await jobView(w, job);
+    expect(view.quoteRequests.find((r) => r.tradieId === w.tradies.pete.id)).toMatchObject({ status: 'firm_quoted', firmQuote: { priceCents: 190_00, durationDays: 2, confirmed: true } });
+    expect(view.quotes.find((q) => q.stage === 'estimate' && q.tradieId === w.tradies.pete.id)).toMatchObject({ status: 'superseded' });
+    expect((await w.alice.ticket(job.ticketId)).timeline.findLast((e) => e.kind === 'firm_quote_received')).toMatchObject({ enteredBy: 'property_manager', priceCents: 190_00 });
+  });
+
+  test("is refused for another Agency's Quote Request", async () => {
+    const w = await world();
+    const job = await askPeteAndDana(w);
+    await estimate(w, job, w.tradies.pete, { priceCents: 180_00, needsInspection: false });
+    const pete = await quoteRequestFor(w, job, w.tradies.pete);
+    const other = await w.h.app.setup.createAgency({ name: 'Other Realty', timeZone: 'Australia/Sydney' });
+    const olga = w.h.as(await w.h.app.setup.addPropertyManager(other, { name: 'Olga Other', email: 'olga@other.example', password: 'other-password' }));
+
+    await expect(olga.enterFirmQuote(pete.quoteRequestId, { priceCents: 190_00, scopeOfWork: 'Replace the cartridge', durationDays: 1, availableDates: [dateAhead(w, 2)] })).rejects.toThrow(/Quote Request/);
+    expect((await quoteRequestFor(w, job, w.tradies.pete)).status).toBe('estimated');
+  });
+});
+
+describe('the timeline records what happens to each Site Inspection', () => {
+  test('an inspection still booked when another Quote is approved is cancelled, and the timeline says so', async () => {
+    const w = await world();
+    const job = await askPeteAndDana(w);
+    await estimate(w, job, w.tradies.pete, { priceCents: 120_00, needsInspection: false });
+    await estimate(w, job, w.tradies.dana, { priceCents: 160_00, needsInspection: true });
+    await w.alice.bookInspection((await quoteRequestFor(w, job, w.tradies.dana)).quoteRequestId, { start: TUE_10AM.toISOString() });
+    const pete = (await quoteRequestFor(w, job, w.tradies.pete)).estimate!;
+
+    await w.alice.proceedOnEstimate(pete.quoteId, { capCents: 150_00 });
+
+    expect((await w.alice.ticket(job.ticketId)).timeline.findLast((e) => e.kind === 'inspection_cancelled')).toMatchObject({ tradie: 'Drip Doctors', visitStart: TUE_10AM.toISOString(), why: 'quote_approved' });
+  });
+});
+
+describe("the Tenant's tracker", () => {
+  test('a Site visit is done only once every inspection has happened, not when it is booked', async () => {
+    const w = await world();
+    const { h } = w;
+    const job = await askPeteAndDana(w);
+    const trackerLink = h.messenger.to(TOM).find((m) => m.template === 'tenant.confirmed')!.data.trackerLink as string;
+    await estimate(w, job, w.tradies.dana, { priceCents: 160_00, needsInspection: true });
+    const id = await w.alice.bookInspection((await quoteRequestFor(w, job, w.tradies.dana)).quoteRequestId, { start: TUE_10AM.toISOString() });
+
+    const booked = (await h.tracker(trackerLink)).stages.find((s) => s.stage === 'site_visit');
+    expect(booked).toMatchObject({ reached: true, done: false, visits: [{ tradie: 'Drip Doctors', visitStart: TUE_10AM.toISOString(), done: false }] });
+
+    visitStarted(w, TUE_10AM);
+    await w.alice.markInspected(id);
+
+    const after = await h.tracker(trackerLink);
+    expect(after.stages.find((s) => s.stage === 'site_visit')).toMatchObject({ reached: true, done: true, visits: [{ tradie: 'Drip Doctors', done: true }] });
+    // Getting quotes goes on until a Quote is approved.
+    expect(after.stages.find((s) => s.stage === 'getting_quotes')).toMatchObject({ reached: true, done: false });
   });
 });

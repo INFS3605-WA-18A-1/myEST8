@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { visible, webWorld } from '../support/web.ts';
-import { confirmedQuotes, jobView, TOM, tomsTapTicket } from '../support/world.ts';
+import { confirmedQuotes, jobView, TOM, tomsTapTicket, visitStarted } from '../support/world.ts';
 
 describe('Tradies', () => {
   test('the directory is sorted by myEST8 rating, shows both ratings and Previous Quotes, and filters by Trade', async () => {
@@ -77,6 +77,7 @@ describe('Tradies', () => {
     await w.alice.sendWorkOrder(job.jobId);
     const { workOrder } = await jobView(w, job);
     w.h.classifier.when('All done', { replyType: 'done', relatedItem: `work_order:${workOrder!.workOrderId}` });
+    visitStarted(w, workOrder!.start);
     await w.h.receive(w.tradies.pete.address, 'All done');
     await w.alice.rateTradie(job.jobId, 3);
     await w.h.answer(TOM, '5', '5');

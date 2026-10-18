@@ -189,6 +189,21 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
    * chosen Tradie's included) and closes the other Quote Requests. Returns the requests
    * passed over, to tell.
    */
+  /**
+   * Cancels the active Site Inspections matching `where` (on `work_orders`), recording each on
+   * the timeline with `why`: another Quote was approved, or the Tradie declined. Inside a transaction.
+   */
+  async function cancelInspections(where: string, id: number, why: 'quote_approved' | 'declined') {
+    const cancelled = await all<{ ticket_id: number; job_id: number; tradie_id: number; start: string; end: string }>(
+      db,
+      `UPDATE work_orders SET status = 'cancelled' WHERE ${where} AND kind = 'inspection' AND status = 'active' RETURNING ticket_id, job_id, tradie_id, start, "end"`,
+      id,
+    );
+    for (const v of cancelled) {
+      await tickets.recordEvent(v.ticket_id, 'inspection_cancelled', { jobId: v.job_id, tradie: await businessName(v.tradie_id), visitStart: v.start, visitEnd: v.end, why });
+    }
+  }
+
   async function approveQuote(quote: QuoteRow) {
     const job = await tickets.job(quote.job_id);
     return transaction(db, async () => {
@@ -200,7 +215,7 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
         priceCents: costOf(quote),
         stage: quote.stage,
       });
-      await run(db, `UPDATE work_orders SET status = 'cancelled' WHERE job_id = ? AND kind = 'inspection' AND status = 'active'`, job.id);
+      await cancelInspections('job_id = ?', job.id, 'quote_approved');
       const others = (await quoteRequestsOf(job.id)).filter((r) => r.id !== quote.quote_request_id && LIVE.includes(r.status));
       for (const request of others) {
         await run(db, `UPDATE quote_requests SET status = 'closed' WHERE id = ?`, request.id);
@@ -618,8 +633,8 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
           if (!LIVE.includes(request.status) || request.status === 'firm_quoted') return 'ignored';
           await run(db, `UPDATE quote_requests SET status = 'declined' WHERE id = ?`, request.id);
           await run(db, `UPDATE quotes SET status = 'not_chosen' WHERE quote_request_id = ? AND status = 'open'`, request.id);
-          await run(db, `UPDATE work_orders SET status = 'cancelled' WHERE quote_request_id = ? AND kind = 'inspection' AND status = 'active'`, request.id);
           await tickets.recordEvent(request.ticket_id, 'tradie_declined', { jobId: request.job_id, tradie: await businessName(request.tradie_id) });
+          await cancelInspections('quote_request_id = ?', request.id, 'declined');
           return 'declined';
         }
         if (!AWAITING_ESTIMATE.includes(request.status)) return 'ignored';
@@ -667,7 +682,7 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
      * and after the Site Inspection when one is needed. It is a new Quote that supersedes the
      * Estimate, which stays on record.
      */
-    async submitFirmQuote(quoteRequestId: number, input: FirmQuoteInput) {
+    async submitFirmQuote(quoteRequestId: number, input: FirmQuoteInput, o: { enteredBy?: 'property_manager' } = {}) {
       const request = await quoteRequestRow(quoteRequestId);
       if (!request) notFound('Quote Request');
       const { timeZone } = await profiles.agency(request.agency_id);
@@ -729,8 +744,18 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
           jobId: job.id,
           tradie: await businessName(current.tradie_id),
           priceCents: input.priceCents,
+          ...(o.enteredBy ? { enteredBy: o.enteredBy } : {}),
         });
       });
+    },
+
+    /**
+     * The Property Manager enters a Firm Quote the Tradie sent another way (a PDF by email, say),
+     * for a Quote Request in their Agency. Checked exactly as one from the quote page.
+     */
+    async enterFirmQuote(agencyId: number, quoteRequestId: number, input: FirmQuoteInput) {
+      const request = await requestInAgency(agencyId, quoteRequestId);
+      await this.submitFirmQuote(request.id, input, { enteredBy: 'property_manager' });
     },
 
     /**

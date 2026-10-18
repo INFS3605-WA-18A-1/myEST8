@@ -5021,3 +5021,127 @@
     }
   }
 }
+
+/*
+ * ----- The Ticket's staged quoting (ADR 0009) and its honest stage tracker -----
+ * Each Tradie asked is a row of their own (where they are, what they have given, their
+ * next action); Firm Quotes and Estimates are two separate tables, and a superseded
+ * Estimate stays listed, muted. A skipped step in a tracker (Site inspection or With
+ * Property Owner "Not needed", Firm Quote when proceeding on an Estimate) is a muted
+ * dashed circle with a dash: never the done tick, never the current ring.
+ */
+@layer utilities {
+  @layer app {
+    /* A skipped step: daisyUI draws data-content as a done tick, so the dash is set here. */
+    .steps .step.step-skipped::after {
+      content: '–';
+      background-color: var(--surface);
+      box-shadow: inset 0 0 0 1px var(--control);
+      color: var(--muted);
+      outline: 1px dashed var(--line);
+      outline-offset: 2px;
+    }
+    .steps .step.step-skipped::before,
+    .steps .step.step-skipped + .step::before {
+      --step-bg: var(--line);
+    }
+
+    /* One row per Tradie asked, hairline-separated in one framed list. */
+    .tradie-progress {
+      display: grid;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+    }
+    .tradie-row {
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+      font-size: 14px;
+    }
+    .tradie-row + .tradie-row {
+      border-top: 1px solid var(--line);
+    }
+    .tradie-row.is-ended {
+      color: var(--muted);
+    }
+    .tradie-row-head,
+    .tradie-row-facts,
+    .tradie-row-visit,
+    .tradie-row-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px 12px;
+      margin: 0;
+      min-width: 0;
+    }
+    .tradie-row-head > :last-child {
+      margin-left: auto;
+    }
+    .tradie-row-actions {
+      align-items: flex-start;
+      gap: 8px;
+    }
+    /* An opened form takes the row's whole width under the other actions. */
+    .tradie-row-actions > details[open],
+    .tradie-row-actions > .site-form-row {
+      flex: 1 1 100%;
+    }
+    .tradie-row-actions .site-form-row {
+      background: var(--page);
+    }
+
+    /* A folded form on a Tradie's row: "Enter a Firm Quote they sent". */
+    .ticket-fold > summary {
+      cursor: pointer;
+      width: fit-content;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--action);
+    }
+    .ticket-fold[open] {
+      padding: 12px;
+      background: var(--page);
+      border-radius: 4px;
+    }
+    .ticket-fold-body {
+      margin-top: 8px;
+      max-width: 36rem;
+    }
+
+    /* The two Quote tables, each with its own heading: they never share a price column. */
+    .quote-table {
+      display: grid;
+      gap: 6px;
+    }
+    .quote-table-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0;
+      font-weight: 600;
+    }
+    .quote-table.is-estimates tr[data-superseded] :is(th, td) {
+      color: var(--muted);
+    }
+    .quote-table.is-estimates tr[data-superseded] .link {
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    /* Call-out Fees owed: a line of their own near the Job's costs, not part of the Repair Cost. */
+    .callout-fees {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 8px;
+      margin: 16px 0 0;
+      padding: 8px 12px;
+      font-size: 14px;
+      background: var(--page);
+      border-radius: 4px;
+    }
+  }
+}

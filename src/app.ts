@@ -260,6 +260,8 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
         /** Goes ahead on an Estimate with a Not-to-exceed Cap, for a routine Job whose Tradie needs no Site Inspection. */
         proceedOnEstimate: (quoteId: number, options: { capCents: number; reason?: string; confirm?: boolean }) =>
           quotes.proceedOnEstimate(agencyId, quoteId, options),
+        /** Enters a Firm Quote the Tradie sent another way (a PDF by email, say), checked as one from their quote page. */
+        enterFirmQuote: (quoteRequestId: number, input: FirmQuoteInput) => quotes.enterFirmQuote(agencyId, quoteRequestId, input),
 
         // Scheduling and completion
         calendar: (range: { from: string; to: string }) => scheduling.calendar(agencyId, range),

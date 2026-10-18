@@ -915,6 +915,12 @@ export function createTickets({ db, clock, settings, modules }: Context) {
      * The Tenant's progress tracker. Built from statuses only: no prices, Quotes or
      * ratings. It names the Agency and the Property, and the booked stage names the
      * Tradie's business and Trade, because the Tenant needs to know who is coming.
+     *
+     * Each stage is `reached` once it has begun and `done` only once it has really
+     * happened, never because a later stage began: Getting quotes is done once a Quote is
+     * approved, a Site visit once every inspection still going ahead has taken place, and
+     * Booked once the Job is done. The booked stage says whether the Tenant has confirmed
+     * they'll be in (`visitConfirmed`) or asked for another time (`rescheduleRequested`).
      */
     async tracker(token: string) {
       const tracked = await this.ticketByTrackerToken(token);
@@ -930,22 +936,42 @@ export function createTickets({ db, clock, settings, modules }: Context) {
       const visit = visits.findLast((e) => jobs.some((j) => j.id === e.jobId)) ?? visits.at(-1);
       const tradie = visits.findLast((e) => e.kind === 'work_order_sent' && e.jobId === visit?.jobId)?.tradie;
       const trade = jobs.find((j) => j.id === visit?.jobId)?.trade;
-      const booked = visit?.visitStart ? { visitStart: visit.visitStart, ...(tradie ? { tradie } : {}), ...(trade ? { trade } : {}) } : {};
-      // Site Inspections, only when a Tradie had one: who is coming and when, for the visits still to happen.
-      const siteQuotesBooked = events.find((e) => e.kind === 'inspection_booked' || e.kind === 'site_quotes_booked');
-      const siteVisits = siteQuotesBooked
-        ? (await Promise.all(jobs.map((j) => modules.scheduling.inspectionVisits(j.id))))
-            .flat()
-            .filter((v) => v.status === 'active')
-            .map((v) => ({ tradie: v.businessName, visitStart: v.start }))
-        : [];
-      const stages: { stage: string; at: string | null; visitStart?: string; tradie?: string; trade?: Trade; visits?: { tradie: string; visitStart: string }[] }[] = [
+      const repair = visit?.jobId !== undefined ? await modules.scheduling.workOrderForJob(visit.jobId) : null;
+      const booked = visit?.visitStart
+        ? {
+            visitStart: visit.visitStart,
+            ...(tradie ? { tradie } : {}),
+            ...(trade ? { trade } : {}),
+            visitConfirmed: !!repair?.visitConfirmed,
+            rescheduleRequested: repair?.status === 'active' && repair.rescheduleRequestedBy !== null,
+          }
+        : {};
+      const bookedDone = !!visit && jobs.some((j) => j.id === visit.jobId && j.status === 'done');
+      // Site Inspections, only when a Tradie has one going ahead or done: who is coming and when,
+      // and whether each has happened. Done once every one of them has.
+      const inspections = (await Promise.all(jobs.map((j) => modules.scheduling.inspectionVisits(j.id)))).flat();
+      const siteVisits = inspections.map((v) => ({ tradie: v.businessName, visitStart: v.start, done: v.status === 'done' }));
+      const siteBooked = events.find((e) => e.kind === 'inspection_booked' || e.kind === 'site_quotes_booked');
+      const siteDone = siteVisits.length > 0 && siteVisits.every((v) => v.done);
+      const approvedAt = first('quote_approved');
+      type Stage = {
+        stage: string;
+        at: string | null;
+        done?: boolean;
+        visitStart?: string;
+        tradie?: string;
+        trade?: Trade;
+        visitConfirmed?: boolean;
+        rescheduleRequested?: boolean;
+        visits?: { tradie: string; visitStart: string; done: boolean }[];
+      };
+      const stages: Stage[] = [
         { stage: 'reported', at: tracked.reportedAt },
         { stage: 'confirmed', at: first('confirmed') },
-        { stage: 'getting_quotes', at: first('quote_requests_sent') },
-        ...(siteQuotesBooked ? [{ stage: 'site_visit', at: siteQuotesBooked.at, visits: siteVisits }] : []),
-        { stage: 'approved', at: first('quote_approved') },
-        { stage: 'booked', at: first('work_order_sent'), ...booked },
+        { stage: 'getting_quotes', at: first('quote_requests_sent'), done: approvedAt !== null },
+        ...(siteBooked && siteVisits.length ? [{ stage: 'site_visit', at: siteBooked.at, done: siteDone, visits: siteVisits }] : []),
+        { stage: 'approved', at: approvedAt },
+        { stage: 'booked', at: first('work_order_sent'), done: bookedDone, ...booked },
         { stage: 'done', at: doneAt },
         { stage: 'closed', at: tracked.closedAt },
       ];
@@ -956,7 +982,8 @@ export function createTickets({ db, clock, settings, modules }: Context) {
         address: (await modules.profiles.property(tracked.propertyId)).address,
         // The Agency's zone, so the Tenant sees times as the Agency does.
         timeZone: agency.timeZone,
-        stages: stages.map((s) => ({ ...s, reached: s.at !== null })),
+        // A stage that is simply an event (Reported, Repair approved...) is done once it is reached.
+        stages: stages.map((s) => ({ ...s, reached: s.at !== null, done: s.at !== null && (s.done ?? true) })),
       };
     },
   };

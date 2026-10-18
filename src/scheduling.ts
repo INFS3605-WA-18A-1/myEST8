@@ -268,14 +268,17 @@ export function createScheduling({ db, clock, worker, modules }: Context) {
     return out;
   }
 
+  /** Whether a visit's start time has come, by the injected clock: a visit is never done before it starts. */
+  const started = (row: WorkOrderRow) => clock.now() >= new Date(row.start);
+
   /**
    * A Site Inspection is over (the Tradie replied DONE, or the Property Manager marked it):
-   * the Tradie is asked for their Firm Quote.
+   * the Tradie is asked for their Firm Quote. Ignored before the visit's start time.
    */
   async function markInspected(workOrderId: number) {
     const done = await transaction(db, async () => {
       const row = await workOrderRow(workOrderId);
-      if (row?.status !== 'active' || row.kind !== 'inspection') return null;
+      if (row?.status !== 'active' || row.kind !== 'inspection' || !started(row)) return null;
       const { tradieBusinessName } = await place(row);
       await run(db, `UPDATE work_orders SET status = 'done' WHERE id = ?`, row.id);
       await tickets.recordEvent(row.ticket_id, 'inspected', { jobId: row.job_id, tradie: tradieBusinessName });
@@ -367,7 +370,7 @@ export function createScheduling({ db, clock, worker, modules }: Context) {
         const row = await workOrderRow(workOrderId);
         if (row?.status !== 'active') return;
         await run(db, 'UPDATE work_orders SET reschedule_requested_by = ?, visit_confirmed = 0 WHERE id = ?', by, workOrderId);
-        await tickets.recordEvent(row.ticket_id, 'reschedule_requested', { jobId: row.job_id, by });
+        await tickets.recordEvent(row.ticket_id, 'reschedule_requested', { jobId: row.job_id, by, ...(row.kind === 'inspection' ? { inspection: true } : {}) });
       });
     },
 
@@ -376,7 +379,7 @@ export function createScheduling({ db, clock, worker, modules }: Context) {
         const row = await workOrderRow(workOrderId);
         if (row?.status !== 'active') return;
         await run(db, 'UPDATE work_orders SET visit_confirmed = 1 WHERE id = ?', workOrderId);
-        await tickets.recordEvent(row.ticket_id, 'visit_confirmed', { jobId: row.job_id });
+        await tickets.recordEvent(row.ticket_id, 'visit_confirmed', { jobId: row.job_id, ...(row.kind === 'inspection' ? { inspection: true } : {}) });
       });
     },
 
@@ -430,12 +433,13 @@ export function createScheduling({ db, clock, worker, modules }: Context) {
     /**
      * The Tradie replied "done". On a repair the Job is done and the Tenant is asked if it was
      * fixed properly; on a Site Inspection only the visit is done, and the Tradie is asked for their Firm Quote.
+     * Ignored before the visit's start time (intake answers the Tradie then; see `hasStarted`).
      */
     async markDone(workOrderId: number) {
       if ((await workOrderRow(workOrderId))?.kind === 'inspection') return markInspected(workOrderId);
       const done = await transaction(db, async () => {
         const row = await workOrderRow(workOrderId);
-        if (row?.status !== 'active' || row.kind !== 'repair') return null;
+        if (row?.status !== 'active' || row.kind !== 'repair' || !started(row)) return null;
         const { job, ticket, tradieBusinessName } = await place(row);
         await run(db, `UPDATE work_orders SET status = 'done' WHERE id = ?`, row.id);
         await tickets.setJobStatus(job.id, 'done');
@@ -531,7 +535,28 @@ export function createScheduling({ db, clock, worker, modules }: Context) {
 
     async workOrder(id: number) {
       const row = await workOrderRow(id);
-      return row ? { id: row.id, jobId: row.job_id, ticketId: row.ticket_id, kind: row.kind, quoteRequestId: row.quote_request_id } : null;
+      return row ? { id: row.id, jobId: row.job_id, ticketId: row.ticket_id, kind: row.kind, quoteRequestId: row.quote_request_id, start: row.start } : null;
+    },
+
+    /**
+     * Whether an active visit's start time has come. When it hasn't, a DONE reply about it is
+     * answered with `tradie.done_too_early` and left for the Property Manager.
+     */
+    async hasStarted(workOrderId: number) {
+      const row = await workOrderRow(workOrderId);
+      return row?.status !== 'active' || started(row);
+    },
+
+    /** Tells the Tradie their visit can't be done yet: it starts later. */
+    async tellDoneTooEarly(workOrderId: number) {
+      const row = (await workOrderRow(workOrderId))!;
+      const { ticket, property } = await place(row);
+      await notifications.send(
+        row.tradie_id,
+        'tradie.done_too_early',
+        { propertyAddress: property.address, visitStart: row.start, inspection: row.kind === 'inspection' },
+        { issueId: ticket.issueId },
+      );
     },
 
     /** The Job's active visit the Tenant or Tradie is talking about: the repair, else a Site Inspection. */
@@ -576,10 +601,14 @@ export function createScheduling({ db, clock, worker, modules }: Context) {
       return { workOrderId: row.id, start: row.start, end: row.end, status: row.status, visit: visitOf(row), visitConfirmed: !!row.visit_confirmed, rescheduleRequestedBy: row.reschedule_requested_by };
     },
 
-    /** The Property Manager marks a Site Inspection done (the Tradie may not reply). */
+    /** The Property Manager marks a Site Inspection done (the Tradie may not reply), once its start time has come. */
     async markInspectedForAgency(agencyId: number, workOrderId: number) {
       const row = await activeWorkOrder(agencyId, workOrderId);
       if (row.kind !== 'inspection') invalid('This is not a Site Inspection');
+      if (!started(row)) {
+        const { timeZone } = await profiles.agency(agencyId);
+        invalid(`Mark the Site Inspection done once it has started. It is booked for ${formatVisit(row.start, timeZone)}.`);
+      }
       await markInspected(workOrderId);
     },
 

@@ -470,6 +470,13 @@ export const JOB_STAGES: { status: string; label: string }[] = [
   { status: 'cancelled', label: 'Cancelled' },
 ];
 
+/**
+ * The stages of a Job as the Ticket page's stage tracker shows them: quoting split into
+ * its steps (ADR 0009), then the Job stages after it, with their words from JOB_STAGES.
+ * Site inspection and With Property Owner can be skipped ("Not needed").
+ */
+export const JOB_TRACKER_STAGES = ['Estimates', 'Site inspection', 'Firm Quote', 'With Property Owner', 'Ready to book', 'Booked', 'Done'] as const;
+
 /** The label for a Job stage ("scheduled" is "Booked"). Other values are humanised. */
 export function jobStageLabel(status: string): string {
   return JOB_STAGES.find((stage) => stage.status === status)?.label ?? humanise(status);
@@ -661,14 +668,23 @@ export function statGroup(items: Html[]): Html {
 }
 
 /**
+ * Where a stage stands: done (ticked), skipped (it didn't happen and won't: muted, no
+ * tick, never current), current, or upcoming.
+ */
+export type StepState = 'done' | 'skipped' | 'current' | 'upcoming';
+
+/**
  * Progress through stages (daisyUI steps, https://daisyui.com/components/steps/),
  * as for the Tenant's tracker. Done stages are ticked (--done) and say so to screen
- * readers; the current one is --action, and the stages to come are --line. The
- * current stage is the first not done unless `current` says otherwise. Vertical on
- * phones and horizontal on wide screens, or always vertical with `vertical`.
+ * readers; the current one is --action, and the stages to come are --line. Each item
+ * is done or not (`done`), or has its own `state` when a stage can also be skipped
+ * or must be current while one before it isn't done. The current stage is the one
+ * whose state is `current`, else the first neither done nor skipped, unless `current`
+ * says otherwise. Vertical on phones and horizontal on wide screens, or always
+ * vertical with `vertical`.
  */
 export function steps(
-  items: { label: string; done: boolean; detail?: string; href?: string }[],
+  items: { label: string; done?: boolean; state?: StepState; detail?: string; href?: string }[],
   o: {
     vertical?: boolean;
     /** Always horizontal, with small labels on phones: a wizard's short step names. */
@@ -677,23 +693,28 @@ export function steps(
     current?: number;
   } = {},
 ): Html {
-  const current = o.current ?? items.findIndex((item) => !item.done);
+  const states = items.map((item): StepState => item.state ?? (item.done ? 'done' : 'upcoming'));
+  const named = states.indexOf('current');
+  const current = o.current ?? (named >= 0 ? named : states.findIndex((s) => s !== 'done' && s !== 'skipped'));
   const responsive = !o.vertical && !o.horizontal;
   const direction = o.horizontal ? 'steps-horizontal' : `steps-vertical ${responsive ? 'lg:steps-horizontal' : ''}`;
   return html`<ol class="steps ${direction} w-full">
-    ${items.map(
-      (item, i) =>
-        html`<li class="step ${o.horizontal ? 'min-w-0' : ''} ${item.done || i === current ? 'step-primary' : ''}" ${item.done ? html`data-content="✓"` : ''} ${i === current ? html`aria-current="step"` : ''}>
+    ${items.map((item, i) => {
+      const done = states[i] === 'done';
+      const skipped = states[i] === 'skipped' && i !== current;
+      const strong = done || i === current;
+      const cls = ['step', o.horizontal ? 'min-w-0' : '', strong ? 'step-primary' : '', skipped ? 'step-skipped' : ''].filter(Boolean).join(' ');
+      return html`<li class="${cls}" ${done ? html`data-content="✓"` : ''} ${i === current ? html`aria-current="step"` : ''}>
           <div class="pb-2 ${o.horizontal ? 'px-1 text-center' : `text-start ${responsive ? 'lg:px-1 lg:text-center' : ''}`}">
-            <span class="block ${o.horizontal ? 'text-xs sm:text-sm' : 'text-sm'} ${item.done || i === current ? 'font-semibold' : 'text-muted'}"
+            <span class="block ${o.horizontal ? 'text-xs sm:text-sm' : 'text-sm'} ${strong ? 'font-semibold' : 'text-muted'}"
               >${item.href && i !== current ? html`<a class="link link-hover" href="${item.href}">${item.label}</a>` : item.label}<span class="sr-only"
-                >${item.done ? ' (done)' : ''}${i === current ? (o.current === undefined ? ' (next)' : ' (this step)') : ''}</span
+                >${done ? ' (done)' : ''}${skipped ? ' (skipped)' : ''}${i === current ? (o.current === undefined && named < 0 ? ' (next)' : ' (this step)') : ''}</span
               ></span
             >
             ${item.detail ? html`<span class="block text-xs text-muted">${item.detail}</span>` : ''}
           </div>
-        </li>`,
-    )}
+        </li>`;
+    })}
   </ol>`;
 }
 

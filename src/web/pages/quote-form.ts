@@ -18,6 +18,7 @@ import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { html, raw } from 'hono/html';
 import type { App } from '../../app.ts';
+import type { FirmQuoteInput } from '../../quotes.ts';
 import { ActionError } from '../../shared.ts';
 import { files, list, localToIso, text, type FormValues } from '../forms.ts';
 import { alert, button, card, dl, field, formatMoney, formatWhen, humanise, publicPage, type Html } from '../ui.ts';
@@ -25,7 +26,7 @@ import { alert, button, card, dl, field, formatMoney, formatWhen, humanise, publ
 const MB = 1024 * 1024;
 const STATUS = { not_found: 404, invalid: 400, conflict: 409 } as const;
 /** The most start dates a Firm Quote lists (the core says the same). */
-const DATE_INPUTS = 3;
+export const DATE_INPUTS = 3;
 
 type QuotePage = NonNullable<Awaited<ReturnType<App['quotePage']>>>;
 /** What the Tradie typed, to show again with the refusal. */
@@ -80,16 +81,8 @@ export function quoteFormPages(app: App) {
       const page = await app.quotePage(token);
       if (!page) return c.html(unknownLinkPage(), 404);
       const form = (await c.req.parseBody({ all: true }).catch(() => ({}))) as FormValues;
-      const [pdf] = files(form, 'pdf');
       try {
-        await app.submitFirmQuote(token, {
-          priceCents: dollarsToCents(text(form, 'price')),
-          scopeOfWork: text(form, 'scopeOfWork'),
-          durationDays: text(form, 'durationDays') ? Number(text(form, 'durationDays')) : NaN,
-          availableDates: list(form, 'availableDates'),
-          proposedTime: text(form, 'proposedTime') ? localTime(text(form, 'proposedTime'), page.timeZone, 'proposedTime') : null,
-          pdf: pdf ? { filename: pdf.name, contentType: pdf.type || 'application/octet-stream', content: new Uint8Array(await pdf.arrayBuffer()) } : null,
-        });
+        await app.submitFirmQuote(token, await firmQuoteFrom(form, page.timeZone));
       } catch (error) {
         return refused(c, token, page, error, form, ['price', 'scopeOfWork', 'durationDays', 'availableDates', 'proposedTime']);
       }
@@ -98,6 +91,23 @@ export function quoteFormPages(app: App) {
   );
 
   return pages;
+}
+
+/**
+ * A posted Firm Quote form (price, scopeOfWork, durationDays, availableDates, proposedTime
+ * and an optional pdf) as the core's input. Shared with the Ticket page, where the Property
+ * Manager enters a Firm Quote a Tradie sent another way; the core checks every field.
+ */
+export async function firmQuoteFrom(form: FormValues, timeZone: string): Promise<FirmQuoteInput> {
+  const [pdf] = files(form, 'pdf');
+  return {
+    priceCents: dollarsToCents(text(form, 'price')),
+    scopeOfWork: text(form, 'scopeOfWork'),
+    durationDays: text(form, 'durationDays') ? Number(text(form, 'durationDays')) : NaN,
+    availableDates: list(form, 'availableDates'),
+    proposedTime: text(form, 'proposedTime') ? localTime(text(form, 'proposedTime'), timeZone, 'proposedTime') : null,
+    pdf: pdf ? { filename: pdf.name, contentType: pdf.type || 'application/octet-stream', content: new Uint8Array(await pdf.arrayBuffer()) } : null,
+  };
 }
 
 /** Dollars typed by a person ("1,250.50") as cents; NaN when it isn't an amount, which the core refuses. */

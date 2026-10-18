@@ -182,7 +182,7 @@ All of these are in `src/web/ui.ts`; pages use them instead of hand-building mar
   - Two-column field grids at 768 px and up.
 - **Sections:** surface, 1 px `--line` border, 8 px radius, 16 px padding, no shadow, heading 20 px Bricolage Grotesque 600 with optional actions on the right.
 - **Alerts** (`alert`, `flashMessage`): 8 px radius, the tone's pair (info is Ironbark on `--info-bg` with a Gum icon), an icon and the tone's word for screen readers. Links inside take the alert's text colour, underlined.
-- **Steps** (sequences only: the Ticket's Job progress, the Tenant tracker, the setup guide): 24 px circles. Done is `--done` with a tick (and a done line between done steps); current is Gum with its number; to come is a white circle on a hairline with a muted number. The step on screen (`aria-current="step"`) also gets a 2 px Gum ring 2 px out, so "you are here" still reads when that step is done and shows its tick (a wizard step you came back to).
+- **Steps** (sequences only: the Ticket's Job progress, the Tenant tracker, the setup guide): 24 px circles. Done is `--done` with a tick (and a done line between done steps); current is Gum with its number; to come is a white circle on a hairline with a muted number; skipped (`state: 'skipped'`: a stage that didn't happen and won't, such as "Not needed") is a muted dash in a dashed ring, never ticked and never current. A step is ticked only when it really happened, never because a later one began. The step on screen (`aria-current="step"`) also gets a 2 px Gum ring 2 px out, so "you are here" still reads when that step is done and shows its tick (a wizard step you came back to).
 - **Tabs** (`tabs`): Bricolage Grotesque, muted until current; the current one is Ironbark 600 with a Gum underline and `aria-current`. **Side tabs** (`sideTabs`, for Settings' sections): a column of 40 px Bricolage Grotesque 14 px links, the current one a white tab with a hairline and the Wattle bar; a sideways-scrolling row under 768 px.
 - **Timeline:** Gum dots on a `--line` rule, the time muted above each event, 12 px between events so it reads as a log.
 - **Facts** (`dl`): a 10 rem label column, so a value sits near its label even in a wide column; in a box under 26 rem the label stacks over its value.
@@ -253,7 +253,7 @@ The same labels and the same order appear in the dashboard lanes, the Ticket pag
 |---|---|---|
 | `quoting` | Quoting | info badge |
 | `site_quoting` | Site quotes | info badge; Tradies visit the Property before the final Quote |
-| `awaiting_owner` | With Property Owner | Ochre badge. As a step, it appears only when the Job needed approval. |
+| `awaiting_owner` | With Property Owner | Ochre badge. As a step, it reads "Not needed" (skipped) when the Repair Cost stayed within the Max Repair Cost. |
 | `approved` | Ready to book | info badge |
 | `scheduled` | Booked | info badge |
 | `done` | Done | Slate badge |
@@ -272,7 +272,10 @@ A Ticket is Open or Closed.
 | Change Trade | |
 | Send Quote Requests | |
 | Confirm Quote | |
-| Choose this Quote | |
+| Choose this Firm Quote | Firm Quotes only; an Estimate is never chosen |
+| Check Estimate | Folds the correct-and-confirm form on the Tradie's row |
+| Proceed on Estimate | With a Not-to-exceed Cap; offered only when it can work |
+| Enter a Firm Quote they sent | For a Firm Quote that came by email or PDF |
 | Send Work Order | |
 | Suggest new times | |
 | Use this time | |
@@ -309,7 +312,8 @@ A machine check never stands in for what a person said:
 - **Literal colours.** No literal colour values outside the token block in `app.css`, including white. Use `var(--surface)`.
 - **Navigation (2026-10-19).** Requests folds into Tickets (new Maintenance Requests above open Tickets, one filter bar over both), closed Tickets move to Archive, and Properties, Tradies and the new Tenants sit under a Profiles heading. The rail's decision count moves from Requests to Tickets.
 - **Navigation (2026-10-13, replacing the three-item rail of 2026-10-10).** Dashboard, Dispatch, Requests, Tickets, Approvals, Schedule, a gap, Properties, Tradies, a gap, Settings, plus the demo's Phone simulator at the foot of the rail. The user asked for each queue to have its own place, so Calendar is Schedule again rather than moving into Dispatch's Tradie schedule; the Setup pages still move into Settings tabs.
-- **The Tenant's progress tracker.** The Ticket page links to it, so a Property Manager can see what the Tenant sees.
+- **The Tenant's progress tracker.** The Ticket page links to it, so a Property Manager can see what the Tenant sees. A Site visit is Done only once the inspection has happened (before that, "booked for" its time); Booked asks the Tenant to confirm they'll be home or can let the tradie in until they have.
+- **Staged quoting on the Ticket page (ADR 0009).** The stage tracker reads Estimates, Site inspection, Firm Quote, With Property Owner, Ready to book, Booked, Done (`JOB_TRACKER_STAGES`). Site inspection is "Not needed" when no Tradie needed one and left out when the Job proceeded on an Estimate; Firm Quote then reads "Proceeding on Estimate (cap $X)". Booked is ticked only once the Tenant has confirmed the visit ("Waiting on Tenant to confirm" until then). Each Tradie asked is a row of their own with a chip for where they are (Asked, Estimate in, Needs inspection, Inspection booked, Inspected, Firm Quote in, Declined, Closed) and their next action; Firm Quotes and Estimates are two tables that never share a price column, and a superseded Estimate stays listed, muted. Call-out Fees owed are a line of their own, never part of the Repair Cost. Mark inspected appears only once the visit has started.
 
 ## Copy
 

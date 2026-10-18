@@ -534,8 +534,11 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
       return modules.scheduling.recordRescheduleRequest(id, 'tradie');
     }
     if (kind === 'work_order' && replyType === 'done') {
-      await logInbound(msg, tradie.id, issueId);
-      return modules.scheduling.markDone(id);
+      // A visit is never done before it starts: the Tradie is told when it is booked for,
+      // and the message is left unread for the Property Manager.
+      const early = !(await modules.scheduling.hasStarted(id));
+      await logInbound(msg, tradie.id, issueId, early);
+      return early ? modules.scheduling.tellDoneTooEarly(id) : modules.scheduling.markDone(id);
     }
     return toInbox(msg, tradie.id, 'low_confidence', answers);
   }
