@@ -99,4 +99,48 @@ describe('the quote stages migration', () => {
     expect(await all(db, 'SELECT * FROM quotes ORDER BY id')).toEqual(before);
     expect((await one<{ n: number }>(db, 'SELECT count(*) AS n FROM quote_requests WHERE status = ?', 'firm_quoted'))!.n).toBe(1);
   });
+  test('makes the Quotes the old single-step flow chose, sent to the Owner or passed over Firm Quotes; a still-open one stays an Estimate', async () => {
+    const db = await beforeStages();
+    const at = '2026-10-10T00:00:00.000Z';
+    const job = (status: string) => run(db, `INSERT INTO jobs (agency_id, ticket_id, trade, status) VALUES (1, 1, 'plumbing', ?) RETURNING id`, status);
+    const done = await job('done');
+    const quoting = await job('quoting');
+    const request = (jobId: number, tradieId: number, status: string) =>
+      run(db, `INSERT INTO quote_requests (agency_id, job_id, ticket_id, tradie_id, status, sent_at) VALUES (1, ?, 1, ?, ?, ?) RETURNING id`, jobId, tradieId, status, at);
+    const quote = (jobId: number, requestId: number, tradieId: number, status: string, confirmed = 1) =>
+      run(
+        db,
+        `INSERT INTO quotes (agency_id, job_id, ticket_id, quote_request_id, tradie_id, trade, price_cents, confirmed, status, received_at)
+         VALUES (1, ?, 1, ?, ?, 'plumbing', 20000, ?, ?, ?) RETURNING id`,
+        jobId,
+        requestId,
+        tradieId,
+        confirmed,
+        status,
+        at,
+      );
+    const approved = await quote(done, await request(done, 10, 'quoted'), 10, 'approved');
+    const passedOver = await quote(done, await request(done, 11, 'closed'), 11, 'not_chosen');
+    const neverChecked = await quote(done, await request(done, 12, 'closed'), 12, 'not_chosen', 0);
+    const ownerSaidNo = await quote(quoting, await request(quoting, 13, 'quoted'), 13, 'declined_by_owner');
+    const stillOpen = await quote(quoting, await request(quoting, 14, 'quoted'), 14, 'open');
+
+    await migrate(db);
+
+    const stage = async (id: number) => (await one<{ stage: string; not_to_exceed_cents: number | null }>(db, 'SELECT stage, not_to_exceed_cents FROM quotes WHERE id = ?', id))!;
+    expect(await stage(approved)).toEqual({ stage: 'firm', not_to_exceed_cents: null });
+    expect((await stage(passedOver)).stage).toBe('firm');
+    expect((await stage(ownerSaidNo)).stage).toBe('firm');
+    expect((await stage(neverChecked)).stage).toBe('estimate');
+    expect((await stage(stillOpen)).stage).toBe('estimate');
+    // They were single-step prices: no Estimate is made up for them.
+    expect((await one<{ n: number }>(db, 'SELECT count(*) AS n FROM quotes'))!.n).toBe(5);
+    expect((await all<{ status: string }>(db, 'SELECT status FROM quote_requests ORDER BY id')).map((r) => r.status)).toEqual(['firm_quoted', 'closed', 'closed', 'firm_quoted', 'estimated']);
+
+    // Run again over a new Estimate passed over since, it is left an Estimate.
+    const later = await quote(quoting, await request(quoting, 15, 'closed'), 15, 'not_chosen');
+    await db.sql.unsafe(readFileSync(join(MIGRATIONS_DIR, `${STAGES}_quote_stages.sql`), 'utf8'));
+    expect((await stage(later)).stage).toBe('estimate');
+    expect((await stage(approved)).stage).toBe('firm');
+  });
 });

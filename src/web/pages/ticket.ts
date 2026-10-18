@@ -576,8 +576,10 @@ type Stage = { label: string; state: StepState; detail?: string };
  * A Job's stages and how each stands. While the Job is getting Quotes, the current stage
  * is Firm Quote once one is in (or once every Tradie can quote firm), Site inspection while
  * one is still to happen, else Estimates. Site inspection is Not needed when no Tradie
- * needed one, and left out when the Job went ahead on an Estimate without one; Firm Quote
- * then says the Job is proceeding on an Estimate, and With Property Owner is Not needed
+ * still in the running needs one; once the Job is decided without one it is Not held if a
+ * Tradie wanted one (Not needed if none did), and left out when the Job went ahead on an
+ * Estimate without one; Firm Quote then says the Job is proceeding on an Estimate (and its
+ * Not-to-exceed Cap, when one is on record), and With Property Owner is Not needed
  * when the Repair Cost stayed within the Max Repair Cost. Booked waits on the Tenant to
  * confirm the visit, and is ticked only once they have (or the Job is done).
  */
@@ -591,7 +593,9 @@ function jobStages(job: JobView, x: Extras): Stage[] {
   const estimatesIn = job.quotes.some((q) => q.stage === 'estimate');
   const firmIn = job.quotes.filter((q) => q.stage === 'firm' && q.confirmed && q.status === 'open').length;
   const inspected = requests.some((r) => r.inspection?.status === 'done');
-  const needed = requests.some((r) => (r.inspectionNeeded || r.inspection) && r.status !== 'declined');
+  // Wanted by a Tradie who didn't decline; needed by one still in the running.
+  const wanted = requests.some((r) => (r.inspectionNeeded || r.inspection) && r.status !== 'declined');
+  const needed = requests.some((r) => (r.inspectionNeeded || r.inspection) && r.status !== 'declined' && r.status !== 'closed');
   const toInspect = requests.some((r) => r.inspectionNeeded && (r.status === 'estimated' || r.status === 'inspection_booked'));
   const stillAsked = requests.some((r) => r.status === 'sent' || r.status === 'reminded');
   const at = !quoting ? null : !estimatesIn ? ESTIMATES : toInspect && !firmIn ? SITE : FIRM;
@@ -600,17 +604,22 @@ function jobStages(job: JobView, x: Extras): Stage[] {
   const stages: Stage[] = [{ label: ESTIMATES, state: state(ESTIMATES, estimatesIn) }];
   if (inspected) stages.push({ label: SITE, state: 'done' });
   else if (!proceeded) {
-    // Not needed once every Tradie has answered and none needs one (or the Job has moved on without one).
-    const notNeeded = !needed && (decided || (estimatesIn && !stillAsked));
     // While a visit is booked, when the next one is.
     const next = requests.flatMap((r) => (r.inspection?.status === 'active' ? [r.inspection.start] : [])).sort()[0];
+    // Not needed once every Tradie has answered and none still in the running needs one.
+    const notNeeded = !needed && estimatesIn && !stillAsked;
     stages.push(
-      notNeeded
-        ? { label: SITE, state: 'skipped', detail: 'Not needed' }
-        : { label: SITE, state: state(SITE, false), ...(next ? { detail: `Booked ${formatWhen(next, x.timeZone)}` } : {}) },
+      decided && !next
+        ? { label: SITE, state: 'skipped', detail: wanted ? 'Not held' : 'Not needed' }
+        : notNeeded
+          ? { label: SITE, state: 'skipped', detail: 'Not needed' }
+          : { label: SITE, state: state(SITE, false), ...(next ? { detail: `Booked ${formatWhen(next, x.timeZone)}` } : {}) },
     );
   }
-  if (proceeded) stages.push({ label: FIRM, state: 'skipped', detail: `Proceeding on Estimate (cap ${formatMoney(chosen!.notToExceedCents)})` });
+  if (proceeded) {
+    const cap = chosen!.notToExceedCents;
+    stages.push({ label: FIRM, state: 'skipped', detail: cap === null ? 'Proceeding on Estimate' : `Proceeding on Estimate (cap ${formatMoney(cap)})` });
+  }
   else stages.push({ label: FIRM, state: state(FIRM, decided), ...(quoting && firmIn ? { detail: `${firmIn} in` } : {}) });
 
   const approval = job.approval;
@@ -881,14 +890,14 @@ function recommendationsSection(t: TicketView, job: JobView, x: Extras): Html {
   return html`<section class="space-y-3">
     ${header}
     <p class="text-muted">
-      Ranked by myEST8 rating, then Google rating, then median previous Quote.
+      Ranked by myEST8 rating, then Google rating, then median previous Firm Quote.
       ${firstRound ? 'Send the first round to three or four Tradies; the top three are ticked.' : 'Invite more Tradies if the Job is short of Quotes.'}
     </p>
     ${rule?.singleReason ? alert(rule.singleReason, 'info') : (rule?.minimum ?? MIN_QUOTES) > 1
       ? html`<p class="text-sm text-muted">Send Quote Requests to at least ${rule?.minimum === 3 ? 'three' : 'two'} Tradies.</p>`
       : nothing}
     <form method="post" action="/tickets/${t.ticketId}/jobs/${job.jobId}/quote-requests" class="space-y-3">
-      ${compactTable(['Tradie', 'Rating', 'Google', 'Median Quote', 'Ask'], rows, `Recommended Tradies for the ${humanise(job.trade)} Job`)}
+      ${compactTable(['Tradie', 'Rating', 'Google', 'Median Firm Quote', 'Ask'], rows, `Recommended Tradies for the ${humanise(job.trade)} Job`)}
       ${anyLeft ? button('Send Quote Requests', { block: true }) : html`<p>Every recommended Tradie has been asked.</p>`}
     </form>
   </section>`;
@@ -929,7 +938,7 @@ function recommendationRow(job: JobView, r: Recommendation, rank: number, ticked
     html`<span class="num whitespace-nowrap">${myEst8Rating(r)}</span>`,
     html`<span class="whitespace-nowrap">${googleRating(r.googleRating)}</span>`,
     html`<span class="num">${
-      r.medianQuoteCents === null ? 'No previous Quotes' : `Median Quote ${formatMoney(r.medianQuoteCents)} (${r.previousQuotes.length} previous)`
+      r.medianQuoteCents === null ? 'No previous Firm Quotes' : `Median Firm Quote ${formatMoney(r.medianQuoteCents)} (${r.firmQuoteCount} previous)`
     }</span>`,
     html`<input
       type="checkbox"
@@ -1242,9 +1251,8 @@ function estimateStanding(job: JobView, q: QuoteView): Html {
     case 'superseded':
       return html`<span class="text-muted">Superseded by Firm Quote ${by ? formatMoney(by.priceCents) : ''}</span>`;
     case 'approved':
-      return html`${statusBadge(q.status)} <span class="text-sm">Capped at ${formatMoney(q.notToExceedCents)}</span>`;
     case 'awaiting_owner':
-      return html`${statusBadge(q.status)} <span class="text-sm">Capped at ${formatMoney(q.notToExceedCents)}</span>`;
+      return q.notToExceedCents === null ? statusBadge(q.status) : html`${statusBadge(q.status)} <span class="text-sm">Capped at ${formatMoney(q.notToExceedCents)}</span>`;
     case 'open':
       return q.confirmed ? badge('Confirmed', 'success') : badge('Needs checking', 'warning');
     default:

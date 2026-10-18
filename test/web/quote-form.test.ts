@@ -119,6 +119,30 @@ describe('the quote page', () => {
     expect((await post('firm', { price: '420', scopeOfWork: 'x', durationDays: '1', availableDates: [dateAhead(w, 6)] })).status).toBe(400);
   });
 
+  test('an Estimate post over 64 KB is refused on the page', async () => {
+    const { w, job, post } = await petesPage();
+    const refused = await post('estimate', { price: '150', proposedTime: '', filler: 'x'.repeat(70 * 1024) });
+    expect(refused.status).toBe(413);
+    expect(visible(refused.html)).toContain('That is too much to send');
+    expect((await quoteRequestFor(w, job, w.tradies.pete)).status).toBe('sent');
+  });
+
+  test('while the Property Owner decides, says whose quote is with them and that the others are still open', async () => {
+    const { w, job, open } = await petesPage();
+    await w.h.app.submitEstimate(await quoteToken(w, job, w.tradies.pete), { priceCents: 600_00, needsInspection: false });
+    await w.h.app.submitEstimate(await quoteToken(w, job, w.tradies.dana), { priceCents: 700_00, needsInspection: false });
+    await w.h.app.submitFirmQuote(await quoteToken(w, job, w.tradies.pete), { priceCents: 650_00, scopeOfWork: 'New tap', durationDays: 1, availableDates: [dateAhead(w, 3)] });
+    const pete = (await quoteRequestFor(w, job, w.tradies.pete)).firmQuote!;
+    await w.alice.chooseQuote(pete.quoteId, 'Dana is a week away');
+
+    const mine = visible((await open()).html);
+    expect(mine).toContain('Harbour Realty would like to go with your quote and has asked the Property Owner to approve it');
+    expect(mine).not.toContain('has closed');
+    const other = visible(await (await w.get(`/q/${await quoteToken(w, job, w.tradies.dana)}`)).text());
+    expect(other).toContain('Still open: Harbour Realty is waiting on the Property Owner about another quote');
+    expect(other).not.toContain('has closed');
+  });
+
   test('says so when the request has closed, been declined, or another Quote was chosen', async () => {
     const { w, job, open } = await petesPage();
     await w.alice.cancelJob(job.jobId);

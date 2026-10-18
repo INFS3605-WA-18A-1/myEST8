@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   BELLA,
+  confirmedEstimates,
   confirmedQuotes,
   jobView,
   KING_ST,
@@ -70,6 +71,25 @@ describe('Work Orders', () => {
     });
     const tracker = await h.tracker(h.messenger.to(TOM).find((m) => m.template === 'tenant.confirmed')!.data.trackerLink as string);
     expect(tracker.stages.find((s) => s.stage === 'booked')).toMatchObject({ reached: true, visitStart: TUE_9AM.toISOString() });
+  });
+
+  test("the Work Order carries what was approved: the Firm Quote's price, or the Estimate's Not-to-exceed Cap", async () => {
+    const w = await world();
+    const job = await approvedTapJob(w, w.tradies.pete, TUE_9AM);
+    await w.alice.sendWorkOrder(job.jobId);
+    expect(w.h.messenger.last(w.tradies.pete.address)).toMatchObject({ template: 'tradie.work_order', data: { approvedCents: 150_00, stage: 'firm' } });
+    expect(w.h.messenger.last(w.tradies.pete.address)!.text).toContain('Approved: your Firm Quote of $150.00.');
+
+    const w2 = await world();
+    const capped = await tomsTapTicket(w2);
+    const [pete] = await confirmedEstimates(w2, capped, [
+      [w2.tradies.pete, 120_00, TUE_9AM],
+      [w2.tradies.dana, 140_00],
+    ]);
+    await w2.alice.proceedOnEstimate(pete!.quoteId, { capCents: 180_00 });
+    await w2.alice.sendWorkOrder(capped.jobId);
+    expect(w2.h.messenger.last(w2.tradies.pete.address)).toMatchObject({ template: 'tradie.work_order', data: { approvedCents: 180_00, stage: 'estimate' } });
+    expect(w2.h.messenger.last(w2.tradies.pete.address)!.text).toContain('Approved on your Estimate: not to exceed $180.00.');
   });
 
   test('the slot is 2 hours by default and can be made longer', async () => {

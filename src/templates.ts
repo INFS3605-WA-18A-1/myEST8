@@ -93,6 +93,10 @@ export const templates = {
       `Before we fix it, ${d.tradieBusinessName} (${trade(d.trade)}) will come to inspect the issue so they can give a firm price: ${visit(d.visitStart, a)}. ` +
       'Reply YES if that time works, or tell us if you need another time.',
   ),
+  'tenant.inspection_cancelled': template<{ tradieBusinessName: string; visitStart: string }>(
+    'Inspection cancelled',
+    (d, a) => `${d.tradieBusinessName} won't be coming to inspect on ${visit(d.visitStart, a)}: that visit is cancelled, so you don't need to be home for it. We'll let you know when the repair is booked.`,
+  ),
   'tenant.fixed_properly': template<{ trade: Trade; tradieBusinessName: string }>(
     'Was it fixed properly?',
     (d) => `${d.tradieBusinessName} has finished the ${trade(d.trade)} job. Was it fixed properly? Reply with a number from 1 (not at all) to 5 (perfectly).`,
@@ -121,13 +125,27 @@ export const templates = {
       `Reminder from ${a.name}: can you give an Estimate for the ${trade(d.trade)} job in ${d.suburb}? ${d.quoteLink} ` +
       'Or reply with a ballpark price and earliest time, or NO to decline.',
   ),
-  'tradie.not_chosen': template<{ trade: Trade; suburb: string }>(
+  'tradie.not_chosen': template<{ trade: Trade; suburb: string; inspectionStart?: string }>(
     'Quote not chosen',
-    (d, a) => `Thanks for quoting for the ${trade(d.trade)} job in ${d.suburb}. ${a.name} has gone with another quote this time.`,
+    (d, a) =>
+      `Thanks for quoting for the ${trade(d.trade)} job in ${d.suburb}. ${a.name} has gone with another quote this time.` +
+      (d.inspectionStart ? ` Your Site Inspection on ${visit(d.inspectionStart, a)} is cancelled, so please don't go.` : ''),
   ),
-  'tradie.work_order': template<{ propertyAddress: string; description: string; trade: Trade; visitStart: string; visitEnd: string }>(
+  'tradie.work_order': template<{
+    propertyAddress: string;
+    description: string;
+    trade: Trade;
+    visitStart: string;
+    visitEnd: string;
+    /** What was approved: the Firm Quote's price, or the Not-to-exceed Cap on an Estimate proceeded on. */
+    approvedCents: number;
+    stage: 'estimate' | 'firm';
+  }>(
     'Work order',
-    (d, a) => `Work order from ${a.name}: ${trade(d.trade)} at ${d.propertyAddress}, ${visit(d.visitStart, a)}. Issue: ${d.description}. Reply DONE when finished, or tell us if you need another time.`,
+    (d, a) =>
+      `Work order from ${a.name}: ${trade(d.trade)} at ${d.propertyAddress}, ${visit(d.visitStart, a)}. Issue: ${d.description}. ` +
+      (d.stage === 'estimate' ? `Approved on your Estimate: not to exceed ${dollars(d.approvedCents)}. ` : `Approved: your Firm Quote of ${dollars(d.approvedCents)}. `) +
+      'Reply DONE when finished, or tell us if you need another time.',
   ),
   'tradie.done_too_early': template<{ propertyAddress: string; visitStart: string; inspection: boolean }>(
     'Not done yet',

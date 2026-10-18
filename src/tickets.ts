@@ -932,7 +932,7 @@ export function createTickets({ db, clock, settings, modules }: Context) {
       const doneAt = allDone ? (events.filter((e) => e.kind === 'job_done').at(-1)?.at ?? null) : null;
       // The latest visit, preferring a Job that is still going ahead.
       type VisitEvent = { kind: string; jobId?: number; tradie?: string; visitStart?: string };
-      const visits = events.filter((e) => (e.kind === 'work_order_sent' || e.kind === 'visit_moved') && !(e as { inspection?: boolean }).inspection) as VisitEvent[];
+      const visits = events.filter((e) => (e.kind === 'work_order_sent' || e.kind === 'visit_moved') && !(e as { inspection?: boolean }).inspection && !(e as { siteQuote?: boolean }).siteQuote) as VisitEvent[];
       const visit = visits.findLast((e) => jobs.some((j) => j.id === e.jobId)) ?? visits.at(-1);
       const tradie = visits.findLast((e) => e.kind === 'work_order_sent' && e.jobId === visit?.jobId)?.tradie;
       const trade = jobs.find((j) => j.id === visit?.jobId)?.trade;

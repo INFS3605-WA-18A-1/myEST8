@@ -514,7 +514,7 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
 
     if (kind === 'quote_request' && (replyType === 'quote' || replyType === 'decline')) {
       // A price after the Estimate can't be a Firm Quote (a message can't carry its scope and
-      // dates): the Tradie is sent their quote page, and the message is left unread.
+      // dates): the Tradie is sent their quote page once a Firm Quote is allowed, and the message is left unread.
       const afterEstimate = replyType === 'quote' && !!(await modules.quotes.quoteRequest(id))?.estimated;
       await logInbound(msg, tradie.id, issueId, afterEstimate);
       const pdf = (await Promise.all(msg.fileIds.map((fileId) => files.get(fileId)))).find((f) => f.contentType === 'application/pdf');
@@ -728,6 +728,11 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
     markReimbursed,
     resendReceiptLink,
     expectAnswer,
+
+    /** Stops waiting for the Tenant to confirm a visit that is no longer happening (a Site Inspection cancelled). */
+    async stopWaitingOnVisit(personId: number, workOrderId: number) {
+      if ((await awaitingFrom(personId)).some((a) => a.kind === 'visit' && a.workOrderId === workOrderId)) await stopWaiting(personId, 'visit');
+    },
 
     async inbox(agencyId: number) {
       const items = await all<{ id: number; inbound_id: number; person_id: number | null; reason: InboxReason; best_guess: string | null; at: string }>(

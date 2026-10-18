@@ -353,7 +353,15 @@ export function createScheduling({ db, clock, worker, modules }: Context) {
       await notifications.send(
         tradie.id,
         'tradie.work_order',
-        { propertyAddress: property.address, description: withoutContactDetails(issue.description), trade: job.trade, visitStart: row.start, visitEnd: row.end },
+        {
+          propertyAddress: property.address,
+          description: withoutContactDetails(issue.description),
+          trade: job.trade,
+          visitStart: row.start,
+          visitEnd: row.end,
+          approvedCents: quote.priceCents,
+          stage: quote.stage,
+        },
         { issueId: issue.id },
       );
       await tellTenantVisitTime(row, false);

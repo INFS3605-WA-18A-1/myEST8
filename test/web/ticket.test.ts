@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { formatWhen } from '../../src/web/ui.ts';
+import { run } from '../../src/db.ts';
 import { webWorld } from '../support/web.ts';
 import { readdirSync, readFileSync } from 'node:fs';
 import {
@@ -7,6 +8,7 @@ import {
   confirmedQuotes,
   DANA,
   dateAhead,
+  firmQuote,
   KING_ST,
   PETE,
   quoteToken,
@@ -627,6 +629,45 @@ describe('the stage tracker ticks only what has happened', () => {
     );
   });
 
+  test('a Site Inspection one Tradie wanted but never had is Not held once another Tradie is chosen, and never becomes the next step', async () => {
+    const { w, job, open, visitTime } = await tapTicket();
+    await w.alice.sendQuoteRequests(job.jobId, [w.tradies.pete.id, w.tradies.dana.id]);
+    await w.h.app.submitEstimate(await quoteToken(w, job, w.tradies.pete), { priceCents: 150_00, needsInspection: true });
+    await w.h.app.submitEstimate(await quoteToken(w, job, w.tradies.dana), { priceCents: 140_00, needsInspection: false });
+    const dana = await firmQuote(w, job, w.tradies.dana, { priceCents: 150_00, proposedTime: TUE_9AM });
+
+    await w.alice.chooseQuote(dana.quoteId, 'Pete is a week away');
+
+    expect(trackerOf((await open()).html)).toBe(
+      'Estimates (done) Site inspection (skipped) Not held Firm Quote (done) With Property Owner (skipped) Not needed Ready to book (this step) Booked Done',
+    );
+
+    await w.alice.sendWorkOrder(job.jobId);
+    await visitTime(TUE_9AM);
+    const workOrderId = (await w.alice.ticket(job.ticketId)).jobs[0]!.workOrder!.workOrderId;
+    w.h.classifier.when('All done', { replyType: 'done', relatedItem: `work_order:${workOrderId}` });
+    await w.h.receive(DANA, 'All done');
+
+    const done = trackerOf((await open()).html);
+    expect(done).toBe('Estimates (done) Site inspection (skipped) Not held Firm Quote (done) With Property Owner (skipped) Not needed Ready to book (done) Booked (done) Done (done)');
+    expect(done).not.toContain('(next)');
+  });
+
+  test('an Estimate proceeded on with no cap on record (from before staged quoting) never shows a missing cap', async () => {
+    const { w, job, open, submit } = await tapTicket();
+    const [pete] = await confirmedEstimates(w, job, [
+      [w.tradies.pete, 120_00],
+      [w.tradies.dana, 140_00],
+    ]);
+    await submit(formPosting((await open()).html, /\/proceed$/), { cap: '150' });
+    await run(w.h.db, 'UPDATE quotes SET not_to_exceed_cents = NULL WHERE id = ?', pete!.quoteId);
+
+    const page = await open();
+
+    expect(trackerOf(page.html)).toContain('Firm Quote (skipped) Proceeding on Estimate With Property Owner');
+    expect(page.text).not.toMatch(/cap —|Capped at —/);
+  });
+
   test('Booked waits on the Tenant to confirm before it is ticked, says when they ask to move it, and Done is ticked only once the Job is', async () => {
     const { w, open, submit, approvePete, visitTime } = await tapTicket();
     await approvePete(150_00, TUE_9AM);
@@ -662,6 +703,19 @@ describe('the stage tracker ticks only what has happened', () => {
 });
 
 describe('Firm Quotes and Estimates stay apart', () => {
+  test('confirming a Firm Quote is refused: it is binding as the Tradie gave it', async () => {
+    const { w, job, path, submit } = await tapTicket();
+    const [pete] = await confirmedQuotes(w, job, [
+      [w.tradies.pete, 150_00],
+      [w.tradies.dana, 180_00],
+    ]);
+
+    const refused = await submit(`${path}/quotes/${pete!.quoteId}/confirm`, { price: '99' });
+
+    expect(refused.error).toMatch(/Firm Quote is binding/);
+    expect((await w.alice.ticket(job.ticketId)).jobs[0]!.quotes.find((q) => q.quoteId === pete!.quoteId)).toMatchObject({ priceCents: 150_00 });
+  });
+
   test('a superseded Estimate stays listed, muted, with the Firm Quote that replaced it, and is never offered to choose', async () => {
     const { w, job, open } = await tapTicket();
     const [pete] = await confirmedQuotes(w, job, [

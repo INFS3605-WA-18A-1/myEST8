@@ -4,7 +4,7 @@ import { upload } from './support/photos.ts';
 import { confirmedEstimates, confirmedQuotes, firmQuote, jobView, KING_ST, quoteRequestFor, TOM, tomsTapTicket, tradieQuotes, world } from './support/world.ts';
 
 describe('recommending Tradies', () => {
-  test('only Tradies with the Trade are recommended, by myEST8 rating, then Google rating, then median Quote, with both ratings shown', async () => {
+  test('only Tradies with the Trade are recommended, by myEST8 rating, then Google rating, then median Firm Quote, with both ratings shown', async () => {
     const w = await world();
     const { alice, tradies } = w;
     const job = await tomsTapTicket(w);
@@ -14,9 +14,13 @@ describe('recommending Tradies', () => {
     await tradieQuotes(w, job, tradies.nina, '$180 Tuesday', { priceCents: 180_00 });
     await tradieQuotes(w, job, tradies.quick, '$260 Wednesday', { priceCents: 260_00 });
     for (const quote of (await jobView(w, job)).quotes) await alice.confirmQuote(quote.quoteId);
+    // Only Firm Quotes make the median: an Estimate is never compared with one.
+    expect((await jobView(w, job)).recommendations.find((r) => r.businessName === 'Quick Pipes')).toMatchObject({ medianQuoteCents: null });
+    await firmQuote(w, job, tradies.nina, { priceCents: 180_00 });
+    await firmQuote(w, job, tradies.quick, { priceCents: 260_00 });
 
     const { recommendations } = await jobView(w, job);
-    // The Property's Nominated Tradie (Nina) leads, then myEST8 rating, Google rating, median Quote; four at most.
+    // The Property's Nominated Tradie (Nina) leads, then myEST8 rating, Google rating, median Firm Quote; four at most.
     expect(recommendations.map((r) => r.businessName)).toEqual(["Nina's Plumbing", 'Drip Doctors', "Pete's Plumbing", 'Quick Pipes']);
     expect(recommendations).toMatchObject([
       { nominated: true, requested: true, preselected: false, googleRating: { rating: 4.2 }, previousQuotes: [{ priceCents: 180_00 }], medianQuoteCents: 180_00 },

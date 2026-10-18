@@ -11,7 +11,8 @@
 //      three dates they can start, and optionally a PDF;
 //   4. after it: what they gave, read only.
 //
-// A closed, declined or passed-over request says so. Every field is checked again by
+// A closed, declined or passed-over request says so, as does one waiting on the
+// Property Owner (theirs, or another Tradie's quote). Every field is checked again by
 // the core, which refuses field by field; the page shows each message by its field.
 
 import { Hono, type Context } from 'hono';
@@ -23,7 +24,8 @@ import { ActionError } from '../../shared.ts';
 import { files, list, localToIso, text, type FormValues } from '../forms.ts';
 import { alert, button, card, dl, field, formatMoney, formatWhen, humanise, publicPage, type Html } from '../ui.ts';
 
-const MB = 1024 * 1024;
+const KB = 1024;
+const MB = 1024 * KB;
 const STATUS = { not_found: 404, invalid: 400, conflict: 409 } as const;
 /** The most start dates a Firm Quote lists (the core says the same). */
 export const DATE_INPUTS = 3;
@@ -44,25 +46,38 @@ export function quoteFormPages(app: App) {
     return c.html(quotePage(c.req.param('token'), page, { thanks: sent === 'estimate' || sent === 'firm' ? sent : undefined }));
   });
 
-  pages.post('/q/:token/estimate', async (c) => {
-    const token = c.req.param('token');
-    const page = await app.quotePage(token);
-    if (!page) return c.html(unknownLinkPage(), 404);
-    const form = (await c.req.parseBody({ all: true }).catch(() => ({}))) as FormValues;
-    const needsInspection = text(form, 'needsInspection') === 'yes';
-    const fee = text(form, 'calloutFee');
-    try {
-      await app.submitEstimate(token, {
-        priceCents: dollarsToCents(text(form, 'price')),
-        proposedTime: text(form, 'proposedTime') ? localTime(text(form, 'proposedTime'), page.timeZone, 'proposedTime') : null,
-        needsInspection,
-        calloutFeeCents: needsInspection && fee ? dollarsToCents(fee) : null,
-      });
-    } catch (error) {
-      return refused(c, token, page, error, form, ['price', 'proposedTime', 'needsInspection', 'calloutFee']);
-    }
-    return c.redirect(`/q/${encodeURIComponent(token)}?sent=estimate`, 303);
-  });
+  pages.post(
+    '/q/:token/estimate',
+    // A few short fields: anything bigger is not an Estimate.
+    bodyLimit({
+      maxSize: 64 * KB,
+      onError: async (c) => {
+        const token = c.req.param('token') ?? '';
+        const page = await app.quotePage(token);
+        if (!page) return c.html(unknownLinkPage(), 404);
+        return c.html(quotePage(token, page, { refusal: { message: 'That is too much to send. Give your Estimate in the fields below.', fields: {}, posted: {} } }), 413);
+      },
+    }),
+    async (c) => {
+      const token = c.req.param('token');
+      const page = await app.quotePage(token);
+      if (!page) return c.html(unknownLinkPage(), 404);
+      const form = (await c.req.parseBody({ all: true }).catch(() => ({}))) as FormValues;
+      const needsInspection = text(form, 'needsInspection') === 'yes';
+      const fee = text(form, 'calloutFee');
+      try {
+        await app.submitEstimate(token, {
+          priceCents: dollarsToCents(text(form, 'price')),
+          proposedTime: text(form, 'proposedTime') ? localTime(text(form, 'proposedTime'), page.timeZone, 'proposedTime') : null,
+          needsInspection,
+          calloutFeeCents: needsInspection && fee ? dollarsToCents(fee) : null,
+        });
+      } catch (error) {
+        return refused(c, token, page, error, form, ['price', 'proposedTime', 'needsInspection', 'calloutFee']);
+      }
+      return c.redirect(`/q/${encodeURIComponent(token)}?sent=estimate`, 303);
+    },
+  );
 
   pages.post(
     '/q/:token/firm',
@@ -184,6 +199,10 @@ function outcomeNote(p: QuotePage): Html | string {
   switch (p.outcome) {
     case 'chosen':
       return alert(`${p.agencyName} has gone with your quote. A Work Order with the visit time will follow.`, 'success');
+    case 'with_owner':
+      return alert(`${p.agencyName} would like to go with your quote and has asked the Property Owner to approve it. If they do, a Work Order with the visit time will follow.`, 'info');
+    case 'on_hold':
+      return alert(`Still open: ${p.agencyName} is waiting on the Property Owner about another quote, so it can't take yours just now. If the Owner says no, ${p.agencyName} may come back to you.`, 'info');
     case 'not_chosen':
       return alert(`${p.agencyName} has gone with another quote this time. Thanks for quoting.`, 'info');
     case 'declined':

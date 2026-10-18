@@ -16,8 +16,27 @@ ALTER TABLE quote_requests
 
 CREATE UNIQUE INDEX IF NOT EXISTS quote_requests_token ON quote_requests (token);
 
+-- Each Quote's stage, filled once, when the column is added: re-running the file
+-- never turns an Estimate given since into a Firm Quote.
+--  * A Quote revised after a Site Quote visit was the Tradie's firm price: a Firm
+--    Quote, over the Estimate made from its initial price below.
+--  * A confirmed Quote the old single-step flow chose, sent to the Property Owner
+--    or passed over was a price compared as binding: a Firm Quote too, with no
+--    Estimate made up for it. So an old Ticket shows its Firm Quote chosen, never
+--    "proceeding on an Estimate" with no Not-to-exceed Cap.
+--  * Any other (still open, or never checked) is an Estimate: the Tradie can
+--    still give a Firm Quote on their quote page.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'quotes' AND column_name = 'stage') THEN
+    ALTER TABLE quotes ADD COLUMN stage text NOT NULL DEFAULT 'estimate';  -- 'estimate' | 'firm'
+    UPDATE quotes SET stage = 'firm'
+    WHERE revised_at IS NOT NULL
+       OR (confirmed = 1 AND status IN ('approved', 'awaiting_owner', 'declined_by_owner', 'not_chosen'));
+  END IF;
+END $$;
+
 ALTER TABLE quotes
-  ADD COLUMN IF NOT EXISTS stage text NOT NULL DEFAULT 'estimate',          -- 'estimate' | 'firm'
   ADD COLUMN IF NOT EXISTS supersedes_quote_id bigint REFERENCES quotes (id), -- a Firm Quote's Estimate
   -- Estimate: whether the Tradie needs a Site Inspection first, and its Call-out Fee.
   ADD COLUMN IF NOT EXISTS needs_inspection boolean NOT NULL DEFAULT false,
@@ -32,10 +51,7 @@ ALTER TABLE quotes
 -- One Quote per Quote Request becomes one per stage.
 ALTER TABLE quotes DROP CONSTRAINT IF EXISTS quotes_quote_request_id_key;
 
--- A Quote revised after a Site Quote visit was the Tradie's firm price: it becomes the
--- Firm Quote, and its initial price becomes the Estimate it supersedes.
-UPDATE quotes SET stage = 'firm' WHERE revised_at IS NOT NULL AND stage = 'estimate';
-
+-- A revised Quote's initial price becomes the Estimate its Firm Quote supersedes.
 WITH estimates AS (
   INSERT INTO quotes (agency_id, job_id, ticket_id, quote_request_id, tradie_id, trade, price_cents, proposed_time,
                       confirmed, status, pdf_file_id, received_at, stage, needs_inspection)
@@ -43,7 +59,7 @@ WITH estimates AS (
          coalesce(f.initial_price_cents, f.price_cents), f.initial_proposed_time,
          1, 'superseded', NULL, f.received_at, 'estimate', true
   FROM quotes f
-  WHERE f.stage = 'firm'
+  WHERE f.stage = 'firm' AND f.revised_at IS NOT NULL
     AND NOT EXISTS (SELECT 1 FROM quotes e WHERE e.quote_request_id = f.quote_request_id AND e.stage = 'estimate')
   RETURNING id, quote_request_id
 )
