@@ -92,8 +92,8 @@ export async function createHarness(options: { blobs?: BlobStore } = {}) {
       await receive(from, text, options);
     },
 
-    async upload(link: string, files: { filename: string; contentType: string; content: Uint8Array }[]) {
-      await app.upload(tokenOf(link), files);
+    async upload(link: string, files: { filename: string; contentType: string; content: Uint8Array }[], options: { amountCents?: number } = {}) {
+      await app.upload(tokenOf(link), files, options);
       await drain();
     },
 

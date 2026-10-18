@@ -1,7 +1,11 @@
 import type { Context } from './context.ts';
+import { URGENT_REPAIR_LIMIT_CENTS } from './intake.ts';
 import { MIN_QUOTES } from './quotes.ts';
 import { addMs, HOUR_MS, iso, URGENCIES } from './shared.ts';
-import type { Issue, Job, JobStatus, Ticket } from './tickets.ts';
+import type { Issue, Job, JobStatus, Ticket, UrgentRepairStatus } from './tickets.ts';
+
+/** Reimbursement Requests in the order Approvals lists them: the ones to check first, then those waiting on the Tenant, then on the Property Owner. */
+const REIMBURSEMENT_ORDER: UrgentRepairStatus[] = ['receipt_received', 'reminder_sent', 'receipt_forwarded', 'reimbursed'];
 
 /** What the Property Manager's screens show, composed from each module's queries. */
 /** How far ahead the dashboard's calendar looks. */
@@ -220,16 +224,19 @@ export function createViews({ clock, modules }: Context) {
 
     /**
      * The rail's counts for a Property Manager's own Properties: Tickets is the new
-     * Maintenance Requests to confirm; Approvals is the Quotes waiting on a Property Owner.
+     * Maintenance Requests to confirm; Approvals is the Quotes waiting on a Property
+     * Owner and the Reimbursement Requests waiting for the Property Manager to check.
      */
     async navCounts(agencyId: number, propertyManagerId: number) {
       const propertyIds = await profiles.propertyIdsOf(propertyManagerId);
       // Tickets counts the new Maintenance Requests /tickets lists; inbox messages wait on the dashboard instead.
-      const [requests, waitingOnOwner] = await Promise.all([
+      const [requests, waitingOnOwner, urgentRepairs] = await Promise.all([
         tickets.maintenanceRequests(agencyId, propertyIds),
         modules.quotes.waitingOnOwner(agencyId, propertyIds),
+        tickets.urgentRepairs(agencyId, propertyIds),
       ]);
-      return { tickets: requests.length, approvals: waitingOnOwner.length };
+      const toReview = urgentRepairs.filter((u) => u.status === 'receipt_received').length;
+      return { tickets: requests.length, approvals: waitingOnOwner.length + toReview };
     },
 
     /**
@@ -259,26 +266,76 @@ export function createViews({ clock, modules }: Context) {
       };
     },
 
-    /** What is waiting on someone outside the Agency: Quotes on a Property Owner, and Urgent Repairs on a Tenant's receipt. */
+    /**
+     * What is waiting on a Property Owner, or on a Tenant's Reimbursement Request:
+     * Quotes over the Max Repair Cost, and every Reimbursement Request not yet
+     * reimbursed, the ones for the Property Manager to check first, then oldest first.
+     */
     async approvals(agencyId: number, propertyManagerId: number, filter: 'mine' | 'all') {
       const propertyIds = await scope(propertyManagerId, filter);
+      const open = (await tickets.urgentRepairs(agencyId, propertyIds))
+        .filter((u) => u.status !== 'reimbursed')
+        .sort((a, b) => REIMBURSEMENT_ORDER.indexOf(a.status) - REIMBURSEMENT_ORDER.indexOf(b.status) || a.createdAt.localeCompare(b.createdAt) || a.id - b.id);
       return {
         waitingOnOwner: await modules.quotes.waitingOnOwner(agencyId, propertyIds),
-        waitingOnReceipt: await Promise.all(
-          (await tickets.urgentRepairs(agencyId, propertyIds))
-            .filter((u) => u.status === 'reminder_sent')
-            .map(async (u) => {
-              const property = await profiles.property(u.propertyId);
-              return {
-                urgentRepairId: u.id,
-                propertyAddress: property.address,
-                ownerName: (await profiles.person(property.ownerId)).name,
-                tenantName: (await profiles.person(u.tenantId)).name,
-                description: (await tickets.issue(u.issueId)).description,
-                reportedAt: u.createdAt,
-              };
-            }),
+        reimbursements: await Promise.all(
+          open.map(async (u) => {
+            const property = await profiles.property(u.propertyId);
+            const issue = await tickets.issue(u.issueId);
+            return {
+              urgentRepairId: u.id,
+              propertyId: property.id,
+              propertyAddress: property.address,
+              ownerName: (await profiles.person(property.ownerId)).name,
+              tenantName: (await profiles.person(u.tenantId)).name,
+              description: issue.summary ?? issue.description,
+              status: u.status,
+              amountCents: u.amountCents,
+              limitCents: URGENT_REPAIR_LIMIT_CENTS,
+              receipts: u.receiptFileIds.length,
+              reportedAt: u.createdAt,
+              forwardedAt: u.forwardedAt,
+            };
+          }),
         ),
+      };
+    },
+
+    /**
+     * One Reimbursement Request, for its page: the issue and who is involved, the
+     * amount against the limit, the receipts, when each step happened, its timeline
+     * (from the Tenant's report) and the messages on its issue.
+     */
+    async reimbursement(agencyId: number, urgentRepairId: number) {
+      const u = await tickets.urgentRepairInAgency(agencyId, urgentRepairId);
+      const issue = await tickets.issue(u.issueId);
+      const property = await profiles.property(u.propertyId);
+      const [tenant, owner] = await Promise.all([profiles.person(u.tenantId), profiles.person(property.ownerId)]);
+      const events = await tickets.urgentRepairTimeline(u.id);
+      const contact = (p: typeof tenant) => ({ personId: p.id, name: p.name, mobile: p.mobile, email: p.email });
+      return {
+        urgentRepairId: u.id,
+        issueId: issue.id,
+        status: u.status,
+        description: issue.description,
+        summary: issue.summary,
+        propertyId: property.id,
+        propertyAddress: property.address,
+        propertyManager: (await profiles.propertyManager(property.propertyManagerId)).name,
+        tenant: contact(tenant),
+        owner: contact(owner),
+        amountCents: u.amountCents,
+        limitCents: URGENT_REPAIR_LIMIT_CENTS,
+        overLimit: u.amountCents !== null && u.amountCents > URGENT_REPAIR_LIMIT_CENTS,
+        receipts: await tickets.urgentRepairReceipts(u.id),
+        reportedAt: issue.reportedAt,
+        createdAt: u.createdAt,
+        /** When the latest receipt came; null before any did. */
+        receivedAt: events.findLast((e) => e.kind === 'receipt_received')?.at ?? (u.receiptFileIds.length ? u.createdAt : null),
+        forwardedAt: u.forwardedAt,
+        reimbursedAt: u.reimbursedAt,
+        timeline: [{ kind: 'reported', at: issue.reportedAt } as (typeof events)[number], ...events],
+        messages: await tickets.messages(issue.id),
       };
     },
 

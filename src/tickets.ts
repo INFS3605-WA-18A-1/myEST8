@@ -11,7 +11,16 @@ export const TAKES_PHOTOS: IssueStatus[] = ['awaiting_photos', 'checking', 'main
 export type JobStatus = 'quoting' | 'site_quoting' | 'awaiting_owner' | 'approved' | 'scheduled' | 'done' | 'cancelled';
 /** Who wrote a Maintenance Request's Summary: the model, or a Property Manager who edited it (never overwritten by the model again). */
 export type SummaryBy = 'ai' | 'property_manager';
-export type UrgentRepairStatus = 'reminder_sent' | 'receipt_received' | 'receipt_forwarded';
+/**
+ * Where an Urgent Repair's Reimbursement Request stands: waiting for the Tenant's
+ * receipt, waiting for the Property Manager to check it, with the Property Owner,
+ * then reimbursed.
+ */
+export type UrgentRepairStatus = 'reminder_sent' | 'receipt_received' | 'receipt_forwarded' | 'reimbursed';
+/** How a receipt arrived: through the upload link, or attached to a message on a channel. */
+export type ReceiptVia = 'upload' | ChannelType;
+/** A claim over this is surely a typo (the limit is $1,000): refused rather than stored. */
+const MAX_CLAIM_CENTS = 100_000_00;
 export type PhotoMetadata = 'ok' | 'flagged' | 'no_metadata';
 
 export interface Issue {
@@ -70,7 +79,11 @@ export interface UrgentRepair {
   status: UrgentRepairStatus;
   receiptToken: string;
   receiptFileIds: number[];
+  /** What the Tenant claims, as they or the Property Manager entered it; null until someone does. */
+  amountCents: number | null;
   createdAt: string;
+  forwardedAt: string | null;
+  reimbursedAt: string | null;
 }
 
 export interface LoggedMessage {
@@ -142,7 +155,10 @@ type UrgentRepairRow = {
   tenant_id: number;
   status: UrgentRepairStatus;
   receipt_token: string;
+  amount_cents: number | null;
   created_at: string;
+  forwarded_at: string | null;
+  reimbursed_at: string | null;
 };
 
 const ISSUE_COLUMNS = {
@@ -230,6 +246,12 @@ function requireTrade(trade: Trade) {
   if (!TRADES.includes(trade)) invalid(`Choose a Trade from: ${TRADES.join(', ')}`);
 }
 
+/** A claim must be a positive amount of cents, and not absurd. Over the $1,000 limit is allowed: the page warns. */
+export function requireClaim(amountCents: number) {
+  if (!Number.isInteger(amountCents) || amountCents <= 0) invalid('Enter the amount on the receipt, more than $0');
+  if (amountCents > MAX_CLAIM_CENTS) invalid('Check the amount: that is far over the $1,000 an Urgent Repair can claim');
+}
+
 /** Restricts a dashboard query to some Properties, or to none when `propertyIds` is null. */
 function propertyFilter(propertyIds: number[] | null): [string, Param[]] {
   return propertyIds === null ? ['', []] : [' AND property_id IN (SELECT value::bigint FROM jsonb_array_elements_text(?::text::jsonb) AS ids (value))', [JSON.stringify(propertyIds)]];
@@ -298,8 +320,21 @@ export function createTickets({ db, clock, settings, modules }: Context) {
         'SELECT file_id FROM urgent_repair_receipts WHERE urgent_repair_id = ? ORDER BY file_id',
         r.id,
       )).map((f) => f.file_id),
+      amountCents: r.amount_cents,
       createdAt: r.created_at,
+      forwardedAt: r.forwarded_at,
+      reimbursedAt: r.reimbursed_at,
     };
+  }
+
+  async function urgentRepairInAgency(agencyId: number, id: number) {
+    const row = await one<UrgentRepairRow>(db, 'SELECT * FROM urgent_repairs WHERE id = ? AND agency_id = ?', id, agencyId);
+    if (!row) notFound('Reimbursement Request');
+    return toUrgentRepair(row);
+  }
+
+  async function recordUrgentRepairEvent(urgentRepairId: number, kind: string, data: object = {}) {
+    await run(db, 'INSERT INTO urgent_repair_events (urgent_repair_id, kind, data, at) VALUES (?, ?, ?, ?)', urgentRepairId, kind, JSON.stringify(data), iso(clock.now()));
   }
 
   async function recordEvent(ticketId: number, kind: string, data: object = {}, at: Date | string = clock.now()) {
@@ -386,8 +421,8 @@ export function createTickets({ db, clock, settings, modules }: Context) {
       const about = photos ?? (await issue(receipt!.issueId));
       return {
         kind: photos ? ('photos' as const) : ('receipt' as const),
-        // A receipt link stays open: a Tenant may send a second page or a better photo.
-        open: photos ? TAKES_PHOTOS.includes(photos.status) : true,
+        // A receipt link stays open until the Tenant is reimbursed: they may send a second page or a better photo.
+        open: photos ? TAKES_PHOTOS.includes(photos.status) : receipt!.status !== 'reimbursed',
         description: about.description,
         agencyName: (await modules.profiles.agency(about.agencyId)).name,
         address: (await modules.profiles.property(about.propertyId)).address,
@@ -520,6 +555,7 @@ export function createTickets({ db, clock, settings, modules }: Context) {
           receiptToken,
           iso(clock.now()),
         );
+        await recordUrgentRepairEvent(id, 'reminder_sent');
         return { id, receiptToken };
       });
     },
@@ -531,17 +567,93 @@ export function createTickets({ db, clock, settings, modules }: Context) {
       return row ? toUrgentRepair(row) : null;
     },
 
-    async addReceipt(urgentRepairId: number, fileIds: number[]) {
+    urgentRepairInAgency,
+
+    /**
+     * Adds receipt files to a Reimbursement Request, which then waits for the Property
+     * Manager to check it, even if it was forwarded before (the Tenant sent another
+     * page). `amountCents`, when given, is what the Tenant claims. Refused once reimbursed.
+     */
+    async addReceipt(urgentRepairId: number, fileIds: number[], o: { amountCents?: number | null; via: ReceiptVia }) {
+      if (o.amountCents != null) requireClaim(o.amountCents);
       await transaction(db, async () => {
+        const current = await urgentRepair(urgentRepairId);
+        if (current.status === 'reimbursed') invalid('This Reimbursement Request is already reimbursed, so this link has expired');
         for (const fileId of fileIds) {
           await run(db, 'INSERT INTO urgent_repair_receipts (urgent_repair_id, file_id) VALUES (?, ?)', urgentRepairId, fileId);
         }
-        await run(db, `UPDATE urgent_repairs SET status = 'receipt_received' WHERE id = ?`, urgentRepairId);
+        await run(
+          db,
+          `UPDATE urgent_repairs SET status = 'receipt_received', amount_cents = COALESCE(?, amount_cents) WHERE id = ?`,
+          o.amountCents ?? null,
+          urgentRepairId,
+        );
+        await recordUrgentRepairEvent(urgentRepairId, 'receipt_received', {
+          files: fileIds.length,
+          via: o.via,
+          ...(o.amountCents != null ? { amountCents: o.amountCents } : {}),
+        });
       });
     },
 
-    async setUrgentRepairStatus(urgentRepairId: number, status: UrgentRepairStatus) {
-      await run(db, 'UPDATE urgent_repairs SET status = ? WHERE id = ?', status, urgentRepairId);
+    /**
+     * Marks a Reimbursement Request forwarded to the Property Owner with the amount
+     * claimed: from Awaiting your review, or again once forwarded. `amountCents`
+     * replaces the Tenant's amount; without it the Tenant's stands, and one is needed.
+     * Returns the request as forwarded, for the caller to send.
+     */
+    async forwardUrgentRepair(agencyId: number, urgentRepairId: number, o: { amountCents?: number | null; ownerName: string }) {
+      return transaction(db, async () => {
+        const current = await urgentRepairInAgency(agencyId, urgentRepairId);
+        if (current.status === 'reimbursed') invalid('This Reimbursement Request is already reimbursed');
+        if (current.status === 'reminder_sent' || !current.receiptFileIds.length) invalid('The Tenant has not sent the receipt yet');
+        const amountCents = o.amountCents ?? current.amountCents;
+        if (amountCents == null) invalid('Enter the amount on the receipt');
+        requireClaim(amountCents);
+        const at = iso(clock.now());
+        await run(db, `UPDATE urgent_repairs SET status = 'receipt_forwarded', amount_cents = ?, forwarded_at = ? WHERE id = ?`, amountCents, at, urgentRepairId);
+        await recordUrgentRepairEvent(urgentRepairId, 'forwarded', { amountCents, ownerName: o.ownerName, ...(current.forwardedAt ? { again: true } : {}) });
+        return { ...current, status: 'receipt_forwarded' as const, amountCents, forwardedAt: at };
+      });
+    },
+
+    /** Marks a forwarded Reimbursement Request reimbursed: the Property Owner has paid the Tenant back. */
+    async markUrgentRepairReimbursed(agencyId: number, urgentRepairId: number) {
+      return transaction(db, async () => {
+        const current = await urgentRepairInAgency(agencyId, urgentRepairId);
+        if (current.status === 'reimbursed') invalid('This Reimbursement Request is already reimbursed');
+        if (current.status !== 'receipt_forwarded') invalid('Forward the receipt to the Property Owner before marking it reimbursed');
+        const at = iso(clock.now());
+        await run(db, `UPDATE urgent_repairs SET status = 'reimbursed', reimbursed_at = ? WHERE id = ?`, at, urgentRepairId);
+        await recordUrgentRepairEvent(urgentRepairId, 'reimbursed', current.amountCents != null ? { amountCents: current.amountCents } : {});
+        return { ...current, status: 'reimbursed' as const, reimbursedAt: at };
+      });
+    },
+
+    recordUrgentRepairEvent,
+
+    /** A Reimbursement Request's events, oldest first. */
+    async urgentRepairTimeline(urgentRepairId: number) {
+      return (await all<{ kind: string; data: string; at: string }>(
+        db,
+        'SELECT kind, data, at FROM urgent_repair_events WHERE urgent_repair_id = ? ORDER BY at, id',
+        urgentRepairId,
+      )).map((e) => ({ kind: e.kind, at: e.at, ...(JSON.parse(e.data) as Record<string, unknown>) }));
+    },
+
+    /** The receipt files of a Reimbursement Request, without their bytes, in the order they came. */
+    async urgentRepairReceipts(urgentRepairId: number) {
+      return (await all<{ file_id: number; filename: string; content_type: string }>(
+        db,
+        `SELECT r.file_id, f.filename, f.content_type FROM urgent_repair_receipts r JOIN files f ON f.id = r.file_id
+         WHERE r.urgent_repair_id = ? ORDER BY r.file_id`,
+        urgentRepairId,
+      )).map((f) => ({ fileId: f.file_id, filename: f.filename, contentType: f.content_type }));
+    },
+
+    /** Marks every message on an issue read: a Reimbursement Request's, which has no Ticket. */
+    async markIssueRead(issueId: number) {
+      await run(db, 'UPDATE messages SET unread = 0 WHERE issue_id = ?', issueId);
     },
 
     ticket,

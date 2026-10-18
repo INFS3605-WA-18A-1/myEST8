@@ -1,5 +1,6 @@
 // The two pages a Tenant reaches by a no-login link (ADR-0002): the upload page for
-// issue photos or an Urgent Repair receipt, and the progress tracker. Phone first.
+// issue photos or the receipt for a Reimbursement Request (an Urgent Repair the Tenant
+// arranged), and the progress tracker. Phone first.
 // Both name who they are from (the Agency, in the bar) and where (the Property's
 // address), because a stranger's link is only trustworthy if it says so. The upload
 // page looks its link up before showing the form, so an unknown or expired link
@@ -9,8 +10,9 @@ import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { html, raw } from 'hono/html';
 import type { App, Upload } from '../app.ts';
-import { ActionError, type Trade } from '../shared.ts';
-import { files, type FormValues } from './forms.ts';
+import { URGENT_REPAIR_LIMIT_CENTS } from '../intake.ts';
+import { ActionError, dollars, type Trade } from '../shared.ts';
+import { files, optionalCents, text, type FormValues } from './forms.ts';
 import { shareButton, shareUrl } from './share.ts';
 import { icon } from './icons.ts';
 import { alert, button, card, formatWhen, publicPage, type Html } from './ui.ts';
@@ -84,12 +86,14 @@ export function tenantPages(app: App) {
           content: new Uint8Array(await f.arrayBuffer()),
         })),
       );
+      // A receipt may come with the amount the Tenant claims; kept in the form if it is refused.
+      const amount = link.kind === 'receipt' ? text(form, 'amount') : '';
       try {
-        await app.upload(token, uploads);
+        await app.upload(token, uploads, { amountCents: optionalCents(amount, 'the amount') });
       } catch (error) {
         if (!(error instanceof ActionError)) throw error;
         if (error.code === 'not_found') return c.html(badLinkPage(null), 404);
-        return c.html(uploadPage(token, link, { error: error.message }), STATUS[error.code]);
+        return c.html(uploadPage(token, link, { error: error.message, amount }), STATUS[error.code]);
       }
       return c.redirect(`/u/${encodeURIComponent(token)}?ok=${uploads.length}`, 303);
     },
@@ -120,7 +124,8 @@ export function tenantPages(app: App) {
 function thanks(sent: number, link: UploadLink) {
   const noun = link.kind === 'photos' ? 'photo' : 'file';
   const count = Number.isInteger(sent) && sent > 0 && sent <= MAX_FILES ? `your ${sent === 1 ? noun : `${sent} ${noun}s`}` : 'your upload';
-  return `Thanks, ${link.agencyName} has ${count}. You can add more below if you need to.`;
+  const next = link.kind === 'receipt' ? ' They will check it and pass your Reimbursement Request to the property owner.' : '';
+  return `Thanks, ${link.agencyName} has ${count}.${next} You can add more below if you need to.`;
 }
 
 /** The footer on a page from an Agency: who to reply to. */
@@ -148,18 +153,19 @@ function badLinkPage(link: UploadLink | null): Html {
     title: 'This link has expired',
     subtitle: `Repair at ${link.address}`,
     footer: replyTo(link.agencyName),
-    body: html`<p>${link.agencyName} has already dealt with this issue, so this link no longer takes photos.</p>
+    body: html`<p>${link.agencyName} has already dealt with this ${link.kind === 'photos' ? 'issue, so this link no longer takes photos' : 'Reimbursement Request, so this link no longer takes receipts'}.</p>
       <p>To send more, or if something has changed, reply to the message you got from ${link.agencyName}.</p>`,
   });
 }
 
 /**
- * The upload page, worded for what the link is for: photos of an issue, or an Urgent
- * Repair receipt (a photo or a PDF). `thanks` is set after a successful upload (the ok
- * query), and `error` is the refusal shown above the form. The thank-you is a block
- * on the page rather than a flash, because a flash fades away on its own.
+ * The upload page, worded for what the link is for: photos of an issue, or the receipt
+ * for a Reimbursement Request (a photo or a PDF, which it needs, and optionally the
+ * amount). `thanks` is set after a successful upload (the ok query), and `error` is the
+ * refusal shown above the form, with `amount` as the Tenant typed it. The thank-you is
+ * a block on the page rather than a flash, because a flash fades away on its own.
  */
-function uploadPage(token: string, link: UploadLink, o: { error?: string; thanks?: string } = {}): Html {
+function uploadPage(token: string, link: UploadLink, o: { error?: string; thanks?: string; amount?: string } = {}): Html {
   const sent = o.thanks !== undefined;
   const photos = link.kind === 'photos';
   return publicPage({
@@ -167,7 +173,7 @@ function uploadPage(token: string, link: UploadLink, o: { error?: string; thanks
     runtime: false,
     brand: link.agencyName,
     title: photos ? 'Send photos of the issue' : 'Send your Urgent Repair receipt',
-    subtitle: `${photos ? 'For the repair at' : 'For the Urgent Repair at'} ${link.address}`,
+    subtitle: `${photos ? 'For the repair at' : 'For your Reimbursement Request for the Urgent Repair at'} ${link.address}`,
     footer: replyTo(link.agencyName),
     body: html`
       ${o.thanks ? doneBox(o.thanks) : ''}
@@ -180,6 +186,7 @@ function uploadPage(token: string, link: UploadLink, o: { error?: string; thanks
               <p class="tenant-issue-text">${link.description}</p>
             </div>
             ${dropZone(link.kind)}
+            ${photos ? '' : amountField(o.amount)}
             ${button(sent ? 'Upload more' : 'Upload', { block: true })}
           </form>`,
       })}
@@ -191,6 +198,7 @@ function uploadPage(token: string, link: UploadLink, o: { error?: string; thanks
               <li>Photos straight from your camera keep their details, like when they were taken, which helps us act faster.</li>
             </ul>`
           : html`<ul class="tenant-tips">
+              <li>We need the receipt to get you reimbursed: without it the property owner can't pay you back.</li>
               <li>Make sure the whole receipt is in the photo and the amount is easy to read.</li>
               <li>If the tradie emailed you a PDF, you can send that instead.</li>
             </ul>`,
@@ -219,6 +227,15 @@ function dropZone(kind: UploadLink['kind']): Html {
     </label>
     <div id="files-chosen" class="tenant-chosen" aria-live="polite"></div>
     ${CHOSEN_SCRIPT}
+  </div>`;
+}
+
+/** The amount the Tenant claims, optional: the Property Manager checks it against the receipt. */
+function amountField(value = ''): Html {
+  return html`<div class="tenant-amount">
+    <label for="field-amount" class="field-label">Amount on the receipt (optional)</label>
+    <input id="field-amount" name="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="$0.00" value="${value}" class="input" aria-describedby="field-amount-hint" />
+    <p id="field-amount-hint" class="field-hint">You can claim up to ${dollars(URGENT_REPAIR_LIMIT_CENTS)} back for an Urgent Repair.</p>
   </div>`;
 }
 

@@ -5,7 +5,7 @@
 import type { Context, MiddlewareHandler } from 'hono';
 import type { WebEnv } from './env.ts';
 
-/** The rail's counts: new Maintenance Requests to review (on Tickets) and Quotes waiting on a Property Owner. */
+/** The rail's counts: new Maintenance Requests to review (on Tickets), and Quotes waiting on a Property Owner with Reimbursement Requests to review (on Approvals). */
 export type NavCounts = { tickets: number; approvals: number };
 
 /** The shell's facts, passed to `page()` as its `shell` option. */

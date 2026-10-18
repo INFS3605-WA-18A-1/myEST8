@@ -47,6 +47,8 @@ import { finishSetupBanner } from './welcome.ts';
 import { streamOf } from '../stream.ts';
 
 /** Kept for the pages that still import it from here; the words live with the other request checks. */
+import { reimbursementBadge } from './reimbursement.ts';
+
 export { PHOTO_FLAG } from '../request-checks.ts';
 
 type Dashboard = Awaited<ReturnType<PropertyManagerActions['dashboard']>>;
@@ -63,12 +65,6 @@ const INBOX_REASON: Record<InboxItem['reason'], [string, Tone]> = {
   other: ['Not maintenance', 'neutral'],
   low_confidence: ['Agent unsure', 'info'],
   common_area_no_building_manager: ['Common Area with no Building Manager', 'warning'],
-};
-
-const URGENT_REPAIR_STATUS: Record<UrgentRepair['status'], [string, Tone]> = {
-  reminder_sent: ['Waiting for receipt', 'warning'],
-  receipt_received: ['Receipt received', 'info'],
-  receipt_forwarded: ['Receipt sent to Property Owner', 'success'],
 };
 
 const GUESS_LABEL: Record<string, string> = {
@@ -117,6 +113,7 @@ export function dashboardPages() {
     const people = view.inbox.some((item) => item.personId === null) ? await actions.people() : [];
     const q = filter === 'all' ? '?filter=all' : '';
     const needReceipt = view.urgentRepairs.filter((u) => u.status === 'reminder_sent').length;
+    const toReview = view.urgentRepairs.filter((u) => u.status === 'receipt_received').length;
     const toCheck = view.tickets.filter((t) => t.decision === 'check_quotes');
     const toBook = view.tickets.filter((t) => t.decision === 'book_site_quotes');
     const toChoose = view.tickets.filter((t) => t.decision === 'choose_quote');
@@ -145,7 +142,8 @@ export function dashboardPages() {
               { label: 'Tradies to rate', one: 'Tradie to rate', count: toRate.length, href: '#to-rate', decision: true },
               { label: 'Alerts', one: 'Alert', count: otherAlerts.length, href: '#alerts', decision: true },
               { label: 'Messages in the inbox', one: 'Message in the inbox', count: view.inbox.length, href: '#inbox', decision: true },
-              { label: 'Urgent Repairs waiting for a receipt', one: 'Urgent Repair waiting for a receipt', count: needReceipt, href: '#urgent-repairs' },
+              { label: 'Reimbursement Requests to review', one: 'Reimbursement Request to review', count: toReview, href: '#urgent-repairs', decision: true },
+              { label: 'Reimbursement Requests waiting for a receipt', one: 'Reimbursement Request waiting for a receipt', count: needReceipt, href: '#urgent-repairs' },
             ],
             { label: 'What needs you' },
           )}
@@ -535,12 +533,11 @@ function urgentRepairsTable(repairs: UrgentRepair[], timeZone: string, now: Date
   return table(
     ['Issue', 'Tenant', 'Status', 'Receipts', 'Reported'],
     repairs.map((u) => {
-      const [label, tone] = URGENT_REPAIR_STATUS[u.status];
       return [
-        html`<p class="font-semibold">${u.description}</p>
+        html`<p><a class="link font-semibold" href="/reimbursements/${u.urgentRepairId}">${u.description}</a></p>
           <p class="text-xs text-muted">${u.propertyAddress}</p>`,
         html`${u.tenantName}`,
-        badge(label, tone, { wrap: true }),
+        reimbursementBadge(u.status, { wrap: true }),
         html`${u.receipts}`,
         html`<time class="whitespace-nowrap" datetime="${u.reportedAt}" title="${formatWhen(u.reportedAt, timeZone)}">${ageOf(u.reportedAt, now)}</time>`,
       ];

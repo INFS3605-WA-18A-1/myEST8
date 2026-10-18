@@ -3,6 +3,7 @@ import { all, one, run, transaction } from './db.ts';
 import { checkPhotoMetadata } from './photo-checks.ts';
 import type { ChannelType, ClassifierAnswer, ClassifierQuestion, InboundMessage } from './ports.ts';
 import type { Person, Property } from './profiles.ts';
+import { requireClaim, type ReceiptVia } from './tickets.ts';
 import { addMs, AVAILABILITY, HOUR_MS, invalid, iso, notFound, TRADES, URGENCIES, type Availability, type Trade, type Urgency } from './shared.ts';
 import type { GuidedQuestion } from './templates.ts';
 
@@ -12,6 +13,8 @@ export const MAX_UPLOAD_FILES = 10;
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 /** Photo formats phones produce. Not SVG, which can carry script into the Property Manager's pages. */
 const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/heic', 'image/heif', 'image/webp', 'image/gif'];
+/** What a Reimbursement Request's receipt can be: a photo of it, or the PDF the Tradie sent. */
+const RECEIPT_TYPES = [...PHOTO_TYPES, 'application/pdf'];
 
 /** What the agent is waiting for this person to answer. */
 type Awaiting =
@@ -343,9 +346,15 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
 
   async function startUrgentRepair(issueId: number) {
     const issue = await modules.tickets.issue(issueId);
-    const property = await modules.profiles.property(issue.propertyId);
     const { receiptToken } = await modules.tickets.createUrgentRepair(issueId);
     if ((await awaitingFrom(issue.tenantId)).some((a) => a.kind === 'guided' && a.issueId === issueId)) await stopWaiting(issue.tenantId, 'guided');
+    await sendReceiptReminder(issueId, receiptToken);
+  }
+
+  /** What to do now, the Property's Nominated Tradies, and the link for the receipt the Reimbursement Request needs. */
+  async function sendReceiptReminder(issueId: number, receiptToken: string) {
+    const issue = await modules.tickets.issue(issueId);
+    const property = await modules.profiles.property(issue.propertyId);
     const nominatedTradies = (await Promise.all(property.nominatedTradieIds.map((id) => modules.profiles.person(id))))
       .filter((t) => t.mobile)
       .map((t) => ({ businessName: t.businessName ?? t.name, phone: t.mobile! }));
@@ -357,28 +366,74 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
     );
   }
 
-  async function forwardReceipt(urgentRepairId: number, fileIds: number[]) {
-    const urgentRepair = await modules.tickets.urgentRepair(urgentRepairId);
-    await modules.tickets.addReceipt(urgentRepairId, fileIds);
-    const issue = await modules.tickets.issue(urgentRepair.issueId);
-    const property = await modules.profiles.property(urgentRepair.propertyId);
+  /**
+   * A receipt for a Reimbursement Request arrived. It waits for the Property Manager
+   * to check it and forward it (the rail's Approvals count and the dashboard show
+   * it); nothing goes to the Property Owner yet.
+   */
+  async function receiveReceipt(urgentRepairId: number, fileIds: number[], o: { amountCents?: number | null; via: ReceiptVia }) {
+    await modules.tickets.addReceipt(urgentRepairId, fileIds, o);
+  }
+
+  /**
+   * The Property Manager forwards a checked Reimbursement Request to the Property
+   * Owner: by email where the Owner has one, with every receipt attached and the
+   * Property Manager copied in. Forwarding again sends another copy.
+   */
+  async function forwardReimbursement(agencyId: number, urgentRepairId: number, o: { amountCents?: number | null } = {}) {
+    const found = await modules.tickets.urgentRepairInAgency(agencyId, urgentRepairId);
+    const property = await modules.profiles.property(found.propertyId);
+    const owner = await modules.profiles.person(property.ownerId);
+    const forwarded = await modules.tickets.forwardUrgentRepair(agencyId, urgentRepairId, { amountCents: o.amountCents ?? null, ownerName: owner.name });
+    const issue = await modules.tickets.issue(forwarded.issueId);
     await modules.notifications.send(
-      property.ownerId,
+      owner.id,
       'owner.urgent_repair_receipt',
       {
         propertyAddress: property.address,
-        tenantName: (await modules.profiles.person(urgentRepair.tenantId)).name,
-        description: issue.description,
+        tenantName: (await modules.profiles.person(forwarded.tenantId)).name,
+        description: issue.summary ?? issue.description,
+        amountCents: forwarded.amountCents,
         limitCents: URGENT_REPAIR_LIMIT_CENTS,
       },
       {
         issueId: issue.id,
-        attachmentFileIds: fileIds,
+        attachmentFileIds: forwarded.receiptFileIds,
         preferEmail: true,
         copyPropertyManagerId: property.propertyManagerId,
       },
     );
-    await modules.tickets.setUrgentRepairStatus(urgentRepairId, 'receipt_forwarded');
+  }
+
+  /** The Property Owner has paid the Tenant back: the Reimbursement Request is done, and the Tenant is told. */
+  async function markReimbursed(agencyId: number, urgentRepairId: number) {
+    const done = await modules.tickets.markUrgentRepairReimbursed(agencyId, urgentRepairId);
+    const property = await modules.profiles.property(done.propertyId);
+    await modules.notifications.send(
+      done.tenantId,
+      'tenant.reimbursed',
+      { propertyAddress: property.address, amountCents: done.amountCents },
+      { issueId: done.issueId },
+    );
+  }
+
+  /** Sends the Tenant the receipt link again, while the Reimbursement Request still waits for the receipt. */
+  async function resendReceiptLink(agencyId: number, urgentRepairId: number) {
+    const found = await modules.tickets.urgentRepairInAgency(agencyId, urgentRepairId);
+    if (found.status !== 'reminder_sent') invalid('The Tenant has already sent the receipt');
+    await sendReceiptReminder(found.issueId, found.receiptToken);
+    await modules.tickets.recordUrgentRepairEvent(found.id, 'link_resent');
+  }
+
+  /** The files among `fileIds` that can be a receipt (a photo or a PDF). */
+  async function receiptFilesAmong(fileIds: number[]) {
+    if (!fileIds.length) return [];
+    const rows = await all<{ id: number; content_type: string }>(
+      db,
+      'SELECT id, content_type FROM files WHERE id IN (SELECT value::bigint FROM jsonb_array_elements_text(?::text::jsonb) AS ids (value)) ORDER BY id',
+      JSON.stringify(fileIds),
+    );
+    return rows.filter((f) => RECEIPT_TYPES.includes(f.content_type)).map((f) => f.id);
   }
 
   async function attachDuplicate(msg: Received, tenant: Person, property: Property, issueId: number) {
@@ -411,9 +466,11 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
       await logInbound(msg, tenant.id, related.issueId);
       return modules.scheduling.recordVisitConfirmation(workOrder.id);
     }
-    if (updateType === 'receipt' && related.urgentRepairId !== undefined && msg.fileIds.length) {
+    // A receipt counts only with a photo or PDF in it; anything else waits for the Property Manager as an update.
+    const receipts = updateType === 'receipt' && related.urgentRepairId !== undefined ? await receiptFilesAmong(msg.fileIds) : [];
+    if (receipts.length && (await modules.tickets.urgentRepair(related.urgentRepairId!)).status !== 'reimbursed') {
       await logInbound(msg, tenant.id, related.issueId);
-      return forwardReceipt(related.urgentRepairId, msg.fileIds);
+      return receiveReceipt(related.urgentRepairId!, receipts, { via: msg.channelType });
     }
     // A general update: logged and left unread for the Property Manager.
     await logInbound(msg, tenant.id, related.issueId, true);
@@ -573,8 +630,10 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
     await modules.tickets.updateIssue(issueId, { status: 'maintenance_request', noPhotos: true });
   });
 
+  // Uploads once handed their receipt over through this task, which forwarded it straight
+  // to the Property Owner. A task still queued from then is now received for review.
   worker.on<{ urgentRepairId: number; fileIds: number[] }>('intake.forward_receipt', ({ urgentRepairId, fileIds }) =>
-    forwardReceipt(urgentRepairId, fileIds),
+    receiveReceipt(urgentRepairId, fileIds, { via: 'upload' }),
   );
 
   return {
@@ -615,13 +674,18 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
       return target.agencyId;
     },
 
-    /** Handles photos or a receipt uploaded through a no-login link. */
-    async upload(token: string, uploads: { filename: string; contentType: string; content: Uint8Array }[]) {
-      if (!uploads.length || uploads.length > MAX_UPLOAD_FILES) invalid(`Upload between 1 and ${MAX_UPLOAD_FILES} files`);
+    /**
+     * Handles photos or a receipt uploaded through a no-login link. A receipt must be
+     * photos or PDFs, and may come with the amount the Tenant claims (`amountCents`,
+     * ignored for photos of an issue).
+     */
+    async upload(token: string, uploads: { filename: string; contentType: string; content: Uint8Array }[], o: { amountCents?: number | null } = {}) {
+      if (uploads.length > MAX_UPLOAD_FILES) invalid(`Upload between 1 and ${MAX_UPLOAD_FILES} files`);
       if (uploads.some((u) => u.content.byteLength > MAX_UPLOAD_BYTES)) invalid('Each file must be under 10 MB');
 
       const issue = await modules.tickets.issueByPhotosToken(token);
       if (issue) {
+        if (!uploads.length) invalid(`Upload between 1 and ${MAX_UPLOAD_FILES} files`);
         if (!['awaiting_photos', 'checking', 'maintenance_request'].includes(issue.status)) invalid('This upload link has expired');
         if (uploads.some((u) => !PHOTO_TYPES.includes(u.contentType))) invalid('Only photos can be uploaded here (JPEG, PNG, HEIC, WebP or GIF)');
         const tenant = await modules.profiles.person(issue.tenantId);
@@ -642,15 +706,20 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
 
       const urgentRepair = await modules.tickets.urgentRepairByToken(token);
       if (!urgentRepair) notFound('Upload link');
-      if (uploads.some((u) => !PHOTO_TYPES.includes(u.contentType) && u.contentType !== 'application/pdf')) {
-        invalid('Upload the receipt as a photo or PDF');
-      }
+      if (urgentRepair.status === 'reimbursed') invalid('This link has expired: the Reimbursement Request is already reimbursed');
+      // The receipt is what lets the Tenant be paid back, so one must come, and only as something a person can read.
+      if (!uploads.length) invalid('Add a photo or PDF of the receipt');
+      if (uploads.some((u) => !RECEIPT_TYPES.includes(u.contentType))) invalid('Upload the receipt as a photo or PDF');
+      if (o.amountCents != null) requireClaim(o.amountCents);
       const fileIds: number[] = [];
       for (const u of uploads) fileIds.push(await files.save(urgentRepair.agencyId, u));
-      await worker.schedule('intake.forward_receipt', { urgentRepairId: urgentRepair.id, fileIds });
+      await receiveReceipt(urgentRepair.id, fileIds, { amountCents: o.amountCents ?? null, via: 'upload' });
     },
 
     startUrgentRepair,
+    forwardReimbursement,
+    markReimbursed,
+    resendReceiptLink,
     expectAnswer,
 
     async inbox(agencyId: number) {

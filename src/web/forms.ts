@@ -91,3 +91,15 @@ export function isoToLocal(iso: string, timeZone: string): string {
   );
   return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
 }
+
+/**
+ * An optional amount in dollars, typed by a person ("$450", "1,250.50"), as cents:
+ * null when blank. Throws an ActionError naming `label` when it isn't an amount.
+ */
+export function optionalCents(value: unknown, label: string): number | null {
+  const typed = typeof value === 'string' ? value.trim() : '';
+  if (!typed) return null;
+  const dollars = Number(typed.replace(/[$,\s]/g, ''));
+  if (!Number.isFinite(dollars) || dollars < 0) throw new ActionError('invalid', `Enter an amount in dollars for ${label}`);
+  return Math.round(dollars * 100);
+}

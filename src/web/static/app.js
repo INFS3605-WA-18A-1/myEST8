@@ -322,7 +322,12 @@
         const put = await fetch(slots[i].url, { method: 'PUT', headers: { 'content-type': file.type || 'application/octet-stream' }, body: file });
         if (!put.ok) throw new Error('upload');
       }
-      const done = await post('complete', { files: files.map((f, i) => ({ path: slots[i].path, filename: f.name, contentType: f.type })) });
+      // A receipt's form also says how much the Tenant claims.
+      const amount = form.querySelector('input[name=amount]');
+      const done = await post('complete', {
+        files: files.map((f, i) => ({ path: slots[i].path, filename: f.name, contentType: f.type })),
+        ...(amount instanceof HTMLInputElement && amount.value.trim() ? { amount: amount.value } : {}),
+      });
       if (!done.ok) throw new Error('complete');
       location.assign(`/u/${token}?ok=${files.length}`);
     } catch {
