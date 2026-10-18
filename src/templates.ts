@@ -62,7 +62,7 @@ export const templates = {
       d.nominatedTradies.length
         ? `Please use one of the property's nominated tradies where possible: ${d.nominatedTradies.map((t) => `${t.businessName} ${t.phone}`).join(', ')}.`
         : '',
-      `Send us the receipt here when it's done: ${d.receiptLink}`,
+      `When it's done, send us the receipt (a photo or PDF) here, and we'll pass your Reimbursement Request to the property owner: ${d.receiptLink}`,
     ]
       .filter(Boolean)
       .join(' '),
@@ -97,6 +97,12 @@ export const templates = {
   'tenant.fixed_properly': template<{ trade: Trade; tradieBusinessName: string }>(
     'Was it fixed properly?',
     (d) => `${d.tradieBusinessName} has finished the ${trade(d.trade)} job. Was it fixed properly? Reply with a number from 1 (not at all) to 5 (perfectly).`,
+  ),
+  'tenant.reimbursed': template<{ propertyAddress: string; amountCents: number | null }>(
+    'Reimbursement Request paid',
+    (d) =>
+      `Good news: the property owner has reimbursed you${d.amountCents === null ? '' : ` ${dollars(d.amountCents)}`} for the urgent repair at ${d.propertyAddress}. ` +
+      "If the money hasn't reached you in a few days, reply to this message.",
   ),
   'tenant.ticket_closed': template<{ propertyAddress: string }>(
     'Repair complete',
@@ -165,10 +171,11 @@ export const templates = {
     'Repair complete',
     (d) => `The repair at ${d.propertyAddress} (${d.description}) is complete.`,
   ),
-  'owner.urgent_repair_receipt': template<{ propertyAddress: string; tenantName: string; description: string; limitCents: number }>(
-    'Urgent repair receipt',
+  'owner.urgent_repair_receipt': template<{ propertyAddress: string; tenantName: string; description: string; amountCents: number; limitCents: number }>(
+    'Reimbursement Request for an urgent repair',
     (d) =>
-      `${d.tenantName} arranged an urgent repair at ${d.propertyAddress} (${d.description}). The receipt is attached. ` +
+      `${d.tenantName} arranged an urgent repair at ${d.propertyAddress} (${d.description}) and asks to be reimbursed ${dollars(d.amountCents)}. ` +
+      'The receipt is attached, and we have checked it. Please organise the reimbursement to the tenant and let us know when it is paid. ' +
       `Tenants can claim up to ${dollars(d.limitCents)} for urgent repairs.`,
   ),
 

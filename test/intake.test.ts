@@ -106,7 +106,7 @@ describe('rejecting a Maintenance Request', () => {
 });
 
 describe('an Urgent issue', () => {
-  test('the Tenant is reminded to arrange it, and the receipt uploaded through the link reaches the Property Owner with the Property Manager copied in', async () => {
+  test('the Tenant is reminded to arrange it, and the receipt uploaded through the link reaches the Property Owner, with the Property Manager copied in, once the Property Manager forwards it', async () => {
     const { h, alice, bob } = await world();
     h.classifier.when('Water is pouring through the ceiling', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'urgent', trade: 'plumbing' });
 
@@ -129,7 +129,13 @@ describe('an Urgent issue', () => {
     ]);
     expect((await bob.dashboard()).urgentRepairs).toEqual([]);
 
-    await h.upload(reminder.data.receiptLink as string, [{ filename: 'receipt.pdf', contentType: 'application/pdf', content: new Uint8Array([1, 2]) }]);
+    await h.upload(reminder.data.receiptLink as string, [{ filename: 'receipt.pdf', contentType: 'application/pdf', content: new Uint8Array([1, 2]) }], { amountCents: 640_00 });
+
+    // The receipt waits for the Property Manager to check it.
+    expect(h.messenger.to(OLIVIA_EMAIL)).toEqual([]);
+    const [received] = (await alice.dashboard()).urgentRepairs;
+    expect(received).toMatchObject({ status: 'receipt_received', receipts: 1 });
+    await alice.forwardReimbursement(received!.urgentRepairId);
 
     expect(h.messenger.to(OLIVIA_EMAIL)).toMatchObject([
       {
@@ -137,7 +143,7 @@ describe('an Urgent issue', () => {
         template: 'owner.urgent_repair_receipt',
         cc: ['alice@harbour.example'],
         attachments: ['receipt.pdf'],
-        data: { propertyAddress: KING_ST, tenantName: 'Tom Tran', limitCents: 1000_00 },
+        data: { propertyAddress: KING_ST, tenantName: 'Tom Tran', amountCents: 640_00, limitCents: 1000_00 },
       },
     ]);
     const dashboard = await alice.dashboard();
@@ -146,7 +152,7 @@ describe('an Urgent issue', () => {
     expect(dashboard.maintenanceRequests).toEqual([]);
   });
 
-  test('a receipt sent as a WhatsApp attachment is forwarded too', async () => {
+  test('a receipt sent as a WhatsApp attachment counts too, and waits for the Property Manager to check it', async () => {
     const { h, alice } = await world();
     h.classifier.when('No power in the whole flat', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'urgent', trade: 'electrical' });
     await h.receive(TOM, 'No power in the whole flat', { channel: 'whatsapp' });
@@ -162,6 +168,10 @@ describe('an Urgent issue', () => {
       attachments: [{ filename: 'receipt.jpg', contentType: 'image/jpeg', content: new Uint8Array([1]) }],
     });
 
+    expect(h.messenger.to(OLIVIA_EMAIL)).toEqual([]);
+    expect((await alice.dashboard()).urgentRepairs).toMatchObject([{ status: 'receipt_received', receipts: 1 }]);
+
+    await alice.forwardReimbursement(urgentRepair!.urgentRepairId, { amountCents: 220_00 });
     expect(h.messenger.to(OLIVIA_EMAIL)).toMatchObject([{ template: 'owner.urgent_repair_receipt', attachments: ['receipt.jpg'] }]);
     expect((await alice.dashboard()).urgentRepairs).toMatchObject([{ status: 'receipt_forwarded' }]);
   });

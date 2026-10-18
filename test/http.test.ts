@@ -198,6 +198,38 @@ describe('the no-login links', () => {
     expect((await http.request('/api/u/not-a-real-token/prepare', { method: 'POST', body: JSON.stringify({ files: [{}] }) })).status).toBe(404);
   });
 
+  test("a receipt sent through the JSON endpoints must be a photo or PDF, and may say the amount, directly or through storage", async () => {
+    const blobs = new FakeBlobStore();
+    const { h, alice, http } = await server({ blobs });
+    h.classifier.when('Water is pouring through the ceiling', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'urgent', trade: 'plumbing' });
+    await h.receive(TOM, 'Water is pouring through the ceiling');
+    const api = `/api${new URL(h.messenger.last(TOM)!.data.receiptLink as string).pathname}`;
+    const { urgentRepairId } = (await alice.dashboard()).urgentRepairs[0]!;
+
+    const notes = new FormData();
+    notes.append('files', new File(['hello'], 'notes.txt', { type: 'text/plain' }));
+    const refused = await http.request(api, { method: 'POST', body: notes });
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toEqual({ error: 'Upload the receipt as a photo or PDF' });
+    const empty = await http.request(api, { method: 'POST', body: new FormData() });
+    expect(await empty.json()).toEqual({ error: 'Add a photo or PDF of the receipt' });
+
+    const receipt = new FormData();
+    receipt.append('files', new File([new Uint8Array([1, 2])], 'receipt.pdf', { type: 'application/pdf' }));
+    receipt.append('amount', '$350');
+    expect((await http.request(api, { method: 'POST', body: receipt })).status).toBe(202);
+    await h.drain();
+    expect(await alice.reimbursement(urgentRepairId)).toMatchObject({ status: 'receipt_received', amountCents: 350_00, receipts: [{ filename: 'receipt.pdf' }] });
+
+    const post = (path: string, body: unknown) =>
+      http.request(`${api}/${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const { slots } = (await (await post('prepare', { files: [{ filename: 'page-2.jpg' }] })).json()) as { slots: { path: string }[] };
+    await blobs.put(slots[0]!.path, new Uint8Array([1]), 'image/jpeg');
+    expect((await post('complete', { files: [{ path: slots[0]!.path, filename: 'page-2.jpg', contentType: 'image/jpeg' }], amount: '360.00' })).status).toBe(202);
+    await h.drain();
+    expect(await alice.reimbursement(urgentRepairId)).toMatchObject({ amountCents: 360_00, receipts: [{ filename: 'receipt.pdf' }, { filename: 'page-2.jpg' }] });
+  });
+
   test('without storage, prepare says to use the ordinary form', async () => {
     const { h, http } = await server();
     h.classifier.when('The kitchen tap is dripping', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });

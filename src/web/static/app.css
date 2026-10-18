@@ -4631,3 +4631,134 @@
     }
   }
 }
+
+/* === Reimbursement Requests (/reimbursements/:id, and the amount on the Tenant's receipt upload) ===
+   The header reads like the Ticket's without the docket stub (a Reimbursement Request
+   is not a Ticket): the issue, the Property, then one line of facts. Under the steps,
+   one column on phones in reading order (next step, receipts, timeline, details,
+   messages); from 1024px the work on the left and who and what was said on the right. */
+@layer utilities {
+  @layer app {
+    .reimbursement-head {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+      padding: 16px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    .reimbursement-head > p {
+      margin: 0;
+      font-weight: 500;
+      overflow-wrap: anywhere;
+    }
+    .reimbursement-issue {
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 20px;
+      font-weight: 600;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+    .reimbursement-head > .reimbursement-meta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px 16px;
+      margin: 4px 0 0;
+      font-size: 14px;
+      font-weight: 400;
+      color: var(--muted);
+    }
+    .reimbursement-meta strong {
+      font-weight: 700;
+      color: var(--ink);
+    }
+    .reimbursement-steps {
+      margin: 16px 0;
+      padding: 12px 8px 0;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    .reimbursement-steps .step {
+      min-width: 0;
+    }
+    .reimbursement-layout,
+    .reimbursement-main,
+    .reimbursement-side {
+      display: grid;
+      gap: 16px;
+      min-width: 0;
+      margin-top: 16px;
+    }
+    .reimbursement-main,
+    .reimbursement-side {
+      margin-top: 0;
+    }
+    @media (min-width: 64rem) {
+      .reimbursement-layout {
+        grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+        align-items: start;
+      }
+    }
+    /* The amount and Forward to Property Owner on one line, the button level with the control. */
+    .reimbursement-forward {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .reimbursement-forward > .btn {
+      margin-top: calc(14px * 1.45 + 4px);
+    }
+    .reimbursement-again > summary {
+      width: fit-content;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--action);
+    }
+    .reimbursement-again[open] > summary {
+      margin-bottom: 12px;
+    }
+    .reimbursement-files {
+      display: grid;
+      gap: 6px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      font-size: 14px;
+    }
+    /* Label and value pairs in the side column, each value beside its label. */
+    .reimbursement-facts {
+      display: grid;
+      grid-template-columns: max-content minmax(0, 1fr);
+      gap: 8px 16px;
+      margin: 0;
+      font-size: 14px;
+    }
+    .reimbursement-facts > div {
+      display: contents;
+    }
+    .reimbursement-facts dt {
+      color: var(--muted);
+    }
+    .reimbursement-facts dd {
+      margin: 0;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+    .reimbursement-facts dd p {
+      margin: 0;
+    }
+    /* The Tenant's upload page loads no Tailwind: the amount's control fills the form's width. */
+    .tenant-amount {
+      display: grid;
+      gap: 4px;
+    }
+    .tenant-amount > .input {
+      width: 100%;
+    }
+  }
+}

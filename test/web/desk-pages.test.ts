@@ -348,25 +348,44 @@ describe('Approvals', () => {
     await w.h.receive(OLIVIA, 'YES go ahead');
     const after = await text(w, '/approvals');
     expect(after).not.toContain(`href="/tickets/${ticketId}"`);
-    expect(visible(after)).toContain('Nothing is waiting on a Property Owner or a receipt.');
+    expect(visible(after)).toContain('Nothing is waiting on a Property Owner, and no Reimbursement Requests are open.');
     expect(after).toMatch(/href="\/approvals\?filter=all"[^>]*>\s*Show all approvals/);
     expect(visible(after)).not.toContain('Waiting on a Property Owner');
     expect(railCount(after, '/approvals')).toBeNull();
   });
 
-  test('also lists Urgent Repairs waiting on a receipt', async () => {
+  test('lists every Reimbursement Request not yet reimbursed, the ones to review first, each opening its page', async () => {
     const w = await webWorld();
     w.h.classifier.when('Water is pouring through the ceiling', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'urgent', trade: 'plumbing' });
     await w.h.receive(TOM, 'Water is pouring through the ceiling');
+    const waiting = (await w.alice.dashboard()).urgentRepairs[0]!.urgentRepairId;
+    w.h.classifier.when('The front door lock is broken and will not close', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'urgent', trade: 'locksmith' });
+    await w.h.receive(HANA, 'The front door lock is broken and will not close');
+    const link = w.h.messenger.last(HANA)!.data.receiptLink as string;
+    const received = (await w.alice.dashboard()).urgentRepairs.find((u) => u.urgentRepairId !== waiting)!.urgentRepairId;
+    await w.h.upload(link, [{ filename: 'receipt.pdf', contentType: 'application/pdf', content: new Uint8Array([1]) }], { amountCents: 1200_00 });
 
     const html = await text(w, '/approvals');
     const readable = visible(html);
-    for (const expected of ['Urgent Repairs waiting on a receipt', 'Water is pouring through the ceiling', 'Tom Tran', 'Olivia Owens', KING_ST]) {
+    for (const expected of ['Reimbursement Requests', 'Water is pouring through the ceiling', 'Tom Tran', 'Olivia Owens', KING_ST, 'Awaiting receipt', 'Awaiting your review', '$1,200.00', 'Over the $1,000.00 limit']) {
       expect(readable).toContain(expected);
     }
+    expect(readable).not.toContain('Urgent Repairs waiting on a receipt');
     expect(html).toContain(`href="/properties/${w.ids.kingSt}"`);
+    // The one to review first, though reported later.
+    expect(html.indexOf(`href="/reimbursements/${received}"`)).toBeGreaterThan(0);
+    expect(html.indexOf(`href="/reimbursements/${received}"`)).toBeLessThan(html.indexOf(`href="/reimbursements/${waiting}"`));
+    expect(html).toMatch(/<a href="#reimbursements" class="count-link[^"]*">1 Reimbursement Request to review<\/a>/);
+    // The rail counts the one to review.
+    expect(railCount(html, '/approvals')).toBe('1');
     // Only the list with rows is shown.
     expect(readable).not.toContain('Waiting on a Property Owner');
+
+    await w.alice.forwardReimbursement(received);
+    await w.alice.markReimbursed(received);
+    const after = await text(w, '/approvals');
+    expect(after).not.toContain(`href="/reimbursements/${received}"`);
+    expect(after).toContain(`href="/reimbursements/${waiting}"`);
+    expect(railCount(after, '/approvals')).toBeNull();
   });
 });
-

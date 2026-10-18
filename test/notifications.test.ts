@@ -61,6 +61,8 @@ describe('choosing the channel', () => {
     expect(reminder.data.nominatedTradies).toEqual([]);
 
     await h.upload(reminder.data.receiptLink as string, [{ filename: 'receipt.jpg', contentType: 'image/jpeg', content: new Uint8Array([1]) }]);
+    const [received] = (await bob.dashboard()).urgentRepairs;
+    await bob.forwardReimbursement(received!.urgentRepairId, { amountCents: 300_00 });
 
     expect(h.messenger.to(OSCAR)).toMatchObject([{ channel: 'sms', template: 'owner.urgent_repair_receipt', attachments: ['receipt.jpg'], cc: [] }]);
     expect(h.messenger.to('bob@harbour.example')).toMatchObject([{ channel: 'email', template: 'owner.urgent_repair_receipt', attachments: ['receipt.jpg'] }]);

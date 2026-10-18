@@ -17,10 +17,11 @@ async function tomsUploadPath({ h }: WebWorld) {
   return new URL(h.messenger.last(TOM)!.data.uploadLink as string).pathname;
 }
 
-/** Posts files to a page the way the browser's upload form does, then lets the worker catch up. */
-async function postFiles(w: WebWorld, path: string, files: File[]) {
+/** Posts files (and any other fields) to a page the way the browser's upload form does, then lets the worker catch up. */
+async function postFiles(w: WebWorld, path: string, files: File[], fields: Record<string, string> = {}) {
   const form = new FormData();
   for (const file of files) form.append('files', file);
+  for (const [name, value] of Object.entries(fields)) form.append(name, value);
   const res = await w.web.request(path, { method: 'POST', body: form });
   await w.h.drain();
   return res;
@@ -113,7 +114,7 @@ describe('the upload page', () => {
     expect(await readable(await w.get(path))).not.toContain('enctype="multipart/form-data"');
   });
 
-  test('an Urgent Repair receipt can be sent as a PDF and reaches the Property Owner', async () => {
+  test('an Urgent Repair receipt can be sent as a PDF with the amount claimed, and waits for the Property Manager to forward it', async () => {
     const w = await webWorld();
     const { h } = w;
     h.classifier.when('Water is pouring through the ceiling', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'urgent', trade: 'plumbing' });
@@ -127,10 +128,44 @@ describe('the upload page', () => {
     expect(page).toContain('Photos, or a PDF receipt');
     expect(page).toContain('accept="image/*,application/pdf"');
     expect(page).toContain(KING_ST);
-    const res = await postFiles(w, path, [new File([new Uint8Array([1, 2])], 'receipt.pdf', { type: 'application/pdf' })]);
+    expect(page).toContain('Reimbursement Request');
+    expect(page).toContain('Amount on the receipt (optional)');
+    expect(page).toContain('You can claim up to $1,000.00 back');
+
+    // Not a photo or PDF, or a nonsense amount: refused, with the amount kept.
+    const notes = await postFiles(w, path, [new File(['hello'], 'notes.txt', { type: 'text/plain' })], { amount: '$480' });
+    expect(notes.status).toBe(400);
+    const refused = await readable(notes);
+    expect(refused).toContain('Upload the receipt as a photo or PDF');
+    expect(refused).toContain('value="$480"');
+    const nonsense = await postFiles(w, path, [new File([new Uint8Array([1, 2])], 'receipt.pdf', { type: 'application/pdf' })], { amount: 'four hundred' });
+    expect(nonsense.status).toBe(400);
+    expect(await readable(nonsense)).toContain('Enter an amount in dollars');
+
+    const res = await postFiles(w, path, [new File([new Uint8Array([1, 2])], 'receipt.pdf', { type: 'application/pdf' })], { amount: '$480.50' });
 
     expect(res.status).toBe(303);
-    expect(h.messenger.to(OLIVIA_EMAIL)).toMatchObject([{ template: 'owner.urgent_repair_receipt', attachments: ['receipt.pdf'] }]);
+    expect(await readable(await w.get(res.headers.get('location')!))).toContain('pass your Reimbursement Request to the property owner');
+    expect(h.messenger.to(OLIVIA_EMAIL)).toEqual([]);
+    expect((await w.alice.dashboard()).urgentRepairs).toMatchObject([{ status: 'receipt_received', receipts: 1 }]);
+    const [repair] = (await w.alice.dashboard()).urgentRepairs;
+    expect(await w.alice.reimbursement(repair!.urgentRepairId)).toMatchObject({ amountCents: 480_50 });
+  });
+
+  test('once the Tenant is reimbursed, the receipt link no longer takes receipts', async () => {
+    const w = await webWorld();
+    const { h } = w;
+    h.classifier.when('Water is pouring through the ceiling', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'urgent', trade: 'plumbing' });
+    await h.receive(TOM, 'Water is pouring through the ceiling');
+    const path = new URL(h.messenger.last(TOM)!.data.receiptLink as string).pathname;
+    await postFiles(w, path, [new File([new Uint8Array([1])], 'receipt.jpg', { type: 'image/jpeg' })], { amount: '200' });
+    const [repair] = (await w.alice.dashboard()).urgentRepairs;
+    await w.alice.forwardReimbursement(repair!.urgentRepairId);
+    await w.alice.markReimbursed(repair!.urgentRepairId);
+
+    const opened = await w.get(path);
+    expect(opened.status).toBe(410);
+    expect(await readable(opened)).toContain('no longer takes receipts');
   });
 
   test('an unknown link says so as soon as it opens, without a form, and when submitted to', async () => {

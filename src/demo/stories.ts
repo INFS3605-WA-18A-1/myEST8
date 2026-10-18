@@ -215,17 +215,20 @@ function bellasOvenDoor(k: Kit) {
   s.on(3, '10:00', 'Bob rates Ally and closes the Ticket', () => k.rateAndClose(job, 4));
 }
 
-/** Urgent Repair, receipt forwarded: Noah's burst pipe at Llewellyn St, fixed by Dana after hours. */
+/** Urgent Repair, its Reimbursement Request forwarded: Noah's burst pipe at Llewellyn St, fixed by Dana after hours. */
 function noahsBurstPipe(k: Kit) {
-  const { ids } = k;
+  const { ids, alice } = k;
   const s = k.story("Noah's burst pipe");
   let receiptToken = '';
   s.on(3, '06:40', 'Noah texts about a burst pipe', async () => {
     const sent = await k.say(ids.noah, 'Water is pouring out of a burst pipe under the laundry tub');
     receiptToken = k.tokenIn(k.expectSent(sent, ids.noah, 'tenant.urgent_repair_reminder'));
   });
-  s.on(3, '11:30', 'Noah uploads the receipt, which goes to Henry', async () => {
-    const sent = await k.upload(receiptToken, [{ filename: 'receipt.jpg', contentType: 'image/jpeg', content: k.sample('receipt') }]);
+  s.on(3, '11:30', 'Noah uploads the receipt and claims $380', () =>
+    k.upload(receiptToken, [{ filename: 'receipt.jpg', contentType: 'image/jpeg', content: k.sample('receipt') }], { amountCents: 380_00 }),
+  );
+  s.on(3, '13:00', 'Alice checks the receipt and forwards it to Henry', async () => {
+    const sent = await k.forwardReimbursement(alice, ids.noah);
     k.expectSent(sent, ids.henry, 'owner.urgent_repair_receipt');
   });
 }
@@ -730,10 +733,21 @@ async function createKit({ app, simulator, seed, clock, end }: { app: App; simul
   }
 
   /** Uploads through a no-login link, as the Tenant's phone would. Returns what myEST8 sent as a result. */
-  async function upload(token: string, files: Upload[]) {
+  async function upload(token: string, files: Upload[], o: { amountCents?: number } = {}) {
     await wait(1);
     const sentBefore = (await outbox()).length;
-    await app.upload(token, files);
+    await app.upload(token, files, o);
+    await tick();
+    return (await outbox()).slice(sentBefore);
+  }
+
+  /** The Property Manager forwards the Tenant's Reimbursement Request, checked, to the Property Owner. Returns what was sent. */
+  async function forwardReimbursement(pm: PropertyManagerActions, tenantId: number) {
+    const tenant = person(tenantId).name;
+    const request = (await pm.approvals({ filter: 'all' })).reimbursements.find((r) => r.tenantName === tenant && r.status === 'receipt_received');
+    if (!request) throw new Error(`${tenant} has no Reimbursement Request waiting to be checked`);
+    const sentBefore = (await outbox()).length;
+    await pm.forwardReimbursement(request.urgentRepairId);
     await tick();
     return (await outbox()).slice(sentBefore);
   }
@@ -869,6 +883,7 @@ async function createKit({ app, simulator, seed, clock, end }: { app: App; simul
     tokenIn,
     report,
     upload,
+    forwardReimbursement,
     sample,
     photo,
     takenAt,

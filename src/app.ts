@@ -82,8 +82,11 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
     /** A WhatsApp delivery failure from Meta, recorded on the outbound message. */
     recordDeliveryFailure: (failure: { to: string; code: number; title: string }) => tickets.recordDeliveryFailure(failure),
 
-    /** An upload through a no-login link: issue photos or an Urgent Repair receipt. */
-    upload: (token: string, uploads: Upload[]) => intake.upload(token, uploads),
+    /**
+     * An upload through a no-login link: issue photos, or the receipt for a
+     * Reimbursement Request (photos or PDFs) with the amount the Tenant claims, if given.
+     */
+    upload: (token: string, uploads: Upload[], o?: { amountCents?: number | null }) => intake.upload(token, uploads, o),
 
     /**
      * Where a browser can send the files of a no-login upload straight to storage,
@@ -96,11 +99,11 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
     },
 
     /** Finishes an upload sent to the slots from `uploadSlots`: collects the files, then handles them like `upload`. */
-    async completeUpload(token: string, sent: { path: string; filename: string; contentType: string }[]) {
+    async completeUpload(token: string, sent: { path: string; filename: string; contentType: string }[], o?: { amountCents?: number | null }) {
       const agencyId = await intake.uploadAgency(token);
       const uploads: Upload[] = [];
       for (const f of sent) uploads.push({ filename: f.filename, contentType: f.contentType, content: await files.take(agencyId, f.path) });
-      await intake.upload(token, uploads);
+      await intake.upload(token, uploads, o);
     },
 
     /** What a no-login upload link is for and whether it still takes files, or null for an unknown link. */
@@ -144,8 +147,10 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
         /** Tickets by status (open by default, or closed for the Archive), optionally by Urgency, Trade and Property. */
         tickets: (o: Partial<ListOptions> & { status?: 'open' | 'closed' } = {}) =>
           views.tickets(agencyId, propertyManagerId, { ...o, filter: o.filter ?? 'mine', status: o.status ?? 'open' }),
-        /** Quotes waiting on a Property Owner over the Max Repair Cost, and Urgent Repairs waiting on a receipt. */
+        /** Quotes waiting on a Property Owner over the Max Repair Cost, and every Reimbursement Request not yet reimbursed. */
         approvals: ({ filter = 'mine' }: { filter?: 'mine' | 'all' } = {}) => views.approvals(agencyId, propertyManagerId, filter),
+        /** One Reimbursement Request (by its Urgent Repair's id) with its receipts, timeline and messages. Refuses (not_found) one outside the Agency. */
+        reimbursement: (urgentRepairId: number) => views.reimbursement(agencyId, urgentRepairId),
         propertyOverviews: () => views.propertyOverviews(agencyId),
         property: (propertyId: number) => views.property(agencyId, propertyId),
         tradieDirectory: () => views.tradies(agencyId),
@@ -215,6 +220,21 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
         cancelJob: (jobId: number) => tickets.cancelJob(agencyId, jobId),
         closeTicket: (ticketId: number) => tickets.closeTicket(agencyId, ticketId),
         markTicketRead: (ticketId: number) => tickets.markRead(agencyId, ticketId),
+
+        // Reimbursement Requests
+        /**
+         * Forwards a checked receipt to the Property Owner (email when they have one, the
+         * Property Manager copied in), with `amountCents` replacing the Tenant's amount.
+         * From Awaiting your review, or again once forwarded.
+         */
+        forwardReimbursement: (urgentRepairId: number, o: { amountCents?: number | null } = {}) => intake.forwardReimbursement(agencyId, urgentRepairId, o),
+        /** Records that the Property Owner paid the Tenant back, and tells the Tenant. Only once forwarded. */
+        markReimbursed: (urgentRepairId: number) => intake.markReimbursed(agencyId, urgentRepairId),
+        /** Sends the Tenant the receipt link again, while the receipt is still to come. */
+        resendReceiptLink: (urgentRepairId: number) => intake.resendReceiptLink(agencyId, urgentRepairId),
+        async markReimbursementRead(urgentRepairId: number) {
+          await tickets.markIssueRead((await tickets.urgentRepairInAgency(agencyId, urgentRepairId)).issueId);
+        },
 
         // Quotes and approval
         sendQuoteRequests: (jobId: number, tradieIds: number[]) => quotes.sendQuoteRequests(agencyId, jobId, tradieIds),

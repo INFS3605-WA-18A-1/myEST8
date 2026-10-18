@@ -1,7 +1,9 @@
-// What is waiting on someone outside the Agency, at /approvals: Quotes held up because
-// choosing them would take a Ticket's Repair Cost over the Property's Max Repair Cost
-// (the Property Owner must say yes), and Urgent Repairs whose Tenant has not yet sent
-// the receipt. The rail's count is the Quotes waiting on a Property Owner.
+// What is waiting on a Property Owner or a Tenant's claim, at /approvals: Quotes held up
+// because choosing them would take a Ticket's Repair Cost over the Property's Max Repair
+// Cost (the Property Owner must say yes), and every Reimbursement Request not yet
+// reimbursed (a Tenant's claim for an Urgent Repair they arranged), the ones whose
+// receipt the Property Manager is to check first, each opening its own page. The rail's
+// count is the Quotes waiting on a Property Owner and the Reimbursement Requests to check.
 
 import { Hono } from 'hono';
 import { html } from 'hono/html';
@@ -9,6 +11,7 @@ import type { PropertyManagerActions } from '../../app.ts';
 import type { WebEnv } from '../env.ts';
 import { shellInfo } from '../shell.ts';
 import { badge, countSentence, emptyState, flashFrom, formatAge, formatMoney, formatWhen, humanise, linkButton, page, section, segmented, table, type Html } from '../ui.ts';
+import { reimbursementBadge } from './reimbursement.ts';
 
 type Approvals = Awaited<ReturnType<PropertyManagerActions['approvals']>>;
 
@@ -21,9 +24,7 @@ export function approvalPages() {
     const all = c.req.query('filter') === 'all';
     const now = actions.now();
     const { timeZone } = actions.agency();
-    // The receipts list names each Property by its address; its id makes the address a link.
-    const [waiting, properties] = await Promise.all([actions.approvals({ filter: all ? 'all' : 'mine' }), actions.properties()]);
-    const propertyIds = new Map(properties.map((p) => [p.address, p.id]));
+    const waiting = await actions.approvals({ filter: all ? 'all' : 'mine' });
     return c.html(
       page({
         title: 'Approvals',
@@ -31,12 +32,12 @@ export function approvalPages() {
         active: 'approvals',
         flash: flashFrom(c.req.url),
         shell: await shellInfo(c),
-        subtitle: 'Work held up until a Property Owner says yes, or a Tenant sends a receipt.',
+        subtitle: "Quotes held up until a Property Owner says yes, and Tenants' Reimbursement Requests for Urgent Repairs they arranged.",
         controls: segmented([
           { label: 'Mine', href: '/approvals', active: !all },
           { label: 'All', href: '/approvals?filter=all', active: all },
         ]),
-        body: body(waiting, all, propertyIds, timeZone, now),
+        body: body(waiting, all, timeZone, now),
       }),
     );
   });
@@ -48,25 +49,28 @@ export function approvalPages() {
  * The counts, then each list that has rows. With nothing waiting anywhere the page is
  * one sentence: three zeros and two empty lists would only be noise.
  */
-function body(waiting: Approvals, all: boolean, propertyIds: Map<string, number>, timeZone: string, now: Date): Html {
+function body(waiting: Approvals, all: boolean, timeZone: string, now: Date): Html {
   const owners = waiting.waitingOnOwner;
-  const receipts = waiting.waitingOnReceipt;
-  if (!owners.length && !receipts.length) {
+  const claims = waiting.reimbursements;
+  if (!owners.length && !claims.length) {
     return emptyState(
-      'Nothing is waiting on a Property Owner or a receipt. A Quote lands here when choosing it would take a Ticket over its Max Repair Cost.',
+      'Nothing is waiting on a Property Owner, and no Reimbursement Requests are open. A Quote lands here when choosing it would take a Ticket over its Max Repair Cost, and a Reimbursement Request when a Tenant arranges an Urgent Repair.',
       all ? undefined : linkButton('Show all approvals', '/approvals?filter=all'),
     );
   }
   const silent = owners.filter((w) => w.silent).length;
+  const toReview = claims.filter((r) => r.status === 'receipt_received').length;
+  const others = claims.length - toReview;
   return html`
     ${countSentence([
-      // Only a silent Property Owner needs the Property Manager (a call); the rest wait on the Owner.
+      // Only a silent Property Owner or a receipt to check needs the Property Manager; the rest wait on someone else.
+      ...(toReview ? [{ label: 'Reimbursement Requests to review', one: 'Reimbursement Request to review', count: toReview, href: '#reimbursements', decision: true }] : []),
       ...(owners.length ? [{ label: 'Quotes waiting on a Property Owner', one: 'Quote waiting on a Property Owner', count: owners.length, href: '#owners' }] : []),
       ...(silent ? [{ label: 'Property Owners with no reply for 48 hours', one: 'Property Owner with no reply for 48 hours', count: silent, href: '#owners', decision: true }] : []),
-      ...(receipts.length ? [{ label: 'Urgent Repairs waiting on a receipt', one: 'Urgent Repair waiting on a receipt', count: receipts.length, href: '#receipts' }] : []),
+      ...(others ? [{ label: 'Reimbursement Requests waiting on a Tenant or Property Owner', one: 'Reimbursement Request waiting on a Tenant or Property Owner', count: others, href: '#reimbursements' }] : []),
     ])}
     ${owners.length ? section({ title: 'Waiting on a Property Owner', id: 'owners', body: ownerTable(owners, now) }) : ''}
-    ${receipts.length ? section({ title: 'Urgent Repairs waiting on a receipt', id: 'receipts', body: receiptTable(receipts, propertyIds, timeZone, now) }) : ''}
+    ${claims.length ? section({ title: 'Reimbursement Requests', id: 'reimbursements', body: reimbursementTable(claims, timeZone, now) }) : ''}
   `;
 }
 
@@ -93,20 +97,21 @@ function ownerTable(waiting: Approvals['waitingOnOwner'], now: Date): Html {
   );
 }
 
-function receiptTable(waiting: Approvals['waitingOnReceipt'], propertyIds: Map<string, number>, timeZone: string, now: Date): Html {
+/** Every open Reimbursement Request, each opening its page: the ones to review first, then oldest first. */
+function reimbursementTable(claims: Approvals['reimbursements'], timeZone: string, now: Date): Html {
   return table(
-    ['Issue', 'Tenant', 'Property Owner', 'Reported', 'Waiting'],
-    waiting.map((u) => {
-      const id = propertyIds.get(u.propertyAddress);
-      return [
-        html`<p class="font-semibold">${u.description}</p>
-          <p>${id === undefined ? html`<span class="text-xs text-muted">${u.propertyAddress}</span>` : html`<a class="link text-xs" href="/properties/${id}">${u.propertyAddress}</a>`}</p>`,
-        html`${u.tenantName}`,
-        html`${u.ownerName}`,
-        html`<span class="whitespace-nowrap">${formatWhen(u.reportedAt, timeZone)}</span>`,
-        html`${formatAge(u.reportedAt, now).replace(' ago', '')}`,
-      ];
-    }),
-    { stack: 'labelled', caption: 'Urgent Repairs waiting on a receipt, latest first' },
+    ['Reimbursement Request', 'Tenant', 'Property Owner', 'Status', 'Amount', 'Reported'],
+    claims.map((u) => [
+      html`<p><a class="link font-semibold" href="/reimbursements/${u.urgentRepairId}">${u.description}</a></p>
+        <p><a class="link text-xs" href="/properties/${u.propertyId}">${u.propertyAddress}</a></p>`,
+      html`${u.tenantName}`,
+      html`${u.ownerName}`,
+      reimbursementBadge(u.status, { wrap: true }),
+      u.amountCents === null
+        ? html`<span class="text-muted">Not given</span>`
+        : html`<div><p class="num">${formatMoney(u.amountCents)}</p>${u.amountCents > u.limitCents ? html`<p class="text-xs text-high">Over the ${formatMoney(u.limitCents)} limit</p>` : ''}</div>`,
+      html`<span class="whitespace-nowrap" title="${formatWhen(u.reportedAt, timeZone)}">${formatAge(u.reportedAt, now)}</span>`,
+    ]),
+    { stack: 'labelled', caption: 'Reimbursement Requests not yet reimbursed, the ones to review first', align: ['left', 'left', 'left', 'left', 'right', 'left'] },
   );
 }

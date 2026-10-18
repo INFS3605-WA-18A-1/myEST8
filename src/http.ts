@@ -15,6 +15,7 @@ import type { App } from './app.ts';
 import type { FileLinks } from './file-links.ts';
 import type { Clock } from './ports.ts';
 import { ActionError, invalid } from './shared.ts';
+import { optionalCents } from './web/forms.ts';
 import { streamOf } from './web/stream.ts';
 
 const STATUS = { not_found: 404, invalid: 400, conflict: 409 } as const;
@@ -150,7 +151,8 @@ export function createHttpApp(
       if (typeof path !== 'string' || typeof filename !== 'string') invalid('Expected the files that were uploaded');
       return { path, filename, contentType: typeof contentType === 'string' && contentType ? contentType : 'application/octet-stream' };
     });
-    await app.completeUpload(c.req.param('token'), files);
+    // A receipt's upload may say how much the Tenant claims, in dollars as typed.
+    await app.completeUpload(c.req.param('token'), files, { amountCents: optionalCents(body?.amount, 'the amount') });
     return c.json({ ok: true, count: files.length }, 202);
   });
 
@@ -161,7 +163,7 @@ export function createHttpApp(
     const uploads = await Promise.all(
       files.map(async (f) => ({ filename: f.name, contentType: f.type || 'application/octet-stream', content: new Uint8Array(await f.arrayBuffer()) })),
     );
-    await app.upload(c.req.param('token'), uploads);
+    await app.upload(c.req.param('token'), uploads, { amountCents: optionalCents(form.get('amount'), 'the amount') });
     return c.json({ ok: true }, 202);
   });
 

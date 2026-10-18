@@ -112,7 +112,7 @@ describe('Maintenance Requests on the dashboard', () => {
 
     expect(after).toContain('Now an Urgent Repair');
     expect(after).toContain('No Maintenance Requests waiting for you.');
-    expect(after).toContain('Waiting for receipt');
+    expect(after).toContain('Awaiting receipt');
   });
 
   test("a Tenant's photo is shown with its checks and served only to signed-in Property Managers", async () => {

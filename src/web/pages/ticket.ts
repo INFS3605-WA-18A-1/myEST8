@@ -7,10 +7,11 @@ import { Hono } from 'hono';
 import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
 import { ActionError, notFound, TRADES, type Trade, type Urgency } from '../../shared.ts';
-import { AVAILABILITY_LABELS, templates, type TemplateName } from '../../templates.ts';
+import { AVAILABILITY_LABELS } from '../../templates.ts';
 import type { WebEnv } from '../env.ts';
 import { PHOTO_FLAG } from './dashboard.ts';
 import { cents, formAction, int, isoToLocal, list, localToIso, text, type FormValues } from '../forms.ts';
+import { collapsible, messageLog } from '../messages.ts';
 import { COLLEAGUES_ONLY, shareButton, shareUrl } from '../share.ts';
 import { shellInfo } from '../shell.ts';
 import {
@@ -19,7 +20,6 @@ import {
   badge,
   button,
   card,
-  chatBubble,
   dl,
   emptyState,
   field,
@@ -48,7 +48,6 @@ type QuoteView = JobView['quotes'][number];
 type WorkOrderView = NonNullable<JobView['workOrder']>;
 type Recommendation = JobView['recommendations'][number];
 type Photo = TicketView['photos'][number];
-type Message = TicketView['messages'][number];
 type TimelineEvent = TicketView['timeline'][number];
 type Slot = { start: string; end: string };
 
@@ -67,8 +66,6 @@ type Extras = {
 const MIN_QUOTES = 2;
 const FREE_SLOTS_SHOWN = 3;
 const DEFAULT_VISIT_HOURS = 2;
-/** WhatsApp is paused as a channel, but messages that came by it still say so. */
-const CHANNELS = { sms: 'SMS', whatsapp: 'WhatsApp', email: 'Email' } as const;
 const nothing = html``;
 
 /** The Ticket view under /tickets/:id and every Job action on it. */
@@ -1271,18 +1268,6 @@ function jobLines(t: TicketView, events: Record<string, unknown>[], tradiesOf: (
     .join('\n');
 }
 
-/** A section whose heading opens and closes its body. */
-function collapsible(title: string, body: Html): Html {
-  return html`<section class="section">
-    <details open>
-      <summary class="section-head cursor-pointer">
-        <h2 class="section-title">${title}</h2>
-      </summary>
-      <div class="section-body mt-3">${body}</div>
-    </details>
-  </section>`;
-}
-
 /** A timeline event in words, with the Tradie, price or visit it was about, and its Job when the Ticket has several. */
 function describeEvent(t: TicketView, event: TimelineEvent, x: Extras): { title: string; detail?: string } {
   const d = event as Record<string, unknown>;
@@ -1347,67 +1332,9 @@ function describeEvent(t: TicketView, event: TimelineEvent, x: Extras): { title:
   }
 }
 
-/** How many of the latest messages show before "Show all". */
-const LATEST_MESSAGES = 6;
-
-/**
- * The message log, as a collapsible side panel, with the mark-read control when
- * something is unread. The latest few show; the older ones open above them, and
- * start open when one of them is unread.
- */
+/** The Ticket's issue's message log (src/web/messages.ts), marked read through the Ticket. */
 function messagesCard(t: TicketView, x: Extras): Html {
-  const unread = t.messages.filter((m) => m.unread).length;
-  const read = unread ? postButton(`/tickets/${t.ticketId}/read`, 'Mark messages read', { variant: 'secondary', size: 'sm' }) : nothing;
-  const older = t.messages.slice(0, -LATEST_MESSAGES);
-  const latest = t.messages.slice(-LATEST_MESSAGES);
-  const log = t.messages.length
-    ? html`${older.length
-          ? html`<details class="ticket-older" ${older.some((m) => m.unread) ? 'open' : ''}>
-              <summary class="cursor-pointer text-sm font-medium text-action">Show all ${t.messages.length} messages</summary>
-              <div>${older.map((m) => messageBubble(m, x))}</div>
-            </details>`
-          : nothing}
-        <div>${latest.map((m) => messageBubble(m, x))}</div>`
-    : emptyState('No messages yet.');
-  return collapsible(unread ? `Messages (${unread} unread)` : 'Messages', html`${read} ${log}`);
-}
-
-/** Inbound messages on the left, what myEST8 sent on the right; unread ones stand out. */
-function messageBubble(m: Message, x: Extras): Html {
-  const subject = m.template ? html`: <span class="font-medium">${templateSubject(m.template)}</span>` : nothing;
-  return chatBubble({
-    side: m.direction === 'in' ? 'start' : 'end',
-    header: html`${m.direction === 'in' ? 'From' : 'To'} ${m.address} by ${CHANNELS[m.channel]}${subject}`,
-    text: shortLinks(m.text),
-    footer: html`${formatWhen(m.at, x.timeZone)}${m.unread ? html` ${badge('Unread', 'warning')}` : nothing}${m.deliveryError ? html` ${badge(m.deliveryError, 'error')}` : nothing}`,
-    tone: m.deliveryError ? 'error' : m.unread ? 'warning' : undefined,
-  });
-}
-
-const URL_IN_TEXT = /https?:\/\/[^\s<>"']*[^\s<>"'.,;:!?)\]]/g;
-
-/** A message's text with each link shortened to what it is ("progress link", "upload link"); the link itself is the full URL. */
-function shortLinks(text: string): Html {
-  const parts: (Html | string)[] = [];
-  let last = 0;
-  for (const match of text.matchAll(URL_IN_TEXT)) {
-    parts.push(text.slice(last, match.index));
-    parts.push(html`<a class="link" href="${match[0]}" title="${match[0]}" target="_blank" rel="noopener noreferrer">${linkName(match[0])}</a>`);
-    last = match.index + match[0].length;
-  }
-  parts.push(text.slice(last));
-  return html`${parts}`;
-}
-
-function linkName(url: string): string {
-  try {
-    const { hostname, pathname } = new URL(url);
-    if (pathname.startsWith('/t/')) return 'progress link';
-    if (pathname.startsWith('/u/')) return 'upload link';
-    return `${hostname} link`;
-  } catch {
-    return 'link';
-  }
+  return messageLog(t.messages, { timeZone: x.timeZone, markRead: `/tickets/${t.ticketId}/read` });
 }
 
 // Small helpers
@@ -1441,10 +1368,6 @@ function isOpen(job: JobView) {
 
 function tradeOptions() {
   return TRADES.map((trade) => ({ value: trade, label: humanise(trade) }));
-}
-
-function templateSubject(name: string): string {
-  return name in templates ? templates[name as TemplateName].subject : humanise(name);
 }
 
 /** "Tue 13 Oct, 9:00 am – 11:00 am", with the end's date only when it's another day. */
