@@ -423,7 +423,7 @@ function ticketsByStage(tickets: BoardTicket[], filter: Filter, now: Date, timeZ
 }
 
 /** What a Ticket being quoted waits on: Quotes to check, Ready to choose, or how many Quotes are in. */
-export function quotingStatus(t: Pick<BoardTicket, 'quoting' | 'decision'>): string | null {
+function quotingStatus(t: Pick<BoardTicket, 'quoting' | 'decision'>): string | null {
   const q = t.quoting;
   if (!q) return null;
   if (t.decision === 'check_quotes') return `${q.toCheck} ${q.toCheck === 1 ? 'Quote' : 'Quotes'} to check`;

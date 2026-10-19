@@ -37,7 +37,7 @@ export const PHOTO_FLAG: Record<string, string> = {
 };
 
 /** Whether any photo's metadata was flagged. Missing metadata never counts against the Tenant. */
-export function hasFlaggedPhotos(r: Pick<CheckedRequest, 'photos'>): boolean {
+function hasFlaggedPhotos(r: Pick<CheckedRequest, 'photos'>): boolean {
   return r.photos.some((p) => p.metadata === 'flagged');
 }
 

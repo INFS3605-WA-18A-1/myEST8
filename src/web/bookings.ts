@@ -77,7 +77,7 @@ export function visitWords(b: Booking): string | null {
  * the warning tone, linking to the Ticket where new times are suggested. A confirmed
  * visit needs no word.
  */
-export function visitNote(b: Booking): Html | '' {
+function visitNote(b: Booking): Html | '' {
   switch (b.visit) {
     case 'done':
       return html`<p class="booking-meta">Done</p>`;
@@ -91,7 +91,7 @@ export function visitNote(b: Booking): Html | '' {
 }
 
 /** "12 King St, Newtown": the street, then the suburb (the address's postcode and state are noise here). */
-export function placeOf(b: Booking): string {
+function placeOf(b: Booking): string {
   const street = streetOf(b.propertyAddress);
   return b.suburb && street !== b.propertyAddress ? `${street}, ${b.suburb}` : b.propertyAddress;
 }

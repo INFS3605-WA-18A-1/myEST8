@@ -3,8 +3,8 @@
 import { describe, expect, test } from 'vitest';
 import type { DemoControls } from '../../src/demo/controls.ts';
 import { HOUR } from '../support/harness.ts';
-import { visible, webWorld } from '../support/web.ts';
-import { BELLA, confirmedQuotes, HANA, KING_ST, OCEAN_AVE, OLIVIA, STRANGER, TOM } from '../support/world.ts';
+import { webWorld } from '../support/web.ts';
+import { BELLA, confirmedQuotes, HANA, STRANGER, TOM } from '../support/world.ts';
 
 type Web = Awaited<ReturnType<typeof webWorld>>;
 

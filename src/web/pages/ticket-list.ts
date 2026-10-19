@@ -110,7 +110,7 @@ export function countBadge(count: number) {
  * The issue's first photo, 56px and cropped square, or a quiet placeholder when there is
  * none: the same in a request's row and a Ticket's, so the lists read alike.
  */
-export function issueThumb(photos: { fileId: number }[]): Html {
+function issueThumb(photos: { fileId: number }[]): Html {
   return photos[0]
     ? html`<img src="/files/${photos[0].fileId}" alt="Photo of the issue" width="56" height="56" loading="lazy" />`
     : html`<span class="issue-thumb-none" aria-hidden="true">${icon('image', { size: 'size-6' })}</span>`;

@@ -51,7 +51,7 @@ export type HostedProvider = { provider: string; required: boolean; missing: str
  * required: they only have a mock until their services exist; nor are the map tiles,
  * which fall back to a keyless basemap.
  */
-export function hostedProviders(env: Env): HostedProvider[] {
+function hostedProviders(env: Env): HostedProvider[] {
   const set = (name: string) => !!env[name]?.trim();
   const unset = (...names: string[]) => names.filter((name) => !set(name));
   return [
@@ -270,7 +270,6 @@ export async function createDemo<Seeded extends boolean = true>(
       if (!hosted) await messenger.send(message);
     },
   };
-  const twilioAccountSid = env.TWILIO_ACCOUNT_SID?.trim();
   const twilioAuthToken = env.TWILIO_AUTH_TOKEN?.trim();
   const app = createApp({
     db,

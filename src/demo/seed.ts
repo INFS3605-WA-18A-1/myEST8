@@ -6,13 +6,13 @@ import type { ChannelType } from '../ports.ts';
 import type { Trade } from '../shared.ts';
 
 /** Every demo Property Manager's password. */
-export const DEMO_PASSWORD = 'demo1234';
+const DEMO_PASSWORD = 'demo1234';
 
 /** Harbour Realty's time zone. */
 export const DEMO_TIME_ZONE = 'Australia/Sydney';
 
 /** The Agency's own channel addresses: where Tenants, Tradies and Owners send to. */
-export const DEMO_CHANNELS: Partial<Record<ChannelType, string>> = {
+const DEMO_CHANNELS: Partial<Record<ChannelType, string>> = {
   sms: '+61290000000',
   email: 'inbox@harbour.example',
 };

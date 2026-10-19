@@ -42,7 +42,7 @@ type Receipt = Reimbursement['receipts'][number];
 type TimelineEvent = Reimbursement['timeline'][number];
 
 /** Each status in the words every screen uses (Approvals, the dashboard, this page), with its badge tone. */
-export const REIMBURSEMENT_STATUS: Record<UrgentRepairStatus, [string, Tone]> = {
+const REIMBURSEMENT_STATUS: Record<UrgentRepairStatus, [string, Tone]> = {
   reminder_sent: ['Awaiting receipt', 'neutral'],
   receipt_received: ['Awaiting your review', 'warning'],
   receipt_forwarded: ['With Property Owner', 'info'],

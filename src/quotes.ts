@@ -14,13 +14,13 @@ export const MIN_QUOTES = 2;
 /** Quote Requests a Job needs (sent and new together) before the Property Manager compares prices. */
 export const MIN_QUOTE_REQUESTS = 2;
 /** The most Tradies `recommend` returns, and how many of them start ticked. */
-export const MAX_RECOMMENDED = 4;
-export const PRESELECTED = 3;
+const MAX_RECOMMENDED = 4;
+const PRESELECTED = 3;
 /** The most start dates a Firm Quote lists. */
-export const MAX_AVAILABLE_DATES = 3;
+const MAX_AVAILABLE_DATES = 3;
 const MAX_SCOPE_LENGTH = 2000;
 /** The most a Quote, Call-out Fee or Not-to-exceed Cap may be: anything more is a typo, never a repair price. */
-export const MAX_QUOTE_CENTS = 1_000_000_00;
+const MAX_QUOTE_CENTS = 1_000_000_00;
 const MAX_DURATION_DAYS = 365;
 
 /**
@@ -1132,9 +1132,17 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
       };
     },
 
-    /** How many Quote Requests a Tradie has answered with a Quote a Property Manager confirmed. */
-    async quoteCount(tradieId: number) {
-      return (await one<{ n: number }>(db, 'SELECT count(DISTINCT quote_request_id) AS n FROM quotes WHERE tradie_id = ? AND confirmed = 1', tradieId))!.n;
+    /** How many Quote Requests each Tradie has answered with a Quote a Property Manager confirmed, by Tradie id (none counted are left out). */
+    async quoteCounts(tradieIds: number[]) {
+      if (!tradieIds.length) return new Map<number, number>();
+      return new Map(
+        (await all<{ tradie_id: number; n: number }>(
+          db,
+          `SELECT tradie_id, count(DISTINCT quote_request_id) AS n FROM quotes
+           WHERE confirmed = 1 AND tradie_id IN (SELECT value::bigint FROM jsonb_array_elements_text(?::text::jsonb) AS ids (value)) GROUP BY tradie_id`,
+          JSON.stringify(tradieIds),
+        )).map((r) => [r.tradie_id, r.n]),
+      );
     },
 
     /**
@@ -1183,18 +1191,19 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
      */
     async waitingOnOwner(agencyId: number, propertyIds: number[] | null) {
       const now = clock.now();
-      const waiting = [];
-      for (const a of await all<ApprovalRow>(
+      const approvals = await all<ApprovalRow>(
         db,
         `SELECT * FROM approvals WHERE agency_id = ? AND status IN ('requested', 'reminded') ORDER BY requested_at, id`,
         agencyId,
-      )) {
+      );
+      // Each approval's lookups run side by side; the list keeps the approvals' order.
+      const waiting = await Promise.all(approvals.map(async (a) => {
         const { job, ticket, property } = await jobPlace(a.job_id);
-        if (propertyIds !== null && !propertyIds.includes(property.id)) continue;
+        if (propertyIds !== null && !propertyIds.includes(property.id)) return null;
         const quote = (await one<QuoteRow>(db, 'SELECT * FROM quotes WHERE id = ?', a.quote_id))!;
         const owner = await profiles.person(a.owner_id);
         const repairCostCents = (await repairCost(ticket.id)) + costOf(quote);
-        waiting.push({
+        return {
           approvalId: a.id,
           ticketId: ticket.id,
           jobId: job.id,
@@ -1212,53 +1221,58 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
           requestedAt: a.requested_at,
           reminded: a.status === 'reminded',
           silent: addMs(a.requested_at, OWNER_ALERT_MS) <= now,
-        });
-      }
-      return waiting;
+        };
+      }));
+      return waiting.filter((w) => w !== null);
     },
 
     /** Jobs short of Quotes 72 hours after the first Quote Requests, and Property Owners silent for 48 hours. */
     async alerts(agencyId: number, propertyIds: number[] | null) {
       const now = clock.now();
       const mine = async (ticketId: number) => propertyIds === null || propertyIds.includes((await tickets.ticket(ticketId)).propertyId);
+      // Only Jobs still getting Quotes can be short of them: the rest of the history isn't read.
       const firstRequests = await all<{ job_id: number; ticket_id: number; first_sent: string }>(
         db,
-        'SELECT job_id, ticket_id, min(sent_at) AS first_sent FROM quote_requests WHERE agency_id = ? GROUP BY job_id, ticket_id ORDER BY job_id, ticket_id',
+        `SELECT r.job_id, r.ticket_id, min(r.sent_at) AS first_sent FROM quote_requests r JOIN jobs j ON j.id = r.job_id
+         WHERE r.agency_id = ? AND j.status = 'quoting' GROUP BY r.job_id, r.ticket_id ORDER BY r.job_id, r.ticket_id`,
         agencyId,
       );
-      const quotePrompts = [];
-      for (const r of firstRequests) {
-        if (!(await mine(r.ticket_id)) || (await tickets.job(r.job_id)).status !== 'quoting') continue;
-        if (addMs(r.first_sent, MORE_QUOTES_PROMPT_MS) > now) continue;
-        const confirmedQuotes = await pricedCount(r.job_id);
-        if (confirmedQuotes >= MIN_QUOTES) continue;
-        quotePrompts.push({
-          kind: 'invite_more_tradies' as const,
-          ticketId: r.ticket_id,
-          jobId: r.job_id,
-          propertyAddress: (await jobPlace(r.job_id)).property.address,
-          confirmedQuotes,
-        });
-      }
-      const silentOwners = [];
-      for (const a of await all<ApprovalRow>(
+      // Each one's lookups run side by side; the lists keep the order they were read in.
+      const quotePrompts = await Promise.all(
+        firstRequests.map(async (r) => {
+          if (addMs(r.first_sent, MORE_QUOTES_PROMPT_MS) > now || !(await mine(r.ticket_id))) return null;
+          const confirmedQuotes = await pricedCount(r.job_id);
+          if (confirmedQuotes >= MIN_QUOTES) return null;
+          return {
+            kind: 'invite_more_tradies' as const,
+            ticketId: r.ticket_id,
+            jobId: r.job_id,
+            propertyAddress: (await jobPlace(r.job_id)).property.address,
+            confirmedQuotes,
+          };
+        }),
+      );
+      const approvals = await all<ApprovalRow>(
         db,
         `SELECT * FROM approvals WHERE agency_id = ? AND status IN ('requested', 'reminded') ORDER BY requested_at, id`,
         agencyId,
-      )) {
-        if (!(await mine(a.ticket_id)) || addMs(a.requested_at, OWNER_ALERT_MS) > now) continue;
-        const owner = await profiles.person(a.owner_id);
-        silentOwners.push({
-          kind: 'owner_no_reply' as const,
-          ticketId: a.ticket_id,
-          jobId: a.job_id,
-          propertyAddress: (await jobPlace(a.job_id)).property.address,
-          ownerName: owner.name,
-          ownerPhone: owner.mobile,
-          requestedAt: a.requested_at,
-        });
-      }
-      return [...quotePrompts, ...silentOwners];
+      );
+      const silentOwners = await Promise.all(
+        approvals.map(async (a) => {
+          if (addMs(a.requested_at, OWNER_ALERT_MS) > now || !(await mine(a.ticket_id))) return null;
+          const owner = await profiles.person(a.owner_id);
+          return {
+            kind: 'owner_no_reply' as const,
+            ticketId: a.ticket_id,
+            jobId: a.job_id,
+            propertyAddress: (await jobPlace(a.job_id)).property.address,
+            ownerName: owner.name,
+            ownerPhone: owner.mobile,
+            requestedAt: a.requested_at,
+          };
+        }),
+      );
+      return [...quotePrompts.filter((p) => p !== null), ...silentOwners.filter((o) => o !== null)];
     },
   };
 }

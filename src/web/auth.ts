@@ -15,7 +15,7 @@ import { authPage, otherWay } from './auth-card.ts';
 import { button, field, linkButton, type Flash } from './ui.ts';
 
 /** The session cookie's name. */
-export const SESSION_COOKIE = 'myest8_session';
+const SESSION_COOKIE = 'myest8_session';
 
 /** A session ends after this long without a request. */
 const SESSION_IDLE_MS = 12 * 3_600_000;
@@ -193,7 +193,7 @@ export function sameOrigin(c: HonoContext): boolean {
 }
 
 /** Said beside the password: which two things didn't match, without saying which was wrong, and what to try. */
-export const SIGN_IN_REFUSED =
+const SIGN_IN_REFUSED =
   'That email and password don’t match. Check the email for typos and that Caps Lock is off. If you haven’t created an account yet, create your Agency’s account below.';
 
 function signInPage(o: { next: string; email?: string; flash?: Flash; errors?: { email?: string; password?: string } }) {

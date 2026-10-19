@@ -23,7 +23,7 @@ import { exifTime, withExif, type PhotoMetadata } from './photo-exif.ts';
 import { DEMO_TIME_ZONE, type DemoSeed } from './seed.ts';
 
 /** How many days back the stories start. */
-export const STORY_DAYS = 10;
+const STORY_DAYS = 10;
 
 const MINUTE_MS = 60_000;
 /**

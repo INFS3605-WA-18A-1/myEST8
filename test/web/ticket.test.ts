@@ -24,8 +24,6 @@ const sydney = (local: string) => new Date(`${local}+11:00`);
 const TUE_9AM = sydney('2026-10-13T09:00:00');
 const TIME_ZONE = 'Australia/Sydney';
 
-type Web = Awaited<ReturnType<typeof webWorld>>;
-
 /** Collapses every kind of space, including the narrow one Intl puts before "am". */
 const squash = (s: string) => s.replace(/\s+/g, ' ');
 const when = (at: Date) => squash(formatWhen(at.toISOString(), TIME_ZONE));
@@ -801,7 +799,7 @@ describe('a Firm Quote the Tradie sent another way', () => {
   });
 
   test("is refused for another Agency's Ticket", async () => {
-    const { w, job, open, submit } = await tapTicket();
+    const { w, job, open } = await tapTicket();
     await confirmedEstimates(w, job, [
       [w.tradies.pete, 150_00],
       [w.tradies.dana, 180_00],

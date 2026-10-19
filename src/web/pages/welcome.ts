@@ -37,7 +37,6 @@ import {
   formatMoney,
   linkButton,
   page,
-  section,
   steps,
   table,
   withFlash,
@@ -102,7 +101,7 @@ const STILL_TO_DO: Record<(typeof NEEDED)[number], string> = {
 const ROLE_LABEL: Record<Role, string> = { tenant: 'Tenant', owner: 'Property Owner', tradie: 'Tradie', building_manager: 'Building Manager' };
 
 /** How far the Agency's setup has got, read from what it has. */
-export async function setupProgress(actions: Actions, unavailable: readonly ChannelType[] = []) {
+async function setupProgress(actions: Actions, unavailable: readonly ChannelType[] = []) {
   const channels = await actions.channels();
   return {
     team: (await actions.propertyManagers()).length > 1,
@@ -121,7 +120,7 @@ function isDone(key: StepKey, progress: Progress): boolean {
 }
 
 /** Where to pick setup up again: the first needed step not done, or null once the Agency is set up. */
-export function nextSetupStep(progress: Progress): string | null {
+function nextSetupStep(progress: Progress): string | null {
   const key = NEEDED.find((k) => !progress[k]);
   return key ? STEPS.find((s) => s.key === key)!.path : null;
 }

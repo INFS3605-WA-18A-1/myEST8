@@ -87,39 +87,58 @@ export function createViews({ clock, modules }: Context) {
     tenantName: (await profiles.person(issue.tenantId)).name,
   });
 
-  const ticketSummary = async (ticket: Ticket) => ({
-    ticketId: ticket.id,
-    propertyId: ticket.propertyId,
-    ...(await propertyLabel(ticket.propertyId)),
-    tenantName: (await profiles.person(ticket.tenantId)).name,
-    description: (await tickets.issue(ticket.issueId)).description,
-    urgency: ticket.urgency,
-    checkUrgency: ticket.checkUrgency,
-    reportedAt: ticket.reportedAt,
-    jobs: (await tickets.jobsOf(ticket.id)).map((j) => ({ jobId: j.id, trade: j.trade, status: j.status })),
-    unreadMessages: await tickets.unreadCount(ticket.issueId),
-    // The issue's photos, for a list's thumbnail (the first) and anything that counts them.
-    photos: (await tickets.photos(ticket.issueId)).map(({ photoId, fileId }) => ({ photoId, fileId })),
-  });
+  /**
+   * Tickets as a list shows them, in the order given. Their jobs, issues (with unread
+   * counts) and photos are read in one query each for the whole list.
+   */
+  const ticketSummaries = async (list: Ticket[]) => {
+    const [jobs, issues, photos] = await Promise.all([
+      tickets.jobsOfTickets(list.map((t) => t.id)),
+      tickets.issuesWithUnread(list.map((t) => t.issueId)),
+      tickets.photosOfIssues(list.map((t) => t.issueId)),
+    ]);
+    return Promise.all(
+      list.map(async (ticket) => {
+        const issue = issues.get(ticket.issueId)!;
+        return {
+          ticketId: ticket.id,
+          propertyId: ticket.propertyId,
+          ...(await propertyLabel(ticket.propertyId)),
+          tenantName: (await profiles.person(ticket.tenantId)).name,
+          description: issue.description,
+          urgency: ticket.urgency,
+          checkUrgency: ticket.checkUrgency,
+          reportedAt: ticket.reportedAt,
+          jobs: jobs.filter((j) => j.ticketId === ticket.id).map((j) => ({ jobId: j.id, trade: j.trade, status: j.status })),
+          unreadMessages: issue.unreadMessages,
+          // The issue's photos, for a list's thumbnail (the first) and anything that counts them.
+          photos: photos.get(ticket.issueId) ?? [],
+        };
+      }),
+    );
+  };
 
-  const maintenanceRequestView = async (issue: Issue) => ({
-    issueId: issue.id,
-    propertyId: issue.propertyId,
-    ...(await propertyLabel(issue.propertyId)),
-    ...(await issueDetails(issue)),
-    urgency: issue.urgency,
-    checkUrgency: issue.checkUrgency,
-    trade: issue.trade,
-    checkTrade: issue.checkTrade,
-    reportedAt: issue.reportedAt,
-    summary: issue.summary,
-    summaryBy: issue.summaryBy,
-    photosOnArrival: issue.photosOnArrival,
-    unreadMessages: await tickets.unreadCount(issue.id),
-  });
-
-  const maintenanceRequestViews = async (agencyId: number, propertyIds: number[] | null) =>
-    Promise.all((await tickets.maintenanceRequests(agencyId, propertyIds)).map(maintenanceRequestView));
+  /** Maintenance Requests as a list shows them, in the order given, their unread counts read in one query. */
+  const maintenanceRequestViews = async (list: Issue[]) => {
+    const unread = await tickets.issuesWithUnread(list.map((i) => i.id));
+    return Promise.all(
+      list.map(async (issue) => ({
+        issueId: issue.id,
+        propertyId: issue.propertyId,
+        ...(await propertyLabel(issue.propertyId)),
+        ...(await issueDetails(issue)),
+        urgency: issue.urgency,
+        checkUrgency: issue.checkUrgency,
+        trade: issue.trade,
+        checkTrade: issue.checkTrade,
+        reportedAt: issue.reportedAt,
+        summary: issue.summary,
+        summaryBy: issue.summaryBy,
+        photosOnArrival: issue.photosOnArrival,
+        unreadMessages: unread.get(issue.id)!.unreadMessages,
+      })),
+    );
+  };
 
   /**
    * The open Tickets as the dashboard's board shows them: each Ticket's summary, its
@@ -197,7 +216,7 @@ export function createViews({ clock, modules }: Context) {
       const now = clock.now();
       const propertyIds = filter === 'mine' ? await profiles.propertyIdsOf(propertyManagerId) : null;
       const [maintenanceRequests, openTickets, urgentRepairs, inbox, quoteAlerts, schedulingAlerts, calendar] = await Promise.all([
-        maintenanceRequestViews(agencyId, propertyIds),
+        tickets.maintenanceRequests(agencyId, propertyIds).then(maintenanceRequestViews),
         tickets.openTickets(agencyId, propertyIds),
         tickets.urgentRepairs(agencyId, propertyIds),
         intake.inbox(agencyId),
@@ -231,14 +250,14 @@ export function createViews({ clock, modules }: Context) {
       const waiting = (await tickets.maintenanceRequests(agencyId, await listScope(propertyManagerId, o))).filter(
         (i) => (!o.urgency || i.urgency === o.urgency) && (!o.trade || i.trade === o.trade),
       );
-      const views = await Promise.all(waiting.map(maintenanceRequestView));
+      const views = await maintenanceRequestViews(waiting);
       return views.sort((a, b) => rank(a.urgency) - rank(b.urgency) || a.reportedAt.localeCompare(b.reportedAt));
     },
 
     /** One Maintenance Request waiting for review anywhere in the Agency, or null when there is none with that number. */
     async request(agencyId: number, issueId: number) {
       const issue = (await tickets.maintenanceRequests(agencyId, null)).find((i) => i.id === issueId);
-      return issue ? maintenanceRequestView(issue) : null;
+      return issue ? (await maintenanceRequestViews([issue]))[0]! : null;
     },
 
     /**
@@ -270,7 +289,7 @@ export function createViews({ clock, modules }: Context) {
       const withTrade = o.trade ? new Set((await tickets.jobsOfTickets(inStatus.map((t) => t.id))).filter((j) => j.trade === o.trade).map((j) => j.ticketId)) : null;
       const shown = withTrade ? inStatus.filter((t) => withTrade.has(t.id)) : inStatus;
       if (o.status === 'closed') shown.sort((a, b) => (b.closedAt ?? '').localeCompare(a.closedAt ?? '') || b.id - a.id);
-      return Promise.all(shown.map(async (t) => ({ ...(await ticketSummary(t)), status: t.status, closedAt: t.closedAt })));
+      return (await ticketSummaries(shown)).map((summary, i) => ({ ...summary, status: shown[i]!.status, closedAt: shown[i]!.closedAt }));
     },
 
     /**
@@ -368,6 +387,8 @@ export function createViews({ clock, modules }: Context) {
       const property = await profiles.propertyInAgency(agencyId, propertyId);
       const owner = await profiles.person(property.ownerId);
       const buildingManager = property.buildingManagerId ? await profiles.person(property.buildingManagerId) : null;
+      const every = await tickets.list(agencyId, [property.id]);
+      const closed = every.filter((t) => t.status === 'closed').sort((a, b) => (b.closedAt ?? '').localeCompare(a.closedAt ?? '') || b.id - a.id);
       return {
         propertyId: property.id,
         address: property.address,
@@ -385,30 +406,25 @@ export function createViews({ clock, modules }: Context) {
           }),
         ),
         frequentIssues: await profiles.frequentIssues(property.id),
-        openTickets: await Promise.all(
-          (await tickets.list(agencyId, [property.id])).filter((t) => t.status === 'open').map(ticketSummary),
-        ),
+        openTickets: await ticketSummaries(every.filter((t) => t.status === 'open')),
         /** The Property's history: its closed Tickets, most recently closed first. */
-        closedTickets: await Promise.all(
-          (await tickets.list(agencyId, [property.id]))
-            .filter((t) => t.status === 'closed')
-            .sort((a, b) => (b.closedAt ?? '').localeCompare(a.closedAt ?? '') || b.id - a.id)
-            .map(async (t) => ({ ...(await ticketSummary(t)), closedAt: t.closedAt })),
-        ),
+        closedTickets: (await ticketSummaries(closed)).map((summary, i) => ({ ...summary, closedAt: closed[i]!.closedAt })),
       };
     },
 
     /** The Agency's Tradies, best myEST8 rating first, with both ratings and how many Quotes each has given. */
     async tradies(agencyId: number) {
+      const tradies = await profiles.people(agencyId, 'tradie');
+      const quoteCounts = await modules.quotes.quoteCounts(tradies.map((t) => t.id));
       const directory = await Promise.all(
-        (await profiles.people(agencyId, 'tradie')).map(async (t) => ({
+        tradies.map(async (t) => ({
           tradieId: t.id,
           name: t.name,
           businessName: t.businessName,
           trades: t.trades,
           myEst8Rating: await profiles.myEst8Rating(t.id),
           googleRating: t.googlePlaceId ? { rating: t.googleRating, reviewCount: t.googleReviewCount } : null,
-          quotes: await modules.quotes.quoteCount(t.id),
+          quotes: quoteCounts.get(t.id) ?? 0,
         })),
       );
       return directory.sort((a, b) => b.myEst8Rating.average - a.myEst8Rating.average || (a.businessName ?? a.name).localeCompare(b.businessName ?? b.name));
@@ -454,14 +470,19 @@ export function createViews({ clock, modules }: Context) {
         return { ...base, needs: null, asked: 0, minimum: 0, singleReason: null, candidates: [], booking: null };
       }
 
+      const openTickets = await tickets.openTickets(agencyId, null);
+      const [issues, jobs] = await Promise.all([
+        tickets.issuesWithUnread(openTickets.map((t) => t.issueId)),
+        tickets.jobsOfTickets(openTickets.map((t) => t.id)),
+      ]);
       const open = await Promise.all(
-        (await tickets.openTickets(agencyId, null)).map(async (ticket) => ({
+        openTickets.map(async (ticket) => ({
           ticketId: ticket.id,
           propertyId: ticket.propertyId,
-          description: (await tickets.issue(ticket.issueId)).description,
+          description: issues.get(ticket.issueId)!.description,
           urgency: ticket.urgency,
           reportedAt: ticket.reportedAt,
-          jobs: await Promise.all((await tickets.jobsOf(ticket.id)).filter((j) => j.status !== 'cancelled' && j.status !== 'done').map(dispatchJob)),
+          jobs: await Promise.all(jobs.filter((j) => j.ticketId === ticket.id && j.status !== 'cancelled' && j.status !== 'done').map(dispatchJob)),
         })),
       );
       return {
@@ -656,7 +677,7 @@ export function createViews({ clock, modules }: Context) {
       const issue = await tickets.issue(ticket.issueId);
       const property = await profiles.property(ticket.propertyId);
       return {
-        ...(await ticketSummary(ticket)),
+        ...(await ticketSummaries([ticket]))[0]!,
         ...(await issueDetails(issue)),
         status: ticket.status,
         summary: issue.summary,

@@ -509,21 +509,29 @@ export function createScheduling({ db, clock, worker, modules }: Context) {
 
     /** Done Jobs the Property Manager hasn't rated yet. */
     async alerts(agencyId: number, propertyIds: number[] | null) {
-      const due = [];
-      for (const row of await all<WorkOrderRow>(db, `SELECT * FROM work_orders WHERE agency_id = ? AND kind = 'repair' AND status = 'done' ORDER BY start, id`, agencyId)) {
-        if (await profiles.hasRating(row.job_id, 'property_manager')) continue;
-        const { propertyId } = await tickets.ticket(row.ticket_id);
-        if (propertyIds !== null && !propertyIds.includes(propertyId)) continue;
-        const view = await toView(row);
-        due.push({
-          kind: 'rating_due' as const,
-          ticketId: row.ticket_id,
-          jobId: row.job_id,
-          propertyAddress: view.propertyAddress,
-          businessName: view.businessName,
-        });
-      }
-      return due;
+      // Only done repairs the Property Manager hasn't rated: the rated history isn't read.
+      const unrated = await all<WorkOrderRow>(
+        db,
+        `SELECT * FROM work_orders w WHERE agency_id = ? AND kind = 'repair' AND status = 'done'
+           AND NOT EXISTS (SELECT 1 FROM ratings r WHERE r.job_id = w.job_id AND r.source = 'property_manager')
+         ORDER BY start, id`,
+        agencyId,
+      );
+      const due = await Promise.all(
+        unrated.map(async (row) => {
+          const { propertyId } = await tickets.ticket(row.ticket_id);
+          if (propertyIds !== null && !propertyIds.includes(propertyId)) return null;
+          const view = await toView(row);
+          return {
+            kind: 'rating_due' as const,
+            ticketId: row.ticket_id,
+            jobId: row.job_id,
+            propertyAddress: view.propertyAddress,
+            businessName: view.businessName,
+          };
+        }),
+      );
+      return due.filter((d) => d !== null);
     },
 
     async itemsWaitingOn(tradieId: number): Promise<OpenItem[]> {

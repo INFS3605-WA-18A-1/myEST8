@@ -16,7 +16,7 @@ import { icon } from '../icons.ts';
 import { badge, button, docket, head, linkButton, logo, steps, urgencyBadge, type Html } from '../ui.ts';
 
 /** The demo Agency's sign-ins, shown on the landing page when the app runs as the demo. */
-export const DEMO_LOGINS = { emails: ['alice@harbour.example', 'bob@harbour.example'], password: 'demo1234' };
+const DEMO_LOGINS = { emails: ['alice@harbour.example', 'bob@harbour.example'], password: 'demo1234' };
 
 /**
  * GET / for a signed-out visitor. A signed-in Property Manager falls through to
@@ -34,7 +34,7 @@ export function landingRoutes(app: App, sessions: Sessions, o: { demo: boolean }
 const SIGN_UP = 'Create your Agency’s account';
 
 /** The landing page: the hero, the demo sign-ins (demo only), the workflow, who does what, and the way in again. */
-export function landingPage(o: { demo: boolean }): Html {
+function landingPage(o: { demo: boolean }): Html {
   return html`<!doctype html>
     <html lang="en-AU" data-theme="myest8">
       <head>

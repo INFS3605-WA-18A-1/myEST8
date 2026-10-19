@@ -209,12 +209,30 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
       ownerId: row.owner_id,
       maxRepairCostCents: row.max_repair_cost_cents,
       buildingManagerId: row.building_manager_id,
-      nominatedTradieIds: (await all<{ tradie_id: number }>(
-        db,
-        'SELECT tradie_id FROM nominated_tradies WHERE property_id = ? ORDER BY tradie_id',
-        row.id,
-      )).map((r) => r.tradie_id),
+      nominatedTradieIds: (await nominatedTradies(row.agency_id)).filter((r) => r.property_id === row.id).map((r) => r.tradie_id),
     };
+  }
+
+  /**
+   * Every Nominated Tradie of the Agency's Properties. Read for the whole Agency so a
+   * page's many Properties share one read (src/db.ts's read cache), not one each.
+   */
+  function nominatedTradies(agencyId: number) {
+    return all<{ property_id: number; tradie_id: number }>(
+      db,
+      `SELECT n.property_id, n.tradie_id FROM nominated_tradies n JOIN properties p ON p.id = n.property_id
+       WHERE p.agency_id = ? ORDER BY n.tradie_id`,
+      agencyId,
+    );
+  }
+
+  /** Every rating of the Agency's Tradies, oldest first: read for the whole Agency, for the same reason. */
+  function agencyRatings(agencyId: number) {
+    return all<{ tradie_id: number; source: 'property_manager' | 'tenant'; score: number; job_id: number; at: string }>(
+      db,
+      'SELECT r.tradie_id, r.source, r.score, r.job_id, r.at FROM ratings r JOIN people p ON p.id = r.tradie_id WHERE p.agency_id = ? ORDER BY r.id',
+      agencyId,
+    );
   }
 
   async function person(id: number): Promise<Person> {
@@ -618,17 +636,16 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
     },
 
     async ratings(tradieId: number) {
-      return (await all<{ source: 'property_manager' | 'tenant'; score: number; job_id: number; at: string }>(
-        db,
-        'SELECT source, score, job_id, at FROM ratings WHERE tradie_id = ? ORDER BY id',
-        tradieId,
-      )).map((r) => ({ source: r.source, score: r.score, jobId: r.job_id, at: r.at }));
+      const tradie = await person(tradieId);
+      return (await agencyRatings(tradie.agencyId))
+        .filter((r) => r.tradie_id === tradieId)
+        .map((r) => ({ source: r.source, score: r.score, jobId: r.job_id, at: r.at }));
     },
 
     /** The average of the starting rating and every rating since, with how many there are. */
     async myEst8Rating(tradieId: number) {
-      const { starting_rating } = (await one<{ starting_rating: number }>(db, 'SELECT starting_rating FROM people WHERE id = ?', tradieId))!;
-      const scores = [starting_rating, ...(await this.ratings(tradieId)).map((r) => r.score)];
+      const tradie = await person(tradieId);
+      const scores = [tradie.startingRating ?? 0, ...(await this.ratings(tradieId)).map((r) => r.score)];
       return { average: scores.reduce((a, b) => a + b, 0) / scores.length, count: scores.length };
     },
 

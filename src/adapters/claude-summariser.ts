@@ -11,7 +11,7 @@ import { callJson, isObject, malformed } from './json-api.ts';
 const SERVICE = 'Claude';
 const MODEL = 'claude-haiku-5-5';
 const URL = 'https://api.anthropic.com/v1/messages';
-export const SUMMARY_MAX_CHARS = 160;
+const SUMMARY_MAX_CHARS = 160;
 
 const SYSTEM = [
   'You write the one-line summary of a tenant\'s property-maintenance request for a property manager.',

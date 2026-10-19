@@ -23,7 +23,7 @@ export type Values = Record<string, string | string[]>;
 export type Errors = Record<string, string>;
 
 /** The radio value for a Tradie who has no Google listing. */
-export const NOT_ON_GOOGLE = 'none';
+const NOT_ON_GOOGLE = 'none';
 
 /**
  * The Agency's channels, as the forms describe them: SMS and email. WhatsApp is not offered
@@ -279,7 +279,7 @@ export function nominatedFrom(form: FormValues): number[] {
   return [...new Set(list(form, 'nominatedTradieIds').filter(Boolean).map(Number))];
 }
 
-export function choiceGroup(o: {
+function choiceGroup(o: {
   legend: string;
   name: string;
   type: 'checkbox' | 'radio';
@@ -405,9 +405,10 @@ export async function addTradieFrom(actions: PropertyManagerActions, form: FormV
 /** The Agency's Tradies with their Trades and both ratings. */
 export async function tradiesTable(actions: PropertyManagerActions, tradies: Person[], empty = 'No Tradies yet.'): Promise<Html> {
   if (!tradies.length) return emptyState(empty);
-  const ratings = await Promise.all(tradies.map(async (t) => (await actions.tradie(t.id)).myEst8Rating));
-  const rows = tradies.map((t, i) => {
-    const { average, count } = ratings[i]!;
+  // The directory has every Tradie's rating; a Tradie's whole profile isn't needed for it.
+  const ratings = new Map((await actions.tradieDirectory()).map((t) => [t.tradieId, t.myEst8Rating]));
+  const rows = tradies.map((t) => {
+    const { average, count } = ratings.get(t.id)!;
     return [
       rowLink(t.businessName ?? t.name, `/tradies/${t.id}`),
       html`${t.name}`,

@@ -4,9 +4,9 @@ import type { ChannelType, ImageMatchResult } from './ports.ts';
 import { invalid, iso, newToken, normalizeAddress, notFound, TRADES, URGENCIES, type Availability, type Trade, type Urgency } from './shared.ts';
 
 export type IssueStatus = 'gathering' | 'awaiting_photos' | 'checking' | 'maintenance_request' | 'confirmed' | 'rejected' | 'urgent';
-export const IN_INTAKE: IssueStatus[] = ['gathering', 'awaiting_photos', 'checking', 'maintenance_request'];
+const IN_INTAKE: IssueStatus[] = ['gathering', 'awaiting_photos', 'checking', 'maintenance_request'];
 /** An issue's photo link takes photos only while the issue is in these statuses (the same rule as intake.upload). */
-export const TAKES_PHOTOS: IssueStatus[] = ['awaiting_photos', 'checking', 'maintenance_request'];
+const TAKES_PHOTOS: IssueStatus[] = ['awaiting_photos', 'checking', 'maintenance_request'];
 
 export type JobStatus = 'quoting' | 'awaiting_owner' | 'approved' | 'scheduled' | 'done' | 'cancelled';
 /** Who wrote a Maintenance Request's Summary: the model, or a Property Manager who edited it (never overwritten by the model again). */
@@ -439,6 +439,20 @@ export function createTickets({ db, clock, settings, modules }: Context) {
         JSON.stringify(reasons),
         iso(clock.now()),
       );
+    },
+
+    /** The photos of several issues in one query, by issue: the id and file of each, in the order they came. */
+    async photosOfIssues(issueIds: number[]) {
+      const byIssue = new Map<number, { photoId: number; fileId: number }[]>();
+      if (!issueIds.length) return byIssue;
+      for (const p of await all<{ id: number; issue_id: number; file_id: number }>(
+        db,
+        'SELECT id, issue_id, file_id FROM photos WHERE issue_id IN (SELECT value::bigint FROM jsonb_array_elements_text(?::text::jsonb) AS ids (value)) ORDER BY id',
+        JSON.stringify(issueIds),
+      )) {
+        byIssue.set(p.issue_id, [...(byIssue.get(p.issue_id) ?? []), { photoId: p.id, fileId: p.file_id }]);
+      }
+      return byIssue;
     },
 
     async photos(issueId: number) {

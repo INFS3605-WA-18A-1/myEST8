@@ -200,12 +200,6 @@
     }
 
     /* Text that must not run past its box: one line, cut with an ellipsis at a word boundary where it can be. */
-    .truncate-words {
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
     /* Clamped text (see clip() in ui.ts): wraps to N lines, then an ellipsis. */
     .line-clamp-1,
     .line-clamp-2,
@@ -931,15 +925,6 @@
       min-height: 18px;
       padding: 0 6px;
       font-size: 12px;
-    }
-    .docket-meta {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 2px 12px;
-      margin-top: 2px;
-      font-size: 12px;
-      color: var(--muted);
     }
     .unread-dot {
       display: inline-block;
@@ -1809,14 +1794,6 @@
         padding: 16px;
       }
     }
-    .app-flash {
-      padding: 12px 24px 0;
-    }
-    @media (max-width: 63.99rem) {
-      .app-flash {
-        padding: 12px 16px 0;
-      }
-    }
     .app-body-stack {
       display: flex;
       flex-direction: column;
@@ -2141,8 +2118,7 @@
       }
     }
 
-    /* The invitations around a Share button on the sign-up page and the Tenant's tracker. */
-    .signup-share,
+    /* The invitation around a Share button on the Tenant's tracker. */
     .tracker-share {
       display: flex;
       flex-direction: column;
@@ -4258,63 +4234,6 @@
         width: auto;
       }
     }
-    /* Quotes compared: compact blocks on a narrow column, one column per Quote once
-       there is room, their rows lined up across columns (subgrid). */
-    .quote-compare-frame {
-      container: quote-compare / inline-size;
-    }
-    .quote-compare {
-      display: grid;
-      gap: 8px;
-      margin: 0;
-      padding: 0;
-      list-style: none;
-    }
-    .quote-column {
-      display: grid;
-      gap: 6px;
-      min-width: 0;
-      padding: 12px;
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: 4px;
-    }
-    .quote-column.is-approved {
-      border-color: var(--done);
-    }
-    .quote-tradie {
-      min-width: 0;
-      overflow-wrap: anywhere;
-    }
-    .quote-price {
-      margin: 0;
-      font-family: var(--font-head);
-      font-size: 22px;
-      font-weight: 600;
-      line-height: 1.15;
-    }
-    .quote-cell {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: space-between;
-      gap: 0 12px;
-      font-size: 14px;
-    }
-    .quote-label {
-      font-size: 12px;
-      color: var(--muted);
-    }
-    .quote-ratings {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0 12px;
-    }
-    .quote-state {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 4px;
-    }
     .quote-check > summary {
       list-style: none;
     }
@@ -4325,28 +4244,6 @@
       background: var(--surface);
       color: var(--action);
       border-color: var(--control);
-    }
-    @container quote-compare (min-width: 30rem) {
-      .quote-compare {
-        grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-        column-gap: 12px;
-      }
-      .quote-column {
-        grid-row: span var(--quote-rows);
-        grid-template-rows: subgrid;
-        row-gap: 8px;
-        align-content: start;
-      }
-      .quote-cell {
-        flex-direction: column;
-        justify-content: flex-start;
-      }
-      .quote-ratings {
-        flex-direction: column;
-      }
-      .quote-state {
-        align-content: start;
-      }
     }
     /* Older messages fold above the latest ones. */
     .ticket-older[open] > summary {
@@ -4874,12 +4771,6 @@
     }
 
     /* Dispatch: the ratings side by side, and the disclosure under the Properties table. */
-    .dispatch-ratings {
-      display: flex;
-      flex-wrap: wrap;
-      column-gap: 12px;
-      row-gap: 2px;
-    }
     .dispatch-more {
       margin-top: 12px;
     }

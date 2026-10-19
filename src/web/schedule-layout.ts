@@ -21,10 +21,10 @@ export interface HourRange {
   last: number;
 }
 
-export const DEFAULT_HOURS: HourRange = { first: 7, last: 19 };
+const DEFAULT_HOURS: HourRange = { first: 7, last: 19 };
 
 /** Minutes in one grid row. */
-export const SLOT_MINUTES = 15;
+const SLOT_MINUTES = 15;
 
 const DAY_MINUTES = 24 * 60;
 

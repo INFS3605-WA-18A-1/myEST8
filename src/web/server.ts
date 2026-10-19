@@ -4,6 +4,7 @@ import type { DemoControls } from '../demo/controls.ts';
 import type { FileLinks } from '../file-links.ts';
 import { simulatorPages } from '../demo/simulator-pages.ts';
 import { createHttpApp } from '../http.ts';
+import { withReadCache } from '../db.ts';
 import type { Clock } from '../ports.ts';
 import { assetRoutes } from './assets.ts';
 import { authRoutes, requirePropertyManager, type Sessions } from './auth.ts';
@@ -42,6 +43,8 @@ export function createWebApp(deps: {
   demoSignIns?: boolean;
 }) {
   const web = new Hono();
+  // A page reads the same rows many times over; each GET shares its reads (src/db.ts).
+  web.use('*', (c, next) => (c.req.method === 'GET' || c.req.method === 'HEAD' ? withReadCache(next) : next()));
   // The no-login Tenant links (a tracker, the upload page and its posts) and the Tradie's quote page.
   const links = rateLimit({ max: 60, windowMs: 60_000 });
   const uploads = rateLimit({ max: 20, windowMs: 60_000 });

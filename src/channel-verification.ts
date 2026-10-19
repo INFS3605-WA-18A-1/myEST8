@@ -23,12 +23,12 @@ type Row = {
 };
 
 /** The inbound mail domain. Tests leave RESEND_INBOUND_DOMAIN unset and get the default. */
-export function inboundEmailDomain(env: Record<string, string | undefined> = process.env) {
+function inboundEmailDomain(env: Record<string, string | undefined> = process.env) {
   return env.RESEND_INBOUND_DOMAIN?.trim() || 'mail.example.test';
 }
 
 /** "Sunrise Realty" -> "sunrise-realty". */
-export function agencySlug(name: string) {
+function agencySlug(name: string) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'agency';
 }
 
