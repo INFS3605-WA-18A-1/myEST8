@@ -14,6 +14,7 @@ import { listFilterOf, listFilterQuery, type ListFilter } from '../list-filter.t
 import { requestFlags } from '../request-checks.ts';
 import { shellInfo } from '../shell.ts';
 import { badge, emptyState, filterBar, flashFrom, formatAge, formatDay, humanise, linkButton, page, postButton, queueRow, section, segmented, statusBadge, table, ticketCell, urgencyBadge, type Html } from '../ui.ts';
+import { propertyOptions } from './onboarding-forms.ts';
 import { byUrgency } from './requests.ts';
 
 type MaintenanceRequest = Awaited<ReturnType<PropertyManagerActions['requests']>>[number];
@@ -96,7 +97,7 @@ export function listFilterBar(path: string, f: ListFilter, properties: Property[
     filter: f,
     urgencies: URGENCIES.filter((u) => u !== 'urgent').map((u) => ({ value: u, label: humanise(u) })),
     trades: TRADES.map((t) => ({ value: t, label: humanise(t) })),
-    properties: properties.map((p) => ({ value: String(p.id), label: p.address })),
+    properties: propertyOptions(properties),
   });
 }
 

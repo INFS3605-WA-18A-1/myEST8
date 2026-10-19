@@ -93,7 +93,7 @@ describe('the onboarding guide', () => {
     expect(added.page).toContain('Tina Test added as a Tenant');
     expect(visible(added.page)).toContain('1 Sep 2026');
     // Each Tenant's name links to their profile.
-    expect(visible(await page(w, '/properties', cookie))).toMatch(/Hana Ho ?, Tina Test ?, Tom Tran/);
+    expect(visible(await page(w, '/properties', cookie))).toMatch(/Hana Ho\s+Tina Test\s+Tom Tran/);
   });
 
   test('a Tenant with no mobile or email is refused, with the reason next to the form', async () => {

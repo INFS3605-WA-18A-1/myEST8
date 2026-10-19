@@ -10,7 +10,7 @@ import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
 import type { WebEnv } from '../env.ts';
 import { shellInfo } from '../shell.ts';
-import { badge, countSentence, emptyState, flashFrom, formatAge, formatMoney, formatWhen, humanise, linkButton, page, section, segmented, table, type Html } from '../ui.ts';
+import { badge, contactLink, countSentence, emptyState, entityLink, flashFrom, formatAge, formatMoney, formatWhen, humanise, linkButton, page, rowLink, section, segmented, table, type Html } from '../ui.ts';
 import { reimbursementBadge } from './reimbursement.ts';
 
 type Approvals = Awaited<ReturnType<PropertyManagerActions['approvals']>>;
@@ -84,10 +84,10 @@ function ownerTable(waiting: Approvals['waitingOnOwner'], now: Date): Html {
   return table(
     ['Ticket', 'Property Owner', 'Quote', 'Over the limit', 'Waiting', 'Reminder'],
     waiting.map((w) => [
-      html`<p><a class="link font-semibold num" href="/tickets/${w.ticketId}">Ticket #${w.ticketId}</a> <span class="text-muted">${humanise(w.trade)}</span></p>
-        <p><a class="link text-xs" href="/properties/${w.propertyId}">${w.propertyAddress}</a></p>`,
+      html`<p>${rowLink(`Ticket #${w.ticketId}`, `/tickets/${w.ticketId}`)} <span class="text-muted">${humanise(w.trade)}</span></p>
+        <p class="mt-1">${entityLink('property', w.propertyAddress, `/properties/${w.propertyId}`)}</p>`,
       // One element per labelled cell, so its lines stay together beside the label on phones.
-      html`<div><p>${w.ownerName}</p>${w.ownerMobile ? html`<p><a class="link text-xs" href="tel:${w.ownerMobile}">${w.ownerMobile}</a></p>` : ''}</div>`,
+      html`<div><p>${w.ownerName}</p>${w.ownerMobile ? html`<p class="text-xs">${contactLink('mobile', w.ownerMobile)}</p>` : ''}</div>`,
       html`<div><p>${formatMoney(w.quotePriceCents)}</p><p class="text-xs text-muted">${w.tradieBusinessName}</p></div>`,
       html`<div><p class="font-semibold">${formatMoney(w.overByCents)}</p><p class="text-xs text-muted whitespace-nowrap">${formatMoney(w.repairCostCents)} of ${formatMoney(w.maxRepairCostCents)}</p></div>`,
       html`<span class="whitespace-nowrap">${formatAge(w.requestedAt, now).replace(' ago', '')}</span>`,
@@ -102,8 +102,8 @@ function reimbursementTable(claims: Approvals['reimbursements'], timeZone: strin
   return table(
     ['Reimbursement Request', 'Tenant', 'Property Owner', 'Status', 'Amount', 'Reported'],
     claims.map((u) => [
-      html`<p><a class="link font-semibold" href="/reimbursements/${u.urgentRepairId}">${u.description}</a></p>
-        <p><a class="link text-xs" href="/properties/${u.propertyId}">${u.propertyAddress}</a></p>`,
+      html`<p>${rowLink(u.description, `/reimbursements/${u.urgentRepairId}`)}</p>
+        <p class="mt-1">${entityLink('property', u.propertyAddress, `/properties/${u.propertyId}`)}</p>`,
       html`${u.tenantName}`,
       html`${u.ownerName}`,
       reimbursementBadge(u.status, { wrap: true }),

@@ -509,7 +509,9 @@ describe('ui', () => {
     expect(issue).toBeGreaterThan(-1);
     expect(out.indexOf('#7')).toBeGreaterThan(issue);
     expect(out).toContain('2 unread');
-    expect(out.indexOf('<a href="/properties/1" class="ticket-cell-address">12 King St</a>')).toBeGreaterThan(issue);
+    // The address is a chip that links to the Property.
+    expect(out).toMatch(/<p class="ticket-cell-address"><a class="entity-link entity-link-property" href="\/properties\/1">.*<span>12 King St<\/span><\/a><\/p>/);
+    expect(out.indexOf('href="/properties/1"')).toBeGreaterThan(issue);
 
     const quiet = await render(ticketCell({ ticketId: 7, issue: 'The tap drips', address: '12 King St' }));
     expect(quiet).toContain('<p class="ticket-cell-address">12 King St</p>');

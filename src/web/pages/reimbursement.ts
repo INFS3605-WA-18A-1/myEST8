@@ -19,7 +19,9 @@ import {
   badge,
   button,
   card,
+  contactLink,
   emptyState,
+  entityLink,
   field,
   flashFrom,
   formatAge,
@@ -169,9 +171,9 @@ function header(r: Reimbursement, now: Date): Html {
       : html`<span class="num ${r.overLimit ? 'text-high' : ''}">Amount <strong>${formatMoney(r.amountCents)}</strong> of the ${formatMoney(r.limitCents)} limit</span>`;
   return html`<header class="reimbursement-head">
     <h2 class="reimbursement-issue">${r.summary ?? r.description}</h2>
-    <p><a class="link" href="/properties/${r.propertyId}">${r.propertyAddress}</a></p>
+    <p>${entityLink('property', r.propertyAddress, `/properties/${r.propertyId}`)}</p>
     <p class="reimbursement-meta">
-      <span>Tenant <a class="link" href="/tenants/${r.tenant.personId}">${r.tenant.name}</a></span>
+      <span>Tenant ${entityLink('tenant', r.tenant.name, `/tenants/${r.tenant.personId}`)}</span>
       <span>${reimbursementBadge(r.status)}</span>
       ${amount}
       <time datetime="${r.reportedAt}">Reported ${formatAge(r.reportedAt, now)}</time>
@@ -283,7 +285,7 @@ function fileLink(f: Receipt): Html {
 /** Who is involved and what the Tenant said. */
 function detailsCard(r: Reimbursement): Html {
   const contact = (p: Reimbursement['owner']) =>
-    html`<p>${p.name}</p>${p.email ? html`<p><a class="link text-xs" href="mailto:${p.email}">${p.email}</a></p>` : nothing}${p.mobile ? html`<p><a class="link text-xs" href="tel:${p.mobile}">${p.mobile}</a></p>` : nothing}`;
+    html`<p>${p.name}</p>${p.email ? html`<p class="text-xs">${contactLink('email', p.email)}</p>` : nothing}${p.mobile ? html`<p class="text-xs">${contactLink('mobile', p.mobile)}</p>` : nothing}`;
   const rows: [string, Html | string][] = [
     ...(r.summary ? [["The Tenant's words", r.description] as [string, string]] : []),
     ['Tenant', contact(r.tenant)],

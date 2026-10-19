@@ -11,7 +11,7 @@ import { MAX_SHEET_BYTES } from '../../spreadsheet.ts';
 import { ActionError, TRADES, type Trade } from '../../shared.ts';
 import { int, list, optional, text, type FormValues } from '../forms.ts';
 import { icon } from '../icons.ts';
-import { badge, button, emptyState, field, formatWhen, humanise, table, type Html } from '../ui.ts';
+import { badge, button, emptyState, field, formatWhen, humanise, ratingChip, rowLink, table, type Html, type Option } from '../ui.ts';
 
 type Person = Awaited<ReturnType<PropertyManagerActions['people']>>[number];
 type Listing = Awaited<ReturnType<PropertyManagerActions['findGoogleListings']>>[number];
@@ -237,6 +237,48 @@ export function scoped(scope: string | undefined, name: string) {
 }
 
 /** Checkboxes (in `columns` from 768px) or radio buttons in a labelled group. `checked` ticks the given values. */
+/** Properties for a searchable select: the address, found by its street, suburb or postcode too. */
+export function propertyOptions(properties: { id: number; address: string; suburb: string }[]): Option[] {
+  return properties.map((p) => ({ value: String(p.id), label: p.address, keywords: p.suburb }));
+}
+
+/** Tradies for a searchable select: the business and its Trades, found by the Tradie's own name too. */
+export function tradieOptions(tradies: { id: number; name: string; businessName: string | null; trades: Trade[] }[]): Option[] {
+  return tradies.map((t) => ({ value: String(t.id), label: `${t.businessName ?? t.name} (${t.trades.map(humanise).join(', ')})`, keywords: t.name }));
+}
+
+/**
+ * The Nominated Tradies: a searchable Tradie select per Tradie chosen, each with a
+ * Remove button, and "Add Tradie" for another (app.js). With nothing chosen it starts
+ * with one empty select, so it works without JavaScript too; empty ones post nothing
+ * (`nominatedFrom`).
+ */
+export function tradiePicker(o: { id: string; tradies: Parameters<typeof tradieOptions>[0]; chosen?: string[]; legend?: string; hint?: string; error?: string }): Html {
+  const options = tradieOptions(o.tradies);
+  const chosen = o.chosen?.length ? o.chosen : [''];
+  const row = (value: string, id: string) => html`<li class="picker-row" data-picker-row>
+    <label class="sr-only" for="${id}">Nominated Tradie</label>
+    <select id="${id}" name="nominatedTradieIds" class="select w-full" data-combobox>
+      <option value="">Search Tradies by name or Trade</option>
+      ${options.map((opt) => html`<option value="${opt.value}" ${value === opt.value ? 'selected' : ''} data-keywords="${opt.keywords ?? ''}">${opt.label}</option>`)}
+    </select>
+    <button type="button" class="btn btn-ghost btn-sm picker-remove" data-picker-remove>${icon('x', { size: 'size-4' })}<span>Remove</span></button>
+  </li>`;
+  return html`<fieldset class="picker min-w-0" data-picker ${o.error ? html`aria-invalid="true"` : ''}>
+    <legend class="field-label mb-1">${o.legend ?? 'Nominated Tradies'}</legend>
+    <ul class="picker-rows" data-picker-rows>${chosen.map((value, i) => row(value, `${o.id}-tradie-${i}`))}</ul>
+    <template data-picker-template>${row('', `${o.id}-tradie`)}</template>
+    <button type="button" class="btn btn-secondary btn-sm picker-add" data-picker-add hidden>${icon('plus', { size: 'size-4' })}<span>Add Tradie</span></button>
+    ${o.error ? html`<p class="field-error">${o.error}</p>` : ''}
+    <p class="field-hint">${o.hint ?? 'Who the Tenant can call for an Urgent Repair.'}</p>
+  </fieldset>`;
+}
+
+/** The Tradies a `tradiePicker` posted, each once, leaving out rows left empty. */
+export function nominatedFrom(form: FormValues): number[] {
+  return [...new Set(list(form, 'nominatedTradieIds').filter(Boolean).map(Number))];
+}
+
 export function choiceGroup(o: {
   legend: string;
   name: string;
@@ -367,11 +409,11 @@ export async function tradiesTable(actions: PropertyManagerActions, tradies: Per
   const rows = tradies.map((t, i) => {
     const { average, count } = ratings[i]!;
     return [
-      html`<a class="link font-medium" href="/tradies/${t.id}">${t.businessName ?? t.name}</a>`,
+      rowLink(t.businessName ?? t.name, `/tradies/${t.id}`),
       html`${t.name}`,
       html`${t.trades.map((trade) => html`${badge(humanise(trade), 'info')} `)}`,
-      html`${average.toFixed(1)} <span class="text-sm text-muted">(${count})</span>`,
-      html`${t.googlePlaceId ? `${t.googleRating?.toFixed(1) ?? '—'} (${t.googleReviewCount ?? 0} reviews)` : 'Not on Google'}`,
+      ratingChip({ source: 'myEST8', rating: average, count, named: false }),
+      ratingChip({ source: 'Google', rating: t.googleRating, count: t.googleReviewCount ?? 0, onGoogle: !!t.googlePlaceId, named: false }),
     ];
   });
   return table(['Business', 'Name', 'Trades', 'myEST8 rating', 'Google rating'], rows, { stack: 'labelled', caption: 'Tradies' });

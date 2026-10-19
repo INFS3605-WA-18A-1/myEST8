@@ -1,6 +1,6 @@
 import type { Context } from './context.ts';
 import { URGENT_REPAIR_LIMIT_CENTS } from './intake.ts';
-import { MIN_QUOTES } from './quotes.ts';
+import { MIN_QUOTE_REQUESTS, MIN_QUOTES } from './quotes.ts';
 import { addMs, HOUR_MS, iso, URGENCIES, type Trade, type Urgency } from './shared.ts';
 import type { Issue, Job, JobStatus, Ticket, UrgentRepairStatus } from './tickets.ts';
 
@@ -421,6 +421,39 @@ export function createViews({ clock, modules }: Context) {
      * Properties: Tradies are shared, and dispatch looks across the Agency.
      */
     async dispatch(agencyId: number) {
+      /**
+       * What a Job needs from dispatch, if anything: Tradies to quote while it has fewer
+       * than two Quote Requests (`candidates`, the Tradies of its Trade not asked yet,
+       * ranked as the Ticket ranks them), or its Work Order once a Quote is approved
+       * (`booking`: the chosen Tradie, the price and their next free slots).
+       */
+      async function dispatchJob(job: Job) {
+        const base = { jobId: job.id, trade: job.trade, status: job.status };
+        if (job.status === 'quoting') {
+          const [rule, ranked] = await Promise.all([modules.quotes.quoteRequestRule(agencyId, job.id), modules.quotes.recommend(agencyId, job.id)]);
+          const candidates = ranked
+            .filter((r) => !r.requested)
+            .map(({ tradieId, businessName, nominated, myEst8Rating, googleRating }) => ({ tradieId, businessName, nominated, myEst8Rating, googleRating }));
+          const needs = rule.asked < MIN_QUOTE_REQUESTS && candidates.length > 0 ? ('tradies' as const) : null;
+          return { ...base, needs, asked: rule.asked, minimum: rule.minimum, singleReason: rule.singleReason, candidates, booking: null };
+        }
+        if (job.status === 'approved') {
+          const quote = (await modules.quotes.approvedQuote(job.id))!;
+          const tradie = await profiles.person(quote.tradieId);
+          const freeSlots = (await modules.scheduling.freeSlots(agencyId, tradie.id)).slice(0, 3);
+          return {
+            ...base,
+            needs: 'booking' as const,
+            asked: 0,
+            minimum: 0,
+            singleReason: null,
+            candidates: [],
+            booking: { tradieId: tradie.id, businessName: tradie.businessName ?? tradie.name, priceCents: quote.notToExceedCents ?? quote.priceCents, proposedTime: quote.proposedTime, freeSlots },
+          };
+        }
+        return { ...base, needs: null, asked: 0, minimum: 0, singleReason: null, candidates: [], booking: null };
+      }
+
       const open = await Promise.all(
         (await tickets.openTickets(agencyId, null)).map(async (ticket) => ({
           ticketId: ticket.id,
@@ -428,6 +461,7 @@ export function createViews({ clock, modules }: Context) {
           description: (await tickets.issue(ticket.issueId)).description,
           urgency: ticket.urgency,
           reportedAt: ticket.reportedAt,
+          jobs: await Promise.all((await tickets.jobsOf(ticket.id)).filter((j) => j.status !== 'cancelled' && j.status !== 'done').map(dispatchJob)),
         })),
       );
       return {
@@ -439,7 +473,7 @@ export function createViews({ clock, modules }: Context) {
             address: property.address,
             suburb: property.suburb,
             location: property.location,
-            openTickets: openTickets.map(({ ticketId, description, urgency, reportedAt }) => ({ ticketId, description, urgency, reportedAt })),
+            openTickets: openTickets.map(({ ticketId, description, urgency, reportedAt, jobs }) => ({ ticketId, description, urgency, reportedAt, jobs })),
             worstUrgency,
           };
         }),

@@ -142,8 +142,8 @@ describe('the Ticket view', () => {
     const ranked = ["1. Nina's Plumbing", '2. Drip Doctors', "3. Pete's Plumbing", '4. Quick Pipes'].map((t) => text.indexOf(t));
     expect(ranked.every((at, i) => at > -1 && (i === 0 || at > ranked[i - 1]!))).toBe(true);
     expect(text).not.toContain('Sparky Sam');
-    expect(text).toContain('myEST8 5.0 (1 rating) Not on Google');
-    expect(text).toContain('myEST8 4.0 (1 rating) Google 4.8 (120 reviews)');
+    expect(text).toContain('myEST8 5.0 (1) from 1 rating Not on Google');
+    expect(text).toContain('myEST8 4.0 (1) from 1 rating Google 4.8 (120) from 120 reviews');
     expect(text).toContain('Reported by the Tenant');
     expect(text).toContain('Confirmed as a Ticket');
     expect(text).toContain(`From ${TOM}`);
@@ -429,7 +429,7 @@ describe('the Next step', () => {
 
     expect(nextStepOf(page.html)).toEqual({ text: 'Next Choose a Firm Quote: 2 in', href: `#job-${job.jobId}-quotes`, decision: true });
     expect(page.text).toMatch(
-      /Firm Quotes for the Plumbing Job Tradie Firm Quote Scope of work Takes Can start PDF Ratings Action Pete's Plumbing \$150\.00 Replace the washer and reseat the tap 1 day Thu, 15 Oct None myEST8 4\.0 Google 4\.8 Choose this Firm Quote/,
+      /Firm Quotes for the Plumbing Job Tradie Firm Quote Scope of work Takes Can start PDF Ratings Action Pete's Plumbing \$150\.00 Replace the washer and reseat the tap 1 day Thu, 15 Oct None myEST8 4\.0 \(1\) from 1 rating Google 4\.8 \(120\) from 120 reviews Choose this Firm Quote/,
     );
     expect(page.text).toMatch(/Estimates Non-binding .* Pete's Plumbing \$150\.00 Not needed None Superseded by Firm Quote \$150\.00/);
     expect(page.text.match(/Choose this Firm Quote/g)).toHaveLength(2);

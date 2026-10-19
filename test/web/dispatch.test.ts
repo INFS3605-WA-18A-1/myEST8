@@ -49,17 +49,19 @@ async function locateTradies(w: World, bases: [number, { address: string; locati
 }
 
 describe('Dispatch: the map data', () => {
-  test('the pin key names, in words, every kind of pin the map draws, groups of pins included', async () => {
+  test('the map has no key: its pins are a house for a Property and a wrench for a Tradie, each named in words', async () => {
     const w = await webWorld();
     const cookie = await w.signIn();
 
     const html = await dispatch(w, cookie);
 
-    const start = html.indexOf('aria-label="Pin key"');
+    expect(html).not.toContain('aria-label="Pin key"');
+    expect(html).not.toContain('dispatch-legend');
+    const start = html.indexOf('<template id="dispatch-pin-icons">');
     expect(start).toBeGreaterThan(-1);
-    const key = html.slice(html.indexOf('>', start) + 1, html.indexOf('</ul>', start));
-    expect([...key.matchAll(/data-pin="([a-z]+)"/g)].map((m) => m[1])).toEqual(['urgent', 'high', 'routine', 'none', 'tradie', 'group']);
-    expect(visible(key).trim()).toBe('Urgent High Routine No open Tickets Tradie Group of pins, zoom in to see them');
+    const glyphs = html.slice(start, html.indexOf('</template>', start));
+    expect([...glyphs.matchAll(/data-icon="([a-z]+)"/g)].map((m) => m[1])).toEqual(['property', 'tradie']);
+    expect(html).toContain('Map. Each pin is a Property or a Tradie');
   });
 
   test('every geocoded Property is a pin with its coordinates and the worst urgency of its open Tickets', async () => {
@@ -162,6 +164,7 @@ describe('Dispatch: the table of Properties', () => {
       [w.ids.pete, PETE_BASE],
       [w.ids.nina, NINA_BASE],
       [w.ids.finn, FINN_BASE],
+      [w.ids.sam, { address: '3 Enmore Rd, Enmore NSW 2042', location: { lat: -33.8985, lng: 151.1735 } }],
     ]);
     const cookie = await w.signIn();
 
@@ -177,11 +180,14 @@ describe('Dispatch: the table of Properties', () => {
     expect(text.indexOf("Nina's Plumbing")).toBeGreaterThan(-1);
     expect(text.indexOf("Nina's Plumbing")).toBeLessThan(text.indexOf("Pete's Plumbing"));
     expect(text).not.toContain('Flow Bros');
+    // Only the Trades its open Jobs need: Sam is an electrician next door.
+    expect(text).toContain('Nearest Tradies, within 15 km who do plumbing');
+    expect(text).not.toContain('Sparky Sam');
     expect(text).toMatch(/0\.6 km/);
     expect(text).toMatch(/2\.2 km/);
     expect(text).toContain('Plumbing');
     // Both ratings side by side, never combined.
-    expect(text).toContain('myEST8 4.0 (1 rating) Google 4.8 (120 reviews)');
+    expect(text).toContain('myEST8 4.0 (1) from 1 rating Google 4.8 (120) from 120 reviews');
     expect(panel).toContain(`href="/tradies/${w.ids.pete}"`);
   });
 
@@ -294,6 +300,85 @@ describe("Dispatch: a Tradie's bookings", () => {
     expect(html).not.toContain('id="tradie-schedule"');
     expect(visible(html)).not.toContain('Tradie schedule');
     expect(html).not.toContain('dispatch-schedule');
+  });
+});
+
+describe('Dispatch: the Jobs to dispatch', () => {
+  test('a Job with no Quote Requests is a card offering its Trade\'s Tradies, nearest first with distance and ratings, the nearest two ticked', async () => {
+    const w = await webWorld();
+    const job = await tomsTapTicket(w);
+    await locateTradies(w, [
+      [w.ids.pete, PETE_BASE],
+      [w.ids.nina, NINA_BASE],
+    ]);
+    const cookie = await w.signIn();
+
+    const html = await dispatch(w, cookie);
+
+    expect(visible(html)).toMatch(/Need Tradies 1 Jobs to ask for Quotes/);
+    const card = html.slice(html.indexOf(`id="dispatch-job-${job.jobId}"`), html.indexOf('</li>\n</ul>', html.indexOf(`id="dispatch-job-${job.jobId}"`)));
+    const text = visible(card);
+    expect(text).toContain('Needs Tradies to quote');
+    expect(card).toContain(`href="/tickets/${job.ticketId}"`);
+    expect(card).toContain(`data-select="property-${w.ids.kingSt}"`);
+    expect(card).toContain(`action="/dispatch/jobs/${job.jobId}/quote-requests"`);
+    // Nina is nominated for King St and nearest, then Pete; Tradies without a location come last.
+    expect(text.indexOf("Nina's Plumbing")).toBeLessThan(text.indexOf("Pete's Plumbing"));
+    expect(text).toMatch(/Nina's Plumbing Nominated 0\.6 km/);
+    expect(text).toMatch(/Pete's Plumbing 2\.2 km/);
+    expect(text).toContain('Distance unknown');
+    expect([...card.matchAll(/value="(\d+)" checked/g)].map((m) => Number(m[1]))).toEqual([w.ids.nina, w.ids.pete]);
+  });
+
+  test('sending from the card asks the ticked Tradies and takes the Job off the list', async () => {
+    const w = await webWorld();
+    const job = await tomsTapTicket(w);
+    const cookie = await w.signIn();
+
+    const res = await w.post(`/dispatch/jobs/${job.jobId}/quote-requests`, { tradieIds: [w.ids.pete, w.ids.nina] }, cookie);
+
+    expect(res.status).toBe(303);
+    expect(res.headers.get('location')).toMatch(/^\/dispatch\?ok=.*#to-dispatch$/);
+    expect((await w.alice.ticket(job.ticketId)).jobs[0]!.quoteRequests.map((r) => r.tradieId).sort()).toEqual([w.ids.nina, w.ids.pete].sort());
+    const html = await dispatch(w, cookie);
+    expect(html).not.toContain(`id="dispatch-job-${job.jobId}"`);
+    expect(visible(html)).toContain('Nothing to dispatch.');
+  });
+
+  test('one Tradie is refused when two can be asked, with the reason back on the page', async () => {
+    const w = await webWorld();
+    const job = await tomsTapTicket(w);
+    const cookie = await w.signIn();
+
+    const res = await w.post(`/dispatch/jobs/${job.jobId}/quote-requests`, { tradieIds: [w.ids.pete] }, cookie);
+
+    expect(res.headers.get('location')).toMatch(/^\/dispatch\?error=.*#to-dispatch$/);
+    expect(visible(await dispatch(w, cookie, res.headers.get('location')!.split('#')[0]))).toContain('Send Quote Requests to at least two Tradies');
+  });
+
+  test('a Job with an approved Quote is a card to book its Tradie, with their free times, and sending it books the visit', async () => {
+    const w = await webWorld();
+    const job = await tomsTapTicket(w);
+    const [quote] = await confirmedQuotes(w, job, [[w.tradies.pete, 150_00, TUE_9AM]]);
+    await w.alice.chooseQuote(quote!.quoteId, 'Usual plumber');
+    const cookie = await w.signIn();
+
+    const html = await dispatch(w, cookie);
+
+    const start = html.indexOf(`id="dispatch-job-${job.jobId}"`);
+    const card = html.slice(start, html.indexOf('</form>', start));
+    const text = visible(card);
+    expect(text).toContain('Ready to book');
+    expect(text).toContain("Pete's Plumbing approved at $150.00");
+    expect(card).toContain('data-fill=');
+    expect(card).toContain('value="2026-10-13T09:00"');
+
+    const res = await w.post(`/dispatch/jobs/${job.jobId}/work-order`, { start: '2026-10-13T09:00', hours: '2' }, cookie);
+
+    expect(res.headers.get('location')).toMatch(/^\/dispatch\?ok=/);
+    expect(decodeURIComponent(res.headers.get('location')!)).toContain('Work Order sent for Tue 13 Oct, 9:00 am');
+    expect((await w.alice.ticket(job.ticketId)).jobs[0]!.workOrder).toMatchObject({ start: TUE_9AM.toISOString() });
+    expect(await dispatch(w, cookie)).not.toContain(`id="dispatch-job-${job.jobId}"`);
   });
 });
 

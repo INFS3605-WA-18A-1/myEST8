@@ -24,6 +24,7 @@ import {
   card,
   dl,
   emptyState,
+  entityLink,
   field,
   flashFrom,
   formatAge,
@@ -35,6 +36,7 @@ import {
   page,
   photoGrid,
   postButton,
+  ratingChip,
   sectionHeader,
   statusBadge,
   steps,
@@ -72,7 +74,7 @@ type Extras = {
 /** Shown to explain the rule; the core enforces it. */
 const MIN_QUOTES = 2;
 const FREE_SLOTS_SHOWN = 3;
-const DEFAULT_VISIT_HOURS = 2;
+export const DEFAULT_VISIT_HOURS = 2;
 const MB = 1024 * 1024;
 const nothing = html``;
 
@@ -346,7 +348,7 @@ function invalidTrade(): never {
 }
 
 /** The visit length typed in hours ("2", "1.5"), as minutes. */
-function visitMinutes(form: FormValues): number {
+export function visitMinutes(form: FormValues): number {
   const typed = text(form, 'hours');
   if (!typed) return DEFAULT_VISIT_HOURS * 60;
   const hours = Number(typed);
@@ -422,9 +424,9 @@ function ticketHeader(t: TicketView, x: Extras, share: Html): Html {
     <div class="ticket-head-body">
       <div class="ticket-head-main">
         ${summaryBlock(t)}
-        <p class="ticket-address"><a class="link" href="/properties/${t.propertyId}">${t.propertyAddress}</a></p>
+        <p class="ticket-address">${entityLink('property', t.propertyAddress, `/properties/${t.propertyId}`)}</p>
         <p class="ticket-meta">
-          <span>Tenant <a class="link" href="/tenants/${t.tenantId}">${t.tenantName}</a></span>
+          <span>Tenant ${entityLink('tenant', t.tenantName, `/tenants/${t.tenantId}`)}</span>
           <span>${statusBadge(t.status)}</span>
           <time datetime="${t.reportedAt}">${reportedAgo(t.reportedAt, x.now)}</time>
           ${t.repairCostCents > 0
@@ -927,7 +929,7 @@ function recommendationRow(job: JobView, r: Recommendation, rank: number, ticked
         <label for="${id}" class="font-semibold">${rank}. ${r.businessName}</label>
         ${r.nominated ? badge('Nominated', 'success') : nothing}
         ${r.requested ? badge('Already asked', 'info') : nothing}
-        <a class="link text-xs" href="/tradies/${r.tradieId}">Profile</a>
+        ${entityLink('tradie', 'Profile', `/tradies/${r.tradieId}`)}
       </div>
       ${r.bookings.length
         ? html`<ul role="list" class="text-xs text-muted">
@@ -935,8 +937,8 @@ function recommendationRow(job: JobView, r: Recommendation, rank: number, ticked
           </ul>`
         : nothing}
     </div>`,
-    html`<span class="num whitespace-nowrap">${myEst8Rating(r)}</span>`,
-    html`<span class="whitespace-nowrap">${googleRating(r.googleRating)}</span>`,
+    ratingChip({ source: 'myEST8', rating: r.myEst8Rating.average, count: r.myEst8Rating.count, named: false }),
+    ratingChip({ source: 'Google', rating: r.googleRating?.rating ?? null, count: r.googleRating?.reviewCount ?? 0, onGoogle: !!r.googleRating, named: false }),
     html`<span class="num">${
       r.medianQuoteCents === null ? 'No previous Firm Quotes' : `Median Firm Quote ${formatMoney(r.medianQuoteCents)} (${r.firmQuoteCount} previous)`
     }</span>`,
@@ -950,17 +952,6 @@ function recommendationRow(job: JobView, r: Recommendation, rank: number, ticked
       ${r.requested ? 'disabled' : ''}
     />`,
   ];
-}
-
-function googleRating(g: Recommendation['googleRating']): string {
-  if (!g) return 'Not on Google';
-  if (g.rating === null) return 'Google: no rating yet';
-  return `Google ${g.rating.toFixed(1)} (${g.reviewCount ?? 0} reviews)`;
-}
-
-function myEst8Rating(r: Recommendation): string {
-  const { average, count } = r.myEst8Rating;
-  return `myEST8 ${average.toFixed(1)} (${count} ${plural(count, 'rating')})`;
 }
 
 /** Every Quote Request on the Job, with when it went and what came back. */
@@ -1146,7 +1137,10 @@ function firmQuoteEntry(t: TicketView, r: RequestView, x: Extras): Html {
 }
 
 function ratingsCell(q: QuoteView): Html {
-  return html`<span class="num">myEST8 ${q.myEst8Rating.average.toFixed(1)}<br />${q.googleRating ? (q.googleRating.rating === null ? 'Google no rating' : `Google ${q.googleRating.rating.toFixed(1)}`) : 'Not on Google'}</span>`;
+  return html`<span class="metric-row">
+    ${ratingChip({ source: 'myEST8', rating: q.myEst8Rating.average, count: q.myEst8Rating.count })}
+    ${ratingChip({ source: 'Google', rating: q.googleRating?.rating ?? null, count: q.googleRating?.reviewCount ?? 0, onGoogle: !!q.googleRating })}
+  </span>`;
 }
 
 function quoteTradieCell(q: QuoteView): Html {
@@ -1669,7 +1663,7 @@ function facts(items: [string, Html | string][]): Html {
 }
 
 function tradieLink(tradieId: number, name: string): Html {
-  return html`<a class="link font-semibold" href="/tradies/${tradieId}">${name}</a>`;
+  return entityLink('tradie', name, `/tradies/${tradieId}`);
 }
 
 /** "Plumbing Job", or "Job 2: Plumbing" when the Ticket has several. */

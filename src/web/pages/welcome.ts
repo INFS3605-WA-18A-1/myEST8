@@ -22,7 +22,7 @@ import { NO_CONNECTORS, type ChannelConnectors } from '../connectors.ts';
 import type { WebEnv } from '../env.ts';
 import { gmailControls } from './oauth-google.ts';
 import { icon } from '../icons.ts';
-import { cents, list, text, type FormValues } from '../forms.ts';
+import { cents, text, type FormValues } from '../forms.ts';
 import { shareButton } from '../share.ts';
 import { shellInfo } from '../shell.ts';
 import {
@@ -35,7 +35,6 @@ import {
   flashFrom,
   flashMessage,
   formatMoney,
-  humanise,
   linkButton,
   page,
   section,
@@ -57,7 +56,8 @@ import {
   channelState,
   inboundEmailField,
   phoneChannelForm,
-  choiceGroup,
+  nominatedFrom,
+  tradiePicker,
   contactFields,
   contactFrom,
   fieldGrid,
@@ -534,7 +534,7 @@ async function readPropertyForm(actions: Actions, form: FormValues, myId: number
   if (!managers.some((m) => m.id === chosenManager)) errors.propertyManagerId = 'Choose a Property Manager in your Agency';
 
   const tradies = await actions.people('tradie');
-  const nominatedTradieIds = list(form, 'nominatedTradieIds').map(Number);
+  const nominatedTradieIds = nominatedFrom(form);
   if (nominatedTradieIds.some((id) => !tradies.some((t) => t.id === id))) errors.nominatedTradieIds = 'Choose Tradies from the list';
 
   // Who already has each mobile and email, so nobody is added twice.
@@ -766,13 +766,11 @@ async function propertyForm(actions: Actions, myId: number, o: { values?: Values
         </div>
       </details>
       ${tradies.length
-        ? choiceGroup({
+        ? tradiePicker({
+            id: 'welcome-property',
             legend: 'Nominated Tradies (optional)',
-            name: 'nominatedTradieIds',
-            type: 'checkbox',
-            options: tradies.map((t) => ({ value: String(t.id), label: `${t.businessName ?? t.name} (${t.trades.map(humanise).join(', ')})` })),
-            checked: Array.isArray(nominated) ? nominated : nominated ? [nominated] : [],
-            hint: 'Who the Tenant can call for an Urgent Repair.',
+            tradies,
+            chosen: (Array.isArray(nominated) ? nominated : nominated ? [nominated] : []).filter(Boolean),
             error: errors.nominatedTradieIds,
           })
         : html`<p class="text-sm text-muted">Add Tradies in the Tradies step to nominate them for Urgent Repairs.</p>`}

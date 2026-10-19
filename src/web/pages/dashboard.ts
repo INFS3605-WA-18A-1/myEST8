@@ -24,6 +24,7 @@ import {
   dl,
   docket,
   emptyState,
+  entityLink,
   field,
   flashFrom,
   formatWhen,
@@ -34,12 +35,13 @@ import {
   page,
   postButton,
   queueRow,
+  ROLE_LABEL,
+  rowLink,
   section,
   segmented,
   table,
   urgencyBadge,
   type Html,
-  ROLE_LABEL,
   type Tone,
 } from '../ui.ts';
 import { dayRange, shortDay, streetOf, type Booking } from '../bookings.ts';
@@ -508,8 +510,8 @@ function bookingLine(b: Booking, timeZone: string): Html {
   const time = new Intl.DateTimeFormat('en-AU', { timeZone, hour: 'numeric', minute: '2-digit' }).format(new Date(b.start));
   return html`<li class="flex min-w-0 flex-wrap items-baseline gap-x-3 text-sm">
     <time datetime="${b.start}" class="num shrink-0 font-semibold">${time}</time>
-    <a class="link min-w-0 truncate" href="/tradies/${b.tradieId}">${b.businessName}</a>
-    <a class="link min-w-0 truncate" href="/tickets/${b.ticketId}">${streetOf(b.propertyAddress)}</a>
+    ${entityLink('tradie', b.businessName, `/tradies/${b.tradieId}`)}
+    ${entityLink('ticket', streetOf(b.propertyAddress), `/tickets/${b.ticketId}`)}
   </li>`;
 }
 
@@ -531,7 +533,7 @@ function urgentRepairsTable(repairs: UrgentRepair[], timeZone: string, now: Date
     ['Issue', 'Tenant', 'Status', 'Receipts', 'Reported'],
     repairs.map((u) => {
       return [
-        html`<p><a class="link font-semibold" href="/reimbursements/${u.urgentRepairId}">${u.description}</a></p>
+        html`<p>${rowLink(u.description, `/reimbursements/${u.urgentRepairId}`)}</p>
           <p class="text-xs text-muted">${u.propertyAddress}</p>`,
         html`${u.tenantName}`,
         reimbursementBadge(u.status, { wrap: true }),
@@ -577,7 +579,8 @@ function inboxItem(item: InboxItem, people: Person[], timeZone: string, q: strin
               id: `person-${item.itemId}`,
               type: 'select',
               required: true,
-              placeholder: 'Choose a person',
+              placeholder: 'Search people by name',
+              search: true,
               options: people.map((p) => ({ value: String(p.id), label: personLabel(p) })),
               hint: 'Their next message from this address will be recognised.',
             })}

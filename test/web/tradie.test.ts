@@ -45,9 +45,9 @@ describe('Tradies', () => {
     const row = page.slice(start, page.indexOf('</tr>', start));
     expect(page).toContain('table-frame is-stacked is-labelled');
     expect(row).toContain('data-label="myEST8 rating"');
-    expect(visible(row)).toContain('4.0 from 1');
+    expect(visible(row)).toContain('4.0 (1) from 1 rating');
     expect(row).toContain('data-label="Google rating"');
-    expect(visible(row)).toContain('4.8 120 reviews');
+    expect(visible(row)).toContain('4.8 (120) from 120 reviews');
     expect(row).toMatch(/data-label="Previous Quotes">0</);
   });
 

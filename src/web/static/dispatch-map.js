@@ -18,35 +18,32 @@
   const SVG = 'http://www.w3.org/2000/svg';
 
   // === Pins ===
-  // Shape says the Urgency as well as colour: a triangle is Urgent, a diamond High, a
-  // filled circle Routine, an open circle nothing open, a square a Tradie. A Property's
-  // pin carries its number of open Tickets; a Tradie's its initial.
-  const SHAPES = {
-    urgent: ['path', { d: 'M16 3 30 28H2z' }],
-    high: ['path', { d: 'M16 2 30 16 16 30 2 16z' }],
-    routine: ['circle', { cx: 16, cy: 16, r: 13 }],
-    none: ['circle', { cx: 16, cy: 16, r: 12 }],
-    tradie: ['rect', { x: 4, y: 4, width: 24, height: 24, rx: 5 }],
-  };
+  // Two glyphs, copied from the page's #dispatch-pin-icons template: a house on a disc for
+  // a Property, a wrench on a rounded square for a Tradie. A Property's disc grows and
+  // takes the Urgency's colour (Urgent largest, in Rust; High in Ochre; Routine in Gum;
+  // none small and white), with its number of open Tickets on its shoulder.
+  const glyphs = document.getElementById('dispatch-pin-icons');
+  const PIN_SIZE = { urgent: 44, high: 38, routine: 32, none: 26, tradie: 28 };
 
-  function pin(kind, label) {
-    const [tag, attributes] = SHAPES[kind];
-    const shape = document.createElementNS(SVG, tag);
-    for (const [name, value] of Object.entries(attributes)) shape.setAttribute(name, String(value));
-    const svg = document.createElementNS(SVG, 'svg');
-    svg.setAttribute('viewBox', '0 0 32 32');
-    svg.setAttribute('aria-hidden', 'true');
-    svg.setAttribute('focusable', 'false');
-    svg.append(shape);
-    const text = document.createElement('b');
-    text.textContent = label;
+  function glyph(kind) {
+    const svg = glyphs?.content.querySelector(`[data-icon="${kind}"] svg`);
+    return svg ? svg.cloneNode(true) : document.createElement('span');
+  }
+
+  function pin(kind, level, count) {
     const root = document.createElement('span');
-    root.className = `map-pin map-pin-${kind}`;
-    root.append(svg, text);
+    root.className = kind === 'tradie' ? 'map-pin map-pin-tradie' : `map-pin map-pin-property is-${level}`;
+    root.append(glyph(kind));
+    if (count) {
+      const badge = document.createElement('b');
+      badge.className = 'map-pin-count';
+      badge.textContent = String(count);
+      root.append(badge);
+    }
     return root;
   }
 
-  // A group of pins that overlap: a disc with how many.
+  // A group of pins that overlap: a disc with how many, ringed in the worst Urgency's colour.
   function groupDisc(count) {
     const element = document.createElement('span');
     element.className = 'map-group';
@@ -54,11 +51,6 @@
     number.textContent = String(count);
     element.append(number);
     return element;
-  }
-
-  for (const item of document.querySelectorAll('[data-map-legend] [data-pin]')) {
-    const kind = item.dataset.pin;
-    item.querySelector('[data-pin-sample]')?.append(kind === 'group' ? groupDisc(3) : pin(kind, ''));
   }
 
   // === Picking something ===
@@ -167,8 +159,8 @@
     const RANK = { urgent: 3, high: 2, routine: 1 };
     const WORST = ['', 'routine', 'high', 'urgent'];
 
-    // A group: a white disc with the number of pins in it, and the worst Urgency's shape on its
-    // shoulder when a Property in it has an Urgent or High Ticket. Enter or a click zooms in to it.
+    // A group: a white disc with the number of pins in it, ringed in Rust or Ochre when a
+    // Property in it has an Urgent or High Ticket. Enter or a click zooms in to it.
     group = L.markerClusterGroup({
       maxClusterRadius: 40,
       showCoverageOnHover: false,
@@ -181,7 +173,7 @@
         const worst = WORST[Math.max(0, ...properties.map((m) => m.options.rank))];
         const element = groupDisc(children.length);
         if (selected && children.includes(markers.get(selected)?.marker)) element.classList.add('is-selected');
-        if (worst === 'urgent' || worst === 'high') element.append(pin(worst, ''));
+        if (worst === 'urgent' || worst === 'high') element.classList.add(`is-${worst}`);
         const parts = [];
         if (properties.length) parts.push(properties.length === 1 ? '1 Property' : `${properties.length} Properties`);
         if (tradies) parts.push(tradies === 1 ? '1 Tradie' : `${tradies} Tradies`);
@@ -190,10 +182,10 @@
       },
     });
 
-    function add(key, kind, label, name, item, rank) {
+    function add(key, kind, level, count, name, item, rank) {
       const latlng = L.latLng(item.lat, item.lng);
-      const element = pin(kind, label);
-      const size = kind === 'tradie' ? 26 : 32;
+      const element = pin(kind, level, count);
+      const size = PIN_SIZE[kind === 'tradie' ? 'tradie' : level];
       const marker = L.marker(latlng, {
         icon: new PinIcon({ className: 'map-pin-icon', html: element, iconSize: [size, size], iconAnchor: [size / 2, size / 2], label: name, key }),
         keyboard: true,
@@ -210,10 +202,10 @@
     const propertyPins = data.properties.map((p) => {
       const open = p.openTickets === 1 ? '1 open Ticket' : `${p.openTickets} open Tickets`;
       const worst = p.urgency ? `, worst urgency ${p.urgency}` : '';
-      return add(p.key, p.urgency || 'none', p.openTickets ? String(p.openTickets) : '', `${p.address}, ${open}${worst}`, p, RANK[p.urgency] || 0);
+      return add(p.key, 'property', p.urgency || 'none', p.openTickets, `${p.address}, ${open}${worst}`, p, RANK[p.urgency] || 0);
     });
     const tradiePins = data.tradies.map((t) =>
-      add(t.key, 'tradie', (t.name.trim()[0] || '?').toUpperCase(), `Tradie: ${t.name}, ${t.trades.join(', ').replaceAll('_', ' ')}`, t, -1),
+      add(t.key, 'tradie', 'tradie', 0, `Tradie: ${t.name}, ${t.trades.join(', ').replaceAll('_', ' ')}`, t, -1),
     );
     group.addLayers([...propertyPins, ...tradiePins]);
     map.addLayer(group);

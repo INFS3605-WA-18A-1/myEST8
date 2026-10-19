@@ -293,7 +293,10 @@ export function flashFrom(url: string): Flash | null {
 
 /** A redirect target that shows `message` on the next page. */
 export function withFlash(path: string, kind: Flash['kind'], message: string) {
-  return `${path}${path.includes('?') ? '&' : '?'}${kind}=${encodeURIComponent(message)}`;
+  // The message goes in the query, before any #fragment, so the page still scrolls to it.
+  const at = path.indexOf('#');
+  const [base, fragment] = at === -1 ? [path, ''] : [path.slice(0, at), path.slice(at)];
+  return `${base}${base.includes('?') ? '&' : '?'}${kind}=${encodeURIComponent(message)}${fragment}`;
 }
 
 /** The message after an action, one line under the page header. app.js adds a close button and fades "ok" ones. */
@@ -406,11 +409,62 @@ function toneBadge(text: string, toneClass: string, wrap = false): Html {
   return html`<span class="badge badge-soft ${toneClass} ${wrap ? 'max-w-full whitespace-normal text-left' : 'whitespace-nowrap'}">${text}</span>`;
 }
 
-/** Urgent, High or Routine. Routine is quiet: muted text on a hairline, so its word is the only signal. */
+const URGENCY_ICON: Record<string, string> = { urgent: 'warning-octagon', high: 'arrow-fat-up' };
+
+/**
+ * Urgent, High or Routine. Urgent and High carry an icon so they stand out at a glance:
+ * Urgent is solid Rust, High tinted Ochre; Routine stays quiet (muted on a hairline).
+ */
 export function urgencyBadge(urgency: string): Html {
-  if (urgency === 'urgent') return badge(humanise(urgency), 'error');
-  if (urgency === 'high') return badge(humanise(urgency), 'warning');
-  return toneBadge(humanise(urgency), 'badge-muted');
+  const tone = urgency === 'urgent' ? 'badge-error' : urgency === 'high' ? 'badge-warning' : 'badge-muted';
+  const glyph = URGENCY_ICON[urgency];
+  return html`<span class="badge badge-soft ${tone} urgency-badge urgency-${urgency} whitespace-nowrap">${glyph ? icon(glyph, { weight: 'fill', size: 'size-3' }) : ''}${humanise(urgency)}</span>`;
+}
+
+export type EntityKind = 'property' | 'tenant' | 'tradie' | 'person' | 'ticket';
+const ENTITY_ICON: Record<EntityKind, string> = { property: 'house-line', tenant: 'user', tradie: 'wrench', person: 'user', ticket: 'ticket' };
+
+/**
+ * A link to another record (a Property, a Tenant, a Tradie) where it is mentioned beside
+ * something else: a chip with the record's icon and name, so it reads as "go to that
+ * record" rather than as underlined text.
+ */
+export function entityLink(kind: EntityKind, label: string, href: string): Html {
+  return html`<a class="entity-link entity-link-${kind}" href="${href}">${icon(ENTITY_ICON[kind], { size: 'size-4' })}<span>${label}</span></a>`;
+}
+
+/**
+ * The title of a row in a list, linking to its record: Ironbark and semibold, underlined
+ * only on hover. In a `stack` table it covers the whole row, so the row is the target.
+ */
+export function rowLink(label: string, href: string): Html {
+  return html`<a class="row-link" href="${href}">${label}</a>`;
+}
+
+/** A phone number or email address that calls or writes, with its icon. */
+export function contactLink(kind: 'mobile' | 'email', value: string): Html {
+  return kind === 'mobile'
+    ? html`<a class="contact-link num" href="tel:${value}">${icon('phone', { size: 'size-4' })}<span>${value}</span></a>`
+    : html`<a class="contact-link is-email" href="mailto:${value}">${icon('envelope-simple', { size: 'size-4' })}<span>${value}</span></a>`;
+}
+
+/**
+ * A rating as a chip: who gave it, a star, the score to one decimal and how many it is
+ * from: "myEST8 ★ 4.7 (3)". `rating` null is a listing with no rating yet; `source` Google
+ * with no listing at all reads "Not on Google". The words in full are for screen readers.
+ */
+export function ratingChip(o: { source: 'myEST8' | 'Google'; rating: number | null; count: number; onGoogle?: boolean; named?: boolean }): Html {
+  if (o.source === 'Google' && o.onGoogle === false) return html`<span class="metric is-empty">Not on Google</span>`;
+  if (o.rating === null) return html`<span class="metric is-empty">${o.source}: no rating yet</span>`;
+  const noun = o.source === 'Google' ? (o.count === 1 ? 'review' : 'reviews') : o.count === 1 ? 'rating' : 'ratings';
+  return html`<span class="metric metric-rating" title="${o.source} ${o.rating.toFixed(1)} from ${o.count} ${noun}">
+    ${o.named === false ? html`<span class="sr-only">${o.source}</span>` : html`<span class="metric-source">${o.source}</span>`}${icon('star', { weight: 'fill', size: 'size-3.5' })}<strong class="num">${o.rating.toFixed(1)}</strong><span class="metric-sub num" aria-hidden="true">(${o.count})</span><span class="sr-only">from ${o.count} ${noun}</span>
+  </span>`;
+}
+
+/** A distance as a chip: "0.6 km" with a route icon. */
+export function distanceChip(km: number): Html {
+  return html`<span class="metric metric-distance">${icon('navigation-arrow', { weight: 'fill', size: 'size-3.5' })}<strong class="num">${km.toFixed(1)}</strong><span>km</span></span>`;
 }
 
 const STATUS_TONE: Record<string, Tone> = {
@@ -592,6 +646,15 @@ function rowAttributes(attributes: RowAttributes | undefined): Html | string {
  * `hint` is tied to the control with aria-describedby, and so is `error`, which
  * also marks the control aria-invalid.
  */
+/** A select's option. `keywords` are more words a searchable select matches it by (a Property's suburb, a Tradie's name). */
+export type Option = { value: string; label: string; keywords?: string };
+
+function optionTags(options: Option[], value: string): Html[] {
+  return options.map(
+    (opt) => html`<option value="${opt.value}" ${value === opt.value ? 'selected' : ''}${opt.keywords ? html` data-keywords="${opt.keywords}"` : ''}>${opt.label}</option>`,
+  );
+}
+
 export function field(o: {
   label: string;
   name: string;
@@ -599,7 +662,9 @@ export function field(o: {
   value?: string | number | null;
   required?: boolean;
   placeholder?: string;
-  options?: { value: string; label: string }[];
+  options?: Option[];
+  /** A select that filters its options as you type (app.js), matching each option's label and keywords. */
+  search?: boolean;
   hint?: string;
   multiple?: boolean;
   accept?: string;
@@ -638,9 +703,9 @@ export function field(o: {
     type === 'textarea'
       ? html`<textarea ${common} class="textarea w-full${invalid.replace('input', 'textarea')}" rows="${o.rows ?? 4}" placeholder="${o.placeholder ?? ''}">${o.value ?? ''}</textarea>`
       : type === 'select'
-        ? html`<select ${common} class="select w-full${invalid.replace('input', 'select')} ${o.multiple ? 'h-auto min-h-28 py-2' : ''}">
+        ? html`<select ${common} class="select w-full${invalid.replace('input', 'select')} ${o.multiple ? 'h-auto min-h-28 py-2' : ''}" ${o.search ? 'data-combobox' : ''}>
             ${o.placeholder ? html`<option value="">${o.placeholder}</option>` : ''}
-            ${(o.options ?? []).map((opt) => html`<option value="${opt.value}" ${String(o.value ?? '') === opt.value ? 'selected' : ''}>${opt.label}</option>`)}
+            ${optionTags(o.options ?? [], String(o.value ?? ''))}
           </select>`
         : type === 'file'
           ? html`<input ${common} type="file" class="file-input w-full${invalid.replace('input', 'file-input')}" ${o.accept ? html`accept="${o.accept}"` : ''} />`
@@ -869,7 +934,7 @@ export function ticketCell(o: { ticketId: number; issue: string; address?: strin
     </p>
     ${o.address
       ? o.propertyHref
-        ? html`<a href="${o.propertyHref}" class="ticket-cell-address">${o.address}</a>`
+        ? html`<p class="ticket-cell-address">${entityLink('property', o.address, o.propertyHref)}</p>`
         : html`<p class="ticket-cell-address">${o.address}</p>`
       : ''}
   </div>`;
@@ -1021,15 +1086,15 @@ export function filterBar(o: {
   filter: { scope: 'mine' | 'all'; urgency?: string; trade?: string; propertyId?: number };
   urgencies?: { value: string; label: string }[];
   trades?: { value: string; label: string }[];
-  properties?: { value: string; label: string }[];
+  properties?: Option[];
 }): Html {
   const f = o.filter;
-  const select = (name: string, label: string, all: string, options: { value: string; label: string }[] | undefined, value: string | undefined) =>
+  const select = (name: string, label: string, all: string, options: Option[] | undefined, value: string | undefined, search = false) =>
     options?.length
-      ? html`<label class="filter-bar-field"><span class="filter-bar-label">${label}</span>
-          <select name="${name}" class="select select-sm">
+      ? html`<label class="filter-bar-field${search ? ' filter-bar-search' : ''}"><span class="filter-bar-label">${label}</span>
+          <select name="${name}" class="select select-sm" ${search ? 'data-combobox' : ''}>
             <option value="">${all}</option>
-            ${options.map((opt) => html`<option value="${opt.value}" ${value === opt.value ? 'selected' : ''}>${opt.label}</option>`)}
+            ${optionTags(options, value ?? '')}
           </select></label>`
       : '';
   const any = Boolean(f.urgency || f.trade || f.propertyId);
@@ -1037,7 +1102,7 @@ export function filterBar(o: {
     ${f.scope === 'all' ? html`<input type="hidden" name="filter" value="all" />` : ''}
     ${select('urgency', 'Urgency', 'Any Urgency', o.urgencies, f.urgency)}
     ${select('trade', 'Trade', 'Any Trade', o.trades, f.trade)}
-    ${select('property', 'Property', 'Any Property', o.properties, f.propertyId ? String(f.propertyId) : undefined)}
+    ${select('property', 'Property', 'Any Property', o.properties, f.propertyId ? String(f.propertyId) : undefined, true)}
     <button type="submit" class="btn btn-sm filter-bar-apply">Apply</button>
     ${any ? html`<a class="link filter-bar-clear" href="${o.action}${f.scope === 'all' ? '?filter=all' : ''}">Clear filters</a>` : ''}
   </form>`;

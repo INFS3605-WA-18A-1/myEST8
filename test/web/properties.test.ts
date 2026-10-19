@@ -60,8 +60,8 @@ describe('Properties', () => {
     const page = await (await w.get(`/properties/${w.ids.kingSt}`, cookie)).text();
     const tenants = page.slice(page.indexOf('aria-label="Tenants"'), page.indexOf('aria-label="Nominated Tradies"'));
     expect(tenants).toContain('table-frame is-stacked is-labelled');
-    expect(tenants).toContain(`data-label="Mobile"><a class="link num" href="tel:${HANA}">`);
-    expect(tenants).toContain(`data-label="Email"><a class="link break-all" href="mailto:${HANA_EMAIL}">`);
+    expect(tenants).toContain(`data-label="Mobile"><a class="contact-link num" href="tel:${HANA}">`);
+    expect(tenants).toContain(`data-label="Email"><a class="contact-link is-email" href="mailto:${HANA_EMAIL}">`);
     const nominated = page.slice(page.indexOf('aria-label="Nominated Tradies"'), page.indexOf('aria-label="Frequent issues"'));
     expect(nominated).toContain('table-frame is-stacked is-labelled');
     expect(visible(nominated)).toMatch(/Sparky Sam Electrical/);

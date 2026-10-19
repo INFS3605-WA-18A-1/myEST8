@@ -17,8 +17,10 @@ import { shellInfo } from '../shell.ts';
 import {
   alert,
   button,
+  contactLink,
   dl,
   emptyState,
+  entityLink,
   field,
   flashFrom,
   formatWhen,
@@ -26,6 +28,7 @@ import {
   linkButton,
   page,
   postButton,
+  rowLink,
   section,
   sectionHeader,
   segmented,
@@ -35,7 +38,7 @@ import {
   urgencyBadge,
   type Html,
 } from '../ui.ts';
-import { contactFields, fieldGrid } from './onboarding-forms.ts';
+import { contactFields, fieldGrid, propertyOptions } from './onboarding-forms.ts';
 import { formatDate } from './properties.ts';
 
 type TenantList = Awaited<ReturnType<PropertyManagerActions['tenants']>>;
@@ -109,7 +112,7 @@ export function tenantProfilePages() {
         flash: flashFrom(c.req.url),
         shell: shellInfo(c),
         subtitle: tenant.property
-          ? html`Tenant at <a class="link" href="/properties/${tenant.property.propertyId}">${tenant.property.address}</a>`
+          ? html`Tenant at ${entityLink('property', tenant.property.address, `/properties/${tenant.property.propertyId}`)}`
           : 'Former Tenant: no longer at a Property',
         actions: html`${tenant.property ? removeButton(tenant.tenantId, tenant.name, tenant.property.address) : ''}${linkButton('Back to Tenants', '/tenants', { variant: 'ghost', size: 'sm' })}`,
         body: html`${facts(tenant)} ${ticketsSection(tenant, timeZone)} ${requestsSection(tenant, timeZone)} ${reimbursementsSection(tenant, timeZone)}`,
@@ -124,8 +127,8 @@ export function tenantProfilePages() {
 function contact(t: { mobile: string | null; email: string | null }): Html {
   if (!t.mobile && !t.email) return html`<span class="text-muted">—</span>`;
   return html`<span class="tenant-contact">
-    ${t.mobile ? html`<a class="link num" href="tel:${t.mobile}">${t.mobile}</a>` : ''}
-    ${t.email ? html`<a class="link break-all" href="mailto:${t.email}">${t.email}</a>` : ''}
+    ${t.mobile ? contactLink('mobile', t.mobile) : ''}
+    ${t.email ? contactLink('email', t.email) : ''}
   </span>`;
 }
 
@@ -139,8 +142,8 @@ function list(tenants: TenantList, filter: Filter): Html {
   return table(
     ['Tenant', 'Property', ...(all ? ['Property Manager'] : []), 'Since', 'Open Tickets', 'Contact', ''],
     tenants.map((t) => [
-      html`<a class="link font-medium" href="/tenants/${t.tenantId}">${t.name}</a>`,
-      t.property ? html`<a class="link" href="/properties/${t.property.propertyId}">${t.property.address}</a>` : html`<span class="text-muted">No Property</span>`,
+      rowLink(t.name, `/tenants/${t.tenantId}`),
+      t.property ? entityLink('property', t.property.address, `/properties/${t.property.propertyId}`) : html`<span class="text-muted">No Property</span>`,
       ...(all ? [html`<span class="text-muted">${t.propertyManager ?? '—'}</span>`] : []),
       html`<span class="whitespace-nowrap">${t.tenancyStart ? formatDate(t.tenancyStart) : '—'}</span>`,
       html`<span class="${t.openTickets ? 'property-open' : 'text-muted'}">${t.openTickets}</span>`,
@@ -176,8 +179,9 @@ function addForm(properties: Property[], refused: Html): Html {
             id: 'tenant-property',
             type: 'select',
             required: true,
-            placeholder: 'Choose the Property',
-            options: properties.map((p) => ({ value: String(p.id), label: p.address })),
+            placeholder: 'Search by street, suburb or postcode',
+            search: true,
+            options: propertyOptions(properties),
           })}
           ${field({ label: 'Tenancy start date', name: 'tenancyStart', id: 'tenant-start', type: 'date', required: true, hint: 'Photos taken before this date are flagged.' })}
         `)}
@@ -190,11 +194,11 @@ function addForm(properties: Property[], refused: Html): Html {
 function facts(t: TenantView): Html {
   return html`<section class="section" aria-label="Tenant details">
     ${dl([
-      ['Property', t.property ? html`<a class="link" href="/properties/${t.property.propertyId}">${t.property.address}</a>` : html`<span class="text-muted">No Property</span>`],
+      ['Property', t.property ? entityLink('property', t.property.address, `/properties/${t.property.propertyId}`) : html`<span class="text-muted">No Property</span>`],
       ['Property Manager', t.propertyManager ?? '—'],
       ['Tenant since', t.tenancyStart ? formatDate(t.tenancyStart) : '—'],
-      ['Mobile', t.mobile ? html`<a class="link num" href="tel:${t.mobile}">${t.mobile}</a>` : '—'],
-      ['Email', t.email ? html`<a class="link break-all" href="mailto:${t.email}">${t.email}</a>` : '—'],
+      ['Mobile', t.mobile ? contactLink('mobile', t.mobile) : '—'],
+      ['Email', t.email ? contactLink('email', t.email) : '—'],
       ['Usually home', t.availability ? humanise(t.availability) : html`<span class="text-muted">Not asked yet</span>`],
     ])}
   </section>`;
@@ -233,7 +237,7 @@ function requestsSection(t: TenantView, timeZone: string): Html {
           t.maintenanceRequests.map((r) => {
             const address = otherAddress(t, r.propertyAddress);
             return [
-              html`<a class="link font-medium" href="/requests/${r.issueId}">${r.summary ?? r.description}</a>${address ? html`<br /><span class="text-xs text-muted">${address}</span>` : ''}`,
+              html`${rowLink(r.summary ?? r.description, `/requests/${r.issueId}`)}${address ? html`<br /><span class="text-xs text-muted">${address}</span>` : ''}`,
               urgencyBadge(r.urgency),
               html`<span class="text-muted whitespace-nowrap">${formatWhen(r.reportedAt, timeZone)}</span>`,
             ];
@@ -254,7 +258,7 @@ function reimbursementsSection(t: TenantView, timeZone: string): Html {
           t.reimbursementRequests.map((u) => {
             const address = otherAddress(t, u.propertyAddress);
             return [
-              html`<a class="link font-medium" href="/reimbursements/${u.urgentRepairId}">${u.description}</a>${address ? html`<br /><span class="text-xs text-muted">${address}</span>` : ''}`,
+              html`${rowLink(u.description, `/reimbursements/${u.urgentRepairId}`)}${address ? html`<br /><span class="text-xs text-muted">${address}</span>` : ''}`,
               statusBadge(u.status),
               html`<span class="num">${u.receipts}</span>`,
               html`<span class="text-muted whitespace-nowrap">${formatWhen(u.reportedAt, timeZone)}</span>`,

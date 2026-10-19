@@ -15,7 +15,7 @@ import { doubtsPhotos, passedChecks, photoCaption, requestFlags, type Check } fr
 import { formAction, text } from '../forms.ts';
 import { COLLEAGUES_ONLY, shareButton, shareUrl } from '../share.ts';
 import { shellInfo } from '../shell.ts';
-import { aiFilled, badge, button, emptyState, field, flashFrom, formatWhen, humanise, linkButton, page, photoGrid, section, type Html } from '../ui.ts';
+import { aiFilled, badge, button, emptyState, entityLink, field, flashFrom, formatWhen, humanise, linkButton, page, photoGrid, section, type Html } from '../ui.ts';
 
 type MaintenanceRequest = Awaited<ReturnType<PropertyManagerActions['requests']>>[number];
 
@@ -89,10 +89,10 @@ function review(r: MaintenanceRequest, timeZone: string, editing: boolean): Html
     <section class="section request-lead" id="summary" aria-labelledby="summary-title">
       <h2 class="section-title" id="summary-title">Summary</h2>
       ${summary(r, editing)}
-      <p class="request-address"><a href="/properties/${r.propertyId}" class="link">${r.propertyAddress}</a></p>
+      <p class="request-address">${entityLink('property', r.propertyAddress, `/properties/${r.propertyId}`)}</p>
       ${facts(
         [
-          ['Tenant', html`<a class="link" href="/tenants/${r.tenantId}">${r.tenantName}</a>`],
+          ['Tenant', entityLink('tenant', r.tenantName, `/tenants/${r.tenantId}`)],
           ['Reported', formatWhen(r.reportedAt, timeZone)],
           ['Property Manager', r.propertyManager],
         ],

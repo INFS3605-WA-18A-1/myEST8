@@ -11,7 +11,7 @@ import type { WebEnv } from '../env.ts';
 import { formAction, text } from '../forms.ts';
 import { icon } from '../icons.ts';
 import { shellInfo } from '../shell.ts';
-import { alert, badge, button, emptyState, field, flashFrom, formatMoney, formatWhen, humanise, linkButton, page, section, sectionHeader, stat, statGroup, table, ticketCell, type Html } from '../ui.ts';
+import { alert, badge, button, contactLink, emptyState, field, flashFrom, formatMoney, formatWhen, humanise, linkButton, page, ratingChip, rowLink, section, sectionHeader, stat, statGroup, table, ticketCell, type Html } from '../ui.ts';
 import { timeRange } from './calendar.ts';
 import { googleSearchForm, importPanel, searchListings, tradieFields } from './onboarding-forms.ts';
 
@@ -160,12 +160,10 @@ function directory(tradies: DirectoryEntry[], trade: Trade | null): Html {
     tradies.map((t) => {
       const { average, count } = t.myEst8Rating;
       return [
-        html`<a class="link font-medium" href="/tradies/${t.tradieId}">${t.businessName ?? t.name}</a>${t.businessName ? html`<br /><span class="text-xs text-muted">${t.name}</span>` : ''}`,
+        html`${rowLink(t.businessName ?? t.name, `/tradies/${t.tradieId}`)}${t.businessName ? html`<br /><span class="text-xs text-muted">${t.name}</span>` : ''}`,
         html`<span class="flex flex-wrap gap-1">${t.trades.map((x) => badge(humanise(x), 'info'))}</span>`,
-        html`<span><span class="num font-medium">${average.toFixed(1)}</span> <span class="text-sm text-muted">from ${count}</span></span>`,
-        t.googleRating
-          ? html`<span><span class="num font-medium">${t.googleRating.rating === null ? '—' : t.googleRating.rating.toFixed(1)}</span> <span class="text-sm text-muted">${t.googleRating.reviewCount ?? 0} reviews</span></span>`
-          : html`<span class="text-muted">Not on Google</span>`,
+        ratingChip({ source: 'myEST8', rating: average, count, named: false }),
+        ratingChip({ source: 'Google', rating: t.googleRating?.rating ?? null, count: t.googleRating?.reviewCount ?? 0, onGoogle: !!t.googleRating, named: false }),
         html`${t.quotes}`,
       ];
     }),
@@ -191,8 +189,8 @@ function header(t: TradieView): Html {
     <div class="tradie-contact">
       <div class="flex flex-wrap items-center gap-2">${t.trades.map((trade) => badge(humanise(trade), 'info'))}</div>
       <dl>
-        <div><dt>Mobile</dt><dd>${t.mobile ? html`<a class="link num" href="tel:${t.mobile}">${t.mobile}</a>` : '—'}</dd></div>
-        <div><dt>Email</dt><dd>${t.email ? html`<a class="link break-all" href="mailto:${t.email}">${t.email}</a>` : '—'}</dd></div>
+        <div><dt>Mobile</dt><dd>${t.mobile ? html`${contactLink('mobile', t.mobile)}` : '—'}</dd></div>
+        <div><dt>Email</dt><dd>${t.email ? html`${contactLink('email', t.email)}` : '—'}</dd></div>
       </dl>
     </div>
     <div class="tradie-ratings">

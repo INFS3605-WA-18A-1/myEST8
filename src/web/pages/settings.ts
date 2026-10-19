@@ -10,7 +10,7 @@ import type { WebEnv } from '../env.ts';
 import { shellInfo } from '../shell.ts';
 import type { ImportKind } from '../../imports.ts';
 import { icon } from '../icons.ts';
-import { dl, emptyState, flashFrom, formatWhen, linkButton, page, section, sideTabs, table, type Html } from '../ui.ts';
+import { contactLink, dl, emptyState, flashFrom, formatWhen, linkButton, page, section, sideTabs, table, type Html } from '../ui.ts';
 import { IMPORT_NOUNS, templatePath } from './onboarding-forms.ts';
 
 type AgencyChannel = Awaited<ReturnType<PropertyManagerActions['channels']>>[number];
@@ -133,7 +133,7 @@ function teamTab(team: Awaited<ReturnType<PropertyManagerActions['propertyManage
     actions: linkButton('Add a colleague', '/welcome/team', { size: 'sm' }),
     body: table(
       ['Name', 'Email'],
-      team.map((m) => [html`<span class="font-medium">${m.name}</span>${m.id === meId ? html` <span class="text-muted">(you)</span>` : ''}`, html`<a class="link break-all" href="mailto:${m.email}">${m.email}</a>`]),
+      team.map((m) => [html`<span class="font-medium">${m.name}</span>${m.id === meId ? html` <span class="text-muted">(you)</span>` : ''}`, contactLink('email', m.email)]),
       { caption: 'Property Managers in the Agency', stack: 'labelled' },
     ),
   });

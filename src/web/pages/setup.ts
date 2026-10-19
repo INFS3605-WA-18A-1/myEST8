@@ -17,11 +17,11 @@ import type { ChannelType } from '../../ports.ts';
 import { NO_CONNECTORS, type ChannelConnectors } from '../connectors.ts';
 import type { WebEnv } from '../env.ts';
 import { gmailControls } from './oauth-google.ts';
-import { cents, formAction, list, text } from '../forms.ts';
+import { cents, formAction, text } from '../forms.ts';
 import { icon } from '../icons.ts';
 import { shellInfo } from '../shell.ts';
 import { importPages } from './import.ts';
-import { alert, button, emptyState, field, flashFrom, formatMoney, humanise, linkButton, page, section, table, type Flash, type Html } from '../ui.ts';
+import { alert, button, emptyState, field, flashFrom, formatMoney, linkButton, page, section, table, type Flash, type Html } from '../ui.ts';
 import {
   addTradieFrom,
   CHANNELS,
@@ -34,7 +34,9 @@ import {
   inboundEmailField,
   phoneChannelForm,
   chosenId,
-  choiceGroup,
+  nominatedFrom,
+  propertyOptions,
+  tradiePicker,
   contactFields,
   contactFrom,
   fieldGrid,
@@ -181,7 +183,7 @@ export function setupPages(o: { connectors?: ChannelConnectors } = {}) {
         ownerId: chosenId(form, 'ownerId', 'the Property Owner'),
         propertyManagerId: chosenId(form, 'propertyManagerId', 'the Property Manager'),
         maxRepairCostCents: cents(form, 'maxRepairCost', 'the Max Repair Cost'),
-        nominatedTradieIds: list(form, 'nominatedTradieIds').map(Number),
+        nominatedTradieIds: nominatedFrom(form),
         buildingManagerId: buildingManager ? Number(buildingManager) : undefined,
       });
       return { ok: `${address} added. Now add its Tenants.` };
@@ -453,13 +455,7 @@ function propertiesArea(agency: Agency, myId: number, shown: Shown): Html {
           `)}
           <div class="mt-3">
             ${agency.tradies.length
-              ? choiceGroup({
-                  legend: 'Nominated Tradies',
-                  name: 'nominatedTradieIds',
-                  type: 'checkbox',
-                  options: agency.tradies.map((t) => ({ value: String(t.id), label: `${t.businessName ?? t.name} (${t.trades.map(humanise).join(', ')})` })),
-                  hint: 'Who the Tenant can call for an Urgent Repair.',
-                })
+              ? tradiePicker({ id: 'setup-property', tradies: agency.tradies })
               : html`<p class="text-sm text-muted">Add Tradies above to nominate them for Urgent Repairs.</p>`}
           </div>
           <div class="mt-3">${button('Add Property', { size: 'sm' })}</div>
@@ -498,8 +494,9 @@ function tenantsArea(agency: Agency, shown: Shown): Html {
               id: 'tenant-property',
               type: 'select',
               required: true,
-              placeholder: 'Choose the Property',
-              options: agency.properties.map((p) => ({ value: String(p.id), label: p.address })),
+              placeholder: 'Search by street, suburb or postcode',
+              search: true,
+              options: propertyOptions(agency.properties),
             })}
             ${field({ label: 'Tenancy start date', name: 'tenancyStart', id: 'tenant-start', type: 'date', required: true, hint: 'Photos taken before this date are flagged.' })}
           `)}

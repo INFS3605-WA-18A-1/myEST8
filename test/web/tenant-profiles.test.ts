@@ -120,7 +120,7 @@ describe('links to Tenant profiles', () => {
     const cookie = await w.signIn();
 
     const list = await (await w.get('/properties', cookie)).text();
-    expect(list).toMatch(new RegExp(`<a class="link" href="/tenants/${w.ids.tom}">Tom Tran</a>`));
+    expect(list).toMatch(new RegExp(`<a class="entity-link entity-link-tenant" href="/tenants/${w.ids.tom}">.*<span>Tom Tran</span></a>`));
     expect(list).toContain(`href="/tenants/${w.ids.bella}"`);
 
     const profile = await (await w.get(`/properties/${w.ids.kingSt}`, cookie)).text();
