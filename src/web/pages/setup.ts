@@ -157,8 +157,8 @@ export function setupPages(o: { connectors?: ChannelConnectors } = {}) {
     }),
   );
 
-  // The Tradies and Properties pages post here too and come back to themselves; this page's forms add `from=setup`.
-  const home = (c: Context<WebEnv>, page: '/tradies' | '/properties') => (c.req.query('from') === 'setup' ? '/setup' : page);
+  // The Tradies, Properties and Tenants pages post here too and come back to themselves; this page's forms add `from=setup`.
+  const home = (c: Context<WebEnv>, page: '/tradies' | '/properties' | '/tenants') => (c.req.query('from') === 'setup' ? '/setup' : page);
 
   pages.post('/tradies', (c) => {
     const google = c.req.query('google');
@@ -189,14 +189,14 @@ export function setupPages(o: { connectors?: ChannelConnectors } = {}) {
   );
 
   pages.post('/tenants', (c) =>
-    formAction(c, '/setup?form=tenant', async (form) => {
+    formAction(c, `${home(c, '/tenants')}?form=tenant`, async (form) => {
       const contact = contactFrom(form);
       await c.var.actions.addTenant({
         ...contact,
         propertyId: chosenId(form, 'propertyId', 'the Property'),
         tenancyStart: text(form, 'tenancyStart'),
       });
-      return { ok: `${contact.name} added as a Tenant` };
+      return { ok: `${contact.name} added as a Tenant`, redirect: home(c, '/tenants') };
     }),
   );
 
@@ -488,7 +488,7 @@ function tenantsArea(agency: Agency, shown: Shown): Html {
       'Add a Tenant',
       shown.open,
       html`${agency.properties.length ? '' : html`<p class="mb-3 text-sm text-high">Add a Property above first.</p>`}
-        <form method="post" action="/setup/tenants">
+        <form method="post" action="/setup/tenants?from=setup">
           ${shown.error}
           ${fieldGrid(html`
             ${contactFields('tenant')}

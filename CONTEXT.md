@@ -15,7 +15,7 @@ A staff member of an Agency who manages a set of Properties.
 _Avoid_: agent, manager (on its own)
 
 **Tenant**:
-A person living in a Property under its lease.
+A person living in a Property under its lease. Removing a Tenant ends their tenancy: they leave the Property, and their mobile and email no longer reach the Agency as them, but their profile and the Tickets they raised stay on record.
 _Avoid_: resident, renter
 
 **Property Owner**:

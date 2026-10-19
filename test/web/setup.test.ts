@@ -85,7 +85,7 @@ describe('the onboarding guide', () => {
 
     const added = await submit(
       w,
-      '/setup/tenants',
+      '/setup/tenants?from=setup',
       { name: 'Tina Test', mobile: '0412 000 111', propertyId: w.ids.kingSt, tenancyStart: '2026-09-01' },
       cookie,
     );
@@ -100,7 +100,7 @@ describe('the onboarding guide', () => {
     const w = await webWorld();
     const cookie = await w.signIn();
 
-    const refused = await submit(w, '/setup/tenants', { name: 'Tina Test', propertyId: w.ids.kingSt, tenancyStart: '2026-09-01' }, cookie);
+    const refused = await submit(w, '/setup/tenants?from=setup', { name: 'Tina Test', propertyId: w.ids.kingSt, tenancyStart: '2026-09-01' }, cookie);
 
     expect(refused.location).toMatch(/^\/setup\?form=tenant&error=/);
     expect(refused.page).toContain('Enter a mobile number or email address');

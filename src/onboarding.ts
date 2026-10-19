@@ -103,6 +103,20 @@ export function createOnboarding({ ports, modules }: Context) {
       return profiles.addPerson(agencyId, { role: 'tenant', ...input });
     },
 
+    /**
+     * Takes a Tenant off their Property (Profiles' endTenancy). Refuses while they have an
+     * open Ticket or a Maintenance Request waiting, whose messages still need to reach them.
+     */
+    async removeTenant(agencyId: number, tenantId: number) {
+      const tenant = await profiles.personInAgency(agencyId, tenantId, 'tenant');
+      if (tenant.propertyId === null) invalid(`${tenant.name} has already left their Property`);
+      const [open, waiting] = await Promise.all([modules.tickets.openTickets(agencyId, null), modules.tickets.maintenanceRequests(agencyId, null)]);
+      if (open.some((t) => t.tenantId === tenantId)) invalid(`Close ${tenant.name}'s open Tickets before removing them`);
+      if (waiting.some((i) => i.tenantId === tenantId)) invalid(`Confirm or reject ${tenant.name}'s waiting Maintenance Requests before removing them`);
+      await profiles.endTenancy(tenantId);
+      return tenant.name;
+    },
+
     findGoogleListings(query: string) {
       return ports.places.findListings(query);
     },

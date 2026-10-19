@@ -2,18 +2,45 @@
 // profile at /tenants/:id with their Property, contact details and when they are
 // usually home, the Tickets they raised, their Maintenance Requests still waiting and
 // their Reimbursement Requests. Each Property's page links its Tenants here.
+//
+// The list adds a Tenant to a Property (the form posts to /setup/tenants, which comes
+// back here) and removes one: they leave their Property, but their profile and the
+// Tickets they raised stay.
 
 import { Hono } from 'hono';
 import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
 import { ActionError } from '../../shared.ts';
 import type { WebEnv } from '../env.ts';
+import { formAction } from '../forms.ts';
 import { shellInfo } from '../shell.ts';
-import { dl, emptyState, flashFrom, formatWhen, humanise, linkButton, page, sectionHeader, segmented, statusBadge, table, ticketCell, urgencyBadge, type Html } from '../ui.ts';
+import {
+  alert,
+  button,
+  dl,
+  emptyState,
+  field,
+  flashFrom,
+  formatWhen,
+  humanise,
+  linkButton,
+  page,
+  postButton,
+  section,
+  sectionHeader,
+  segmented,
+  statusBadge,
+  table,
+  ticketCell,
+  urgencyBadge,
+  type Html,
+} from '../ui.ts';
+import { contactFields, fieldGrid } from './onboarding-forms.ts';
 import { formatDate } from './properties.ts';
 
 type TenantList = Awaited<ReturnType<PropertyManagerActions['tenants']>>;
 type TenantView = Awaited<ReturnType<PropertyManagerActions['tenant']>>;
+type Property = Awaited<ReturnType<PropertyManagerActions['properties']>>[number];
 type Filter = 'mine' | 'all';
 
 const hrefFor = (filter: Filter) => (filter === 'all' ? '/tenants?filter=all' : '/tenants');
@@ -25,22 +52,34 @@ export function tenantProfilePages() {
   pages.get('/', async (c) => {
     const { actions, pm } = c.var;
     const filter: Filter = c.req.query('filter') === 'all' ? 'all' : 'mine';
-    const tenants = await actions.tenants({ filter });
+    const flash = flashFrom(c.req.url);
+    const refused = flash?.kind === 'error' && c.req.query('form') === 'tenant' ? alert(flash.message, 'error') : html``;
+    const [tenants, properties] = await Promise.all([actions.tenants({ filter }), actions.properties()]);
     return c.html(
       page({
         title: 'Tenants',
         pm,
         active: 'tenants',
-        flash: flashFrom(c.req.url),
+        flash,
         shell: shellInfo(c),
         subtitle: tenants.length ? `${tenants.length} ${tenants.length === 1 ? 'Tenant' : 'Tenants'}${filter === 'mine' ? ' on your Properties' : ' in the Agency'}, by name.` : undefined,
+        actions: linkButton('Add a Tenant', '#add-tenant', { variant: 'primary', size: 'sm' }),
         controls: segmented([
           { label: 'Mine', href: hrefFor('mine'), active: filter === 'mine' },
           { label: 'All', href: hrefFor('all'), active: filter === 'all' },
         ]),
-        body: list(tenants, filter),
+        body: html`${list(tenants, filter)} ${addForm(properties, refused)}`,
       }),
     );
+  });
+
+  // Refused, the reason shows on the Tenant's profile, beside the open Tickets it names.
+  pages.post('/:id{[0-9]+}/remove', (c) => {
+    const id = Number(c.req.param('id'));
+    return formAction(c, `/tenants/${id}`, async () => {
+      const name = await c.var.actions.removeTenant(id);
+      return { ok: `${name} removed from their Property`, redirect: '/tenants' };
+    });
   });
 
   pages.get('/:id{[0-9]+}', async (c) => {
@@ -71,8 +110,8 @@ export function tenantProfilePages() {
         shell: shellInfo(c),
         subtitle: tenant.property
           ? html`Tenant at <a class="link" href="/properties/${tenant.property.propertyId}">${tenant.property.address}</a>`
-          : 'Tenant with no Property',
-        actions: linkButton('Back to Tenants', '/tenants', { variant: 'ghost', size: 'sm' }),
+          : 'Former Tenant: no longer at a Property',
+        actions: html`${tenant.property ? removeButton(tenant.tenantId, tenant.name, tenant.property.address) : ''}${linkButton('Back to Tenants', '/tenants', { variant: 'ghost', size: 'sm' })}`,
         body: html`${facts(tenant)} ${ticketsSection(tenant, timeZone)} ${requestsSection(tenant, timeZone)} ${reimbursementsSection(tenant, timeZone)}`,
       }),
     );
@@ -94,11 +133,11 @@ function list(tenants: TenantList, filter: Filter): Html {
   if (!tenants.length) {
     return filter === 'mine'
       ? emptyState('No Tenants on your Properties.', linkButton('Show all Tenants', hrefFor('all')))
-      : emptyState('No Tenants yet. Add the people who live in your Properties so they can report repairs.', linkButton('Add a Tenant', '/setup#tenants'));
+      : emptyState('No Tenants yet. Add the people who live in your Properties so they can report repairs.', linkButton('Add a Tenant', '#add-tenant'));
   }
   const all = filter === 'all';
   return table(
-    ['Tenant', 'Property', ...(all ? ['Property Manager'] : []), 'Since', 'Open Tickets', 'Contact'],
+    ['Tenant', 'Property', ...(all ? ['Property Manager'] : []), 'Since', 'Open Tickets', 'Contact', ''],
     tenants.map((t) => [
       html`<a class="link font-medium" href="/tenants/${t.tenantId}">${t.name}</a>`,
       t.property ? html`<a class="link" href="/properties/${t.property.propertyId}">${t.property.address}</a>` : html`<span class="text-muted">No Property</span>`,
@@ -106,9 +145,45 @@ function list(tenants: TenantList, filter: Filter): Html {
       html`<span class="whitespace-nowrap">${t.tenancyStart ? formatDate(t.tenancyStart) : '—'}</span>`,
       html`<span class="${t.openTickets ? 'property-open' : 'text-muted'}">${t.openTickets}</span>`,
       contact(t),
+      t.property ? removeButton(t.tenantId, t.name, t.property.address) : html``,
     ]),
-    { stack: 'labelled', caption: 'Tenants, by name', align: ['left', 'left', ...(all ? ['left' as const] : []), 'left', 'right', 'left'] },
+    { stack: 'labelled', caption: 'Tenants, by name', align: ['left', 'left', ...(all ? ['left' as const] : []), 'left', 'right', 'left', 'right'] },
   );
+}
+
+function removeButton(tenantId: number, name: string, address: string): Html {
+  return postButton(`/tenants/${tenantId}/remove`, 'Remove', {
+    variant: 'ghost',
+    size: 'sm',
+    confirm: `Remove ${name} from ${address}? Their profile and past Tickets stay on record.`,
+  });
+}
+
+/** Adds a Tenant to a Property the Property Manager chooses. */
+function addForm(properties: Property[], refused: Html): Html {
+  return section({
+    id: 'add-tenant',
+    title: 'Add a Tenant',
+    body: html`
+      ${properties.length ? '' : html`<p class="mb-3 text-sm text-high">Add a Property on the Properties page first.</p>`}
+      <form method="post" action="/setup/tenants">
+        ${refused}
+        ${fieldGrid(html`
+          ${contactFields('tenant')}
+          ${field({
+            label: 'Property',
+            name: 'propertyId',
+            id: 'tenant-property',
+            type: 'select',
+            required: true,
+            placeholder: 'Choose the Property',
+            options: properties.map((p) => ({ value: String(p.id), label: p.address })),
+          })}
+          ${field({ label: 'Tenancy start date', name: 'tenancyStart', id: 'tenant-start', type: 'date', required: true, hint: 'Photos taken before this date are flagged.' })}
+        `)}
+        <div class="mt-3">${button('Add Tenant', { variant: 'primary' })}</div>
+      </form>`,
+  });
 }
 
 /** Where they live, who manages it, and how and when to reach them. */

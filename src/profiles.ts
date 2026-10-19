@@ -349,10 +349,12 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
       )).map((r) => ({ id: r.id, agencyId: r.agency_id, name: r.name, email: r.email }));
     },
 
+    /** The Agency's people, optionally of one role. A Tenant who has left their Property (endTenancy) isn't one of them. */
     async people(agencyId: number, role?: Role): Promise<Person[]> {
       return (await all<PersonRow>(
         db,
-        'SELECT * FROM people WHERE agency_id = ? AND (?::text IS NULL OR role = ?) ORDER BY role, name, id',
+        `SELECT * FROM people WHERE agency_id = ? AND (?::text IS NULL OR role = ?) AND (role <> 'tenant' OR property_id IS NOT NULL)
+         ORDER BY role, name, id`,
         agencyId,
         role ?? null,
         role ?? null,
@@ -446,6 +448,18 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
         if (input.mobile) await addAddress(agencyId, id, input.mobile);
         if (input.email) await addAddress(agencyId, id, input.email);
         return id;
+      });
+    },
+
+    /**
+     * A Tenant leaves their Property. Their record stays, so the Tickets they raised still
+     * name them, but their mobile and email stop reaching the Agency as them and can be
+     * given to someone else.
+     */
+    async endTenancy(personId: number) {
+      await transaction(db, async () => {
+        await run(db, 'UPDATE people SET property_id = NULL WHERE id = ?', personId);
+        await run(db, 'DELETE FROM contact_addresses WHERE person_id = ?', personId);
       });
     },
 

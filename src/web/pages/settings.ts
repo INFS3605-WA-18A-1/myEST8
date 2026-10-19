@@ -32,7 +32,7 @@ const CHANNEL_NAME: Record<AgencyChannel['type'], string> = { sms: 'SMS', whatsa
 const SETUP_AREAS: { label: string; hint: string; list?: string; add: string; href: string }[] = [
   { label: 'Properties', hint: 'Each with its Property Owner and Max Repair Cost.', list: '/properties', add: 'Add a Property', href: '/setup#properties' },
   { label: 'Tradies', hint: 'Who you send Quote Requests and Work Orders to.', list: '/tradies', add: 'Add a Tradie', href: '/setup#tradies' },
-  { label: 'Tenants', hint: 'Listed on each Property’s page.', add: 'Add a Tenant', href: '/setup#tenants' },
+  { label: 'Tenants', hint: 'Each with their Property, contact details and Tickets.', list: '/tenants', add: 'Add a Tenant', href: '/setup#tenants' },
   { label: 'Property Owners and Building Managers', hint: 'Listed on each Property’s page.', add: 'Add an Owner or Building Manager', href: '/setup#people' },
 ];
 

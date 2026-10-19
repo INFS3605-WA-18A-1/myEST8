@@ -149,3 +149,79 @@ describe('links to Tenant profiles', () => {
     expect(ticket).toContain(`href="/tenants/${w.ids.tom}"`);
   });
 });
+
+describe('adding and removing Tenants', () => {
+  test('the list adds a Tenant to the chosen Property and comes back to the list', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    const list = await (await w.get('/tenants', cookie)).text();
+    expect(list).toContain('href="#add-tenant"');
+    expect(list).toContain('id="add-tenant"');
+    expect(list).toContain('action="/setup/tenants"');
+    expect(list).toMatch(new RegExp(`<option value="${w.ids.kingSt}"[^>]*>${KING_ST}</option>`));
+
+    const res = await w.post('/setup/tenants', { name: 'Tina Test', mobile: '0412 000 111', propertyId: w.ids.kingSt, tenancyStart: '2026-09-01' }, cookie);
+    expect(res.status).toBe(303);
+    expect(res.headers.get('location')).toMatch(/^\/tenants\?ok=/);
+    const after = visible(await (await w.get(res.headers.get('location')!, cookie)).text());
+    expect(after).toContain('Tina Test added as a Tenant');
+    expect(after).toContain('Tina Test');
+  });
+
+  test('a refused Tenant comes back to the list with the reason beside the form', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    const res = await w.post('/setup/tenants', { name: 'Tina Test', propertyId: w.ids.kingSt, tenancyStart: '2026-09-01' }, cookie);
+    expect(res.headers.get('location')).toMatch(/^\/tenants\?form=tenant&error=/);
+    const page = await (await w.get(res.headers.get('location')!, cookie)).text();
+    const form = page.slice(page.indexOf('id="add-tenant"'));
+    expect(form).toContain('Enter a mobile number or email address');
+  });
+
+  test('removing a Tenant takes them off the list and their Property, keeps their profile, and frees their mobile', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    const list = await (await w.get('/tenants', cookie)).text();
+    expect(list).toContain(`action="/tenants/${w.ids.hana}/remove"`);
+    expect(list).toContain(`data-confirm="Remove Hana Ho from ${KING_ST}?`);
+
+    const res = await w.post(`/tenants/${w.ids.hana}/remove`, {}, cookie);
+    expect(res.status).toBe(303);
+    expect(res.headers.get('location')).toMatch(/^\/tenants\?ok=/);
+    const after = await (await w.get(res.headers.get('location')!, cookie)).text();
+    expect(visible(after)).toContain('Hana Ho removed from their Property');
+    expect(after).not.toContain(`href="/tenants/${w.ids.hana}"`);
+    expect(await (await w.get('/tenants?filter=all', cookie)).text()).not.toContain(`href="/tenants/${w.ids.hana}"`);
+    expect(visible(await (await w.get(`/properties/${w.ids.kingSt}`, cookie)).text())).not.toContain('Hana Ho');
+
+    const profile = await w.get(`/tenants/${w.ids.hana}`, cookie);
+    expect(profile.status).toBe(200);
+    const text = visible(await profile.text());
+    expect(text).toContain('Former Tenant');
+    expect(text).not.toContain('Remove');
+
+    await w.alice.addTenant({ name: 'Nadia New', mobile: HANA, propertyId: w.ids.kingSt, tenancyStart: '2026-10-01' });
+  });
+
+  test('a Tenant with an open Ticket is not removed, and their profile says why', async () => {
+    const w = await webWorld();
+    await tomsTapTicket(w);
+    const cookie = await w.signIn();
+
+    const res = await w.post(`/tenants/${w.ids.tom}/remove`, {}, cookie);
+    expect(res.headers.get('location')).toMatch(new RegExp(`^/tenants/${w.ids.tom}\\?error=`));
+    expect(visible(await (await w.get(res.headers.get('location')!, cookie)).text())).toContain("Close Tom Tran's open Tickets before removing them");
+    expect(await (await w.get('/tenants', cookie)).text()).toContain(`href="/tenants/${w.ids.tom}"`);
+  });
+
+  test("a Tenant of another Agency can't be removed", async () => {
+    const w = await webWorld();
+    const sunrise = await w.signUp();
+    const res = await w.post(`/tenants/${w.ids.tom}/remove`, {}, sunrise);
+    expect(res.headers.get('location')).toMatch(/error=/);
+    expect(await (await w.get('/tenants', await w.signIn())).text()).toContain(`href="/tenants/${w.ids.tom}"`);
+  });
+});
