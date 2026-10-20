@@ -152,7 +152,7 @@ function railLink(item: { key: NavKey; label: string; href: string }, active: Na
  * choice in this browser). On phones it is a drawer when JavaScript is on, and a
  * block above the page otherwise.
  */
-function rail(active: NavKey | undefined, agencyName: string | undefined, counts: Partial<Record<NavKey, number>>, demo: boolean): Html {
+function rail(active: NavKey | undefined, agencyName: string | undefined, counts: Partial<Record<NavKey, number>>, demo: boolean, setupHref?: string): Html {
   return html`<aside id="rail" class="rail" aria-label="Sections">
     <a href="/" class="rail-logo">${logo()}</a>
     <nav aria-label="Main" class="rail-menu">
@@ -166,6 +166,7 @@ function rail(active: NavKey | undefined, agencyName: string | undefined, counts
       )}
       ${demo ? html`<ul class="rail-nav rail-foot"><li>${railLink(SIMULATOR, active, counts.simulator, 'rail-link is-quiet')}</li></ul>` : ''}
     </nav>
+    ${setupHref ? html`<ul class="rail-nav rail-setup"><li><a href="${setupHref}" class="rail-link rail-setup-link">${ICON.setup}<span class="rail-label">Setup guide</span></a></li></ul>` : ''}
     <button type="button" class="rail-toggle" data-rail-toggle aria-controls="rail" aria-expanded="true">${ICON.sidebar}<span class="rail-label">Collapse menu</span></button>
     ${agencyName ? html`<p class="rail-agency">${agencyName}</p>` : ''}
   </aside>`;
@@ -244,7 +245,7 @@ export function page(o: {
       <body>
         <a href="#main" class="skip-link">Skip to content</a>
         <div class="app-shell ${withRail ? 'has-rail' : ''}" data-shell>
-          ${withRail ? rail(o.active, o.shell?.agencyName, o.navCounts ?? o.shell?.counts ?? {}, o.demo ?? o.shell?.demo ?? false) : ''}
+          ${withRail ? rail(o.active, o.shell?.agencyName, o.navCounts ?? o.shell?.counts ?? {}, o.demo ?? o.shell?.demo ?? false, o.shell?.setupHref) : ''}
           <div class="app-main">
             ${topBar(o.title, { menu: withRail, controls: o.controls, today: o.shell?.today, pm: o.pm })}
             ${o.flash ? html`<div class="app-flash">${flashMessage(o.flash)}</div>` : ''}
@@ -904,7 +905,7 @@ export function countStrip(items: { label: string; count: number; href: string; 
     <ul class="count-strip">
       ${items.map(
         (item) =>
-          html`<li><a href="${item.href}" class="count-item"><span class="count-chip ${item.decision ? 'is-decision' : ''}">${item.count}</span><span class="count-label">${item.label}</span></a></li>`,
+          html`<li><a href="${item.href}" class="count-item"><span class="count-chip ${item.decision ? 'is-decision' : ''}${item.count === 0 ? ' is-zero' : ''}">${item.count}</span><span class="count-label">${item.label}</span></a></li>`,
       )}
     </ul>
   </nav>`;
@@ -1043,6 +1044,7 @@ const ICON = {
   info: icon('info'),
   dot: icon('circle', { weight: 'fill', size: 'size-4' }),
   sidebar: icon('sidebar-simple', { size: 'size-[18px]' }),
+  setup: icon('compass', { size: 'size-[18px]' }),
 };
 
 /** The rail's icons, 18px (the Phone simulator's 16px, as it is quieter). */

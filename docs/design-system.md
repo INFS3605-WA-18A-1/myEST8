@@ -19,13 +19,13 @@ The first draft was a white SaaS kit: identical rounded cards with soft grey sha
 
 | Token | Name | Hex | Role | Contrast |
 |---|---|---|---|---|
-| `--ink` | Night | `#13212E` | Body text, headings, the rail | 16.4:1 on white, 14.8:1 on Paper |
-| `--page` | Paper | `#F2F4F6` | The page behind sections, lanes, the Trade badge | |
+| `--ink` | Night | `#13212E` | Body text, headings, the rail | 16.4:1 on white, 14.3:1 on Sand |
+| `--page` | Sand | `#F4EFE6` | The page behind sections, lanes, the Trade badge (was Paper `#F2F4F6`) | |
 | `--surface` | | `#FFFFFF` | Sections, rows, dockets, inputs | |
-| `--muted` | Slate | `#55636F` | Secondary text, timestamps, hints, Routine | 6.2:1 on white, 5.6:1 on Paper, 5.4:1 on info |
+| `--muted` | Slate | `#55636F` | Secondary text, timestamps, hints, Routine | 6.2:1 on white, 5.4:1 on Sand, 5.4:1 on info |
 | `--line` | Line | `#D8DEE4` | Hairlines and section borders (decorative) | |
-| `--control` | | `#7D8A95` | Input, select, checkbox and secondary button borders | 3.5:1 on white, 3.2:1 on Paper (UI component minimum 3:1) |
-| `--action` | Harbour | `#1F5C8B` | Primary buttons, links, focus ring, selected state | white on it 7.1:1; as text 7.1:1 on white, 6.4:1 on Paper |
+| `--control` | | `#7D8A95` | Input, select, checkbox and secondary button borders | 3.5:1 on white, 3.1:1 on Sand (UI component minimum 3:1) |
+| `--action` | Harbour | `#1F5C8B` | Primary buttons, links, focus ring, selected state | white on it 7.1:1; as text 7.1:1 on white, 6.2:1 on Sand |
 | `--action-hover` | | `#174A70` | Primary button and link hover | white on it 9.3:1 |
 | `--hivis` | Wattle | `#FFC233` | The decision stripe, the current rail item's bar, decision count chips, the logo on Night | Night on it 10.1:1 |
 | `--info-bg` | | `#E8F0F7` | Info badges and alerts, "Filled in by AI" | Harbour on it 6.2:1, Night 14.2:1 |
@@ -121,11 +121,14 @@ The first frame at 1366×768 shows the Ticket pipeline across the full width, wi
  below the fold: Urgent Repairs table, Inbox detail with link/route/dismiss, all open Tickets table
 ```
 
-- Top, full width: "Tickets by stage", five lanes in workflow order: Quoting, With Property Owner, Ready to book, Booked, Done. A lane is a Paper tray (6 px radius, hairline) with its title and a muted count, holding white dockets. A Ticket sits in the lane of its least advanced open Job; within a lane, Urgency then reported time. From 1024 px lanes scroll vertically inside 22 rem; with no open Tickets the board is one empty state.
-- A board docket is read in the order the Property Manager reads it: the **issue** (Red Hat Text 600, 15 px, up to three lines), the **address** (13 px Slate, street and suburb on one line, the full address in its title), the perforation, then the **status**: the Urgency badge, the Trades and what the Ticket waits on ("No Quote Requests yet", "1 of 3 Quotes in", "2 Quotes to check", "Ready to choose" in Quoting; the visit time in Booked). A foot holds the number, the unread dot and the age. "2 Quotes to check" (unconfirmed Quotes in) and "Ready to choose" (two or more confirmed) get the 4 px Wattle stripe, as they wait on the Property Manager. The core works these out (`views.dashboard`); the page only renders them. On phones "Needs your decision" comes before the board.
-- Under it, left (360 px) "Needs your decision": one list of compact rows, each with a 4 px Wattle left stripe. Order: Maintenance Requests (oldest first), then alerts, then inbox items. A Maintenance Request row: 56 px photo thumbnail (or a "No photos" tile), address, one-line description, Urgency and Trade badges plus "Check urgency", "Flagged photos" or "No photos" flags, age, and two actions: **Confirm** (POST) and **Review** (link to `/requests/:issueId`).
-- Under it, right: "Next 7 days": today and the six days after it in the Agency's time zone, bookings for both Property Managers, empty days collapsed into one muted line, linking to `/calendar`. A rolling window always shows the coming work, where a Monday-to-Sunday week is often empty.
-- Phone: one column: count strip (wrapping), Tickets as a list grouped by stage (lanes stacked, no inner scroll), Needs your decision, Next 7 days.
+- Right column, under "Next 7 days": "Tickets by stage", lanes stacked in workflow order (stages with no Tickets are left out): Quoting, With Property Owner, Ready to book, Booked, Done. A lane is a Paper tray (6 px radius, hairline) with its title and a muted count, holding white dockets. A Ticket sits in the lane of its least advanced open Job; within a lane, Urgency then reported time. Lanes scroll vertically inside 22 rem; with no open Tickets the board is one empty state.
+- A board docket is read in the order the Property Manager reads it: the **issue** (Red Hat Text 600, 15 px, up to three lines), the **address** (13 px Slate, street and suburb on one line, the full address in its title), the perforation, then the **status**: the Urgency badge, the Trades and what the Ticket waits on ("No Quote Requests yet", "1 of 3 Quotes in", "2 Quotes to check", "Ready to choose" in Quoting; the visit time in Booked). A foot holds the number, the unread dot and the age. "2 Quotes to check" (unconfirmed Quotes in) and "Ready to choose" (two or more confirmed) get the 4 px Wattle stripe, as they wait on the Property Manager. The core works these out (`views.dashboard`); the page only renders them. On phones "Needs your attention" comes before the board.
+- Left, wider column (1.4 : 1), "Needs your attention" in 22 px type, then the Inbox detail beneath it: one list of compact rows, each with a 4 px Wattle left stripe. Order: Maintenance Requests (oldest first), then alerts, then inbox items. A Maintenance Request row: 56 px photo thumbnail (or a "No photos" tile), address, one-line description, Urgency and Trade badges plus "Check urgency", "Flagged photos" or "No photos" flags, age, and two actions: **Confirm** (POST) and **Review** (link to `/requests/:issueId`).
+- Right: "Next 7 days" on top: today and the six days after it in the Agency's time zone, bookings for both Property Managers, empty days collapsed into one muted line, linking to `/calendar`. A rolling window always shows the coming work, where a Monday-to-Sunday week is often empty.
+- Phone: one column: count strip (wrapping), Needs your attention, Inbox, Next 7 days, Tickets by stage (lanes stacked, no inner scroll), Urgent Repairs.
+- Setup is not on the dashboard. While the Agency is unfinished the rail shows an outlined "Setup guide" link above Collapse menu, pointing at the next step still to do.
+- Count strip: five big numbers (Lexend 28 px 700) under a 4 px Harbour line; a decision count above zero gets a 4 px Wattle underline, a zero turns Slate.
+- Sections and the count strip carry `--shadow-soft`, a faint lift off Sand. Menus, dialogs and the phone frame keep `--shadow-lift`.
 
 ### Dispatch: the map
 

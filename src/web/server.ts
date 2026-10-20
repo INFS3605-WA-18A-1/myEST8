@@ -14,6 +14,7 @@ import { signupRoutes } from './pages/signup.ts';
 import { pmPages } from './pm-pages.ts';
 import { rateLimit } from './rate-limit.ts';
 import { loadNavCounts } from './shell.ts';
+import { loadSetupLink } from './pages/welcome.ts';
 import { tenantPages } from './tenant-pages.ts';
 
 /**
@@ -62,6 +63,7 @@ export function createWebApp(deps: {
     await next();
   });
   signedIn.use('*', loadNavCounts());
+  signedIn.use('*', loadSetupLink());
   if (deps.demo) signedIn.route('/demo', simulatorPages(deps.demo));
   signedIn.route('/', pmPages({ demo: !!deps.demo, connectors: deps.connectors ?? NO_CONNECTORS }));
   web.route('/', signedIn);

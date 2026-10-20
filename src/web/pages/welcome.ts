@@ -12,7 +12,7 @@
 //   5 First Property   address, Max Repair Cost, Property Owner, Tenant, Building Manager
 //   6 Done             what's set up, and where to go next
 
-import { Hono, type Context } from 'hono';
+import { Hono, type Context, type MiddlewareHandler } from 'hono';
 import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
 import type { ImportKind } from '../../imports.ts';
@@ -123,6 +123,22 @@ function isDone(key: StepKey, progress: Progress): boolean {
 export function nextSetupStep(progress: Progress): string | null {
   const key = NEEDED.find((k) => !progress[k]);
   return key ? STEPS.find((s) => s.key === key)!.path : null;
+}
+
+/**
+ * Sets `setupHref` for pages shown to a Property Manager while the Agency is not fully set up,
+ * so the rail can offer a "Setup guide" link. Setup is optional: nothing else on the page nags.
+ * Skips files and the setup pages themselves.
+ */
+export function loadSetupLink(): MiddlewareHandler<WebEnv> {
+  return async (c, next) => {
+    const path = c.req.path;
+    if (c.req.method === 'GET' && !path.startsWith('/files/') && !path.startsWith('/welcome') && !path.startsWith('/setup')) {
+      const href = nextSetupStep(await setupProgress(c.var.actions, c.var.unavailableChannels ?? []));
+      if (href) c.set('setupHref', href);
+    }
+    await next();
+  };
 }
 
 /** The dashboard's "Finish setting up" banner, or nothing once the Agency is set up. */

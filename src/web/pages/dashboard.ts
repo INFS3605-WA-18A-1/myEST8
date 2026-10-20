@@ -1,7 +1,6 @@
-// The Property Manager's dispatch board. On phones what needs a decision comes first,
-// then Tickets by stage, then the next 7 days; from 1024px the board runs the full
-// width with the decisions beside the next 7 days under it. Then the inbox with its
-// actions and Urgent Repairs. Also the actions on each, and /files/:id for photos.
+// The Property Manager's dispatch board. What needs attention comes first (decisions,
+// then the inbox with its actions); beside it from 1024px sit the next 7 days and Tickets
+// by stage. Urgent Repairs run the full width underneath. Also the actions on each, and /files/:id for photos.
 // Controls repeated per item get the item's id in their element id ("reason-12"),
 // so every label on the page points at its own control.
 
@@ -41,7 +40,6 @@ import {
   type Tone,
 } from '../ui.ts';
 import { dayRange, shortDay, streetOf, type Booking } from '../bookings.ts';
-import { finishSetupBanner } from './welcome.ts';
 import { streamOf } from '../stream.ts';
 
 /** Kept for the pages that still import it from here; the words live with the other request checks. */
@@ -127,7 +125,6 @@ export function dashboardPages() {
           { label: 'All', href: '/?filter=all', active: filter === 'all' },
         ]),
         body: html`
-          ${(await finishSetupBanner(actions, c.var.unavailableChannels))}
           ${countStrip([
             { label: 'Maintenance Requests to review', count: view.maintenanceRequests.length, href: '#requests', decision: true },
             { label: 'Open Tickets', count: view.tickets.length, href: '#tickets' },
@@ -135,12 +132,16 @@ export function dashboardPages() {
             { label: 'In the inbox', count: view.inbox.length, href: '#inbox', decision: true },
             { label: 'Urgent Repairs needing a receipt', count: needReceipt, href: '#urgent-repairs' },
           ])}
-          <div class="dashboard-desk grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)] lg:items-start">
-            <div class="dashboard-decisions min-w-0 lg:col-start-1 lg:row-start-2">${decisions(view, q, timeZone, now, shareUrl(c, '/?filter=all#requests'))}</div>
-            <div class="min-w-0 lg:col-span-2 lg:row-start-1">${ticketsByStage(view.tickets, filter, now, timeZone)}</div>
-            <div class="min-w-0 lg:col-start-2 lg:row-start-2">${nextSevenDays(view.calendar, now, timeZone)}</div>
+          <div class="dashboard-desk grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] lg:items-start">
+            <div class="dashboard-main grid min-w-0 gap-4">
+              ${decisions(view, q, timeZone, now, shareUrl(c, '/?filter=all#requests'))}
+              ${section({ title: 'Inbox', id: 'inbox', actions: countBadge(view.inbox.length), body: inboxList(view.inbox, people, timeZone, q) })}
+            </div>
+            <div class="dashboard-glance grid min-w-0 gap-4">
+              ${nextSevenDays(view.calendar, now, timeZone)}
+              ${ticketsByStage(view.tickets, filter, now, timeZone)}
+            </div>
           </div>
-          ${section({ title: 'Inbox', id: 'inbox', actions: countBadge(view.inbox.length), body: inboxList(view.inbox, people, timeZone, q) })}
           ${section({ title: 'Urgent Repairs', id: 'urgent-repairs', actions: countBadge(view.urgentRepairs.length), body: urgentRepairsTable(view.urgentRepairs, timeZone) })}
         `,
       }),
@@ -241,7 +242,7 @@ function countBadge(count: number) {
   return count ? badge(String(count)) : undefined;
 }
 
-// Needs your decision
+// Needs your attention
 
 /**
  * Maintenance Requests (oldest first, as the core orders them), then alerts, then the
@@ -251,7 +252,7 @@ function countBadge(count: number) {
 function decisions(view: Dashboard, q: string, timeZone: string, now: Date, shareLink: string): Html {
   const requests = view.maintenanceRequests;
   return section({
-    title: 'Needs your decision',
+    title: 'Needs your attention',
     id: 'decisions',
     body: html`<div class="grid gap-4">
       <div id="requests" class="grid gap-2">
@@ -273,7 +274,7 @@ function decisions(view: Dashboard, q: string, timeZone: string, now: Date, shar
         ${view.alerts.length ? view.alerts.map((a) => alertRow(a, timeZone)) : emptyState('No alerts.')}
       </div>
       ${view.inbox.length
-        ? html`<div class="grid gap-2">
+        ? html`<div class="grid gap-2 lg:hidden">
             <h3 class="text-sm font-semibold">In the inbox</h3>
             ${view.inbox.map((item) => inboxRow(item, timeZone))}
           </div>`
@@ -283,7 +284,7 @@ function decisions(view: Dashboard, q: string, timeZone: string, now: Date, shar
 }
 
 /**
- * A Maintenance Request in "Needs your decision", read like a docket: the issue, the
+ * A Maintenance Request in "Needs your attention", read like a docket: the issue, the
  * street, then every badge (Urgency, Trade and each check that needs a second look),
  * with Confirm and Review on their own line.
  */
@@ -362,16 +363,11 @@ function ticketsByStage(tickets: BoardTicket[], filter: Filter, now: Date, timeZ
     id: 'tickets',
     actions: linkButton('See all Tickets', filter === 'all' ? '/tickets?filter=all' : '/tickets', { variant: 'ghost', size: 'sm' }),
     body: tickets.length
-      ? html`<div class="grid gap-3 lg:grid-cols-5">
+      ? html`<div class="grid gap-3">
           ${STAGES.map((stage) => {
             const inLane = tickets.filter((t) => t.stage === stage);
-            return lane({
-              title: STAGE_TITLE[stage],
-              count: inLane.length,
-              body: inLane.length
-                ? html`${inLane.map((t) => ticketDocket(t, now, timeZone))}`
-                : html`<p class="text-sm text-muted">Nothing at this stage.</p>`,
-            });
+            if (!inLane.length) return '';
+            return lane({ title: STAGE_TITLE[stage], count: inLane.length, body: html`${inLane.map((t) => ticketDocket(t, now, timeZone))}` });
           })}
         </div>`
       : emptyState(filter === 'mine' ? 'No open Tickets on your Properties. Confirming a Maintenance Request opens one.' : 'No open Tickets. Confirming a Maintenance Request opens one.'),

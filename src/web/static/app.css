@@ -63,9 +63,9 @@
  */
 :root {
   --ink: #13212e; /* Night: body text, the rail (16.4:1 on white) */
-  --page: #f2f4f6; /* Paper: the page behind sections */
+  --page: #f4efe6; /* Sand: the page behind sections (muted text 5.4:1 on it) */
   --surface: #ffffff; /* sections, rows, dockets, inputs */
-  --muted: #55636f; /* Slate: secondary text, timestamps, hints (6.2:1 on white, 5.6:1 on Paper) */
+  --muted: #55636f; /* Slate: secondary text, timestamps, hints (6.2:1 on white, 5.4:1 on Sand) */
   --line: #d8dee4; /* Line: hairlines and section borders (decorative) */
   --control: #7d8a95; /* input, select, checkbox and secondary button borders (3.5:1 on white) */
   --action: #1f5c8b; /* Harbour: primary buttons, links, focus, selected (white on it 7.1:1) */
@@ -86,6 +86,7 @@
   --rail-width: 220px; /* the rail, and the drawer on phones */
   --rail-collapsed-width: 64px; /* the rail folded to its icons */
   --scrim: rgb(19 33 46 / 0.45); /* Night over the page, behind the open drawer */
+  --shadow-soft: 0 2px 10px rgb(19 33 46 / 0.07); /* sections and the count strip: a faint lift off Sand */
   --shadow-lift: 0 8px 24px rgb(19 33 46 / 0.18); /* the one shadow: menus, dialogs, the phone frame */
   --font-body: 'Red Hat Text', system-ui, sans-serif;
   --font-head: 'Lexend', system-ui, sans-serif;
@@ -515,6 +516,7 @@
       background: var(--surface);
       border: 1px solid var(--line);
       border-radius: 8px;
+      box-shadow: var(--shadow-soft);
     }
     .section-head {
       display: flex;
@@ -910,34 +912,72 @@
       background: var(--action);
     }
 
-    /* ----- The count strip: links into the queues. */
+    /* ----- The count strip: five big numbers that link into the queues, under a Harbour line. */
     .count-strip {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 4px 20px;
-      min-height: 44px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
       margin: 0;
-      padding: 4px 16px;
+      padding: 0;
       list-style: none;
+      overflow: hidden;
       background: var(--surface);
       border: 1px solid var(--line);
+      border-top: 4px solid var(--action);
       border-radius: 8px;
+      box-shadow: var(--shadow-soft);
       font-size: 14px;
     }
+    .count-strip > li + li {
+      border-left: 1px solid var(--line);
+    }
+    @media (max-width: 40rem) {
+      .count-strip > li + li {
+        border-left: 0;
+        border-top: 1px solid var(--line);
+      }
+    }
     .count-item {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      min-height: 36px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
+      min-height: 44px;
+      padding: 12px 16px;
       color: var(--ink);
       text-decoration: none;
     }
     .count-item:hover {
       color: var(--ink);
+      background: var(--page);
     }
     .count-item:hover .count-label {
       text-decoration: underline;
+    }
+    /* The number is plain type here, not a pill; a Wattle line marks the ones that need a decision. */
+    .count-strip .count-chip {
+      min-width: 0;
+      height: auto;
+      padding: 0 0 2px;
+      border-radius: 0;
+      background: none;
+      font-family: var(--font-head);
+      font-size: 28px;
+      font-weight: 700;
+      line-height: 1.1;
+    }
+    .count-strip .count-chip.is-decision:not(.is-zero) {
+      box-shadow: inset 0 -4px 0 var(--hivis);
+    }
+    .count-strip .count-chip.is-zero {
+      color: var(--muted);
+    }
+    .count-label {
+      color: var(--muted);
+    }
+
+    /* The dashboard: what needs attention leads, in larger type. */
+    .dashboard-main > .section:first-child > .section-head .section-title {
+      font-size: 22px;
     }
 
     /* ----- Segmented control (Mine | All): links, the current one filled with Harbour. */
@@ -1202,6 +1242,19 @@
       background: var(--rail-current);
       box-shadow: inset 4px 0 0 var(--hivis);
       color: var(--surface);
+    }
+    /* Setup guide: an outlined, quiet link above Collapse menu while setup is unfinished. */
+    .rail-setup {
+      margin-top: auto;
+      padding-top: 16px;
+    }
+    .rail-setup-link {
+      gap: 8px;
+      min-height: 40px;
+      border: 1px solid rgb(255 255 255 / 0.22);
+      font-family: var(--font-body);
+      font-size: 14px;
+      font-weight: 600;
     }
     /* The demo's Phone simulator: quieter, in the body face. */
     .rail-link.is-quiet {

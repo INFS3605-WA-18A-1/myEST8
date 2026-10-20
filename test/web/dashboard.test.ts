@@ -200,7 +200,7 @@ describe('the Agency inbox', () => {
 
     const inbox = await page(w, '/', cookie);
     expect(inbox).toContain('Unknown sender');
-    // The brief row in Needs your decision points at the item and its actions below.
+    // The brief row in Needs your attention points at the item and its actions below.
     expect(inbox).toMatch(/href="#inbox-(\d+)"[\s\S]*id="inbox-\1"/);
     expect(inbox).toContain(STRANGER);
     expect(inbox).toContain('Hi, this is Tom on my work phone');
