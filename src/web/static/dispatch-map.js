@@ -20,7 +20,7 @@
   // === Pins ===
   // Two glyphs, copied from the page's #dispatch-pin-icons template: a house on a disc for
   // a Property, a wrench on a rounded square for a Tradie. A Property's disc grows and
-  // takes the Urgency's colour (Urgent largest, in Rust; High in Ochre; Routine in Gum;
+  // takes the Urgency's colour (Urgent largest, in Rust; High in Ochre; Routine in Harbour;
   // none small and white), with its number of open Tickets on its shoulder.
   const glyphs = document.getElementById('dispatch-pin-icons');
   const PIN_SIZE = { urgent: 44, high: 38, routine: 32, none: 26, tradie: 28 };

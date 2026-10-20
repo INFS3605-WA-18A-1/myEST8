@@ -37,9 +37,6 @@ body.lp {
   background: var(--surface);
   border-bottom: 1px solid var(--line);
 }
-.lp-bar .logotype .logo-mark {
-  color: var(--ink);
-}
 .lp-bar-inner {
   display: flex;
   align-items: center;
@@ -572,7 +569,7 @@ body.lp {
 /*
  * One repair, stage by stage. Every stage and its picture always shows. A "now"
  * marker moves down the stages: the stage being shown lifts onto white and its
- * number fills with Gum; at a decision its number is outlined in Ironbark.
+ * number fills with Harbour; at a decision its number is outlined in Night.
  * One cycle is 8 stages of 2.6s; --i sets each stage's delay.
  */
 .flow {
@@ -691,7 +688,7 @@ body.lp {
   font-size: 13px;
   color: var(--muted);
 }
-/* The Property Manager's own stages: Ironbark text on a darker line, no Wattle outside the hero. */
+/* The Property Manager's own stages: Night text on a darker line, no Wattle outside the hero. */
 .flow-who.is-you {
   border-color: var(--ink);
   color: var(--ink);
@@ -1027,7 +1024,7 @@ body.lp {
   color: var(--action);
 }
 
-/* ----- The way in, again: Ironbark, the key tag in Wattle ----- */
+/* ----- The way in, again: Night, the key tag in Wattle ----- */
 
 .lp-close {
   background: var(--ink);
@@ -1084,7 +1081,7 @@ body.lp {
   border-color: var(--surface);
   background: rgb(255 255 255 / 0.1);
 }
-/* Gum is too dark to ring on Ironbark, so focus rings are white here. */
+/* Harbour is too dark to ring on Night, so focus rings are white here. */
 .lp-close :focus-visible,
 .lp-footer :focus-visible {
   outline-color: var(--surface);

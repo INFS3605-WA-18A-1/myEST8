@@ -5,36 +5,40 @@ myEST8 is where a Property Manager at a small Australian Agency sees every repai
 ## What the identity commits to
 
 - **Shape encodes type.** Only a Ticket is a docket. Everything else is a row or a section.
-- **Gum means act.** Primary buttons, links, focus and the selected state are Gum. Done, approved and confirmed are Slate, kept off green so Gum always means "act".
+- **Harbour means act.** Primary buttons, links, focus and the selected state are Harbour. Done, approved and confirmed are a deep green (`--done`), never blue, so Harbour always means "act".
 - **Wattle is the decision.** The one memorable element on the desk is the full-height 4px Wattle bar on the left edge of the "Needs you" section. Wattle also marks the current rail item and the counts that need a decision. It is never text, never a button, never a wash.
 - **No shadow** except `--shadow-lift` on menus, dialogs and the phone frame. Hierarchy comes from borders, spacing and weight.
 - Sentence case everywhere: no all-caps, no letter-spaced eyebrows, no middle-dot meta strings, no arrows on labels.
 
 ## Colour
 
-All colour is a token on `:root` in `src/web/static/app.css`. No literal colour appears outside that block (white is `var(--surface)`). The daisyUI theme `myest8` maps these tokens, and `TAILWIND_THEME` in `ui.ts` exposes them as utilities (`bg-page`, `text-muted`, `border-line`, `text-urgent`, `bg-info-bg`...).
+"Harbour and Wattle": a crisp harbour blue for actions and a wattle yellow for anything that needs the Property Manager's decision, on cool neutrals. All colour is a token on `:root` in `src/web/static/app.css`; no literal colour appears outside that block (white is `var(--surface)`). The daisyUI theme `myest8` maps these tokens, and `TAILWIND_THEME` in `ui.ts` exposes them as utilities (`bg-page`, `text-muted`, `border-line`, `text-urgent`, `bg-info-bg`...). Every pair below was measured (WCAG 2 relative luminance); text pairs meet AA, most of them AAA.
 
-| Token | Name | Hex | Role |
-| --- | --- | --- | --- |
-| `--ink` | Ironbark | `#1C2622` | Text, headings, the logo mark, the landing's closing band |
-| `--page` | Gumleaf | `#ECEFE9` | The page behind sections, and the rail |
-| `--surface` | White | `#FFFFFF` | Sections, rows, dockets, inputs |
-| `--muted` | Bark | `#5C645E` | Secondary text, timestamps, hints, Routine |
-| `--line` | Line | `#D4DAD1` | Hairlines and section borders (decorative) |
-| `--control` | | `#7A847C` | Input, select and secondary button borders |
-| `--action` | Gum | `#27694B` | Primary buttons, links, focus, selected |
-| `--action-hover` | | `#1E553C` | Hover and pressed |
-| `--hivis` | Wattle | `#FFC233` | The decision bar, the current rail item, decision counts |
-| `--info-bg` | | `#E9F1EC` | "Filled in by AI" and info tints |
-| `--urgent` / `--urgent-bg` | Rust | `#B23A1E` / `#FBEAE5` | Urgent, errors, destructive |
-| `--high` / `--high-bg` | Ochre | `#9A5A0B` / `#FBF0DF` | High Urgency, warnings, flags |
-| `--done` / `--done-bg` | Slate | `#3E5A72` / `#E7EEF4` | Done, approved, confirmed |
-| `--rail`, `--rail-text`, `--rail-muted` | | Gumleaf, Ironbark, Bark | The rail |
-| `--rail-hover` / `--rail-current` | | `rgb(28 38 34 / 0.06)` / `0.08` | Rail hover and current band |
-| `--scrim` | | `rgb(28 38 34 / 0.45)` | Behind the open drawer |
-| `--shadow-lift` | | `0 8px 24px rgb(28 38 34 / 0.16)` | The one shadow |
+| Token | Name | Hex | Role | Contrast |
+|---|---|---|---|---|
+| `--ink` | Night | `#13212E` | Body text, headings, the rail, the sign-in panel, the landing's closing band | 16.4:1 on white, 14.8:1 on Paper |
+| `--page` | Paper | `#F2F4F6` | The page behind sections, lanes, the Trade badge | |
+| `--surface` | | `#FFFFFF` | Sections, rows, dockets, inputs | |
+| `--muted` | Slate | `#55636F` | Secondary text, timestamps, hints, Routine | 6.2:1 on white, 5.6:1 on Paper, 5.4:1 on info |
+| `--line` | Line | `#D8DEE4` | Hairlines and section borders (decorative) | |
+| `--control` | | `#7D8A95` | Input, select, checkbox and secondary button borders | 3.5:1 on white, 3.2:1 on Paper (UI component minimum 3:1) |
+| `--action` | Harbour | `#1F5C8B` | Primary buttons, links, focus ring, selected state, Routine map pins | white on it 7.1:1; as text 7.1:1 on white, 6.4:1 on Paper |
+| `--action-hover` | | `#174A70` | Primary button and link hover | white on it 9.3:1 |
+| `--hivis` | Wattle | `#FFC233` | The decision stripe, the current rail item's bar, decision count chips, the logo on Night | Night on it 10.1:1 |
+| `--info-bg` | | `#E8F0F7` | Info badges and alerts, "Filled in by AI" | Harbour on it 6.2:1, Night 14.2:1 |
+| `--urgent` / `--urgent-bg` | Rust | `#B42318` / `#FDECEA` | Urgent, errors, destructive actions | 5.8:1 on its tint, 6.6:1 on white |
+| `--high` / `--high-bg` | Ochre | `#9A4A0B` / `#FDF1E3` | High Urgency, warnings, flags | 5.6:1 on its tint, 6.3:1 on white |
+| `--done` / `--done-bg` | | `#2F5A3E` / `#E8F1EA` | Done, approved, confirmed | 6.9:1 on its tint, 7.9:1 on white |
+| `--rail` | Night | `#13212E` | The rail | |
+| `--rail-text` | | `#E6EBF0` | Rail links and the wordmark in the rail | 13.6:1 on Night, 10.1:1 on the current item's band |
+| `--rail-muted` | | `#9AA8B4` | Rail counts, the Phone simulator link, the Agency's name | 6.7:1 on Night |
+| `--rail-hover` / `--rail-current` | | `rgb(255 255 255 / 0.05)` / `0.08` | Rail hover and current band | |
+| `--scrim` | | `rgb(19 33 46 / 0.45)` | Behind the open drawer | |
+| `--shadow-lift` | | `0 8px 24px rgb(19 33 46 / 0.18)` | The one shadow | |
 
-Every text pair meets WCAG AA (4.5:1 for text, 3:1 for control borders and icons). Measured: white on Gum 6.6:1; Ironbark on Wattle 11.8:1; Ironbark on White about 16:1; Bark on Gumleaf 5.4:1 and on White 6.0:1; Gum on `--info-bg` 5.9:1; each of Rust, Ochre and Slate on its own tint at least 4.5:1. Colour is never the only signal: badges carry the word.
+- Routine Urgency is not coloured: `--muted` text on a `--line` hairline. Colour is never the only signal; every badge carries its word.
+- Wattle is never text and never a button. It is 1.6:1 on white, so it only ever marks (a stripe, a bar, a chip behind Night text).
+- The focus ring is Harbour everywhere except on the Night rail, where Harbour is 2.3:1, so rail links ring in `--rail-text`. Links inside a dark chat bubble take the bubble's own text colour, underlined, and so does their ring.
 
 ## Type
 
@@ -49,7 +53,7 @@ Every text pair meets WCAG AA (4.5:1 for text, 3:1 for control borders and icons
 - Spacing steps 4, 8, 12, 16, 24, 32. Content column max 1280px with 24px gutters (16px under 1024px).
 - No shadow except `--shadow-lift`.
 - Motion only answers an action; no entrance animation; `prefers-reduced-motion` removes all transitions and animations.
-- Focus: one 2px Gum outline offset 2px on every control (`:focus-visible`). Touch targets are 44px on phones and touch screens.
+- Focus: one 2px Harbour outline offset 2px on every control (`:focus-visible`). Touch targets are 44px on phones and touch screens.
 - Every page works at 390px with no horizontal scroll; tables scroll inside their own frame or stack.
 
 ## Layout
@@ -59,7 +63,7 @@ Every text pair meets WCAG AA (4.5:1 for text, 3:1 for control borders and icons
 ```
 ┌──────────────┬───────────────────────────────────────────────────────────┐
 │ [tag] myEST8 │ Dashboard             [Mine | All]    Sun 18 Oct  Alice ▾  │ page header row
-│ (Gumleaf)    │ 2 Maintenance Requests to confirm and 1 Quote to choose.   │ count sentence
+│ (Night)      │ 2 Maintenance Requests to confirm and 1 Quote to choose.   │ count sentence
 │▌Dashboard    │ ┌▌Needs you ──────────────────────────────────────────┐   │
 │ Dispatch     │ │▌ row                                                │   │
 │ Requests   2 │ │▌ row                                                │   │
@@ -73,7 +77,7 @@ Every text pair meets WCAG AA (4.5:1 for text, 3:1 for control borders and icons
  220px rail, 1px Line on its right
 ```
 
-- **Rail.** Gumleaf background, Ironbark text, a 1px `--line` on its right. The logo (key tag in Ironbark, wordmark in Bricolage) links home. Ten places in three groups: Dashboard (`/`), Dispatch, Tickets, Archive, Approvals, Schedule (`/calendar`); then Properties, Tradies and Tenants under a quiet uppercase "Profiles" heading (`.rail-group`, hidden when the rail is collapsed, and naming the list with `aria-labelledby`); then Settings after a 12px gap. Public Sans 500 15px, 40px tall, with a Phosphor icon (18px). The current item has a 4px Wattle bar on its left (inset shadow, following the 6px radius), weight 600 and `aria-current="page"`; hover is `--rail-hover`. Counts are plain Bark numerals; only Tickets (new Maintenance Requests) and Approvals (Quotes waiting on a Property Owner and Reimbursement Requests to review; counts that mean "needs you", worked out by `loadNavCounts`) are a small Wattle chip with Ironbark text. Zero is not shown. A page under a place keeps it current.
+- **Rail.** Night background with `--rail-text`, no border. The logo (key tag in Wattle, wordmark in Bricolage) links home. Ten places in three groups: Dashboard (`/`), Dispatch, Tickets, Archive, Approvals, Schedule (`/calendar`); then Properties, Tradies and Tenants under a quiet uppercase "Profiles" heading (`.rail-group`, hidden when the rail is collapsed, and naming the list with `aria-labelledby`); then Settings after a 12px gap. Public Sans 500 15px, 40px tall, with a Phosphor icon (18px). The current item has a 4px Wattle bar on its left (inset shadow, following the 6px radius), weight 600, white text and `aria-current="page"`; hover is `--rail-hover`; focus rings in `--rail-text`. Counts are plain `--rail-muted` numerals; only Tickets (new Maintenance Requests) and Approvals (Quotes waiting on a Property Owner and Reimbursement Requests to review; counts that mean "needs you", worked out by `loadNavCounts`) are a small Wattle chip with Night text. Zero is not shown. A page under a place keeps it current.
 - At the foot, quieter: the demo's Phone simulator link and the Agency's name.
 - **Page header.** There is no separate top bar. The first row of the content column holds the `<h1>` (`.page-title`, Bricolage 28px/700, 24px on phones) on the left and, on the right of the same row, the page's controls (the Mine/All segmented control), today's date in the Agency's time zone, and the user menu (name, Sign out). On phones the row wraps: menu button and title, then the controls and the user menu. `page()`'s signature is unchanged; `controls`, `subtitle` and `actions` render in the same places.
 - **Flash** messages appear under the page header as one line (`role="status"` or `role="alert"`).
@@ -82,7 +86,7 @@ Every text pair meets WCAG AA (4.5:1 for text, 3:1 for control borders and icons
 ### Count sentence and "Needs you"
 
 - `filterBar({ action, filter, urgencies, trades, properties })` is the one filter over a list (Tickets, Archive): a GET form of small labelled selects in a wrapping row that keeps Mine/All in a hidden field. `app.js` submits it on change and hides its Apply button; a Clear filters link shows once a filter is set. Pages read it with `listFilterOf(c)` (`src/web/list-filter.ts`), which drops unknown values.
-- `countSentence(items, { empty })` replaces the count strip (`countStrip` stays as an alias). One sentence under the title in 16px: "2 Maintenance Requests to confirm, 1 Quote to choose and 1 Tradie to rate." Each count is a link into its queue. Items take `{ label, one?, count, href, decision? }`; `one` is the wording for a count of 1. Counts of zero are left out. A count that needs a decision is Ironbark on a Wattle chip; the rest are Gum links. When nothing is left the sentence says so ("Nothing needs you right now.").
+- `countSentence(items, { empty })` replaces the count strip (`countStrip` stays as an alias). One sentence under the title in 16px: "2 Maintenance Requests to confirm, 1 Quote to choose and 1 Tradie to rate." Each count is a link into its queue. Items take `{ label, one?, count, href, decision? }`; `one` is the wording for a count of 1. Counts of zero are left out. A count that needs a decision is Night on a Wattle chip; the rest are Harbour links. When nothing is left the sentence says so ("Nothing needs you right now.").
 - `needsYou({ title?, actions?, body })` is the decision queue: one section with a full-height 4px Wattle bar on its own left edge (the section's `border-left`, not a stripe per row). `queueRow`s inside are hairline-separated, not cards. A row draws no Wattle of its own; its `decision` option is kept for callers. Nothing else on the page is Wattle except the rail's current item and decision counts.
 - `aiFilled(content, { label?, edit? })` is the "Filled in by AI" style: `--info-bg` tint, 4px radius, a quiet "Filled in by AI" label, and an optional edit control. Use it only for text the AI wrote (a Summary); text a person wrote or edited, and the Tenant's own words, are not tinted.
 
@@ -93,19 +97,19 @@ Every text pair meets WCAG AA (4.5:1 for text, 3:1 for control borders and icons
 │ #12  [High]        2 days  │  stub: number (Bricolage 20px) and Urgency
 │ ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄ │  the perforation
 │ The cupboard under the sink│  issue (the Summary), 16px
-│ 27 Llewellyn St            │  address, Bark
+│ 27 Llewellyn St            │  address, Slate
 │ Plumbing   4 Quotes        │  stage line
 └────────────────────────────┘
 ```
 
-- White, 1px `--line` border, 4px radius, 12px padding. It sits in a Gumleaf lane, like a slip on a tray.
-- Reading order: the stub (number in Bricolage 700, the Urgency badge, the unread dot, the age at the right), the dashed perforation, then the issue at 16px (up to three lines; `lines` changes it), the address in Bark (one line, full text in its title), and the stage line (`meta`: Trades and what the Ticket waits on).
+- White, 1px `--line` border, 4px radius, 12px padding. It sits in a Paper lane, like a slip on a tray.
+- Reading order: the stub (number in Bricolage 700, the Urgency badge, the unread dot, the age at the right), the dashed perforation, then the issue at 16px (up to three lines; `lines` changes it), the address in Slate (one line, full text in its title), and the stage line (`meta`: Trades and what the Ticket waits on).
 - `size: 'large'` is the Ticket page header: the same order with the number at 40px.
 - A docket draws no Wattle. Tickets waiting on the Property Manager are listed in "Needs you".
 
 ### Dashboard
 
-The count sentence under the title, then the "Needs you" section (Maintenance Requests, Quotes to check, Site quotes to book, Quotes to choose, Tradies to rate), then Tickets by stage in lanes (a Gumleaf tray, 6px radius, of white dockets; the lanes follow `JOB_STAGES`, including Site quotes) and Next 7 days. On phones: one column.
+The count sentence under the title, then the "Needs you" section (Maintenance Requests, Quotes to check, Site quotes to book, Quotes to choose, Tradies to rate), then Tickets by stage in lanes (a Paper tray, 6px radius, of white dockets; the lanes follow `JOB_STAGES`, including Site quotes) and Next 7 days. On phones: one column.
 
 ### Dispatch: the queue and the map
 
@@ -124,13 +128,13 @@ The count sentence under the title, then the "Needs you" section (Maintenance Re
 
 - **At a glance.** Four stats: Jobs that need Tradies to quote, Jobs ready to book (a Quote approved, no Work Order), open High or Urgent Tickets, and today's visits.
 - **To dispatch.** A card per Job waiting on the Property Manager, most urgent then oldest first, with a Wattle edge: what it needs (Needs Tradies to quote, Ready to book), the Ticket's issue, its Urgency, Trade and Property (the Property's chip picks it on the map). A Job with fewer than two Quote Requests lists up to six Tradies of its Trade not asked yet, nominated first then nearest, each with its distance and both ratings, the first ones ticked, and **Send Quote Requests**. A Job with an approved Quote names the Tradie and price, offers their next three free times (each fills the start) and **Send Work Order**. Both post to `/dispatch/jobs/:id/…` and refuse as the Ticket page does.
-- **Pins.** No key: each pin's shape says what it is. A Property is a house on a disc, sized and coloured by its worst open Ticket's Urgency (Urgent 44 px `--urgent`, High 38 px `--high`, Routine 32 px `--action`, none 26 px white with a `--control` edge and a Bark house), with its number of open Tickets on an Ironbark chip at its shoulder. A Tradie is a wrench on a 28 px Ironbark rounded square, drawn under the Property pins. Every pin's accessible name says the same in words (the address, its open Tickets and worst Urgency; or the Tradie and their Trades). The glyphs come from the page's `#dispatch-pin-icons` template, so they are the app's Phosphor icons.
-- **Groups.** Pins closer than about 40 px (Properties and Tradies alike) become one group until the map is zoomed in: a 36 px white disc with a 2 px Ironbark ring and the number of pins in it; the ring is 3 px Rust or Ochre when it holds an Urgent or High Property. It is a `role="button"` named "Group of 5 pins: 3 Properties and 2 Tradies, worst urgency high. Press Enter to zoom in."; a click or Enter zooms in to it. Pins still together at the deepest zoom (18, or the tiles' own limit) fan out instead. No coverage outline on hover.
+- **Pins.** No key: each pin's shape says what it is. A Property is a house on a disc, sized and coloured by its worst open Ticket's Urgency (Urgent 44 px `--urgent`, High 38 px `--high`, Routine 32 px `--action`, none 26 px white with a `--control` edge and a Slate house), with its number of open Tickets on an Night chip at its shoulder. A Tradie is a wrench on a 28 px Night rounded square, drawn under the Property pins. Every pin's accessible name says the same in words (the address, its open Tickets and worst Urgency; or the Tradie and their Trades). The glyphs come from the page's `#dispatch-pin-icons` template, so they are the app's Phosphor icons.
+- **Groups.** Pins closer than about 40 px (Properties and Tradies alike) become one group until the map is zoomed in: a 36 px white disc with a 2 px Night ring and the number of pins in it; the ring is 3 px Rust or Ochre when it holds an Urgent or High Property. It is a `role="button"` named "Group of 5 pins: 3 Properties and 2 Tradies, worst urgency high. Press Enter to zoom in."; a click or Enter zooms in to it. Pins still together at the deepest zoom (18, or the tiles' own limit) fan out instead. No coverage outline on hover.
 - **The first view** fits the Agency's Properties (32 px padding, at most zoom 15), not every Tradie, so it opens on the streets that have work rather than all of Sydney.
-- **Picking.** The picked pin gets a 3 px Gum ring on a pale disc behind it and is drawn above the others; a group holding it gets a Gum outline. Picking a Property (from its pin or its row) zooms in only as far as needed for its pin to stand on its own, and draws the Tradie search radius (`TRADIE_SEARCH_RADIUS_KM`, 15, in `src/geo.ts`; the Settings page will make it the Agency's own) as a quiet ring: a 1.5 px Gum dashed line at 55% opacity, no fill. The map never zooms out to fit the ring.
+- **Picking.** The picked pin gets a 3 px Harbour ring on a pale disc behind it and is drawn above the others; a group holding it gets a Harbour outline. Picking a Property (from its pin or its row) zooms in only as far as needed for its pin to stand on its own, and draws the Tradie search radius (`TRADIE_SEARCH_RADIUS_KM`, 15, in `src/geo.ts`; the Settings page will make it the Agency's own) as a quiet ring: a 1.5 px Harbour dashed line at 55% opacity, no fill. The map never zooms out to fit the ring.
 - **Panel, not a tooltip.** Beside the map from 1024 px, under it on phones. It shows the street address, the open Tickets (each links to `/tickets/:id`, with its Jobs' stages; one waiting on dispatch links to its card) and up to five nearest Tradies within the radius who do the Trades its open Jobs need (any Trade when it has none), nearest first, each as a Tradie chip with a distance chip, their Trades and both rating chips (myEST8 and Google, never combined). A Tradie's panel shows their ratings and bookings. Opening it moves focus to its heading; Close or Escape closes it and puts the focus back on the pin or link that opened it.
 - **Table.** The map is not usable with a keyboard or a screen reader on its own, so the table is the same information: every Property (most urgent first) with the address as a link that picks it, the suburb, the open Tickets and the worst urgency. A Property the map could not place says **Address not found** (a warning badge) and its panel says why it lists no Tradies. Opening the page never looks addresses up; while any are missing, the page header's **Look up missing addresses** tries them again (`geocodeMissing`, at most 10 Properties and 10 Tradies a time; a failing lookup never stops the page).
-- **Phones (under 640 px).** The map is 55vh (18 to 32rem) with the panel under it. The Properties tables stack: each row is a white block on Gumleaf, the address first, then the suburb with the worst urgency at the end of its line, then the Tickets. They use their own `dispatch-stack` rules rather than `table({ stack })` in `ui.ts`, which can't carry the row header and `data-row` the picking needs. Nothing scrolls sideways at 390 px.
+- **Phones (under 640 px).** The map is 55vh (18 to 32rem) with the panel under it. The Properties tables stack: each row is a white block on Paper, the address first, then the suburb with the worst urgency at the end of its line, then the Tickets. They use their own `dispatch-stack` rules rather than `table({ stack })` in `ui.ts`, which can't carry the row header and `data-row` the picking needs. Nothing scrolls sideways at 390 px.
 - **Keyboard.** Every pin is a focusable `role="button"` named by its address and tickets (or the Tradie's name and Trades): Tab to it, Enter or Space picks it (the name and key are set wherever Leaflet makes the element, as it makes it again whenever a group splits or forms). The map itself takes arrow keys and + / -. The scroll wheel zooms only after the map has been clicked or focused, so the page still scrolls.
 - **Without JavaScript.** The map's place says it needs JavaScript. The queue, the table and a panel per Property work: a row's link goes to its panel (`:target`).
 - **No Tradie schedule.** Who is booked when is the Schedule's (below); a Tradie's panel still lists their visits over the next 7 days.
@@ -139,10 +143,10 @@ The count sentence under the title, then the "Needs you" section (Maintenance Re
 
 `/calendar` (`src/web/pages/calendar.ts`; `src/web/schedule-layout.ts` places the visits) shows every booked visit in the Agency's time zone. `?view=day|week|month&date=YYYY-MM-DD&filter=all`; Week is the default, and the older `?week=` still opens that week. Day, Week and Month are tabs (`Calendar views`) above the summary line; Previous, Today (or This week / This month) and Next step the view shown.
 
-- **Time grid.** Hour lines with the times in a 3.5rem gutter over a Gumleaf tray of 15-minute rows, 7 am to 7 pm, grown to the whole hours around any visit outside them (one range for the whole week). Rows grow to fit what is on them; the hours, days and lanes are CSS subgrids of one grid, so everything lines up. The grid scrolls sideways inside its frame, a focusable region, never the page.
-- **Week** (from 768 px). Seven day columns, Monday first; a day's name opens its Day. A visit is a white block linking to its Ticket: the time, Site inspection when it is one, the issue, the Tradie and how it stands. Visits that overlap (directly or through another) fold into one Gum-on-`--info-bg` block over their time, "2 Jobs booked", that opens the Day. Under 768 px the Week is the list of days, a run of empty days folded into one line.
+- **Time grid.** Hour lines with the times in a 3.5rem gutter over a Paper tray of 15-minute rows, 7 am to 7 pm, grown to the whole hours around any visit outside them (one range for the whole week). Rows grow to fit what is on them; the hours, days and lanes are CSS subgrids of one grid, so everything lines up. The grid scrolls sideways inside its frame, a focusable region, never the page.
+- **Week** (from 768 px). Seven day columns, Monday first; a day's name opens its Day. A visit is a white block linking to its Ticket: the time, Site inspection when it is one, the issue, the Tradie and how it stands. Visits that overlap (directly or through another) fold into one Harbour-on-`--info-bg` block over their time, "2 Jobs booked", that opens the Day. Under 768 px the Week is the list of days, a run of empty days folded into one line.
 - **Day.** The same grid for one day with a lane per visit running at once (greedy interval colouring), each lane at least 14rem, full booking cards; a visit alone at its time takes the whole width.
-- **Month.** A table of weeks (column headers Mon to Sun), the days of the months either side on Gumleaf with muted numbers, today's number a Gum chip. A day lists up to two visits (time and issue, one line); with more, or any that overlap, it says "N Jobs booked", opening the Day. On phones a booked day shows only the count, 44 px tall.
+- **Month.** A table of weeks (column headers Mon to Sun), the days of the months either side on Paper with muted numbers, today's number a Harbour chip. A day lists up to two visits (time and issue, one line); with more, or any that overlap, it says "N Jobs booked", opening the Day. On phones a booked day shows only the count, 44 px tall.
 - **Text equivalent.** The hour lines are `aria-hidden`; every visit is a list item in its day's list whose link or card names its time, issue and Tradie, so the grid reads as text in time order.
 - **Pin data.** The page writes one `<script type="application/json" id="dispatch-data">` block with the tile source, the radius and the pins. `<`, `>`, `&` and U+2028/9 are written as `\uXXXX`, so an address cannot close the script or open a comment. The script builds every pin with DOM calls and `textContent`, never `innerHTML`; there are no inline handlers.
 - **Tiles.** A light grey basemap, so the pins carry the colour. `mapTiles()` in `src/web/map-config.ts` gives the URL template, subdomains, attribution and maximum zoom. The choice is CARTO Positron (`https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png`, subdomains abcd, credited "&copy; OpenStreetMap contributors &copy; CARTO", both linked), which since 25 September 2026 CARTO serves only with an API key: set `CARTO_BASEMAPS_KEY` (free, no account: carto.com/basemaps/apikey) and it is added as `?key=`. **Without a key the map falls back** to Esri's keyless World Light Gray Base (to zoom 16, credited "Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ") rather than show CARTO's "API key required" notice. The hosted start-up log lists the key under real or off; a start never waits for it. Never OpenStreetMap's own tile server (`tile.openstreetmap.org`): its usage policy is not for production apps.
@@ -150,59 +154,59 @@ The count sentence under the title, then the "Needs you" section (Maintenance Re
 
 ### Landing page, sign-in and Tenant pages
 
-- **Landing** (`landing.css`): bands alternate Gumleaf and White; the closing band is Ironbark with the logo in Wattle. The hero is a Bricolage headline (56 to 72px) on the left and the Tenant's thread becoming a Maintenance Request on the right. Only claims the app actually makes appear on the page.
-- **Sign-in and sign-up** (`auth.css`): a split panel, Gumleaf with Ironbark type on the left and the form on White on the right. Errors are specific sentences beside the field, announced with `aria-describedby`. No onboarding panel on sign-in.
-- **Tenant pages** (`tenant.css`): a white column on Gumleaf; the bar names the Agency and the page names the Property's street; the tracker's current stage carries the Wattle bar.
+- **Landing** (`landing.css`): bands alternate Paper and White; the closing band is Night with the logo in Wattle. The hero is a Bricolage headline (56 to 72px) on the left and the Tenant's thread becoming a Maintenance Request on the right. Only claims the app actually makes appear on the page.
+- **Sign-in and sign-up** (`auth.css`): a split panel, Night with `--rail-text` type and the key tag in Wattle on the left, and the form on White on the right. Errors are specific sentences beside the field, announced with `aria-describedby`. No onboarding panel on sign-in.
+- **Tenant pages** (`tenant.css`): a white column on Paper; the bar names the Agency and the page names the Property's street; the tracker's current stage carries the Wattle bar.
 
 ## Components
 
 All of these are in `src/web/ui.ts`; pages use them instead of hand-building markup.
 
 - **Buttons** (`button`, `linkButton`, `postButton`): Public Sans 600, 6 px radius. Sizes `sm` 32 px (rows and lanes), `md` 36 px (default), `lg` 44 px (a page's main way in, as on the landing page); every size is 44 px on phones and touch screens.
-  - Primary: Gum fill, white text, `--action-hover` on hover.
-  - Secondary: surface fill with a 1 px `--control` border and Ironbark text.
-  - Ghost: Gum text, no box, Gumleaf on hover: a quiet action ("See all Tickets", "Sign out") that still reads as one. Inside a message it takes the message's colour.
+  - Primary: Harbour fill, white text, `--action-hover` on hover.
+  - Secondary: surface fill with a 1 px `--control` border and Night text.
+  - Ghost: Harbour text, no box, Paper on hover: a quiet action ("See all Tickets", "Sign out") that still reads as one. Inside a message it takes the message's colour.
   - daisyUI's `btn-secondary` is drawn as Secondary too, so there is one bordered look.
   - Danger: `--urgent` text on surface, red border on hover.
   - Labels are verbs that say what happens: "Confirm", "Send Quote Requests", "Send Work Order". No arrows.
-- **Badges:** 13 px Public Sans 500, 1 px 8 px padding, 4 px radius, tinted from the token pairs, word always present. Trade and channel badges are Ironbark on Gumleaf; info is Gum on `--info-bg`. A badge sitting straight on the Gumleaf page takes `badge(text, tone, { outline: true })`: a white fill and a hairline, the tone's text kept, as a neutral badge's own fill is Gumleaf and would read as loose text.
-- **Count chips:** 22 px circles, Public Sans 12 px 600, tabular. For decisions, Wattle with Ironbark text; otherwise Gumleaf with Ironbark text.
+- **Badges:** 13 px Public Sans 500, 1 px 8 px padding, 4 px radius, tinted from the token pairs, word always present. Trade and channel badges are Night on Paper; info is Harbour on `--info-bg`. A badge sitting straight on the Paper page takes `badge(text, tone, { outline: true })`: a white fill and a hairline, the tone's text kept, as a neutral badge's own fill is Paper and would read as loose text.
+- **Count chips:** 22 px circles, Public Sans 12 px 600, tabular. For decisions, Wattle with Night text; otherwise Paper with Night text.
 - **Outlined badge:** `badge(text, tone, { outline: true })` is a white fill with a border in the tone's own colour; the word still carries the meaning. It marks "Site quote" visits next to repair visits.
 - **Filled in by AI:** see `aiFilled` above.
 - **Links to records.** A link's shape says what it leads to; plain underlined text is kept for links inside a sentence.
-  - `entityLink(kind, label, href)`: a record mentioned beside something else (the Property under a Ticket, a Ticket's Tenant, a Tradie on a Quote): a pill with a hairline, the record's icon in Gum (`house-line` Property, `user` Tenant, `wrench` Tradie, `ticket` Ticket) and its name in Ironbark; Gum edge and `--info-bg` on hover.
-  - `rowLink(label, href)`: the title of a row in a list (a Tradie, a Tenant, a Property): Ironbark 600, underlined on hover only; in a stacked table it covers the whole row.
-  - `contactLink('mobile' | 'email', value)`: a phone or envelope icon with the number or address, in Gum.
-- **Metrics.** Numbers a Property Manager compares at a glance sit in a Gumleaf chip with the number at 14 px 700 and its context quiet: `ratingChip` ("myEST8 ★ 4.7 (3)", an Ochre star; `named: false` under a column that already says whose; "Not on Google" dashed) and `distanceChip` (a Gum arrow and "0.6 km"). Screen readers hear "myEST8 4.7 from 3 ratings".
+  - `entityLink(kind, label, href)`: a record mentioned beside something else (the Property under a Ticket, a Ticket's Tenant, a Tradie on a Quote): a pill with a hairline, the record's icon in Harbour (`house-line` Property, `user` Tenant, `wrench` Tradie, `ticket` Ticket) and its name in Night; Harbour edge and `--info-bg` on hover.
+  - `rowLink(label, href)`: the title of a row in a list (a Tradie, a Tenant, a Property): Night 600, underlined on hover only; in a stacked table it covers the whole row.
+  - `contactLink('mobile' | 'email', value)`: a phone or envelope icon with the number or address, in Harbour.
+- **Metrics.** Numbers a Property Manager compares at a glance sit in a Paper chip with the number at 14 px 700 and its context quiet: `ratingChip` ("myEST8 ★ 4.7 (3)", an Ochre star; `named: false` under a column that already says whose; "Not on Google" dashed) and `distanceChip` (a Harbour arrow and "0.6 km"). Screen readers hear "myEST8 4.7 from 3 ratings".
 - **Urgency.** `urgencyBadge`: Urgent is solid Rust with a warning octagon, High tinted Ochre with an up arrow, Routine quiet with no icon.
 - **Searchable selects.** `field({ type: 'select', search: true })` (and the filter bar's Property) becomes a text box that filters the options as you type (app.js): every word must appear in the option's label or `keywords` (a Property's address, suburb and postcode via `propertyOptions`; a Tradie's business, Trades and own name via `tradieOptions`). Arrow keys move, Enter picks, Escape puts back what was picked. The select stays in the form, hidden, and holds the posted value; without JavaScript it is a plain select.
 - **Nominated Tradies** (`tradiePicker`): one searchable Tradie select per Tradie, each with Remove, and **Add Tradie** for another; it starts with one empty select so it works without JavaScript, and empty ones post nothing (`nominatedFrom`).
 - **Queue rows** (`queueRow`): 4 px radius, hairline, 12 px padding. The title with the actions (Confirm, Review) at the end of its line, then the detail, then the badges with the age pushed to the end of their row. On phones (under 640 px) the actions move to their own line under the badges, so the title keeps the row's width. A row draws no Wattle; decision rows sit inside `needsYou`, which carries the one bar.
-- **Lanes** (`lane`): a Gumleaf tray of white dockets; the count is a muted number beside the title.
-- **Tables** (`table`): 13 px, 36 px rows, headers in Public Sans 600 Ironbark, hairlines between rows, horizontal scroll only inside the table's frame. On phones (under 640 px) a table can stack instead:
+- **Lanes** (`lane`): a Paper tray of white dockets; the count is a muted number beside the title.
+- **Tables** (`table`): 13 px, 36 px rows, headers in Public Sans 600 Night, hairlines between rows, horizontal scroll only inside the table's frame. On phones (under 640 px) a table can stack instead:
   - `stack: true`: each row becomes a white block, the first cell leading and the rest in a wrapping row, headers hidden. For cells that explain themselves (badges, an age): the Tickets list.
-  - `stack: 'labelled'`: the same block, but each value after the first sits beside its column's header in one aligned label column (8 rem, 13 px Bark), like a facts list. For plain values (names, money, counts): Properties, Tradies. A column with an empty header (actions) stays unlabelled.
+  - `stack: 'labelled'`: the same block, but each value after the first sits beside its column's header in one aligned label column (8 rem, 13 px Slate), like a facts list. For plain values (names, money, counts): Properties, Tradies. A column with an empty header (actions) stays unlabelled.
   - In a labelled row only the lead line of the first cell is 14 px 600 (a contact name under a business name keeps its own weight), and the label hangs in the cell's left edge so a value made of several pieces (a number and its words, badges) stays together.
   - On wider screens a stacked table's cells line up on their first line's baseline, so a badge sits level with the text beside it.
-  - `rowHeader: true` makes each row's first cell a `<th scope="row">` (an address, a Tradie), drawn like the cells beside it. `rowAttributes[i]` gives row i its attributes (`data-row`, `data-selected`, `aria-*`): values are escaped, `true` writes a bare attribute, `false` leaves it out, and only plain lower-case names are allowed. A row with `data-selected` is tinted `--info-bg` (and, stacked, outlined in Gum).
+  - `rowHeader: true` makes each row's first cell a `<th scope="row">` (an address, a Tradie), drawn like the cells beside it. `rowAttributes[i]` gives row i its attributes (`data-row`, `data-selected`, `aria-*`): values are escaped, `true` writes a bare attribute, `false` leaves it out, and only plain lower-case names are allowed. A row with `data-selected` is tinted `--info-bg` (and, stacked, outlined in Harbour).
 - **Forms:**
   - Label above the control (14 px 600). A field's box has no padding above or below, so a button bottom-aligned beside it lines up with the control.
   - Controls 36 px tall (44 px on phones and touch screens) with a `--control` border and 4 px radius; text is 16 px on phones so iOS doesn't zoom.
-  - Under the control, the error first, then the hint. Hint 12 px `--muted`; field error 12 px `--urgent`, both tied to the control with `aria-describedby`. An error also marks the control `aria-invalid` and turns its border `--urgent`, for every kind of field (text, select, textarea, file, checkbox); a file field's Choose file button stays Gumleaf.
+  - Under the control, the error first, then the hint. Hint 12 px `--muted`; field error 12 px `--urgent`, both tied to the control with `aria-describedby`. An error also marks the control `aria-invalid` and turns its border `--urgent`, for every kind of field (text, select, textarea, file, checkbox); a file field's Choose file button stays Paper.
   - Placeholders are `--muted` upright text, lighter than typed text, so they never look filled in.
   - Two-column field grids at 768 px and up.
 - **Sections:** surface, 1 px `--line` border, 8 px radius, 16 px padding, no shadow, heading 20 px Bricolage Grotesque 600 with optional actions on the right.
-- **Alerts** (`alert`, `flashMessage`): 8 px radius, the tone's pair (info is Ironbark on `--info-bg` with a Gum icon), an icon and the tone's word for screen readers. Links inside take the alert's text colour, underlined.
-- **Steps** (sequences only: the Ticket's Job progress, the Tenant tracker, the setup guide): 24 px circles. Done is `--done` with a tick (and a done line between done steps); current is Gum with its number; to come is a white circle on a hairline with a muted number; skipped (`state: 'skipped'`: a stage that didn't happen and won't, such as "Not needed") is a muted dash in a dashed ring, never ticked and never current. A step is ticked only when it really happened, never because a later one began. The step on screen (`aria-current="step"`) also gets a 2 px Gum ring 2 px out, so "you are here" still reads when that step is done and shows its tick (a wizard step you came back to).
-- **Tabs** (`tabs`): Bricolage Grotesque, muted until current; the current one is Ironbark 600 with a Gum underline and `aria-current`. **Side tabs** (`sideTabs`, for Settings' sections): a column of 40 px Bricolage Grotesque 14 px links, the current one a white tab with a hairline and the Wattle bar; a sideways-scrolling row under 768 px.
-- **Timeline:** Gum dots on a `--line` rule, the time muted above each event, 12 px between events so it reads as a log.
+- **Alerts** (`alert`, `flashMessage`): 8 px radius, the tone's pair (info is Night on `--info-bg` with a Harbour icon), an icon and the tone's word for screen readers. Links inside take the alert's text colour, underlined.
+- **Steps** (sequences only: the Ticket's Job progress, the Tenant tracker, the setup guide): 24 px circles. Done is `--done` with a tick (and a done line between done steps); current is Harbour with its number; to come is a white circle on a hairline with a muted number; skipped (`state: 'skipped'`: a stage that didn't happen and won't, such as "Not needed") is a muted dash in a dashed ring, never ticked and never current. A step is ticked only when it really happened, never because a later one began. The step on screen (`aria-current="step"`) also gets a 2 px Harbour ring 2 px out, so "you are here" still reads when that step is done and shows its tick (a wizard step you came back to).
+- **Tabs** (`tabs`): Bricolage Grotesque, muted until current; the current one is Night 600 with a Harbour underline and `aria-current`. **Side tabs** (`sideTabs`, for Settings' sections): a column of 40 px Bricolage Grotesque 14 px links, the current one a white tab with a hairline and the Wattle bar; a sideways-scrolling row under 768 px.
+- **Timeline:** Harbour dots on a `--line` rule, the time muted above each event, 12 px between events so it reads as a log.
 - **Facts** (`dl`): a 10 rem label column, so a value sits near its label even in a wide column; in a box under 26 rem the label stacks over its value.
 - **Chat** (simulator and message logs):
-  - myEST8's messages on the left on Gumleaf; the person's on the right on Gum with white text. 8 px radius.
-  - Links in a bubble take the bubble's text colour, underlined, so they read on Gum and on every tone (the global link colour would be Gum on Gum); their focus ring is the text colour too.
+  - myEST8's messages on the left on Paper; the person's on the right on Harbour with white text. 8 px radius.
+  - Links in a bubble take the bubble's text colour, underlined, so they read on Harbour and on every tone (the global link colour would be Harbour on Harbour); their focus ring is the text colour too.
   - The channel is a small badge, the time is muted, and text keeps its line breaks.
-- **Empty states** (`emptyState(text, action?)`): one sentence saying what will appear and the action to take, with no illustration. Give it the action whenever there is one. Standing alone on the page it is a white section (hairline, 8 px radius) with Ironbark text; inside a section, a lane or a table cell it is just the muted sentence and the action, with no box in a box.
-- **Disclosures** (`<details>`): the summary gets a pointer, a Bark marker and the focus ring. A page may style its own summary (a menu, a button); these rules have zero specificity so it wins.
+- **Empty states** (`emptyState(text, action?)`): one sentence saying what will appear and the action to take, with no illustration. Give it the action whenever there is one. Standing alone on the page it is a white section (hairline, 8 px radius) with Night text; inside a section, a lane or a table cell it is just the muted sentence and the action, with no box in a box.
+- **Disclosures** (`<details>`): the summary gets a pointer, a Slate marker and the focus ring. A page may style its own summary (a menu, a button); these rules have zero specificity so it wins.
 - **Segmented control** (`segmented`): 36 px on desktop like a button, 44 px on touch; it keeps its own width in a column.
 
 ### Icons and logo
@@ -212,12 +216,12 @@ All of these are in `src/web/ui.ts`; pages use them instead of hand-building mar
 - Sizes: 18 px in the rail (`size-[18px]`), 16 px for the Phone simulator link, 20 px in alerts and flash messages (the default), 24 px for the menu button, 16 px for the user menu caret and timeline dots.
 - The app's icons: Dashboard `squares-four`, Dispatch `map-pin`, Tickets `ticket`, Archive `archive`, Approvals `seal-check`, Schedule `calendar-blank`, Properties `house-line`, Tradies `wrench`, Tenants `users`, Settings `gear-six`, Phone simulator `device-mobile`, menu `list`, user menu `caret-down`, done `check-circle`, warning and error `warning-circle`, note `info`, timeline dot `circle` (fill).
 - **The logo** is `logo({ size })` in `src/web/ui.ts`: the key tag beside the wordmark. The rail and the public bar both use it; nothing else hand-builds it.
-  - **The key tag:** a house-shaped tag with the key ring's hole at the top and an 8 cut out, the tag every Agency hangs on its key board. One solid shape (an even-odd path on a 256 grid, `currentColor`), so it holds at 16 px and works as an app icon as it is. It is only ever Ironbark, White or Wattle: Ironbark on the Gumleaf rail and the white public bar, White or Wattle on Ironbark bands; Ironbark on Wattle for an app tile.
-  - **The wordmark:** "myEST8" in Bricolage Grotesque, "my" at 400 and "EST8" at 700, so the pun reads without decoration. Ironbark on light surfaces, White on Ironbark.
+  - **The key tag:** a house-shaped tag with the key ring's hole at the top and an 8 cut out, the tag every Agency hangs on its key board. One solid shape (an even-odd path on a 256 grid, `currentColor`), so it holds at 16 px and works as an app icon as it is. It is only ever Night, White or Wattle: Night on the Paper rail and the white public bar, White or Wattle on Night bands; Night on Wattle for an app tile.
+  - **The wordmark:** "myEST8" in Bricolage Grotesque, "my" at 400 and "EST8" at 700, so the pun reads without decoration. Night on light surfaces, White on Night.
   - Sizes: `md` (default) is a 28 px tag with 22 px type; `sm` is a 20 px tag with 18 px type.
   - The tag is `aria-hidden`, so the logo's accessible name is "myEST8". In the rail it is the link home.
-  - Don't recolour the tag outside Ironbark, White and Wattle, outline it, or put it on a busy background.
-- **Favicon:** `/assets/favicon.svg`, the key tag alone, Ironbark in a light browser theme and Wattle in a dark one (`prefers-color-scheme` inside the SVG), linked from every page's head.
+  - Don't recolour the tag outside Night, White and Wattle, outline it, or put it on a busy background.
+- **Favicon:** `/assets/favicon.svg`, the key tag alone, Night in a light browser theme and Wattle in a dark one (`prefers-color-scheme` inside the SVG), linked from every page's head.
 
 ### Share
 
@@ -249,7 +253,7 @@ Each setup step that creates many records (Property Owners, Building Managers, T
   - **Columns**: each column of the sheet, sample values, a "Goes to" select, and how it was matched: "Matched by name", "Matched by AI", "You chose", "Empty, ignored", or "AI not sure" with its guess. An unsure column is ignored until the Property Manager chooses, and a warning alert says so; the section is open only then.
   - **Rows**: Add (checkbox), Row (the spreadsheet's row number), Status ("Ready", "Needs a fix", "Duplicate" as badges), Notes ("Already added: …", "Adds … as a new Property Owner"), then the fields. A flagged cell is an input on `--high-bg` with its problem under it in `--high`; a cell that links to a record (Property Owner, Property, Property Manager, Building Manager) is a select of the Agency's records. Duplicates start unticked and are muted.
   - The buttons repeat the step's noun: "Add 3 Properties", then "Check changes" and "Discard upload". The count updates as rows are ticked (`// === import ===` in `app.js`); a line beside it says how many ticked rows still need a fix.
-- **"Filled in by AI"** is the one bold mark: a Gum chip on `--info-bg` with the `sparkle` icon, on every value the AI supplied and on columns it matched. Values worked out by a fixed rule ("From the address", "No rating in the sheet, so 3") are muted notes instead; when every row has the same one, it's said once under the column heading.
+- **"Filled in by AI"** is the one bold mark: a Harbour chip on `--info-bg` with the `sparkle` icon, on every value the AI supplied and on columns it matched. Values worked out by a fixed rule ("From the address", "No rating in the sheet, so 3") are muted notes instead; when every row has the same one, it's said once under the column heading.
 - AI answers below the confidence threshold are never applied: the column is ignored, or the cell is flagged with "The AI isn't sure. Its guess: Carpentry."
 
 ## Vocabulary
@@ -267,7 +271,7 @@ The same labels and the same order appear in the dashboard lanes, the Ticket pag
 | `awaiting_owner` | With Property Owner | Ochre badge. As a step, it reads "Not needed" (skipped) when the Repair Cost stayed within the Max Repair Cost. |
 | `approved` | Ready to book | info badge |
 | `scheduled` | Booked | info badge |
-| `done` | Done | Slate badge |
+| `done` | Done | done (green) badge |
 | `cancelled` | Cancelled | muted badge; collapsed on the Ticket page |
 
 A Ticket is Open or Closed.

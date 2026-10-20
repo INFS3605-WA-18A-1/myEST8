@@ -1,5 +1,5 @@
 // The document shared by the sign-in and sign-up pages: the whole viewport, split
-// in two from 1024px. On the left a full-height Gumleaf panel, where the app's rail
+// in two from 1024px. On the left a full-height Night panel, where the app's rail
 // will sit once the Property Manager is in, carrying the landing page's thesis and,
 // on sign-up, "what happens next" with the Maintenance Request they will be asked
 // to confirm. On the right, on white, the page's h1 and its form. On phones the

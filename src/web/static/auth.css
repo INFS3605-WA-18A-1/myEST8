@@ -5,8 +5,8 @@
  * tokens only (docs/design-system.md).
  *
  * The page is the whole viewport. From 1024px it splits in two: a full-height
- * Gumleaf panel on the left with Ironbark type, where the app's rail will sit once
- * the Property Manager is in, and the form on white on the right. On phones and
+ * Night panel on the left, where the app's rail will sit once the Property Manager
+ * is in (the logo takes the rail's colours there), and the form on white on the right. On phones and
  * tablets the form comes first and the panel follows (sign-in hides it there).
  * The panel carries the landing page's thesis, whose "You decide." has the Wattle
  * stripe. Sign-up adds what happens next; sign-in has no onboarding panel.
@@ -76,10 +76,10 @@ body.au {
 /* Stacked, the footer and the panel's contents line up with the form column above them. */
 .au-footer {
   padding: 20px max(16px, calc((100% - var(--au-col)) / 2)) 28px;
-  background: var(--surface);
-  border-top: 1px solid var(--line);
+  background: var(--ink);
+  border-top: 1px solid var(--rail-current);
   font-size: 13px;
-  color: var(--muted);
+  color: var(--rail-muted);
 }
 
 @media (min-width: 40rem) {
@@ -94,7 +94,7 @@ body.au {
   }
 }
 
-/* The split: the Gumleaf panel runs the full height on the left, under the bar's logo. */
+/* The split: the Night panel runs the full height on the left, under the bar's logo. */
 @media (min-width: 64rem) {
   .au-frame {
     grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
@@ -113,11 +113,11 @@ body.au {
   }
   .au-logo {
     padding-inline: 48px;
-    color: var(--ink);
+    color: var(--rail-text);
   }
-  /* The key tag is Ironbark on Gumleaf, as in the rail. */
+  /* The key tag is Wattle on Night, as in the rail. */
   .au-logo .logo-mark {
-    color: var(--ink);
+    color: var(--hivis);
   }
   .au-bar-actions {
     justify-self: end;
@@ -126,7 +126,6 @@ body.au {
   .au-panel {
     grid-column: 1;
     grid-row: 1 / -1;
-    border-right: 1px solid var(--line);
   }
   .au-main {
     grid-column: 2;
@@ -248,12 +247,12 @@ body.au {
   max-width: 60ch;
 }
 
-/* ----- The panel ----- */
+/* ----- The Night panel ----- */
 
 .au-panel {
   min-width: 0;
-  background: var(--page);
-  color: var(--ink);
+  background: var(--ink);
+  color: var(--rail-text);
 }
 /* Sign-in has nothing to add under the form on a phone, so its panel only shows beside it. */
 @media (max-width: 63.99rem) {
@@ -302,7 +301,7 @@ body.au {
   font-weight: 700;
   line-height: 1.06;
   letter-spacing: -0.01em;
-  color: var(--ink);
+  color: var(--rail-text);
 }
 .au-line {
   display: block;
@@ -341,7 +340,7 @@ body.au {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-  color: var(--muted);
+  color: var(--rail-muted);
 }
 
 /* The steps in order, numbered on a thin track like the landing page's workflow. */
@@ -369,7 +368,7 @@ body.au {
   bottom: 6px;
   left: 13.5px;
   width: 1px;
-  background: color-mix(in srgb, var(--muted) 45%, transparent);
+  background: color-mix(in srgb, var(--rail-muted) 45%, transparent);
 }
 .au-step-num {
   display: inline-flex;
@@ -377,12 +376,12 @@ body.au {
   justify-content: center;
   width: 28px;
   height: 28px;
-  border: 1px solid var(--muted);
+  border: 1px solid var(--rail-muted);
   border-radius: 999px;
   font-family: var(--font-head);
   font-size: 13px;
   font-weight: 600;
-  color: var(--ink);
+  color: var(--rail-text);
 }
 .au-step-body {
   display: flex;
@@ -395,7 +394,7 @@ body.au {
   max-width: 46ch;
   font-size: 15px;
   line-height: 1.5;
-  color: var(--ink);
+  color: var(--rail-text);
 }
 
 /* The Maintenance Request waiting for a decision: a decision row, so it has the Wattle stripe. */
@@ -481,8 +480,4 @@ body.au {
     opacity: 1;
     transform: none;
   }
-}
-
-.logotype .logo-mark {
-  color: var(--ink);
 }

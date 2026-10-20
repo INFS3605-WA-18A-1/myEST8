@@ -27,37 +27,36 @@
 }
 
 /*
- * The tokens: green and gold. Gum (the action green) for what you do, Wattle (the
- * gold) only for the decisions waiting on the Property Manager, on gum-leaf neutrals,
- * with Slate for done so that green always means "act". Every text pair meets WCAG AA
- * (docs/design-system.md lists each measured pair).
+ * The tokens: the "Harbour and Wattle" palette. A harbour blue for actions, a wattle
+ * yellow for anything that needs the Property Manager's decision, on cool neutrals.
+ * Every text pair meets WCAG AA (docs/design-system.md lists each measured pair).
  */
 :root {
-  --ink: #1c2622; /* Ironbark: text, headings, the landing's closing band */
-  --page: #ecefe9; /* Gumleaf: the page behind sections, and the rail */
-  --surface: #ffffff; /* White: sections, rows, dockets, inputs */
-  --muted: #5c645e; /* Bark: secondary text, timestamps, hints, Routine (5.4:1 on Gumleaf) */
-  --line: #d4dad1; /* Line: hairlines and section borders (decorative) */
-  --control: #7a847c; /* input, select and secondary button borders */
-  --action: #27694b; /* Gum: primary buttons, links, focus, selected (white on it 6.6:1) */
-  --action-hover: #1e553c; /* hover and pressed */
-  --hivis: #ffc233; /* Wattle: the decision bar, the current rail item, decision counts (Ironbark on it 11.8:1). Never text, never a button, never a wash */
-  --info-bg: #e9f1ec; /* "Filled in by AI" and info tints */
-  --urgent: #b23a1e; /* Rust: urgent, errors, destructive */
-  --urgent-bg: #fbeae5;
-  --high: #9a5a0b; /* Ochre: High Urgency, warnings, flags */
-  --high-bg: #fbf0df;
-  --done: #3e5a72; /* Slate: done, approved, confirmed (kept off green so Gum always means "act") */
-  --done-bg: #e7eef4;
-  --rail: var(--page); /* the rail is Gumleaf */
-  --rail-text: var(--ink);
-  --rail-muted: var(--muted);
-  --rail-hover: rgb(28 38 34 / 0.06);
-  --rail-current: rgb(28 38 34 / 0.08);
+  --ink: #13212e; /* Night: body text, the rail (16.4:1 on white) */
+  --page: #f2f4f6; /* Paper: the page behind sections */
+  --surface: #ffffff; /* sections, rows, dockets, inputs */
+  --muted: #55636f; /* Slate: secondary text, timestamps, hints (6.2:1 on white, 5.6:1 on Paper) */
+  --line: #d8dee4; /* Line: hairlines and section borders (decorative) */
+  --control: #7d8a95; /* input, select, checkbox and secondary button borders (3.5:1 on white) */
+  --action: #1f5c8b; /* Harbour: primary buttons, links, focus, selected (white on it 7.1:1) */
+  --action-hover: #174a70; /* Harbour, pressed darker: primary hover, link hover */
+  --hivis: #ffc233; /* Wattle: the decision stripe, the current rail item, decision chips (Night on it 10.1:1). Never text, never a button */
+  --info-bg: #e8f0f7; /* Harbour's tint: info badges and alerts, "Filled in by AI" */
+  --urgent: #b42318; /* urgent, errors, destructive actions */
+  --urgent-bg: #fdecea;
+  --high: #9a4a0b; /* High Urgency, warnings, flags */
+  --high-bg: #fdf1e3;
+  --done: #2f5a3e; /* done, approved, confirmed */
+  --done-bg: #e8f1ea;
+  --rail: #13212e; /* the rail is Night */
+  --rail-text: #e6ebf0; /* rail text on Night (13.6:1) */
+  --rail-muted: #9aa8b4; /* rail counts, the Phone simulator, the Agency (6.7:1) */
+  --rail-hover: rgb(255 255 255 / 0.05);
+  --rail-current: rgb(255 255 255 / 0.08);
   --rail-width: 220px; /* the rail, and the drawer on phones */
   --rail-collapsed-width: 64px; /* the rail folded to its icons */
-  --scrim: rgb(28 38 34 / 0.45); /* Ironbark over the page, behind the open drawer */
-  --shadow-lift: 0 8px 24px rgb(28 38 34 / 0.16); /* the one shadow: menus, dialogs, the phone frame */
+  --scrim: rgb(19 33 46 / 0.45); /* Night over the page, behind the open drawer */
+  --shadow-lift: 0 8px 24px rgb(19 33 46 / 0.18); /* the one shadow: menus, dialogs, the phone frame */
   --font-body: 'Public Sans', system-ui, sans-serif;
   --font-head: 'Bricolage Grotesque', system-ui, sans-serif;
 }
@@ -134,7 +133,7 @@
       line-height: 1.1;
     }
 
-    /* Ordinary links are Gum. Links styled as buttons (.btn) keep their variant's text colour. :where keeps this at zero specificity, so any class (rail, docket, segmented, a chat bubble) still wins. */
+    /* Ordinary links are Harbour. Links styled as buttons (.btn) keep their variant's text colour. :where keeps this at zero specificity, so any class (rail, docket, segmented, a chat bubble) still wins. */
     :where(a:not(.btn)) {
       color: var(--action);
     }
@@ -256,7 +255,7 @@
       outline: 2px solid var(--action);
       outline-offset: 2px;
     }
-    /* Primary: white on Gum, darker Gum on hover, whatever the link colour. */
+    /* Primary: white on Harbour, darker Harbour on hover, whatever the link colour. */
     .btn-primary {
       --btn-color: var(--action);
       --btn-fg: var(--surface);
@@ -269,7 +268,7 @@
       --btn-bg: var(--action-hover);
       --btn-border: var(--action-hover);
     }
-    /* Secondary: surface fill, a control border, Ironbark text. */
+    /* Secondary: surface fill, a control border, Night text. */
     .btn-outline {
       background: var(--surface);
       border: 1px solid var(--control);
@@ -308,7 +307,7 @@
       border-color: var(--urgent);
       color: var(--urgent);
     }
-    /* Ghost: Gum text and no box, so a quiet action ("See all Tickets", "Sign out") still reads as one, not as a heading. */
+    /* Ghost: Harbour text and no box, so a quiet action ("See all Tickets", "Sign out") still reads as one, not as a heading. */
     .btn-ghost {
       color: var(--action);
     }
@@ -342,7 +341,7 @@
     .badge.badge-soft {
       border: 1px solid transparent;
     }
-    /* Neutral (a Trade, a channel): Ironbark on Gumleaf. */
+    /* Neutral (a Trade, a channel): Night on Paper. */
     .badge-soft.badge-neutral {
       color: var(--ink);
       background-color: var(--page);
@@ -700,7 +699,7 @@
       outline-color: currentColor;
     }
 
-    /* Tabs: the active one Ironbark with the Gum underline. */
+    /* Tabs: the active one Night with the Harbour underline. */
     .tabs-border > .tab {
       font-family: var(--font-body);
       font-size: 14px;
@@ -935,7 +934,7 @@
     }
 
     /* ----- The count sentence: one sentence under the title, every count a link into its queue.
-       A count that needs a decision is Ironbark on a Wattle chip; the rest are Gum links. */
+       A count that needs a decision is Night on a Wattle chip; the rest are Harbour links. */
     .count-sentence {
       max-width: 72ch;
       margin: 0;
@@ -1011,7 +1010,7 @@
       color: var(--muted);
     }
 
-    /* ----- Segmented control (Mine | All): links, the current one filled with Gum. */
+    /* ----- Segmented control (Mine | All): links, the current one filled with Harbour. */
     /* The filter bar over a list: labelled selects in a wrapping row. */
     .filter-bar {
       display: flex;
@@ -1315,7 +1314,6 @@
       gap: 4px;
       padding: 20px 12px 16px;
       background: var(--rail);
-      border-right: 1px solid var(--line);
       color: var(--rail-text);
     }
     @media (min-width: 64rem) {
@@ -1340,8 +1338,9 @@
     .rail-logo:hover {
       color: var(--rail-text);
     }
+    /* The key tag is Wattle on the Night rail. */
     .rail-logo .logo-mark {
-      color: var(--ink);
+      color: var(--hivis);
     }
     /* The nav fills the rail, so the Phone simulator can sit at its foot. */
     .rail-menu {
@@ -1395,12 +1394,12 @@
       background: var(--rail-hover);
       color: var(--rail-text);
     }
-    /* The current place: weight 600 and the 4px Wattle bar on its left edge. */
+    /* The current place: a lighter band, weight 600, white, and the 4px Wattle bar on its left edge. */
     .rail-link[aria-current='page'] {
       background: var(--rail-current);
       box-shadow: inset 4px 0 0 var(--hivis);
       font-weight: 600;
-      color: var(--rail-text);
+      color: var(--surface);
     }
     /* The demo's Phone simulator: quieter, in the body face. */
     .rail-link.is-quiet {
@@ -1438,7 +1437,7 @@
       font-weight: 400;
       color: var(--rail-muted);
     }
-    /* A count that means "needs you" (Requests, Approvals): a small Wattle chip with Ironbark text. */
+    /* A count that means "needs you" (Requests, Approvals): a small Wattle chip with Night text. */
     .rail-link[data-decision] .rail-count {
       min-width: 20px;
       padding: 0 6px;
@@ -1746,7 +1745,7 @@
       text-decoration: none;
     }
     .logotype .logo-mark {
-      color: var(--ink);
+      color: var(--action);
     }
     .public-main {
       display: flex;
@@ -1886,7 +1885,7 @@
 @layer utilities {
   @layer app {
     /* The logo: the key tag beside the wordmark (logo() in ui.ts). The word takes the
-       parent's colour; the tag is Ironbark on light surfaces, White or Wattle on dark ones. */
+       parent's colour; the tag is Night on light surfaces, White or Wattle on dark ones. */
     .logo {
       display: inline-flex;
       align-items: center;
@@ -1917,6 +1916,12 @@
     .logo.is-sm .logo-mark {
       width: 20px;
       height: 20px;
+    }
+    /* The Harbour ring is too dark on the Night rail, so the rail's links ring in rail text. */
+    .rail-logo:focus-visible,
+    .rail-link:focus-visible,
+    .rail-toggle:focus-visible {
+      outline-color: var(--rail-text);
     }
 
   }
@@ -2560,7 +2565,7 @@
       height: 100%;
       border: 2px solid var(--surface);
       border-radius: 50%;
-      box-shadow: 0 1px 4px rgb(28 38 34 / 0.35);
+      box-shadow: 0 1px 4px rgb(19 33 46 / 0.35);
       color: var(--surface);
     }
     /* Leaflet gives svg elements inside its panes a z-index of 200, which would hide the count: set both. */
@@ -2609,7 +2614,7 @@
       color: var(--surface);
       font-variant-numeric: tabular-nums;
     }
-    /* The one picked: a Gum ring around it, on a pale disc behind it so it reads on any tile. */
+    /* The one picked: a Harbour ring around it, on a pale disc behind it so it reads on any tile. */
     .map-pin.is-selected::before {
       content: '';
       position: absolute;
@@ -2631,7 +2636,7 @@
       fill: none;
     }
 
-    /* A group of pins that overlap: a white disc with how many, ringed in Ironbark, or in Rust or
+    /* A group of pins that overlap: a white disc with how many, ringed in Night, or in Rust or
        Ochre when it holds an Urgent or High Property. */
     .map-group {
       position: relative;
@@ -3405,7 +3410,7 @@
       color: var(--action);
     }
     .request-lead .icon-btn:hover {
-      background: rgb(28 38 34 / 0.06);
+      background: rgb(19 33 46 / 0.06);
     }
     .request-lead .icon-btn:focus-visible {
       outline: 2px solid var(--action);
@@ -3589,7 +3594,7 @@
     }
 
     /* The Tradies directory's Trade filter (pages/tradie.ts): one link per Trade with how
-       many Tradies do it, the current one filled with Gum like the segmented
+       many Tradies do it, the current one filled with Harbour like the segmented
        control. It wraps on phones rather than scrolling sideways. */
     .trade-filter ul {
       display: flex;
@@ -4397,8 +4402,8 @@
     }
 
     /* The Schedule's Week under 768px: a list of days, where a run of empty days is one
-       line (.schedule-quiet). Booked days are white; empty ones stay on Gumleaf behind a
-       hairline so the work stands out; today is ringed in Gum. From 768px the time grid
+       line (.schedule-quiet). Booked days are white; empty ones stay on Paper behind a
+       hairline so the work stands out; today is ringed in Harbour. From 768px the time grid
        below takes its place. */
     .schedule-week {
       display: grid;
@@ -4462,7 +4467,7 @@
       color: var(--muted);
     }
 
-    /* The time grid (schedule-layout.ts places each visit): a Gumleaf tray of 15-minute
+    /* The time grid (schedule-layout.ts places each visit): a Paper tray of 15-minute
        rows under hour lines, the times in a 3.5rem gutter, white visits on it. Rows are at
        least --slot tall and grow to fit what is on them, and the hours, days and lanes are
        subgrids of the one grid, so everything on a row lines up. The grid scrolls sideways
@@ -4632,7 +4637,7 @@
     }
 
     /* The Month: a table of weeks, Monday to Sunday. The days of the months either side are
-       Gumleaf with muted numbers; today's number is a Gum chip. A day lists up to two
+       Paper with muted numbers; today's number is a Harbour chip. A day lists up to two
        visits, else "N Jobs booked"; on phones every booked day says only how many. */
     .schedule-month {
       width: 100%;
@@ -4979,7 +4984,7 @@
     .ticket-list-issue > .ticket-cell {
       min-width: 0;
     }
-    /* No photo: a quiet picture icon on the Gumleaf thumbnail, in a request's row and a Ticket's alike. */
+    /* No photo: a quiet picture icon on the Paper thumbnail, in a request's row and a Ticket's alike. */
     .issue-thumb-none {
       display: grid;
       place-items: center;

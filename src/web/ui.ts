@@ -397,7 +397,7 @@ const TONE: Record<Tone, string> = { neutral: 'badge-neutral', info: 'badge-info
 /**
  * A short label (daisyUI badge, soft style). The text carries the meaning; colour only backs it up.
  * `outline` adds a hairline boundary and a white fill, keeping the tone's text colour: for a badge
- * that sits straight on the Gumleaf page (a neutral badge's own fill is Gumleaf, so it would read as loose text).
+ * that sits straight on the Paper page (a neutral badge's own fill is Paper, so it would read as loose text).
  */
 export function badge(text: string, tone: Tone = 'neutral', o: { wrap?: boolean; outline?: boolean } = {}): Html {
   return toneBadge(text, `${TONE[tone]}${o.outline ? ' is-outline' : ''}`, o.wrap);
@@ -434,7 +434,7 @@ export function entityLink(kind: EntityKind, label: string, href: string): Html 
 }
 
 /**
- * The title of a row in a list, linking to its record: Ironbark and semibold, underlined
+ * The title of a row in a list, linking to its record: Night and semibold, underlined
  * only on hover. In a `stack` table it covers the whole row, so the row is the target.
  */
 export function rowLink(label: string, href: string): Html {
@@ -803,8 +803,8 @@ const BUBBLE_TONE: Record<Tone, string> = { neutral: '', info: 'chat-bubble-info
 /**
  * One message in a conversation (daisyUI chat, https://daisyui.com/components/chat/).
  * Line breaks in `text` are kept; when it is a string, links in it can be
- * followed. Without a tone, `end` bubbles are Gum with white text and `start`
- * bubbles sit on Gumleaf. Links in a bubble take its text colour, underlined, so
+ * followed. Without a tone, `end` bubbles are Harbour with white text and `start`
+ * bubbles sit on Paper. Links in a bubble take its text colour, underlined, so
  * they read on every fill.
  */
 export function chatBubble(o: { side: 'start' | 'end'; header: Html | string; text: Html | string; footer?: Html | string; tone?: Tone }): Html {
@@ -944,7 +944,7 @@ export function ticketCell(o: { ticketId: number; issue: string; address?: strin
  * A Ticket as a work-order docket, read in the order a Property Manager reads it: the
  * stub (the number in the display face, the Urgency badge, the unread dot and `age`), a
  * dashed perforation, then the issue (the Summary, up to three lines) at 16px, the
- * address in Bark, and the stage line (`meta`: Trades and what the Ticket waits on). The
+ * address in Slate, and the stage line (`meta`: Trades and what the Ticket waits on). The
  * whole docket is one link. `street` shows in place of the full address. `unread` adds the
  * unread dot, with the words for screen readers. `decision` is kept for callers and adds
  * the `is-decision` class, but a docket draws no Wattle of its own: decisions live in
@@ -993,7 +993,7 @@ type Count = { label: string; count: number; href: string; decision?: boolean; /
 /**
  * The count sentence: one sentence under the page title in 16px, each count a link into
  * its queue ("2 Maintenance Requests to confirm, 1 Quote to choose and 1 Tradie to
- * rate."). Counts of zero are left out. A count that needs a decision is Ironbark on a
+ * rate."). Counts of zero are left out. A count that needs a decision is Night on a
  * Wattle chip; the others are plain links. When nothing is left, the sentence says so
  * (`empty`, "Nothing needs you right now." by default).
  */
@@ -1118,7 +1118,7 @@ export function segmented(items: { label: string; href: string; active: boolean 
 /**
  * A board column (a lane): a heading with its count, and a body that scrolls
  * inside about 300px. The body is focusable so the keyboard can scroll it. The
- * lane is a Gumleaf tray; the dockets in it are white.
+ * lane is a Paper tray; the dockets in it are white.
  */
 export function lane(o: { title: string; count: number; body: Html }): Html {
   return html`<section class="lane">
@@ -1238,7 +1238,7 @@ const LOGO_MARK =
  * The logo: the key tag beside the "myEST8" wordmark in Bricolage Grotesque, a light "my" and a
  * bold "EST8". The mark is hidden from screen readers, so the logo's accessible
  * name is "myEST8". Put it inside a link or heading; `sm` is a 20px mark, `md`
- * (default) 28px. The mark is only ever Ironbark, White or Wattle.
+ * (default) 28px. The mark is only ever Night, White or Wattle.
  */
 export function logo(o: { size?: 'sm' | 'md' } = {}): Html {
   return html`<span class="logo is-${o.size ?? 'md'}"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" class="logo-mark" aria-hidden="true" focusable="false"><path fill-rule="evenodd" d="${LOGO_MARK}" /></svg><span class="logo-word"><span class="logo-my">my</span>EST8</span></span>`;
