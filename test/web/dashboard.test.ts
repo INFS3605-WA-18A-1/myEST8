@@ -156,7 +156,7 @@ describe('Tickets on the dashboard', () => {
     const docketOf = (board: string) => board.slice(board.indexOf(`href="/tickets/${job.ticketId}"`), board.indexOf('</a>', board.indexOf(`href="/tickets/${job.ticketId}"`)));
 
     const board = await page(w, '/', cookie);
-    expect(board).toContain('<h3 class="lane-title">Quoting</h3>');
+    expect(board).toContain('<span class="stage-name">Quoting</span>');
     expect(board).toContain('href="/tickets"');
     expect(board).not.toContain('All open Tickets');
     const asked = docketOf(board);
@@ -260,11 +260,12 @@ describe('the Next 7 days and Tradie profiles', () => {
     const start = board.indexOf('id="next-7-days"');
     expect(start).toBeGreaterThan(-1);
     const strip = board.slice(start, board.indexOf('</section>', start));
-    expect(strip).toContain('Tue 13 Oct');
+    expect(strip).toContain('Tue 13');
     expect(strip).toContain(`href="/tradies/${w.tradies.pete.id}"`);
     expect(strip).toContain(`href="/tickets/${job.ticketId}"`);
     expect(strip).toContain('12 King St');
-    expect(strip).toContain('Nothing booked Wed 14 – Fri 16 Oct');
+    expect(strip.match(/class="day-chip/g)).toHaveLength(7);
+    expect(strip.match(/class="day-dot"/g)).toHaveLength(1);
   });
 
   test('a Tradie not on Google says so, and an unknown Tradie is not found', async () => {

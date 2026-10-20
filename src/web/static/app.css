@@ -1021,9 +1021,6 @@
       color: var(--muted);
     }
     @media (min-width: 64rem) {
-      .dashboard-glance .lane-body {
-        max-height: 15rem;
-      }
       .dashboard-inbox {
         max-height: 34rem;
         overflow-y: auto;
@@ -1049,77 +1046,227 @@
       padding-bottom: 0;
       border-bottom: 0;
     }
-    /* Ticket lanes in the right column: a white box with a thin blue outline and a pale blue heading, flat rows inside. */
-    .dashboard-glance .lane {
-      overflow: hidden;
-      background: var(--surface);
-      border: 1px solid #8fb0cc;
+    /* Tickets by stage: a row of stage tiles (tap one to show only that stage), then flat rows. No script: hidden radios do the switching. */
+    .stage-board {
+      display: grid;
+      gap: 10px;
+    }
+    .stage-tiles {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(5.2rem, 1fr));
+      gap: 8px;
+    }
+    .stage-tile {
+      display: grid;
+      gap: 2px;
+      padding: 8px 10px;
+      background: var(--page);
+      border: 1px solid transparent;
       border-radius: 8px;
+      cursor: pointer;
     }
-    .dashboard-glance .lane-head {
-      padding: 8px 12px;
-      background: #e8f0f7;
-      border-bottom: 1px solid #c4d7e7;
+    .stage-count {
+      font-family: var(--font-head);
+      font-size: 22px;
+      font-weight: 600;
+      line-height: 1.1;
     }
-    .dashboard-glance .lane-title,
-    .dashboard-glance .lane-count {
-      color: var(--ink);
+    .stage-name {
+      font-size: 13px;
+      line-height: 1.25;
+      color: var(--muted);
     }
-    .dashboard-glance .lane-body {
-      gap: 0;
-      padding: 0 12px;
+    .stage-tile.is-zero .stage-count {
+      color: var(--muted);
+    }
+    .stage-tile:hover {
+      border-color: #8fb0cc;
+    }
+    .stage-showall {
+      display: none;
+      justify-self: start;
+      font-size: 13px;
+      color: var(--action);
+      text-decoration: underline;
+      cursor: pointer;
+    }
+    #stage-all:not(:checked) ~ .stage-showall {
+      display: inline;
+    }
+    .stage-board input:focus-visible ~ .stage-tiles .stage-tile {
+      outline-offset: 0;
+    }
+    .stage-list {
       scrollbar-width: thin;
     }
-    .dashboard-glance .docket {
-      position: relative;
+    .stage-row .docket {
       padding: 10px 0;
       background: transparent;
       border: 0;
-      border-bottom: 1px solid var(--line);
+      border-top: 1px solid var(--line);
       border-radius: 0;
     }
-    .dashboard-glance a.docket:hover {
+    .stage-row a.docket:hover {
       background: var(--page);
     }
-    .dashboard-glance .docket:last-child {
-      border-bottom: 0;
-    }
-    .dashboard-glance .docket-perf {
+    .stage-row .docket-perf {
       display: none;
     }
     /* The number and age live on the Ticket itself; here only the unread dot stays, at the corner. */
-    .dashboard-glance .docket-foot {
+    .stage-row .docket {
+      position: relative;
+    }
+    .stage-row .docket-foot {
       position: absolute;
       top: 12px;
       right: 0;
     }
-    .dashboard-glance .docket-foot .docket-number,
-    .dashboard-glance .docket-foot .ml-auto {
+    .stage-row .docket-foot .docket-number,
+    .stage-row .docket-foot .ml-auto {
       display: none;
     }
-    .dashboard-glance .docket.is-decision,
-    .dashboard-glance a.docket.is-decision:hover {
+    .stage-row .docket.is-decision,
+    .stage-row a.docket.is-decision:hover {
       padding-left: 10px;
       border-left-width: 0;
       box-shadow: inset 3px 0 0 var(--hivis);
     }
-
-    /* Urgent Repairs, when there are any, are the loudest box on the page: red edge and top, tinted ground. */
-    .urgent-panel > .section {
-      background: #fdf4f2;
-      border-color: #ecc3be;
-      border-top: 3px solid #c8372d;
+    @media (min-width: 64rem) {
+      .stage-list {
+        max-height: 19rem;
+        overflow-y: auto;
+      }
     }
+    #stage-quoting:checked ~ .stage-list .stage-row:not([data-stage="quoting"]) {
+      display: none;
+    }
+    #stage-quoting:checked ~ .stage-tiles label[for="stage-quoting"] {
+      background: #e8f0f7;
+      border-color: #8fb0cc;
+    }
+    #stage-awaiting_owner:checked ~ .stage-list .stage-row:not([data-stage="awaiting_owner"]) {
+      display: none;
+    }
+    #stage-awaiting_owner:checked ~ .stage-tiles label[for="stage-awaiting_owner"] {
+      background: #e8f0f7;
+      border-color: #8fb0cc;
+    }
+    #stage-approved:checked ~ .stage-list .stage-row:not([data-stage="approved"]) {
+      display: none;
+    }
+    #stage-approved:checked ~ .stage-tiles label[for="stage-approved"] {
+      background: #e8f0f7;
+      border-color: #8fb0cc;
+    }
+    #stage-scheduled:checked ~ .stage-list .stage-row:not([data-stage="scheduled"]) {
+      display: none;
+    }
+    #stage-scheduled:checked ~ .stage-tiles label[for="stage-scheduled"] {
+      background: #e8f0f7;
+      border-color: #8fb0cc;
+    }
+    #stage-done:checked ~ .stage-list .stage-row:not([data-stage="done"]) {
+      display: none;
+    }
+    #stage-done:checked ~ .stage-tiles label[for="stage-done"] {
+      background: #e8f0f7;
+      border-color: #8fb0cc;
+    }
+
+    /* Next 7 days: a strip of day chips (today filled, a dot where a visit is booked), then one row per visit. */
+    .day-strip {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 6px;
+      margin: 0 0 10px;
+      padding: 0;
+      list-style: none;
+    }
+    .day-chip {
+      display: grid;
+      justify-items: center;
+      gap: 1px;
+      padding: 6px 0 8px;
+      background: var(--page);
+      border: 1px solid transparent;
+      border-radius: 10px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .day-chip time {
+      display: grid;
+      justify-items: center;
+    }
+    .day-num {
+      font-family: var(--font-head);
+      font-size: 17px;
+      font-weight: 600;
+      line-height: 1.2;
+      color: var(--ink);
+    }
+    .day-chip.is-today {
+      background: #e8f0f7;
+      border-color: #8fb0cc;
+    }
+    .day-chip.is-today .day-name {
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .day-dot {
+      width: 5px;
+      height: 5px;
+      margin-top: 1px;
+      border-radius: 50%;
+      background: var(--action);
+    }
+    .visit-list {
+      display: grid;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .visit-row {
+      display: grid;
+      grid-template-columns: 3.5rem minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: baseline;
+      padding: 10px 0;
+      border-top: 1px solid var(--line);
+      font-size: 14px;
+    }
+    .visit-day {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .visit-what {
+      display: grid;
+      min-width: 0;
+    }
+    .visit-tradie {
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .visit-place {
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .visit-time {
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .visit-none {
+      margin: 0;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    /* Urgent Repairs, when there are any: a plain card; the red is a thin edge on each repair and the heading. */
     .urgent-panel .section-title {
       color: #8f1d14;
-      font-size: 17px;
     }
     .urgent-panel .urgent-item {
-      border-color: #ecc3be;
       border-left: 3px solid #c8372d;
-    }
-    .urgent-panel .urgent-issue {
-      font-size: 15px;
     }
 
     /* The dashboard: what needs attention leads, in larger type. */

@@ -18,6 +18,7 @@ import { shellInfo } from '../shell.ts';
 import {
   badge,
   button,
+  clip,
   countStrip,
   dl,
   docket,
@@ -38,7 +39,7 @@ import {
   ROLE_LABEL,
   type Tone,
 } from '../ui.ts';
-import { dayRange, shortDay, streetOf, type Booking } from '../bookings.ts';
+import { shortDay, streetOf, type Booking } from '../bookings.ts';
 import { streamOf } from '../stream.ts';
 
 /** Kept for the pages that still import it from here; the words live with the other request checks. */
@@ -362,12 +363,19 @@ function ticketsByStage(tickets: BoardTicket[], filter: Filter, now: Date, timeZ
     id: 'tickets',
     actions: linkButton('See all Tickets', filter === 'all' ? '/tickets?filter=all' : '/tickets', { variant: 'ghost', size: 'sm' }),
     body: tickets.length
-      ? html`<div class="grid gap-3">
-          ${STAGES.map((stage) => {
-            const inLane = tickets.filter((t) => t.stage === stage);
-            if (!inLane.length) return '';
-            return lane({ title: STAGE_TITLE[stage], count: inLane.length, body: html`${inLane.map((t) => ticketDocket(t, now, timeZone))}` });
-          })}
+      ? html`<div class="stage-board">
+          <input type="radio" name="stage" id="stage-all" class="sr-only" checked aria-label="Show every stage" />
+          ${STAGES.map((stage) => html`<input type="radio" name="stage" id="stage-${stage}" class="sr-only" aria-label="Show ${STAGE_TITLE[stage]}" />`)}
+          <div class="stage-tiles">
+            ${STAGES.map((stage) => {
+              const count = tickets.filter((t) => t.stage === stage).length;
+              return html`<label for="stage-${stage}" class="stage-tile${count === 0 ? ' is-zero' : ''}"><span class="stage-count">${count}</span><span class="stage-name">${STAGE_TITLE[stage]}</span></label>`;
+            })}
+          </div>
+          <label for="stage-all" class="stage-showall">Show every stage</label>
+          <div class="stage-list">
+            ${STAGES.flatMap((stage) => tickets.filter((t) => t.stage === stage).map((t) => html`<div class="stage-row" data-stage="${stage}">${ticketDocket(t, now, timeZone)}</div>`))}
+          </div>
         </div>`
       : emptyState(filter === 'mine' ? 'No open Tickets on your Properties. Confirming a Maintenance Request opens one.' : 'No open Tickets. Confirming a Maintenance Request opens one.'),
   });
@@ -410,9 +418,9 @@ function ticketDocket(t: BoardTicket, now: Date, timeZone: string): Html {
 // Next 7 days
 
 /**
- * Today and the six days after it, in the Agency's time zone. Each day with bookings
- * gets a row (today always has one); the empty days between them collapse into a
- * single muted line.
+ * Today and the six days after it, in the Agency's time zone, as a strip of day chips
+ * (a dot under each day with a visit, today filled), then one row for each booked visit:
+ * its day, the Tradie and the issue, the time.
  */
 function nextSevenDays(bookings: Booking[], now: Date, timeZone: string): Html {
   const today = dayOf(now, timeZone);
@@ -421,48 +429,36 @@ function nextSevenDays(bookings: Booking[], now: Date, timeZone: string): Html {
     const day = dayOf(b.start, timeZone);
     byDay.set(day, [...(byDay.get(day) ?? []), b]);
   }
-  const rows: Html[] = [];
-  let quiet: string[] = [];
-  const flushQuiet = () => {
-    if (quiet.length) rows.push(html`<li class="px-2 py-2 text-sm text-muted">Nothing booked ${dayRange(quiet, { month: true })}</li>`);
-    quiet = [];
-  };
-  for (let i = 0; i < 7; i++) {
-    const day = addDays(today, i);
-    const dayBookings = byDay.get(day) ?? [];
-    if (i > 0 && !dayBookings.length) {
-      quiet.push(day);
-      continue;
-    }
-    flushQuiet();
-    rows.push(dayRow(day, dayBookings, i === 0, timeZone));
-  }
-  flushQuiet();
+  const days = Array.from({ length: 7 }, (_, i) => addDays(today, i));
+  const weekday = new Intl.DateTimeFormat('en-AU', { timeZone: 'UTC', weekday: 'short' });
+  const dateOf = new Intl.DateTimeFormat('en-AU', { timeZone: 'UTC', day: 'numeric' });
+  const booked = days.filter((day) => byDay.has(day));
   return section({
     title: 'Next 7 days',
     id: 'next-7-days',
     actions: linkButton('Open calendar', '/calendar', { variant: 'ghost', size: 'sm' }),
-    body: html`<ol class="grid">${rows}</ol>`,
+    body: html`<ol class="day-strip">
+        ${days.map((day, i) => {
+          const at = new Date(`${day}T00:00:00Z`);
+          return html`<li class="day-chip${i === 0 ? ' is-today' : ''}" ${i === 0 ? html`aria-current="date"` : ''}><time datetime="${day}"><span class="day-name">${weekday.format(at)}</span><span class="day-num">${dateOf.format(at)}</span></time>${byDay.has(day) ? html`<span class="day-dot" role="img" aria-label="Has a visit"></span>` : ''}</li>`;
+        })}
+      </ol>
+      ${booked.length
+        ? html`<ul class="visit-list">${booked.flatMap((day) => byDay.get(day)!.map((b) => visitRow(day, b, timeZone)))}</ul>`
+        : html`<p class="visit-none">Nothing booked in the next 7 days.</p>`}`,
   });
 }
 
-/** One day: its date (today is highlighted), then its bookings or "Nothing booked today". */
-function dayRow(day: string, bookings: Booking[], isToday: boolean, timeZone: string): Html {
-  return html`<li class="grid gap-2 border-t border-line px-2 py-2 first:border-t-0 sm:grid-cols-[7rem_minmax(0,1fr)] ${isToday ? 'rounded bg-page' : ''}" ${isToday ? html`aria-current="date"` : ''}>
-    <p class="text-sm font-semibold"><time datetime="${day}">${shortDay(day, { month: true })}</time>${isToday ? html` ${badge('Today', 'info')}` : ''}</p>
-    ${bookings.length
-      ? html`<ul class="grid gap-1.5">${bookings.map((b) => bookingLine(b, timeZone))}</ul>`
-      : html`<p class="text-sm text-muted">Nothing booked today</p>`}
-  </li>`;
-}
-
-/** One booking: its time, the Tradie's business name (linked to the profile) and the street (linked to the Ticket). */
-function bookingLine(b: Booking, timeZone: string): Html {
+/** One booked visit: its day, the Tradie (linked to the profile) and the issue and street (linked to the Ticket), then the time. */
+function visitRow(day: string, b: Booking, timeZone: string): Html {
   const time = new Intl.DateTimeFormat('en-AU', { timeZone, hour: 'numeric', minute: '2-digit' }).format(new Date(b.start));
-  return html`<li class="flex min-w-0 flex-wrap items-baseline gap-x-3 text-sm">
-    <time datetime="${b.start}" class="num shrink-0 font-semibold">${time}</time>
-    <a class="link min-w-0 truncate" href="/tradies/${b.tradieId}">${b.businessName}</a>
-    <a class="link min-w-0 truncate" href="/tickets/${b.ticketId}">${streetOf(b.propertyAddress)}</a>
+  return html`<li class="visit-row">
+    <span class="visit-day">${shortDay(day)}</span>
+    <span class="visit-what">
+      <a class="visit-tradie" href="/tradies/${b.tradieId}">${b.businessName}</a>
+      <a class="visit-place" href="/tickets/${b.ticketId}">${clip(b.issue, { lines: 1 })} · ${streetOf(b.propertyAddress)}</a>
+    </span>
+    <time datetime="${b.start}" class="visit-time num">${time}</time>
   </li>`;
 }
 
