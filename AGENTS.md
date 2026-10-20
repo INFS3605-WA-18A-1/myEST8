@@ -36,6 +36,7 @@ your branch ──PR──▶ dev ──release PR──▶ master (deploys to p
 - Open a PR from `dev` to `master`. Before merging, a human looks over `dev` as a whole: read the diff, and run the app with `npm run demo`.
 - Merge it with **Create a merge commit**, never squash or rebase. Squashing gives `master` commits that `dev` doesn't have, and then every later release conflicts.
 - Merging deploys to production and migrates its database. Do it when someone can watch the CI `deploy-prod` and `smoke` jobs. If something breaks, roll back with the Rollback workflow (`docs/vercel.md`).
+- There is no separate QA or staging environment. This is a university project with no real users, so the production deployment from `master` is where changes are tested against the real channels (SMS, email). Don't add a QA environment, staging deploys or live-test pipelines.
 - Agents never merge into `master`. They stop once the release PR is open.
 
 ### Hotfixes
