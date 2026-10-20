@@ -25,7 +25,8 @@
     "db:migrate": "tsx scripts/db.ts migrate",
     "db:reset": "tsx scripts/db.ts reset",
     "screenshots": "tsx scripts/screenshot.ts",
-    "smoke:live": "tsx scripts/smoke-live.ts"
+    "smoke:live": "tsx scripts/smoke-live.ts",
+    "qa:dry-run": "tsx scripts/qa-dry-run.ts"
   },
   "dependencies": {
     "@fontsource-variable/bricolage-grotesque": "^5.3.0",

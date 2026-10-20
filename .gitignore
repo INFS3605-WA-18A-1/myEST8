@@ -7,6 +7,9 @@ data/
 *.sqlite
 *.sqlite-*
 
+# The QA email journey's logs (the QA workflow uploads them when a run fails)
+qa-journey-logs/
+
 # Playwright output
 test-results/
 playwright-report/
