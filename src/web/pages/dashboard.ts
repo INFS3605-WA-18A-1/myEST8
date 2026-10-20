@@ -1,6 +1,6 @@
 // The Property Manager's dispatch board. What needs attention comes first (decisions,
 // then the inbox with its actions); beside it from 1024px sit the next 7 days and Tickets
-// by stage. Urgent Repairs run the full width underneath. Also the actions on each, and /files/:id for photos.
+// by stage, with Urgent Repairs at the top of that column. Also the actions on each, and /files/:id for photos.
 // Controls repeated per item get the item's id in their element id ("reason-12"),
 // so every label on the page points at its own control.
 
@@ -33,7 +33,6 @@ import {
   queueRow,
   section,
   segmented,
-  table,
   urgencyBadge,
   type Html,
   ROLE_LABEL,
@@ -135,14 +134,14 @@ export function dashboardPages() {
           <div class="dashboard-desk grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] lg:items-start">
             <div class="dashboard-main grid min-w-0 gap-4">
               ${decisions(view, q, timeZone, now, shareUrl(c, '/?filter=all#requests'))}
-              ${section({ title: 'Inbox', id: 'inbox', actions: countBadge(view.inbox.length), body: inboxList(view.inbox, people, timeZone, q) })}
+              ${section({ title: 'Inbox', id: 'inbox', actions: countBadge(view.inbox.length), body: html`<div class="dashboard-inbox">${inboxList(view.inbox, people, timeZone, q)}</div>` })}
             </div>
             <div class="dashboard-glance grid min-w-0 gap-4">
+              ${section({ title: 'Urgent Repairs', id: 'urgent-repairs', actions: countBadge(view.urgentRepairs.length), body: urgentRepairsList(view.urgentRepairs, timeZone) })}
               ${nextSevenDays(view.calendar, now, timeZone)}
               ${ticketsByStage(view.tickets, filter, now, timeZone)}
             </div>
           </div>
-          ${section({ title: 'Urgent Repairs', id: 'urgent-repairs', actions: countBadge(view.urgentRepairs.length), body: urgentRepairsTable(view.urgentRepairs, timeZone) })}
         `,
       }),
     );
@@ -478,23 +477,18 @@ function ageOf(iso: string, now: Date) {
 
 // Urgent Repairs
 
-function urgentRepairsTable(repairs: UrgentRepair[], timeZone: string): Html {
+function urgentRepairsList(repairs: UrgentRepair[], timeZone: string): Html {
   if (!repairs.length) return emptyState('No Urgent Repairs reported.');
-  return table(
-    ['Property', 'Tenant', 'Issue', 'Status', 'Receipts', 'Reported'],
-    repairs.map((u) => {
+  return html`<ul class="grid gap-2">
+    ${repairs.map((u) => {
       const [label, tone] = URGENT_REPAIR_STATUS[u.status];
-      return [
-        html`${u.propertyAddress}`,
-        html`${u.tenantName}`,
-        html`${u.description}`,
-        badge(label, tone),
-        html`${u.receipts}`,
-        html`${formatWhen(u.reportedAt, timeZone)}`,
-      ];
-    }),
-    { caption: 'Urgent Repairs', stack: true },
-  );
+      return html`<li class="urgent-item">
+        <p class="urgent-issue">${u.description}</p>
+        <p class="urgent-meta">${u.propertyAddress} · ${u.tenantName} · ${formatWhen(u.reportedAt, timeZone)}</p>
+        <p class="urgent-foot">${badge(label, tone)}<span class="urgent-receipts">${u.receipts === 1 ? '1 receipt' : u.receipts ? `${u.receipts} receipts` : 'No receipts yet'}</span></p>
+      </li>`;
+    })}
+  </ul>`;
 }
 
 // Inbox
