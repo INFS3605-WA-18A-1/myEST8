@@ -11,6 +11,8 @@ The shared copy is two systemd user services on this server, so it survives logo
 
 Files: `deploy/serve.sh`, `deploy/tunnel.sh`, `deploy/*.service` (symlinked into `~/.config/systemd/user/`). Postgres is the `myest8-postgres` Docker container, set to restart with Docker.
 
+A second copy, `myest8-qa` (`serve.sh 4100 qa`, schema `qa`, its own `qa.env`), tests releases with a real email round trip. It shares the machine, the tunnel and the Postgres container with these two services, and nothing else: see [qa.md](qa.md).
+
 ```sh
 cat ~/.local/state/myest8/public-url            # the link to share
 systemctl --user status myest8 myest8-tunnel

@@ -33,6 +33,7 @@ your branch ──PR──▶ dev ──release PR──▶ master (deploys to p
 
 ### Releasing `dev` to `master`
 
+- First push `dev` to the QA environment on the home server (`git push origin dev:qa`) and let the **QA** workflow go green: it sends a real email through Gmail and Resend and checks the app answers (`docs/qa.md`, ADR 0011). Agents don't push to `qa` unless asked, because a push sends real email.
 - Open a PR from `dev` to `master`. Before merging, a human looks over `dev` as a whole: read the diff, and run the app with `npm run demo`.
 - Merge it with **Create a merge commit**, never squash or rebase. Squashing gives `master` commits that `dev` doesn't have, and then every later release conflicts.
 - Merging deploys to production and migrates its database. Do it when someone can watch the CI `deploy-prod` and `smoke` jobs. If something breaks, roll back with the Rollback workflow (`docs/vercel.md`).
