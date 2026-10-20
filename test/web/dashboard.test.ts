@@ -156,7 +156,7 @@ describe('Tickets on the dashboard', () => {
     const docketOf = (board: string) => board.slice(board.indexOf(`href="/tickets/${job.ticketId}"`), board.indexOf('</a>', board.indexOf(`href="/tickets/${job.ticketId}"`)));
 
     const board = await page(w, '/', cookie);
-    expect(board).toContain('<span class="stage-name">Quoting</span>');
+    expect(board).toContain('<h3 class="lane-title">Quoting</h3>');
     expect(board).toContain('href="/tickets"');
     expect(board).not.toContain('All open Tickets');
     const asked = docketOf(board);

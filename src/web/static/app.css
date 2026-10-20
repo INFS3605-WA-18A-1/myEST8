@@ -1021,6 +1021,9 @@
       color: var(--muted);
     }
     @media (min-width: 64rem) {
+      .dashboard-glance .lane-body {
+        max-height: 15rem;
+      }
       .dashboard-inbox {
         max-height: 34rem;
         overflow-y: auto;
@@ -1028,149 +1031,129 @@
       }
     }
 
-    /* Quieter lists on the dashboard: rows split by hairlines, not cards inside boxes, and no side stripes. */
+    /* The dashboard Inbox: no outer box, each message its own white card (title and reason on top, who and when, then quiet actions). */
+    .dashboard-main > .section:has(.dashboard-inbox) {
+      padding: 0;
+      background: transparent;
+      border: 0;
+      box-shadow: none;
+    }
     .dashboard-inbox > .grid {
-      gap: 0;
+      gap: 12px;
     }
     .dashboard-inbox .inbox-item {
-      padding: 12px 0;
+      display: grid;
+      gap: 6px;
+      padding: 16px 18px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      box-shadow: var(--shadow-soft);
+    }
+    .dashboard-inbox .inbox-item-who {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .dashboard-inbox .inbox-item-text {
+      margin: 4px 0 0;
+      padding: 10px 14px;
+      background: var(--page);
+      border: 0;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 400;
+    }
+    .dashboard-inbox .inbox-item-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 12px;
+      margin-top: 4px;
+    }
+    /* Pick a contact is an outlined button, Dismiss a quiet word: the same pair as Ask for details and Decline. */
+    .dashboard-inbox .inbox-pick > summary {
+      display: inline-flex;
+      align-items: center;
+      min-height: 36px;
+      padding: 0 14px;
+      background: var(--surface);
+      border: 1px solid #8fb0cc;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--ink);
+      cursor: pointer;
+    }
+    .dashboard-inbox .inbox-item-actions .btn-ghost {
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .dashboard-inbox .inbox-pick > summary {
+      list-style: none;
+    }
+    .dashboard-inbox .inbox-pick > summary::-webkit-details-marker {
+      display: none;
+    }
+    .dashboard-inbox .inbox-pick[open] {
+      flex-basis: 100%;
+    }
+    .dashboard-inbox .inbox-pick[open] > summary {
+      margin-bottom: 8px;
+    }
+    /* Ticket lanes in the right column: a white box with a thin blue outline and a pale blue heading, flat rows inside. */
+    .dashboard-glance .lane {
+      overflow: hidden;
+      background: var(--surface);
+      border: 1px solid #8fb0cc;
+      border-radius: 8px;
+    }
+    .dashboard-glance .lane-head {
+      padding: 8px 12px;
+      background: #e8f0f7;
+      border-bottom: 1px solid #c4d7e7;
+    }
+    .dashboard-glance .lane-title,
+    .dashboard-glance .lane-count {
+      color: var(--ink);
+    }
+    .dashboard-glance .lane-body {
+      gap: 0;
+      padding: 0 12px;
+      scrollbar-width: thin;
+    }
+    .dashboard-glance .docket {
+      position: relative;
+      padding: 10px 0;
       background: transparent;
       border: 0;
       border-bottom: 1px solid var(--line);
       border-radius: 0;
     }
-    .dashboard-inbox .inbox-item:first-child {
-      padding-top: 0;
+    .dashboard-glance a.docket:hover {
+      background: var(--page);
     }
-    .dashboard-inbox .inbox-item:last-child {
-      padding-bottom: 0;
+    .dashboard-glance .docket:last-child {
       border-bottom: 0;
     }
-    /* Tickets by stage: a row of stage tiles (tap one to show only that stage), then flat rows. No script: hidden radios do the switching. */
-    .stage-board {
-      display: grid;
-      gap: 10px;
-    }
-    .stage-tiles {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(5.2rem, 1fr));
-      gap: 8px;
-    }
-    .stage-tile {
-      display: grid;
-      gap: 2px;
-      padding: 8px 10px;
-      background: var(--page);
-      border: 1px solid transparent;
-      border-radius: 8px;
-      cursor: pointer;
-    }
-    .stage-count {
-      font-family: var(--font-head);
-      font-size: 22px;
-      font-weight: 600;
-      line-height: 1.1;
-    }
-    .stage-name {
-      font-size: 13px;
-      line-height: 1.25;
-      color: var(--muted);
-    }
-    .stage-tile.is-zero .stage-count {
-      color: var(--muted);
-    }
-    .stage-tile:hover {
-      border-color: #8fb0cc;
-    }
-    .stage-showall {
-      display: none;
-      justify-self: start;
-      font-size: 13px;
-      color: var(--action);
-      text-decoration: underline;
-      cursor: pointer;
-    }
-    #stage-all:not(:checked) ~ .stage-showall {
-      display: inline;
-    }
-    .stage-board input:focus-visible ~ .stage-tiles .stage-tile {
-      outline-offset: 0;
-    }
-    .stage-list {
-      scrollbar-width: thin;
-    }
-    .stage-row .docket {
-      padding: 10px 0;
-      background: transparent;
-      border: 0;
-      border-top: 1px solid var(--line);
-      border-radius: 0;
-    }
-    .stage-row a.docket:hover {
-      background: var(--page);
-    }
-    .stage-row .docket-perf {
+    .dashboard-glance .docket-perf {
       display: none;
     }
     /* The number and age live on the Ticket itself; here only the unread dot stays, at the corner. */
-    .stage-row .docket {
-      position: relative;
-    }
-    .stage-row .docket-foot {
+    .dashboard-glance .docket-foot {
       position: absolute;
       top: 12px;
       right: 0;
     }
-    .stage-row .docket-foot .docket-number,
-    .stage-row .docket-foot .ml-auto {
+    .dashboard-glance .docket-foot .docket-number,
+    .dashboard-glance .docket-foot .ml-auto {
       display: none;
     }
-    .stage-row .docket.is-decision,
-    .stage-row a.docket.is-decision:hover {
+    .dashboard-glance .docket.is-decision,
+    .dashboard-glance a.docket.is-decision:hover {
       padding-left: 10px;
       border-left-width: 0;
       box-shadow: inset 3px 0 0 var(--hivis);
-    }
-    @media (min-width: 64rem) {
-      .stage-list {
-        max-height: 19rem;
-        overflow-y: auto;
-      }
-    }
-    #stage-quoting:checked ~ .stage-list .stage-row:not([data-stage="quoting"]) {
-      display: none;
-    }
-    #stage-quoting:checked ~ .stage-tiles label[for="stage-quoting"] {
-      background: #e8f0f7;
-      border-color: #8fb0cc;
-    }
-    #stage-awaiting_owner:checked ~ .stage-list .stage-row:not([data-stage="awaiting_owner"]) {
-      display: none;
-    }
-    #stage-awaiting_owner:checked ~ .stage-tiles label[for="stage-awaiting_owner"] {
-      background: #e8f0f7;
-      border-color: #8fb0cc;
-    }
-    #stage-approved:checked ~ .stage-list .stage-row:not([data-stage="approved"]) {
-      display: none;
-    }
-    #stage-approved:checked ~ .stage-tiles label[for="stage-approved"] {
-      background: #e8f0f7;
-      border-color: #8fb0cc;
-    }
-    #stage-scheduled:checked ~ .stage-list .stage-row:not([data-stage="scheduled"]) {
-      display: none;
-    }
-    #stage-scheduled:checked ~ .stage-tiles label[for="stage-scheduled"] {
-      background: #e8f0f7;
-      border-color: #8fb0cc;
-    }
-    #stage-done:checked ~ .stage-list .stage-row:not([data-stage="done"]) {
-      display: none;
-    }
-    #stage-done:checked ~ .stage-tiles label[for="stage-done"] {
-      background: #e8f0f7;
-      border-color: #8fb0cc;
     }
 
     /* Next 7 days: a strip of day chips (today filled, a dot where a visit is booked), then one row per visit. */

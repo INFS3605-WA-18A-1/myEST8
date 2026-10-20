@@ -363,19 +363,12 @@ function ticketsByStage(tickets: BoardTicket[], filter: Filter, now: Date, timeZ
     id: 'tickets',
     actions: linkButton('See all Tickets', filter === 'all' ? '/tickets?filter=all' : '/tickets', { variant: 'ghost', size: 'sm' }),
     body: tickets.length
-      ? html`<div class="stage-board">
-          <input type="radio" name="stage" id="stage-all" class="sr-only" checked aria-label="Show every stage" />
-          ${STAGES.map((stage) => html`<input type="radio" name="stage" id="stage-${stage}" class="sr-only" aria-label="Show ${STAGE_TITLE[stage]}" />`)}
-          <div class="stage-tiles">
-            ${STAGES.map((stage) => {
-              const count = tickets.filter((t) => t.stage === stage).length;
-              return html`<label for="stage-${stage}" class="stage-tile${count === 0 ? ' is-zero' : ''}"><span class="stage-count">${count}</span><span class="stage-name">${STAGE_TITLE[stage]}</span></label>`;
-            })}
-          </div>
-          <label for="stage-all" class="stage-showall">Show every stage</label>
-          <div class="stage-list">
-            ${STAGES.flatMap((stage) => tickets.filter((t) => t.stage === stage).map((t) => html`<div class="stage-row" data-stage="${stage}">${ticketDocket(t, now, timeZone)}</div>`))}
-          </div>
+      ? html`<div class="grid gap-3">
+          ${STAGES.map((stage) => {
+            const inLane = tickets.filter((t) => t.stage === stage);
+            if (!inLane.length) return '';
+            return lane({ title: STAGE_TITLE[stage], count: inLane.length, body: html`${inLane.map((t) => ticketDocket(t, now, timeZone))}` });
+          })}
         </div>`
       : emptyState(filter === 'mine' ? 'No open Tickets on your Properties. Confirming a Maintenance Request opens one.' : 'No open Tickets. Confirming a Maintenance Request opens one.'),
   });
@@ -504,13 +497,16 @@ function inboxItem(item: InboxItem, people: Person[], timeZone: string, q: strin
   const guesses = item.bestGuess && Object.keys(item.bestGuess).length ? item.bestGuess : null;
   return html`<article class="inbox-item${item.personId === null ? ' is-unknown' : ''}" id="inbox-${item.itemId}">
     <div class="inbox-item-head">
-      <blockquote class="inbox-item-text">${item.text}</blockquote>
+      <div class="min-w-0">
+        <p class="inbox-item-who">${item.personName ?? item.from}</p>
+        <p class="inbox-item-from">
+          ${item.personName ? html`<span>${item.from}</span>` : ''}
+          <span>${formatWhen(item.receivedAt, timeZone)}</span>
+        </p>
+      </div>
       ${badge(reason, tone)}
     </div>
-    <p class="inbox-item-from">
-      ${item.personName ? html`<span>${item.personName}</span><span>${item.from}</span>` : html`<span>${item.from}</span>`}
-      <span>${formatWhen(item.receivedAt, timeZone)}</span>
-    </p>
+    <blockquote class="inbox-item-text">${item.text}</blockquote>
     ${guesses
       ? html`<details class="inbox-item-guess">
           <summary>Looks like: ${guessSummary(guesses)}</summary>
@@ -519,7 +515,9 @@ function inboxItem(item: InboxItem, people: Person[], timeZone: string, q: strin
       : ''}
     <div class="inbox-item-actions">
       ${item.personId === null
-        ? html`<form method="post" action="${base}/link${q}" class="inbox-item-link">
+        ? html`<details class="inbox-pick">
+            <summary>Pick a contact</summary>
+            <form method="post" action="${base}/link${q}" class="inbox-item-link">
             ${field({
               label: 'Link sender to',
               name: 'personId',
@@ -531,7 +529,8 @@ function inboxItem(item: InboxItem, people: Person[], timeZone: string, q: strin
               hint: 'Their next message from this address will be recognised.',
             })}
             ${button('Link sender', { size: 'sm' })}
-          </form>`
+            </form>
+          </details>`
         : item.reason === 'low_confidence' && item.bestGuess
           ? postButton(`${base}/route${q}`, 'Route with best guess', { size: 'sm' })
           : ''}
