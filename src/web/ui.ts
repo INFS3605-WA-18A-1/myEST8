@@ -897,15 +897,15 @@ export function docket(o: {
 }
 
 /**
- * The count strip: one row of counts that link into the queues. Decision counts
- * take the Wattle chip; the others a quiet one.
+ * The count strip: one row of counts that link into the queues. A `tone` colours a tile
+ * while its count is above zero: `attention` Wattle, `urgent` red; zeros stay plain.
  */
-export function countStrip(items: { label: string; count: number; href: string; decision?: boolean }[]): Html {
+export function countStrip(items: { label: string; count: number; href: string; decision?: boolean; tone?: 'attention' | 'urgent' }[]): Html {
   return html`<nav aria-label="Counts">
     <ul class="count-strip">
       ${items.map(
         (item) =>
-          html`<li><a href="${item.href}" class="count-item"><span class="count-chip ${item.decision ? 'is-decision' : ''}${item.count === 0 ? ' is-zero' : ''}">${item.count}</span><span class="count-label">${item.label}</span></a></li>`,
+          html`<li><a href="${item.href}" class="count-item${item.tone && item.count > 0 ? ` is-${item.tone}` : ''}"><span class="count-chip ${item.decision ? 'is-decision' : ''}${item.count === 0 ? ' is-zero' : ''}">${item.count}</span><span class="count-label">${item.label}</span></a></li>`,
       )}
     </ul>
   </nav>`;

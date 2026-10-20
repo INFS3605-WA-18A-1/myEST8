@@ -968,6 +968,28 @@
     .count-strip .count-chip.is-zero {
       color: var(--muted);
     }
+    /* A tile with something in it takes a tint: Wattle for what needs the Property Manager, red for urgent. */
+    .count-item.is-attention {
+      background: #fff3cf;
+      box-shadow: inset 0 -3px 0 var(--hivis);
+    }
+    .count-item.is-urgent {
+      background: #fde6e3;
+      box-shadow: inset 0 -3px 0 #c8372d;
+    }
+    .count-item.is-urgent .count-chip {
+      color: #8f1d14;
+    }
+    .count-item.is-urgent .count-label {
+      color: #6e1710;
+    }
+    .count-item.is-attention .count-label {
+      color: #4a3a00;
+    }
+    .count-item.is-attention:hover,
+    .count-item.is-urgent:hover {
+      filter: brightness(0.97);
+    }
     .count-label {
       color: var(--muted);
     }
@@ -1029,50 +1051,46 @@
       padding-bottom: 0;
       border-bottom: 0;
     }
+    /* Ticket lanes in the right column: a Harbour tray with white lettering, holding white dockets. */
     .dashboard-glance .lane {
-      background: transparent;
-      border: 0;
-      border-radius: 0;
+      background: var(--action);
+      border-color: var(--action);
+      border-radius: 8px;
     }
     .dashboard-glance .lane-head {
-      padding: 0 0 4px;
+      padding: 10px 12px 2px;
+    }
+    .dashboard-glance .lane-title,
+    .dashboard-glance .lane-count {
+      color: #fff;
     }
     .dashboard-glance .lane-body {
-      gap: 0;
-      padding: 0;
+      padding: 8px 10px 10px;
+    }
+    .dashboard-glance .lane-body:focus-visible {
+      outline: 2px solid #fff;
+      outline-offset: -2px;
     }
     .dashboard-glance .docket {
-      position: relative;
-      padding: 10px 0;
-      background: transparent;
-      border: 0;
-      border-bottom: 1px solid var(--line);
-      border-radius: 0;
+      border-color: transparent;
     }
-    .dashboard-glance a.docket:hover {
-      background: var(--page);
+
+    /* Urgent Repairs, when there are any, are the loudest box on the page: red edge and top, tinted ground. */
+    .urgent-panel > .section {
+      background: #fdf0ee;
+      border-color: #e7aaa3;
+      border-top: 4px solid #c8372d;
     }
-    .dashboard-glance .docket:last-child {
-      border-bottom: 0;
+    .urgent-panel .section-title {
+      color: #8f1d14;
+      font-size: 18px;
     }
-    .dashboard-glance .docket-perf {
-      display: none;
+    .urgent-panel .urgent-item {
+      border-color: #e7aaa3;
+      border-left: 4px solid #c8372d;
     }
-    /* The number and age live on the Ticket itself; here only the unread dot stays, at the corner. */
-    .dashboard-glance .docket-foot {
-      position: absolute;
-      top: 12px;
-      right: 0;
-    }
-    .dashboard-glance .docket-foot .docket-number,
-    .dashboard-glance .docket-foot .ml-auto {
-      display: none;
-    }
-    .dashboard-glance .docket.is-decision,
-    .dashboard-glance a.docket.is-decision:hover {
-      padding-left: 10px;
-      border-left-width: 0;
-      box-shadow: inset 3px 0 0 var(--hivis);
+    .urgent-panel .urgent-issue {
+      font-size: 15px;
     }
 
     /* The dashboard: what needs attention leads, in larger type. */

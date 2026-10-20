@@ -125,11 +125,11 @@ export function dashboardPages() {
         ]),
         body: html`
           ${countStrip([
-            { label: 'Maintenance Requests to review', count: view.maintenanceRequests.length, href: '#requests', decision: true },
+            { label: 'Maintenance Requests to review', count: view.maintenanceRequests.length, href: '#requests', decision: true, tone: 'attention' },
             { label: 'Open Tickets', count: view.tickets.length, href: '#tickets' },
-            { label: 'Alerts', count: view.alerts.length, href: '#alerts', decision: true },
-            { label: 'In the inbox', count: view.inbox.length, href: '#inbox', decision: true },
-            { label: 'Urgent Repairs needing a receipt', count: needReceipt, href: '#urgent-repairs' },
+            { label: 'Alerts', count: view.alerts.length, href: '#alerts', decision: true, tone: 'attention' },
+            { label: 'In the inbox', count: view.inbox.length, href: '#inbox', decision: true, tone: 'attention' },
+            { label: 'Urgent Repairs needing a receipt', count: needReceipt, href: '#urgent-repairs', tone: 'urgent' },
           ])}
           <div class="dashboard-desk grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] lg:items-start">
             <div class="dashboard-main grid min-w-0 gap-4">
@@ -137,7 +137,7 @@ export function dashboardPages() {
               ${section({ title: 'Inbox', id: 'inbox', actions: countBadge(view.inbox.length), body: html`<div class="dashboard-inbox">${inboxList(view.inbox, people, timeZone, q)}</div>` })}
             </div>
             <div class="dashboard-glance grid min-w-0 gap-4">
-              ${section({ title: 'Urgent Repairs', id: 'urgent-repairs', actions: countBadge(view.urgentRepairs.length), body: urgentRepairsList(view.urgentRepairs, timeZone) })}
+              <div class="${view.urgentRepairs.length ? 'urgent-panel' : ''}">${section({ title: 'Urgent Repairs', id: 'urgent-repairs', actions: countBadge(view.urgentRepairs.length, 'error'), body: urgentRepairsList(view.urgentRepairs, timeZone) })}</div>
               ${nextSevenDays(view.calendar, now, timeZone)}
               ${ticketsByStage(view.tickets, filter, now, timeZone)}
             </div>
@@ -237,8 +237,8 @@ function idParam(c: Context<WebEnv>, name: string) {
   return Number(c.req.param(name));
 }
 
-function countBadge(count: number) {
-  return count ? badge(String(count)) : undefined;
+function countBadge(count: number, tone: Tone = 'neutral') {
+  return count ? badge(String(count), tone) : undefined;
 }
 
 // Needs your attention
