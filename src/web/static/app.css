@@ -1055,11 +1055,33 @@
       font-size: 16px;
       font-weight: 600;
     }
+    .dashboard-inbox .inbox-item-head {
+      flex-wrap: nowrap;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .dashboard-inbox .inbox-item-head > div {
+      flex: 1 1 auto;
+    }
+    .dashboard-inbox .inbox-item-head .badge {
+      flex: 0 0 auto;
+      max-width: 55%;
+      text-align: right;
+    }
+    .dashboard-inbox .inbox-item-from {
+      margin-top: 2px;
+    }
+    .dashboard-inbox .inbox-item-guess > summary {
+      padding: 2px 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
     .dashboard-inbox .inbox-item-text {
       margin: 4px 0 0;
       padding: 10px 14px;
-      background: var(--page);
-      border: 0;
+      background: #eef3f8;
+      border: 1px solid #dbe6f0;
       border-radius: 10px;
       font-size: 15px;
       font-weight: 400;
@@ -1086,6 +1108,8 @@
       cursor: pointer;
     }
     .dashboard-inbox .inbox-item-actions .btn-ghost {
+      min-height: 0;
+      padding: 0 4px;
       color: var(--muted);
       font-weight: 600;
     }
