@@ -12,6 +12,7 @@ import type { ImportKind } from '../../imports.ts';
 import { icon } from '../icons.ts';
 import { contactLink, dl, emptyState, flashFrom, formatWhen, linkButton, page, section, sideTabs, table, type Html } from '../ui.ts';
 import { IMPORT_NOUNS, templatePath } from './onboarding-forms.ts';
+import { smsNumberPanel } from './sms-number.ts';
 
 type AgencyChannel = Awaited<ReturnType<PropertyManagerActions['channels']>>[number];
 
@@ -68,7 +69,7 @@ export function settingsPages() {
     const { timeZone } = actions.agency();
     const body: Html =
       tab === 'channels'
-        ? channelsTab(await actions.channels(), timeZone)
+        ? await channelsTab(actions, timeZone)
         : tab === 'team'
           ? teamTab(await actions.propertyManagers(), pm.id)
           : tab === 'import'
@@ -109,22 +110,31 @@ function agencyTab(agency: { name: string; timeZone: string }, team: number): Ht
   })}`;
 }
 
-function channelsTab(channels: AgencyChannel[], timeZone: string): Html {
-  return section({
+async function channelsTab(actions: PropertyManagerActions, timeZone: string): Promise<Html> {
+  const channels = await actions.channels();
+  const sms = await actions.smsNumber();
+  const channelsSection = section({
     title: 'Channels',
     actions: linkButton('Manage channels', '/setup#channels', { size: 'sm' }),
     body: channels.length
       ? table(
           ['Channel', 'Address', 'Last test message'],
-          channels.map((ch) => [
-            html`<span class="font-medium">${CHANNEL_NAME[ch.type]}</span>`,
-            html`<span class="break-all">${ch.address}</span>`,
-            html`${ch.testedAt ? formatWhen(ch.testedAt, timeZone) : html`<span class="text-muted">Not tested</span>`}`,
-          ]),
+          channels.map((ch) => {
+            // An SMS number myEST8 set up with Twilio was proved when it was set up, so it has no test message.
+            const viaTwilio = ch.type === 'sms' && sms?.number?.phoneNumber === ch.address;
+            return [
+              html`<span class="font-medium">${CHANNEL_NAME[ch.type]}</span>`,
+              html`<span class="break-all">${ch.address}</span>${viaTwilio ? html` <span class="text-muted">${sms.number!.kind === 'created' ? 'Created by myEST8' : 'Your Twilio number'}</span>` : ''}`,
+              html`${viaTwilio ? html`<span class="text-muted">Not needed</span>` : ch.testedAt ? formatWhen(ch.testedAt, timeZone) : html`<span class="text-muted">Not tested</span>`}`,
+            ];
+          }),
           { caption: 'Channels', stack: 'labelled' },
         )
       : emptyState('No channels connected. Connect SMS or email so Tenants can reach you.', linkButton('Connect a channel', '/setup#channels', { variant: 'primary', size: 'sm' })),
   });
+  if (!sms) return channelsSection;
+  const current = channels.find((ch) => ch.type === 'sms')?.address;
+  return html`${channelsSection}${section({ id: 'sms', title: 'SMS number', body: await smsNumberPanel(actions, { from: 'settings', current }) })}`;
 }
 
 function teamTab(team: Awaited<ReturnType<PropertyManagerActions['propertyManagers']>>, meId: number): Html {

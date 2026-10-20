@@ -21,6 +21,7 @@ import { cents, formAction, text } from '../forms.ts';
 import { icon } from '../icons.ts';
 import { shellInfo } from '../shell.ts';
 import { importPages } from './import.ts';
+import { smsNumberPanel, smsNumbersOffered } from './sms-number.ts';
 import { alert, button, emptyState, field, flashFrom, formatMoney, linkButton, page, section, table, type Flash, type Html } from '../ui.ts';
 import {
   addTradieFrom,
@@ -99,6 +100,8 @@ export function setupPages(o: { connectors?: ChannelConnectors } = {}) {
     const email = await actions.ensureInboundEmail();
     const channels = await actions.channels();
     const pending = await actions.pendingChannelVerifications();
+    // Where this server sets up SMS numbers, SMS offers the two ways to get one instead of a typed number and a code.
+    const smsPanel = (await smsNumbersOffered(actions)) ? await smsNumberPanel(actions, { from: 'setup', current: channels.find((ch) => ch.type === 'sms')?.address }) : null;
 
     return c.html(
       page({
@@ -111,7 +114,7 @@ export function setupPages(o: { connectors?: ChannelConnectors } = {}) {
         actions: linkButton('Use the step-by-step guide', '/welcome', { variant: 'secondary', size: 'sm' }),
         body: html`
           ${areasNav(agency, channels, connectors.unavailable)}
-          ${section({ id: 'channels', title: 'Channels', body: await channelsArea(origin, channels, timeZone, shownFor('channels'), connectors, actions.agency().id, email, pending) })}
+          ${section({ id: 'channels', title: 'Channels', body: await channelsArea(origin, channels, timeZone, shownFor('channels'), connectors, actions.agency().id, email, pending, smsPanel) })}
           ${section({ id: 'people', title: 'Property Owners and Building Managers', body: peopleArea(agency, shownFor) })}
           ${section({ id: 'tradies', title: 'Tradies', body: html`${await tradiesArea(c, agency, googleQuery, shownFor('tradie'))}${importForm('tradies', shownFor('import-tradies'))}` })}
           ${section({ id: 'properties', title: 'Properties', body: html`${propertiesArea(agency, pm.id, shownFor('property'))}${importForm('properties', shownFor('import-properties'))}` })}
@@ -280,13 +283,14 @@ async function channelsArea(
   agencyId: number,
   email: { address: string; state: 'waiting' | 'verified' | 'connected' },
   pending: { channelType: AgencyChannel['type']; address: string }[],
+  smsPanel: Html | null,
 ): Promise<Html> {
   const gmailBlock = connectors.gmail ? await gmailControls(connectors.gmail, agencyId, 'setup') : null;
   return html`
-    <p class="text-sm">Tenants, Tradies and Property Owners reach the Agency by SMS and email. Verify a phone number with a code. Forward the Agency inbox to the email address below.</p>
+    <p class="text-sm">Tenants, Tradies and Property Owners reach the Agency by SMS and email. ${smsPanel ? 'Set up the number Tenants will text.' : 'Verify a phone number with a code.'} Forward the Agency inbox to the email address below.</p>
     ${shown.error}
-    <div class="mt-4 grid gap-4 md:grid-cols-2">
-      ${CHANNELS.map((channel) => channelCard(channel, connected.find((c) => c.type === channel.type), timeZone, origin, { gmailBlock, unavailable: connectors.unavailable, smsInbound: connectors.smsInbound }, email, pending.find((row) => row.channelType === channel.type)))}
+    <div class="mt-4 grid gap-4 ${smsPanel ? '' : 'md:grid-cols-2'}">
+      ${CHANNELS.map((channel) => channelCard(channel, connected.find((c) => c.type === channel.type), timeZone, origin, { gmailBlock, unavailable: connectors.unavailable, smsInbound: connectors.smsInbound, smsPanel }, email, pending.find((row) => row.channelType === channel.type)))}
     </div>
   `;
 }
@@ -297,7 +301,7 @@ function channelCard(
   connected: AgencyChannel | undefined,
   timeZone: string,
   origin: string,
-  via: { gmailBlock: Html | null; unavailable: ChannelType[]; smsInbound: 'simulator' | 'none' },
+  via: { gmailBlock: Html | null; unavailable: ChannelType[]; smsInbound: 'simulator' | 'none'; smsPanel: Html | null },
   email: { address: string; state: 'waiting' | 'verified' | 'connected' },
   pending: { address: string } | undefined,
 ): Html {
@@ -312,11 +316,11 @@ function channelCard(
     title: channel.name,
     actions: channelChip(connected, { waiting, verified: emailVerified }),
     body: html`
-      ${connected ? channelLine(connected, timeZone, { waiting, smsInbound: via.smsInbound }) : ''}
+      ${connected && !(channel.type === 'sms' && via.smsPanel) ? channelLine(connected, timeZone, { waiting, smsInbound: via.smsInbound }) : ''}
       <div class="mt-3">
         ${channel.type === 'email'
           ? html`${inboundEmailField(email.address)}${via.gmailBlock ?? ''}`
-          : phoneChannelForm({
+          : via.smsPanel ?? phoneChannelForm({
                 channel,
                 postTo: '/setup/channels',
                 confirmTo: '/setup/channels/confirm',
@@ -325,7 +329,7 @@ function channelCard(
                 className: rowForm,
               })}
       </div>
-      <div class="mt-3">${channelGuide(channel.type, origin)}</div>
+      ${channel.type === 'sms' && via.smsPanel ? '' : html`<div class="mt-3">${channelGuide(channel.type, origin)}</div>`}
     `,
   });
 }
