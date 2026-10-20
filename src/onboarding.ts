@@ -77,10 +77,18 @@ export function createOnboarding({ ports, modules }: Context) {
      * Stores an address the caller has already proved (the demo seed, Gmail
      * OAuth, or confirmChannelVerification). A number typed into the channels
      * form goes through startChannelVerification and is not stored here.
+     * `verified` marks the address as proved, for one myEST8 itself holds (an SMS number it bought, or one
+     * from the Agency's own Twilio account), so no code is needed.
      */
-    async connectChannel(agencyId: number, channelType: ChannelType, address: string) {
+    async connectChannel(agencyId: number, channelType: ChannelType, address: string, o: { verified?: boolean } = {}) {
       if (!CHANNEL_TYPES.includes(channelType)) invalid(`Unknown channel ${channelType}`);
       await profiles.connectChannel(agencyId, channelType, address);
+      if (o.verified) await profiles.markChannelTested(agencyId, channelType);
+    },
+
+    /** Forgets the Agency's channel of this type, if it is still `address`. */
+    async disconnectChannel(agencyId: number, channelType: ChannelType, address: string) {
+      await profiles.disconnectChannel(agencyId, channelType, address);
     },
 
     async sendTestMessage(agencyId: number, channelType: ChannelType, to: string) {

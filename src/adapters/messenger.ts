@@ -31,6 +31,9 @@ export function routeByChannel(byChannel: ChannelMessengers): Messenger {
  *   default; hosted and npm start) throws, otherwise SMS is left to the caller's
  *   simulator with a log line. TWILIO_WHATSAPP_FROM is the same for WhatsApp, except
  *   that it only leaves Twilio without WhatsApp (Meta can still supply it).
+ *   TWILIO_API_BASE_URL points Twilio's REST API somewhere else: a local fake, for the demo.
+ *   With `agencyNumbers` (Agencies set up their own numbers, ADR 0005) TWILIO_SMS_FROM is
+ *   optional: it only serves Agencies that have no number of their own.
  * - RESEND_API_KEY: email through Resend, from the Agency's channel address.
  *   On its own this enables email, and it takes precedence over SendGrid.
  * - SENDGRID_API_KEY: email, when Resend is not set. Optional SENDGRID_FROM
@@ -41,7 +44,13 @@ export function routeByChannel(byChannel: ChannelMessengers): Messenger {
  */
 export function messengersFromEnv(
   env: Record<string, string | undefined>,
-  { clock, fetch: fetchImpl = fetch, strict = true, log = (line) => console.log(line) }: { clock: Clock; fetch?: typeof fetch; strict?: boolean; log?: (line: string) => void },
+  {
+    clock,
+    fetch: fetchImpl = fetch,
+    strict = true,
+    agencyNumbers = false,
+    log = (line) => console.log(line),
+  }: { clock: Clock; fetch?: typeof fetch; strict?: boolean; agencyNumbers?: boolean; log?: (line: string) => void },
 ): { channels: ChannelMessengers; fileLinks: FileLinks | null } {
   const set = (name: string) => env[name]?.trim() || undefined;
   const channels: ChannelMessengers = {};
@@ -55,15 +64,18 @@ export function messengersFromEnv(
     if (!fileLinks) throw new Error('Twilio sends attachments by link: set FILE_LINK_SECRET and a public PUBLIC_URL too');
     const smsFrom = set('TWILIO_SMS_FROM');
     const whatsappFrom = set('TWILIO_WHATSAPP_FROM');
+    const apiBaseUrl = set('TWILIO_API_BASE_URL');
     const twilio = createTwilioMessenger({
       accountSid,
       authToken,
       ...(smsFrom ? { smsFrom } : {}),
       ...(whatsappFrom ? { whatsappFrom } : {}),
       fileLinks,
+      ...(apiBaseUrl ? { apiBaseUrl } : {}),
       fetch: fetchImpl,
     });
     if (smsFrom) channels.sms = twilio;
+    else if (agencyNumbers) log('[messenger] TWILIO_SMS_FROM is not set, so only Agencies with their own number send SMS.');
     else if (strict) throw new Error("Twilio is configured but TWILIO_SMS_FROM is not: set it to the Twilio number SMS should come from (an SMS must never go out from an Agency's own number).");
     else log('[messenger] TWILIO_SMS_FROM is not set, so SMS stays simulated.');
     if (whatsappFrom) channels.whatsapp = twilio;

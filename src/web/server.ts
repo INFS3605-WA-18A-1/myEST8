@@ -6,6 +6,7 @@ import { simulatorPages } from '../demo/simulator-pages.ts';
 import { createHttpApp } from '../http.ts';
 import { withReadCache } from '../db.ts';
 import type { Clock } from '../ports.ts';
+import type { SmsNumbers } from '../sms-numbers.ts';
 import { assetRoutes } from './assets.ts';
 import { authRoutes, requirePropertyManager, type Sessions } from './auth.ts';
 import { NO_CONNECTORS, type ChannelConnectors } from './connectors.ts';
@@ -30,6 +31,8 @@ export function createWebApp(deps: {
   clock: Clock;
   publicUrl: string;
   twilioAuthToken: string | null;
+  /** Agencies' own Twilio numbers, whose texts are checked with their own account's token (ADR 0005). */
+  smsNumbers?: Pick<SmsNumbers, 'authTokenFor'> | null;
   sendgridPublicKey: string;
   /** Signed file links (src/file-links.ts), for Twilio to fetch attachments. */
   fileLinks?: FileLinks | null;
