@@ -1,0 +1,84 @@
+# The QA environment and its live email test (docs/qa.md, docs/adr/0011-qa-environment-and-live-email-test.md).
+#
+#   push to qa         ->  deploy that commit to the QA app on the home server, then run the journey
+#   nightly            ->  the same, for whatever `qa` holds
+#   workflow_dispatch  ->  the same, by hand ("Run workflow" on the Actions tab)
+#
+# It runs on a self-hosted runner on the home server, labelled `home-qa`, because the QA app,
+# its Postgres schema and its secrets live only there (~/.config/myest8/qa.env). Nothing in
+# this file holds a secret, and nothing in it touches production: it never sets, reads or
+# passes a production address, key or database, and every command goes through
+# deploy/qa-exec.sh, which loads only QA's settings. It sends real emails, so it is not run
+# on pull requests: that would also hand a self-hosted runner to code from forks. Never add a
+# `pull_request` or `pull_request_target` trigger here.
+name: QA
+
+on:
+  push:
+    branches: [qa]
+  schedule:
+    # 03:00 in Sydney during daylight saving (AEDT, UTC+11, October to April) and 02:00 the
+    # rest of the year (AEST, UTC+10): GitHub's cron is UTC only. Scheduled workflows run
+    # from the default branch, so this file must have reached master for the nightly to start.
+    - cron: '0 16 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One QA run at a time: a push during a run waits its turn, and a run is never cut off in the
+# middle of a real send (cancel-in-progress would leave emails half-answered).
+concurrency:
+  group: qa-home-server
+  cancel-in-progress: false
+
+jobs:
+  journey:
+    runs-on: [self-hosted, home-qa]
+    timeout-minutes: 30
+    steps:
+      # The QA service runs from this runner's checkout (deploy/myest8-qa.service), so stop it
+      # while the files change. The nightly run tests the `qa` branch, not the default branch
+      # a scheduled workflow would otherwise check out.
+      - name: Stop the QA app
+        run: systemctl --user stop myest8-qa || true
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event_name == 'schedule' && 'qa' || github.ref }}
+
+      - name: Show what is being tested
+        run: |
+          echo "Commit $(git rev-parse --short HEAD) from ${{ github.event_name == 'schedule' && 'qa' || github.ref_name }}"
+          node --version
+
+      - run: npm ci
+
+      - name: Migrate the QA database
+        run: deploy/qa-exec.sh npx tsx scripts/db.ts migrate
+
+      - name: Restart the QA app
+        run: systemctl --user restart myest8-qa
+
+      - name: Wait for the QA app to answer
+        run: deploy/qa-exec.sh deploy/qa-wait.sh
+
+      # The app must have started once on the schema before the seed, and the seed adds only
+      # what is missing, so it is safe on every run.
+      - name: Seed the QA Agency
+        run: deploy/qa-exec.sh npx tsx scripts/qa-seed.ts
+
+      - name: Run the email journey
+        run: deploy/qa-exec.sh npx tsx scripts/qa-email-journey.ts
+
+      # The journey's log masks every secret and address, because artifacts of a public
+      # repository can be downloaded by anyone. The app's own log stays on the server:
+      # `journalctl --user -u myest8-qa`.
+      - name: Upload the journey log
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: qa-journey-logs
+          path: qa-journey-logs/
+          if-no-files-found: ignore
+          retention-days: 14
