@@ -1,16 +1,16 @@
 # Setting up real channels: keys and accounts
 
-myEST8 reaches Tenants, Tradies and Property Owners through channels they already use. Email goes through Resend ([ADR 0006](adr/0006-resend-email-and-claude-haiku.md)). WhatsApp goes through Meta's WhatsApp Cloud API ([ADR 0004](adr/0004-gmail-and-whatsapp-cloud-api.md)). SMS is simulated, or one shared Twilio number. A Twilio number bought for each Agency ([ADR 0005](adr/0005-twilio-sms-number-per-agency.md)) is not built.
+myEST8 reaches Tenants, Tradies and Property Owners through channels they already use. Email goes through Resend ([ADR 0006](adr/0006-resend-email-and-claude-haiku.md)). WhatsApp goes through Meta's WhatsApp Cloud API ([ADR 0004](adr/0004-gmail-and-whatsapp-cloud-api.md)). SMS is simulated, or goes through Twilio: each Agency gets its own number ([ADR 0005](adr/0005-twilio-sms-number-per-agency.md)), and one shared number covers an Agency that has none.
 
 | Channel | How | What you set up |
 | ------- | --- | --------------- |
 | Email | Resend, on a subdomain such as `mail.kevinhe.pro` | The domain's MX, SPF and DKIM, and a webhook (section 1) |
 | WhatsApp | Meta's WhatsApp Cloud API | A Meta app, a token and a webhook (section 2) |
-| SMS | Simulated, or one shared Twilio number | A Twilio account only if SMS should be real (section 3) |
+| SMS | Simulated, or Twilio: a number for each Agency | A paid Twilio account, a regulatory bundle and an address, only if SMS should be real (section 3) |
 
 Gmail OAuth is still in the code and is dormant (section 5). With none of the groups below set, every channel is simulated: nothing is sent to a real phone or inbox.
 
-All the values go in one file outside the repo, `~/.config/myest8/live.env` (`chmod 600`), which the systemd service loads. [`deploy/live.env.example`](../deploy/live.env.example) is the template. The repo's `.env` is not used by the service. The names below are the ones the process reads. It does not read `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `CHANNEL_SECRET_KEY`, `WHATSAPP_TOKEN`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_DISPLAY_NUMBER`, `TWILIO_BUNDLE_SID` or `TWILIO_ADDRESS_SID`.
+All the values go in one file outside the repo, `~/.config/myest8/live.env` (`chmod 600`), which the systemd service loads. [`deploy/live.env.example`](../deploy/live.env.example) is the template. The repo's `.env` is not used by the service. The names below are the ones the process reads. It does not read `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `CHANNEL_SECRET_KEY`, `WHATSAPP_TOKEN`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID` or `WHATSAPP_DISPLAY_NUMBER`. It does read `TWILIO_BUNDLE_SID` and `TWILIO_ADDRESS_SID` (section 3).
 
 ## 0. A stable public address (first)
 
@@ -71,26 +71,38 @@ Limits:
 - One WhatsApp number belongs to one Agency. The first Agency to press Connect WhatsApp gets it. A number for every Agency (Embedded Signup) is not built.
 - A Meta app in Development mode may not receive some webhooks.
 
-## 3. SMS (simulated, or one shared Twilio number)
-
-A button that buys an Australian mobile per Agency is not built. `TWILIO_BUNDLE_SID` and `TWILIO_ADDRESS_SID` are not read. Leave them unset.
+## 3. SMS (simulated, or a Twilio number for each Agency)
 
 Without Twilio, SMS stays on the phone simulator.
 
-With a paid Twilio account, one number you already own can send and receive for the server:
+With Twilio, each Agency has its own SMS number, in one of two ways ([ADR 0005](adr/0005-twilio-sms-number-per-agency.md)). Both are buttons in the welcome wizard's Channels step, on the Setup page and in Settings:
 
-1. Upgrade the Twilio account from trial if you need to text numbers you have not verified.
-2. On that number, set "A message comes in" to `https://myest8.yourdomain.com/webhooks/twilio`, HTTP POST.
-3. Put these in `live.env`:
+- **Create a new number.** myEST8 buys an Australian mobile number on your Twilio account and connects it. It costs you a monthly fee for each Agency.
+- **Register a Twilio number.** An Agency with its own Twilio account pastes its Account SID and Auth Token, picks one of its numbers, and myEST8 connects it. Nothing is bought, and your account isn't used. The Agency's Auth Token is stored encrypted.
+
+What you set up, once:
+
+1. **Upgrade the Twilio account from trial.** A trial account can only send Twilio's own template messages, not custom text, so myEST8 can't use it. (Checked 2026-10-21.)
+2. **Create a regulatory bundle and an address** in the Twilio Console, for "Create a new number". An Australian mobile number needs an approved bundle and an address on the account, and costs about US$8.25 a month (checked 2026-10-21). Twilio reviews a bundle, which can take days. Console: Phone Numbers, Regulatory Compliance, Bundles (Australia, Mobile) and Addresses. Skip this and "Register a Twilio number" still works.
+3. **Run the check.** With `TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN` in your shell, `npx tsx scripts/twilio-setup.ts` confirms the account is upgraded and finds the approved bundle and an address. It prints the two lines to add, or says what is missing and where in the Console to fix it.
+4. **Put these in `live.env`:**
 
    ```sh
    TWILIO_ACCOUNT_SID=AC...
    TWILIO_AUTH_TOKEN=
-   TWILIO_SMS_FROM=+61400000000
+   TWILIO_BUNDLE_SID=BU...
+   TWILIO_ADDRESS_SID=AD...
+   TOKEN_ENCRYPTION_KEY=
    FILE_LINK_SECRET=
    ```
 
-   `TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN` are both set, or neither. Both also require `FILE_LINK_SECRET` (32 random bytes or more, `openssl rand -base64 32`) and an https `PUBLIC_URL`: Twilio fetches attachments by a signed link. `TWILIO_SMS_FROM` is required with them: every SMS is sent from that E.164 number, and the app refuses to start without it (an SMS never goes out from an Agency's own mobile number).
+   `TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN` are both set, or neither. Both also require `FILE_LINK_SECRET` (32 random bytes or more, `openssl rand -base64 32`) and an https `PUBLIC_URL`: Twilio fetches attachments by a signed link. `TOKEN_ENCRYPTION_KEY` (base64 of 32 bytes, `openssl rand -base64 32`) is what turns Agency numbers on. Losing it means every registered Agency has to paste its Twilio details again. Without `TWILIO_BUNDLE_SID` and `TWILIO_ADDRESS_SID`, "Create a new number" is shown disabled with the reason, and "Register a Twilio number" still works.
+
+You don't set a webhook by hand. myEST8 points each number's "A message comes in" at `${PUBLIC_URL}/webhooks/twilio` when it connects the number, and clears it when an Agency disconnects a registered number. Releasing a created number gives it back to Twilio, which stops the fee.
+
+**`TWILIO_SMS_FROM` is optional now.** It is one shared number for an Agency that has none of its own, and without it that Agency's SMS stays simulated. With `TOKEN_ENCRYPTION_KEY` unset, SMS works as it did before: `TWILIO_SMS_FROM` is required with the Twilio pair, every SMS is sent from it, and the app refuses to start without it. An Agency types its own mobile number and a code is sent to verify it, with no buttons above.
+
+Limits: Australian numbers can't receive pictures. A number inside a Twilio Messaging Service may ignore its own webhook. The check that stops a double click buying two numbers works within one server process.
 
 `TWILIO_WHATSAPP_FROM` is optional (without it Twilio sends no WhatsApp) and unused while the Meta pair in section 2 is set: Meta takes the WhatsApp channel.
 
@@ -115,7 +127,7 @@ Redirect URI, if you ever turn it on: `https://myest8.yourdomain.com/oauth/googl
 ## Checking it works
 
 1. Restart: `systemctl --user restart myest8`, then `journalctl --user -u myest8 -n 20`. A half-set group (for example only `GOOGLE_CLIENT_ID`, or only `META_WHATSAPP_ACCESS_TOKEN`) refuses to start and names what is missing. Mocked APIs do the same unless `ALLOW_MOCKS=1`.
-2. Sign up a new Agency. Leave `GOOGLE_CLIENT_ID` unset so email stays off the dormant Gmail button. WhatsApp is paused: the setup pages offer SMS and email only, and the WhatsApp backend below stays dormant. SMS is an address you type. There is no **Get an SMS number** action. With the Twilio pair set, outbound SMS always uses `TWILIO_SMS_FROM`.
+2. Sign up a new Agency. Leave `GOOGLE_CLIENT_ID` unset so email stays off the dormant Gmail button. WhatsApp is paused: the setup pages offer SMS and email only, and the WhatsApp backend below stays dormant. With `TOKEN_ENCRYPTION_KEY` and the Twilio pair set, the Channels step offers **Create a new number** and **Register a Twilio number**. Press one, text the number from a phone, and the message reaches the Agency. Replies come from that number. Without the key, SMS is an address you type, and outbound SMS uses `TWILIO_SMS_FROM`.
 3. Send mail to an address on `RESEND_INBOUND_DOMAIN`, or forward a message there. Resend posts `email.received` to `/webhooks/resend`; the event has no body, and myEST8 fetches it.
 4. WhatsApp (paused; only if it is turned back on): **Send a test message** to a phone on the test number's allowed list (WhatsApp, API Setup). The text is `This is a test message from <Agency name> on myEST8. This channel is working.` Meta delivers that free-form text only within 24 hours of that phone's last message to the test number. A later failure is a warning in the log, `WhatsApp message to … failed`, so the webhook has to be subscribed to **messages** (delivery statuses come on that field too): `journalctl --user -u myest8 | grep "WhatsApp message to"`.
 5. WhatsApp (paused): message the test number from an allowed phone. The message reaches the Agency, and a reply inside 24 hours is free-form text.
