@@ -203,6 +203,117 @@ describe('Dispatch: the table of Properties', () => {
   });
 });
 
+/** The Tradie entries in `html`: each whole `<li>`, with the Tradie it is for. Entries never nest, so the first `</li>` closes one. */
+function tradieEntries(html: string) {
+  return [...html.matchAll(/<li class="tradie-entry[^"]*"[^>]*data-tradie="(\d+)"[\s\S]*?<\/li>/g)].map((m) => ({ id: Number(m[1]), html: m[0], text: visible(m[0]).trim() }));
+}
+
+/** `html` with every Tradie entry cut out, as the text outside them. */
+function outsideEntries(html: string) {
+  return visible(html.replace(/<li class="tradie-entry[^"]*"[\s\S]*?<\/li>/g, ' '));
+}
+
+const DANA_BASE = { address: '8 Station St, Newtown NSW 2042', location: { lat: -33.925, lng: 151.18 } }; // about 3.1 km
+
+describe("Dispatch: a Tradie's entry in a Property's panel", () => {
+  test('each nearby Tradie is one entry that holds its name, distance, Trades and both ratings, and none of it is outside the entry', async () => {
+    const w = await webWorld();
+    await tomsTapTicket(w);
+    await locateTradies(w, [
+      [w.ids.dana, DANA_BASE],
+      [w.ids.pete, PETE_BASE],
+      [w.ids.nina, NINA_BASE],
+    ]);
+    const cookie = await w.signIn();
+
+    const html = await dispatch(w, cookie);
+
+    const start = html.indexOf(`id="panel-property-${w.ids.kingSt}"`);
+    const panel = html.slice(start, html.indexOf('</section>', start));
+    const entries = tradieEntries(panel);
+    expect(entries.map((e) => e.id)).toEqual([w.ids.nina, w.ids.pete, w.ids.dana]);
+    const [nina, pete, dana] = entries;
+    expect(nina!.html).toContain(`<a class="tradie-name" href="/tradies/${w.ids.nina}">`);
+    expect(nina!.text).toMatch(/^Nina's Plumbing 0\.6 km Plumbing myEST8 4\.0 \(1\) from 1 rating Google 4\.2 \(33\) from 33 reviews$/);
+    expect(pete!.text).toMatch(/^Pete's Plumbing 2\.2 km Plumbing myEST8 4\.0 \(1\) from 1 rating Google 4\.8 \(120\) from 120 reviews$/);
+    expect(dana!.text).toMatch(/^Drip Doctors 3\.1 km Plumbing myEST8 5\.0 \(1\) from 1 rating Not on Google$/);
+    // The distance is plain text and the ratings are not boxed chips.
+    expect(nina!.html).not.toContain('class="metric');
+    // Everything about a Tradie is in its own entry: the panel outside the entries names none of them.
+    const outside = outsideEntries(panel);
+    for (const fact of ["Nina's Plumbing", "Pete's Plumbing", 'Drip Doctors', '0.6 km', '2.2 km', 'myEST8', 'Google', 'Plumbing myEST8']) expect(outside).not.toContain(fact);
+  });
+});
+
+describe("Dispatch: a Tradie's entry in the Ask for Quotes list", () => {
+  test("a candidate's checkbox, name, badge, distance, Trades and ratings are all in its label, with the Profile link after it", async () => {
+    const w = await webWorld();
+    const job = await tomsTapTicket(w);
+    await locateTradies(w, [
+      [w.ids.pete, PETE_BASE],
+      [w.ids.nina, NINA_BASE],
+    ]);
+    const cookie = await w.signIn();
+
+    const html = await dispatch(w, cookie);
+
+    const start = html.indexOf(`id="dispatch-job-${job.jobId}"`);
+    const card = html.slice(start, html.indexOf('</form>', start));
+    const entries = tradieEntries(card);
+    // Nominated first, then nearest; those without a location (unknown distance) come last.
+    expect(entries.map((e) => e.id).slice(0, 2)).toEqual([w.ids.nina, w.ids.pete]);
+    const nina = entries[0]!;
+    const label = /<label[^>]*>([\s\S]*)<\/label>/.exec(nina.html)![1]!;
+    expect(label).toContain(`<input type="checkbox"`);
+    expect(label).toContain(`name="tradieIds" value="${w.ids.nina}"`);
+    expect(visible(label).trim()).toMatch(/^Nina's Plumbing Nominated 0\.6 km Plumbing myEST8 4\.0 \(1\) from 1 rating Google 4\.2 \(33\) from 33 reviews$/);
+    expect(label.indexOf('Nominated')).toBeGreaterThan(label.indexOf('tradie-name'));
+    // A link inside a label would be a control inside a control: Profile follows the label instead.
+    expect(label).not.toContain('<a ');
+    expect(nina.html.slice(nina.html.indexOf('</label>'))).toContain(`<a class="tradie-profile" href="/tradies/${w.ids.nina}">Profile</a>`);
+    // The card outside its entries names none of the candidates.
+    expect(outsideEntries(card)).not.toContain("Nina's Plumbing");
+  });
+
+  test('a candidate whose distance is not known says so, with no ruler', async () => {
+    const w = await webWorld();
+    const job = await tomsTapTicket(w);
+    await locateTradies(w, [[w.ids.nina, NINA_BASE]]);
+    const cookie = await w.signIn();
+
+    const html = await dispatch(w, cookie);
+
+    const start = html.indexOf(`id="dispatch-job-${job.jobId}"`);
+    const entries = tradieEntries(html.slice(start, html.indexOf('</form>', start)));
+    const nina = entries.find((e) => e.id === w.ids.nina)!;
+    const dana = entries.find((e) => e.id === w.ids.dana)!;
+    expect(dana.text).toContain('Drip Doctors Distance unknown');
+    expect(dana.text).toContain('Not on Google');
+    expect(dana.html).not.toContain('tradie-ruler');
+    expect(nina.html).toContain('tradie-ruler');
+  });
+});
+
+describe('Dispatch: the distance ruler', () => {
+  test("a Tradie's ruler fills the distance's share of the 15 km search radius and is hidden from assistive technology", async () => {
+    const w = await webWorld();
+    await tomsTapTicket(w);
+    await locateTradies(w, [
+      [w.ids.pete, PETE_BASE],
+      [w.ids.nina, NINA_BASE],
+    ]);
+    const cookie = await w.signIn();
+
+    const html = await dispatch(w, cookie);
+
+    const start = html.indexOf(`id="panel-property-${w.ids.kingSt}"`);
+    const [nina, pete] = tradieEntries(html.slice(start, html.indexOf('</section>', start)));
+    const ruler = (entry: { html: string }) => /<span class="tradie-ruler" aria-hidden="true"><span class="tradie-ruler-fill" style="width: ([\d.]+)%">/.exec(entry.html);
+    expect(Number(ruler(nina!)![1])).toBeCloseTo((0.6 / 15) * 100, 0);
+    expect(Number(ruler(pete!)![1])).toBeCloseTo((2.2 / 15) * 100, 0);
+  });
+});
+
 describe('Dispatch: finding addresses again', () => {
   test('opening the page never looks addresses up; the button shown while some are missing does, and they gain pins', async () => {
     const w = await webWorld();

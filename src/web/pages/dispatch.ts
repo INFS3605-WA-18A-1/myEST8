@@ -31,7 +31,6 @@ import { shellInfo } from '../shell.ts';
 import {
   badge,
   button,
-  distanceChip,
   emptyState,
   entityLink,
   field,
@@ -41,7 +40,6 @@ import {
   humanise,
   page,
   postButton,
-  ratingChip,
   section,
   stat,
   statGroup,
@@ -206,35 +204,21 @@ function queueCard({ job, ticket, property }: Waiting, tradies: TradieView[], ti
 }
 
 function quoteRequestForm(job: DispatchJob, property: PropertyView, tradies: TradieView[]): Html {
-  const located = new Map(tradies.map((t) => [t.tradieId, t.location]));
+  const known = new Map(tradies.map((t) => [t.tradieId, t]));
   const candidates = job.candidates
     .map((c) => {
-      const at = located.get(c.tradieId);
-      return { ...c, distance: property.location && at ? distanceKm(property.location, at) : null };
+      const at = known.get(c.tradieId)?.location;
+      return { ...c, trades: known.get(c.tradieId)?.trades ?? [], distanceKm: property.location && at ? distanceKm(property.location, at) : null };
     })
-    .sort((a, b) => Number(b.nominated) - Number(a.nominated) || (a.distance ?? Infinity) - (b.distance ?? Infinity))
+    .sort((a, b) => Number(b.nominated) - Number(a.nominated) || (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity))
     .slice(0, CANDIDATES_SHOWN);
   const ticked = Math.max(1, job.minimum);
   const asked = job.asked ? ` ${job.asked} asked so far.` : '';
   return html`<form method="post" action="/dispatch/jobs/${job.jobId}/quote-requests" class="dispatch-card-body">
     <fieldset class="min-w-0">
       <legend class="dispatch-card-legend">Ask for Quotes${asked} ${job.singleReason ?? (job.minimum > 1 ? `Tick at least ${job.minimum}.` : '')}</legend>
-      <ul class="dispatch-candidates" role="list">
-        ${candidates.map(
-          (c, i) => html`<li>
-            <label class="dispatch-candidate">
-              <input type="checkbox" class="checkbox checkbox-primary checkbox-sm" name="tradieIds" value="${c.tradieId}" ${i < ticked ? 'checked' : ''} />
-              <span class="dispatch-candidate-name">${c.businessName}</span>
-            </label>
-            <span class="metric-row">
-              ${c.nominated ? badge('Nominated', 'success') : ''}
-              ${c.distance === null ? html`<span class="metric is-empty">Distance unknown</span>` : distanceChip(c.distance)}
-              ${ratingChip({ source: 'myEST8', rating: c.myEst8Rating.average, count: c.myEst8Rating.count })}
-              ${ratingChip({ source: 'Google', rating: c.googleRating?.rating ?? null, count: c.googleRating?.reviewCount ?? 0, onGoogle: !!c.googleRating })}
-              ${entityLink('tradie', 'Profile', `/tradies/${c.tradieId}`)}
-            </span>
-          </li>`,
-        )}
+      <ul class="tradie-entries" role="list">
+        ${candidates.map((c, i) => tradieEntry(c, { id: `dispatch-job-${job.jobId}-tradie-${c.tradieId}`, checked: i < ticked, nominated: c.nominated }))}
       </ul>
     </fieldset>
     <div>${button('Send Quote Requests', { size: 'sm' })}</div>
@@ -334,11 +318,7 @@ function propertyPanel(p: PropertyView, tradies: TradieView[], anyTradieLocated:
     ${!p.location
       ? html`<p class="text-muted">Address not found, so distances can't be worked out. Look up missing addresses tries it again.</p>`
       : near.length
-        ? html`<ul class="dispatch-list">${near.map((t) => html`<li>
-            <span class="dispatch-near">${entityLink('tradie', t.businessName, `/tradies/${t.tradieId}`)} ${distanceChip(t.distanceKm)}</span>
-            <span class="dispatch-list-detail">${t.trades.map(humanise).join(', ')}</span>
-            <span class="dispatch-list-detail">${ratings(t)}</span>
-          </li>`)}</ul>`
+        ? html`<ul class="tradie-entries" role="list">${near.map((t) => tradieEntry(t))}</ul>`
         : html`<p class="text-muted">${anyTradieLocated ? `No Tradies${trades.size ? ` who do ${tradesWords}` : ''} work within ${TRADIE_SEARCH_RADIUS_KM} km of this Property.` : "No Tradie has a business address yet, so distances can't be worked out."}</p>`}
   </section>`;
 }
@@ -357,12 +337,56 @@ function tradiePanel(t: TradieView, bookings: Booking[], timeZone: string): Html
   </section>`;
 }
 
+/** What a Tradie's entry needs: who they are, how far from the Property (null when unknown), and both ratings. */
+type EntryTradie = Pick<TradieView, 'tradieId' | 'businessName' | 'trades' | 'myEst8Rating' | 'googleRating'> & { distanceKm: number | null };
+
+/**
+ * One Tradie as one bounded entry, the same in a Property's panel and in a Job's Ask for
+ * Quotes list, so everything about a business sits inside its own block: a wrench mark (the
+ * one on the map's Tradie pins) or, with `pick`, the checkbox; the business name with its
+ * distance at the right; their Trades; a ruler of how far within the search radius they are;
+ * both ratings. With `pick` the entry is the checkbox's label, so a click anywhere in it
+ * ticks it; the Profile link can't sit inside a label, so it follows it.
+ */
+function tradieEntry(t: EntryTradie, pick?: { id: string; checked: boolean; nominated: boolean }): Html {
+  const distance = t.distanceKm === null ? html`<span class="tradie-distance is-unknown">Distance unknown</span>` : html`<span class="tradie-distance num">${t.distanceKm.toFixed(1)} km</span>`;
+  const facts = html`<span class="tradie-trades">${t.trades.map(humanise).join(', ')}</span>
+    ${t.distanceKm === null ? '' : tradieRuler(t.distanceKm)}
+    ${ratings(t)}`;
+  if (!pick) {
+    return html`<li class="tradie-entry" data-tradie="${t.tradieId}">
+      <span class="tradie-mark" aria-hidden="true">${icon('wrench', { weight: 'fill', size: 'size-4' })}</span>
+      <span class="tradie-line"><span class="tradie-title"><a class="tradie-name" href="/tradies/${t.tradieId}">${t.businessName}</a></span>${distance}</span>
+      ${facts}
+    </li>`;
+  }
+  return html`<li class="tradie-entry is-pick" data-tradie="${t.tradieId}">
+    <label class="tradie-label">
+      <input type="checkbox" class="checkbox checkbox-primary checkbox-sm tradie-check" name="tradieIds" value="${t.tradieId}" ${pick.checked ? 'checked' : ''} aria-labelledby="${pick.id}-title" />
+      <span class="tradie-line"><span class="tradie-title" id="${pick.id}-title"><span class="tradie-name">${t.businessName}</span>${pick.nominated ? html` ${badge('Nominated', 'success')}` : ''}</span>${distance}</span>
+      ${facts}
+    </label>
+    <a class="tradie-profile" href="/tradies/${t.tradieId}">Profile</a>
+  </li>`;
+}
+
+/** How far within the search radius a Tradie is: a track, with a fill as long as the distance's share of it. Decorative; the distance in words carries the meaning. */
+function tradieRuler(km: number): Html {
+  const share = Math.round(Math.min(1, km / TRADIE_SEARCH_RADIUS_KM) * 1000) / 10;
+  return html`<span class="tradie-ruler" aria-hidden="true"><span class="tradie-ruler-fill" style="width: ${share}%"></span></span>`;
+}
+
 /** Both ratings side by side, each in its own words and never combined. */
-function ratings(t: TradieView): Html {
-  const g = t.googleRating;
-  return html`<span class="metric-row">
-    ${ratingChip({ source: 'myEST8', rating: t.myEst8Rating.average, count: t.myEst8Rating.count })}
-    ${ratingChip({ source: 'Google', rating: g?.rating ?? null, count: g?.reviewCount ?? 0, onGoogle: !!g })}
+function ratings(t: Pick<TradieView, 'myEst8Rating' | 'googleRating'>): Html {
+  const rating = (source: 'myEST8' | 'Google', score: number, count: number) => {
+    const noun = source === 'Google' ? (count === 1 ? 'review' : 'reviews') : count === 1 ? 'rating' : 'ratings';
+    return html`<span class="tradie-rating"><span class="tradie-source">${source}</span>${icon('star', { weight: 'fill', size: 'size-3.5' })}<strong class="num">${score.toFixed(1)}</strong><span class="num" aria-hidden="true">(${count})</span><span class="sr-only">from ${count} ${noun}</span></span>`;
+  };
+  const mine = t.myEst8Rating;
+  const google = t.googleRating;
+  return html`<span class="tradie-scores">
+    ${mine.average === null ? html`<span class="tradie-rating is-empty">myEST8: no rating yet</span>` : rating('myEST8', mine.average, mine.count)}
+    ${!google ? html`<span class="tradie-rating is-empty">Not on Google</span>` : google.rating === null ? html`<span class="tradie-rating is-empty">Google: no rating yet</span>` : rating('Google', google.rating, google.reviewCount ?? 0)}
   </span>`;
 }
 
