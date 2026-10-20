@@ -968,27 +968,28 @@
     .count-strip .count-chip.is-zero {
       color: var(--muted);
     }
-    /* A tile with something in it takes a tint: Wattle for what needs the Property Manager, red for urgent. */
-    .count-item.is-attention {
-      background: #fff3cf;
-      box-shadow: inset 0 -3px 0 var(--hivis);
-    }
-    .count-item.is-urgent {
-      background: #fde6e3;
-      box-shadow: inset 0 -3px 0 #c8372d;
+    /* A tile with something in it gets a coloured number and a small dot: Wattle for what needs the Property Manager, red for urgent. */
+    .count-item.is-attention .count-chip {
+      color: #7a4f00;
     }
     .count-item.is-urgent .count-chip {
-      color: #8f1d14;
+      color: #a8271c;
     }
-    .count-item.is-urgent .count-label {
-      color: #6e1710;
+    .count-item.is-attention .count-label::before,
+    .count-item.is-urgent .count-label::before {
+      content: '';
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      margin-right: 6px;
+      border-radius: 50%;
+      vertical-align: 0.05em;
     }
-    .count-item.is-attention .count-label {
-      color: #4a3a00;
+    .count-item.is-attention .count-label::before {
+      background: var(--hivis);
     }
-    .count-item.is-attention:hover,
-    .count-item.is-urgent:hover {
-      filter: brightness(0.97);
+    .count-item.is-urgent .count-label::before {
+      background: #c8372d;
     }
     .count-label {
       color: var(--muted);
@@ -1051,43 +1052,74 @@
       padding-bottom: 0;
       border-bottom: 0;
     }
-    /* Ticket lanes in the right column: a Harbour tray with white lettering, holding white dockets. */
+    /* Ticket lanes in the right column: a white box with a thin blue outline and a pale blue heading, flat rows inside. */
     .dashboard-glance .lane {
-      background: var(--action);
-      border-color: var(--action);
+      overflow: hidden;
+      background: var(--surface);
+      border: 1px solid #8fb0cc;
       border-radius: 8px;
     }
     .dashboard-glance .lane-head {
-      padding: 10px 12px 2px;
+      padding: 8px 12px;
+      background: #e8f0f7;
+      border-bottom: 1px solid #c4d7e7;
     }
     .dashboard-glance .lane-title,
     .dashboard-glance .lane-count {
-      color: #fff;
+      color: var(--ink);
     }
     .dashboard-glance .lane-body {
-      padding: 8px 10px 10px;
-    }
-    .dashboard-glance .lane-body:focus-visible {
-      outline: 2px solid #fff;
-      outline-offset: -2px;
+      gap: 0;
+      padding: 0 12px;
+      scrollbar-width: thin;
     }
     .dashboard-glance .docket {
-      border-color: transparent;
+      position: relative;
+      padding: 10px 0;
+      background: transparent;
+      border: 0;
+      border-bottom: 1px solid var(--line);
+      border-radius: 0;
+    }
+    .dashboard-glance a.docket:hover {
+      background: var(--page);
+    }
+    .dashboard-glance .docket:last-child {
+      border-bottom: 0;
+    }
+    .dashboard-glance .docket-perf {
+      display: none;
+    }
+    /* The number and age live on the Ticket itself; here only the unread dot stays, at the corner. */
+    .dashboard-glance .docket-foot {
+      position: absolute;
+      top: 12px;
+      right: 0;
+    }
+    .dashboard-glance .docket-foot .docket-number,
+    .dashboard-glance .docket-foot .ml-auto {
+      display: none;
+    }
+    .dashboard-glance .docket.is-decision,
+    .dashboard-glance a.docket.is-decision:hover {
+      padding-left: 10px;
+      border-left-width: 0;
+      box-shadow: inset 3px 0 0 var(--hivis);
     }
 
     /* Urgent Repairs, when there are any, are the loudest box on the page: red edge and top, tinted ground. */
     .urgent-panel > .section {
-      background: #fdf0ee;
-      border-color: #e7aaa3;
-      border-top: 4px solid #c8372d;
+      background: #fdf4f2;
+      border-color: #ecc3be;
+      border-top: 3px solid #c8372d;
     }
     .urgent-panel .section-title {
       color: #8f1d14;
-      font-size: 18px;
+      font-size: 17px;
     }
     .urgent-panel .urgent-item {
-      border-color: #e7aaa3;
-      border-left: 4px solid #c8372d;
+      border-color: #ecc3be;
+      border-left: 3px solid #c8372d;
     }
     .urgent-panel .urgent-issue {
       font-size: 15px;
