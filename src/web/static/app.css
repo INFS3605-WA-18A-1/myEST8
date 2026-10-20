@@ -1093,7 +1093,7 @@
       gap: 8px 12px;
       margin-top: 4px;
     }
-    /* Pick a contact is an outlined button, Dismiss a quiet word: the same pair as Ask for details and Decline. */
+    /* Pick a contact and Dismiss are both outlined buttons, so each looks clickable. */
     .dashboard-inbox .inbox-pick > summary {
       display: inline-flex;
       align-items: center;
@@ -1108,10 +1108,17 @@
       cursor: pointer;
     }
     .dashboard-inbox .inbox-item-actions .btn-ghost {
-      min-height: 0;
-      padding: 0 4px;
-      color: var(--muted);
+      min-height: 36px;
+      padding: 0 14px;
+      background: var(--surface);
+      border: 1px solid #8fb0cc;
+      border-radius: 8px;
+      color: var(--ink);
       font-weight: 600;
+    }
+    .dashboard-inbox .inbox-item-actions .btn-ghost:hover,
+    .dashboard-inbox .inbox-pick > summary:hover {
+      background: #eef3f8;
     }
     .dashboard-inbox .inbox-pick > summary {
       list-style: none;
