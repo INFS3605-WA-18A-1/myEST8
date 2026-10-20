@@ -1,0 +1,20 @@
+[Unit]
+Description=myEST8 QA app (src/main.ts on port 4100, schema "qa")
+After=network-online.target docker.service
+
+[Service]
+# The QA workflow's checkout on the runner (docs/qa.md, step 5): the runner keeps this directory
+# and the workflow updates it, so QA runs the `qa` branch. Edit the path if the runner lives elsewhere.
+WorkingDirectory=%h/actions-runner/_work/myEST8/myEST8
+# QA's own address, Resend account, test Gmail account and passwords (deploy/qa.env.example).
+# Not live.env: QA never shares a secret with the live app. A missing file is a failed start.
+EnvironmentFile=%h/.config/myest8/qa.env
+# `serve.sh <port> <schema>`: QA never takes the live quick tunnel's address and never uses Supabase.
+ExecStart=%h/actions-runner/_work/myEST8/myEST8/deploy/serve.sh 4100 qa
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+
+# Started by the QA workflow (`systemctl --user restart myest8-qa`); enable it to also come back after a reboot.
+[Install]
+WantedBy=default.target

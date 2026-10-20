@@ -1,12 +1,19 @@
-# The named tunnel for a fixed address (docs/hosting.md). Replace the hostname with one
+# The named tunnel for a fixed address (docs/hosting.md). Replace the hostnames with ones
 # on a domain in your Cloudflare account, then
 #   cloudflared tunnel route dns mytunnel <that hostname>
-# This file is separate from ~/.cloudflared/config.yml on purpose: that one belongs to
-# another site.
+# once for each. This file is separate from ~/.cloudflared/config.yml on purpose: that one
+# belongs to another site.
+#
+# The second hostname is the QA app (docs/qa.md). Keep it one label under the domain and
+# starting "qa-" (qa-myest8.example.com, not qa.myest8.example.com): Cloudflare's free
+# certificate covers one level of subdomain only, and the email journey recognises the QA
+# address by that prefix. It is a different hostname, port and database from the live one.
 tunnel: 95e2a98a-0c86-4839-9277-fc39b5a5ebd9
 credentials-file: /home/kevin_he/.cloudflared/95e2a98a-0c86-4839-9277-fc39b5a5ebd9.json
 
 ingress:
   - hostname: myest8.kevinhe.pro
     service: http://127.0.0.1:4000
+  - hostname: qa-myest8.kevinhe.pro
+    service: http://127.0.0.1:4100
   - service: http_status:404

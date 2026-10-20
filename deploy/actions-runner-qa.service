@@ -1,0 +1,18 @@
+[Unit]
+Description=GitHub Actions runner for the QA workflow (label home-qa)
+After=network-online.target
+
+[Service]
+# Where docs/qa.md step 5 unpacks the runner. It runs as a user service so the QA workflow can
+# `systemctl --user restart myest8-qa`. It runs the repository's QA workflow and nothing else.
+WorkingDirectory=%h/actions-runner
+ExecStart=%h/actions-runner/run.sh
+Restart=always
+RestartSec=10
+# Lets a job finish before the runner stops.
+KillMode=process
+KillSignal=SIGTERM
+TimeoutStopSec=5min
+
+[Install]
+WantedBy=default.target
