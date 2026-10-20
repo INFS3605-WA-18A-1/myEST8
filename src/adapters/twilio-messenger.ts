@@ -18,10 +18,10 @@ const MAX_MMS_MEDIA = 10;
  * Twilio error codes for a recipient that no retry will fix: 21211 not a valid
  * phone number, 21610 the recipient replied STOP, 21614 not a mobile number.
  */
-export const TWILIO_UNDELIVERABLE_CODES: ReadonlySet<number> = new Set([21211, 21610, 21614]);
+const TWILIO_UNDELIVERABLE_CODES: ReadonlySet<number> = new Set([21211, 21610, 21614]);
 
 /** What a person is told for each Twilio error code we recognise. */
-export const TWILIO_USER_REASONS: ReadonlyMap<number, string> = new Map([
+const TWILIO_USER_REASONS: ReadonlyMap<number, string> = new Map([
   [21211, "that doesn't look like a valid phone number"],
   [21614, "that isn't a mobile number that can receive texts"],
   [21610, 'that number has opted out of messages'],

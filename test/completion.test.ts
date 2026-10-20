@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { confirmedQuotes, jobView, TOM, tomsTapTicket, world } from './support/world.ts';
+import { confirmedQuotes, jobView, TOM, tomsTapTicket, visitStarted, world } from './support/world.ts';
 
 const TUE_9AM = new Date('2026-10-13T09:00:00+11:00');
 
@@ -15,6 +15,7 @@ describe('completing a Job', () => {
     const { workOrder } = await jobView(w, job);
 
     h.classifier.when('All done, washer replaced', { replyType: 'done', relatedItem: `work_order:${workOrder!.workOrderId}` });
+    visitStarted(w, TUE_9AM);
     await h.receive(tradies.finn.address, 'All done, washer replaced');
 
     expect(await jobView(w, job)).toMatchObject({ status: 'done', workOrder: { status: 'done' } });
@@ -40,6 +41,35 @@ describe('completing a Job', () => {
 
     const nextJob = await alice.addJob(job.ticketId, 'plumbing');
     const { recommendations } = await jobView(w, { ticketId: job.ticketId, jobId: nextJob });
-    expect(recommendations.slice(0, 3).map((r) => r.businessName)).toEqual(['Drip Doctors', 'Flow Bros', "Pete's Plumbing"]);
+    // Nina is the Property's Nominated Tradie, so she leads; the rest follow by myEST8 rating.
+    expect(recommendations.slice(0, 4).map((r) => r.businessName)).toEqual(["Nina's Plumbing", 'Drip Doctors', 'Flow Bros', "Pete's Plumbing"]);
+  });
+});
+
+describe('a visit is done only once it has started', () => {
+  test("a Tradie's DONE before the visit is answered politely and left unread; once the visit has started it counts", async () => {
+    const w = await world();
+    const { h, alice, tradies } = w;
+    const job = await tomsTapTicket(w);
+    const [quote] = await confirmedQuotes(w, job, [[tradies.finn, 150_00, TUE_9AM]]);
+    await alice.chooseQuote(quote!.quoteId, 'Only plumber free this week');
+    await alice.sendWorkOrder(job.jobId);
+    const { workOrder } = await jobView(w, job);
+    h.classifier.when('All done', { replyType: 'done', relatedItem: `work_order:${workOrder!.workOrderId}` });
+
+    await h.receive(tradies.finn.address, 'All done');
+
+    expect(await jobView(w, job)).toMatchObject({ status: 'scheduled', workOrder: { status: 'active' } });
+    expect(h.messenger.last(tradies.finn.address)).toMatchObject({ template: 'tradie.done_too_early', data: { visitStart: TUE_9AM.toISOString() } });
+    expect(h.messenger.last(tradies.finn.address)!.text).toMatch(/Reply DONE after the visit/);
+    expect(h.messenger.templatesTo(TOM)).not.toContain('tenant.fixed_properly');
+    const early = (await alice.ticket(job.ticketId)).messages.find((m) => m.direction === 'in' && m.text === 'All done');
+    expect(early).toMatchObject({ unread: true });
+
+    visitStarted(w, TUE_9AM);
+    await h.receive(tradies.finn.address, 'All done');
+
+    expect(await jobView(w, job)).toMatchObject({ status: 'done', workOrder: { status: 'done' } });
+    expect(h.messenger.last(TOM)).toMatchObject({ template: 'tenant.fixed_properly' });
   });
 });

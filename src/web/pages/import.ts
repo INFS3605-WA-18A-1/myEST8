@@ -21,7 +21,7 @@ import type { WebEnv } from '../env.ts';
 import { files, list, text, type FormValues } from '../forms.ts';
 import { icon } from '../icons.ts';
 import { shellInfo } from '../shell.ts';
-import { alert, badge, button, flashFrom, humanise, page, section, type Html, type Tone } from '../ui.ts';
+import { alert, badge, button, flashFrom, humanise, linkButton, page, section, type Html, type Tone } from '../ui.ts';
 import { IMPORT_NOUNS, templatePath, type ImportFrom } from './onboarding-forms.ts';
 
 const SETUP_AREA: Record<ImportKind, string> = {
@@ -210,7 +210,7 @@ function reviewPage(c: Context<WebEnv>, preview: ImportPreview, from: ImportFrom
     subtitle: html`<span class="flex flex-wrap gap-x-4"><span>From ${preview.filename}</span>${preview.added
         ? html`<span>${count(preview.added, kind)} added so far</span>`
         : ''}</span>`,
-    actions: html`<a class="link text-sm" href="${home}">Back to ${from === 'welcome' ? 'the guide' : 'Setup'}</a>`,
+    actions: linkButton(`Back to ${from === 'welcome' ? 'the guide' : 'Setup'}`, home, { variant: 'ghost', size: 'sm' }),
     body: html`
       <p class="import-summary" role="status">
         <span>${rows.length} ${rows.length === 1 ? 'row' : 'rows'} to review:</span>
@@ -251,7 +251,7 @@ function columnsSection(preview: ImportPreview, from: ImportFrom): Html {
         <summary class="cursor-pointer font-semibold text-action">${unsure ? 'Choose columns' : `Show the ${preview.columns.length} columns`}</summary>
         <form method="post" action="/setup/imports/${preview.token}/columns" class="mt-3 flex flex-col gap-3">
           <input type="hidden" name="from" value="${from}" />
-          <div class="table-frame">
+          <div class="table-frame import-stack">
             <table class="table table-sm">
               <caption class="sr-only">Columns in your sheet</caption>
               <thead>
@@ -261,15 +261,15 @@ function columnsSection(preview: ImportPreview, from: ImportFrom): Html {
                 ${preview.columns.map(
                   (col) => html`<tr ${col.by === 'unsure' ? html`data-flagged` : ''}>
                     <th scope="row" class="font-semibold">${col.header}</th>
-                    <td class="import-samples">${col.samples.slice(0, 3).join(', ') || '—'}</td>
-                    <td class="min-w-44">
+                    <td class="import-samples" data-label="Sample values">${col.samples.slice(0, 3).join(', ') || '—'}</td>
+                    <td class="min-w-44" data-label="Goes to">
                       <label class="sr-only" for="column-${col.index}">Where ${col.header} goes</label>
                       <select id="column-${col.index}" name="column-${col.index}" class="select select-sm w-full">
                         <option value="">Ignore this column</option>
                         ${preview.fields.map((f) => html`<option value="${f.key}" ${col.field === f.key ? 'selected' : ''}>${f.label}</option>`)}
                       </select>
                     </td>
-                    <td><div class="import-how">${HOW[col.by](col, label)}</div></td>
+                    <td data-label="How"><div class="import-how">${HOW[col.by](col, label)}</div></td>
                   </tr>`,
                 )}
               </tbody>
@@ -318,7 +318,7 @@ function rowsSection(preview: ImportPreview, from: ImportFrom, adding: number): 
       <form method="post" action="/setup/imports/${preview.token}" class="flex flex-col gap-3" data-import-rows data-noun-one="${nouns.one}" data-noun-many="${nouns.many}">
         <input type="hidden" name="from" value="${from}" />
         ${rows.length
-          ? html`<div class="table-frame">
+          ? html`<div class="table-frame import-stack">
               <table class="table table-sm import-table">
                 <caption class="sr-only">Rows from ${preview.filename}</caption>
                 <thead>
@@ -353,14 +353,15 @@ function rowHtml(preview: ImportPreview, row: ImportRow, fields: string[], share
   const status = STATUS[row.status];
   const id = (field: string) => `row-${row.index}-${field}`;
   const rowProblem = row.problems.row;
+  const labelOf = (field: string) => preview.fields.find((f) => f.key === field)?.label ?? field;
   return html`<tr data-status="${row.status}">
-    <td class="w-10">
+    <td class="w-10 import-include">
       <input type="checkbox" class="checkbox checkbox-primary checkbox-sm" name="include" value="${row.index}" id="include-${row.index}" ${row.included ? 'checked' : ''} />
       <label class="sr-only" for="include-${row.index}">Add row ${row.line}</label>
     </td>
-    <td class="num">${row.line}</td>
-    <td>${badge(status.label, status.tone)}</td>
-    <td class="import-notes">
+    <td class="num" data-label="Row">${row.line}</td>
+    <td data-label="Status">${badge(status.label, status.tone)}</td>
+    <td class="import-notes" data-label="Notes">
       ${row.duplicateOf ? html`<span>Already added: ${row.duplicateOf}</span>` : ''}
       ${rowProblem ? html`<span class="field-error">${rowProblem}</span>` : ''}
       ${row.notes.map((n) => html`<span>${n}</span>`)}
@@ -368,8 +369,8 @@ function rowHtml(preview: ImportPreview, row: ImportRow, fields: string[], share
     ${fields.map((field) => {
       const problem = row.problems[field];
       const filled = row.filled[field];
-      if (problem) return html`<td class="import-fix" data-field="${field}">${fixControl(preview, row, field, id(field), problem)}</td>`;
-      return html`<td data-field="${field}">
+      if (problem) return html`<td class="import-fix" data-field="${field}" data-label="${labelOf(field)}">${fixControl(preview, row, field, id(field), problem)}</td>`;
+      return html`<td data-field="${field}" data-label="${labelOf(field)}">
         <span>${shown(field, row.values[field])}</span>
         ${filled ? (filled.by === 'ai' ? aiMark() : shared[field] ? '' : html`<span class="import-note">${filled.note}</span>`) : ''}
       </td>`;

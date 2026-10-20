@@ -15,7 +15,7 @@ import { authPage, otherWay } from './auth-card.ts';
 import { button, field, linkButton, type Flash } from './ui.ts';
 
 /** The session cookie's name. */
-export const SESSION_COOKIE = 'myest8_session';
+const SESSION_COOKIE = 'myest8_session';
 
 /** A session ends after this long without a request. */
 const SESSION_IDLE_MS = 12 * 3_600_000;
@@ -86,9 +86,22 @@ export function authRoutes(app: App, sessions: Sessions) {
     const email = String(form.email ?? '').trim();
     const password = String(form.password ?? '');
     const next = safeNext(String(form.next ?? ''));
-    const propertyManagerId = email && password ? await app.login(email, password) : null;
+    if (!email || !password) {
+      return c.html(
+        signInPage({
+          next,
+          email,
+          errors: {
+            ...(email ? {} : { email: 'Enter the email address you signed up with.' }),
+            ...(password ? {} : { password: 'Enter your password.' }),
+          },
+        }),
+        401,
+      );
+    }
+    const propertyManagerId = await app.login(email, password);
     if (propertyManagerId === null) {
-      return c.html(signInPage({ next, email, flash: { kind: 'error', message: 'That email and password don’t match. Try again.' } }), 401);
+      return c.html(signInPage({ next, email, errors: { password: SIGN_IN_REFUSED } }), 401);
     }
     await startSession(c, sessions, propertyManagerId);
     return c.redirect(next, 303);
@@ -179,7 +192,12 @@ export function sameOrigin(c: HonoContext): boolean {
   return hosts.some((host) => !!host && host.toLowerCase() === sourceHost.toLowerCase());
 }
 
-function signInPage(o: { next: string; email?: string; flash?: Flash }) {
+/** Said beside the password: which two things didn't match, without saying which was wrong, and what to try. */
+const SIGN_IN_REFUSED =
+  'That email and password don’t match. Check the email for typos and that Caps Lock is off. If you haven’t created an account yet, create your Agency’s account below.';
+
+function signInPage(o: { next: string; email?: string; flash?: Flash; errors?: { email?: string; password?: string } }) {
+  const errors = o.errors ?? {};
   return authPage({
     title: 'Sign in to myEST8',
     subtitle: 'For Property Managers. Tenants, Tradies and Property Owners never need an account.',
@@ -187,17 +205,16 @@ function signInPage(o: { next: string; email?: string; flash?: Flash }) {
     size: 'login',
     footer: SIGNED_OUT_FOOTER,
     form: html`<form method="post" action="/login" class="au-form">
+        ${errors.email || errors.password
+          ? html`<p role="alert" class="sr-only">Sign-in failed. ${errors.email ?? ''} ${errors.password ?? ''}</p>`
+          : ''}
         <input type="hidden" name="next" value="${o.next}" />
-        ${field({ label: 'Email', name: 'email', type: 'email', value: o.email ?? '', required: true, autocomplete: 'username' })}
-        ${field({ label: 'Password', name: 'password', type: 'password', required: true, autocomplete: 'current-password' })}
+        ${field({ label: 'Email', name: 'email', type: 'email', value: o.email ?? '', required: true, autocomplete: 'username', error: errors.email })}
+        ${field({ label: 'Password', name: 'password', type: 'password', required: true, autocomplete: 'current-password', error: errors.password })}
         ${button('Sign in', { size: 'lg', block: true })}
       </form>
-      ${otherWay({ text: 'New to myEST8?', button: linkButton('Create your Agency’s account', '/signup', { variant: 'secondary', block: true }) })}`,
-    steps: [
-      { text: 'Your dashboard lists each Maintenance Request waiting for your decision.', request: true },
-      { text: 'Confirm one and it becomes a Ticket.' },
-      { text: 'Quotes come back from Tradies for you to choose between.' },
-    ],
+      ${otherWay({ text: 'New to myEST8?', button: linkButton('Create your Agency’s account', '/signup', { variant: 'secondary', size: 'lg', block: true }) })}`,
+    steps: [],
   });
 }
 

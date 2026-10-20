@@ -65,7 +65,7 @@ function decode(content: Uint8Array): string {
 }
 
 /** RFC 4180 CSV: quoted fields may hold separators, quotes ("") and line breaks. */
-export function readCsv(text: string): string[][] {
+function readCsv(text: string): string[][] {
   const body = text.replace(/^﻿/, '');
   const firstLine = body.split(/\r?\n/, 1)[0] ?? '';
   const separator = [',', ';', '\t'].reduce((best, s) => (firstLine.split(s).length > firstLine.split(best).length ? s : best), ',');

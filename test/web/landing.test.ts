@@ -44,6 +44,20 @@ describe('the landing page', () => {
     expect(text).not.toContain('demo1234');
   });
 
+  test('the hero shows a Tenant’s text becoming a Maintenance Request, then a Ticket, with nothing in it to tab to', async () => {
+    const w = await webWorld();
+
+    const page = await (await w.get('/')).text();
+
+    const hero = page.match(/<section class="lp-hero"[\s\S]*?<\/section>/)?.[0] ?? '';
+    const scene = hero.match(/<figure[\s\S]*?<\/figure>/)?.[0] ?? '';
+    const text = visible(scene).replace(/\s+/g, ' ');
+    const order = ['tap under the kitchen sink', 'Maintenance Request', 'Waiting for you', 'Confirmed', '#12'].map((words) => text.indexOf(words));
+    expect(order.every((at) => at >= 0), text).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(scene).not.toMatch(/<(a|button|input|select|textarea)[\s>]/);
+  });
+
   test('plays one repair through myEST8, stage by stage, as an ordered list', async () => {
     const w = await webWorld();
 
@@ -53,10 +67,10 @@ describe('the landing page', () => {
     expect(stages).toHaveLength(8);
     const expected = [
       ['A Tenant texts the problem', 'The kitchen tap is dripping'],
-      ['It becomes a Maintenance Request', 'Routine', 'Plumbing'],
+      ['Photos are checked and a summary is written', 'Routine', 'Plumbing', 'Summary filled in by AI'],
       ['The Property Manager confirms', 'Confirm'],
       ['It becomes a Ticket', '#12'],
-      ['Quote Requests go to Tradies', '3 Tradies'],
+      ['Quote Requests go to at least two Tradies', '3 Tradies'],
       ['A Quote comes back', '$180'],
       ['The Work Order goes out', 'Work Order sent'],
       ['The Job is done, and the Tenant sees it', 'Done'],

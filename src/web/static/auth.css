@@ -6,11 +6,10 @@
  *
  * The page is the whole viewport. From 1024px it splits in two: a full-height
  * Night panel on the left, where the app's rail will sit once the Property Manager
- * is in (the logo takes the rail's colours there), and the form on white on the
- * right. On phones and tablets the form comes first and the Night panel follows.
- * The panel's one bold thing is the landing page's thesis, whose "You decide."
- * carries the Wattle stripe; the only other Wattle is the stripe on the
- * Maintenance Request waiting for a decision. That card arriving is the one motion.
+ * is in (the logo takes the rail's colours there), and the form on white on the right. On phones and
+ * tablets the form comes first and the panel follows (sign-in hides it there).
+ * The panel carries the landing page's thesis, whose "You decide." has the Wattle
+ * stripe. Sign-up adds what happens next; sign-in has no onboarding panel.
  */
 
 /* ----- Frame ----- */
@@ -168,7 +167,7 @@ body.au {
   font-size: clamp(30px, 1.2vw + 20px, 40px);
   font-weight: 700;
   line-height: 1.1;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
   color: var(--ink);
   text-wrap: balance;
 }
@@ -255,6 +254,13 @@ body.au {
   background: var(--ink);
   color: var(--rail-text);
 }
+/* Sign-in has nothing to add under the form on a phone, so its panel only shows beside it. */
+@media (max-width: 63.99rem) {
+  .is-login ~ .au-panel,
+  .au-frame.is-login .au-panel {
+    display: none;
+  }
+}
 .au-panel-inner {
   display: flex;
   flex-direction: column;
@@ -294,7 +300,7 @@ body.au {
   font-size: clamp(26px, 7.6cqi, 46px);
   font-weight: 700;
   line-height: 1.06;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.01em;
   color: var(--rail-text);
 }
 .au-line {
@@ -409,7 +415,7 @@ body.au {
   justify-content: space-between;
   gap: 2px 12px;
   font-family: var(--font-head);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--muted);
 }
@@ -452,6 +458,11 @@ body.au {
   font-family: var(--font-head);
   font-size: 13px;
   font-weight: 600;
+}
+
+/* The sign-in's message beside its field reads at body size. */
+.au-form .field-error {
+  font-size: 14px;
 }
 
 /* The one motion: the Maintenance Request arrives, once, after the page settles. */

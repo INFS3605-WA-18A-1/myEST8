@@ -1,3 +1,5 @@
+import { one } from '../../src/db.ts';
+import { wallClock } from '../../src/zoned-time.ts';
 import { AGENCY_INBOX, AGENCY_NUMBER, createHarness } from './harness.ts';
 
 // The standard Agency every scenario starts from.
@@ -137,13 +139,80 @@ export async function tradieQuotes(
   await w.h.receive(tradie.address, text);
 }
 
-/** Quote Requests go to each Tradie, every one quotes, and the Property Manager confirms every Quote. */
+/** The token of the Tradie's quote page for this Job: the one in the link their Quote Request carried. */
+export async function quoteToken(w: World, job: JobRef, tradie: TradieRef) {
+  const request = await quoteRequestFor(w, job, tradie);
+  const row = await one<{ token: string }>(w.h.db, 'SELECT token FROM quote_requests WHERE id = ?', request.quoteRequestId);
+  if (!row) throw new Error(`No Quote Request to ${tradie.address} for Job ${job.jobId}`);
+  return row.token;
+}
+
+/** An ISO date `days` after the harness clock's day in Sydney. */
+export function dateAhead(w: World, days: number) {
+  const { year, month, day } = wallClock(new Date(w.h.clock.now().getTime() + days * 86_400_000), 'Australia/Sydney');
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+/** Moves the clock to a minute after `start` (without running the worker), so a visit booked then has begun and can be marked done. */
+export function visitStarted(w: World, start: Date | string) {
+  const ms = new Date(start).getTime() + 60_000 - w.h.clock.now().getTime();
+  if (ms > 0) w.h.clock.advance(ms);
+}
+
+/** The Tradie gives a Firm Quote on their quote page (after their Estimate, and their Site Inspection if they needed one). */
+export async function firmQuote(
+  w: World,
+  job: JobRef,
+  tradie: TradieRef,
+  input: { priceCents: number; proposedTime?: Date; scopeOfWork?: string; durationDays?: number; availableDates?: string[] },
+) {
+  await w.h.app.submitFirmQuote(await quoteToken(w, job, tradie), {
+    priceCents: input.priceCents,
+    scopeOfWork: input.scopeOfWork ?? 'Replace the washer and reseat the tap',
+    durationDays: input.durationDays ?? 1,
+    availableDates: input.availableDates ?? [dateAhead(w, 5)],
+    proposedTime: input.proposedTime?.toISOString() ?? null,
+  });
+  await w.h.drain();
+  return (await jobView(w, job)).quotes.find((q) => q.tradieId === tradie.id && q.stage === 'firm')!;
+}
+
+/**
+ * Quote Requests go to each Tradie, every one replies with an Estimate by SMS or email,
+ * the Property Manager confirms each, and each Tradie then gives a Firm Quote at the
+ * same price on their quote page. Returns the Firm Quotes, which are what is chosen.
+ */
 export async function confirmedQuotes(w: World, job: JobRef, quotes: [TradieRef, number, Date?][]) {
-  await w.alice.sendQuoteRequests(job.jobId, quotes.map(([tradie]) => tradie.id));
+  await confirmedEstimates(w, job, quotes);
+  for (const [tradie, priceCents, proposedTime] of quotes) await firmQuote(w, job, tradie, { priceCents, ...(proposedTime ? { proposedTime } : {}) });
+  return (await jobView(w, job)).quotes.filter((q) => q.stage === 'firm');
+}
+
+/** Quote Requests go to each Tradie, every one replies with an Estimate, and the Property Manager confirms every Estimate. */
+export async function confirmedEstimates(w: World, job: JobRef, quotes: [TradieRef, number, Date?][]) {
+  const asked = quotes.map(([tradie]) => tradie.id);
+  // Quote Requests go to at least two Tradies (one only when the Agency has no other for the Trade),
+  // so a lone quoting Tradie is asked alongside another who stays silent.
+  const rule = (await jobView(w, job)).requestRule;
+  if (rule && asked.length < rule.minimum) {
+    const others = (await w.alice.ticket(job.ticketId)).jobs.find((j) => j.jobId === job.jobId)!.recommendations.filter((r) => !r.requested && !asked.includes(r.tradieId));
+    asked.push(...others.slice(0, rule.minimum - asked.length).map((r) => r.tradieId));
+  }
+  await w.alice.sendQuoteRequests(job.jobId, asked);
   for (const [tradie, priceCents, proposedTime] of quotes) {
     await tradieQuotes(w, job, tradie, `Quote from ${tradie.address} for job ${job.jobId}`, { priceCents, proposedTime });
   }
   const view = await jobView(w, job);
   for (const quote of view.quotes.filter((q) => !q.confirmed)) await w.alice.confirmQuote(quote.quoteId);
-  return (await jobView(w, job)).quotes;
+  return (await jobView(w, job)).quotes.filter((q) => q.stage === 'estimate');
+}
+
+/**
+ * The Tradie (already sent a Quote Request) gives an Estimate on their quote page saying they
+ * need a Site Inspection, and the Property Manager books it at `start`. Returns its Work Order id.
+ */
+export async function inspectionBooked(w: World, job: JobRef, tradie: TradieRef, start: Date, estimateCents = 300_00) {
+  await w.h.app.submitEstimate(await quoteToken(w, job, tradie), { priceCents: estimateCents, needsInspection: true });
+  await w.h.drain();
+  return w.alice.bookInspection((await quoteRequestFor(w, job, tradie)).quoteRequestId, { start: start.toISOString() });
 }

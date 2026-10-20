@@ -5,55 +5,25 @@
  * accessibility rules. Page markup is Tailwind utilities and the classes in src/web/ui.ts.
  */
 
-/* Lexend (wordmark, headings, buttons, nav) and Red Hat Text (body, tables, forms), self-hosted under /assets/fonts/. */
+/*
+ * Bricolage Grotesque (display: page titles, section headings, docket numbers, the
+ * wordmark) and Public Sans (text: body, tables, forms, buttons, nav, badges), both
+ * variable fonts self-hosted under /assets/fonts/. The weight axis covers 400 to 700;
+ * Bricolage's optical size axis is left to the browser (font-optical-sizing: auto).
+ */
 @font-face {
-  font-family: 'Lexend';
+  font-family: 'Bricolage Grotesque';
   font-style: normal;
-  font-weight: 400;
+  font-weight: 200 800;
   font-display: swap;
-  src: url('/assets/fonts/lexend-latin-400-normal.woff2') format('woff2');
+  src: url('/assets/fonts/bricolage-grotesque-latin-opsz-normal.woff2') format('woff2');
 }
 @font-face {
-  font-family: 'Lexend';
+  font-family: 'Public Sans';
   font-style: normal;
-  font-weight: 600;
+  font-weight: 100 900;
   font-display: swap;
-  src: url('/assets/fonts/lexend-latin-600-normal.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Lexend';
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url('/assets/fonts/lexend-latin-700-normal.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Red Hat Text';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url('/assets/fonts/red-hat-text-latin-400-normal.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Red Hat Text';
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url('/assets/fonts/red-hat-text-latin-500-normal.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Red Hat Text';
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url('/assets/fonts/red-hat-text-latin-600-normal.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Red Hat Text';
-  font-style: italic;
-  font-weight: 400;
-  font-display: swap;
-  src: url('/assets/fonts/red-hat-text-latin-400-italic.woff2') format('woff2');
+  src: url('/assets/fonts/public-sans-latin-wght-normal.woff2') format('woff2');
 }
 
 /*
@@ -70,7 +40,7 @@
   --control: #7d8a95; /* input, select, checkbox and secondary button borders (3.5:1 on white) */
   --action: #1f5c8b; /* Harbour: primary buttons, links, focus, selected (white on it 7.1:1) */
   --action-hover: #174a70; /* Harbour, pressed darker: primary hover, link hover */
-  --hivis: #ffc233; /* Wattle: the decision stripe, the current rail item, decision chips (Night on it 10.1:1) */
+  --hivis: #ffc233; /* Wattle: the decision stripe, the current rail item, decision chips (Night on it 10.1:1). Never text, never a button */
   --info-bg: #e8f0f7; /* Harbour's tint: info badges and alerts, "Filled in by AI" */
   --urgent: #b42318; /* urgent, errors, destructive actions */
   --urgent-bg: #fdecea;
@@ -88,8 +58,8 @@
   --scrim: rgb(19 33 46 / 0.45); /* Night over the page, behind the open drawer */
   --shadow-soft: 0 2px 10px rgb(19 33 46 / 0.07); /* sections and the count strip: a faint lift off Sand */
   --shadow-lift: 0 8px 24px rgb(19 33 46 / 0.18); /* the one shadow: menus, dialogs, the phone frame */
-  --font-body: 'Red Hat Text', system-ui, sans-serif;
-  --font-head: 'Lexend', system-ui, sans-serif;
+  --font-body: 'Public Sans', system-ui, sans-serif;
+  --font-head: 'Bricolage Grotesque', system-ui, sans-serif;
 }
 
 /*
@@ -150,6 +120,7 @@
       color: var(--ink);
       font-family: var(--font-body);
       font-size: 14px;
+      font-weight: 400;
       line-height: 1.45;
       -webkit-font-smoothing: antialiased;
     }
@@ -158,7 +129,9 @@
     h2,
     h3 {
       font-family: var(--font-head);
-      line-height: 1.15;
+      font-optical-sizing: auto;
+      font-weight: 600;
+      line-height: 1.1;
     }
 
     /* Ordinary links are Harbour. Links styled as buttons (.btn) keep their variant's text colour. :where keeps this at zero specificity, so any class (rail, docket, segmented, a chat bubble) still wins. */
@@ -183,10 +156,21 @@
       outline-offset: 2px;
     }
 
+    /* Disclosures (<details>): the summary is a control, so it gets the pointer, a
+       Slate marker and a rounded focus ring. :where keeps this at zero specificity,
+       so a page's own summary (a menu, a button) still wins. */
+    :where(summary) {
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    :where(summary)::marker {
+      color: var(--muted);
+    }
+
     /* Placeholders look like hints, never like typed values. */
     ::placeholder {
       color: var(--muted);
-      font-style: italic;
+      font-style: normal;
       opacity: 1;
     }
 
@@ -216,12 +200,6 @@
     }
 
     /* Text that must not run past its box: one line, cut with an ellipsis at a word boundary where it can be. */
-    .truncate-words {
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
     /* Clamped text (see clip() in ui.ts): wraps to N lines, then an ellipsis. */
     .line-clamp-1,
     .line-clamp-2,
@@ -242,7 +220,7 @@
       -webkit-line-clamp: 3;
     }
 
-    /* ----- Buttons: Lexend 600, 6px radius. 36px, 32px small, 44px large; every size is 44px on phones and touch screens. */
+    /* ----- Buttons: Public Sans 600, 6px radius. 36px, 32px small, 44px large; every size is 44px on phones and touch screens. */
     .btn {
       --size: 2.25rem;
       height: var(--size);
@@ -250,7 +228,7 @@
       padding-inline: 14px;
       gap: 6px;
       border-radius: 6px;
-      font-family: var(--font-head);
+      font-family: var(--font-body);
       font-weight: 600;
       font-size: 14px;
       letter-spacing: 0;
@@ -302,6 +280,23 @@
       border-color: var(--ink);
       color: var(--ink);
     }
+    /* Secondary is the one bordered look; daisyUI's slate-filled btn-secondary would be a second one. */
+    .btn-secondary {
+      --btn-color: var(--surface);
+      --btn-bg: var(--surface);
+      --btn-fg: var(--ink);
+      --btn-border: var(--control);
+      background: var(--surface);
+      border: 1px solid var(--control);
+      color: var(--ink);
+    }
+    .btn-secondary:hover {
+      --btn-bg: var(--page);
+      --btn-border: var(--ink);
+      background: var(--page);
+      border-color: var(--ink);
+      color: var(--ink);
+    }
     /* Danger: urgent text on surface; the border turns red on hover. */
     .btn-danger {
       background: var(--surface);
@@ -313,13 +308,19 @@
       border-color: var(--urgent);
       color: var(--urgent);
     }
+    /* Ghost: Harbour text and no box, so a quiet action ("See all Tickets", "Sign out") still reads as one, not as a heading. */
     .btn-ghost {
-      color: var(--ink);
+      color: var(--action);
     }
     .btn-ghost:hover {
       --btn-bg: var(--page);
       --btn-border: transparent;
-      color: var(--ink);
+      color: var(--action-hover);
+    }
+    /* Inside a message (the flash's close button) it takes the message's colour. */
+    .alert .btn-ghost,
+    .alert .btn-ghost:hover {
+      color: inherit;
     }
     .btn:disabled,
     .btn[disabled] {
@@ -369,13 +370,20 @@
       color: var(--urgent);
       background-color: var(--urgent-bg);
     }
+    /* Outlined (badge(..., { outline: true }), e.g. "Site inspection"): white with a border in the tone's own colour, so a
+       badge straight on the Paper page has a boundary (a neutral badge's own fill is Paper). */
+    .badge.badge-soft.is-outline {
+      background-color: var(--surface);
+      border-color: currentColor;
+    }
 
     /* Alerts: each tone is a token pair, never a mix of two. Text is the pair's
        strong colour on its tint; the icon repeats the tone and the word says it. */
     .alert {
-      gap: 10px;
-      border-radius: 6px;
+      gap: 12px;
+      border-radius: 8px;
       font-size: 14px;
+      line-height: 1.45;
     }
     .alert.alert-soft {
       color: var(--ink);
@@ -428,12 +436,14 @@
       color: var(--ink);
     }
 
-    /* ----- Forms: label above the control, 40px controls (44px on phones), hints and errors under them. */
+    /* ----- Forms: label above the control, 36px controls (44px on phones and touch screens), the error then the hint under them. */
+    /* No block padding (daisyUI adds 4px), so a button bottom-aligned beside a field lines up with its control. */
     .fieldset {
       display: flex;
       flex-direction: column;
       gap: 4px;
       min-width: 0;
+      padding-block: 0;
       font-size: 14px;
     }
     .field-label {
@@ -465,9 +475,12 @@
       color: var(--ink);
       font-size: 14px;
     }
+    /* The same height as a button beside them: 36px, 44px on phones and touch screens. */
     .input,
-    .select {
-      height: 2.5rem;
+    .select,
+    .file-input {
+      --size: 2.25rem;
+      height: var(--size);
     }
     .checkbox {
       --input-color: var(--control);
@@ -478,11 +491,19 @@
     }
     .textarea {
       min-height: 5.5rem;
+      line-height: 1.45;
     }
     .input-error,
     .select-error,
-    .textarea-error {
+    .textarea-error,
+    .file-input-error,
+    .checkbox-error {
       --input-color: var(--urgent);
+      border-color: var(--urgent);
+    }
+    /* A refused file field turns its border red, not its Choose file button: red fills are for nothing. */
+    .file-input-error {
+      --btn-color: var(--page);
     }
     .input:focus,
     .select:focus,
@@ -500,9 +521,12 @@
       .file-input {
         font-size: 1rem;
       }
+    }
+    @media (max-width: 40rem), (pointer: coarse) {
       .input,
-      .select {
-        height: 2.75rem;
+      .select,
+      .file-input {
+        --size: 2.75rem;
       }
     }
 
@@ -528,9 +552,9 @@
     .section-title {
       margin: 0;
       font-family: var(--font-head);
-      font-size: 16px;
+      font-size: 20px;
       font-weight: 600;
-      line-height: 1.2;
+      line-height: 1.1;
       color: var(--ink);
     }
     .section-actions {
@@ -549,7 +573,7 @@
       font-size: 14px;
     }
 
-    /* ----- Tables: 36px rows, Lexend headers, hairlines, no zebra. */
+    /* ----- Tables: 36px rows, Public Sans headers, hairlines, no zebra. */
     .table-frame {
       min-width: 0;
       overflow-x: auto;
@@ -568,7 +592,7 @@
       vertical-align: middle;
     }
     .table :where(thead, tfoot) {
-      font-family: var(--font-head);
+      font-family: var(--font-body);
       font-size: 13px;
       font-weight: 600;
       color: var(--ink);
@@ -616,6 +640,23 @@
       --step-bg: var(--action);
       --step-fg: var(--surface);
     }
+    /* The step on screen (aria-current) is ringed in Harbour, so "you are here" reads even
+       when that step is already done and shows its tick. The 2px gap is the colour the steps
+       sit on (Paper on the page, white in a section) and covers the connector under it;
+       the list keeps 4px above and below so its scroll box doesn't clip the ring. */
+    .steps {
+      --step-ring-gap: var(--page);
+      padding-block: 4px;
+    }
+    :where(.section, .card, .share-panel) .steps {
+      --step-ring-gap: var(--surface);
+    }
+    .steps .step[aria-current='step']::after {
+      z-index: 2;
+      box-shadow:
+        0 0 0 2px var(--step-ring-gap),
+        0 0 0 4px var(--action);
+    }
     /* daisyUI colours step-primary's circle and connector on the pseudo-elements, so
        a done step (which is also step-primary) is set there too: Done green, with
        the line between two done steps green as well. */
@@ -660,11 +701,11 @@
       outline-color: currentColor;
     }
 
-    /* Tabs: Lexend, the active one Night with the Harbour underline. */
+    /* Tabs: the active one Night with the Harbour underline. */
     .tabs-border > .tab {
-      font-family: var(--font-head);
+      font-family: var(--font-body);
       font-size: 14px;
-      font-weight: 500;
+      font-weight: 400;
       color: var(--muted);
     }
     .tabs-border > .tab:hover {
@@ -693,9 +734,9 @@
       padding: 0 12px;
       border: 1px solid transparent;
       border-radius: 6px;
-      font-family: var(--font-head);
-      font-size: 15px;
-      font-weight: 500;
+      font-family: var(--font-body);
+      font-size: 14px;
+      font-weight: 400;
       color: var(--ink);
       text-decoration: none;
       white-space: nowrap;
@@ -721,7 +762,7 @@
       }
     }
 
-        /* daisyUI's snap-icon rule undoes compact on a vertical timeline; keep the icon column only. */
+    /* daisyUI's snap-icon rule undoes compact on a vertical timeline; keep the icon column only. */
     .timeline-compact.timeline-vertical.timeline-snap-icon > li {
       --timeline-col-start: 0;
     }
@@ -762,27 +803,40 @@
     }
 
     /* ----- Empty states: one sentence and the next action, no illustration. */
+    /* On the page it is a section of its own (surface, hairline); inside a section it is
+       just the sentence and the action, so there is no box in a box. */
     .empty-state {
       display: flex;
       flex-direction: column;
       align-items: flex-start;
       gap: 12px;
       padding: 16px;
+      background: var(--surface);
       border: 1px solid var(--line);
       border-radius: 8px;
     }
     .empty-state p {
       margin: 0;
+      max-width: 72ch;
+      color: var(--ink);
+    }
+    :where(.section-body, .section, .lane-body, .share-panel, td) > .empty-state {
+      padding: 0;
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+    }
+    :where(.section-body, .section, .lane-body, td) > .empty-state p {
       color: var(--muted);
     }
 
-    /* ----- Dockets: Tickets only. The issue, the address, a dashed perforation, then the stub: the status and a foot with the number and age. */
+    /* ----- Dockets: Tickets only. The stub (number, Urgency, age), a dashed perforation, then the issue, the address and the stage line. */
     .docket {
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 8px;
       min-width: 0;
-      padding: 10px;
+      padding: 12px;
       background: var(--surface);
       border: 1px solid var(--line);
       border-radius: 4px;
@@ -797,7 +851,7 @@
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 6px;
+      gap: 4px 8px;
       min-width: 0;
     }
     .docket-stub .badge {
@@ -805,45 +859,37 @@
       padding: 0 6px;
       font-size: 12px;
     }
+    .docket-age {
+      margin-left: auto;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    /* The number: large, in the display face. */
     .docket-number {
       font-family: var(--font-head);
-      font-size: 14px;
-      font-weight: 600;
-      line-height: 1.2;
+      font-size: 20px;
+      font-weight: 700;
+      line-height: 1.1;
+      letter-spacing: 0;
     }
-    /* The Ticket page's header docket: the number at 26px. */
+    /* The Ticket page's header docket: the number at 40px. */
     .docket.is-large {
-      gap: 8px;
       padding: 12px 16px;
-      border-radius: 8px;
+      border-radius: 4px;
     }
     .docket.is-large .docket-number {
-      font-size: 26px;
-      font-weight: 700;
-      line-height: 1.15;
+      font-size: 40px;
+      letter-spacing: -0.01em;
     }
     .docket.is-large .docket-stub .badge {
       min-height: 20px;
       padding: 1px 8px;
       font-size: 13px;
     }
-    /* The Ticket page's header keeps the street first and bold, then the issue. */
-    .docket.is-large .docket-address {
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--ink);
-    }
     .docket.is-large .docket-issue {
-      font-size: 14px;
-      font-weight: 400;
+      font-size: 16px;
     }
-    /* Waiting on the Property Manager (Ready to choose): the decision stripe. */
-    .docket.is-decision,
-    a.docket.is-decision:hover {
-      border-left-width: 4px;
-      border-left-color: var(--hivis);
-    }
-    /* The perforation: a dashed hairline across the docket, above the stub. */
+    /* The perforation: a dashed hairline across the docket, under the stub. */
     .docket-perf {
       display: block;
       border-top: 1px dashed var(--control);
@@ -855,10 +901,10 @@
       gap: 2px;
       min-width: 0;
     }
-    /* Read first: the issue, up to three lines (line-clamp-3 in clip()). */
+    /* Read first: the issue (the Summary), up to three lines (line-clamp-3 in clip()). */
     .docket-issue {
-      font-size: 15px;
-      font-weight: 600;
+      font-size: 16px;
+      font-weight: 500;
       line-height: 1.3;
     }
     /* Then where: the address on one line, the full text in its title. */
@@ -866,7 +912,7 @@
       font-size: 13px;
       color: var(--muted);
     }
-    /* Then the status: Urgency, Trades and what the Ticket waits on. */
+    /* Then the stage line: Trades and what the Ticket waits on. */
     .docket-status {
       display: flex;
       flex-wrap: wrap;
@@ -881,29 +927,6 @@
       padding: 0 6px;
       font-size: 12px;
     }
-    /* The foot: the number and the age, quiet. */
-    .docket-foot {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 12px;
-      color: var(--muted);
-    }
-    .docket-foot .docket-number {
-      font-size: 12px;
-    }
-    .docket-foot .ml-auto {
-      margin-left: auto;
-    }
-    .docket-meta {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 2px 12px;
-      margin-top: 2px;
-      font-size: 12px;
-      color: var(--muted);
-    }
     .unread-dot {
       display: inline-block;
       width: 8px;
@@ -912,7 +935,34 @@
       background: var(--action);
     }
 
-    /* ----- The count strip: five numbers that link into the queues, under a Harbour line. */
+    /* ----- The count sentence: one sentence under the title, every count a link into its queue.
+       A count that needs a decision is Night on a Wattle chip; the rest are Harbour links. */
+    .count-sentence {
+      max-width: 72ch;
+      margin: 0;
+      font-size: 16px;
+      line-height: 1.6;
+      color: var(--ink);
+    }
+    .count-link {
+      border-radius: 4px;
+      font-weight: 500;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+    .count-link.is-decision {
+      color: var(--ink);
+      font-weight: 600;
+      text-decoration-color: var(--hivis);
+      text-decoration-thickness: 3px;
+      text-underline-offset: 4px;
+    }
+    :where(a.count-link.is-decision):hover {
+      color: var(--ink);
+      text-decoration-color: var(--ink);
+    }
+
+    /* ----- The count strip (the dashboard): numbers that link into the queues, under a Harbour line. */
     .count-strip {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
@@ -1283,14 +1333,139 @@
       border-left: 3px solid #c8372d;
     }
 
+    /* Needs your attention: each decision row keeps a 4px Wattle edge. */
+    .dashboard-main .queue-row.is-decision {
+      border-left-width: 4px;
+      border-left-color: var(--hivis);
+    }
+
     /* The dashboard: what needs attention leads, in larger type. */
     .dashboard-main > .section:first-child > .section-head .section-title {
       font-size: 22px;
     }
 
+    /* ----- Filled in by AI: the info tint, with a quiet label, for text the AI wrote that the
+       Property Manager can edit (a Summary). Not Wattle, not a wash of the page. */
+    .ai-filled {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+      padding: 8px 12px;
+      background: var(--info-bg);
+      border-radius: 4px;
+      color: var(--ink);
+    }
+    .ai-filled-label {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
     /* ----- Segmented control (Mine | All): links, the current one filled with Harbour. */
+    /* The filter bar over a list: labelled selects in a wrapping row. */
+    .filter-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: end;
+      gap: 8px 12px;
+    }
+    .filter-bar-field {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 10rem;
+    }
+    .filter-bar-label {
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .filter-bar-clear {
+      align-self: center;
+      font-size: 14px;
+    }
+    .filter-bar-search {
+      min-width: 16rem;
+    }
+
+    /* ----- Searchable select (app.js): a text box over a list of the options that match. */
+    .combobox {
+      position: relative;
+      width: 100%;
+    }
+    .combobox-input {
+      width: 100%;
+      padding-right: 2rem;
+      /* The caret a select has, so it still reads as a choice. */
+      background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+      background-position: calc(100% - 16px) 50%, calc(100% - 11px) 50%;
+      background-size: 5px 5px;
+      background-repeat: no-repeat;
+    }
+    .combobox-list {
+      position: absolute;
+      z-index: 30;
+      top: calc(100% + 4px);
+      left: 0;
+      right: 0;
+      max-height: 16rem;
+      overflow-y: auto;
+      margin: 0;
+      padding: 4px;
+      list-style: none;
+      background: var(--surface);
+      border: 1px solid var(--control);
+      border-radius: 6px;
+      box-shadow: var(--shadow-lift);
+    }
+    .combobox-option,
+    .combobox-empty {
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-size: 14px;
+      line-height: 1.35;
+    }
+    .combobox-option {
+      cursor: pointer;
+    }
+    .combobox-option:hover,
+    .combobox-option.is-active {
+      background: var(--info-bg);
+    }
+    .combobox-option[aria-selected='true'] {
+      font-weight: 600;
+      color: var(--action);
+    }
+    .combobox-empty {
+      color: var(--muted);
+    }
+
+    /* ----- Nominated Tradies picker: a searchable select per Tradie, Remove beside each. */
+    .picker-rows {
+      display: grid;
+      gap: 8px;
+      margin: 0 0 8px;
+      padding: 0;
+      list-style: none;
+    }
+    .picker-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .picker-row > :is(select, .combobox) {
+      flex: 1;
+      min-width: 0;
+    }
+    .picker-remove,
+    .picker-add {
+      gap: 4px;
+    }
+    html:not(.js) .picker-remove {
+      display: none;
+    }
     .segmented {
       display: inline-flex;
+      align-self: flex-start;
       gap: 2px;
       padding: 3px;
       background: var(--surface);
@@ -1300,10 +1475,10 @@
     .segmented-item {
       display: inline-flex;
       align-items: center;
-      min-height: 32px;
+      min-height: 28px;
       padding-inline: 12px;
       border-radius: 4px;
-      font-family: var(--font-head);
+      font-family: var(--font-body);
       font-size: 14px;
       font-weight: 600;
       color: var(--ink);
@@ -1320,25 +1495,21 @@
     }
     @media (max-width: 40rem), (pointer: coarse) {
       .segmented-item {
-        min-height: 40px;
+        min-height: 36px;
         padding-inline: 16px;
       }
     }
 
-    /* ----- Queue rows: compact. Only a row that needs the Property Manager's decision gets the 4px Wattle stripe. */
+    /* ----- Queue rows: compact. On the dashboard a decision row gets a 4px Wattle edge (see the count strip block). */
     .queue-row {
       display: flex;
       align-items: flex-start;
       gap: 12px;
       min-width: 0;
-      padding: 10px 10px 10px 12px;
+      padding: 12px;
       background: var(--surface);
       border: 1px solid var(--line);
       border-radius: 4px;
-    }
-    .queue-row.is-decision {
-      border-left-width: 4px;
-      border-left-color: var(--hivis);
     }
     .queue-thumb {
       flex: 0 0 56px;
@@ -1357,7 +1528,7 @@
       display: flex;
       flex: 1 1 auto;
       flex-direction: column;
-      gap: 6px;
+      gap: 4px;
       min-width: 0;
     }
     /* The title, then the actions at the end of its line (under it when there's no room). */
@@ -1365,7 +1536,7 @@
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 6px 8px;
+      gap: 8px;
       min-width: 0;
     }
     .queue-title {
@@ -1392,10 +1563,26 @@
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 6px;
+      gap: 4px 6px;
+    }
+    .queue-badges {
+      margin-top: 4px;
     }
     .queue-actions {
       flex: 0 0 auto;
+    }
+    /* Phones: the actions take their own line under the badges, so the title keeps the row's width. */
+    @media (max-width: 39.99rem) {
+      .queue-head {
+        display: contents;
+      }
+      .queue-title {
+        flex: none;
+      }
+      .queue-actions {
+        order: 9;
+        margin-top: 4px;
+      }
     }
     /* The age sits at the end of the badges' row. */
     .queue-meta {
@@ -1426,11 +1613,11 @@
       font-family: var(--font-head);
       font-size: 14px;
       font-weight: 600;
-      line-height: 1.2;
+      line-height: 1.15;
       color: var(--ink);
     }
     .lane-count {
-      font-family: var(--font-head);
+      font-family: var(--font-body);
       font-size: 14px;
       font-weight: 600;
       color: var(--muted);
@@ -1502,6 +1689,7 @@
     .rail-logo:hover {
       color: var(--rail-text);
     }
+    /* The key tag is Wattle on the Night rail. */
     .rail-logo .logo-mark {
       color: var(--hivis);
     }
@@ -1524,6 +1712,18 @@
     .rail-gap {
       margin-top: 12px;
     }
+    /* A group's quiet heading (Profiles): the gap above it, small caps-weight label. */
+    .rail-group {
+      margin: 12px 0 0;
+      padding: 0 12px;
+      font-family: var(--font-body);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--rail-text);
+      opacity: 0.7;
+    }
     .rail-foot {
       margin-top: auto;
       padding-top: 16px;
@@ -1535,9 +1735,9 @@
       min-height: 40px;
       padding: 0 12px;
       border-radius: 6px;
-      font-family: var(--font-head);
-      font-size: 16px;
-      font-weight: 600;
+      font-family: var(--font-body);
+      font-size: 15px;
+      font-weight: 500;
       color: var(--rail-text);
       text-decoration: none;
     }
@@ -1545,10 +1745,11 @@
       background: var(--rail-hover);
       color: var(--rail-text);
     }
-    /* The current place: a lighter band with the Wattle bar on its left edge. */
+    /* The current place: a lighter band, weight 600, white, and the 4px Wattle bar on its left edge. */
     .rail-link[aria-current='page'] {
       background: var(--rail-current);
       box-shadow: inset 4px 0 0 var(--hivis);
+      font-weight: 600;
       color: var(--surface);
     }
     /* Setup guide: an outlined, quiet link above Collapse menu while setup is unfinished. */
@@ -1566,12 +1767,15 @@
     }
     /* The demo's Phone simulator: quieter, in the body face. */
     .rail-link.is-quiet {
-      gap: 8px;
       min-height: 36px;
       font-family: var(--font-body);
       font-size: 13px;
       font-weight: 500;
       color: var(--rail-muted);
+    }
+    /* Its 16px icon sits in the nav's 18px icon column, so every label in the rail starts on one line. */
+    .rail-link.is-quiet > svg {
+      margin-inline: 1px;
     }
     .rail-link.is-quiet:hover,
     .rail-link.is-quiet[aria-current='page'] {
@@ -1594,7 +1798,19 @@
       margin-left: auto;
       font-family: var(--font-body);
       font-size: 13px;
+      font-weight: 400;
       color: var(--rail-muted);
+    }
+    /* A count that means "needs you" (Requests, Approvals): a small Wattle chip with Night text. */
+    .rail-link[data-decision] .rail-count {
+      min-width: 20px;
+      padding: 0 6px;
+      border-radius: 999px;
+      background: var(--hivis);
+      color: var(--ink);
+      font-weight: 600;
+      line-height: 20px;
+      text-align: center;
     }
     .rail-agency {
       margin: 0;
@@ -1606,7 +1822,7 @@
     .rail-toggle {
       display: none;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
       min-height: 36px;
       margin-top: 4px;
       padding: 0 12px;
@@ -1643,6 +1859,7 @@
         padding: 4px;
       }
       html.rail-collapsed .logo-word,
+      html.rail-collapsed .rail-group,
       html.rail-collapsed .rail-label {
         position: absolute;
         width: 1px;
@@ -1708,63 +1925,41 @@
       }
     }
 
-    .topbar {
+    /* ----- The page header: the first row of the content column. The title (Bricolage 28px) on
+       the left; the page's controls, the date and the user menu on the right of the same row.
+       On phones the row wraps: the title, then the controls. */
+    .page-header {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
+      justify-content: space-between;
+      gap: 8px 16px;
+      min-width: 0;
+    }
+    .page-header-lead {
+      display: flex;
+      flex: 1 1 14rem;
+      align-items: center;
       gap: 12px;
-      min-height: 60px;
-      padding: 10px 24px;
-      background: var(--surface);
-      border-bottom: 1px solid var(--line);
+      min-width: 0;
     }
-    .topbar-title {
-      flex: 1 1 0;
-      min-width: 12ch;
-      margin: 0;
-      overflow: hidden;
-      font-family: var(--font-head);
-      font-size: 22px;
-      font-weight: 600;
-      line-height: 1.2;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      color: var(--ink);
+    .page-header-end {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px 16px;
+      min-width: 0;
+      max-width: 100%;
     }
-    @media (max-width: 40rem) {
-      .topbar-title {
-        font-size: 20px;
-      }
-    }
-    .topbar-controls {
+    .page-header-controls {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       gap: 12px;
       min-width: 0;
     }
-    .topbar-end {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      min-width: 0;
-    }
-    /* Under 1024px the page's controls take a second row under the title, full width. */
-    @media (max-width: 63.99rem) {
-      .topbar {
-        padding-block: 8px;
-        padding-inline: 16px;
-      }
-      .topbar-controls {
-        order: 1;
-        flex: 0 0 100%;
-        padding-bottom: 4px;
-      }
-      .topbar-end {
-        order: 0;
-      }
-    }
-    .topbar-date {
+    .page-header-date {
       display: none;
       font-size: 14px;
       color: var(--muted);
@@ -1772,8 +1967,17 @@
       font-variant-numeric: tabular-nums;
     }
     @media (min-width: 40rem) {
-      .topbar-date {
+      .page-header-date {
         display: inline;
+      }
+    }
+    @media (max-width: 39.99rem) {
+      .page-header-lead {
+        flex-basis: 9rem;
+      }
+      .page-header-end:has(.page-header-controls) {
+        flex: 1 1 100%;
+        justify-content: space-between;
       }
     }
 
@@ -1810,7 +2014,7 @@
       display: flex;
       align-items: center;
       gap: 8px;
-      min-height: 40px;
+      min-height: 36px;
       padding-inline: 8px;
       border-radius: 6px;
       font-size: 14px;
@@ -1821,6 +2025,16 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+    }
+    .user-menu-name {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    @media (max-width: 40rem), (pointer: coarse) {
+      .user-menu > summary {
+        min-height: 44px;
+      }
     }
     .user-menu > summary::-webkit-details-marker {
       display: none;
@@ -1943,14 +2157,6 @@
         padding: 16px;
       }
     }
-    .app-flash {
-      padding: 12px 24px 0;
-    }
-    @media (max-width: 63.99rem) {
-      .app-flash {
-        padding: 12px 16px 0;
-      }
-    }
     .app-body-stack {
       display: flex;
       flex-direction: column;
@@ -1961,22 +2167,23 @@
     .page-head {
       display: flex;
       flex-wrap: wrap;
-      align-items: flex-end;
+      align-items: center;
       justify-content: space-between;
       gap: 12px 16px;
     }
     .page-title {
       margin: 0;
       font-family: var(--font-head);
-      font-size: 26px;
-      font-weight: 600;
-      line-height: 1.15;
+      font-size: 28px;
+      font-weight: 700;
+      line-height: 1.1;
+      letter-spacing: -0.01em;
       color: var(--ink);
       overflow-wrap: anywhere;
     }
     @media (max-width: 40rem) {
       .page-title {
-        font-size: 22px;
+        font-size: 24px;
       }
     }
     /* A headline (the landing page): 36px on phones up to 52px on wide screens. */
@@ -1991,7 +2198,8 @@
       max-width: 72ch;
       font-size: 14px;
       color: var(--muted);
-    }    .page-actions {
+    }
+    .page-actions {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
@@ -2041,7 +2249,7 @@
 @layer utilities {
   @layer app {
     /* The logo: the key tag beside the wordmark (logo() in ui.ts). The word takes the
-       parent's colour; the tag is Harbour on the public bar and Wattle in the rail. */
+       parent's colour; the tag is Night on light surfaces, White or Wattle on dark ones. */
     .logo {
       display: inline-flex;
       align-items: center;
@@ -2079,6 +2287,7 @@
     .rail-toggle:focus-visible {
       outline-color: var(--rail-text);
     }
+
   }
 }
 
@@ -2168,7 +2377,7 @@
       font-family: var(--font-head);
       font-size: 16px;
       font-weight: 600;
-      line-height: 1.2;
+      line-height: 1.15;
       overflow-wrap: anywhere;
     }
     .share-close {
@@ -2278,8 +2487,7 @@
       }
     }
 
-    /* The invitations around a Share button on the sign-up page and the Tenant's tracker. */
-    .signup-share,
+    /* The invitation around a Share button on the Tenant's tracker. */
     .tracker-share {
       display: flex;
       flex-direction: column;
@@ -2354,12 +2562,18 @@
     }
 
     /* The review page. */
+    /* The summary is a white strip like the dashboard's count strip, so the neutral
+       (Paper) "duplicate" badge reads as a badge rather than loose text. */
     .import-summary {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       gap: 6px 8px;
       margin: 0;
+      padding: 8px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
       font-size: 14px;
     }
     .import-ai {
@@ -2442,6 +2656,89 @@
         flex: 1 1 100%;
       }
     }
+    /* Phones: both review tables stack, so nothing scrolls sideways. Each row is a white
+       block: its lead (the sheet's column, or the Add box, row number and status) on the
+       first line, then every other cell beside its column's name (data-label) in an
+       aligned 7rem label column. A flagged cell keeps its --high-bg tint. */
+    @media (max-width: 639.98px) {
+      .table-frame.import-stack {
+        overflow: visible;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+      }
+      .import-stack :where(table, tbody, tr, td, th) {
+        display: block;
+      }
+      .import-stack thead {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+      .import-stack tbody {
+        display: grid;
+        gap: 8px;
+      }
+      .import-stack tbody tr {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px 12px;
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        background: var(--surface);
+      }
+      .import-stack tbody :where(td, th) {
+        min-width: 0;
+        max-width: none;
+        height: auto;
+        padding: 0;
+        border: 0;
+      }
+      .import-stack tbody th[scope='row'] {
+        flex-basis: 100%;
+        font-size: 14px;
+      }
+      .import-stack td.import-include,
+      .import-stack td[data-label='Status'] {
+        flex: none;
+      }
+      .import-stack td[data-label='Row'] {
+        flex: none;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .import-stack td[data-label='Row']::before {
+        content: 'Row ';
+      }
+      .import-stack td[data-label]:not([data-label='Row'], [data-label='Status']) {
+        display: grid;
+        flex-basis: 100%;
+        grid-template-columns: 7rem minmax(0, 1fr);
+        column-gap: 12px;
+        align-items: start;
+      }
+      .import-stack td[data-label]:not([data-label='Row'], [data-label='Status'])::before {
+        content: attr(data-label);
+        grid-row: 1 / span 6;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .import-stack td[data-label]:not([data-label='Row'], [data-label='Status']) > * {
+        grid-column: 2;
+      }
+      .import-stack td.import-notes[data-label]:not(:has(> span)) {
+        display: none;
+      }
+      .import-table td.import-fix {
+        margin: 0 -12px;
+        padding: 8px 12px;
+      }
+    }
   }
 }
 
@@ -2466,40 +2763,111 @@
       }
     }
 
+    /* The queue of Jobs waiting on dispatch: a card each, what it needs on top, then the form that sends it on. */
+    .dispatch-queue {
+      display: grid;
+      gap: 12px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .dispatch-card {
+      display: grid;
+      gap: 12px;
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--hivis);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+    .dispatch-card:target {
+      outline: 2px solid var(--action);
+      outline-offset: 2px;
+    }
+    .dispatch-card-kind {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin: 0 0 4px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .dispatch-card-title {
+      margin: 0;
+      font-size: 16px;
+      line-height: 1.35;
+    }
+    .dispatch-card-meta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      margin: 6px 0 0;
+    }
+    .dispatch-card-body {
+      display: grid;
+      gap: 10px;
+      padding-top: 12px;
+      border-top: 1px solid var(--line);
+    }
+    .dispatch-card-legend {
+      margin: 0 0 6px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+    .dispatch-candidates {
+      display: grid;
+      gap: 2px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .dispatch-candidates > li {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px 12px;
+      padding: 6px 8px;
+      border-radius: 6px;
+    }
+    .dispatch-candidates > li:has(input:checked) {
+      background: var(--info-bg);
+    }
+    .dispatch-candidate {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .dispatch-near {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+    }
+    .dispatch-panel-sub {
+      display: block;
+      font-size: 13px;
+      font-weight: 400;
+      color: var(--muted);
+    }
+    .dispatch-job-link {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--high);
+    }
+
     .dispatch-map-section {
       display: flex;
       flex-direction: column;
       gap: 8px;
       min-width: 0;
     }
-    .dispatch-legend {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 4px 16px;
-      margin: 0;
-      padding: 0;
-      list-style: none;
-      font-size: 13px;
-      color: var(--muted);
-    }
-    /* The key is only for the map: it means nothing without it. */
-    html:not(.js) .dispatch-legend {
-      display: none;
-    }
-    .dispatch-legend li {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .dispatch-legend .map-pin {
-      width: 20px;
-      height: 20px;
-    }
-    .dispatch-legend .map-pin svg {
-      width: 20px;
-      height: 20px;
-    }
-
     /* Leaflet's panes stack up to z-index 1000: contain them so they stay under the top bar and the drawer. */
     .dispatch-map {
       position: relative;
@@ -2510,6 +2878,14 @@
       background: var(--page);
       border: 1px solid var(--line);
       border-radius: 8px;
+    }
+    /* Phones and tablets: about half the screen, so the panel and the table start in reach. */
+    @media (max-width: 63.98rem) {
+      .dispatch-map {
+        height: 55vh;
+        min-height: 18rem;
+        max-height: 32rem;
+      }
     }
     @media (min-width: 64rem) {
       .dispatch-map {
@@ -2543,82 +2919,124 @@
       outline: 2px solid var(--action);
       outline-offset: 4px;
     }
+    /* A pin: a Property's house on a disc, sized and coloured by its worst Urgency, or a
+       Tradie's wrench on a rounded square. The white edge keeps either readable on any tile. */
     .map-pin {
       position: relative;
-      display: block;
-      width: 32px;
-      height: 32px;
+      display: grid;
+      place-items: center;
+      width: 100%;
+      height: 100%;
+      border: 2px solid var(--surface);
+      border-radius: 50%;
+      box-shadow: 0 1px 4px rgb(19 33 46 / 0.35);
+      color: var(--surface);
     }
-    /* Leaflet gives svg elements inside its panes a z-index of 200, which would hide the number: set both. */
+    /* Leaflet gives svg elements inside its panes a z-index of 200, which would hide the count: set both. */
     .map-pin svg {
       position: relative;
       z-index: 0 !important;
-      width: 100%;
-      height: 100%;
-      overflow: visible;
+      width: 55%;
+      height: 55%;
     }
-    .map-pin svg > * {
-      stroke: var(--surface);
-      stroke-width: 2;
-      stroke-linejoin: round;
+    .map-pin-property.is-urgent {
+      background: var(--urgent);
     }
-    .map-pin-urgent svg > * {
-      fill: var(--urgent);
+    .map-pin-property.is-high {
+      background: var(--high);
     }
-    .map-pin-high svg > * {
-      fill: var(--high);
+    .map-pin-property.is-routine {
+      background: var(--action);
     }
-    .map-pin-routine svg > * {
-      fill: var(--muted);
+    .map-pin-property.is-none {
+      background: var(--surface);
+      border-color: var(--control);
+      color: var(--muted);
+      box-shadow: none;
     }
-    .map-pin-none svg > * {
-      fill: var(--surface);
-      stroke: var(--muted);
-    }
-    .map-pin-tradie svg > * {
-      fill: var(--ink);
-    }
-    /* Tradies are quieter than Properties: smaller, and drawn under them. */
     .map-pin-tradie {
-      width: 26px;
-      height: 26px;
+      border-radius: 8px;
+      background: var(--ink);
     }
-    .map-pin-tradie b {
-      font-size: 11px;
-    }
-    .map-pin b {
+    .map-pin-count {
       position: absolute;
       z-index: 1;
-      inset: 0;
+      top: -6px;
+      right: -6px;
       display: grid;
       place-items: center;
-      font-family: var(--font-head);
-      font-size: 12px;
-      font-weight: 600;
+      min-width: 18px;
+      height: 18px;
+      padding: 0 4px;
+      border: 1.5px solid var(--surface);
+      border-radius: 999px;
+      background: var(--ink);
+      font-family: var(--font-body);
+      font-size: 11px;
+      font-weight: 700;
       line-height: 1;
       color: var(--surface);
+      font-variant-numeric: tabular-nums;
     }
-    .map-pin-urgent b {
-      padding-top: 9px;
-    }
-    .map-pin-none b {
-      color: var(--ink);
-    }
-    /* The one picked: a Harbour ring around it, over a pale disc so it reads on any tile. */
+    /* The one picked: a Harbour ring around it, on a pale disc behind it so it reads on any tile. */
     .map-pin.is-selected::before {
       content: '';
       position: absolute;
       inset: -7px;
+      z-index: -1;
       border: 3px solid var(--action);
       border-radius: 50%;
       background: color-mix(in srgb, var(--surface) 70%, transparent);
     }
+    .map-pin-tradie.is-selected::before {
+      border-radius: 12px;
+    }
+    /* The Tradie search radius: a quiet dashed line, no fill, so it never covers the streets. */
     .dispatch-ring {
       stroke: var(--action);
-      stroke-width: 2;
-      stroke-dasharray: 6 6;
-      fill: var(--action);
-      fill-opacity: 0.06;
+      stroke-width: 1.5;
+      stroke-opacity: 0.55;
+      stroke-dasharray: 4 6;
+      fill: none;
+    }
+
+    /* A group of pins that overlap: a white disc with how many, ringed in Night, or in Rust or
+       Ochre when it holds an Urgent or High Property. */
+    .map-group {
+      position: relative;
+      display: grid;
+      place-items: center;
+      width: 36px;
+      height: 36px;
+      font-family: var(--font-body);
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1;
+      color: var(--ink);
+      background: var(--surface);
+      border: 2px solid var(--ink);
+      border-radius: 50%;
+      font-variant-numeric: tabular-nums;
+    }
+    .map-group.is-urgent {
+      border: 3px solid var(--urgent);
+    }
+    .map-group.is-high {
+      border: 3px solid var(--high);
+    }
+    .map-group.is-selected {
+      outline: 3px solid var(--action);
+      outline-offset: 2px;
+    }
+    .dispatch-spider-leg {
+      stroke: var(--ink);
+      stroke-opacity: 0.5;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .leaflet-cluster-anim :where(.leaflet-marker-icon, .leaflet-marker-shadow),
+      .leaflet-cluster-spider-leg {
+        transition: none;
+      }
     }
 
     /* The side column: a hint, then the one panel picked. Without JavaScript a row's link picks it (:target). */
@@ -2695,24 +3113,6 @@
       display: block;
       margin-top: 4px;
     }
-    .dispatch-day {
-      display: block;
-      font-family: var(--font-body);
-      font-size: 12px;
-      font-weight: 400;
-      color: var(--muted);
-    }
-    .dispatch-schedule :where(th, td) {
-      vertical-align: top;
-    }
-    .dispatch-schedule tbody th {
-      font-weight: 500;
-      text-align: left;
-    }
-    /* A day with a visit takes the room for its card; an empty one stays as wide as its heading. */
-    .dispatch-schedule td.has-visits {
-      min-width: 11rem;
-    }
     .dispatch-board .dispatch-panel .btn,
     .dispatch-panel [data-dispatch-clear] {
       min-height: 2.75rem;
@@ -2724,12 +3124,85 @@
     tr[data-selected] :where(th, td) {
       background: var(--info-bg);
     }
+
+    /* The Properties tables. From 640px they are tables, their columns wide enough to
+       read; on phones each row is a block (like table({ stack: true }) in ui.ts, which
+       can't carry the row header and data-row these rows need), so nothing scrolls
+       sideways. */
+    @media (min-width: 640px) {
+      .dispatch-stack .dispatch-address {
+        min-width: 12rem;
+      }
+      .dispatch-stack .dispatch-tickets {
+        min-width: 16rem;
+      }
+    }
+    @media (max-width: 639.98px) {
+      .dispatch-stack {
+        overflow: visible;
+        background: transparent;
+        border: 0;
+        border-radius: 0;
+      }
+      .dispatch-stack :where(table, tbody) {
+        display: block;
+      }
+      .dispatch-stack thead {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+      .dispatch-stack tbody {
+        display: grid;
+        gap: 8px;
+      }
+      .dispatch-stack tbody tr {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px 8px;
+        padding: 10px 12px;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 4px;
+      }
+      .dispatch-stack tbody :where(th, td) {
+        display: block;
+        height: auto;
+        min-width: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+      }
+      /* A Property: its address, then the suburb with the worst urgency at the end, then its Tickets. */
+      .dispatch-stack tbody th {
+        flex-basis: 100%;
+        font-size: 14px;
+      }
+      .dispatch-stack tbody td:nth-child(2) {
+        color: var(--muted);
+      }
+      .dispatch-stack tbody td.dispatch-tickets {
+        order: 1;
+        flex-basis: 100%;
+      }
+      .dispatch-stack tbody td:nth-child(4) {
+        margin-left: auto;
+      }
+      .dispatch-stack tbody tr[data-selected] {
+        background: var(--info-bg);
+        border-color: var(--action);
+      }
+    }
   }
 }
 
 @layer utilities {
   @layer app {
-    /* Label and value lists (dl() in ui.ts): the label column is 8 to 12rem whatever
+    /* Label and value lists (dl() in ui.ts): the label column is 10rem whatever
        the box's width, so a value sits beside its label; in a box under 26rem (about
        416px, a phone card) the label stacks over its value. The box decides, not the screen. */
     .facts {
@@ -2762,7 +3235,7 @@
     }
     @container (min-width: 26rem) {
       .facts-row {
-        grid-template-columns: minmax(8rem, 12rem) minmax(0, 1fr);
+        grid-template-columns: 10rem minmax(0, 1fr);
         column-gap: 16px;
       }
     }
@@ -2811,14 +3284,136 @@
       font-size: 13px;
       color: var(--muted);
     }
-    a.ticket-cell-address {
+    .ticket-cell-address .entity-link {
+      margin-top: 4px;
+      font-size: 12px;
+    }
+
+    /* ----- Links to records (ui.ts entityLink, rowLink, contactLink): what they lead to
+       shows in their shape, not in an underline. */
+    .entity-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      max-width: 100%;
+      padding: 2px 9px 2px 7px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 500;
+      line-height: 1.35;
+      text-decoration: none;
+      vertical-align: middle;
+    }
+    .entity-link > svg {
+      flex: none;
+      color: var(--action);
+    }
+    .entity-link:hover {
+      border-color: var(--action);
+      background: var(--info-bg);
+    }
+    .entity-link:focus-visible {
+      outline: 2px solid var(--action);
+      outline-offset: 2px;
+    }
+    .row-link {
+      color: var(--ink);
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .row-link:hover,
+    .row-link:focus-visible {
+      color: var(--action);
       text-decoration: underline;
-      text-decoration-color: var(--line);
       text-underline-offset: 2px;
     }
-    a.ticket-cell-address:hover {
+    .contact-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
       color: var(--action);
-      text-decoration-color: currentColor;
+      text-decoration: none;
+    }
+    .contact-link > svg {
+      flex: none;
+    }
+    /* An address breaks only where it must, never between "example.c" and "om" when the column could fit it. */
+    .contact-link.is-email span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+    td > .contact-link.is-email,
+    .tenant-contact > .contact-link.is-email {
+      white-space: nowrap;
+    }
+    .contact-link:hover span {
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    /* ----- Metrics (ui.ts ratingChip, distanceChip): the number large, its source and count quiet. */
+    .metric {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 1px 8px;
+      border-radius: 6px;
+      background: var(--page);
+      font-size: 13px;
+      line-height: 1.5;
+      white-space: nowrap;
+      vertical-align: middle;
+    }
+    .metric strong {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--ink);
+    }
+    .metric-source {
+      margin-right: 2px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      color: var(--muted);
+    }
+    .metric-sub {
+      color: var(--muted);
+    }
+    .metric-rating > svg {
+      color: var(--high);
+    }
+    .metric-distance > svg {
+      color: var(--action);
+    }
+    .metric.is-empty {
+      color: var(--muted);
+      background: transparent;
+      border: 1px dashed var(--line);
+    }
+    .metric-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    /* Urgency: an icon beside the word; Urgent is solid so it can't be missed. */
+    .urgency-badge {
+      gap: 4px;
+    }
+    .badge.badge-soft.urgency-urgent {
+      background: var(--urgent);
+      color: #fff;
+      border-color: var(--urgent);
+    }
+
+    /* A row header (table(..., { rowHeader: true })) looks like the cells beside it: the
+       content decides its weight, not the browser's bold, centred <th>. */
+    .table tbody th[scope='row'] {
+      font-weight: inherit;
+      text-align: start;
     }
 
     /* Stacked tables (table(..., { stack: true })): rows read top to bottom. The issue's
@@ -2826,26 +3421,27 @@
     .table-frame.is-stacked tbody tr {
       position: relative;
     }
-    .table-frame.is-stacked .ticket-cell-issue::after {
+    .table-frame.is-stacked :is(.ticket-cell-issue, .row-link)::after {
       content: '';
       position: absolute;
       inset: 0;
     }
-    .table-frame.is-stacked tbody :where(a:not(.ticket-cell-issue), button, form) {
+    .table-frame.is-stacked tbody :where(a:not(.ticket-cell-issue, .row-link), button, form) {
       position: relative;
       z-index: 1;
     }
-    .table-frame.is-stacked tbody tr:hover td {
+    .table-frame.is-stacked tbody tr:hover :is(th, td) {
       background: var(--page);
     }
-    .table-frame.is-stacked tbody td {
-      vertical-align: top;
+    /* Cells of different kinds (a two-line Ticket, a badge, an age) line up on their first line's baseline, so a badge doesn't sit lower than the text beside it. */
+    .table-frame.is-stacked tbody :is(th, td) {
+      vertical-align: baseline;
     }
     @media (min-width: 640px) {
-      .table-frame.is-stacked tbody td {
+      .table-frame.is-stacked tbody :is(th, td) {
         min-width: 7rem;
       }
-      .table-frame.is-stacked tbody td:first-child {
+      .table-frame.is-stacked tbody :is(th, td):first-child {
         min-width: 16rem;
       }
     }
@@ -2882,7 +3478,7 @@
         border: 1px solid var(--line);
         border-radius: 4px;
       }
-      .table-frame.is-stacked tbody td {
+      .table-frame.is-stacked tbody :is(th, td) {
         display: block;
         height: auto;
         min-width: 0;
@@ -2890,15 +3486,66 @@
         border: 0;
         background: transparent;
       }
-      .table-frame.is-stacked tbody td:first-child {
+      .table-frame.is-stacked tbody :is(th, td):first-child {
         flex-basis: 100%;
         margin-bottom: 2px;
       }
-      .table-frame.is-stacked tbody td:last-child {
+      .table-frame.is-stacked tbody :is(th, td):last-child {
         margin-left: auto;
       }
-      .table-frame.is-stacked tbody tr:hover td {
+      .table-frame.is-stacked tbody tr:hover :is(th, td) {
         background: transparent;
+      }
+      /* A picked row (rowAttributes: { 'data-selected': true }) keeps Harbour's tint as a block. */
+      .table-frame.is-stacked tbody tr[data-selected] {
+        background: var(--info-bg);
+        border-color: var(--action);
+      }
+      /* Labelled (stack: 'labelled'): the first cell leads, then each value sits beside
+         its column's name in one aligned label column, read like a facts list. */
+      .table-frame.is-labelled tbody tr {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 4px;
+        padding: 12px;
+      }
+      /* The lead is the cell's first line (its text, or its first element, such as the
+         business name's link); anything after it (a contact name under it) keeps its own weight. */
+      .table-frame.is-labelled tbody :is(th, td):first-child {
+        margin-bottom: 4px;
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .table-frame.is-labelled tbody :is(th, td):first-child > :not(:first-child) {
+        font-size: 13px;
+        font-weight: 400;
+      }
+      .table-frame.is-labelled tbody :is(th, td):last-child {
+        margin-left: 0;
+      }
+      /* The label hangs in the cell's left padding, so the value's own elements (a badge
+         and a note, a number and its words) flow together as one value beside it. */
+      .table-frame.is-labelled tbody td[data-label] {
+        position: relative;
+        padding-left: calc(8rem + 12px);
+        font-size: 14px;
+        /* Beats the cell's text-right utility (Tailwind's layer outranks this one): label and value both read from the left. */
+        text-align: left !important;
+        overflow-wrap: anywhere;
+      }
+      .table-frame.is-labelled tbody td[data-label]::before {
+        content: attr(data-label);
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 8rem;
+        font-size: 13px;
+        line-height: calc(14px * 1.45);
+        color: var(--muted);
+        overflow-wrap: anywhere;
+      }
+      .table-frame.is-labelled tbody :is(th, td):empty {
+        display: none;
       }
     }
   }
@@ -3095,6 +3742,58 @@
     .request-reject-form .fieldset {
       align-self: stretch;
     }
+    /* Decide is the one thing on the page waiting on the Property Manager: the Wattle stripe. */
+    .request-side > #decide {
+      border-left: 4px solid var(--hivis);
+    }
+    /* Summary: the line to read first, with its pencil beside it. */
+    .request-summary-plain {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .request-summary-form {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .request-summary-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .request-lead .icon-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: none;
+      width: 36px;
+      height: 36px;
+      border-radius: 4px;
+      color: var(--action);
+    }
+    .request-lead .icon-btn:hover {
+      background: rgb(19 33 46 / 0.06);
+    }
+    .request-lead .icon-btn:focus-visible {
+      outline: 2px solid var(--action);
+      outline-offset: 2px;
+    }
+    /* Photos: sent with the message first, then uploaded, each group labelled. */
+    .request-photos {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .request-photo-label {
+      margin: 0 0 8px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .request-photos ul[role='list']:not(.request-checks) {
+      grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+    }
     /* The Requests list reads like a docket: the issue strong, the address quiet under it. */
     .request-list .queue-detail {
       font-size: 13px;
@@ -3141,6 +3840,342 @@
       flex-direction: column;
       align-items: flex-start;
       gap: 2px;
+    }
+    /* A Property with open Tickets: the count in Night 600, so the rows with work stand out. */
+    .property-open {
+      font-weight: 600;
+      color: var(--ink);
+    }
+
+    /* Settings (pages/settings.ts): side tabs, then the tab's sections in a column no
+       wider than 52rem so a row's name and its button stay within reach. Each list is
+       rows of a name (linked when it has a page), a muted hint, and actions at the end. */
+    .settings-layout {
+      display: grid;
+      align-items: start;
+      gap: 24px;
+    }
+    @media (min-width: 1024px) {
+      .settings-layout {
+        grid-template-columns: 13rem minmax(0, 52rem);
+      }
+    }
+    .settings-panel {
+      display: grid;
+      gap: 24px;
+      min-width: 0;
+    }
+    .settings-intro {
+      max-width: 72ch;
+      margin: 0 0 8px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+    .settings-list {
+      display: flex;
+      flex-direction: column;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .settings-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px 16px;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .settings-row:first-child {
+      padding-top: 0;
+    }
+    .settings-row:last-child {
+      padding-bottom: 0;
+      border-bottom: 0;
+    }
+    .settings-row-text {
+      display: flex;
+      flex: 1 1 16rem;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+    .settings-row-label {
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .settings-row-hint {
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .settings-row-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 16px;
+    }
+
+    /* A Tradie's profile (pages/tradie.ts): the Trades and contact details beside the
+       four ratings (myEST8, Property Managers', Tenants', Google) from 1024px. */
+    .tradie-head .section-body,
+    .tradie-head {
+      display: grid;
+      gap: 16px;
+    }
+    .tradie-contact {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-width: 0;
+    }
+    .tradie-contact dl {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 24px;
+      margin: 0;
+    }
+    .tradie-contact dl > div {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+    .tradie-contact dt {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--muted);
+    }
+    .tradie-contact dd {
+      margin: 0;
+      font-size: 14px;
+    }
+    @media (min-width: 1024px) {
+      .tradie-head {
+        grid-template-columns: minmax(14rem, 1fr) minmax(0, 2.4fr);
+        align-items: start;
+      }
+    }
+
+    /* The Tradies directory's Trade filter (pages/tradie.ts): one link per Trade with how
+       many Tradies do it, the current one filled with Harbour like the segmented
+       control. It wraps on phones rather than scrolling sideways. */
+    .trade-filter ul {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .trade-filter-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 32px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--ink);
+      font-family: var(--font-body);
+      font-size: 14px;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .trade-filter-item:hover {
+      border-color: var(--control);
+    }
+    .trade-filter-item:focus-visible {
+      outline: 2px solid var(--action);
+      outline-offset: 2px;
+    }
+    .trade-filter-count {
+      font-family: var(--font-body);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--muted);
+    }
+    .trade-filter-item[aria-current='page'] {
+      border-color: var(--action);
+      background: var(--action);
+      color: var(--surface);
+    }
+    .trade-filter-item[aria-current='page'] .trade-filter-count {
+      color: inherit;
+    }
+    @media (max-width: 639.98px), (pointer: coarse) {
+      .trade-filter-item {
+        min-height: 44px;
+      }
+    }
+
+  }
+}
+
+/* === onboarding and setup === */
+@layer utilities {
+  @layer app {
+    /* The guide at /welcome (pages/welcome.ts): one column, the steps at its head with
+       which step this is, the step's body, and Back and the way on along its foot. */
+    .wizard {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      width: 100%;
+      max-width: 840px;
+      margin-inline: auto;
+    }
+    .wizard-steps {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .wizard-where {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 16px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+    .wizard-where > span:first-child {
+      font-family: var(--font-body);
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .wizard-foot {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding-top: 16px;
+      border-top: 1px solid var(--line);
+    }
+    .wizard-onward {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin-left: auto;
+    }
+    /* What a step still needs, in one line under its introduction. */
+    .wizard-next {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--ink);
+    }
+    /* The last step's checklist: a done tick or an open circle, the item, and a button for what's left. */
+    .wizard-checklist {
+      display: flex;
+      flex-direction: column;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .wizard-checklist > li {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 12px;
+      min-height: 44px;
+      padding-block: 6px;
+    }
+    .wizard-checklist > li + li {
+      border-top: 1px solid var(--line);
+    }
+    .wizard-check {
+      display: inline-flex;
+      flex: 0 0 auto;
+    }
+    .wizard-checklist .is-done .wizard-check {
+      color: var(--done);
+    }
+    .wizard-checklist .is-todo .wizard-check {
+      color: var(--control);
+    }
+    .wizard-check-text {
+      flex: 1 1 16rem;
+      min-width: 0;
+      font-size: 14px;
+      overflow-wrap: anywhere;
+    }
+    .wizard-checklist .is-todo .wizard-check-text {
+      color: var(--ink);
+      font-weight: 500;
+    }
+
+    /* Setup's areas (pages/setup.ts), in the order they must happen: a strip of links to
+       each section, each saying what it has so far. Five across from 1024px, two on
+       tablets, one list on phones. */
+    .setup-areas > ol {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    @media (min-width: 40rem) {
+      .setup-areas > ol {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+    @media (min-width: 64rem) {
+      .setup-areas > ol {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+      }
+    }
+    .setup-areas li {
+      display: flex;
+      min-width: 0;
+      border-top: 1px solid var(--line);
+      margin-top: -1px;
+      border-left: 1px solid var(--line);
+      margin-left: -1px;
+    }
+    .setup-area {
+      display: grid;
+      grid-template-columns: 20px minmax(0, 1fr);
+      column-gap: 8px;
+      align-content: start;
+      width: 100%;
+      min-height: 44px;
+      padding: 10px 12px;
+      color: var(--ink);
+      text-decoration: none;
+    }
+    .setup-area:hover {
+      background: var(--page);
+    }
+    .setup-area:hover .setup-area-name {
+      color: var(--action);
+      text-decoration: underline;
+    }
+    .setup-area-mark {
+      display: inline-flex;
+      grid-row: span 2;
+      padding-top: 1px;
+    }
+    .setup-area.is-done .setup-area-mark {
+      color: var(--done);
+    }
+    .setup-area.is-todo .setup-area-mark {
+      color: var(--control);
+    }
+    .setup-area-name {
+      font-family: var(--font-head);
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.3;
+    }
+    .setup-area-state {
+      font-size: 13px;
+      line-height: 1.35;
+      color: var(--muted);
     }
   }
 }
@@ -3202,11 +4237,11 @@
 @layer utilities {
   @layer app {
     /* The header in the docket's shape: the stub (number and Urgency) along the top
-       on phones and down the left from 640px, then a dashed perforation. */
+       on phones and down the left from 640px, then a dashed perforation. Its menus
+       (Share, Change Urgency) open over the page, so nothing here clips. */
     .ticket-head {
       display: flex;
       flex-direction: column;
-      overflow: hidden;
       background: var(--surface);
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -3216,6 +4251,18 @@
       align-items: baseline;
       gap: 12px;
       padding: 10px 16px;
+      border-radius: 7px 7px 0 0;
+    }
+    .ticket-number {
+      font-family: var(--font-head);
+      font-size: 40px;
+      font-weight: 700;
+      line-height: 1;
+    }
+    .ticket-urgency {
+      font-family: var(--font-body);
+      font-size: 14px;
+      font-weight: 600;
     }
     .ticket-perf {
       flex-shrink: 0;
@@ -3231,9 +4278,10 @@
         align-items: center;
         justify-content: center;
         gap: 4px;
-        width: 6rem;
+        width: 7.5rem;
         flex-shrink: 0;
         padding: 16px 4px;
+        border-radius: 7px 0 0 7px;
       }
       .ticket-perf {
         margin: 12px 0;
@@ -3241,15 +4289,121 @@
         border-left: 1px dashed var(--control);
       }
     }
-    /* The one Next step: a Paper strip, with the Wattle stripe when it waits on the Property Manager. */
+    /* The issue, the address and one line of facts; the Next step under them, full width;
+       the tools under it on phones and at the top right from 1024px. */
+    .ticket-head-body {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      flex: 1 1 auto;
+      gap: 12px;
+      min-width: 0;
+      padding: 16px;
+    }
+    .ticket-head-main {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+    }
+    .ticket-issue {
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 20px;
+      font-weight: 600;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+    .ticket-address {
+      margin: 0;
+      font-weight: 500;
+      overflow-wrap: anywhere;
+    }
+    .ticket-meta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px 16px;
+      margin: 4px 0 0;
+      font-size: 14px;
+      color: var(--muted);
+    }
+    .ticket-meta strong {
+      font-weight: 700;
+    }
+    .ticket-tools {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    @media (min-width: 64rem) {
+      .ticket-head-body {
+        grid-template-columns: minmax(0, 1fr) auto;
+        column-gap: 24px;
+      }
+      .ticket-head-main {
+        grid-column: 1;
+        grid-row: 1;
+      }
+      .ticket-tools {
+        grid-column: 2;
+        grid-row: 1;
+        align-self: start;
+        justify-content: flex-end;
+      }
+      .ticket-head-body > .ticket-next {
+        grid-column: 1 / -1;
+      }
+    }
+    /* Under the header: one column on phones in the order the work is read (the Jobs,
+       what the Tenant reported, the details, the timeline, the messages); from 1024px
+       the Jobs and the timeline on the left, the report and the messages on the right. */
+    .ticket-layout,
+    .ticket-jobs,
+    .ticket-report {
+      display: grid;
+      gap: 16px;
+      min-width: 0;
+    }
+    .ticket-main,
+    .ticket-side {
+      display: contents;
+    }
+    .ticket-jobs {
+      order: 1;
+    }
+    .ticket-report {
+      order: 2;
+    }
+    .ticket-history {
+      order: 3;
+      min-width: 0;
+    }
+    .ticket-messages {
+      order: 4;
+      min-width: 0;
+    }
+    @media (min-width: 64rem) {
+      .ticket-layout {
+        grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+        align-items: start;
+      }
+      .ticket-main,
+      .ticket-side {
+        display: grid;
+        gap: 16px;
+        min-width: 0;
+      }
+    }
+    /* The Next block: the one thing to do, in a white panel; the Wattle bar when it waits on the Property Manager. */
     .ticket-next {
       display: flex;
       flex-wrap: wrap;
       align-items: baseline;
-      gap: 2px 10px;
-      margin: 0;
-      padding: 8px 12px;
-      background: var(--page);
+      gap: 2px 12px;
+      margin: 16px 0;
+      padding: 14px 16px;
+      background: var(--surface);
+      border: 1px solid var(--line);
       border-left: 4px solid var(--line);
       border-radius: 4px;
     }
@@ -3258,11 +4412,161 @@
     }
     .ticket-next-label {
       font-family: var(--font-head);
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .ticket-next > a {
+      font-family: var(--font-head);
+      font-size: 18px;
+      overflow-wrap: anywhere;
+    }
+    /* The Summary: the issue at the top of the header, an Edit button beside it that opens a small form below. */
+    .ticket-summary,
+    .ai-filled .flex:has(> .min-w-0 > .ticket-issue) {
+      flex-wrap: wrap;
+    }
+    .ticket-summary {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .ticket-summary > .ticket-issue {
+      flex: 1 1 16rem;
+      min-width: 0;
+    }
+    .ticket-summary-edit[open] {
+      flex-basis: 100%;
+      padding: 12px;
+      background: var(--page);
+      border-radius: 4px;
+    }
+    .ticket-summary-edit > summary {
+      list-style: none;
+    }
+    .ticket-summary-edit > summary::-webkit-details-marker {
+      display: none;
+    }
+    .ticket-summary-edit[open] > summary {
+      margin-bottom: 8px;
+    }
+    /* The stage tracker under the header. */
+    .ticket-stages {
+      margin: 16px 0 0;
+      padding: 12px 8px 0;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    .ticket-stages-job {
+      margin: 0 0 4px 8px;
       font-size: 13px;
       font-weight: 600;
       color: var(--muted);
     }
-    /* Change Urgency: a small menu in the page actions; a sheet along the bottom on phones. */
+    .ticket-stages .step {
+      min-width: 0;
+    }
+    /* The comparison and the Tradie list sit in the main column: tighter cells so eight columns fit without scrolling. */
+    .ticket-jobs .table-frame:not(.is-stacked-phone) :is(th, td) {
+      padding-inline: 8px;
+      font-size: 13px;
+    }
+    .ticket-jobs .table-frame :is(th, td) .btn {
+      height: auto;
+      min-height: 2rem;
+      padding-block: 4px;
+      line-height: 1.2;
+    }
+    .ticket-jobs .table-frame :is(th, td):last-child {
+      width: 7.5rem;
+    }
+    @media (min-width: 640px) {
+      .ticket-jobs .table-frame.is-stacked tbody :is(th, td),
+      .ticket-jobs .table-frame.is-stacked tbody :is(th, td):first-child {
+        min-width: 0;
+      }
+    }
+    /* Booking: a time for each Tradie, the other free slots as quick choices under it. */
+    .site-form-row {
+      display: grid;
+      gap: 6px;
+      padding: 12px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+    }
+    .site-form-slots {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    /* Label and value pairs in the side column, each value beside its label. */
+    .ticket-facts {
+      display: grid;
+      grid-template-columns: max-content minmax(0, 1fr);
+      gap: 6px 16px;
+      margin: 0;
+      font-size: 14px;
+    }
+    .ticket-facts > div {
+      display: contents;
+    }
+    .ticket-facts dt {
+      color: var(--muted);
+    }
+    .ticket-facts dd {
+      margin: 0;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+    /* A form on one line: fields and the button, the button level with the controls
+       (below their labels) whatever hints sit under the fields. */
+    .ticket-inline-form {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .ticket-inline-form > .btn {
+      margin-top: calc(14px * 1.45 + 4px);
+    }
+    /* Under the Jobs: Add another Job, folded, and when the Ticket can close. */
+    .ticket-jobs-foot {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px 24px;
+      padding: 0 4px;
+    }
+    .ticket-add-job {
+      flex: 1 1 20rem;
+      min-width: 0;
+    }
+    .ticket-add-job > summary {
+      cursor: pointer;
+      width: fit-content;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--action);
+    }
+    .ticket-add-job[open] {
+      padding: 12px 16px 16px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    .ticket-add-job[open] > summary {
+      margin-bottom: 12px;
+    }
+    .ticket-close-hint {
+      margin: 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    /* Change Urgency: a small menu in the header's tools; a sheet along the bottom on phones. */
     .ticket-menu {
       position: relative;
       display: inline-block;
@@ -3299,63 +4603,6 @@
         width: auto;
       }
     }
-    /* Quotes compared: compact blocks on a narrow column, one column per Quote once
-       there is room, their rows lined up across columns (subgrid). */
-    .quote-compare-frame {
-      container: quote-compare / inline-size;
-    }
-    .quote-compare {
-      display: grid;
-      gap: 8px;
-      margin: 0;
-      padding: 0;
-      list-style: none;
-    }
-    .quote-column {
-      display: grid;
-      gap: 6px;
-      min-width: 0;
-      padding: 12px;
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: 4px;
-    }
-    .quote-column.is-approved {
-      border-color: var(--done);
-    }
-    .quote-tradie {
-      min-width: 0;
-      overflow-wrap: anywhere;
-    }
-    .quote-price {
-      margin: 0;
-      font-family: var(--font-head);
-      font-size: 22px;
-      font-weight: 600;
-      line-height: 1.15;
-    }
-    .quote-cell {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: space-between;
-      gap: 0 12px;
-      font-size: 14px;
-    }
-    .quote-label {
-      font-size: 12px;
-      color: var(--muted);
-    }
-    .quote-ratings {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0 12px;
-    }
-    .quote-state {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 4px;
-    }
     .quote-check > summary {
       list-style: none;
     }
@@ -3366,28 +4613,6 @@
       background: var(--surface);
       color: var(--action);
       border-color: var(--control);
-    }
-    @container quote-compare (min-width: 30rem) {
-      .quote-compare {
-        grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-        column-gap: 12px;
-      }
-      .quote-column {
-        grid-row: span var(--quote-rows);
-        grid-template-rows: subgrid;
-        row-gap: 8px;
-        align-content: start;
-      }
-      .quote-cell {
-        flex-direction: column;
-        justify-content: flex-start;
-      }
-      .quote-ratings {
-        flex-direction: column;
-      }
-      .quote-state {
-        align-content: start;
-      }
     }
     /* Older messages fold above the latest ones. */
     .ticket-older[open] > summary {
@@ -3426,6 +4651,10 @@
     .booking.is-reschedule {
       border-left: 4px solid var(--high);
     }
+    /* A reschedule request on the Property Manager's own Property waits on them. */
+    .booking.is-reschedule.is-decision {
+      border-left-color: var(--hivis);
+    }
     .booking.is-done {
       color: var(--muted);
     }
@@ -3462,6 +4691,25 @@
       margin: 0;
       color: var(--muted);
     }
+    .booking-kind {
+      margin: 0 0 2px;
+    }
+    .schedule-free {
+      margin: 8px 0 0;
+      font-size: 13px;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+    .schedule-free-label {
+      cursor: pointer;
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .schedule-free-list {
+      margin: 4px 0 0;
+      padding: 0;
+      list-style: none;
+    }
     .booking-reschedule {
       font-weight: 600;
       color: var(--high);
@@ -3474,9 +4722,53 @@
       border-radius: 2px;
     }
 
-    /* The Schedule's week. Under 1024px a list of days, where a run of empty days is one
-       line (.schedule-quiet) and its days are hidden; from 1024px seven columns in a row,
-       a booked day taking the room and an empty one staying narrow. */
+    /* The Schedule's week in one line: the count of visits, then flags for how they
+       stand. A reschedule request waiting on you carries the Wattle stripe; a
+       colleague's the warning stripe; not confirmed yet is plain. */
+    .schedule-summary {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .schedule-tally {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin: 0;
+    }
+    .schedule-count {
+      margin-right: 4px;
+      font-family: var(--font-head);
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .schedule-flag {
+      padding: 1px 8px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: var(--surface);
+      font-size: 13px;
+      font-weight: 500;
+      line-height: 1.45;
+    }
+    .schedule-flag.is-decision {
+      border-left: 4px solid var(--hivis);
+    }
+    .schedule-flag.is-reschedule {
+      border-left: 4px solid var(--high);
+      color: var(--high);
+    }
+    .schedule-more {
+      margin: 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    /* The Schedule's Week under 768px: a list of days, where a run of empty days is one
+       line (.schedule-quiet). Booked days are white; empty ones stay on Paper behind a
+       hairline so the work stands out; today is ringed in Harbour. From 768px the time grid
+       below takes its place. */
     .schedule-week {
       display: grid;
       gap: 12px;
@@ -3494,54 +4786,360 @@
       border-radius: 8px;
       background: var(--surface);
     }
+    .schedule-day.is-empty {
+      background: transparent;
+    }
     .schedule-day.is-today {
-      background: var(--page);
       border-color: var(--action);
+      box-shadow: inset 0 0 0 1px var(--action);
     }
-    .schedule-day.is-empty:not(.is-today) {
-      display: none;
-    }
-    .schedule-day-title {
+    .schedule-day-title,
+    .schedule-col-title {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 8px;
+      gap: 4px 8px;
       margin: 0;
       font-family: var(--font-head);
-      font-size: 15px;
+      font-size: 16px;
       font-weight: 600;
+    }
+    .schedule-day-title a,
+    .schedule-col-title a {
+      color: var(--ink);
+      text-decoration: none;
+    }
+    .schedule-day-title a:hover,
+    .schedule-col-title a:hover {
+      color: var(--action);
+      text-decoration: underline;
+    }
+    .schedule-day-count {
+      margin-left: auto;
+      font-family: var(--font-body);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--muted);
     }
     .schedule-quiet {
       padding: 4px 8px;
       font-size: 14px;
       color: var(--muted);
     }
-    @media (min-width: 1024px) {
+    .schedule-empty {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    /* The time grid (schedule-layout.ts places each visit): a Paper tray of 15-minute
+       rows under hour lines, the times in a 3.5rem gutter, white visits on it. Rows are at
+       least --slot tall and grow to fit what is on them, and the hours, days and lanes are
+       subgrids of the one grid, so everything on a row lines up. The grid scrolls sideways
+       inside its frame (a focusable region) and never the page. */
+    .schedule-scroll {
+      min-width: 0;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--page);
+    }
+    .schedule-scroll:focus-visible {
+      outline: 2px solid var(--action);
+      outline-offset: 2px;
+    }
+    .schedule-scroll.is-week {
+      display: none;
+    }
+    @media (min-width: 768px) {
       .schedule-week {
-        display: flex;
-        align-items: stretch;
-        min-height: calc(100dvh - 14rem);
-      }
-      .schedule-quiet {
         display: none;
       }
-      .schedule-day,
-      .schedule-day.is-empty:not(.is-today) {
-        display: flex;
-        flex: 0 0 6.5rem;
+      .schedule-scroll.is-week {
+        display: block;
       }
-      .schedule-day.is-booked {
-        flex: 1 1 0;
+    }
+    .schedule-grid {
+      --gutter: 3.5rem;
+      --slot: 0.75rem;
+      display: grid;
+      grid-template-columns: var(--gutter) repeat(var(--cols), minmax(6rem, 1fr));
+      grid-template-rows: auto repeat(var(--slots), minmax(var(--slot), auto));
+    }
+    /* The Day has no row of day names, and each lane is wide enough for a whole card. */
+    .schedule-grid.is-day {
+      --slot: 1.25rem;
+      grid-template-columns: var(--gutter) repeat(var(--cols), minmax(14rem, 1fr));
+      grid-template-rows: repeat(var(--slots), minmax(var(--slot), auto));
+    }
+    .schedule-hours {
+      display: grid;
+      grid-column: 1 / -1;
+      grid-row: 2 / -1;
+      grid-template-columns: subgrid;
+      grid-template-rows: subgrid;
+    }
+    .schedule-grid.is-day .schedule-hours {
+      grid-row: 1 / -1;
+    }
+    .schedule-hour {
+      grid-column: 1 / -1;
+      padding: 2px 8px 0;
+      border-top: 1px solid var(--line);
+      font-size: 12px;
+      line-height: 1.2;
+      color: var(--muted);
+    }
+    .schedule-cols,
+    .schedule-lanes {
+      display: grid;
+      grid-column: 2 / -1;
+      grid-row: 1 / -1;
+      grid-template-columns: subgrid;
+      grid-template-rows: subgrid;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .schedule-col {
+      display: grid;
+      grid-row: 1 / -1;
+      grid-template-rows: subgrid;
+      min-width: 0;
+      border-left: 1px solid var(--line);
+    }
+    .schedule-col-title {
+      grid-row: 1;
+      gap: 0 6px;
+      padding: 8px;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
+      font-size: 14px;
+    }
+    .schedule-col.is-today .schedule-col-title {
+      box-shadow: inset 0 -2px 0 var(--action);
+    }
+    .schedule-col-title .schedule-day-count {
+      flex-basis: 100%;
+      margin-left: 0;
+    }
+    .schedule-slots {
+      display: grid;
+      grid-row: 2 / -1;
+      grid-template-rows: subgrid;
+      min-width: 0;
+      margin: 0;
+      padding: 0 4px;
+      list-style: none;
+    }
+    .schedule-block {
+      z-index: 1;
+      min-width: 0;
+      margin: 1px 0;
+    }
+    .schedule-block-link {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      height: 100%;
+      padding: 4px 6px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: var(--surface);
+      font-size: 12px;
+      line-height: 1.3;
+      color: var(--ink);
+      text-decoration: none;
+      overflow-wrap: anywhere;
+    }
+    .schedule-block-link:hover {
+      border-color: var(--action);
+    }
+    .schedule-block-link:focus-visible,
+    .schedule-chip a:focus-visible,
+    .schedule-mday :where(a):focus-visible {
+      outline: 2px solid var(--action);
+      outline-offset: 2px;
+    }
+    .schedule-block-time {
+      font-weight: 500;
+    }
+    .schedule-block-issue {
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .schedule-block-meta {
+      color: var(--muted);
+    }
+    .schedule-block.is-reschedule .schedule-block-link,
+    .schedule-chip.is-reschedule a {
+      border-left: 4px solid var(--high);
+    }
+    .schedule-block.is-reschedule.is-decision .schedule-block-link,
+    .schedule-chip.is-reschedule.is-decision a {
+      border-left-color: var(--hivis);
+    }
+    .schedule-block.is-done .schedule-block-link {
+      color: var(--muted);
+    }
+    /* Visits at the same time, folded into one block that opens the Day. */
+    .schedule-block.is-cluster .schedule-block-link {
+      border-color: var(--action);
+      background: var(--info-bg);
+      color: var(--action);
+    }
+    .schedule-block-count {
+      font-family: var(--font-head);
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .schedule-block.is-cluster .schedule-block-link:hover .schedule-block-count {
+      text-decoration: underline;
+    }
+    .schedule-lanes > .booking {
+      z-index: 1;
+      margin: 1px 4px;
+    }
+
+    /* The Month: a table of weeks, Monday to Sunday. The days of the months either side are
+       Paper with muted numbers; today's number is a Harbour chip. A day lists up to two
+       visits, else "N Jobs booked"; on phones every booked day says only how many. */
+    .schedule-month {
+      width: 100%;
+      table-layout: fixed;
+      border-collapse: collapse;
+    }
+    .schedule-month th {
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--line);
+      font-size: 12px;
+      font-weight: 600;
+      text-align: left;
+      color: var(--muted);
+    }
+    .schedule-month abbr {
+      text-decoration: none;
+    }
+    .schedule-mday {
+      height: 6.5rem;
+      padding: 4px;
+      border: 1px solid var(--line);
+      vertical-align: top;
+      background: var(--surface);
+      overflow: hidden;
+    }
+    .schedule-month tr > .schedule-mday:first-child {
+      border-left: 0;
+    }
+    .schedule-month tr > .schedule-mday:last-child {
+      border-right: 0;
+    }
+    .schedule-month tbody tr:last-child > .schedule-mday {
+      border-bottom: 0;
+    }
+    .schedule-mday.is-outside {
+      background: var(--page);
+    }
+    .schedule-mday-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 1.75rem;
+      height: 1.75rem;
+      border-radius: 4px;
+      font-weight: 600;
+      color: var(--ink);
+      text-decoration: none;
+    }
+    .schedule-mday-num:hover {
+      color: var(--action);
+      text-decoration: underline;
+    }
+    .schedule-mday.is-outside .schedule-mday-num {
+      font-weight: 400;
+      color: var(--muted);
+    }
+    .schedule-mday.is-today .schedule-mday-num {
+      background: var(--action);
+      color: var(--surface);
+    }
+    .schedule-chips {
+      display: grid;
+      gap: 2px;
+      margin: 4px 0 0;
+      padding: 0;
+      list-style: none;
+    }
+    .schedule-chip a {
+      display: block;
+      padding: 1px 4px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: var(--page);
+      font-size: 12px;
+      color: var(--ink);
+      text-decoration: none;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .schedule-chip a:hover {
+      border-color: var(--action);
+    }
+    .schedule-mday-more {
+      display: block;
+      margin-top: 4px;
+      padding: 1px 4px;
+      border-radius: 4px;
+      background: var(--info-bg);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--action);
+      text-decoration: none;
+    }
+    .schedule-mday-more:hover {
+      text-decoration: underline;
+    }
+    .schedule-mday-more.is-phone-only {
+      display: none;
+    }
+    @media (max-width: 639.98px) {
+      .schedule-month th {
+        padding: 4px 2px;
+        text-align: center;
+      }
+      .schedule-mday {
+        height: auto;
+        padding: 2px;
+        text-align: center;
+      }
+      .schedule-mday-num,
+      .schedule-mday-more,
+      .schedule-mday-more.is-phone-only {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        min-height: 2.75rem;
+      }
+      .schedule-mday-more {
+        margin-top: 2px;
+        padding: 0;
+      }
+      .schedule-chips {
+        display: none;
+      }
+      /* "2" seen, "2 Jobs booked" heard. */
+      .schedule-mday-words {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
       }
     }
 
-    /* Dispatch: the ratings side by side, and the disclosures under the two tables. */
-    .dispatch-ratings {
-      display: flex;
-      flex-wrap: wrap;
-      column-gap: 12px;
-      row-gap: 2px;
-    }
+    /* Dispatch: the ratings side by side, and the disclosure under the Properties table. */
     .dispatch-more {
       margin-top: 12px;
     }
@@ -3550,25 +5148,9 @@
     }
 
     /* Dashboard page */
-    /* Decision rows in the 360px column: the issue (two lines at most), the street, the
-       badges, then the actions on their own line so they never crush the text. */
-    .dashboard-decisions .queue-head {
-      display: contents;
-    }
-    .dashboard-decisions .queue-title {
-      flex: none;
-      display: -webkit-box;
-      -webkit-box-orient: vertical;
-      -webkit-line-clamp: 2;
-      line-clamp: 2;
-      overflow: hidden;
-    }
-    .dashboard-decisions .queue-detail {
-      font-size: 13px;
-      color: var(--muted);
-    }
-    .dashboard-decisions .queue-actions {
-      order: 9;
+    /* Two columns from 1024px (Tailwind classes on the page); see the count strip block for the rest. */
+    .dashboard-desk > * {
+      min-width: 0;
     }
     /* The inbox: each message compact, with the best guess in one line and its answers folded away. */
     .inbox-item {
@@ -3628,11 +5210,342 @@
       align-items: flex-end;
       gap: 8px 12px;
     }
+    /* The select takes the width and Link sender goes under it. */
     .inbox-item-link {
       display: flex;
-      flex-wrap: wrap;
-      align-items: flex-end;
+      flex-direction: column;
+      align-items: flex-start;
       gap: 8px;
+    }
+    .inbox-item-link > .fieldset {
+      align-self: stretch;
+    }
+
+    /* Tickets list page */
+    /* Each Job on its own line: the Trade, then its stage. */
+    .ticket-list-jobs {
+      display: grid;
+      gap: 4px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .ticket-list-jobs li {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 2px 8px;
+    }
+    .ticket-list-trade {
+      min-width: 6.5rem;
+    }
+    /* Waiting on the Property Manager: Night on a Wattle chip. */
+    .ticket-list-close {
+      width: fit-content;
+      margin: 6px 0 0;
+      padding: 1px 8px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--ink);
+      background: var(--hivis);
+      border-radius: 4px;
+    }
+  }
+}
+
+/* Tenants (pages/tenants.ts): the list's Contact column puts the mobile and the email
+   on lines of their own, like a Property's contacts. A Tenant with open Tickets reuses
+   .property-open for the count. */
+@layer utilities {
+  @layer app {
+    .tenant-contact {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
+    }
+  }
+}
+
+/* === Tickets and Archive lists (desk feedback T1) === */
+@layer utilities {
+  @layer app {
+    /* The issue's photo beside the issue in a Tickets or Archive row: the request list's thumbnail, a little smaller. */
+    .ticket-list-issue {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .ticket-list-issue > .queue-thumb {
+      flex-basis: 48px;
+      width: 48px;
+      height: 48px;
+    }
+    .ticket-list-issue > .ticket-cell {
+      min-width: 0;
+    }
+    /* No photo: a quiet picture icon on the Paper thumbnail, in a request's row and a Ticket's alike. */
+    .issue-thumb-none {
+      display: grid;
+      place-items: center;
+      width: 100%;
+      height: 100%;
+      color: var(--muted);
+    }
+  }
+}
+
+/* === Reimbursement Requests (/reimbursements/:id, and the amount on the Tenant's receipt upload) ===
+   The header reads like the Ticket's without the docket stub (a Reimbursement Request
+   is not a Ticket): the issue, the Property, then one line of facts. Under the steps,
+   one column on phones in reading order (next step, receipts, timeline, details,
+   messages); from 1024px the work on the left and who and what was said on the right. */
+@layer utilities {
+  @layer app {
+    .reimbursement-head {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+      padding: 16px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    .reimbursement-head > p {
+      margin: 0;
+      font-weight: 500;
+      overflow-wrap: anywhere;
+    }
+    .reimbursement-issue {
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 20px;
+      font-weight: 600;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+    .reimbursement-head > .reimbursement-meta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px 16px;
+      margin: 4px 0 0;
+      font-size: 14px;
+      font-weight: 400;
+      color: var(--muted);
+    }
+    .reimbursement-meta strong {
+      font-weight: 700;
+      color: var(--ink);
+    }
+    .reimbursement-steps {
+      margin: 16px 0;
+      padding: 12px 8px 0;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    .reimbursement-steps .step {
+      min-width: 0;
+    }
+    .reimbursement-layout,
+    .reimbursement-main,
+    .reimbursement-side {
+      display: grid;
+      gap: 16px;
+      min-width: 0;
+      margin-top: 16px;
+    }
+    .reimbursement-main,
+    .reimbursement-side {
+      margin-top: 0;
+    }
+    @media (min-width: 64rem) {
+      .reimbursement-layout {
+        grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+        align-items: start;
+      }
+    }
+    /* The amount and Forward to Property Owner on one line, the button level with the control. */
+    .reimbursement-forward {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .reimbursement-forward > .btn {
+      margin-top: calc(14px * 1.45 + 4px);
+    }
+    .reimbursement-again > summary {
+      width: fit-content;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--action);
+    }
+    .reimbursement-again[open] > summary {
+      margin-bottom: 12px;
+    }
+    .reimbursement-files {
+      display: grid;
+      gap: 6px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      font-size: 14px;
+    }
+    /* Label and value pairs in the side column, each value beside its label. */
+    .reimbursement-facts {
+      display: grid;
+      grid-template-columns: max-content minmax(0, 1fr);
+      gap: 8px 16px;
+      margin: 0;
+      font-size: 14px;
+    }
+    .reimbursement-facts > div {
+      display: contents;
+    }
+    .reimbursement-facts dt {
+      color: var(--muted);
+    }
+    .reimbursement-facts dd {
+      margin: 0;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+    .reimbursement-facts dd p {
+      margin: 0;
+    }
+    /* The Tenant's upload page loads no Tailwind: the amount's control fills the form's width. */
+    .tenant-amount {
+      display: grid;
+      gap: 4px;
+    }
+    .tenant-amount > .input {
+      width: 100%;
+    }
+  }
+}
+
+/*
+ * ----- The Ticket's staged quoting (ADR 0009) and its honest stage tracker -----
+ * Each Tradie asked is a row of their own (where they are, what they have given, their
+ * next action); Firm Quotes and Estimates are two separate tables, and a superseded
+ * Estimate stays listed, muted. A skipped step in a tracker (Site inspection or With
+ * Property Owner "Not needed", Firm Quote when proceeding on an Estimate) is a muted
+ * dashed circle with a dash: never the done tick, never the current ring.
+ */
+@layer utilities {
+  @layer app {
+    /* A skipped step: daisyUI draws data-content as a done tick, so the dash is set here. */
+    .steps .step.step-skipped::after {
+      content: '–';
+      background-color: var(--surface);
+      box-shadow: inset 0 0 0 1px var(--control);
+      color: var(--muted);
+      outline: 1px dashed var(--line);
+      outline-offset: 2px;
+    }
+    .steps .step.step-skipped::before,
+    .steps .step.step-skipped + .step::before {
+      --step-bg: var(--line);
+    }
+
+    /* One row per Tradie asked, hairline-separated in one framed list. */
+    .tradie-progress {
+      display: grid;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+    }
+    .tradie-row {
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+      font-size: 14px;
+    }
+    .tradie-row + .tradie-row {
+      border-top: 1px solid var(--line);
+    }
+    .tradie-row.is-ended {
+      color: var(--muted);
+    }
+    .tradie-row-head,
+    .tradie-row-facts,
+    .tradie-row-visit,
+    .tradie-row-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px 12px;
+      margin: 0;
+      min-width: 0;
+    }
+    .tradie-row-head > :last-child {
+      margin-left: auto;
+    }
+    .tradie-row-actions {
+      align-items: flex-start;
+      gap: 8px;
+    }
+    /* An opened form takes the row's whole width under the other actions. */
+    .tradie-row-actions > details[open],
+    .tradie-row-actions > .site-form-row {
+      flex: 1 1 100%;
+    }
+    .tradie-row-actions .site-form-row {
+      background: var(--page);
+    }
+
+    /* A folded form on a Tradie's row: "Enter a Firm Quote they sent". */
+    .ticket-fold > summary {
+      cursor: pointer;
+      width: fit-content;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--action);
+    }
+    .ticket-fold[open] {
+      padding: 12px;
+      background: var(--page);
+      border-radius: 4px;
+    }
+    .ticket-fold-body {
+      margin-top: 8px;
+      max-width: 36rem;
+    }
+
+    /* The two Quote tables, each with its own heading: they never share a price column. */
+    .quote-table {
+      display: grid;
+      gap: 6px;
+    }
+    .quote-table-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0;
+      font-weight: 600;
+    }
+    .quote-table.is-estimates tr[data-superseded] :is(th, td) {
+      color: var(--muted);
+    }
+    .quote-table.is-estimates tr[data-superseded] .link {
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    /* Call-out Fees owed: a line of their own near the Job's costs, not part of the Repair Cost. */
+    .callout-fees {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 8px;
+      margin: 16px 0 0;
+      padding: 8px 12px;
+      font-size: 14px;
+      background: var(--page);
+      border-radius: 4px;
     }
   }
 }

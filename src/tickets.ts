@@ -4,12 +4,23 @@ import type { ChannelType, ImageMatchResult } from './ports.ts';
 import { invalid, iso, newToken, normalizeAddress, notFound, TRADES, URGENCIES, type Availability, type Trade, type Urgency } from './shared.ts';
 
 export type IssueStatus = 'gathering' | 'awaiting_photos' | 'checking' | 'maintenance_request' | 'confirmed' | 'rejected' | 'urgent';
-export const IN_INTAKE: IssueStatus[] = ['gathering', 'awaiting_photos', 'checking', 'maintenance_request'];
+const IN_INTAKE: IssueStatus[] = ['gathering', 'awaiting_photos', 'checking', 'maintenance_request'];
 /** An issue's photo link takes photos only while the issue is in these statuses (the same rule as intake.upload). */
-export const TAKES_PHOTOS: IssueStatus[] = ['awaiting_photos', 'checking', 'maintenance_request'];
+const TAKES_PHOTOS: IssueStatus[] = ['awaiting_photos', 'checking', 'maintenance_request'];
 
 export type JobStatus = 'quoting' | 'awaiting_owner' | 'approved' | 'scheduled' | 'done' | 'cancelled';
-export type UrgentRepairStatus = 'reminder_sent' | 'receipt_received' | 'receipt_forwarded';
+/** Who wrote a Maintenance Request's Summary: the model, or a Property Manager who edited it (never overwritten by the model again). */
+export type SummaryBy = 'ai' | 'property_manager';
+/**
+ * Where an Urgent Repair's Reimbursement Request stands: waiting for the Tenant's
+ * receipt, waiting for the Property Manager to check it, with the Property Owner,
+ * then reimbursed.
+ */
+export type UrgentRepairStatus = 'reminder_sent' | 'receipt_received' | 'receipt_forwarded' | 'reimbursed';
+/** How a receipt arrived: through the upload link, or attached to a message on a channel. */
+export type ReceiptVia = 'upload' | ChannelType;
+/** A claim over this is surely a typo (the limit is $1,000): refused rather than stored. */
+const MAX_CLAIM_CENTS = 100_000_00;
 export type PhotoMetadata = 'ok' | 'flagged' | 'no_metadata';
 
 export interface Issue {
@@ -19,12 +30,17 @@ export interface Issue {
   tenantId: number;
   status: IssueStatus;
   description: string;
+  /** One line describing the issue, written by AI or edited by a Property Manager; null until the summariser has run. */
+  summary: string | null;
+  summaryBy: SummaryBy | null;
   answers: { location: string | null; started: string | null; worsening: string | null; availability: Availability | null };
   urgency: Urgency;
   checkUrgency: boolean;
   trade: Trade;
   checkTrade: boolean;
   noPhotos: boolean;
+  /** How many photos came with the Tenant's first message, before any upload link. */
+  photosOnArrival: number;
   imageMatch: { result: ImageMatchResult; reason: string } | null;
   photosToken: string;
   reportedAt: string;
@@ -63,7 +79,11 @@ export interface UrgentRepair {
   status: UrgentRepairStatus;
   receiptToken: string;
   receiptFileIds: number[];
+  /** What the Tenant claims, as they or the Property Manager entered it; null until someone does. */
+  amountCents: number | null;
   createdAt: string;
+  forwardedAt: string | null;
+  reimbursedAt: string | null;
 }
 
 export interface LoggedMessage {
@@ -92,6 +112,9 @@ type IssueRow = {
   tenant_id: number;
   status: IssueStatus;
   description: string;
+  summary: string | null;
+  summary_by: SummaryBy | null;
+  photos_on_arrival: number;
   location: string | null;
   started: string | null;
   worsening: string | null;
@@ -132,7 +155,10 @@ type UrgentRepairRow = {
   tenant_id: number;
   status: UrgentRepairStatus;
   receipt_token: string;
+  amount_cents: number | null;
   created_at: string;
+  forwarded_at: string | null;
+  reimbursed_at: string | null;
 };
 
 const ISSUE_COLUMNS = {
@@ -146,6 +172,9 @@ const ISSUE_COLUMNS = {
   trade: 'trade',
   checkTrade: 'check_trade',
   noPhotos: 'no_photos',
+  photosOnArrival: 'photos_on_arrival',
+  summary: 'summary',
+  summaryBy: 'summary_by',
   imageMatch: 'image_match',
   imageMatchReason: 'image_match_reason',
 } as const;
@@ -161,6 +190,9 @@ export type IssuePatch = Partial<{
   trade: Trade;
   checkTrade: boolean;
   noPhotos: boolean;
+  photosOnArrival: number;
+  summary: string;
+  summaryBy: SummaryBy;
   imageMatch: ImageMatchResult;
   imageMatchReason: string;
 }>;
@@ -172,12 +204,15 @@ const toIssue = (r: IssueRow): Issue => ({
   tenantId: r.tenant_id,
   status: r.status,
   description: r.description,
+  summary: r.summary,
+  summaryBy: r.summary_by,
   answers: { location: r.location, started: r.started, worsening: r.worsening, availability: r.availability },
   urgency: r.urgency,
   checkUrgency: !!r.check_urgency,
   trade: r.trade,
   checkTrade: !!r.check_trade,
   noPhotos: !!r.no_photos,
+  photosOnArrival: r.photos_on_arrival ?? 0,
   imageMatch: r.image_match ? { result: r.image_match, reason: r.image_match_reason ?? '' } : null,
   photosToken: r.photos_token,
   reportedAt: r.reported_at,
@@ -209,6 +244,12 @@ const toJob = (r: JobRow): Job => ({
 
 function requireTrade(trade: Trade) {
   if (!TRADES.includes(trade)) invalid(`Choose a Trade from: ${TRADES.join(', ')}`);
+}
+
+/** A claim must be a positive amount of cents, and not absurd. Over the $1,000 limit is allowed: the page warns. */
+export function requireClaim(amountCents: number) {
+  if (!Number.isInteger(amountCents) || amountCents <= 0) invalid('Enter the amount on the receipt, more than $0');
+  if (amountCents > MAX_CLAIM_CENTS) invalid('Check the amount: that is far over the $1,000 an Urgent Repair can claim');
 }
 
 /** Restricts a dashboard query to some Properties, or to none when `propertyIds` is null. */
@@ -279,8 +320,21 @@ export function createTickets({ db, clock, settings, modules }: Context) {
         'SELECT file_id FROM urgent_repair_receipts WHERE urgent_repair_id = ? ORDER BY file_id',
         r.id,
       )).map((f) => f.file_id),
+      amountCents: r.amount_cents,
       createdAt: r.created_at,
+      forwardedAt: r.forwarded_at,
+      reimbursedAt: r.reimbursed_at,
     };
+  }
+
+  async function urgentRepairInAgency(agencyId: number, id: number) {
+    const row = await one<UrgentRepairRow>(db, 'SELECT * FROM urgent_repairs WHERE id = ? AND agency_id = ?', id, agencyId);
+    if (!row) notFound('Reimbursement Request');
+    return toUrgentRepair(row);
+  }
+
+  async function recordUrgentRepairEvent(urgentRepairId: number, kind: string, data: object = {}) {
+    await run(db, 'INSERT INTO urgent_repair_events (urgent_repair_id, kind, data, at) VALUES (?, ?, ?, ?)', urgentRepairId, kind, JSON.stringify(data), iso(clock.now()));
   }
 
   async function recordEvent(ticketId: number, kind: string, data: object = {}, at: Date | string = clock.now()) {
@@ -367,8 +421,8 @@ export function createTickets({ db, clock, settings, modules }: Context) {
       const about = photos ?? (await issue(receipt!.issueId));
       return {
         kind: photos ? ('photos' as const) : ('receipt' as const),
-        // A receipt link stays open: a Tenant may send a second page or a better photo.
-        open: photos ? TAKES_PHOTOS.includes(photos.status) : true,
+        // A receipt link stays open until the Tenant is reimbursed: they may send a second page or a better photo.
+        open: photos ? TAKES_PHOTOS.includes(photos.status) : receipt!.status !== 'reimbursed',
         description: about.description,
         agencyName: (await modules.profiles.agency(about.agencyId)).name,
         address: (await modules.profiles.property(about.propertyId)).address,
@@ -387,6 +441,20 @@ export function createTickets({ db, clock, settings, modules }: Context) {
       );
     },
 
+    /** The photos of several issues in one query, by issue: the id and file of each, in the order they came. */
+    async photosOfIssues(issueIds: number[]) {
+      const byIssue = new Map<number, { photoId: number; fileId: number }[]>();
+      if (!issueIds.length) return byIssue;
+      for (const p of await all<{ id: number; issue_id: number; file_id: number }>(
+        db,
+        'SELECT id, issue_id, file_id FROM photos WHERE issue_id IN (SELECT value::bigint FROM jsonb_array_elements_text(?::text::jsonb) AS ids (value)) ORDER BY id',
+        JSON.stringify(issueIds),
+      )) {
+        byIssue.set(p.issue_id, [...(byIssue.get(p.issue_id) ?? []), { photoId: p.id, fileId: p.file_id }]);
+      }
+      return byIssue;
+    },
+
     async photos(issueId: number) {
       return (await all<{ id: number; file_id: number; metadata: PhotoMetadata; reasons: string }>(
         db,
@@ -395,7 +463,9 @@ export function createTickets({ db, clock, settings, modules }: Context) {
       )).map((p) => ({ photoId: p.id, fileId: p.file_id, metadata: p.metadata, reasons: JSON.parse(p.reasons) as string[] }));
     },
 
-    async confirmMaintenanceRequest(agencyId: number, issueId: number) {
+    /** Confirms a Maintenance Request. A non-blank `edits.summary` replaces the Summary, as the Property Manager's own words. */
+    async confirmMaintenanceRequest(agencyId: number, issueId: number, edits: { summary?: string } = {}) {
+      const editedSummary = edits.summary?.trim() ?? '';
       // Checked inside the transaction, so confirming twice at once makes one Ticket.
       const { confirmed, ticketId, trackerToken } = await transaction(db, async () => {
         const confirmed = await issueInAgency(agencyId, issueId);
@@ -425,6 +495,10 @@ export function createTickets({ db, clock, settings, modules }: Context) {
         await run(db, `UPDATE issues SET status = 'confirmed' WHERE id = ?`, issueId);
         await recordEvent(ticketId, 'reported', {}, confirmed.reportedAt);
         await recordEvent(ticketId, 'confirmed');
+        if (editedSummary && editedSummary !== confirmed.summary) {
+          await run(db, `UPDATE issues SET summary = ?, summary_by = 'property_manager' WHERE id = ?`, editedSummary, issueId);
+          await recordEvent(ticketId, 'summary_edited', { summary: editedSummary });
+        }
         return { confirmed, ticketId, trackerToken };
       });
       await modules.notifications.send(
@@ -434,6 +508,20 @@ export function createTickets({ db, clock, settings, modules }: Context) {
         { issueId },
       );
       return ticketId;
+    },
+
+    /** Edits the Summary of a Maintenance Request or of a Ticket's issue. Blank is refused. Once edited, the model never overwrites it. */
+    async editSummary(agencyId: number, target: { issueId: number } | { ticketId: number }, summary: string) {
+      const trimmed = summary.trim();
+      if (!trimmed) invalid('Write a Summary');
+      if (trimmed.length > 160) invalid('Keep the Summary to 160 characters');
+      const ticketId = 'ticketId' in target ? (await ticketInAgency(agencyId, target.ticketId)).id : null;
+      const issueId = ticketId === null ? (await issueInAgency(agencyId, (target as { issueId: number }).issueId)).id : (await ticket(ticketId)).issueId;
+      const current = await issue(issueId);
+      if (current.summary === trimmed && current.summaryBy === 'property_manager') return;
+      await this.updateIssue(issueId, { summary: trimmed, summaryBy: 'property_manager' });
+      const linked = ticketId ?? (await one<{ id: number }>(db, 'SELECT id FROM tickets WHERE issue_id = ?', issueId))?.id;
+      if (linked !== undefined) await recordEvent(linked, 'summary_edited', { summary: trimmed });
     },
 
     async rejectMaintenanceRequest(agencyId: number, issueId: number, reason: string) {
@@ -481,6 +569,7 @@ export function createTickets({ db, clock, settings, modules }: Context) {
           receiptToken,
           iso(clock.now()),
         );
+        await recordUrgentRepairEvent(id, 'reminder_sent');
         return { id, receiptToken };
       });
     },
@@ -492,17 +581,93 @@ export function createTickets({ db, clock, settings, modules }: Context) {
       return row ? toUrgentRepair(row) : null;
     },
 
-    async addReceipt(urgentRepairId: number, fileIds: number[]) {
+    urgentRepairInAgency,
+
+    /**
+     * Adds receipt files to a Reimbursement Request, which then waits for the Property
+     * Manager to check it, even if it was forwarded before (the Tenant sent another
+     * page). `amountCents`, when given, is what the Tenant claims. Refused once reimbursed.
+     */
+    async addReceipt(urgentRepairId: number, fileIds: number[], o: { amountCents?: number | null; via: ReceiptVia }) {
+      if (o.amountCents != null) requireClaim(o.amountCents);
       await transaction(db, async () => {
+        const current = await urgentRepair(urgentRepairId);
+        if (current.status === 'reimbursed') invalid('This Reimbursement Request is already reimbursed, so this link has expired');
         for (const fileId of fileIds) {
           await run(db, 'INSERT INTO urgent_repair_receipts (urgent_repair_id, file_id) VALUES (?, ?)', urgentRepairId, fileId);
         }
-        await run(db, `UPDATE urgent_repairs SET status = 'receipt_received' WHERE id = ?`, urgentRepairId);
+        await run(
+          db,
+          `UPDATE urgent_repairs SET status = 'receipt_received', amount_cents = COALESCE(?, amount_cents) WHERE id = ?`,
+          o.amountCents ?? null,
+          urgentRepairId,
+        );
+        await recordUrgentRepairEvent(urgentRepairId, 'receipt_received', {
+          files: fileIds.length,
+          via: o.via,
+          ...(o.amountCents != null ? { amountCents: o.amountCents } : {}),
+        });
       });
     },
 
-    async setUrgentRepairStatus(urgentRepairId: number, status: UrgentRepairStatus) {
-      await run(db, 'UPDATE urgent_repairs SET status = ? WHERE id = ?', status, urgentRepairId);
+    /**
+     * Marks a Reimbursement Request forwarded to the Property Owner with the amount
+     * claimed: from Awaiting your review, or again once forwarded. `amountCents`
+     * replaces the Tenant's amount; without it the Tenant's stands, and one is needed.
+     * Returns the request as forwarded, for the caller to send.
+     */
+    async forwardUrgentRepair(agencyId: number, urgentRepairId: number, o: { amountCents?: number | null; ownerName: string }) {
+      return transaction(db, async () => {
+        const current = await urgentRepairInAgency(agencyId, urgentRepairId);
+        if (current.status === 'reimbursed') invalid('This Reimbursement Request is already reimbursed');
+        if (current.status === 'reminder_sent' || !current.receiptFileIds.length) invalid('The Tenant has not sent the receipt yet');
+        const amountCents = o.amountCents ?? current.amountCents;
+        if (amountCents == null) invalid('Enter the amount on the receipt');
+        requireClaim(amountCents);
+        const at = iso(clock.now());
+        await run(db, `UPDATE urgent_repairs SET status = 'receipt_forwarded', amount_cents = ?, forwarded_at = ? WHERE id = ?`, amountCents, at, urgentRepairId);
+        await recordUrgentRepairEvent(urgentRepairId, 'forwarded', { amountCents, ownerName: o.ownerName, ...(current.forwardedAt ? { again: true } : {}) });
+        return { ...current, status: 'receipt_forwarded' as const, amountCents, forwardedAt: at };
+      });
+    },
+
+    /** Marks a forwarded Reimbursement Request reimbursed: the Property Owner has paid the Tenant back. */
+    async markUrgentRepairReimbursed(agencyId: number, urgentRepairId: number) {
+      return transaction(db, async () => {
+        const current = await urgentRepairInAgency(agencyId, urgentRepairId);
+        if (current.status === 'reimbursed') invalid('This Reimbursement Request is already reimbursed');
+        if (current.status !== 'receipt_forwarded') invalid('Forward the receipt to the Property Owner before marking it reimbursed');
+        const at = iso(clock.now());
+        await run(db, `UPDATE urgent_repairs SET status = 'reimbursed', reimbursed_at = ? WHERE id = ?`, at, urgentRepairId);
+        await recordUrgentRepairEvent(urgentRepairId, 'reimbursed', current.amountCents != null ? { amountCents: current.amountCents } : {});
+        return { ...current, status: 'reimbursed' as const, reimbursedAt: at };
+      });
+    },
+
+    recordUrgentRepairEvent,
+
+    /** A Reimbursement Request's events, oldest first. */
+    async urgentRepairTimeline(urgentRepairId: number) {
+      return (await all<{ kind: string; data: string; at: string }>(
+        db,
+        'SELECT kind, data, at FROM urgent_repair_events WHERE urgent_repair_id = ? ORDER BY at, id',
+        urgentRepairId,
+      )).map((e) => ({ kind: e.kind, at: e.at, ...(JSON.parse(e.data) as Record<string, unknown>) }));
+    },
+
+    /** The receipt files of a Reimbursement Request, without their bytes, in the order they came. */
+    async urgentRepairReceipts(urgentRepairId: number) {
+      return (await all<{ file_id: number; filename: string; content_type: string }>(
+        db,
+        `SELECT r.file_id, f.filename, f.content_type FROM urgent_repair_receipts r JOIN files f ON f.id = r.file_id
+         WHERE r.urgent_repair_id = ? ORDER BY r.file_id`,
+        urgentRepairId,
+      )).map((f) => ({ fileId: f.file_id, filename: f.filename, contentType: f.content_type }));
+    },
+
+    /** Marks every message on an issue read: a Reimbursement Request's, which has no Ticket. */
+    async markIssueRead(issueId: number) {
+      await run(db, 'UPDATE messages SET unread = 0 WHERE issue_id = ?', issueId);
     },
 
     ticket,
@@ -556,14 +721,16 @@ export function createTickets({ db, clock, settings, modules }: Context) {
     },
 
     async cancelJob(agencyId: number, jobId: number) {
-      return transaction(db, async () => {
+      const inspections = await transaction(db, async () => {
         const cancelled = await jobInAgency(agencyId, jobId);
         if (cancelled.status === 'done' || cancelled.status === 'cancelled') invalid(`This Job is already ${cancelled.status}`);
         await run(db, `UPDATE jobs SET status = 'cancelled' WHERE id = ?`, jobId);
-        await modules.quotes.jobCancelled(jobId);
+        const inspections = await modules.quotes.jobCancelled(jobId);
         await modules.scheduling.jobCancelled(jobId);
         await recordEvent(cancelled.ticketId, 'job_cancelled', { jobId });
+        return inspections;
       });
+      await modules.quotes.inspectionsCancelled(inspections);
     },
 
     async closeTicket(agencyId: number, ticketId: number) {
@@ -764,6 +931,12 @@ export function createTickets({ db, clock, settings, modules }: Context) {
      * The Tenant's progress tracker. Built from statuses only: no prices, Quotes or
      * ratings. It names the Agency and the Property, and the booked stage names the
      * Tradie's business and Trade, because the Tenant needs to know who is coming.
+     *
+     * Each stage is `reached` once it has begun and `done` only once it has really
+     * happened, never because a later stage began: Getting quotes is done once a Quote is
+     * approved, a Site visit once every inspection still going ahead has taken place, and
+     * Booked once the Job is done. The booked stage says whether the Tenant has confirmed
+     * they'll be in (`visitConfirmed`) or asked for another time (`rescheduleRequested`).
      */
     async tracker(token: string) {
       const tracked = await this.ticketByTrackerToken(token);
@@ -775,17 +948,46 @@ export function createTickets({ db, clock, settings, modules }: Context) {
       const doneAt = allDone ? (events.filter((e) => e.kind === 'job_done').at(-1)?.at ?? null) : null;
       // The latest visit, preferring a Job that is still going ahead.
       type VisitEvent = { kind: string; jobId?: number; tradie?: string; visitStart?: string };
-      const visits = events.filter((e) => e.kind === 'work_order_sent' || e.kind === 'visit_moved') as VisitEvent[];
+      const visits = events.filter((e) => (e.kind === 'work_order_sent' || e.kind === 'visit_moved') && !(e as { inspection?: boolean }).inspection && !(e as { siteQuote?: boolean }).siteQuote) as VisitEvent[];
       const visit = visits.findLast((e) => jobs.some((j) => j.id === e.jobId)) ?? visits.at(-1);
       const tradie = visits.findLast((e) => e.kind === 'work_order_sent' && e.jobId === visit?.jobId)?.tradie;
       const trade = jobs.find((j) => j.id === visit?.jobId)?.trade;
-      const booked = visit?.visitStart ? { visitStart: visit.visitStart, ...(tradie ? { tradie } : {}), ...(trade ? { trade } : {}) } : {};
-      const stages: { stage: string; at: string | null; visitStart?: string; tradie?: string; trade?: Trade }[] = [
+      const repair = visit?.jobId !== undefined ? await modules.scheduling.workOrderForJob(visit.jobId) : null;
+      const booked = visit?.visitStart
+        ? {
+            visitStart: visit.visitStart,
+            ...(tradie ? { tradie } : {}),
+            ...(trade ? { trade } : {}),
+            visitConfirmed: !!repair?.visitConfirmed,
+            rescheduleRequested: repair?.status === 'active' && repair.rescheduleRequestedBy !== null,
+          }
+        : {};
+      const bookedDone = !!visit && jobs.some((j) => j.id === visit.jobId && j.status === 'done');
+      // Site Inspections, only when a Tradie has one going ahead or done: who is coming and when,
+      // and whether each has happened. Done once every one of them has.
+      const inspections = (await Promise.all(jobs.map((j) => modules.scheduling.inspectionVisits(j.id)))).flat();
+      const siteVisits = inspections.map((v) => ({ tradie: v.businessName, visitStart: v.start, done: v.status === 'done' }));
+      const siteBooked = events.find((e) => e.kind === 'inspection_booked' || e.kind === 'site_quotes_booked');
+      const siteDone = siteVisits.length > 0 && siteVisits.every((v) => v.done);
+      const approvedAt = first('quote_approved');
+      type Stage = {
+        stage: string;
+        at: string | null;
+        done?: boolean;
+        visitStart?: string;
+        tradie?: string;
+        trade?: Trade;
+        visitConfirmed?: boolean;
+        rescheduleRequested?: boolean;
+        visits?: { tradie: string; visitStart: string; done: boolean }[];
+      };
+      const stages: Stage[] = [
         { stage: 'reported', at: tracked.reportedAt },
         { stage: 'confirmed', at: first('confirmed') },
-        { stage: 'getting_quotes', at: first('quote_requests_sent') },
-        { stage: 'approved', at: first('quote_approved') },
-        { stage: 'booked', at: first('work_order_sent'), ...booked },
+        { stage: 'getting_quotes', at: first('quote_requests_sent'), done: approvedAt !== null },
+        ...(siteBooked && siteVisits.length ? [{ stage: 'site_visit', at: siteBooked.at, done: siteDone, visits: siteVisits }] : []),
+        { stage: 'approved', at: approvedAt },
+        { stage: 'booked', at: first('work_order_sent'), done: bookedDone, ...booked },
         { stage: 'done', at: doneAt },
         { stage: 'closed', at: tracked.closedAt },
       ];
@@ -796,7 +998,8 @@ export function createTickets({ db, clock, settings, modules }: Context) {
         address: (await modules.profiles.property(tracked.propertyId)).address,
         // The Agency's zone, so the Tenant sees times as the Agency does.
         timeZone: agency.timeZone,
-        stages: stages.map((s) => ({ ...s, reached: s.at !== null })),
+        // A stage that is simply an event (Reported, Repair approved...) is done once it is reached.
+        stages: stages.map((s) => ({ ...s, reached: s.at !== null, done: s.at !== null && (s.done ?? true) })),
       };
     },
   };

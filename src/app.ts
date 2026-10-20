@@ -9,11 +9,11 @@ import { createNotifications } from './notifications.ts';
 import { createOnboarding } from './onboarding.ts';
 import type { BlobStore, ChannelType, Clock, InboundMessage } from './ports.ts';
 import { createProfiles, type SignUp } from './profiles.ts';
-import { createQuotes } from './quotes.ts';
+import { createQuotes, type EstimateInput, type FirmQuoteInput } from './quotes.ts';
 import { createScheduling } from './scheduling.ts';
-import { DEFAULT_SETTINGS, invalid, type Role, type Settings, type Trade, type Urgency } from './shared.ts';
+import { DEFAULT_SETTINGS, invalid, notFound, type Role, type Settings, type Trade, type Urgency } from './shared.ts';
 import { createTickets } from './tickets.ts';
-import { createViews } from './views.ts';
+import { createViews, type ListOptions } from './views.ts';
 import { createWorker } from './worker.ts';
 
 export type Upload = { filename: string; contentType: string; content: Uint8Array };
@@ -39,6 +39,7 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
       classifier: deps.classifier,
       imageMatcher: deps.imageMatcher,
       quoteReader: deps.quoteReader,
+      summariser: deps.summariser,
       places: deps.places,
       fetchMedia: deps.fetchMedia,
     },
@@ -81,8 +82,11 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
     /** A WhatsApp delivery failure from Meta, recorded on the outbound message. */
     recordDeliveryFailure: (failure: { to: string; code: number; title: string }) => tickets.recordDeliveryFailure(failure),
 
-    /** An upload through a no-login link: issue photos or an Urgent Repair receipt. */
-    upload: (token: string, uploads: Upload[]) => intake.upload(token, uploads),
+    /**
+     * An upload through a no-login link: issue photos, or the receipt for a
+     * Reimbursement Request (photos or PDFs) with the amount the Tenant claims, if given.
+     */
+    upload: (token: string, uploads: Upload[], o?: { amountCents?: number | null }) => intake.upload(token, uploads, o),
 
     /**
      * Where a browser can send the files of a no-login upload straight to storage,
@@ -95,15 +99,30 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
     },
 
     /** Finishes an upload sent to the slots from `uploadSlots`: collects the files, then handles them like `upload`. */
-    async completeUpload(token: string, sent: { path: string; filename: string; contentType: string }[]) {
+    async completeUpload(token: string, sent: { path: string; filename: string; contentType: string }[], o?: { amountCents?: number | null }) {
       const agencyId = await intake.uploadAgency(token);
       const uploads: Upload[] = [];
       for (const f of sent) uploads.push({ filename: f.filename, contentType: f.contentType, content: await files.take(agencyId, f.path) });
-      await intake.upload(token, uploads);
+      await intake.upload(token, uploads, o);
     },
 
     /** What a no-login upload link is for and whether it still takes files, or null for an unknown link. */
     uploadLink: (token: string) => tickets.uploadLink(token),
+
+    /** The Tradie's quote page, reached by the no-login link in their Quote Request: what it is for and where it stands, or null. */
+    quotePage: (token: string) => quotes.quotePage(token),
+
+    /** The Tradie's Estimate from their quote page. Refuses field by field (ActionError.fields); not_found for an unknown link. */
+    async submitEstimate(token: string, input: EstimateInput) {
+      const id = (await quotes.requestIdByToken(token)) ?? notFound('Quote Request');
+      await quotes.submitEstimate(id, input);
+    },
+
+    /** The Tradie's Firm Quote from their quote page, with an optional PDF. Refuses field by field; not_found for an unknown link. */
+    async submitFirmQuote(token: string, input: FirmQuoteInput) {
+      const id = (await quotes.requestIdByToken(token)) ?? notFound('Quote Request');
+      await quotes.submitFirmQuote(id, input);
+    },
 
     /** The Tenant's progress tracker, reached by its no-login link. */
     tracker: (token: string) => tickets.tracker(token),
@@ -136,15 +155,17 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
         /** A photo, receipt or PDF Quote stored for the Agency, or null. */
         file: (fileId: number) => files.getInAgency(agencyId, fileId),
         dashboard: ({ filter = 'mine' }: { filter?: 'mine' | 'all' } = {}) => views.dashboard(agencyId, propertyManagerId, filter),
-        /** The Maintenance Requests waiting for review: the Property Manager's own, or all of the Agency's. */
-        requests: ({ filter = 'mine' }: { filter?: 'mine' | 'all' } = {}) => views.requests(agencyId, propertyManagerId, filter),
+        /** The Maintenance Requests waiting for review: the Property Manager's own (the default) or all of the Agency's, optionally by Urgency, Trade and Property. */
+        requests: (o: Partial<ListOptions> = {}) => views.requests(agencyId, propertyManagerId, { ...o, filter: o.filter ?? 'mine' }),
         /** One Maintenance Request waiting for review, or null. */
         request: (issueId: number) => views.request(agencyId, issueId),
-        /** Tickets by status (open by default) and optionally Urgency, most urgent first then oldest, with the counts for the filters. */
-        tickets: (o: { filter?: 'mine' | 'all'; status?: 'open' | 'closed'; urgency?: Urgency | null } = {}) =>
-          views.tickets(agencyId, propertyManagerId, { filter: o.filter ?? 'mine', status: o.status ?? 'open', urgency: o.urgency ?? null }),
-        /** Quotes waiting on a Property Owner over the Max Repair Cost, and Urgent Repairs waiting on a receipt. */
+        /** Tickets by status (open by default, or closed for the Archive), optionally by Urgency, Trade and Property. */
+        tickets: (o: Partial<ListOptions> & { status?: 'open' | 'closed' } = {}) =>
+          views.tickets(agencyId, propertyManagerId, { ...o, filter: o.filter ?? 'mine', status: o.status ?? 'open' }),
+        /** Quotes waiting on a Property Owner over the Max Repair Cost, and every Reimbursement Request not yet reimbursed. */
         approvals: ({ filter = 'mine' }: { filter?: 'mine' | 'all' } = {}) => views.approvals(agencyId, propertyManagerId, filter),
+        /** One Reimbursement Request (by its Urgent Repair's id) with its receipts, timeline and messages. Refuses (not_found) one outside the Agency. */
+        reimbursement: (urgentRepairId: number) => views.reimbursement(agencyId, urgentRepairId),
         propertyOverviews: () => views.propertyOverviews(agencyId),
         property: (propertyId: number) => views.property(agencyId, propertyId),
         tradieDirectory: () => views.tradies(agencyId),
@@ -156,6 +177,10 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
         setTradieAddress: (tradieId: number, address: string) => profiles.setTradieAddress(agencyId, tradieId, address),
         ticket: (ticketId: number) => views.ticket(agencyId, ticketId),
         tradie: (tradieId: number) => views.tradie(agencyId, tradieId),
+        /** The Tenants by name, each with their Property and open Tickets: those of the Property Manager's own Properties, or all of the Agency's. */
+        tenants: ({ filter = 'mine' }: { filter?: 'mine' | 'all' } = {}) => views.tenants(agencyId, propertyManagerId, filter),
+        /** A Tenant's profile: their Property, contact details, Tickets, Maintenance Requests waiting and Reimbursement Requests. */
+        tenant: (tenantId: number) => views.tenant(agencyId, tenantId),
         /** The counts beside Requests and Approvals in the rail. */
         navCounts: () => views.navCounts(agencyId, propertyManagerId),
 
@@ -175,6 +200,8 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
         addOwner: (input: Parameters<typeof onboarding.addOwner>[1]) => onboarding.addOwner(agencyId, input),
         addBuildingManager: (input: Parameters<typeof onboarding.addBuildingManager>[1]) => onboarding.addBuildingManager(agencyId, input),
         addTenant: (input: Parameters<typeof onboarding.addTenant>[1]) => onboarding.addTenant(agencyId, input),
+        /** Takes a Tenant off their Property, keeping their past Tickets. Refuses while they have an open Ticket or a waiting Maintenance Request. Returns their name. */
+        removeTenant: (tenantId: number) => onboarding.removeTenant(agencyId, tenantId),
         addTradie: (input: Parameters<typeof onboarding.addTradie>[1]) => onboarding.addTradie(agencyId, input),
         addProperty: (input: Parameters<typeof onboarding.addProperty>[1]) => onboarding.addProperty(agencyId, input),
         findGoogleListings: (query: string) => onboarding.findGoogleListings(query),
@@ -198,7 +225,10 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
         dismissInboxItem: (itemId: number) => intake.dismissInboxItem(agencyId, itemId),
 
         // Maintenance Requests and Tickets
-        confirmMaintenanceRequest: (issueId: number) => tickets.confirmMaintenanceRequest(agencyId, issueId),
+        /** Confirms a Maintenance Request into a Ticket and Job; `edits.summary`, when not blank, replaces the Summary. */
+        confirmMaintenanceRequest: (issueId: number, edits?: { summary?: string }) => tickets.confirmMaintenanceRequest(agencyId, issueId, edits),
+        /** Edits a Maintenance Request's or Ticket's Summary without confirming it. The model never overwrites an edit. */
+        editSummary: (target: { issueId: number } | { ticketId: number }, summary: string) => tickets.editSummary(agencyId, target, summary),
         rejectMaintenanceRequest: (issueId: number, reason: string) => tickets.rejectMaintenanceRequest(agencyId, issueId, reason),
         changeUrgency: (target: { issueId: number } | { ticketId: number }, urgency: Urgency) =>
           tickets.changeUrgency(agencyId, target, urgency),
@@ -208,11 +238,32 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
         closeTicket: (ticketId: number) => tickets.closeTicket(agencyId, ticketId),
         markTicketRead: (ticketId: number) => tickets.markRead(agencyId, ticketId),
 
+        // Reimbursement Requests
+        /**
+         * Forwards a checked receipt to the Property Owner (email when they have one, the
+         * Property Manager copied in), with `amountCents` replacing the Tenant's amount.
+         * From Awaiting your review, or again once forwarded.
+         */
+        forwardReimbursement: (urgentRepairId: number, o: { amountCents?: number | null } = {}) => intake.forwardReimbursement(agencyId, urgentRepairId, o),
+        /** Records that the Property Owner paid the Tenant back, and tells the Tenant. Only once forwarded. */
+        markReimbursed: (urgentRepairId: number) => intake.markReimbursed(agencyId, urgentRepairId),
+        /** Sends the Tenant the receipt link again, while the receipt is still to come. */
+        resendReceiptLink: (urgentRepairId: number) => intake.resendReceiptLink(agencyId, urgentRepairId),
+        async markReimbursementRead(urgentRepairId: number) {
+          await tickets.markIssueRead((await tickets.urgentRepairInAgency(agencyId, urgentRepairId)).issueId);
+        },
+
         // Quotes and approval
         sendQuoteRequests: (jobId: number, tradieIds: number[]) => quotes.sendQuoteRequests(agencyId, jobId, tradieIds),
         confirmQuote: (quoteId: number, edits?: { priceCents?: number; proposedTime?: string | null }) =>
           quotes.confirmQuote(agencyId, quoteId, edits),
+        /** Chooses a Firm Quote. An Estimate is refused: proceed on it instead. */
         chooseQuote: (quoteId: number, reason?: string) => quotes.chooseQuote(agencyId, quoteId, reason),
+        /** Goes ahead on an Estimate with a Not-to-exceed Cap, for a routine Job whose Tradie needs no Site Inspection. */
+        proceedOnEstimate: (quoteId: number, options: { capCents: number; reason?: string; confirm?: boolean }) =>
+          quotes.proceedOnEstimate(agencyId, quoteId, options),
+        /** Enters a Firm Quote the Tradie sent another way (a PDF by email, say), checked as one from their quote page. */
+        enterFirmQuote: (quoteRequestId: number, input: FirmQuoteInput) => quotes.enterFirmQuote(agencyId, quoteRequestId, input),
 
         // Scheduling and completion
         calendar: (range: { from: string; to: string }) => scheduling.calendar(agencyId, range),
@@ -223,6 +274,18 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
         suggestTimes: (workOrderId: number) => scheduling.suggestTimes(agencyId, workOrderId),
         acceptTime: (workOrderId: number, start: string) => scheduling.acceptTime(agencyId, workOrderId, start),
         rateTradie: (jobId: number, score: number) => scheduling.rateTradie(agencyId, jobId, score),
+
+        // Site Inspections, one Tradie at a time
+        /** For each Tradie who needs a Site Inspection not booked yet, three free one-hour slots to prefill booking it. */
+        inspectionSlots: (jobId: number) => scheduling.inspectionSlots(agencyId, jobId),
+        /** Books a Tradie's Site Inspection once they have given an Estimate; they and the Tenant are told. Returns the Work Order's id. */
+        bookInspection: (quoteRequestId: number, options: { start: string; durationMinutes?: number }) =>
+          scheduling.bookInspection(agencyId, quoteRequestId, options),
+        /** Overrides whether the Tradie needs a Site Inspection before their Firm Quote. */
+        setInspectionNeeded: (quoteRequestId: number, needed: boolean) => quotes.setInspectionNeeded(agencyId, quoteRequestId, needed),
+        /** Marks a Site Inspection done; the Tradie is asked for their Firm Quote. */
+        markInspected: (workOrderId: number) => scheduling.markInspectedForAgency(agencyId, workOrderId),
+        quoteRequestRule: (jobId: number) => quotes.quoteRequestRule(agencyId, jobId),
       };
     },
   };

@@ -13,7 +13,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { Clock } from './ports.ts';
 
 /** Long enough for Twilio to fetch the media of a queued message, short enough not to linger in a thread. */
-export const FILE_LINK_TTL_MS = 60 * 60 * 1000;
+const FILE_LINK_TTL_MS = 60 * 60 * 1000;
 const MIN_SECRET_LENGTH = 32;
 
 export interface FileLinks {

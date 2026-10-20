@@ -8,9 +8,9 @@ import { execFileSync } from 'node:child_process';
 import postgres from 'postgres';
 import { ident, isLocalUrl, LOCAL_DATABASE_URL } from '../src/db.ts';
 
-export const CONTAINER = 'myest8-postgres';
-export const IMAGE = 'postgres:17-alpine';
-export const VOLUME = 'myest8-pgdata';
+const CONTAINER = 'myest8-postgres';
+const IMAGE = 'postgres:17-alpine';
+const VOLUME = 'myest8-pgdata';
 const LOCAL_PORT = new URL(LOCAL_DATABASE_URL).port;
 
 /**

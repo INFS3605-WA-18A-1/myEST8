@@ -2,7 +2,7 @@
 // transactions keep to one connection, commit together or not at all.
 
 import { describe, expect, test } from 'vitest';
-import { all, one, run, transaction } from '../src/db.ts';
+import { all, one, run, transaction, withReadCache } from '../src/db.ts';
 import { migrations } from '../src/migrate.ts';
 import { testDb } from './support/db.ts';
 
@@ -116,5 +116,50 @@ describe('migrations', () => {
     for (const m of files) expect(m.version).toMatch(/^\d{14}$/);
     const db = await testDb();
     expect((await all<{ version: string }>(db, 'SELECT version FROM schema_migrations ORDER BY version')).map((r) => r.version)).toEqual(files.map((m) => m.version));
+  });
+});
+
+describe("a page request's read cache", () => {
+  /** An agency renamed behind the data layer's back, as another server would. */
+  const renameElsewhere = (db: Awaited<ReturnType<typeof testDb>>, id: number, name: string) => db.sql.unsafe('UPDATE agencies SET name = $1 WHERE id = $2', [name, id]);
+  const nameOf = async (db: Awaited<ReturnType<typeof testDb>>, id: number) => (await one<{ name: string }>(db, 'SELECT name FROM agencies WHERE id = ?', id))!.name;
+
+  test('the same read is sent once, and every caller gets its own array of the rows', async () => {
+    const db = await testDb();
+    const id = await run(db, 'INSERT INTO agencies (name, time_zone) VALUES (?, ?) RETURNING id', 'Harbour Realty', 'Australia/Sydney');
+
+    await withReadCache(async () => {
+      expect(await nameOf(db, id)).toBe('Harbour Realty');
+      await renameElsewhere(db, id, 'Renamed');
+      // Answered from the first read: the database wasn't asked again.
+      expect(await nameOf(db, id)).toBe('Harbour Realty');
+      const first = await all(db, 'SELECT id FROM agencies');
+      first.pop();
+      expect(await all(db, 'SELECT id FROM agencies')).toHaveLength(1);
+    });
+    // Outside a request there is no cache.
+    expect(await nameOf(db, id)).toBe('Renamed');
+  });
+
+  test('any write clears it, so a read after a write sees the database as it is', async () => {
+    const db = await testDb();
+    const id = await run(db, 'INSERT INTO agencies (name, time_zone) VALUES (?, ?) RETURNING id', 'Harbour Realty', 'Australia/Sydney');
+
+    await withReadCache(async () => {
+      expect(await nameOf(db, id)).toBe('Harbour Realty');
+      await run(db, 'UPDATE agencies SET name = ? WHERE id = ?', 'Written', id);
+      expect(await nameOf(db, id)).toBe('Written');
+    });
+  });
+
+  test('a transaction never reads from it, so its checks read the database as it is', async () => {
+    const db = await testDb();
+    const id = await run(db, 'INSERT INTO agencies (name, time_zone) VALUES (?, ?) RETURNING id', 'Harbour Realty', 'Australia/Sydney');
+
+    await withReadCache(async () => {
+      expect(await nameOf(db, id)).toBe('Harbour Realty');
+      await renameElsewhere(db, id, 'Renamed');
+      expect(await transaction(db, () => nameOf(db, id))).toBe('Renamed');
+    });
   });
 });

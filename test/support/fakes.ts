@@ -2,6 +2,7 @@ import type {
   BlobStore,
   ChannelType,
   Classifier,
+  Summariser,
   ClassifierAnswer,
   Clock,
   ImageMatcher,
@@ -101,6 +102,17 @@ export class FakeImageMatcher implements ImageMatcher {
   async match() {
     if (this.next instanceof Error) throw this.next;
     return this.next;
+  }
+}
+
+/** Summarises as "Summary: <description>" unless `next` is set (a summary to return, or an Error to throw). */
+export class FakeSummariser implements Summariser {
+  next: string | Error | null = null;
+  calls: Parameters<Summariser['summarise']>[0][] = [];
+  async summarise(input: Parameters<Summariser['summarise']>[0]) {
+    this.calls.push(input);
+    if (this.next instanceof Error) throw this.next;
+    return { summary: this.next ?? `Summary: ${input.description}` };
   }
 }
 

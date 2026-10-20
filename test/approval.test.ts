@@ -76,13 +76,13 @@ describe('Property Owner approval', () => {
     expect(await jobView(w, job)).toMatchObject({
       status: 'quoting',
       approval: { status: 'declined' },
-      quotes: [{ status: 'declined_by_owner' }, { status: 'open' }],
+      quotes: [{ stage: 'estimate', status: 'superseded' }, { stage: 'estimate', status: 'superseded' }, { status: 'declined_by_owner' }, { status: 'open' }],
     });
     await expect(alice.chooseQuote(expensive!.quoteId)).rejects.toThrow(/no longer/);
 
     await alice.chooseQuote(cheaper!.quoteId);
 
-    expect(await jobView(w, job)).toMatchObject({ status: 'approved', quotes: [{ status: 'declined_by_owner' }, { status: 'approved' }] });
+    expect(await jobView(w, job)).toMatchObject({ status: 'approved', quotes: [{}, {}, { status: 'declined_by_owner' }, { status: 'approved' }] });
     expect(h.messenger.templatesTo(OLIVIA)).toEqual(['owner.approval_request']);
     expect(h.messenger.last(tradies.dana.address)!.template).toBe('tradie.not_chosen');
   });

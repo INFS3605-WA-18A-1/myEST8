@@ -5,6 +5,7 @@ import type { OpenItem } from './tickets.ts';
 import { formatVisit, wallClock, zonedInstant } from './zoned-time.ts';
 
 const DEFAULT_SLOT_MINUTES = 120;
+const INSPECTION_MINUTES = 60;
 const SUGGESTION_COUNT = 3;
 const SUGGESTION_DAYS = 14;
 const MINUTE_MS = 60_000;
@@ -34,7 +35,12 @@ type WorkOrderRow = {
   status: 'active' | 'done' | 'cancelled';
   visit_confirmed: number;
   reschedule_requested_by: 'tenant' | 'tradie' | null;
+  kind: WorkOrderKind;
+  quote_request_id: number | null;
 };
+
+/** A repair visit, or a Tradie's Site Inspection before their Firm Quote. */
+export type WorkOrderKind = 'repair' | 'inspection';
 
 /**
  * How a booked visit stands: done, waiting on new times, or booked and either
@@ -49,7 +55,7 @@ function visitOf(row: WorkOrderRow): VisitStatus {
 }
 
 /** The shared calendar, Work Orders, reschedule suggestions and Job completion. */
-export function createScheduling({ db, clock, modules }: Context) {
+export function createScheduling({ db, clock, worker, modules }: Context) {
 
   const { profiles, tickets, notifications } = modules;
 
@@ -142,6 +148,7 @@ export function createScheduling({ db, clock, modules }: Context) {
     const { job, ticket, property, tradieBusinessName } = await place(row);
     return {
       workOrderId: row.id,
+      kind: row.kind,
       jobId: row.job_id,
       ticketId: row.ticket_id,
       tradieId: row.tradie_id,
@@ -175,6 +182,109 @@ export function createScheduling({ db, clock, modules }: Context) {
       );
     }
     await modules.intake.expectAnswer(ticket.tenantId, { kind: 'visit', workOrderId: row.id });
+  }
+
+  /** Free one-hour slots over the next 14 days inside the Tenant's availability. */
+  async function slotsFor(agencyId: number, tradieId: number, tenantId: number, limit: number) {
+    const tenant = await profiles.person(tenantId);
+    return findSlots({
+      agencyId,
+      tradieId,
+      durationMs: INSPECTION_MINUTES * MINUTE_MS,
+      windows: AVAILABILITY_WINDOWS[tenant.availability ?? 'any_time'],
+      from: clock.now(),
+      days: SUGGESTION_DAYS,
+      limit,
+    });
+  }
+
+  /**
+   * Books one Tradie's Site Inspection (an hour unless `durationMinutes` says otherwise), once
+   * they have given an Estimate. It is a Work Order with kind `inspection`, so it blocks the
+   * Tradie's slot; the Tradie and the Tenant are told. The Job stays `quoting`.
+   */
+  async function bookInspection(agencyId: number, quoteRequestId: number, options: { start: string; durationMinutes?: number }) {
+    const request = await modules.quotes.inspectionBookable(agencyId, quoteRequestId);
+    const tradie = await profiles.person(request.tradieId);
+    const name = tradie.businessName ?? tradie.name;
+    const minutes = options.durationMinutes ?? INSPECTION_MINUTES;
+    if (!Number.isInteger(minutes) || minutes <= 0 || minutes > 24 * 60) invalid('The visit must be between 1 minute and 24 hours long');
+    const start = new Date(options.start);
+    if (Number.isNaN(start.getTime())) invalid(`${options.start} is not a time`);
+    if (start < clock.now()) invalid('Pick a start time in the future');
+    const end = addMs(start, minutes * MINUTE_MS);
+    const id = await transaction(db, async () => {
+      // Checked again inside, so two bookings at once can't both pass.
+      await modules.quotes.inspectionBookable(agencyId, quoteRequestId);
+      if (!(await isFree(agencyId, tradie.id, start, end))) throw new ActionError('conflict', `${name} is already booked then`);
+      const id = await run(
+        db,
+        `INSERT INTO work_orders (agency_id, job_id, ticket_id, tradie_id, start, "end", status, kind, quote_request_id)
+         VALUES (?, ?, ?, ?, ?, ?, 'active', 'inspection', ?) RETURNING id`,
+        agencyId,
+        request.jobId,
+        request.ticketId,
+        tradie.id,
+        iso(start),
+        iso(end),
+        quoteRequestId,
+      );
+      await modules.quotes.inspectionBooked(quoteRequestId);
+      await tickets.recordEvent(request.ticketId, 'inspection_booked', { jobId: request.jobId, tradie: name, visitStart: iso(start), visitEnd: iso(end) });
+      return id;
+    });
+
+    const row = (await workOrderRow(id))!;
+    const { job, ticket, property } = await place(row);
+    const issue = await tickets.issue(ticket.issueId);
+    const photoFileIds = (await tickets.photos(issue.id)).map((x) => x.fileId);
+    const byEmail = (await notifications.channelFor(tradie.id)) === 'email';
+    await notifications.send(
+      tradie.id,
+      'tradie.inspection',
+      {
+        propertyAddress: property.address,
+        trade: job.trade,
+        summary: withoutContactDetails(issue.summary ?? issue.description),
+        visitStart: row.start,
+        visitEnd: row.end,
+      },
+      { issueId: issue.id, attachmentFileIds: byEmail ? photoFileIds : [] },
+    );
+    await notifications.send(ticket.tenantId, 'tenant.inspection', { tradieBusinessName: name, trade: job.trade, visitStart: row.start }, { issueId: issue.id });
+    await modules.intake.expectAnswer(ticket.tenantId, { kind: 'visit', workOrderId: id });
+    return id;
+  }
+
+  /** For each Tradie on the Job who needs a Site Inspection not booked yet, up to three free one-hour slots to prefill booking it. */
+  async function inspectionSlots(agencyId: number, jobId: number) {
+    const job = await tickets.jobInAgency(agencyId, jobId);
+    const ticket = await tickets.ticket(job.ticketId);
+    const out = [];
+    for (const { quoteRequestId, tradieId } of await modules.quotes.needingInspection(jobId)) {
+      const tradie = await profiles.person(tradieId);
+      out.push({ quoteRequestId, tradieId, businessName: tradie.businessName ?? tradie.name, slots: await slotsFor(agencyId, tradieId, ticket.tenantId, SUGGESTION_COUNT) });
+    }
+    return out;
+  }
+
+  /** Whether a visit's start time has come, by the injected clock: a visit is never done before it starts. */
+  const started = (row: WorkOrderRow) => clock.now() >= new Date(row.start);
+
+  /**
+   * A Site Inspection is over (the Tradie replied DONE, or the Property Manager marked it):
+   * the Tradie is asked for their Firm Quote. Ignored before the visit's start time.
+   */
+  async function markInspected(workOrderId: number) {
+    const done = await transaction(db, async () => {
+      const row = await workOrderRow(workOrderId);
+      if (row?.status !== 'active' || row.kind !== 'inspection' || !started(row)) return null;
+      const { tradieBusinessName } = await place(row);
+      await run(db, `UPDATE work_orders SET status = 'done' WHERE id = ?`, row.id);
+      await tickets.recordEvent(row.ticket_id, 'inspected', { jobId: row.job_id, tradie: tradieBusinessName });
+      return row;
+    });
+    if (done?.quote_request_id) await modules.quotes.inspected(done.quote_request_id);
   }
 
   return {
@@ -243,7 +353,15 @@ export function createScheduling({ db, clock, modules }: Context) {
       await notifications.send(
         tradie.id,
         'tradie.work_order',
-        { propertyAddress: property.address, description: withoutContactDetails(issue.description), trade: job.trade, visitStart: row.start, visitEnd: row.end },
+        {
+          propertyAddress: property.address,
+          description: withoutContactDetails(issue.description),
+          trade: job.trade,
+          visitStart: row.start,
+          visitEnd: row.end,
+          approvedCents: quote.priceCents,
+          stage: quote.stage,
+        },
         { issueId: issue.id },
       );
       await tellTenantVisitTime(row, false);
@@ -260,7 +378,7 @@ export function createScheduling({ db, clock, modules }: Context) {
         const row = await workOrderRow(workOrderId);
         if (row?.status !== 'active') return;
         await run(db, 'UPDATE work_orders SET reschedule_requested_by = ?, visit_confirmed = 0 WHERE id = ?', by, workOrderId);
-        await tickets.recordEvent(row.ticket_id, 'reschedule_requested', { jobId: row.job_id, by });
+        await tickets.recordEvent(row.ticket_id, 'reschedule_requested', { jobId: row.job_id, by, ...(row.kind === 'inspection' ? { inspection: true } : {}) });
       });
     },
 
@@ -269,7 +387,7 @@ export function createScheduling({ db, clock, modules }: Context) {
         const row = await workOrderRow(workOrderId);
         if (row?.status !== 'active') return;
         await run(db, 'UPDATE work_orders SET visit_confirmed = 1 WHERE id = ?', workOrderId);
-        await tickets.recordEvent(row.ticket_id, 'visit_confirmed', { jobId: row.job_id });
+        await tickets.recordEvent(row.ticket_id, 'visit_confirmed', { jobId: row.job_id, ...(row.kind === 'inspection' ? { inspection: true } : {}) });
       });
     },
 
@@ -308,7 +426,7 @@ export function createScheduling({ db, clock, modules }: Context) {
           iso(end),
           row.id,
         );
-        await tickets.recordEvent(row.ticket_id, 'visit_moved', { jobId: row.job_id, visitStart: iso(start), visitEnd: iso(end) });
+        await tickets.recordEvent(row.ticket_id, 'visit_moved', { jobId: row.job_id, visitStart: iso(start), visitEnd: iso(end), ...(row.kind === 'inspection' ? { inspection: true } : {}) });
       });
       const moved = (await workOrderRow(row.id))!;
       await notifications.send(
@@ -320,11 +438,16 @@ export function createScheduling({ db, clock, modules }: Context) {
       await tellTenantVisitTime(moved, true);
     },
 
-    /** The Tradie replied "done": the Job is done, and the Tenant is asked if it was fixed properly. */
+    /**
+     * The Tradie replied "done". On a repair the Job is done and the Tenant is asked if it was
+     * fixed properly; on a Site Inspection only the visit is done, and the Tradie is asked for their Firm Quote.
+     * Ignored before the visit's start time (intake answers the Tradie then; see `hasStarted`).
+     */
     async markDone(workOrderId: number) {
+      if ((await workOrderRow(workOrderId))?.kind === 'inspection') return markInspected(workOrderId);
       const done = await transaction(db, async () => {
         const row = await workOrderRow(workOrderId);
-        if (row?.status !== 'active') return null;
+        if (row?.status !== 'active' || row.kind !== 'repair' || !started(row)) return null;
         const { job, ticket, tradieBusinessName } = await place(row);
         await run(db, `UPDATE work_orders SET status = 'done' WHERE id = ?`, row.id);
         await tickets.setJobStatus(job.id, 'done');
@@ -340,7 +463,7 @@ export function createScheduling({ db, clock, modules }: Context) {
     async recordTenantRating(jobId: number, score: number) {
       return transaction(db, async () => {
         if (!Number.isInteger(score) || score < 1 || score > 5 || (await profiles.hasRating(jobId, 'tenant'))) return;
-        const row = await one<WorkOrderRow>(db, `SELECT * FROM work_orders WHERE job_id = ? AND status = 'done'`, jobId);
+        const row = await one<WorkOrderRow>(db, `SELECT * FROM work_orders WHERE job_id = ? AND kind = 'repair' AND status = 'done'`, jobId);
         if (!row) return;
         await profiles.recordRating(row.tradie_id, 'tenant', score, jobId);
         await tickets.recordEvent(row.ticket_id, 'tenant_rated', { jobId, score });
@@ -353,7 +476,7 @@ export function createScheduling({ db, clock, modules }: Context) {
         if (job.status !== 'done') invalid('Rate the Tradie once the Job is done');
         if (!Number.isInteger(score) || score < 1 || score > 5) invalid('Rate from 1 to 5');
         if (await profiles.hasRating(jobId, 'property_manager')) invalid('This Job is already rated');
-        const row = (await one<WorkOrderRow>(db, `SELECT * FROM work_orders WHERE job_id = ? AND status = 'done'`, jobId))!;
+        const row = (await one<WorkOrderRow>(db, `SELECT * FROM work_orders WHERE job_id = ? AND kind = 'repair' AND status = 'done'`, jobId))!;
         await profiles.recordRating(row.tradie_id, 'property_manager', score, jobId);
         await tickets.recordEvent(job.ticketId, 'tradie_rated', { jobId, score });
       });
@@ -386,21 +509,29 @@ export function createScheduling({ db, clock, modules }: Context) {
 
     /** Done Jobs the Property Manager hasn't rated yet. */
     async alerts(agencyId: number, propertyIds: number[] | null) {
-      const due = [];
-      for (const row of await all<WorkOrderRow>(db, `SELECT * FROM work_orders WHERE agency_id = ? AND status = 'done' ORDER BY start, id`, agencyId)) {
-        if (await profiles.hasRating(row.job_id, 'property_manager')) continue;
-        const { propertyId } = await tickets.ticket(row.ticket_id);
-        if (propertyIds !== null && !propertyIds.includes(propertyId)) continue;
-        const view = await toView(row);
-        due.push({
-          kind: 'rating_due' as const,
-          ticketId: row.ticket_id,
-          jobId: row.job_id,
-          propertyAddress: view.propertyAddress,
-          businessName: view.businessName,
-        });
-      }
-      return due;
+      // Only done repairs the Property Manager hasn't rated: the rated history isn't read.
+      const unrated = await all<WorkOrderRow>(
+        db,
+        `SELECT * FROM work_orders w WHERE agency_id = ? AND kind = 'repair' AND status = 'done'
+           AND NOT EXISTS (SELECT 1 FROM ratings r WHERE r.job_id = w.job_id AND r.source = 'property_manager')
+         ORDER BY start, id`,
+        agencyId,
+      );
+      const due = await Promise.all(
+        unrated.map(async (row) => {
+          const { propertyId } = await tickets.ticket(row.ticket_id);
+          if (propertyIds !== null && !propertyIds.includes(propertyId)) return null;
+          const view = await toView(row);
+          return {
+            kind: 'rating_due' as const,
+            ticketId: row.ticket_id,
+            jobId: row.job_id,
+            propertyAddress: view.propertyAddress,
+            businessName: view.businessName,
+          };
+        }),
+      );
+      return due.filter((d) => d !== null);
     },
 
     async itemsWaitingOn(tradieId: number): Promise<OpenItem[]> {
@@ -409,29 +540,97 @@ export function createScheduling({ db, clock, modules }: Context) {
         rows.map(async (row) => {
           const { job, property } = await place(row);
           const { timeZone } = await profiles.agency(row.agency_id);
-          return { ref: `work_order:${row.id}`, summary: `Work Order: ${job.trade} at ${property.address}, ${formatVisit(row.start, timeZone)}` };
+          const when = formatVisit(row.start, timeZone);
+          return {
+            ref: `work_order:${row.id}`,
+            summary: row.kind === 'inspection' ? `Site Inspection: ${job.trade} at ${property.address}, ${when}` : `Work Order: ${job.trade} at ${property.address}, ${when}`,
+          };
         }),
       );
     },
 
     async workOrder(id: number) {
       const row = await workOrderRow(id);
-      return row ? { id: row.id, jobId: row.job_id, ticketId: row.ticket_id } : null;
+      return row ? { id: row.id, jobId: row.job_id, ticketId: row.ticket_id, kind: row.kind, quoteRequestId: row.quote_request_id, start: row.start } : null;
     },
 
+    /**
+     * Whether an active visit's start time has come. When it hasn't, a DONE reply about it is
+     * answered with `tradie.done_too_early` and left for the Property Manager.
+     */
+    async hasStarted(workOrderId: number) {
+      const row = await workOrderRow(workOrderId);
+      return row?.status !== 'active' || started(row);
+    },
+
+    /** Tells the Tradie their visit can't be done yet: it starts later. */
+    async tellDoneTooEarly(workOrderId: number) {
+      const row = (await workOrderRow(workOrderId))!;
+      const { ticket, property } = await place(row);
+      await notifications.send(
+        row.tradie_id,
+        'tradie.done_too_early',
+        { propertyAddress: property.address, visitStart: row.start, inspection: row.kind === 'inspection' },
+        { issueId: ticket.issueId },
+      );
+    },
+
+    /** The Job's active visit the Tenant or Tradie is talking about: the repair, else a Site Inspection. */
     async activeWorkOrderForJob(jobId: number) {
-      return await one<{ id: number }>(db, `SELECT id FROM work_orders WHERE job_id = ? AND status = 'active'`, jobId);
+      return await one<{ id: number }>(
+        db,
+        `SELECT id FROM work_orders WHERE job_id = ? AND status = 'active' ORDER BY (kind = 'repair') DESC, id LIMIT 1`,
+        jobId,
+      );
     },
 
+    /** The Ticket's active visits, the repair last (so `.at(-1)` is the repair when there is one). */
     async activeWorkOrdersForTicket(ticketId: number) {
-      return await all<{ id: number }>(db, `SELECT id FROM work_orders WHERE ticket_id = ? AND status = 'active' ORDER BY id`, ticketId);
+      return await all<{ id: number }>(db, `SELECT id FROM work_orders WHERE ticket_id = ? AND status = 'active' ORDER BY (kind = 'repair'), id`, ticketId);
     },
 
-    /** The Job's current Work Order, for the Ticket view. */
+    /** The Job's current repair Work Order, for the Ticket view. */
     async workOrderForJob(jobId: number) {
-      const row = await one<WorkOrderRow>(db, `SELECT * FROM work_orders WHERE job_id = ? AND status != 'cancelled' ORDER BY id DESC LIMIT 1`, jobId);
+      const row = await one<WorkOrderRow>(
+        db,
+        `SELECT * FROM work_orders WHERE job_id = ? AND kind = 'repair' AND status != 'cancelled' ORDER BY id DESC LIMIT 1`,
+        jobId,
+      );
       return row ? toView(row) : null;
     },
+
+    /** The Job's Site Inspections that haven't been cancelled, earliest first. */
+    async inspectionVisits(jobId: number) {
+      return Promise.all(
+        (await all<WorkOrderRow>(db, `SELECT * FROM work_orders WHERE job_id = ? AND kind = 'inspection' AND status != 'cancelled' ORDER BY start, id`, jobId)).map(toView),
+      );
+    },
+
+    /** A Quote Request's latest Site Inspection that hasn't been cancelled, or null. */
+    async inspectionFor(quoteRequestId: number) {
+      const row = await one<WorkOrderRow>(
+        db,
+        `SELECT * FROM work_orders WHERE quote_request_id = ? AND kind = 'inspection' AND status != 'cancelled' ORDER BY id DESC LIMIT 1`,
+        quoteRequestId,
+      );
+      if (!row) return null;
+      return { workOrderId: row.id, start: row.start, end: row.end, status: row.status, visit: visitOf(row), visitConfirmed: !!row.visit_confirmed, rescheduleRequestedBy: row.reschedule_requested_by };
+    },
+
+    /** The Property Manager marks a Site Inspection done (the Tradie may not reply), once its start time has come. */
+    async markInspectedForAgency(agencyId: number, workOrderId: number) {
+      const row = await activeWorkOrder(agencyId, workOrderId);
+      if (row.kind !== 'inspection') invalid('This is not a Site Inspection');
+      if (!started(row)) {
+        const { timeZone } = await profiles.agency(agencyId);
+        invalid(`Mark the Site Inspection done once it has started. It is booked for ${formatVisit(row.start, timeZone)}.`);
+      }
+      await markInspected(workOrderId);
+    },
+
+    bookInspection,
+    inspectionSlots,
+    markInspected,
 
     /** When each Job of many Tickets is booked, from its current Work Order, in one query. Jobs never booked are left out. */
     async visitsOfTickets(ticketIds: number[]) {
@@ -439,7 +638,7 @@ export function createScheduling({ db, clock, modules }: Context) {
       const rows = await all<{ job_id: number; start: string }>(
         db,
         `SELECT DISTINCT ON (job_id) job_id, start FROM work_orders
-         WHERE ticket_id IN (SELECT value::bigint FROM jsonb_array_elements_text(?::text::jsonb) AS ids (value)) AND status != 'cancelled'
+         WHERE ticket_id IN (SELECT value::bigint FROM jsonb_array_elements_text(?::text::jsonb) AS ids (value)) AND kind = 'repair' AND status != 'cancelled'
          ORDER BY job_id, id DESC`,
         JSON.stringify(ticketIds),
       );

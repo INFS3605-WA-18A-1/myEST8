@@ -1,6 +1,7 @@
-// The Property Manager's dispatch board. What needs attention comes first (decisions,
-// then the inbox with its actions); beside it from 1024px sit the next 7 days and Tickets
-// by stage, with Urgent Repairs at the top of that column. Also the actions on each, and /files/:id for photos.
+// The Property Manager's dispatch board. What needs attention comes first (Maintenance
+// Requests, the Tickets waiting on a Quote decision and alerts, then the inbox with its
+// actions); beside it from 1024px sit Urgent Repairs, the next 7 days and Tickets by stage.
+// Also the actions on each, and /files/:id for photos.
 // Controls repeated per item get the item's id in their element id ("reason-12"),
 // so every label on the page points at its own control.
 
@@ -32,17 +33,20 @@ import {
   page,
   postButton,
   queueRow,
+  ROLE_LABEL,
+  rowLink,
   section,
   segmented,
   urgencyBadge,
   type Html,
-  ROLE_LABEL,
   type Tone,
 } from '../ui.ts';
 import { shortDay, streetOf, type Booking } from '../bookings.ts';
 import { streamOf } from '../stream.ts';
 
 /** Kept for the pages that still import it from here; the words live with the other request checks. */
+import { reimbursementBadge } from './reimbursement.ts';
+
 export { PHOTO_FLAG } from '../request-checks.ts';
 
 type Dashboard = Awaited<ReturnType<PropertyManagerActions['dashboard']>>;
@@ -59,12 +63,6 @@ const INBOX_REASON: Record<InboxItem['reason'], [string, Tone]> = {
   other: ['Not maintenance', 'neutral'],
   low_confidence: ['Agent unsure', 'info'],
   common_area_no_building_manager: ['Common Area with no Building Manager', 'warning'],
-};
-
-const URGENT_REPAIR_STATUS: Record<UrgentRepair['status'], [string, Tone]> = {
-  reminder_sent: ['Waiting for receipt', 'warning'],
-  receipt_received: ['Receipt received', 'info'],
-  receipt_forwarded: ['Receipt sent to Property Owner', 'success'],
 };
 
 const GUESS_LABEL: Record<string, string> = {
@@ -93,8 +91,8 @@ const STAGE_TITLE: Record<Stage, string> = {
   done: 'Done',
 };
 
-/** Where a Maintenance Request's action may send the Property Manager back to: the Requests list or one request's review. */
-const REQUEST_RETURN = /^\/requests(\/\d+)?$/;
+/** Where a Maintenance Request's action may send the Property Manager back to: the Tickets list, or one request's review (/requests itself sends on to Tickets). */
+const REQUEST_RETURN = /^\/(tickets|requests(\/\d+)?)$/;
 
 /** File types safe to show in the browser. Anything else (HTML, SVG...) downloads instead. */
 const INLINE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'image/heif', 'application/pdf']);
@@ -112,6 +110,12 @@ export function dashboardPages() {
     const people = view.inbox.some((item) => item.personId === null) ? await actions.people() : [];
     const q = filter === 'all' ? '?filter=all' : '';
     const needReceipt = view.urgentRepairs.filter((u) => u.status === 'reminder_sent').length;
+    const decided = {
+      toCheck: view.tickets.filter((t) => t.decision === 'check_quotes'),
+      toBook: view.tickets.filter((t) => t.decision === 'book_inspection'),
+      toChoose: view.tickets.filter((t) => t.decision === 'choose_quote'),
+    };
+    const waiting = decided.toCheck.length + decided.toBook.length + decided.toChoose.length;
 
     return c.html(
       page({
@@ -126,7 +130,8 @@ export function dashboardPages() {
         ]),
         body: html`
           ${countStrip([
-            { label: 'Maintenance Requests to review', count: view.maintenanceRequests.length, href: '#requests', decision: true, tone: 'attention' },
+            { label: 'Maintenance Requests to confirm', count: view.maintenanceRequests.length, href: '#requests', decision: true, tone: 'attention' },
+            { label: 'Tickets waiting on you', count: waiting, href: firstGroup(decided), decision: true, tone: 'attention' },
             { label: 'Open Tickets', count: view.tickets.length, href: '#tickets' },
             { label: 'Alerts', count: view.alerts.length, href: '#alerts', decision: true, tone: 'attention' },
             { label: 'In the inbox', count: view.inbox.length, href: '#inbox', decision: true, tone: 'attention' },
@@ -134,7 +139,7 @@ export function dashboardPages() {
           ])}
           <div class="dashboard-desk grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] lg:items-start">
             <div class="dashboard-main grid min-w-0 gap-4">
-              ${decisions(view, q, timeZone, now, shareUrl(c, '/?filter=all#requests'))}
+              ${decisions({ view, ...decided, q, timeZone, now, shareLink: shareUrl(c, '/?filter=all#requests') })}
               ${section({ title: 'Inbox', id: 'inbox', actions: countBadge(view.inbox.length), body: html`<div class="dashboard-inbox">${inboxList(view.inbox, people, timeZone, q)}</div>` })}
             </div>
             <div class="dashboard-glance grid min-w-0 gap-4">
@@ -149,8 +154,10 @@ export function dashboardPages() {
   });
 
   pages.post('/requests/:issueId{[0-9]+}/confirm', async (c) =>
-    formAction(c, await requestBack(c), async () => {
-      const ticketId = await c.var.actions.confirmMaintenanceRequest(idParam(c, 'issueId'));
+    formAction(c, await requestBack(c), async (form) => {
+      // The review page sends the Summary as edited; an empty or unchanged one changes nothing.
+      const summary = text(form, 'summary');
+      const ticketId = await c.var.actions.confirmMaintenanceRequest(idParam(c, 'issueId'), summary ? { summary } : undefined);
       return { ok: 'Confirmed. The Ticket is open and the Tenant has been told.', redirect: `/tickets/${ticketId}` };
     }),
   );
@@ -226,7 +233,7 @@ function back(c: Context<WebEnv>) {
 
 /**
  * Back from a Maintenance Request's action: to the page it was taken on when the form
- * names one (its hidden `return` field, the Requests list or a review), else the dashboard.
+ * names one (its hidden `return` field, the Tickets list or a review), else the dashboard.
  */
 async function requestBack(c: Context<WebEnv>) {
   const form = (await c.req.parseBody({ all: true })) as FormValues;
@@ -244,31 +251,51 @@ function countBadge(count: number, tone: Tone = 'neutral') {
 
 // Needs your attention
 
+type Decided = { toCheck: BoardTicket[]; toBook: BoardTicket[]; toChoose: BoardTicket[] };
+
+/** Where the "Tickets waiting on you" count links: the first of its groups with a Ticket in it. */
+function firstGroup(d: Decided) {
+  return d.toCheck.length ? '#quotes-to-check' : d.toBook.length ? '#inspections' : d.toChoose.length ? '#quotes-to-choose' : '#decisions';
+}
+
 /**
- * Maintenance Requests (oldest first, as the core orders them), then alerts, then the
- * inbox in brief: the decisions, each with its actions. `shareLink` is the Agency-wide
- * list of Maintenance Requests, which a Share button passes on when there are any.
+ * Maintenance Requests (oldest first, as the core orders them), then the Tickets waiting on
+ * a Quote decision (Quotes to check, Site Inspections to book, Quotes to choose; a group with
+ * none is left out), then alerts, then the inbox in brief on phones: the decisions, each with
+ * its actions. `shareLink` is the Agency-wide list of Maintenance Requests, which a Share
+ * button passes on when there are any.
  */
-function decisions(view: Dashboard, q: string, timeZone: string, now: Date, shareLink: string): Html {
+function decisions(n: Decided & { view: Dashboard; q: string; timeZone: string; now: Date; shareLink: string }): Html {
+  const { view, q, timeZone, now } = n;
   const requests = view.maintenanceRequests;
+  const group = (id: string, title: string, rows: Html[]) =>
+    rows.length
+      ? html`<div id="${id}" class="grid gap-2">
+          <h3 class="text-sm font-semibold">${title}</h3>
+          ${rows}
+        </div>`
+      : '';
   return section({
     title: 'Needs your attention',
     id: 'decisions',
     body: html`<div class="grid gap-4">
       <div id="requests" class="grid gap-2">
         <div class="flex flex-wrap items-center justify-between gap-2">
-          <h3 class="text-sm font-semibold">Maintenance Requests to review</h3>
+          <h3 class="text-sm font-semibold">Maintenance Requests to confirm</h3>
           ${requests.length
             ? shareButton({
-                title: 'Maintenance Requests to review',
+                title: 'Maintenance Requests to confirm',
                 text: `${requests.length} ${requests.length === 1 ? 'Maintenance Request is' : 'Maintenance Requests are'} waiting for review in myEST8.`,
-                url: shareLink,
+                url: n.shareLink,
                 note: COLLEAGUES_ONLY,
               })
             : ''}
         </div>
         ${requests.length ? requests.map((r) => requestRow(r, q, now)) : emptyState('No Maintenance Requests waiting for you.')}
       </div>
+      ${group('quotes-to-check', 'Quotes to check', n.toCheck.map((t) => ticketDecisionRow(t, 'check_quotes', now)))}
+      ${group('inspections', 'Site Inspections to book', n.toBook.map((t) => ticketDecisionRow(t, 'book_inspection', now)))}
+      ${group('quotes-to-choose', 'Quotes to choose', n.toChoose.map((t) => ticketDecisionRow(t, 'choose_quote', now)))}
       <div id="alerts" class="grid gap-2">
         <h3 class="text-sm font-semibold">Alerts</h3>
         ${view.alerts.length ? view.alerts.map((a) => alertRow(a, timeZone)) : emptyState('No alerts.')}
@@ -283,6 +310,26 @@ function decisions(view: Dashboard, q: string, timeZone: string, now: Date, shar
   });
 }
 
+const DECISION_ACTION: Record<'check_quotes' | 'book_inspection' | 'choose_quote', string> = {
+  check_quotes: 'Check Quotes',
+  book_inspection: 'Book a Site Inspection',
+  choose_quote: 'Choose a Quote',
+};
+
+/** A Ticket waiting on a Quote decision: the issue, the Ticket and street, Urgency and Trade, with the step as its action. */
+function ticketDecisionRow(t: BoardTicket, decision: keyof typeof DECISION_ACTION, now: Date): Html {
+  const status = quotingStatus(t);
+  return queueRow({
+    href: `/tickets/${t.ticketId}`,
+    title: t.description,
+    detail: `Ticket ${t.ticketId}, ${streetOf(t.propertyAddress)}`,
+    badges: [urgencyBadge(t.urgency), ...t.trades.map((trade) => badge(humanise(trade))), ...(status ? [badge(status, 'info', { outline: true })] : [])],
+    meta: ageOf(t.reportedAt, now),
+    decision: true,
+    actions: linkButton(DECISION_ACTION[decision], `/tickets/${t.ticketId}`, { size: 'sm' }),
+  });
+}
+
 /**
  * A Maintenance Request in "Needs your attention", read like a docket: the issue, the
  * street, then every badge (Urgency, Trade and each check that needs a second look),
@@ -293,7 +340,7 @@ function requestRow(r: MaintenanceRequest, q: string, now: Date): Html {
   return queueRow({
     href: `/requests/${r.issueId}`,
     thumb: first ? html`<img src="/files/${first.fileId}" alt="Photo of the issue" width="56" height="56" loading="lazy" />` : undefined,
-    title: r.description,
+    title: r.summary ?? r.description,
     detail: streetOf(r.propertyAddress),
     badges: [urgencyBadge(r.urgency), badge(humanise(r.trade)), ...requestFlags(r).map((f) => badge(f.label, f.tone))],
     meta: ageOf(r.reportedAt, now),
@@ -352,10 +399,10 @@ function inboxRow(item: InboxItem, timeZone: string): Html {
 // Tickets by stage
 
 /**
- * The board: five lanes from 1024px, each scrolling inside itself, and on phones the
- * lanes stacked as a list grouped by stage. The core gives each Ticket its lane,
+ * The board: the lanes stacked in workflow order, each scrolling inside itself from
+ * 1024px, and a stage with no Tickets left out. The core gives each Ticket its lane,
  * Trades, Quote counts, next visit and whether it needs a decision; this only draws
- * them. With no open Tickets at all it is one empty state, not five.
+ * them. With no open Tickets at all it is one empty state.
  */
 function ticketsByStage(tickets: BoardTicket[], filter: Filter, now: Date, timeZone: string): Html {
   return section({
@@ -375,17 +422,16 @@ function ticketsByStage(tickets: BoardTicket[], filter: Filter, now: Date, timeZ
 }
 
 /** What a Ticket being quoted waits on: Quotes to check, Ready to choose, or how many Quotes are in. */
-export function quotingStatus(t: Pick<BoardTicket, 'quoting' | 'decision'>): string | null {
+function quotingStatus(t: Pick<BoardTicket, 'quoting' | 'decision'>): string | null {
   const q = t.quoting;
   if (!q) return null;
-  if (t.decision === 'check_quotes') {
-    const toCheck = q.received - q.confirmed;
-    return `${toCheck} ${toCheck === 1 ? 'Quote' : 'Quotes'} to check`;
-  }
+  if (t.decision === 'check_quotes') return `${q.toCheck} ${q.toCheck === 1 ? 'Quote' : 'Quotes'} to check`;
   if (t.decision === 'choose_quote') return 'Ready to choose';
+  if (t.decision === 'book_inspection') return 'Site Inspection to book';
   if (!q.asked && !q.received) return 'No Quote Requests yet';
   const of = Math.max(q.asked, q.received);
-  return `${q.received} of ${of} ${of === 1 ? 'Quote' : 'Quotes'} in`;
+  // Estimates and Firm Quotes are counted apart, never added together.
+  return `${q.received} of ${of} ${of === 1 ? 'Estimate' : 'Estimates'} in${q.firm ? `, ${q.firm} ${q.firm === 1 ? 'Firm Quote' : 'Firm Quotes'}` : ''}`;
 }
 
 function ticketDocket(t: BoardTicket, now: Date, timeZone: string): Html {
@@ -405,6 +451,7 @@ function ticketDocket(t: BoardTicket, now: Date, timeZone: string): Html {
     age: ageOf(t.reportedAt, now),
     unread: t.unreadMessages,
     decision: t.decision !== null,
+    lines: 2,
   });
 }
 
@@ -466,17 +513,17 @@ function ageOf(iso: string, now: Date) {
 
 // Urgent Repairs
 
+/** Urgent Repairs as a compact list: the issue (linked to its Reimbursement Request), where, who and when, then where the receipt stands. */
 function urgentRepairsList(repairs: UrgentRepair[], timeZone: string): Html {
   if (!repairs.length) return emptyState('No Urgent Repairs reported.');
   return html`<ul class="grid gap-2">
-    ${repairs.map((u) => {
-      const [label, tone] = URGENT_REPAIR_STATUS[u.status];
-      return html`<li class="urgent-item">
-        <p class="urgent-issue">${u.description}</p>
+    ${repairs.map(
+      (u) => html`<li class="urgent-item">
+        <p class="urgent-issue">${rowLink(u.description, `/reimbursements/${u.urgentRepairId}`)}</p>
         <p class="urgent-meta">${u.propertyAddress} · ${u.tenantName} · ${formatWhen(u.reportedAt, timeZone)}</p>
-        <p class="urgent-foot">${badge(label, tone)}<span class="urgent-receipts">${u.receipts === 1 ? '1 receipt' : u.receipts ? `${u.receipts} receipts` : 'No receipts yet'}</span></p>
-      </li>`;
-    })}
+        <p class="urgent-foot">${reimbursementBadge(u.status)}<span class="urgent-receipts">${u.receipts === 1 ? '1 receipt' : u.receipts ? `${u.receipts} receipts` : 'No receipts yet'}</span></p>
+      </li>`,
+    )}
   </ul>`;
 }
 
@@ -524,11 +571,12 @@ function inboxItem(item: InboxItem, people: Person[], timeZone: string, q: strin
               id: `person-${item.itemId}`,
               type: 'select',
               required: true,
-              placeholder: 'Choose a person',
+              placeholder: 'Search people by name',
+              search: true,
               options: people.map((p) => ({ value: String(p.id), label: personLabel(p) })),
               hint: 'Their next message from this address will be recognised.',
             })}
-            ${button('Link sender', { size: 'sm' })}
+            ${button('Link sender')}
             </form>
           </details>`
         : item.reason === 'low_confidence' && item.bestGuess

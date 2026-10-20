@@ -1,5 +1,6 @@
 // The two pages a Tenant reaches by a no-login link (ADR-0002): the upload page for
-// issue photos or an Urgent Repair receipt, and the progress tracker. Phone first.
+// issue photos or the receipt for a Reimbursement Request (an Urgent Repair the Tenant
+// arranged), and the progress tracker. Phone first.
 // Both name who they are from (the Agency, in the bar) and where (the Property's
 // address), because a stranger's link is only trustworthy if it says so. The upload
 // page looks its link up before showing the form, so an unknown or expired link
@@ -9,8 +10,9 @@ import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { html, raw } from 'hono/html';
 import type { App, Upload } from '../app.ts';
-import { ActionError, type Trade } from '../shared.ts';
-import { files, type FormValues } from './forms.ts';
+import { URGENT_REPAIR_LIMIT_CENTS } from '../intake.ts';
+import { ActionError, dollars, type Trade } from '../shared.ts';
+import { files, optionalCents, text, type FormValues } from './forms.ts';
 import { shareButton, shareUrl } from './share.ts';
 import { icon } from './icons.ts';
 import { alert, button, card, formatWhen, publicPage, type Html } from './ui.ts';
@@ -27,6 +29,7 @@ const STAGE_LABEL: Record<string, string> = {
   reported: 'Reported',
   confirmed: 'Confirmed',
   getting_quotes: 'Getting quotes',
+  site_visit: 'Site visit',
   approved: 'Repair approved',
   booked: 'Booked',
   fixed: 'Fixed',
@@ -83,12 +86,14 @@ export function tenantPages(app: App) {
           content: new Uint8Array(await f.arrayBuffer()),
         })),
       );
+      // A receipt may come with the amount the Tenant claims; kept in the form if it is refused.
+      const amount = link.kind === 'receipt' ? text(form, 'amount') : '';
       try {
-        await app.upload(token, uploads);
+        await app.upload(token, uploads, { amountCents: optionalCents(amount, 'the amount') });
       } catch (error) {
         if (!(error instanceof ActionError)) throw error;
         if (error.code === 'not_found') return c.html(badLinkPage(null), 404);
-        return c.html(uploadPage(token, link, { error: error.message }), STATUS[error.code]);
+        return c.html(uploadPage(token, link, { error: error.message, amount }), STATUS[error.code]);
       }
       return c.redirect(`/u/${encodeURIComponent(token)}?ok=${uploads.length}`, 303);
     },
@@ -119,7 +124,8 @@ export function tenantPages(app: App) {
 function thanks(sent: number, link: UploadLink) {
   const noun = link.kind === 'photos' ? 'photo' : 'file';
   const count = Number.isInteger(sent) && sent > 0 && sent <= MAX_FILES ? `your ${sent === 1 ? noun : `${sent} ${noun}s`}` : 'your upload';
-  return `Thanks, ${link.agencyName} has ${count}. You can add more below if you need to.`;
+  const next = link.kind === 'receipt' ? ' They will check it and pass your Reimbursement Request to the property owner.' : '';
+  return `Thanks, ${link.agencyName} has ${count}.${next} You can add more below if you need to.`;
 }
 
 /** The footer on a page from an Agency: who to reply to. */
@@ -145,20 +151,21 @@ function badLinkPage(link: UploadLink | null): Html {
     runtime: false,
     brand: link.agencyName,
     title: 'This link has expired',
-    subtitle: link.address,
+    subtitle: `Repair at ${link.address}`,
     footer: replyTo(link.agencyName),
-    body: html`<p>${link.agencyName} has already dealt with this issue, so this link no longer takes photos.</p>
+    body: html`<p>${link.agencyName} has already dealt with this ${link.kind === 'photos' ? 'issue, so this link no longer takes photos' : 'Reimbursement Request, so this link no longer takes receipts'}.</p>
       <p>To send more, or if something has changed, reply to the message you got from ${link.agencyName}.</p>`,
   });
 }
 
 /**
- * The upload page, worded for what the link is for: photos of an issue, or an Urgent
- * Repair receipt (a photo or a PDF). `thanks` is set after a successful upload (the ok
- * query), and `error` is the refusal shown above the form. The thank-you is a block
- * on the page rather than a flash, because a flash fades away on its own.
+ * The upload page, worded for what the link is for: photos of an issue, or the receipt
+ * for a Reimbursement Request (a photo or a PDF, which it needs, and optionally the
+ * amount). `thanks` is set after a successful upload (the ok query), and `error` is the
+ * refusal shown above the form, with `amount` as the Tenant typed it. The thank-you is
+ * a block on the page rather than a flash, because a flash fades away on its own.
  */
-function uploadPage(token: string, link: UploadLink, o: { error?: string; thanks?: string } = {}): Html {
+function uploadPage(token: string, link: UploadLink, o: { error?: string; thanks?: string; amount?: string } = {}): Html {
   const sent = o.thanks !== undefined;
   const photos = link.kind === 'photos';
   return publicPage({
@@ -166,7 +173,7 @@ function uploadPage(token: string, link: UploadLink, o: { error?: string; thanks
     runtime: false,
     brand: link.agencyName,
     title: photos ? 'Send photos of the issue' : 'Send your Urgent Repair receipt',
-    subtitle: link.address,
+    subtitle: `${photos ? 'For the repair at' : 'For your Reimbursement Request for the Urgent Repair at'} ${link.address}`,
     footer: replyTo(link.agencyName),
     body: html`
       ${o.thanks ? doneBox(o.thanks) : ''}
@@ -179,6 +186,7 @@ function uploadPage(token: string, link: UploadLink, o: { error?: string; thanks
               <p class="tenant-issue-text">${link.description}</p>
             </div>
             ${dropZone(link.kind)}
+            ${photos ? '' : amountField(o.amount)}
             ${button(sent ? 'Upload more' : 'Upload', { block: true })}
           </form>`,
       })}
@@ -190,6 +198,7 @@ function uploadPage(token: string, link: UploadLink, o: { error?: string; thanks
               <li>Photos straight from your camera keep their details, like when they were taken, which helps us act faster.</li>
             </ul>`
           : html`<ul class="tenant-tips">
+              <li>We need the receipt to get you reimbursed: without it the property owner can't pay you back.</li>
               <li>Make sure the whole receipt is in the photo and the amount is easy to read.</li>
               <li>If the tradie emailed you a PDF, you can send that instead.</li>
             </ul>`,
@@ -218,6 +227,15 @@ function dropZone(kind: UploadLink['kind']): Html {
     </label>
     <div id="files-chosen" class="tenant-chosen" aria-live="polite"></div>
     ${CHOSEN_SCRIPT}
+  </div>`;
+}
+
+/** The amount the Tenant claims, optional: the Property Manager checks it against the receipt. */
+function amountField(value = ''): Html {
+  return html`<div class="tenant-amount">
+    <label for="field-amount" class="field-label">Amount on the receipt (optional)</label>
+    <input id="field-amount" name="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="$0.00" value="${value}" class="input" aria-describedby="field-amount-hint" />
+    <p id="field-amount-hint" class="field-hint">You can claim up to ${dollars(URGENT_REPAIR_LIMIT_CENTS)} back for an Urgent Repair.</p>
   </div>`;
 }
 
@@ -251,7 +269,20 @@ function doneBox(message: string): Html {
   return html`<div role="status" class="tenant-done">${message}</div>`;
 }
 
-type Step = { stage: string; at: string | null; reached: boolean; visitStart?: string; tradie?: string; trade?: Trade };
+type Step = {
+  stage: string;
+  at: string | null;
+  /** Begun. */
+  reached: boolean;
+  /** Really happened: never because a later stage began (a booked Site visit isn't done until it has taken place). */
+  done: boolean;
+  visitStart?: string;
+  tradie?: string;
+  trade?: Trade;
+  visitConfirmed?: boolean;
+  rescheduleRequested?: boolean;
+  visits?: { tradie: string; visitStart: string; done: boolean }[];
+};
 
 /**
  * The stages a Tenant sees. The core keeps Done and Closed apart; here they are
@@ -264,8 +295,8 @@ function tenantSteps(stages: Tracker['stages']): Step[] {
   const closed = stages.find((s) => s.stage === 'closed');
   const last: Step =
     !done?.reached && closed?.reached
-      ? { stage: 'closed', at: closed.at, reached: true }
-      : { stage: 'fixed', at: done?.at ?? null, reached: done?.reached ?? false };
+      ? { stage: 'closed', at: closed.at, reached: true, done: true }
+      : { stage: 'fixed', at: done?.at ?? null, reached: done?.reached ?? false, done: done?.reached ?? false };
   return [...stages.filter((s) => s.stage !== 'done' && s.stage !== 'closed'), last];
 }
 
@@ -286,12 +317,20 @@ function statusLine(step: Step, agencyName: string, timeZone: string): string {
       return `${agencyName} has confirmed the repair and is arranging a tradie.`;
     case 'getting_quotes':
       return `${agencyName} is asking tradies to quote for the repair.`;
+    // The backend adds this stage when a Tradie had a Site Inspection; the visits' times come through stepDetail.
+    case 'site_visit': {
+      const next = step.visits?.find((v) => !v.done);
+      return next
+        ? `${agencyName} has asked tradies to look at the problem before choosing who fixes it. The next visit is ${formatWhen(next.visitStart, timeZone)}: please make sure someone is home or the tradie can get in.`
+        : `${agencyName} has asked tradies to look at the problem before choosing who fixes it.`;
+    }
     case 'approved':
       return `The repair is approved. ${agencyName} is booking a visit next.`;
-    case 'booked':
-      return step.visitStart
-        ? `${whoIsComing(step)} is booked for ${formatWhen(step.visitStart, timeZone)}.`
-        : `${whoIsComing(step)} is booked.`;
+    case 'booked': {
+      const booked = step.visitStart ? `${whoIsComing(step)} is booked for ${formatWhen(step.visitStart, timeZone)}.` : `${whoIsComing(step)} is booked.`;
+      if (step.rescheduleRequested) return `${booked} You asked for another time, so ${agencyName} will be in touch with a new one.`;
+      return step.visitConfirmed ? `${booked} Thanks for confirming you'll be there.` : `${booked} ${CONFIRM_VISIT}`;
+    }
     case 'fixed':
       return 'The repair is done. Thanks for letting us know about it.';
     default:
@@ -301,14 +340,16 @@ function statusLine(step: Step, agencyName: string, timeZone: string): string {
 
 function trackerPage(progress: Tracker, link: string): Html {
   const steps = tenantSteps(progress.stages);
-  const last = steps.findLastIndex((s) => s.reached);
+  // Where the repair is up to: the last stage begun and still going, else the last one reached.
+  const going = steps.findLastIndex((s) => s.reached && !s.done);
+  const last = going >= 0 ? going : steps.findLastIndex((s) => s.reached);
   const current = steps[last];
   return publicPage({
     css: ['tenant.css'],
     runtime: false,
     brand: progress.agencyName,
     title: progress.description,
-    subtitle: progress.address,
+    subtitle: `Repair at ${progress.address}`,
     footer: replyTo(progress.agencyName),
     body: html`
       ${current ? html`<p class="tracker-now">${statusLine(current, progress.agencyName, progress.timeZone)}</p>` : ''}
@@ -328,16 +369,28 @@ function trackerPage(progress: Tracker, link: string): Html {
   });
 }
 
-/** The lines under a step: who is coming and when, for the visit, or else when it happened. */
+/** Asked of the Tenant until they have confirmed the repair visit, in the words of their booking message. */
+const CONFIRM_VISIT = "Please confirm you'll be home or can let the tradie in: reply YES to our message.";
+
+/**
+ * The lines under a step: each Site visit booked or done; for the repair visit, who is
+ * coming and when, then whether the Tenant has confirmed they'll be in; or else when it happened.
+ */
 function stepDetail(s: Step, timeZone: string): string[] {
-  if (s.visitStart) return [...(s.tradie ? [s.tradie] : []), `Visit ${formatWhen(s.visitStart, timeZone)}`];
+  if (s.visits?.length) return s.visits.map((v) => (v.done ? `${v.tradie}: visited ${formatWhen(v.visitStart, timeZone)}` : `${v.tradie}: booked for ${formatWhen(v.visitStart, timeZone)}`));
+  if (s.visitStart) {
+    const confirm = s.done ? [] : [s.rescheduleRequested ? 'You asked for another time' : s.visitConfirmed ? 'Confirmed' : CONFIRM_VISIT];
+    return [...(s.tradie ? [s.tradie] : []), `Visit ${formatWhen(s.visitStart, timeZone)}`, ...confirm];
+  }
   return s.at ? [formatWhen(s.at, timeZone)] : [];
 }
 
 /**
  * The stages as a vertical list. Done stages are a --done circle with a tick, the
- * current stage is an --action ring with its number, and stages still to come are
- * muted numbers. A line is coloured up to the current stage. Times are in the
+ * current stage (the last begun and still going) is an --action ring with its number, and the rest are
+ * muted numbers: those to come, and any begun before it that hasn't really finished
+ * (quotes still coming in while a Site visit is booked). Only a stage that has
+ * happened says Done. A line is coloured between done stages up to the current one. Times are in the
  * Agency's zone. Written here rather than with ui.ts `steps`, whose fixed row
  * heights clip stages that have a detail line.
  */
@@ -348,12 +401,12 @@ function progressList(steps: Step[], current: number, timeZone: string): Html {
       const detail = stepDetail(s, timeZone);
       const reached = s.reached;
       const isCurrent = i === current;
-      const lineDone = i < current;
+      const lineDone = i < current && s.done;
       // The last step, once reached, is finished rather than in progress.
       const finished = isCurrent && i === steps.length - 1;
-      const circle = isCurrent && !finished ? 'is-current' : reached ? 'is-done' : 'is-todo';
-      const status = isCurrent && !finished ? 'Now' : reached ? 'Done' : 'To come';
-      const mark = reached && (!isCurrent || finished) ? CHECK : i + 1;
+      const circle = isCurrent && !finished ? 'is-current' : s.done ? 'is-done' : 'is-todo';
+      const status = isCurrent && !finished ? 'Now' : s.done ? 'Done' : reached ? 'Still going' : 'To come';
+      const mark = s.done && (!isCurrent || finished) ? CHECK : i + 1;
       return html`<li class="tracker-step" ${isCurrent ? html`aria-current="step"` : ''}>
         ${i < steps.length - 1 ? html`<span aria-hidden="true" class="tracker-line${lineDone ? ' is-done' : ''}"></span>` : ''}
         <span aria-hidden="true" class="tracker-circle ${circle}">${mark}</span>
