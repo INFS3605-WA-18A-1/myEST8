@@ -12,7 +12,7 @@
 //   5 First Property   address, Max Repair Cost, Property Owner, Tenant, Building Manager
 //   6 Done             what's set up, and where to go next
 
-import { Hono, type Context } from 'hono';
+import { Hono, type Context, type MiddlewareHandler } from 'hono';
 import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
 import type { ImportKind } from '../../imports.ts';
@@ -91,13 +91,6 @@ type StepKey = (typeof STEPS)[number]['key'];
 /** What a new Agency needs before Tenants' messages can be handled, in guide order. Adding colleagues is optional. */
 const NEEDED = ['channels', 'tradies', 'property'] as const;
 
-/** Each needed step as the "Finish setting up" banner says it. */
-const STILL_TO_DO: Record<(typeof NEEDED)[number], string> = {
-  channels: 'connect SMS and email',
-  property: 'add your first Property',
-  tradies: 'add the Tradies you use',
-};
-
 const ROLE_LABEL: Record<Role, string> = { tenant: 'Tenant', owner: 'Property Owner', tradie: 'Tradie', building_manager: 'Building Manager' };
 
 /** How far the Agency's setup has got, read from what it has. */
@@ -125,18 +118,20 @@ function nextSetupStep(progress: Progress): string | null {
   return key ? STEPS.find((s) => s.key === key)!.path : null;
 }
 
-/** The dashboard's "Finish setting up" banner, or nothing once the Agency is set up. */
-export async function finishSetupBanner(actions: Actions, unavailable: readonly ChannelType[] = []): Promise<Html> {
-  const progress = await setupProgress(actions, unavailable);
-  const next = nextSetupStep(progress);
-  if (!next) return html``;
-  const left = NEEDED.filter((k) => !progress[k]).map((k) => STILL_TO_DO[k]);
-  // One line on wide screens: a hi-vis stripe, the sentence, and the one link to the next step.
-  return html`<div data-banner="finish-setup" class="flex flex-wrap items-center gap-x-3 gap-y-1 overflow-hidden rounded-md border border-line bg-surface text-sm">
-    <span aria-hidden="true" class="inline-block h-6 w-4 shrink-0 self-center bg-[image:repeating-linear-gradient(-45deg,var(--ink)_0_4px,var(--hivis)_4px_8px)] sm:ml-2"></span>
-    <p class="min-w-0 flex-1 py-2 pl-2 sm:pl-0"><strong class="font-semibold">Finish setting up ${actions.agency().name}.</strong> Still to do: ${sentence(left)}.</p>
-    <div class="py-1.5 pr-3">${linkButton('Continue setup', next, { variant: 'primary', size: 'sm' })}</div>
-  </div>`;
+/**
+ * Sets `setupHref` for pages shown to a Property Manager while the Agency is not fully set up,
+ * so the rail can offer a "Setup guide" link. Setup is optional: nothing else on the page nags.
+ * Skips files and the setup pages themselves.
+ */
+export function loadSetupLink(): MiddlewareHandler<WebEnv> {
+  return async (c, next) => {
+    const path = c.req.path;
+    if (c.req.method === 'GET' && !path.startsWith('/files/') && !path.startsWith('/welcome') && !path.startsWith('/setup')) {
+      const href = nextSetupStep(await setupProgress(c.var.actions, c.var.unavailableChannels ?? []));
+      if (href) c.set('setupHref', href);
+    }
+    await next();
+  };
 }
 
 /** The wizard, mounted at /welcome behind requirePropertyManager. `demo` suggests made-up channel addresses for the phone simulator. */

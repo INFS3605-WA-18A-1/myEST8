@@ -351,14 +351,15 @@ describe('the onboarding wizard', () => {
 });
 
 describe('a new Agency', () => {
-  test('sees a "Finish setting up" banner on its dashboard, pointing at the next step it needs', async () => {
+  test('keeps setup off its dashboard, with a "Setup guide" link in the rail pointing at the next step it needs', async () => {
     const w = await webWorld();
     const sam = await w.signUp();
 
     const dashboard = await page(w, '/', sam);
-    expect(visible(dashboard)).toContain('Finish setting up Sunrise Realty');
-    expect(visible(dashboard)).toContain('connect SMS and email, add the Tradies you use and add your first Property');
-    expect(dashboard).toMatch(/data-banner="finish-setup"[\s\S]*href="\/welcome\/channels"/);
+    expect(visible(dashboard)).not.toContain('Finish setting up');
+    expect(dashboard).not.toContain('data-banner="finish-setup"');
+    expect(dashboard).toMatch(/class="rail-link rail-setup-link"[\s\S]*Setup guide/);
+    expect(dashboard).toMatch(/href="\/welcome\/channels"[^>]*class="rail-link rail-setup-link"/);
 
     await page(w, '/welcome/channels', sam);
     for (const type of ['sms'] as const) {
@@ -366,12 +367,14 @@ describe('a new Agency', () => {
       const code = String(w.h.messenger.last('+61291000002')?.data.code);
       await w.post('/welcome/channels/confirm', { type, address: '+61 2 9100 0002', code }, sam);
     }
-    expect(await page(w, '/', sam)).toMatch(/data-banner="finish-setup"[\s\S]*href="\/welcome\/tradies"/);
+    expect(await page(w, '/', sam)).toMatch(/href="\/welcome\/tradies"[^>]*class="rail-link rail-setup-link"/);
   });
 
-  test('a set-up Agency gets no banner', async () => {
+  test('a set-up Agency gets no Setup guide link', async () => {
     const w = await webWorld();
-    expect(visible(await page(w, '/', await w.signIn()))).not.toContain('Finish setting up');
+    const dashboard = await page(w, '/', await w.signIn());
+    expect(visible(dashboard)).not.toContain('Finish setting up');
+    expect(dashboard).not.toContain('rail-setup-link');
   });
 
   test("can't see or use Harbour Realty's Properties, people, Tradies or channels", async () => {

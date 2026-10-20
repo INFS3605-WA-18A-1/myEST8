@@ -113,7 +113,7 @@ function railLink(item: { key: NavKey; label: string; href: string }, active: Na
  * choice in this browser). On phones it is a drawer when JavaScript is on, and a
  * block above the page otherwise.
  */
-function rail(active: NavKey | undefined, agencyName: string | undefined, counts: Partial<Record<NavKey, number>>, demo: boolean): Html {
+function rail(active: NavKey | undefined, agencyName: string | undefined, counts: Partial<Record<NavKey, number>>, demo: boolean, setupHref?: string): Html {
   return html`<aside id="rail" class="rail" aria-label="Sections">
     <a href="/" class="rail-logo">${logo()}</a>
     <nav aria-label="Main" class="rail-menu">
@@ -124,6 +124,7 @@ function rail(active: NavKey | undefined, agencyName: string | undefined, counts
       )}
       ${demo ? html`<ul class="rail-nav rail-foot"><li>${railLink(SIMULATOR, active, counts.simulator, 'rail-link is-quiet')}</li></ul>` : ''}
     </nav>
+    ${setupHref ? html`<ul class="rail-nav rail-setup"><li><a href="${setupHref}" class="rail-link rail-setup-link">${ICON.setup}<span class="rail-label">Setup guide</span></a></li></ul>` : ''}
     <button type="button" class="rail-toggle" data-rail-toggle aria-controls="rail" aria-expanded="true">${ICON.sidebar}<span class="rail-label">Collapse menu</span></button>
     ${agencyName ? html`<p class="rail-agency">${agencyName}</p>` : ''}
   </aside>`;
@@ -206,7 +207,7 @@ export function page(o: {
       <body>
         <a href="#main" class="skip-link">Skip to content</a>
         <div class="app-shell ${withRail ? 'has-rail' : ''}" data-shell>
-          ${withRail ? rail(o.active, o.shell?.agencyName, o.navCounts ?? o.shell?.counts ?? {}, o.demo ?? o.shell?.demo ?? false) : ''}
+          ${withRail ? rail(o.active, o.shell?.agencyName, o.navCounts ?? o.shell?.counts ?? {}, o.demo ?? o.shell?.demo ?? false, o.shell?.setupHref) : ''}
           <div class="app-main">
             <main id="main" class="app-content">
               ${pageHeader(o.title, { menu: withRail, controls: o.controls, today: o.shell?.today, pm: o.pm })}
@@ -947,8 +948,8 @@ export function ticketCell(o: { ticketId: number; issue: string; address?: strin
  * address in Slate, and the stage line (`meta`: Trades and what the Ticket waits on). The
  * whole docket is one link. `street` shows in place of the full address. `unread` adds the
  * unread dot, with the words for screen readers. `decision` is kept for callers and adds
- * the `is-decision` class, but a docket draws no Wattle of its own: decisions live in
- * `needsYou`. Without `href` it is a picture of a docket, not a link (the landing page's
+ * the `is-decision` class, but a docket draws no Wattle of its own: decisions are listed in
+ * the dashboard's "Needs your attention". Without `href` it is a picture of a docket, not a link (the landing page's
  * workflow).
  *
  * `size: 'large'` is the Ticket page's header: the same order with the number at 40px.
@@ -991,6 +992,7 @@ export function docket(o: {
 type Count = { label: string; count: number; href: string; decision?: boolean; /** The words for exactly one ("Quote to choose"), when `label` is the plural. */ one?: string };
 
 /**
+/**
  * The count sentence: one sentence under the page title in 16px, each count a link into
  * its queue ("2 Maintenance Requests to confirm, 1 Quote to choose and 1 Tradie to
  * rate."). Counts of zero are left out. A count that needs a decision is Night on a
@@ -1009,25 +1011,19 @@ export function countSentence(items: Count[], o: { empty?: string; label?: strin
   return html`<nav aria-label="${o.label ?? 'Counts'}"><p class="count-sentence">${parts}.</p></nav>`;
 }
 
-/** The old name for `countSentence`, kept so a page not yet moved over still renders. */
-export const countStrip = countSentence;
-
 /**
- * The decision queue: one section titled "Needs you" (or `title`) with a full-height 4px
- * Wattle bar on its left edge, its own border and not a stripe per row. Put `queueRow`s
- * in `body`; inside it they are hairline-separated, not cards. This bar is the one
- * memorable element on the desk: nothing else on the page is Wattle except the rail's
- * current item and the decision counts.
+ * The count strip (the dashboard): one row of counts that link into the queues. A `tone`
+ * colours a tile while its count is above zero: `attention` Wattle, `urgent` red; zeros stay plain.
  */
-export function needsYou(o: { body: Html; title?: string; actions?: Html; id?: string }): Html {
-  const id = o.id ?? 'needs-you';
-  return html`<section class="needs-you" id="${id}" aria-labelledby="${id}-title">
-    <div class="section-head">
-      <h2 class="section-title" id="${id}-title">${o.title ?? 'Needs you'}</h2>
-      ${o.actions ? html`<div class="section-actions">${o.actions}</div>` : ''}
-    </div>
-    <div class="needs-you-body">${o.body}</div>
-  </section>`;
+export function countStrip(items: { label: string; count: number; href: string; decision?: boolean; tone?: 'attention' | 'urgent' }[]): Html {
+  return html`<nav aria-label="Counts">
+    <ul class="count-strip">
+      ${items.map(
+        (item) =>
+          html`<li><a href="${item.href}" class="count-item${item.tone && item.count > 0 ? ` is-${item.tone}` : ''}"><span class="count-chip ${item.decision ? 'is-decision' : ''}${item.count === 0 ? ' is-zero' : ''}">${item.count}</span><span class="count-label">${item.label}</span></a></li>`,
+      )}
+    </ul>
+  </nav>`;
 }
 
 /**
@@ -1047,7 +1043,7 @@ export function aiFilled(content: Html | string, o: { label?: string; edit?: Htm
  * `href` is given) with the actions such as Confirm and Review beside it, a detail
  * line, and the badges with the meta (an age) at the end of their row.
  * `decision` (default false) marks a row that needs the Property Manager's decision.
- * Put those inside `needsYou`, which carries the one Wattle bar; a row draws none itself.
+ * In the dashboard's "Needs your attention" those get a 4px Wattle edge; elsewhere none.
  */
 export function queueRow(o: {
   href?: string;
@@ -1208,6 +1204,7 @@ const ICON = {
   info: icon('info'),
   dot: icon('circle', { weight: 'fill', size: 'size-4' }),
   sidebar: icon('sidebar-simple', { size: 'size-[18px]' }),
+  setup: icon('compass', { size: 'size-[18px]' }),
 };
 
 /** The rail's icons, 18px (the Phone simulator's 16px, as it is quieter). */

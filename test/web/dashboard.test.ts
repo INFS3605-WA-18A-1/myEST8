@@ -138,7 +138,7 @@ describe('Maintenance Requests on the dashboard', () => {
   });
 });
 
-describe('the count sentence and Needs you', () => {
+describe('the count strip and Needs your attention', () => {
   /** Alice's dashboard with one Ticket's Firm Quotes to choose from and another whose Tradie's Site Inspection is to book. */
   async function quoteDecisions() {
     const w = await webWorld();
@@ -154,27 +154,27 @@ describe('the count sentence and Needs you', () => {
     return { w, cookie: await w.signIn(), routine, high };
   }
 
-  test('the sentence counts what needs the Property Manager, with singular wording for one', async () => {
+  test('the strip counts the Tickets waiting on a Quote decision, and links to the first of them', async () => {
     const { w, cookie } = await quoteDecisions();
     const dashboard = await page(w, '/', cookie);
-    const sentence = match(dashboard, /<p class="count-sentence">([\s\S]*?)<\/p>/).replace(/<[^>]+>/g, '');
-    expect(sentence).toContain('1 Quote to choose');
-    expect(sentence).toContain('1 Site Inspection to book');
-    expect(sentence).not.toMatch(/\b1 (Quotes|Site Inspections|Alerts)/);
-    expect(sentence).not.toContain('Open Tickets');
+    const strip = match(dashboard, /<ul class="count-strip">([\s\S]*?)<\/ul>/);
+    expect(strip).toMatch(/<a href="#inspections" class="count-item is-attention"><span class="count-chip is-decision">2<\/span><span class="count-label">Tickets waiting on you<\/span>/);
+    expect(strip).toContain('Open Tickets');
   });
 
-  test('says so when nothing needs the Property Manager', async () => {
+  test('with nothing waiting every count is quiet', async () => {
     const w = await webWorld();
     const cookie = await w.signIn();
-    expect(await page(w, '/', cookie)).toContain('Nothing needs you right now.');
+    const dashboard = await page(w, '/', cookie);
+    expect(dashboard).not.toMatch(/count-item is-(attention|urgent)/);
+    expect(dashboard).toContain('No Maintenance Requests waiting for you.');
   });
 
-  test('Needs you leads the page and holds Quotes to choose and Site Inspections to book once each', async () => {
+  test('Needs your attention leads the page and holds Quotes to choose and Site Inspections to book once each', async () => {
     const { w, cookie, routine, high } = await quoteDecisions();
     const dashboard = await page(w, '/', cookie);
     expect(dashboard.indexOf('id="decisions"')).toBeLessThan(dashboard.indexOf('id="tickets"'));
-    expect(dashboard).toContain('class="needs-you"');
+    expect(dashboard).toContain('Needs your attention');
     expect(dashboard).toContain('Site Inspections to book');
     expect(dashboard).toContain('Book a Site Inspection');
     expect(dashboard).toContain('Choose a Quote');
@@ -183,13 +183,12 @@ describe('the count sentence and Needs you', () => {
     expect(needs).toContain(`href="/tickets/${routine.ticketId}"`);
   });
 
-  test('the board has no Site quotes lane (each Tradie inspects within Quoting), and no inbox or Ticket list is repeated below it', async () => {
+  test('the board has no Site quotes lane (each Tradie inspects within Quoting), and no inbox or Ticket list is repeated', async () => {
     const { w, cookie } = await quoteDecisions();
     const dashboard = await page(w, '/', cookie);
     expect(dashboard).not.toContain('<h3 class="lane-title">Site quotes</h3>');
     expect(dashboard).toContain('Site Inspection to book');
-    expect(dashboard).toContain('class="board-lanes"');
-    expect(dashboard.match(/id="inbox"/g) ?? []).toHaveLength(0);
+    expect(dashboard.match(/id="inbox"/g)).toHaveLength(1);
     expect(dashboard.match(/All open Tickets/g) ?? []).toHaveLength(0);
     expect(dashboard.match(/id="tickets"/g)).toHaveLength(1);
   });
@@ -205,7 +204,7 @@ describe('Maintenance Request review', () => {
   });
 });
 
-/** The Ticket's docket in the board (the part of the page from Tickets by stage on), not its row in Needs you. */
+/** The Ticket's docket in the board (the part of the page from Tickets by stage on), not its row in Needs your attention. */
 function inBoard(page: string, ticketId: number) {
   const board = page.slice(page.indexOf('id="tickets"'));
   const at = board.indexOf(`href="/tickets/${ticketId}"`);
@@ -272,13 +271,12 @@ describe('the Agency inbox', () => {
     const inbox = await page(w, '/', cookie);
     expect(inbox).toContain('Unknown sender');
     expect(inbox).toContain(STRANGER);
-    // The message shows once, in Needs your decision, with its actions on it.
-    expect(inbox.match(/Hi, this is Tom on my work phone/g)).toHaveLength(1);
-    const decisions = inbox.slice(inbox.indexOf('id="decisions"'), inbox.indexOf('</section>', inbox.indexOf('id="decisions"')));
-    const itemId = match(decisions, /id="inbox-(\d+)"/);
-    expect(decisions).toContain(`action="/inbox/${itemId}/link"`);
-    expect(decisions).toContain(`action="/inbox/${itemId}/dismiss"`);
-    expect(inbox).not.toContain('href="#inbox-');
+    // The message sits in the Inbox with its actions on it; on phones a brief row in Needs your attention points at it.
+    const box = inbox.slice(inbox.indexOf('id="inbox"'), inbox.indexOf('</section>', inbox.indexOf('id="inbox"')));
+    const itemId = match(box, /id="inbox-(\d+)"/);
+    expect(box).toContain(`action="/inbox/${itemId}/link"`);
+    expect(box).toContain(`action="/inbox/${itemId}/dismiss"`);
+    expect(inbox).toMatch(/href="#inbox-(\d+)"[\s\S]*id="inbox-\1"/);
 
     const unchosen = await w.post(`/inbox/${itemId}/link`, { personId: '' }, cookie);
     expect(await follow(w, unchosen, cookie)).toContain('Choose who sent this message');
@@ -335,11 +333,12 @@ describe('the Next 7 days and Tradie profiles', () => {
     const start = board.indexOf('id="next-7-days"');
     expect(start).toBeGreaterThan(-1);
     const strip = board.slice(start, board.indexOf('</section>', start));
-    expect(strip).toContain('Tue 13 Oct');
+    expect(strip).toContain('Tue 13');
     expect(strip).toContain(`href="/tradies/${w.tradies.pete.id}"`);
     expect(strip).toContain(`href="/tickets/${job.ticketId}"`);
     expect(strip).toContain('12 King St');
-    expect(strip).toContain('Nothing booked Wed 14 – Fri 16 Oct');
+    expect(strip.match(/class="day-chip/g)).toHaveLength(7);
+    expect(strip.match(/class="day-dot"/g)).toHaveLength(1);
   });
 
   test('a Tradie not on Google says so, and an unknown Tradie is not found', async () => {

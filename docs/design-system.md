@@ -6,8 +6,8 @@ myEST8 is where a Property Manager at a small Australian Agency sees every repai
 
 - **Shape encodes type.** Only a Ticket is a docket. Everything else is a row or a section.
 - **Harbour means act.** Primary buttons, links, focus and the selected state are Harbour. Done, approved and confirmed are a deep green (`--done`), never blue, so Harbour always means "act".
-- **Wattle is the decision.** The one memorable element on the desk is the full-height 4px Wattle bar on the left edge of the "Needs you" section. Wattle also marks the current rail item and the counts that need a decision. It is never text, never a button, never a wash.
-- **No shadow** except `--shadow-lift` on menus, dialogs and the phone frame. Hierarchy comes from borders, spacing and weight.
+- **Wattle is the decision.** On the dashboard each row in "Needs your attention" has a 4px Wattle left edge. Wattle also marks the current rail item and the counts that need a decision. It is never text, never a button, never a wash.
+- **Two shadows only.** `--shadow-soft`, a faint lift off Sand, on sections and the count strip; `--shadow-lift` on menus, dialogs and the phone frame. Hierarchy otherwise comes from borders, spacing and weight.
 - Sentence case everywhere: no all-caps, no letter-spaced eyebrows, no middle-dot meta strings, no arrows on labels.
 
 ## Colour
@@ -16,13 +16,13 @@ myEST8 is where a Property Manager at a small Australian Agency sees every repai
 
 | Token | Name | Hex | Role | Contrast |
 |---|---|---|---|---|
-| `--ink` | Night | `#13212E` | Body text, headings, the rail, the sign-in panel, the landing's closing band | 16.4:1 on white, 14.8:1 on Paper |
-| `--page` | Paper | `#F2F4F6` | The page behind sections, lanes, the Trade badge | |
+| `--ink` | Night | `#13212E` | Body text, headings, the rail, the sign-in panel, the landing's closing band | 16.4:1 on white, 14.3:1 on Sand |
+| `--page` | Sand | `#F4EFE6` | The page behind sections, lanes, the Trade badge (was Paper `#F2F4F6`; "Paper" elsewhere in this document means this token) | |
 | `--surface` | | `#FFFFFF` | Sections, rows, dockets, inputs | |
-| `--muted` | Slate | `#55636F` | Secondary text, timestamps, hints, Routine | 6.2:1 on white, 5.6:1 on Paper, 5.4:1 on info |
+| `--muted` | Slate | `#55636F` | Secondary text, timestamps, hints, Routine | 6.2:1 on white, 5.4:1 on Sand, 5.4:1 on info |
 | `--line` | Line | `#D8DEE4` | Hairlines and section borders (decorative) | |
-| `--control` | | `#7D8A95` | Input, select, checkbox and secondary button borders | 3.5:1 on white, 3.2:1 on Paper (UI component minimum 3:1) |
-| `--action` | Harbour | `#1F5C8B` | Primary buttons, links, focus ring, selected state, Routine map pins | white on it 7.1:1; as text 7.1:1 on white, 6.4:1 on Paper |
+| `--control` | | `#7D8A95` | Input, select, checkbox and secondary button borders | 3.5:1 on white, 3.1:1 on Sand (UI component minimum 3:1) |
+| `--action` | Harbour | `#1F5C8B` | Primary buttons, links, focus ring, selected state, Routine map pins | white on it 7.1:1; as text 7.1:1 on white, 6.2:1 on Sand |
 | `--action-hover` | | `#174A70` | Primary button and link hover | white on it 9.3:1 |
 | `--hivis` | Wattle | `#FFC233` | The decision stripe, the current rail item's bar, decision count chips, the logo on Night | Night on it 10.1:1 |
 | `--info-bg` | | `#E8F0F7` | Info badges and alerts, "Filled in by AI" | Harbour on it 6.2:1, Night 14.2:1 |
@@ -63,11 +63,11 @@ myEST8 is where a Property Manager at a small Australian Agency sees every repai
 ```
 ┌──────────────┬───────────────────────────────────────────────────────────┐
 │ [tag] myEST8 │ Dashboard             [Mine | All]    Sun 18 Oct  Alice ▾  │ page header row
-│ (Night)      │ 2 Maintenance Requests to confirm and 1 Quote to choose.   │ count sentence
-│▌Dashboard    │ ┌▌Needs you ──────────────────────────────────────────┐   │
-│ Dispatch     │ │▌ row                                                │   │
-│ Requests   2 │ │▌ row                                                │   │
-│ Tickets      │ └─────────────────────────────────────────────────────┘   │
+│ (Night)      │ ┌ 2 ┬ 1 ┬ 5 ┬ 0 ┬ 1 ┬ 0 ──────────────────────────────┐   │ count strip
+│▌Dashboard    │ └───┴───┴───┴───┴───┴─────────────────────────────────┘   │
+│ Dispatch     │ ┌ Needs your attention ──────┐ ┌ Urgent Repairs ──────┐   │
+│ Requests   2 │ │▌ row                       │ │ Next 7 days          │   │
+│ Tickets      │ │ Inbox                      │ │ Tickets by stage     │   │
 │ Approvals  1 │  page content (max-width 1280px, 24px gutters, 16 phone)  │
 │ Schedule     │                                                           │
 │ Properties   │                                                           │
@@ -83,11 +83,11 @@ myEST8 is where a Property Manager at a small Australian Agency sees every repai
 - **Flash** messages appear under the page header as one line (`role="status"` or `role="alert"`).
 - **Collapse menu** (from 1024px, JavaScript only) folds the rail to a 64px strip of icons; each label stays the link's name and shows as a tooltip; a waiting count becomes a 6px Wattle dot. The choice is remembered in `localStorage` and applied in `head()` before first paint. Under 1024px the rail is an off-canvas drawer opened by the menu button in the page header.
 
-### Count sentence and "Needs you"
+### Count strip, count sentence and filters
 
 - `filterBar({ action, filter, urgencies, trades, properties })` is the one filter over a list (Tickets, Archive): a GET form of small labelled selects in a wrapping row that keeps Mine/All in a hidden field. `app.js` submits it on change and hides its Apply button; a Clear filters link shows once a filter is set. Pages read it with `listFilterOf(c)` (`src/web/list-filter.ts`), which drops unknown values.
-- `countSentence(items, { empty })` replaces the count strip (`countStrip` stays as an alias). One sentence under the title in 16px: "2 Maintenance Requests to confirm, 1 Quote to choose and 1 Tradie to rate." Each count is a link into its queue. Items take `{ label, one?, count, href, decision? }`; `one` is the wording for a count of 1. Counts of zero are left out. A count that needs a decision is Night on a Wattle chip; the rest are Harbour links. When nothing is left the sentence says so ("Nothing needs you right now.").
-- `needsYou({ title?, actions?, body })` is the decision queue: one section with a full-height 4px Wattle bar on its own left edge (the section's `border-left`, not a stripe per row). `queueRow`s inside are hairline-separated, not cards. A row draws no Wattle of its own; its `decision` option is kept for callers. Nothing else on the page is Wattle except the rail's current item and decision counts.
+- `countStrip(items)` is the dashboard's row of counts: each a tile linking into its queue, the number in Lexend 26px 600 under a 3px Harbour line, plain type with no underline; a zero turns Slate. Items take `{ label, count, href, decision?, tone? }`; a `tone` above zero adds a small dot beside the label: `attention` Wattle, `urgent` red (and a red number).
+- `countSentence(items, { empty })` is the other pages' counts (Approvals and the desk pages). One sentence under the title in 16px: "2 Maintenance Requests to confirm, 1 Quote to choose and 1 Tradie to rate." Each count is a link into its queue. Items take `{ label, one?, count, href, decision? }`; `one` is the wording for a count of 1. Counts of zero are left out. A count that needs a decision is Night on a Wattle chip; the rest are Harbour links. When nothing is left the sentence says so ("Nothing needs you right now.").
 - `aiFilled(content, { label?, edit? })` is the "Filled in by AI" style: `--info-bg` tint, 4px radius, a quiet "Filled in by AI" label, and an optional edit control. Use it only for text the AI wrote (a Summary); text a person wrote or edited, and the Tenant's own words, are not tinted.
 
 ### The docket (Tickets only)
@@ -105,11 +105,26 @@ myEST8 is where a Property Manager at a small Australian Agency sees every repai
 - White, 1px `--line` border, 4px radius, 12px padding. It sits in a Paper lane, like a slip on a tray.
 - Reading order: the stub (number in Bricolage 700, the Urgency badge, the unread dot, the age at the right), the dashed perforation, then the issue at 16px (up to three lines; `lines` changes it), the address in Slate (one line, full text in its title), and the stage line (`meta`: Trades and what the Ticket waits on).
 - `size: 'large'` is the Ticket page header: the same order with the number at 40px.
-- A docket draws no Wattle. Tickets waiting on the Property Manager are listed in "Needs you".
+- A docket in its own right draws no Wattle; Tickets waiting on the Property Manager are listed in "Needs your attention". On the dashboard board a docket that waits on the Property Manager keeps a 3px Wattle edge.
 
 ### Dashboard
 
-The count sentence under the title, then the "Needs you" section (Maintenance Requests, Quotes to check, Site quotes to book, Quotes to choose, Tradies to rate), then Tickets by stage in lanes (a Paper tray, 6px radius, of white dockets; the lanes follow `JOB_STAGES`, including Site quotes) and Next 7 days. On phones: one column.
+```
+ count strip: six counts linking into their queues, under a 3 px Harbour line
+ left, wider column (1.4 : 1)        right column
+ Needs your attention (22 px)        Urgent Repairs (compact list)
+ Inbox                               Next 7 days (day chips, then visits)
+                                     Tickets by stage (lanes stacked)
+```
+
+- Count strip: Maintenance Requests to confirm, Tickets waiting on you (Quotes to check, Site Inspections to book and Quotes to choose together, linking to the first of them), Open Tickets, Alerts, In the inbox (each `attention`), and Urgent Repairs needing a receipt (`urgent`). Count numbers stay dark (Slate at zero); only Urgent Repairs turns red.
+- Left, wider column, "Needs your attention" in 22 px type: Maintenance Requests to confirm (oldest first; an empty state when there are none), then Quotes to check, Site Inspections to book and Quotes to choose (each a group left out when empty), then Alerts (Tradies to rate among them). Each row has a 4 px Wattle left edge. A Maintenance Request row: 56 px photo thumbnail (or a "No photos" tile), the Summary, street, Urgency and Trade badges plus "Check urgency", "Flagged photos" or "No photos" flags, age, and two actions: **Confirm** (POST) and **Review** (link to `/requests/:issueId`). A Ticket row names its step as its action: Check Quotes, Book a Site Inspection, Choose a Quote. On phones the inbox follows in brief, each row linking down to its message.
+- Under it, the Inbox: flat white message cards (who sent it and when with the reason on the right, the message in a tinted box, the best guess folded away, then **Pick a contact**, Route and **Dismiss** as outlined buttons). From 1024 px it scrolls inside its own box.
+- Right: Urgent Repairs lead as a compact list (the issue linking to its Reimbursement Request, address · Tenant · reported time, the Reimbursement status badge, receipts), in a plain white card with a red heading and a thin red edge on each repair when there are any.
+- Next 7 days: today and the six days after it in the Agency's time zone, as a strip of seven day chips (today filled, a dot where a visit is booked) above one row per visit: day, Tradie and issue, time. It links to `/calendar`.
+- Tickets by stage: lanes stacked in workflow order (Quoting, With Property Owner, Ready to book, Booked, Done), a stage with no Tickets left out, each a white lane with a thin Harbour-tint outline and pale blue heading holding flat docket rows, scrolling inside 15 rem from 1024 px. With no open Tickets the board is one empty state.
+- Phone: one column: count strip (tiles stacked), Needs your attention, Inbox, Urgent Repairs, Next 7 days, Tickets by stage.
+- Setup is not on the dashboard. While the Agency is unfinished the rail shows an outlined "Setup guide" link above Collapse menu, pointing at the next step still to do (`loadSetupLink`).
 
 ### Dispatch: the queue and the map
 
@@ -181,7 +196,7 @@ All of these are in `src/web/ui.ts`; pages use them instead of hand-building mar
 - **Urgency.** `urgencyBadge`: Urgent is solid Rust with a warning octagon, High tinted Ochre with an up arrow, Routine quiet with no icon.
 - **Searchable selects.** `field({ type: 'select', search: true })` (and the filter bar's Property) becomes a text box that filters the options as you type (app.js): every word must appear in the option's label or `keywords` (a Property's address, suburb and postcode via `propertyOptions`; a Tradie's business, Trades and own name via `tradieOptions`). Arrow keys move, Enter picks, Escape puts back what was picked. The select stays in the form, hidden, and holds the posted value; without JavaScript it is a plain select.
 - **Nominated Tradies** (`tradiePicker`): one searchable Tradie select per Tradie, each with Remove, and **Add Tradie** for another; it starts with one empty select so it works without JavaScript, and empty ones post nothing (`nominatedFrom`).
-- **Queue rows** (`queueRow`): 4 px radius, hairline, 12 px padding. The title with the actions (Confirm, Review) at the end of its line, then the detail, then the badges with the age pushed to the end of their row. On phones (under 640 px) the actions move to their own line under the badges, so the title keeps the row's width. A row draws no Wattle; decision rows sit inside `needsYou`, which carries the one bar.
+- **Queue rows** (`queueRow`): 4 px radius, hairline, 12 px padding. The title with the actions (Confirm, Review) at the end of its line, then the detail, then the badges with the age pushed to the end of their row. On phones (under 640 px) the actions move to their own line under the badges, so the title keeps the row's width. On the dashboard a decision row gets a 4 px Wattle left edge; elsewhere a row draws no Wattle.
 - **Lanes** (`lane`): a Paper tray of white dockets; the count is a muted number beside the title.
 - **Tables** (`table`): 13 px, 36 px rows, headers in Public Sans 600 Night, hairlines between rows, horizontal scroll only inside the table's frame. On phones (under 640 px) a table can stack instead:
   - `stack: true`: each row becomes a white block, the first cell leading and the rest in a wrapping row, headers hidden. For cells that explain themselves (badges, an age): the Tickets list.
@@ -321,7 +336,7 @@ A machine check never stands in for what a person said:
 
 - **Ticket page header.** It follows the docket's stub, perforation and number, but it is built on the Ticket page rather than with `docket()`. It reads issue first, then the address (linked to the Property), then Tenant, status, reported and Max Repair Cost. Repair Cost shows only once it is above $0. One **Next step** line names what the Ticket waits on and links to that Job. It may use a Wattle bar only when the step is the Property Manager's decision. The Ticket's tools sit in the docket header, at its top right from 1024 px: Share, Change Urgency (a small menu, not a form) and **Close Ticket**, which appears only when it can work, once every Job is done or cancelled.
 - **Routine Urgency.** Routine shows as `--muted` text with a `--line` border. Ink text would read as more urgent than it is.
-- **Decision rows.** Decision rows live in the "Needs you" section, which carries the one Wattle bar; no row or docket draws its own stripe.
+- **Decision rows.** On the dashboard, decision rows in "Needs your attention" each carry a 4px Wattle left edge; elsewhere a row draws no stripe.
 - **One-Quote rule.** The rule is visible on the Ticket page next to Choose: "Choose once two Quotes are confirmed, or give a reason to go ahead with one." Choose stays enabled. Without a reason, the server's message explains what's missing.
 - **Phone gutters.** 16 px below 1024 px.
 - **Literal colours.** No literal colour values outside the token block in `app.css`, including white. Use `var(--surface)`.
