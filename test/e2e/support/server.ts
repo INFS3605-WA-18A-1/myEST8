@@ -26,8 +26,6 @@ export const MOCKED_APIS = {
   TWILIO_WHATSAPP_FROM: '',
   SENDGRID_API_KEY: '',
   RESEND_API_KEY: '',
-  // The Dispatch map: no CARTO key, so its tiles are always the keyless Esri base.
-  CARTO_BASEMAPS_KEY: '',
 };
 
 /** The command that serves the demo; tsx runs the TypeScript directly. */

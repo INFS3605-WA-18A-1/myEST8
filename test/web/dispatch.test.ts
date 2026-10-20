@@ -1,5 +1,4 @@
 import { describe, expect, test } from 'vitest';
-import { mapTiles } from '../../src/web/map-config.ts';
 import { visible, webWorld } from '../support/web.ts';
 import { confirmedQuotes, KING_ST, tomsTapTicket, type World } from '../support/world.ts';
 
@@ -26,7 +25,7 @@ function pinData(html: string) {
   const match = /<script type="application\/json" id="dispatch-data">([\s\S]*?)<\/script>/.exec(html);
   if (!match) throw new Error('The page has no pin data block');
   return JSON.parse(match[1]!) as {
-    tiles: { url: string; subdomains: string; attribution: string; maxZoom: number };
+    style: string;
     radiusKm: number;
     properties: { key: string; id: number; address: string; suburb: string; lat: number; lng: number; urgency: string | null; openTickets: number }[];
     tradies: { key: string; id: number; name: string; lat: number; lng: number; trades: string[] }[];
@@ -78,13 +77,14 @@ describe('Dispatch: the map data', () => {
     expect(ocean).toMatchObject({ lat: -33.8908, lng: 151.2743, urgency: null, openTickets: 0 });
   });
 
-  test('the tile source and its attribution are the one map setting, and the search radius defaults to 15 km', async () => {
+  test("the basemap is OpenFreeMap's Positron style, which needs no key, and the search radius defaults to 15 km", async () => {
     const w = await webWorld();
     const cookie = await w.signIn();
 
     const data = pinData(await dispatch(w, cookie));
 
-    expect(data.tiles).toEqual(mapTiles());
+    expect(data.style).toBe('https://tiles.openfreemap.org/styles/positron');
+    expect(data).not.toHaveProperty('tiles');
     expect(data.radiusKm).toBe(15);
   });
 
@@ -383,17 +383,19 @@ describe('Dispatch: the Jobs to dispatch', () => {
 });
 
 describe('Dispatch: what the page needs to run', () => {
-  test('loads Leaflet, its pin grouping and the map script from /assets, in that order, and works as a table when they do not run', async () => {
+  test('loads MapLibre and the map script from /assets, in that order, and works as a table when they do not run', async () => {
     const w = await webWorld();
     const cookie = await w.signIn();
 
     const html = await dispatch(w, cookie);
 
-    expect(html).toContain('href="/assets/leaflet.css"');
-    expect(html).toContain('href="/assets/MarkerCluster.css"');
-    const scripts = ['/assets/leaflet.js', '/assets/leaflet.markercluster.js', '/assets/dispatch-map.js'].map((src) => html.indexOf(`src="${src}"`));
+    expect(html).toContain('href="/assets/maplibre-gl.css"');
+    expect(html).not.toMatch(/leaflet|MarkerCluster/i);
+    // MapLibre is an ES module, which the map script imports once it runs; the page fetches it early.
+    expect(html).toContain('<link rel="modulepreload" href="/assets/maplibre-gl.mjs"');
+    const scripts = ['/assets/maplibre-gl.mjs', '/assets/dispatch-map.js'].map((src) => html.indexOf(src));
     for (const at of scripts) expect(at).toBeGreaterThan(-1);
-    expect(scripts).toEqual([...scripts].sort((a, b) => a - b));
+    expect(html).toContain('<script type="module" src="/assets/dispatch-map.js"');
     expect(html).not.toMatch(/\son[a-z]+="/);
     expect(html).toContain('id="dispatch-map"');
     expect(visible(html)).toContain('The map needs JavaScript');
