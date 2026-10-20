@@ -8,7 +8,10 @@ import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
 import type { WebEnv } from '../env.ts';
 import { shellInfo } from '../shell.ts';
-import { dl, emptyState, flashFrom, formatWhen, linkButton, page, section, sideTabs, table, type Html } from '../ui.ts';
+import type { ImportKind } from '../../imports.ts';
+import { icon } from '../icons.ts';
+import { contactLink, dl, emptyState, flashFrom, formatWhen, linkButton, page, section, sideTabs, table, type Html } from '../ui.ts';
+import { IMPORT_NOUNS, templatePath } from './onboarding-forms.ts';
 
 type AgencyChannel = Awaited<ReturnType<PropertyManagerActions['channels']>>[number];
 
@@ -26,20 +29,35 @@ const CHANNEL_NAME: Record<AgencyChannel['type'], string> = { sms: 'SMS', whatsa
  * The Agency's Properties and the people around them: where each list is (if it has a
  * page) and the Setup section that adds to it.
  */
-const SETUP_AREAS: { label: string; list?: string; add: string; href: string }[] = [
-  { label: 'Properties', list: '/properties', add: 'Add a Property', href: '/setup#properties' },
-  { label: 'Tradies', list: '/tradies', add: 'Add a Tradie', href: '/setup#tradies' },
-  { label: 'Tenants', add: 'Add a Tenant', href: '/setup#tenants' },
-  { label: 'Property Owners and Building Managers', add: 'Add an Owner or Building Manager', href: '/setup#people' },
+const SETUP_AREAS: { label: string; hint: string; list?: string; add: string; href: string }[] = [
+  { label: 'Properties', hint: 'Each with its Property Owner and Max Repair Cost.', list: '/properties', add: 'Add a Property', href: '/setup#properties' },
+  { label: 'Tradies', hint: 'Who you send Quote Requests and Work Orders to.', list: '/tradies', add: 'Add a Tradie', href: '/setup#tradies' },
+  { label: 'Tenants', hint: 'Each with their Property, contact details and Tickets.', list: '/tenants', add: 'Add a Tenant', href: '/setup#tenants' },
+  { label: 'Property Owners and Building Managers', hint: 'Listed on each Property’s page.', add: 'Add an Owner or Building Manager', href: '/setup#people' },
 ];
 
-/** Where each kind of spreadsheet is imported: the Setup area that holds its upload form. */
-const IMPORTS = [
-  ['Property Owners and Building Managers', '/setup#people'],
-  ['Tradies', '/setup#tradies'],
-  ['Properties', '/setup#properties'],
-  ['Tenants', '/setup#tenants'],
-] as const;
+/** One line of a Settings list: what it is (linked when it has a page), a muted hint, and its actions at the end. */
+function settingsRow(o: { label: string; href?: string; hint?: string; actions: Html }): Html {
+  return html`<li class="settings-row">
+    <div class="settings-row-text">
+      ${o.href ? html`<a class="settings-row-label link" href="${o.href}">${o.label}</a>` : html`<span class="settings-row-label">${o.label}</span>`}
+      ${o.hint ? html`<span class="settings-row-hint">${o.hint}</span>` : ''}
+    </div>
+    <div class="settings-row-actions">${o.actions}</div>
+  </li>`;
+}
+
+/**
+ * Each kind of spreadsheet, in the order they must happen (a Property needs its Property
+ * Owner, a Tenant their Property; Tradies stand alone), with what each row holds.
+ */
+const IMPORTS: { kind: ImportKind; hint: string }[] = [
+  { kind: 'owners', hint: 'Name, mobile and email.' },
+  { kind: 'building-managers', hint: 'For strata Properties.' },
+  { kind: 'properties', hint: 'Needs their Property Owners first.' },
+  { kind: 'tenants', hint: 'Needs their Properties first.' },
+  { kind: 'tradies', hint: 'Business, Trades and a starting rating.' },
+];
 
 /** Settings under /settings. */
 export function settingsPages() {
@@ -63,9 +81,9 @@ export function settingsPages() {
         active: 'settings',
         shell: shellInfo(c),
         flash: flashFrom(c.req.url),
-        body: html`<div class="grid items-start gap-6 lg:grid-cols-[13rem_minmax(0,1fr)]">
+        body: html`<div class="settings-layout">
           ${sideTabs(TABS.map(([key, label]) => ({ label, href: key === 'agency' ? '/settings' : `/settings?tab=${key}`, active: key === tab })), 'Settings')}
-          <div class="grid min-w-0 gap-4">${body}</div>
+          <div class="settings-panel">${body}</div>
         </div>`,
       }),
     );
@@ -85,13 +103,8 @@ function agencyTab(agency: { name: string; timeZone: string }, team: number): Ht
       <p class="text-sm text-muted">Quote reminders, approval delays and message wording are not editable yet.</p>`,
   })}${section({
     title: 'Properties and people',
-    body: html`<ul class="grid gap-2" role="list">
-      ${SETUP_AREAS.map(
-        (area) =>
-          html`<li class="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-2 last:border-0">
-            ${area.list ? html`<a class="link" href="${area.list}">${area.label}</a>` : html`<span>${area.label}</span>`}${linkButton(area.add, area.href, { size: 'sm' })}
-          </li>`,
-      )}
+    body: html`<ul class="settings-list" role="list">
+      ${SETUP_AREAS.map((area) => settingsRow({ label: area.label, href: area.list, hint: area.hint, actions: linkButton(area.add, area.href, { size: 'sm' }) }))}
     </ul>`,
   })}`;
 }
@@ -103,8 +116,12 @@ function channelsTab(channels: AgencyChannel[], timeZone: string): Html {
     body: channels.length
       ? table(
           ['Channel', 'Address', 'Last test message'],
-          channels.map((ch) => [html`${CHANNEL_NAME[ch.type]}`, html`${ch.address}`, html`${ch.testedAt ? formatWhen(ch.testedAt, timeZone) : 'Not tested'}`]),
-          { caption: 'Channels' },
+          channels.map((ch) => [
+            html`<span class="font-medium">${CHANNEL_NAME[ch.type]}</span>`,
+            html`<span class="break-all">${ch.address}</span>`,
+            html`${ch.testedAt ? formatWhen(ch.testedAt, timeZone) : html`<span class="text-muted">Not tested</span>`}`,
+          ]),
+          { caption: 'Channels', stack: 'labelled' },
         )
       : emptyState('No channels connected. Connect SMS or email so Tenants can reach you.', linkButton('Connect a channel', '/setup#channels', { variant: 'primary', size: 'sm' })),
   });
@@ -116,8 +133,8 @@ function teamTab(team: Awaited<ReturnType<PropertyManagerActions['propertyManage
     actions: linkButton('Add a colleague', '/welcome/team', { size: 'sm' }),
     body: table(
       ['Name', 'Email'],
-      team.map((m) => [html`${m.name}${m.id === meId ? html` <span class="text-muted">(you)</span>` : ''}`, html`<a class="link break-all" href="mailto:${m.email}">${m.email}</a>`]),
-      { caption: 'Property Managers in the Agency' },
+      team.map((m) => [html`<span class="font-medium">${m.name}</span>${m.id === meId ? html` <span class="text-muted">(you)</span>` : ''}`, contactLink('email', m.email)]),
+      { caption: 'Property Managers in the Agency', stack: 'labelled' },
     ),
   });
 }
@@ -125,9 +142,16 @@ function teamTab(team: Awaited<ReturnType<PropertyManagerActions['propertyManage
 function importTab(): Html {
   return section({
     title: 'Import',
-    body: html`<p class="mb-3 text-sm text-muted">Add many at once from an Excel or CSV file. You review the rows before anything is added.</p>
-      <ul class="grid gap-2" role="list">
-        ${IMPORTS.map(([label, href]) => html`<li class="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-2 last:border-0"><span>${label}</span>${linkButton('Import', href, { size: 'sm' })}</li>`)}
+    body: html`<p class="settings-intro">Add many at once from an Excel or CSV file. You review the rows before anything is added. Fill in the template so the columns match.</p>
+      <ul class="settings-list" role="list">
+        ${IMPORTS.map(({ kind, hint }) =>
+          settingsRow({
+            label: IMPORT_NOUNS[kind].many,
+            hint,
+            actions: html`<a class="link import-template" href="${templatePath(kind)}" download>${icon('download-simple', { size: 'size-4' })}<span>Template<span class="sr-only"> for ${IMPORT_NOUNS[kind].many}</span></span></a>
+              ${linkButton(`Import ${IMPORT_NOUNS[kind].many}`, `/setup#import-${kind}`, { size: 'sm' })}`,
+          }),
+        )}
       </ul>`,
   });
 }

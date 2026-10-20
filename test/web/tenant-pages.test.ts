@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { formatWhen } from '../../src/web/ui.ts';
 import { photo } from '../support/photos.ts';
 import { webWorld } from '../support/web.ts';
-import { confirmedQuotes, KING_ST, OLIVIA_EMAIL, TOM, tomsTapTicket } from '../support/world.ts';
+import { confirmedQuotes, inspectionBooked, jobView, KING_ST, OLIVIA_EMAIL, PETE, TOM, tomsTapTicket, visitStarted } from '../support/world.ts';
 
 type WebWorld = Awaited<ReturnType<typeof webWorld>>;
 
@@ -17,10 +17,11 @@ async function tomsUploadPath({ h }: WebWorld) {
   return new URL(h.messenger.last(TOM)!.data.uploadLink as string).pathname;
 }
 
-/** Posts files to a page the way the browser's upload form does, then lets the worker catch up. */
-async function postFiles(w: WebWorld, path: string, files: File[]) {
+/** Posts files (and any other fields) to a page the way the browser's upload form does, then lets the worker catch up. */
+async function postFiles(w: WebWorld, path: string, files: File[], fields: Record<string, string> = {}) {
   const form = new FormData();
   for (const file of files) form.append('files', file);
+  for (const [name, value] of Object.entries(fields)) form.append(name, value);
   const res = await w.web.request(path, { method: 'POST', body: form });
   await w.h.drain();
   return res;
@@ -113,7 +114,7 @@ describe('the upload page', () => {
     expect(await readable(await w.get(path))).not.toContain('enctype="multipart/form-data"');
   });
 
-  test('an Urgent Repair receipt can be sent as a PDF and reaches the Property Owner', async () => {
+  test('an Urgent Repair receipt can be sent as a PDF with the amount claimed, and waits for the Property Manager to forward it', async () => {
     const w = await webWorld();
     const { h } = w;
     h.classifier.when('Water is pouring through the ceiling', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'urgent', trade: 'plumbing' });
@@ -127,10 +128,44 @@ describe('the upload page', () => {
     expect(page).toContain('Photos, or a PDF receipt');
     expect(page).toContain('accept="image/*,application/pdf"');
     expect(page).toContain(KING_ST);
-    const res = await postFiles(w, path, [new File([new Uint8Array([1, 2])], 'receipt.pdf', { type: 'application/pdf' })]);
+    expect(page).toContain('Reimbursement Request');
+    expect(page).toContain('Amount on the receipt (optional)');
+    expect(page).toContain('You can claim up to $1,000.00 back');
+
+    // Not a photo or PDF, or a nonsense amount: refused, with the amount kept.
+    const notes = await postFiles(w, path, [new File(['hello'], 'notes.txt', { type: 'text/plain' })], { amount: '$480' });
+    expect(notes.status).toBe(400);
+    const refused = await readable(notes);
+    expect(refused).toContain('Upload the receipt as a photo or PDF');
+    expect(refused).toContain('value="$480"');
+    const nonsense = await postFiles(w, path, [new File([new Uint8Array([1, 2])], 'receipt.pdf', { type: 'application/pdf' })], { amount: 'four hundred' });
+    expect(nonsense.status).toBe(400);
+    expect(await readable(nonsense)).toContain('Enter an amount in dollars');
+
+    const res = await postFiles(w, path, [new File([new Uint8Array([1, 2])], 'receipt.pdf', { type: 'application/pdf' })], { amount: '$480.50' });
 
     expect(res.status).toBe(303);
-    expect(h.messenger.to(OLIVIA_EMAIL)).toMatchObject([{ template: 'owner.urgent_repair_receipt', attachments: ['receipt.pdf'] }]);
+    expect(await readable(await w.get(res.headers.get('location')!))).toContain('pass your Reimbursement Request to the property owner');
+    expect(h.messenger.to(OLIVIA_EMAIL)).toEqual([]);
+    expect((await w.alice.dashboard()).urgentRepairs).toMatchObject([{ status: 'receipt_received', receipts: 1 }]);
+    const [repair] = (await w.alice.dashboard()).urgentRepairs;
+    expect(await w.alice.reimbursement(repair!.urgentRepairId)).toMatchObject({ amountCents: 480_50 });
+  });
+
+  test('once the Tenant is reimbursed, the receipt link no longer takes receipts', async () => {
+    const w = await webWorld();
+    const { h } = w;
+    h.classifier.when('Water is pouring through the ceiling', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'urgent', trade: 'plumbing' });
+    await h.receive(TOM, 'Water is pouring through the ceiling');
+    const path = new URL(h.messenger.last(TOM)!.data.receiptLink as string).pathname;
+    await postFiles(w, path, [new File([new Uint8Array([1])], 'receipt.jpg', { type: 'image/jpeg' })], { amount: '200' });
+    const [repair] = (await w.alice.dashboard()).urgentRepairs;
+    await w.alice.forwardReimbursement(repair!.urgentRepairId);
+    await w.alice.markReimbursed(repair!.urgentRepairId);
+
+    const opened = await w.get(path);
+    expect(opened.status).toBe(410);
+    expect(await readable(opened)).toContain('no longer takes receipts');
   });
 
   test('an unknown link says so as soon as it opens, without a form, and when submitted to', async () => {
@@ -185,7 +220,7 @@ describe("the Tenant's progress tracker", () => {
     expect(page).toContain(`A plumber from Pete's Plumbing is booked for ${when}.`);
     expect(page).toContain(`<p class="tracker-detail">Pete's Plumbing</p>`);
     // No Tailwind runtime on the Tenant pages: the circles and lines are plain CSS.
-    expect(page).not.toContain('tailwind.js');
+    expect(page).not.toContain('tw.css');
     expect(page).toContain('/assets/tenant.css');
     expect(page).toContain(`Visit ${when}`);
     expect(page).toContain('Harbour Realty');
@@ -217,5 +252,88 @@ describe("the Tenant's progress tracker", () => {
 
     expect(res.status).toBe(404);
     expect(await readable(res)).toContain("We couldn't find that link");
+  });
+});
+
+describe('the tracker: Site Inspections', () => {
+  test('shows a Site visit step with each Tradie and the time of their visit', async () => {
+    const w = await webWorld();
+    const job = await tomsTapTicket(w);
+    await w.alice.sendQuoteRequests(job.jobId, [w.tradies.pete.id, w.tradies.dana.id]);
+    const tue = new Date('2026-10-13T10:00:00+11:00');
+    const wed = new Date('2026-10-14T10:00:00+11:00');
+    await inspectionBooked(w, job, w.tradies.pete, tue);
+    await inspectionBooked(w, job, w.tradies.dana, wed);
+    const path = new URL(w.h.messenger.to(TOM).find((m) => m.template === 'tenant.confirmed')!.data.trackerLink as string).pathname;
+
+    const page = await readable(await w.get(path));
+
+    expect(page).toContain('Site visit<span class="sr-only"> (Now)</span>');
+    expect(page).toContain(`Pete's Plumbing: booked for ${formatWhen(tue.toISOString(), 'Australia/Sydney')}`);
+    expect(page).toContain(`Drip Doctors: booked for ${formatWhen(wed.toISOString(), 'Australia/Sydney')}`);
+    // Quotes are still coming in: Getting quotes isn't done just because a Site visit is booked.
+    expect(page).toContain('Getting quotes<span class="sr-only"> (Still going)</span>');
+  });
+
+  test('a Site visit is Done only once every inspection has happened', async () => {
+    const w = await webWorld();
+    const job = await tomsTapTicket(w);
+    await w.alice.sendQuoteRequests(job.jobId, [w.tradies.pete.id, w.tradies.dana.id]);
+    const tue = new Date('2026-10-13T10:00:00+11:00');
+    const visitId = await inspectionBooked(w, job, w.tradies.pete, tue);
+    const path = new URL(w.h.messenger.to(TOM).find((m) => m.template === 'tenant.confirmed')!.data.trackerLink as string).pathname;
+    visitStarted(w, tue);
+    await w.alice.markInspected(visitId);
+
+    const page = await readable(await w.get(path));
+
+    expect(page).toContain('Site visit<span class="sr-only"> (Done)</span>');
+    expect(page).toContain(`Pete's Plumbing: visited ${formatWhen(tue.toISOString(), 'Australia/Sydney')}`);
+    // Pete's Firm Quote is still to come, so the current step is still Getting quotes.
+    expect(page).toContain('Getting quotes<span class="sr-only"> (Now)</span>');
+  });
+});
+
+describe('the tracker: the booked visit', () => {
+  async function bookedTap() {
+    const w = await webWorld();
+    const job = await tomsTapTicket(w);
+    const tuesday9am = new Date('2026-10-13T09:00:00+11:00');
+    const [quote] = await confirmedQuotes(w, job, [[w.tradies.pete, 180_00, tuesday9am]]);
+    await w.alice.chooseQuote(quote!.quoteId, 'Usual plumber');
+    await w.alice.sendWorkOrder(job.jobId);
+    const path = new URL(w.h.messenger.to(TOM).find((m) => m.template === 'tenant.confirmed')!.data.trackerLink as string).pathname;
+    return { w, job, path, tuesday9am };
+  }
+
+  test("asks the Tenant to confirm they'll be in until they have, then says Confirmed", async () => {
+    const { w, path } = await bookedTap();
+
+    const asking = await readable(await w.get(path));
+    expect(asking).toContain(`<p class="tracker-detail">Please confirm you'll be home or can let the tradie in: reply YES to our message.</p>`);
+    expect(asking).toContain('Booked<span class="sr-only"> (Now)</span>');
+    // Repair approved happened; it is done.
+    expect(asking).toContain('Repair approved<span class="sr-only"> (Done)</span>');
+
+    await w.h.answer(TOM, 'Yes that works', 'confirm');
+    const confirmed = await readable(await w.get(path));
+
+    expect(confirmed).toContain('<p class="tracker-detail">Confirmed</p>');
+    expect(confirmed).not.toContain('Please confirm you');
+    expect(confirmed).toContain("Thanks for confirming you'll be there.");
+    expect(confirmed).toContain('Booked<span class="sr-only"> (Now)</span>');
+  });
+
+  test('is Done only once the repair is, and no longer asks for a confirmation then', async () => {
+    const { w, job, path, tuesday9am } = await bookedTap();
+    const { workOrder } = await jobView(w, job);
+    visitStarted(w, tuesday9am);
+    w.h.classifier.when('All done', { replyType: 'done', relatedItem: `work_order:${workOrder!.workOrderId}` });
+    await w.h.receive(PETE, 'All done');
+
+    const page = await readable(await w.get(path));
+
+    expect(page).toContain('Booked<span class="sr-only"> (Done)</span>');
+    expect(page).not.toContain('Please confirm you');
   });
 });

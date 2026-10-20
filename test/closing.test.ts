@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { confirmedQuotes, jobView, OLIVIA, TOM, tomsTapTicket, world } from './support/world.ts';
+import { confirmedQuotes, jobView, OLIVIA, TOM, tomsTapTicket, visitStarted, world } from './support/world.ts';
 
 const TUE_9AM = new Date('2026-10-13T09:00:00+11:00');
 
@@ -13,6 +13,7 @@ describe('closing a Ticket', () => {
     await alice.sendWorkOrder(job.jobId);
     const { workOrder } = await jobView(w, job);
     h.classifier.when('Done', { replyType: 'done', relatedItem: `work_order:${workOrder!.workOrderId}` });
+    visitStarted(w, TUE_9AM);
     await h.receive(tradies.pete.address, 'Done');
 
     // A second Job, booked and then no longer needed.

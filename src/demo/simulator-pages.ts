@@ -40,7 +40,7 @@ const CHANNEL_LABEL: Partial<Record<ChannelType, string>> = { sms: 'SMS', email:
 /** One-tap replies for the demo script. */
 const QUICK_REPLIES: Record<Role, string[]> = {
   tenant: ['The kitchen tap is dripping', 'Yes', 'No', '1', 'Any time', 'Gas smell in the kitchen', 'The lift is broken'],
-  tradie: ['$180, Tue 9am', 'No thanks, too busy', 'Done', "Can't make Tuesday"],
+  tradie: ['$180, Tue 9am', "Had a look, it's the tempering valve. $640, can do Thursday.", 'No thanks, too busy', 'Done', "Can't make Tuesday"],
   owner: ['YES', 'NO'],
   building_manager: ["Thanks, we're on it", 'Fixed'],
 };

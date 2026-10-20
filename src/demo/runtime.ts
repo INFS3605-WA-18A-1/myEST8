@@ -6,6 +6,7 @@
 
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
 import { createClaudeClassifier } from '../adapters/claude-classifier.ts';
+import { createClaudeSummariser } from '../adapters/claude-summariser.ts';
 import { createGooglePlaces } from '../adapters/google-places.ts';
 import { createImageMatcher } from '../adapters/image-matcher.ts';
 import { createJevClassifier } from '../adapters/jev.ts';
@@ -25,7 +26,7 @@ import { createSessions } from '../web/auth.ts';
 import { createWebApp } from '../web/server.ts';
 import { OffsetClock } from './clock.ts';
 import type { DemoContact, DemoControls, DemoInboundMessage, DemoOutboundMessage } from './controls.ts';
-import { mockApis } from './mock-apis.ts';
+import { mockApis, mockSummariser } from './mock-apis.ts';
 import { seedDemo, type DemoSeed } from './seed.ts';
 import { SimulatedMessenger } from './simulated-messenger.ts';
 import { seedStories, storiesStart } from './stories.ts';
@@ -47,9 +48,10 @@ export type HostedProvider = { provider: string; required: boolean; missing: str
  * quote reader), a made-up value (the `mail.example.test` inbound domain), or a
  * feature left off (file storage in the database, Resend inbound, signed file
  * links, the cron route). The photo matcher and quote reader are listed but not
- * required: they only have a mock until their services exist.
+ * required: they only have a mock until their services exist; nor are the map tiles,
+ * which fall back to a keyless basemap.
  */
-export function hostedProviders(env: Env): HostedProvider[] {
+function hostedProviders(env: Env): HostedProvider[] {
   const set = (name: string) => !!env[name]?.trim();
   const unset = (...names: string[]) => names.filter((name) => !set(name));
   return [
@@ -63,6 +65,8 @@ export function hostedProviders(env: Env): HostedProvider[] {
     { provider: 'worker cron', required: true, missing: unset('CRON_SECRET') },
     { provider: 'imageMatcher', required: false, missing: unset('VISION_API_URL') },
     { provider: 'quoteReader', required: false, missing: unset('QUOTES_API_URL') },
+    // The Dispatch map: CARTO's tiles with the key, Esri's keyless grey base without (src/web/map-config.ts).
+    { provider: 'map tiles', required: false, missing: unset('CARTO_BASEMAPS_KEY') },
   ];
 }
 
@@ -266,13 +270,13 @@ export async function createDemo<Seeded extends boolean = true>(
       if (!hosted) await messenger.send(message);
     },
   };
-  const twilioAccountSid = env.TWILIO_ACCOUNT_SID?.trim();
   const twilioAuthToken = env.TWILIO_AUTH_TOKEN?.trim();
   const app = createApp({
     db,
     clock,
     messenger: outbound,
     classifier: anthropicKey ? createClaudeClassifier({ apiKey: anthropicKey, fetch }) : createJevClassifier({ ...jev, apiKey: env.JEV_API_KEY ?? 'demo' }),
+    summariser: anthropicKey ? createClaudeSummariser({ apiKey: anthropicKey, fetch }) : mockSummariser,
     imageMatcher: createImageMatcher({ ...vision, apiKey: env.VISION_API_KEY ?? 'demo' }),
     quoteReader: createQuoteReader({ ...quotes, apiKey: env.QUOTES_API_KEY ?? 'demo', clock, timeZone }),
     places: createGooglePlaces(google),

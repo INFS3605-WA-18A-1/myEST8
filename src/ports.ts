@@ -1,6 +1,8 @@
 // Ports: interfaces owned by the app for every external service, so a provider
 // can be swapped and tests can use fakes.
 
+import type { Trade } from './shared.ts';
+
 export type ChannelType = 'sms' | 'whatsapp' | 'email';
 
 export type InboundAttachment = { filename: string; contentType: string } & (
@@ -126,6 +128,21 @@ export interface ImageMatcher {
 
 export interface QuoteReader {
   read(input: { text: string; pdf?: Uint8Array }): Promise<{ priceCents?: number; proposedTime?: Date }>;
+}
+
+/**
+ * Writes a Maintenance Request's Summary from the Tenant's words and answers.
+ * The one place a model writes prose (ADR 0008). Throws on failure, so the
+ * worker task retries; the request stays confirmable without a Summary.
+ */
+export interface Summariser {
+  /** One line, at most 160 characters, plain English, only facts in the input. */
+  summarise(input: {
+    description: string;
+    answers: { location: string | null; started: string | null; worsening: string | null };
+    trade: Trade;
+    photoCount: number;
+  }): Promise<{ summary: string }>;
 }
 
 export interface PlacesLookup {

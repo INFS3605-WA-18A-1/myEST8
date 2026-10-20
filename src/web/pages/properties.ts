@@ -10,8 +10,8 @@ import { ActionError } from '../../shared.ts';
 import { icon } from '../icons.ts';
 import type { WebEnv } from '../env.ts';
 import { shellInfo } from '../shell.ts';
-import { alert, badge, button, emptyState, field, flashFrom, section, formatAge, formatMoney, humanise, linkButton, page, sectionHeader, statusBadge, table, ticketCell, urgencyBadge, type Html } from '../ui.ts';
-import { choiceGroup, fieldGrid, importPanel } from './onboarding-forms.ts';
+import { alert, badge, button, contactLink, emptyState, entityLink, field, flashFrom, formatAge, formatMoney, humanise, linkButton, page, rowLink, section, sectionHeader, statusBadge, table, ticketCell, urgencyBadge, type Html } from '../ui.ts';
+import { fieldGrid, importPanel, tradiePicker } from './onboarding-forms.ts';
 
 type Overview = Awaited<ReturnType<PropertyManagerActions['propertyOverviews']>>[number];
 type PropertyView = Awaited<ReturnType<PropertyManagerActions['property']>>;
@@ -91,13 +91,7 @@ export function propertyPages() {
                 `)}
                 <div class="mt-3">
                   ${tradies.length
-                    ? choiceGroup({
-                        legend: 'Nominated Tradies',
-                        name: 'nominatedTradieIds',
-                        type: 'checkbox',
-                        options: tradies.map((t) => ({ value: String(t.id), label: `${t.businessName ?? t.name} (${t.trades.map(humanise).join(', ')})` })),
-                        hint: 'Who the Tenant can call for an Urgent Repair.',
-                      })
+                    ? tradiePicker({ id: 'property', tradies })
                     : html`<p class="text-sm text-muted">Add Tradies on the Tradies page to nominate them for Urgent Repairs.</p>`}
                 </div>
                 <div class="mt-3">${button('Add Property', { variant: 'primary' })}</div>
@@ -155,16 +149,18 @@ export function propertyPages() {
 function list(properties: Overview[]): Html {
   if (!properties.length) return emptyState('No Properties yet. Add the first one to start taking reports.', linkButton('Add a Property', '#add-property', { variant: 'primary' }));
   return table(
-    ['Property', 'Property Owner', 'Max Repair Cost', 'Tenants', 'Open Tickets', 'Property Manager'],
+    ['Property', 'Open Tickets', 'Max Repair Cost', 'Property Owner', 'Tenants', 'Property Manager'],
     properties.map((p) => [
-      html`<a class="link font-medium" href="/properties/${p.propertyId}">${p.address}</a>`,
-      html`${p.ownerName}`,
+      rowLink(p.address, `/properties/${p.propertyId}`),
+      html`<span class="${p.openTickets ? 'property-open' : 'text-muted'}">${p.openTickets}</span>`,
       html`${formatMoney(p.maxRepairCostCents)}`,
-      html`${p.tenants.length ? p.tenants.join(', ') : html`<span class="text-muted">No Tenants</span>`}`,
-      html`${p.openTickets}`,
+      html`${p.ownerName}`,
+      p.tenants.length
+        ? html`<span class="flex flex-wrap gap-1">${p.tenants.map((t) => entityLink('tenant', t.name, `/tenants/${t.personId}`))}</span>`
+        : html`<span class="text-muted">No Tenants</span>`,
       html`${p.propertyManager}`,
     ]),
-    { stack: true, caption: 'Properties', align: ['left', 'left', 'right', 'left', 'right', 'left'] },
+    { stack: 'labelled', caption: 'Properties', align: ['left', 'right', 'right', 'left', 'left', 'left'] },
   );
 }
 
@@ -172,8 +168,8 @@ function list(properties: Overview[]): Html {
 function contact(person: { name: string; mobile: string | null; email: string | null }): Html {
   return html`<span class="property-contact">
     <span class="font-medium">${person.name}</span>
-    ${person.mobile ? html`<a class="link num" href="tel:${person.mobile}">${person.mobile}</a>` : ''}
-    ${person.email ? html`<a class="link break-all" href="mailto:${person.email}">${person.email}</a>` : ''}
+    ${person.mobile ? contactLink('mobile', person.mobile) : ''}
+    ${person.email ? contactLink('email', person.email) : ''}
   </span>`;
 }
 
@@ -204,7 +200,7 @@ function facts(p: PropertyView): Html {
 }
 
 /** "1 Jan 2025" from a date like 2025-01-01. */
-function formatDate(date: string): string {
+export function formatDate(date: string): string {
   const [year, month, day] = date.slice(0, 10).split('-').map(Number);
   if (!year || !month || !day) return date;
   return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).replace('Sept', 'Sep');
@@ -217,13 +213,13 @@ function tenants(p: PropertyView): Html {
       ? table(
           ['Tenant', 'Mobile', 'Email'],
           p.tenants.map((t) => [
-            html`<span class="font-medium">${t.name}</span>${t.tenancyStart ? html`<br /><span class="text-xs text-muted">Since ${formatDate(t.tenancyStart)}</span>` : ''}`,
-            html`${t.mobile ? html`<a class="link num" href="tel:${t.mobile}">${t.mobile}</a>` : '—'}`,
-            html`${t.email ? html`<a class="link break-all" href="mailto:${t.email}">${t.email}</a>` : '—'}`,
+            html`${rowLink(t.name, `/tenants/${t.personId}`)}${t.tenancyStart ? html`<br /><span class="text-xs text-muted">Since ${formatDate(t.tenancyStart)}</span>` : ''}`,
+            html`${t.mobile ? contactLink('mobile', t.mobile) : '—'}`,
+            html`${t.email ? contactLink('email', t.email) : '—'}`,
           ]),
-          { caption: 'Tenants' },
+          { caption: 'Tenants', stack: 'labelled' },
         )
-      : emptyState('No Tenants yet.')}
+      : emptyState('No Tenants yet. Add the people who live here so they can report repairs.', linkButton('Add a Tenant', '/tenants#add-tenant'))}
   </section>`;
 }
 
@@ -234,10 +230,10 @@ function nominated(p: PropertyView): Html {
       ? table(
           ['Tradie', 'Trades'],
           p.nominatedTradies.map((t) => [
-            html`<a class="link font-medium" href="/tradies/${t.tradieId}">${t.businessName ?? t.name}</a>`,
+            rowLink(t.businessName ?? t.name, `/tradies/${t.tradieId}`),
             html`<span class="flex flex-wrap gap-1">${t.trades.map((trade) => badge(humanise(trade), 'info'))}</span>`,
           ]),
-          { caption: 'Nominated Tradies for Urgent Repairs' },
+          { caption: 'Nominated Tradies for Urgent Repairs', stack: 'labelled' },
         )
       : emptyState('No Nominated Tradie. Tenants arrange Urgent Repairs themselves.')}
   </section>`;

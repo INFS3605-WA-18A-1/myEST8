@@ -99,13 +99,13 @@ describe('where people share', () => {
     const page = await (await w.web.request('https://desk.harbour.example/calendar?week=2026-10-19&ok=Done', { headers: { cookie } })).text();
 
     const share = shareControls(page);
-    expect(share.url).toBe('https://desk.harbour.example/calendar?week=2026-10-19');
+    expect(share.url).toBe('https://desk.harbour.example/calendar?view=week&date=2026-10-19');
     expect(share.email).toContain(encodeURIComponent('Jobs booked, week of Monday 19 October 2026'));
     expect(share.block).toContain('Only Property Managers in your Agency can open this link');
 
     // "This week" is shared as its dates, so the link still shows the same week next month.
     const thisWeek = shareControls(await (await w.get('/calendar', cookie)).text());
-    expect(thisWeek.url).toMatch(/^http:\/\/localhost\/calendar\?week=\d{4}-\d{2}-\d{2}$/);
+    expect(thisWeek.url).toMatch(/^http:\/\/localhost\/calendar\?view=week&date=\d{4}-\d{2}-\d{2}$/);
   });
 
   test('a Maintenance Request and the dashboard list of them can be shared', async () => {

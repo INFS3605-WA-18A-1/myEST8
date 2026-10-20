@@ -2,7 +2,9 @@
 // four async calls: `one`, `all`, `run` and `transaction`. SQL is written with
 // `?` placeholders, numbered for Postgres here. The schema lives in SQL
 // migrations (supabase/migrations/), never in application code; see
-// src/migrate.ts for how local, test and CI databases get them.
+// src/migrate.ts for how local, test and CI databases get them. A page request
+// shares its reads (`withReadCache`), so a list that names the same Property on
+// every row reads it once.
 
 import { AsyncLocalStorage } from 'node:async_hooks';
 import postgres from 'postgres';
@@ -173,9 +175,52 @@ function toParam(value: Param): Param {
   return typeof value === 'number' && !Number.isFinite(value) ? null : value;
 }
 
-async function query<T>(db: Db, sql: string, params: Param[]): Promise<T[]> {
+/**
+ * The reads of one page request (`withReadCache`): the same SELECT with the same
+ * parameters is sent once, the rest share its rows. A page reads the same Property or
+ * person for row after row; this answers them from the first read. Any other statement
+ * clears it, so a read after a write sees the write; a transaction never uses it, so
+ * the checks it makes under its lock read the database as it is.
+ */
+const readCache = new AsyncLocalStorage<Map<string, Promise<unknown[]>>>();
+
+/** Runs `fn` with a read cache of its own (a GET request: see `readCache`). */
+export function withReadCache<T>(fn: () => Promise<T>): Promise<T> {
+  return readCache.run(new Map(), fn);
+}
+
+const isRead = (sql: string) => /^\s*SELECT\b/i.test(sql);
+
+/** The cache key of a read: its schema, statement and parameters (bytes and bigints included). */
+function readKey(db: Db, sql: string, params: Param[]): string {
+  const values = params.map((p) => (p instanceof Uint8Array ? `b:${Buffer.from(p).toString('base64')}` : typeof p === 'bigint' ? `n:${p}` : p));
+  return `${db.schema}\u0000${sql}\u0000${JSON.stringify(values)}`;
+}
+
+async function send<T>(db: Db, sql: string, params: Param[]): Promise<T[]> {
   const rows = await connectionFor(db).unsafe(toPostgres(sql), params.map(toParam) as postgres.ParameterOrJSON<never>[]);
   return [...rows] as T[];
+}
+
+async function query<T>(db: Db, sql: string, params: Param[]): Promise<T[]> {
+  const cache = readCache.getStore();
+  if (!cache) return send<T>(db, sql, params);
+  if (!isRead(sql)) {
+    cache.clear();
+    return send<T>(db, sql, params);
+  }
+  const tx = current.getStore();
+  if (tx && tx.db === db && tx.open) return send<T>(db, sql, params);
+  const key = readKey(db, sql, params);
+  let rows = cache.get(key) as Promise<T[]> | undefined;
+  if (!rows) {
+    rows = send<T>(db, sql, params);
+    cache.set(key, rows);
+    // A failed read isn't kept: the next one tries again.
+    rows.catch(() => cache.get(key) === rows && cache.delete(key));
+  }
+  // Each caller gets its own array (it may sort it); the rows themselves are shared and never changed.
+  return [...(await rows)];
 }
 
 /** The first row, or undefined. */

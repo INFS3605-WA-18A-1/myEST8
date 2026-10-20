@@ -21,7 +21,7 @@ test('a demo Property Manager signs in and sees the dashboard', async ({ page })
 
   await expect(page.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible();
   await expect(page.getByText('Harbour Realty').first()).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Maintenance Requests to review' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 2, name: 'Needs you' })).toBeVisible();
 });
 
 test('a wrong password is refused with a message', async ({ page }) => {
@@ -31,5 +31,6 @@ test('a wrong password is refused with a message', async ({ page }) => {
   await page.getByRole('button', { name: 'Sign in' }).click();
 
   await expect(page).toHaveURL(/\/login/);
-  await expect(page.getByText(/don.t match/)).toBeVisible();
+  // The message is on the field and repeated for screen readers (sr-only); the field's is the visible one.
+  await expect(page.getByText(/don.t match/).last()).toBeVisible();
 });

@@ -6,7 +6,7 @@ import type { Context } from './context.ts';
 import { all } from './db.ts';
 import { HOUR_MS } from './shared.ts';
 
-export const GOOGLE_RATING_REFRESH_INTERVAL_MS = 7 * 24 * HOUR_MS;
+const GOOGLE_RATING_REFRESH_INTERVAL_MS = 7 * 24 * HOUR_MS;
 
 export function createGoogleRatingRefresh({ db, worker, modules }: Context) {
   worker.on<{ tradieId: number }>('google_rating.refresh', ({ tradieId }) => modules.profiles.refreshGoogleRating(tradieId));

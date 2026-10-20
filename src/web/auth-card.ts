@@ -1,9 +1,9 @@
 // The document shared by the sign-in and sign-up pages: the whole viewport, split
 // in two from 1024px. On the left a full-height Night panel, where the app's rail
-// will sit once the Property Manager is in, carrying the landing page's thesis and
-// "what happens next" with the Maintenance Request they will be asked to confirm.
-// On the right, on white, the page's h1 and its form. On phones the form comes
-// first and the Night panel follows it, then the footer. Every link is a button
+// will sit once the Property Manager is in, carrying the landing page's thesis and,
+// on sign-up, "what happens next" with the Maintenance Request they will be asked
+// to confirm. On the right, on white, the page's h1 and its form. On phones the
+// form comes first and the panel follows it, then the footer. Every link is a button
 // (docs/design-system.md). Styles are in static/auth.css, loaded only here.
 
 import { html } from 'hono/html';
@@ -14,7 +14,7 @@ export type NextStep = { text: string; request?: boolean };
 
 /**
  * A full-page sign-in or sign-up document. `title` is the h1 and the tab's title;
- * `form` is the form and the other way in under it; `steps` fill the Night panel.
+ * `form` is the form and the other way in under it; `steps` fill the panel (none on sign-in).
  * `size` sets how wide the form column runs: a sign-in form is short, the sign-up
  * form needs room for its two-column fields.
  */
@@ -57,18 +57,18 @@ export function authPage(o: {
 }
 
 /**
- * The Night panel: the landing page's three-line thesis, where "You decide."
- * carries the Wattle decision stripe, then the steps in order.
+ * The panel: the landing page's three-line thesis, where "You decide."
+ * carries the Wattle decision stripe, then the steps in order when there are any.
  */
 function panel(steps: NextStep[]): Html {
-  return html`<aside class="au-panel" aria-labelledby="next-heading">
+  return html`<aside class="au-panel"${steps.length ? html` aria-labelledby="next-heading"` : html` aria-label="About myEST8"`}>
     <div class="au-panel-inner">
       <p class="au-thesis">
         <span class="au-line">Tenants text the problem.</span>
         <span class="au-line is-you">You decide.</span>
         <span class="au-line">myEST8 does the chasing.</span>
       </p>
-      <div class="au-next">
+      ${steps.length ? html`<div class="au-next">
         <h2 id="next-heading" class="au-next-title">What happens next</h2>
         <ol class="au-steps" role="list">
           ${steps.map(
@@ -81,7 +81,7 @@ function panel(steps: NextStep[]): Html {
             </li>`,
           )}
         </ol>
-      </div>
+      </div>` : ''}
     </div>
   </aside>`;
 }
@@ -103,7 +103,7 @@ function request(): Html {
   </div>`;
 }
 
-/** The secondary way in under a hairline, at the foot of a form: a sentence, then a full-width button. */
+/** The secondary way in under a hairline, at the foot of a form: a sentence, then a full-width button as tall as the form's own. */
 export function otherWay(o: { text: string; button: Html }): Html {
   return html`<div class="au-other">
     <p class="au-other-text">${o.text}</p>

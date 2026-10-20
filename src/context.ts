@@ -2,7 +2,7 @@ import type { Db } from './db.ts';
 import type { Files } from './files.ts';
 import type { Intake } from './intake.ts';
 import type { Notifications } from './notifications.ts';
-import type { Clock, Classifier, FetchMedia, ImageMatcher, Messenger, PlacesLookup, QuoteReader } from './ports.ts';
+import type { Clock, Classifier, FetchMedia, ImageMatcher, Messenger, PlacesLookup, QuoteReader, Summariser } from './ports.ts';
 import type { Profiles } from './profiles.ts';
 import type { Quotes } from './quotes.ts';
 import type { Scheduling } from './scheduling.ts';
@@ -15,6 +15,7 @@ export interface Ports {
   classifier: Classifier;
   imageMatcher: ImageMatcher;
   quoteReader: QuoteReader;
+  summariser: Summariser;
   places: PlacesLookup;
   fetchMedia: FetchMedia;
 }

@@ -5,9 +5,28 @@
  * Colours are app.css's tokens only (docs/design-system.md).
  */
 
+/* A white column on Paper. */
+body {
+  background: var(--page);
+}
+.public-main {
+  background: var(--surface);
+  border-inline: 1px solid var(--line);
+  padding: 24px 16px 32px;
+  max-width: 560px;
+}
+.public-footer {
+  max-width: 560px;
+}
+
 /* The Agency's name leads the bar; the logo goes to the right edge. */
 .public-brand + .logotype {
   margin-left: auto;
+}
+
+/* Who to reply to, at the foot: left-aligned under the page like everything above it. */
+.public-footer {
+  text-align: left;
 }
 
 /* ----- Upload ----- */
@@ -131,9 +150,11 @@
   background: var(--surface);
   color: var(--muted);
 }
+/* Where the repair is now: Harbour, filled, with its number; its text carries the Wattle bar. */
 .tracker-circle.is-current {
   border-color: var(--action);
-  color: var(--action);
+  background: var(--action);
+  color: var(--surface);
 }
 .tracker-circle.is-done {
   border-color: var(--done);
@@ -151,7 +172,23 @@
   font-weight: 600;
   color: var(--ink);
 }
+.tracker-step[aria-current='step'] .tracker-text {
+  padding-left: 12px;
+  border-left: 4px solid var(--hivis);
+}
 .tracker-detail {
   font-size: 14px;
   color: var(--muted);
+}
+
+.tracker-now {
+  max-width: 60ch;
+  font-size: 16px;
+  color: var(--ink);
+}
+@media (prefers-reduced-motion: reduce) {
+  * {
+    scroll-behavior: auto;
+    transition: none;
+  }
 }

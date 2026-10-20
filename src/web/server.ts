@@ -4,12 +4,14 @@ import type { DemoControls } from '../demo/controls.ts';
 import type { FileLinks } from '../file-links.ts';
 import { simulatorPages } from '../demo/simulator-pages.ts';
 import { createHttpApp } from '../http.ts';
+import { withReadCache } from '../db.ts';
 import type { Clock } from '../ports.ts';
 import { assetRoutes } from './assets.ts';
 import { authRoutes, requirePropertyManager, type Sessions } from './auth.ts';
 import { NO_CONNECTORS, type ChannelConnectors } from './connectors.ts';
 import type { WebEnv } from './env.ts';
 import { landingRoutes } from './pages/landing.ts';
+import { quoteFormPages } from './pages/quote-form.ts';
 import { signupRoutes } from './pages/signup.ts';
 import { pmPages } from './pm-pages.ts';
 import { rateLimit } from './rate-limit.ts';
@@ -41,13 +43,17 @@ export function createWebApp(deps: {
   demoSignIns?: boolean;
 }) {
   const web = new Hono();
-  // The no-login Tenant links: reading a tracker, and the upload page and its posts.
+  // A page reads the same rows many times over; each GET shares its reads (src/db.ts).
+  web.use('*', (c, next) => (c.req.method === 'GET' || c.req.method === 'HEAD' ? withReadCache(next) : next()));
+  // The no-login Tenant links (a tracker, the upload page and its posts) and the Tradie's quote page.
   const links = rateLimit({ max: 60, windowMs: 60_000 });
   const uploads = rateLimit({ max: 20, windowMs: 60_000 });
   for (const path of ['/t/*', '/api/t/*']) web.use(path, links);
-  for (const path of ['/u/*', '/api/u/*']) web.use(path, uploads);
+  for (const path of ['/u/*', '/api/u/*', '/q/*']) web.use(path, uploads);
   web.route('/', assetRoutes());
   web.route('/', tenantPages(deps.app));
+  // The no-login Tradie quote page (Estimate, then Firm Quote).
+  web.route('/', quoteFormPages(deps.app));
   web.route('/', createHttpApp(deps.app, deps));
   web.route('/', authRoutes(deps.app, deps.sessions));
   web.route('/', signupRoutes(deps.app, deps.sessions));

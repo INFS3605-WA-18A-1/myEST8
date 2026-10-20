@@ -62,6 +62,12 @@ export function createFiles(db: Db, clock: Clock, blobs: BlobStore | null = null
       return content;
     },
 
+    /** Deletes a file nothing refers to (a PDF saved for a Firm Quote that was then refused), and its stored bytes. */
+    async remove(id: number) {
+      const row = await one<{ storage_path: string | null }>(db, 'DELETE FROM files WHERE id = ? RETURNING storage_path', id);
+      if (row?.storage_path && blobs) await blobs.remove(row.storage_path);
+    },
+
     /** A file belonging to the Agency, or null. */
     async getInAgency(agencyId: number, id: number): Promise<StoredFile | null> {
       const row = await one<{ agency_id: number }>(db, 'SELECT agency_id FROM files WHERE id = ?', id);
