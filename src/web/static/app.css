@@ -968,10 +968,7 @@
     .count-strip .count-chip.is-zero {
       color: var(--muted);
     }
-    /* A tile with something in it gets a coloured number and a small dot: Wattle for what needs the Property Manager, red for urgent. */
-    .count-item.is-attention .count-chip {
-      color: #7a4f00;
-    }
+    /* Numbers stay dark; only Urgent Repairs turns red. A small dot marks tiles with something in them: Wattle for what needs the Property Manager, red for urgent. */
     .count-item.is-urgent .count-chip {
       color: #a8271c;
     }
