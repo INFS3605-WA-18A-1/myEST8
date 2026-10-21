@@ -2,7 +2,7 @@
 
 `npm run demo` starts the whole app on your machine with:
 
-- **Dummy external APIs.** The classifier (Jev), the photo matcher, the quote reader and Google Places/Geocoding are answered by an in-process mock (`src/demo/mock-apis.ts`). Nothing leaves your machine unless you set the env vars below.
+- **Dummy external APIs.** The classifier (Jev), the photo matcher, the quote reader, Google Places and Nominatim's geocoding are answered by an in-process mock (`src/demo/mock-apis.ts`). Nothing leaves your machine unless you set the env vars below.
 - **A simulated messenger.** No SMS or email is really sent (unless you set up Twilio and SendGrid: see [Sending real messages](#sending-real-messages)). Every outbound message is kept in the demo's database and shown in the phone simulator.
 - **A movable clock.** The demo clock runs in real time, and the simulator can move it forward to show reminders and deadlines without waiting.
 - **Seed data.** The Agency "Harbour Realty" with its Property Managers, Properties, Owners, Tenants and Tradies.
@@ -194,7 +194,8 @@ Each external API can be pointed at a real endpoint with env vars. Anything not 
 | `JEV_API_URL`, `JEV_API_KEY`          | The classifier (Jev)                                  |
 | `VISION_API_URL`, `VISION_API_KEY`    | The photo matcher                                     |
 | `QUOTES_API_URL`, `QUOTES_API_KEY`    | The quote reader                                      |
-| `GOOGLE_MAPS_API_KEY`                 | Google Places (New) and the Geocoding API             |
+| `GOOGLE_MAPS_API_KEY`                 | Google Places (New) only                              |
+| `NOMINATIM_URL`                       | Geocoding, which places addresses on the Dispatch map. Needs no key. Hosted mode defaults to `https://nominatim.openstreetmap.org` |
 | `TWILIO_*`, `SENDGRID_*`, `FILE_LINK_SECRET`, `DEMO_SEND_TO` | Real SMS and email. See [Sending real messages](#sending-real-messages) |
 | `PORT`                                | The port to listen on (default 3000)                  |
 | `PUBLIC_URL`                          | The address used in upload and tracker links (default `http://localhost:$PORT`) |
@@ -235,7 +236,7 @@ For replies to come back in, point the Twilio number's "A message comes in" webh
 
 ### Checking the live services by hand
 
-`npm run smoke:live -- --to +61412345678` sends one SMS to that number, makes one Jev classify call and one geocode, and prints each result. It refuses to run without `--to` and every key it needs (`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_SMS_FROM` or `--from`, `JEV_API_URL`, `JEV_API_KEY`, `GOOGLE_MAPS_API_KEY`). Automated tests never call a real provider.
+`npm run smoke:live -- --to +61412345678` sends one SMS to that number, makes one Jev classify call and one Nominatim geocode, and prints each result. It refuses to run without `--to` and every key it needs (`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_SMS_FROM` or `--from`, `JEV_API_URL`, `JEV_API_KEY`, `GOOGLE_MAPS_API_KEY`). Automated tests never call a real provider.
 
 Manual checklist with real providers:
 
