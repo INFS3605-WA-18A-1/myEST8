@@ -5,7 +5,7 @@ import { createGooglePlaces } from '../../src/adapters/google-places.ts';
 import { createImageMatcher } from '../../src/adapters/image-matcher.ts';
 import { createJevClassifier } from '../../src/adapters/jev.ts';
 import { createQuoteReader } from '../../src/adapters/quote-reader.ts';
-import { mockApis, mockFetch } from '../../src/demo/mock-apis.ts';
+import { DEMO_PLACES, mockApis, mockFetch } from '../../src/demo/mock-apis.ts';
 import type { ClassifierQuestion } from '../../src/ports.ts';
 import { AVAILABILITY, TRADES, URGENCIES } from '../../src/shared.ts';
 
@@ -221,6 +221,41 @@ describe('mock Google Places', () => {
   test('details give the rating, and an unknown place is a 404', async () => {
     expect(await places.getRating('demo-flow-bros')).toEqual({ rating: 4.9, reviewCount: 15 });
     await expect(places.getRating('demo-nobody')).rejects.toThrow('Google Place Details returned 404');
+  });
+
+  test("listing details give a place's phone, website, types and summary", async () => {
+    expect(await places.listingDetails('demo-petes-plumbing')).toEqual({
+      placeId: 'demo-petes-plumbing',
+      name: "Pete's Plumbing",
+      address: '4 Illawarra Rd, Marrickville NSW 2204',
+      phone: '+61 412 555 018',
+      website: 'https://petes-plumbing.example',
+      types: ['plumber', 'point_of_interest', 'establishment'],
+      primaryType: 'Plumber',
+      summary: 'Local plumbers for blocked drains, leaks and hot water systems.',
+      rating: 4.8,
+      reviewCount: 120,
+    });
+  });
+
+  test('some demo listings are landlines, or have no website or summary, as real ones do', async () => {
+    expect((await places.listingDetails('demo-quick-pipes')).phone).toBe('+61 2 9319 0044');
+    const harry = await places.listingDetails('demo-handy-harry');
+    expect([harry.phone, harry.website, harry.summary]).toEqual([null, null, null]);
+  });
+
+  test('every demo listing has details, and the search answer still holds only what its field mask names', async () => {
+    for (const { placeId } of DEMO_PLACES) expect((await places.listingDetails(placeId)).types.length).toBeGreaterThan(0);
+    const response = await mockApis().request('http://mock.local/google/places/v1/places:searchText', {
+      method: 'POST',
+      headers: { 'x-goog-fieldmask': 'places.id,places.displayName', 'content-type': 'application/json' },
+      body: JSON.stringify({ textQuery: 'Quick Pipes' }),
+    });
+    expect(await response.json()).toEqual({ places: [{ id: 'demo-quick-pipes', displayName: { text: 'Quick Pipes', languageCode: 'en' } }] });
+  });
+
+  test('details of an unknown place are a 404', async () => {
+    await expect(places.listingDetails('demo-nobody')).rejects.toThrow('Google Place Details returned 404');
   });
 
   test.each([
