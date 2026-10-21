@@ -19,7 +19,7 @@ OpenStreetMap's Nominatim geocodes for free with no key or account. Its data is 
 - **Configuration:** `NOMINATIM_URL`, the base URL.
   - Hosted (production) defaults to `https://nominatim.openstreetmap.org`. It needs no key, so it is never a missing setting.
   - The local demo and the tests use the mock unless `NOMINATIM_URL` is set, like every other provider in `src/demo/runtime.ts` (`pick`).
-- **Existing Properties and Tradies without a location** are placed by `geocodeMissing` the next time Dispatch opens. Nothing else is needed.
+- **Existing Properties and Tradies without a location** are placed by `geocodeMissing` when a Property Manager presses **Look up missing addresses** on Dispatch. Nothing else is needed.
 
 ## Non-goals
 
