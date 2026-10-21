@@ -160,7 +160,9 @@ export function importPages() {
         return c.redirect(flashTo(back, 'ok', 'Changes checked.', '#rows'), 303);
       }
       const result = await c.var.actions.confirmImport(token, changes);
-      const added = result.added ? `Added ${count(result.added, result.kind)}.` : `No ${IMPORT_NOUNS[result.kind].many} added.`;
+      let added = result.added ? `Added ${count(result.added, result.kind)}.` : `No ${IMPORT_NOUNS[result.kind].many} added.`;
+      // Imported Properties are not geocoded. Dispatch places them, a few at a time.
+      if (result.kind === 'properties' && result.added) added += ' Look up missing addresses on Dispatch places them, at most 10 a press.';
       if (result.finished) {
         const home = from === 'welcome' ? WELCOME_STEP[result.kind] : '/setup';
         return c.redirect(flashTo(home, 'ok', added, from === 'welcome' ? '' : `#${SETUP_AREA[result.kind]}`), 303);

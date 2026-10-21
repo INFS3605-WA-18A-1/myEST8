@@ -302,6 +302,29 @@ describe('the onboarding wizard', () => {
     expect(after).not.toContain('Omar Owen');
   });
 
+  test('a pin posted with the welcome Property is stored, and the address is not geocoded', async () => {
+    const w = await webWorld();
+    const sam = await w.signUp();
+    const address = '3 Sun St, Newtown NSW 2042';
+    // What a lookup would return. The posted pin must be kept instead.
+    w.h.geocoder.locations.set(address, { lat: -33.87, lng: 151.2 });
+    let calls = 0;
+    const geocode = w.h.geocoder.geocode.bind(w.h.geocoder);
+    w.h.geocoder.geocode = async (query) => {
+      calls++;
+      return geocode(query);
+    };
+
+    await submit(w, '/welcome/property', propertyFields({ lat: '-33.8983619', lng: '151.1205914' }), sam);
+
+    expect(calls).toBe(0);
+    const dispatch = await page(w, '/dispatch', sam);
+    const data = JSON.parse(/id="dispatch-data">([\s\S]*?)<\/script>/.exec(dispatch)![1]!) as {
+      properties: { address: string; lat: number; lng: number }[];
+    };
+    expect(data.properties.find((property) => property.address === address)).toMatchObject({ lat: -33.8983619, lng: 151.1205914 });
+  });
+
   test('a Property Owner already added is reused for another Property, but a Tenant\'s number cannot be the Property Owner\'s', async () => {
     const w = await webWorld();
     const sam = await w.signUp();

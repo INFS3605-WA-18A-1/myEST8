@@ -131,6 +131,32 @@ describe('uploading a spreadsheet', () => {
     expect(added.page).toContain('Bright Sparks');
   });
 
+  test('importing Properties makes no geocoder call, and says Dispatch will place them', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+    const address = '3 Rose St, Glebe NSW 2037';
+    // A point the geocoder would return. The import must not ask for it.
+    w.h.geocoder.locations.set(address, { lat: -33.8795, lng: 151.1865 });
+    let calls = 0;
+    const geocode = w.h.geocoder.geocode.bind(w.h.geocoder);
+    w.h.geocoder.geocode = async (query) => {
+      calls++;
+      return geocode(query);
+    };
+
+    const review = await follow(
+      w,
+      await upload(w, '/setup/import/properties', csvFile(`Property address,Landlord,Max spend\n"${address}",Olivia Owens,500\n`, 'properties.csv'), cookie),
+      cookie,
+    );
+    const token = review.location.split('/').at(-1)!;
+    const added = await follow(w, await w.post(`/setup/imports/${token}`, { intent: 'add', include: '0' }, cookie), cookie);
+
+    expect(calls).toBe(0);
+    expect(visible(added.page)).toContain('Look up missing addresses on Dispatch places them, at most 10 a press.');
+    expect((await w.alice.properties()).find((p) => p.address === address)?.location).toBeNull();
+  });
+
   test('refuses a file that is not a spreadsheet, back on the step it came from', async () => {
     const w = await webWorld();
     const cookie = await w.signIn();
