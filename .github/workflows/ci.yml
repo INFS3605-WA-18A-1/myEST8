@@ -1,14 +1,15 @@
 # Test every change; deploy what lands on master (docs/vercel.md, "CI/CD").
 #
-#   pull request   ->  test
-#   push to master -> test -> migrate-prod -> deploy-prod -> smoke
+#   pull request   ->  test, build
+#   push to master -> test, build -> migrate-prod -> deploy-prod -> smoke
 #
 # There are no preview deployments: the one Supabase project is production, and a
 # preview would run on its data. Add a staging project and a preview job to bring them back.
+# Instead `build` runs production's `vercel build` on every change, without deploying it.
 #
-# `test` needs no secrets: every external API is mocked, and every test uses its
+# `test` and `build` need no secrets: every external API is mocked, every test uses its
 # own throwaway database on the Postgres service below, never a hosted one (see
-# docs/testing.md). Only the jobs after it hold secrets, and a pull request from
+# docs/testing.md), and `vercel build` runs offline. Only the jobs after them hold secrets, and a pull request from
 # a fork never reaches them. Never switch this to `pull_request_target`: that
 # would hand secrets to code from a fork.
 #
@@ -89,12 +90,38 @@ jobs:
             test-results/
           retention-days: 14
 
+  # The same `vercel build` as deploy-prod, so a vercel.json Vercel refuses, or a function
+  # missing a file the app reads at run time, fails here rather than after master's
+  # migrations have run. It needs no Vercel account: the project settings are production's
+  # (Other, Node.js 24.x) and the ids only name the output.
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.x
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build the Vercel function as production does
+        run: |
+          mkdir -p .vercel
+          echo '{"projectId":"ci","orgId":"ci","settings":{"framework":null,"nodeVersion":"24.x"}}' > .vercel/project.json
+          npx vercel build --prod
+
+      - name: Check the function holds every file the app reads
+        run: npx tsx scripts/check-vercel-function.ts
+
   # The first run applies every migration to the empty production database. If a
   # migration fails nothing is deployed. Use the session pooler's address (port
   # 5432, reachable over IPv4); Supabase's direct address is IPv6 only. Add
   # required reviewers to the `production` environment to approve each deploy.
   migrate-prod:
-    needs: test
+    needs: [test, build]
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     timeout-minutes: 10

@@ -57,6 +57,11 @@ function fontFile(name: string) {
   return join(dirname(require.resolve(`${pkg}/package.json`)), 'files', name);
 }
 
+/** Every file assetRoutes reads, as absolute paths. The Vercel function must include each one (scripts/check-vercel-function.ts). */
+export function servedFiles(): string[] {
+  return [...Object.values(ASSETS).map((asset) => asset.file()), ...Object.keys(FONTS).map(fontFile)];
+}
+
 /**
  * Serves /assets/*: the prebuilt Tailwind utilities, daisyUI, MapLibre GL JS, the app's own
  * CSS, JS and favicon, and the Bricolage Grotesque and Public Sans fonts under /assets/fonts/. Anything
