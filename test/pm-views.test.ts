@@ -183,7 +183,7 @@ describe('Tradie locations and Dispatch', () => {
     await w.alice.setTradieAddress(w.ids.nina, NINA_BASE.address);
     expect((await w.alice.people('tradie')).find((t) => t.id === w.ids.nina)).toMatchObject({ businessAddress: NINA_BASE.address, location: null });
 
-    w.h.places.locations.set(NINA_BASE.address, NINA_BASE.location);
+    w.h.geocoder.locations.set(NINA_BASE.address, NINA_BASE.location);
     expect(await w.alice.geocodeMissing()).toBe(1);
     expect((await w.alice.people('tradie')).find((t) => t.id === w.ids.nina)!.location).toEqual(NINA_BASE.location);
 
@@ -195,14 +195,14 @@ describe('Tradie locations and Dispatch', () => {
     const w = await world();
     const id = await unknownProperty(w);
     expect(await w.alice.geocodeMissing()).toBe(0);
-    w.h.places.geocode = async () => {
+    w.h.geocoder.geocode = async () => {
       throw new Error('Geocoding is down');
     };
     expect(await w.alice.geocodeMissing()).toBe(0);
 
-    w.h.places.geocode = async (address) => w.h.places.locations.get(address) ?? null;
-    w.h.places.locations.set(UNKNOWN_ADDRESS, { lat: -33.89, lng: 151.18 });
-    w.h.places.locations.set(KING_ST, { lat: 0, lng: 0 });
+    w.h.geocoder.geocode = async (address) => w.h.geocoder.locations.get(address) ?? null;
+    w.h.geocoder.locations.set(UNKNOWN_ADDRESS, { lat: -33.89, lng: 151.18 });
+    w.h.geocoder.locations.set(KING_ST, { lat: 0, lng: 0 });
     expect(await w.alice.geocodeMissing()).toBe(1);
     expect((await w.alice.properties()).find((p) => p.id === id)!.location).toEqual({ lat: -33.89, lng: 151.18 });
     expect((await w.alice.properties()).find((p) => p.id === w.ids.kingSt)!.location).toEqual({ lat: -33.897, lng: 151.179 });
@@ -210,14 +210,14 @@ describe('Tradie locations and Dispatch', () => {
 
   test('a Property is added without a location when the geocoder fails, and geocodeMissing places it later', async () => {
     const w = await world();
-    w.h.places.geocode = async () => {
-      throw new Error('Google Geocoding returned REQUEST_DENIED');
+    w.h.geocoder.geocode = async () => {
+      throw new Error('Nominatim returned 429: Too many requests');
     };
     const id = await unknownProperty(w);
     expect((await w.alice.properties()).find((p) => p.id === id)!.location).toBeNull();
 
-    w.h.places.geocode = async (address) => w.h.places.locations.get(address) ?? null;
-    w.h.places.locations.set(UNKNOWN_ADDRESS, { lat: -33.89, lng: 151.18 });
+    w.h.geocoder.geocode = async (address) => w.h.geocoder.locations.get(address) ?? null;
+    w.h.geocoder.locations.set(UNKNOWN_ADDRESS, { lat: -33.89, lng: 151.18 });
     expect(await w.alice.geocodeMissing()).toBe(1);
     expect((await w.alice.properties()).find((p) => p.id === id)!.location).toEqual({ lat: -33.89, lng: 151.18 });
   });
@@ -226,7 +226,7 @@ describe('Tradie locations and Dispatch', () => {
     const w = await world();
     const { ticketId } = await tomsTapTicket(w);
     await w.alice.changeUrgency({ ticketId }, 'high');
-    w.h.places.locations.set(NINA_BASE.address, NINA_BASE.location);
+    w.h.geocoder.locations.set(NINA_BASE.address, NINA_BASE.location);
     await w.alice.setTradieAddress(w.ids.nina, NINA_BASE.address);
 
     const d = await w.alice.dispatch();

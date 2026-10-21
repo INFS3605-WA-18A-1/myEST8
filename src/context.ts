@@ -2,7 +2,7 @@ import type { Db } from './db.ts';
 import type { Files } from './files.ts';
 import type { Intake } from './intake.ts';
 import type { Notifications } from './notifications.ts';
-import type { Clock, Classifier, Composer, FetchMedia, ImageMatcher, Messenger, PlacesLookup, QuoteReader, Summariser, TradeSuggester } from './ports.ts';
+import type { Clock, Classifier, Composer, FetchMedia, Geocoder, AddressSuggester, ImageMatcher, Messenger, PlacesLookup, QuoteReader, Summariser, TradeSuggester } from './ports.ts';
 import type { Profiles } from './profiles.ts';
 import type { Quotes } from './quotes.ts';
 import type { Scheduling } from './scheduling.ts';
@@ -19,6 +19,9 @@ export interface Ports {
   /** Writes the Property Manager's follow-up from their notes; null when no model is configured, and the notes stand as written. */
   composer: Composer | null;
   places: PlacesLookup;
+  geocoder: Geocoder;
+  /** Street addresses to offer while a Property's address is typed. */
+  addressSuggester: AddressSuggester;
   tradeSuggester: TradeSuggester;
   fetchMedia: FetchMedia;
 }

@@ -118,7 +118,7 @@ The keys are placeholders. Jev (TypeSafe) classifies every inbound message: its 
 
 **Not built yet:** today classification uses Claude Haiku whenever `ANTHROPIC_API_KEY` is set, and Jev only without it. `src/adapters/jev.ts` still speaks a guessed pre-release contract rather than TypeSafe's `/v1/systemone`. Outbound messages are fixed templates. ADR 0011 lists the gaps.
 
-`VISION_API_*`, `QUOTES_API_*` and `GOOGLE_MAPS_API_KEY` are the same as before: leave them empty and the mocks run. For the maps key, enable the Geocoding API and the Places API (New) and restrict the key to those two.
+`VISION_API_*`, `QUOTES_API_*` and `GOOGLE_MAPS_API_KEY` are the same as before: leave them empty and the mocks run. For the maps key, enable only the Places API (New) and restrict the key to it. Addresses are placed on the Dispatch map by Nominatim, which needs no key: `NOMINATIM_URL` is optional and defaults to `https://nominatim.openstreetmap.org` ([ADR 0012](adr/0012-nominatim-for-geocoding.md)). Address suggestions while a Property's address is typed use Photon, also with no key: `PHOTON_URL` is optional and defaults to `https://photon.komoot.io`.
 
 `src/main.ts` exits if any of these is still a mock, unless `ALLOW_MOCKS=1`.
 

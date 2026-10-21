@@ -1,17 +1,17 @@
 // A live smoke test of the real external services, run by hand before a demo or
 // a release: sends one SMS through Twilio, makes one Jev classify call and one
-// Google geocode, and prints what came back. It costs money and texts a real
+// Nominatim geocode, and prints what came back. It costs money and texts a real
 // phone, so it refuses to run without every key and an explicit recipient.
 //
 //   npm run smoke:live -- --to +61412345678 [--from +61480000000] [--address "12 King St, Newtown NSW 2042"]
 //
 // Keys come from the environment only (see .env.example): TWILIO_ACCOUNT_SID,
-// TWILIO_AUTH_TOKEN, TWILIO_SMS_FROM (or --from), JEV_API_URL, JEV_API_KEY and
-// GOOGLE_MAPS_API_KEY.
+// TWILIO_AUTH_TOKEN, TWILIO_SMS_FROM (or --from), JEV_API_URL and JEV_API_KEY.
+// Nominatim needs no key: it uses NOMINATIM_URL, or the public server.
 
 import { parseArgs } from 'node:util';
-import { createGooglePlaces } from '../src/adapters/google-places.ts';
 import { createJevClassifier } from '../src/adapters/jev.ts';
+import { createNominatimGeocoder, PUBLIC_NOMINATIM_URL } from '../src/adapters/nominatim.ts';
 import { createTwilioMessenger } from '../src/adapters/twilio-messenger.ts';
 import { TRADES, URGENCIES } from '../src/shared.ts';
 
@@ -42,7 +42,7 @@ if (!to) refuse('give the phone number to text with --to, in E.164 form (+61...)
 if (!E164.test(to)) refuse(`--to ${to} is not an E.164 phone number`);
 if (from && !E164.test(from)) refuse(`the sender ${from} is not an E.164 phone number`);
 
-const required = ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'JEV_API_URL', 'JEV_API_KEY', 'GOOGLE_MAPS_API_KEY'];
+const required = ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'JEV_API_URL', 'JEV_API_KEY'];
 const missing = [...required.filter((name) => !env(name)), ...(from ? [] : ['TWILIO_SMS_FROM (or --from)'])];
 if (missing.length) refuse(`set ${missing.join(', ')}`);
 
@@ -88,6 +88,8 @@ await step('Jev classify', () =>
   }),
 );
 
-await step(`Google geocode "${address}"`, () => createGooglePlaces({ apiKey: env('GOOGLE_MAPS_API_KEY')! }).geocode(address));
+await step(`Nominatim geocode "${address}"`, () =>
+  createNominatimGeocoder({ baseUrl: env('NOMINATIM_URL') ?? PUBLIC_NOMINATIM_URL, userAgent: `myEST8 smoke test (${env('PUBLIC_URL') ?? 'no public address'})` }).geocode(address),
+);
 
 process.exit(failed ? 1 : 0);

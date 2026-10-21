@@ -61,6 +61,17 @@ export function valueOf(values: Values | undefined, name: string): string {
   return Array.isArray(value) ? (value[0] ?? '') : (value ?? '');
 }
 
+/** A pin posted with a Property, when both lat and lng are numbers. Missing or not a number is left for geocoding. */
+export function postedLocation(form: FormValues): { lat: number; lng: number } | undefined {
+  const latText = text(form, 'lat');
+  const lngText = text(form, 'lng');
+  if (!latText || !lngText) return undefined;
+  const lat = Number(latText);
+  const lng = Number(lngText);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return undefined;
+  return { lat, lng };
+}
+
 /** The channel a form names in its "type" field, or a refusal. */
 export function channelOf(form: FormValues) {
   const type = text(form, 'type');
@@ -199,6 +210,29 @@ export function channelGuide(type: 'sms' | 'email', _origin: string, o: { open?:
 /** Fields in two columns from 768px up, one column on phones. */
 export function fieldGrid(fields: Html): Html {
   return html`<div class="grid gap-x-4 gap-y-3 md:grid-cols-2">${fields}</div>`;
+}
+
+/**
+ * A Property's Address and Suburb. `data-address-suggest` lets app.js offer addresses
+ * as the Address is typed and fill Suburb plus the hidden lat and lng. Without
+ * JavaScript those stay empty and the address is geocoded on save.
+ */
+export function propertyPlaceFields(o: { values?: Values; errors?: Errors } = {}): Html {
+  return html`
+    ${field({
+      label: 'Address',
+      name: 'address',
+      id: 'property-address',
+      required: true,
+      placeholder: '12 King St, Newtown NSW 2042',
+      suggest: true,
+      value: valueOf(o.values, 'address'),
+      error: o.errors?.address,
+    })}
+    ${field({ label: 'Suburb', name: 'suburb', id: 'property-suburb', required: true, value: valueOf(o.values, 'suburb'), error: o.errors?.suburb })}
+    <input type="hidden" name="lat" value="${valueOf(o.values, 'lat')}" />
+    <input type="hidden" name="lng" value="${valueOf(o.values, 'lng')}" />
+  `;
 }
 
 /**

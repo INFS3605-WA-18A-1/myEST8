@@ -14,6 +14,8 @@ import { createJevClassifier } from '../adapters/jev.ts';
 import { createJevTradeSuggester } from '../adapters/jev-trades.ts';
 import { messengersFromEnv } from '../adapters/messenger.ts';
 import { metaFetchMedia } from '../adapters/meta-whatsapp.ts';
+import { createNominatimGeocoder, PUBLIC_NOMINATIM_URL } from '../adapters/nominatim.ts';
+import { createPhotonAddressSuggester, PUBLIC_PHOTON_URL } from '../adapters/photon.ts';
 import { createQuoteReader } from '../adapters/quote-reader.ts';
 import { createSupabaseStorage } from '../adapters/supabase-storage.ts';
 import { resendInboundConfig } from '../adapters/resend.ts';
@@ -41,7 +43,7 @@ const MOCK = 'http://mock.local';
 export type Env = Record<string, string | undefined>;
 
 /** Which external APIs are real (set by env vars) and which are the in-process mocks. */
-export type ApiChoice = Record<'classifier' | 'imageMatcher' | 'quoteReader' | 'places' | 'messenger', 'mock' | 'real'>;
+export type ApiChoice = Record<'classifier' | 'imageMatcher' | 'quoteReader' | 'places' | 'geocoder' | 'addressSuggester' | 'messenger', 'mock' | 'real'>;
 
 /** One thing the hosted app needs: the settings it reads, and which are unset. `required` ones stop a hosted start. */
 export type HostedProvider = { provider: string; required: boolean; missing: string[] };
@@ -52,7 +54,9 @@ export type HostedProvider = { provider: string; required: boolean; missing: str
  * quote reader), a made-up value (the `mail.example.test` inbound domain), or a
  * feature left off (file storage in the database, Resend inbound, signed file
  * links, the cron route). The photo matcher and quote reader are listed but not
- * required: they only have a mock until their services exist.
+ * required: they only have a mock until their services exist. The geocoder and address
+ * suggestions are listed with nothing to miss: Nominatim and Photon need no key
+ * and default to their public servers.
  */
 function hostedProviders(env: Env): HostedProvider[] {
   const set = (name: string) => !!env[name]?.trim();
@@ -61,6 +65,8 @@ function hostedProviders(env: Env): HostedProvider[] {
     // Claude, or Jev when JEV_API_URL is set, is the real classifier. Only a missing pair of both is a mock.
     { provider: 'classifier', required: true, missing: set('ANTHROPIC_API_KEY') || set('JEV_API_URL') ? [] : ['ANTHROPIC_API_KEY'] },
     { provider: 'places', required: true, missing: unset('GOOGLE_MAPS_API_KEY') },
+    { provider: 'geocoder', required: false, missing: [] },
+    { provider: 'address suggestions', required: false, missing: [] },
     { provider: 'file storage', required: true, missing: unset('SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY') },
     { provider: 'email', required: true, missing: unset('RESEND_API_KEY') },
     { provider: 'inbound email', required: true, missing: unset('RESEND_WEBHOOK_SECRET', 'RESEND_INBOUND_DOMAIN') },
@@ -204,6 +210,12 @@ export async function createDemo<Seeded extends boolean = true>(
      * is undeliverable instead of landing in the phone simulator.
      */
     hosted?: boolean;
+    /**
+     * Runs for real use: hosted, or `npm start` (src/main.ts). Geocoding goes to the
+     * public Nominatim, and address suggestions to the public Photon, unless their
+     * URLs say otherwise, never to the mock.
+     */
+    live?: boolean;
     /** Where the hosted start-up report (which providers are real, which mocked) goes. Defaults to console.log. */
     log?: (line: string) => void;
   } = {},
@@ -235,14 +247,18 @@ export async function createDemo<Seeded extends boolean = true>(
   const jev = pick(env.JEV_API_URL, `${MOCK}/jev`);
   const vision = pick(env.VISION_API_URL, `${MOCK}/vision`);
   const quotes = pick(env.QUOTES_API_URL, `${MOCK}/quotes`);
-  const google = env.GOOGLE_MAPS_API_KEY
-    ? { apiKey: env.GOOGLE_MAPS_API_KEY, fetch }
-    : { apiKey: 'demo', fetch: mockFetch, placesBaseUrl: `${MOCK}/google/places`, geocodeBaseUrl: `${MOCK}/google` }; // the adapter adds /maps/api/geocode/json
+  const nominatimUrl = env.NOMINATIM_URL?.trim() || (hosted || options.live ? PUBLIC_NOMINATIM_URL : undefined);
+  const nominatim = pick(nominatimUrl, `${MOCK}/nominatim`);
+  const photonUrl = env.PHOTON_URL?.trim() || (hosted || options.live ? PUBLIC_PHOTON_URL : undefined);
+  const photon = pick(photonUrl, `${MOCK}/photon`);
+  const google = env.GOOGLE_MAPS_API_KEY ? { apiKey: env.GOOGLE_MAPS_API_KEY, fetch } : { apiKey: 'demo', fetch: mockFetch, placesBaseUrl: `${MOCK}/google/places` };
   const apis: ApiChoice = {
     classifier: anthropicKey || env.JEV_API_URL ? 'real' : 'mock',
     imageMatcher: env.VISION_API_URL ? 'real' : 'mock',
     quoteReader: env.QUOTES_API_URL ? 'real' : 'mock',
     places: env.GOOGLE_MAPS_API_KEY ? 'real' : 'mock',
+    geocoder: nominatimUrl ? 'real' : 'mock',
+    addressSuggester: photonUrl ? 'real' : 'mock',
     messenger: env.TWILIO_ACCOUNT_SID || env.SENDGRID_API_KEY || env.RESEND_API_KEY || env.GOOGLE_CLIENT_ID || env.META_WHATSAPP_PHONE_NUMBER_ID ? 'real' : 'mock',
   };
 
@@ -293,6 +309,9 @@ export async function createDemo<Seeded extends boolean = true>(
     imageMatcher: createImageMatcher({ ...vision, apiKey: env.VISION_API_KEY ?? 'demo' }),
     quoteReader: createQuoteReader({ ...quotes, apiKey: env.QUOTES_API_KEY ?? 'demo', clock, timeZone }),
     places: createGooglePlaces(google),
+    // The mock needs no pacing, but a real Nominatim gets at most a request a second.
+    geocoder: createNominatimGeocoder({ ...nominatim, userAgent: `myEST8 (${baseUrl})`, ...(nominatimUrl ? {} : { wait: async () => {} }) }),
+    addressSuggester: createPhotonAddressSuggester({ ...photon, userAgent: `myEST8 (${baseUrl})` }),
     tradeSuggester: createJevTradeSuggester({ ...jev, apiKey: env.JEV_API_KEY ?? 'demo' }),
     fetchMedia: mediaFetcher(env, smsNumbers),
     settings: { baseUrl },

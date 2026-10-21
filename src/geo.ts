@@ -4,6 +4,18 @@
 export type Point = { lat: number; lng: number };
 
 /**
+ * Mainland Australia and Tasmania, with a little room: about 10°S–44°S and
+ * 112°E–154°E. A posted pin outside this is not a Property's location, and the
+ * address is geocoded instead. External territories sit outside the box.
+ */
+export const AUSTRALIA_BBOX = { minLat: -44, maxLat: -10, minLng: 112, maxLng: 154 };
+
+/** Whether a point sits inside `AUSTRALIA_BBOX`. */
+export function inAustralia(point: Point): boolean {
+  return point.lat >= AUSTRALIA_BBOX.minLat && point.lat <= AUSTRALIA_BBOX.maxLat && point.lng >= AUSTRALIA_BBOX.minLng && point.lng <= AUSTRALIA_BBOX.maxLng;
+}
+
+/**
  * How far from a Property the Dispatch map looks for Tradies, in km: the ring
  * drawn around a selected Property and the cut-off for its list of nearest
  * Tradies. The Agency will be able to change it in Settings; until that is
