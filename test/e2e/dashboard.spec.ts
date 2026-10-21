@@ -115,8 +115,11 @@ test('a visit time keeps a column wide enough for 12:30 pm', async ({ browser })
     const time = week.locator('.visit-time').first();
     await expect(time).toBeVisible();
     const measured = await time.evaluate((el) => {
-      const probe = document.createElement('span');
-      const style = getComputedStyle(el);
+      const doc = el.ownerDocument;
+      const view = doc.defaultView;
+      if (!view) throw new Error('No window');
+      const probe = doc.createElement('span');
+      const style = view.getComputedStyle(el);
       probe.textContent = '12:30 pm';
       probe.style.font = style.font;
       probe.style.fontWeight = style.fontWeight;
@@ -124,7 +127,7 @@ test('a visit time keeps a column wide enough for 12:30 pm', async ({ browser })
       probe.style.position = 'absolute';
       probe.style.whiteSpace = 'nowrap';
       probe.style.visibility = 'hidden';
-      document.body.appendChild(probe);
+      doc.body.appendChild(probe);
       const needed = probe.getBoundingClientRect().width;
       probe.remove();
       return { column: el.getBoundingClientRect().width, needed };
