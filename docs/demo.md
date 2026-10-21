@@ -134,7 +134,7 @@ Open Tickets:
 
 Closed, with both ratings (so Tradie profiles have ratings and previous Quotes, recommendations differ, and Properties have frequent issues): Hana's blocked shower (Pete) and hallway light (Sam) at King St, Wei's leaking kitchen tap at Wilson St (Nina, rated 3), Priya's blocked toilet at Glebe Point Rd (Finn), Bella's oven door at Ocean Ave (Ally).
 
-Urgent Repairs: Noah's burst pipe at Llewellyn St, receipt uploaded and forwarded to Henry; Omar's hot water at Bronte Rd, waiting for a receipt.
+Urgent Repairs, each with its Reimbursement Request: Noah's burst pipe at Llewellyn St, receipt uploaded with $380 claimed and forwarded by Alice to Henry; Omar's hot water at Bronte Rd, waiting for a receipt.
 
 The inbox: a text from an unknown number (Ruby's new flatmate), Priya asking about rent (not maintenance), Maya's "any update?" (two Tickets open, so a low-confidence best guess), and Liam's broken intercom (a Common Area with no Building Manager on file). Bella's foyer light went to Barry, the Building Manager, so it's in Barry's thread in the simulator, not the inbox.
 
@@ -168,14 +168,16 @@ The mock classifier and quote reader read messages by keywords, much as the real
 
 ### 3. Done, ratings and closing (about 1 minute)
 
-1. **As Pete:** "All done, washer replaced". Tom is asked whether it was fixed properly.
-2. **As Tom:** "5". On the Ticket, Alice rates Pete as well.
-3. **Close the Ticket.** Tom and Olivia are told the repair is complete.
+1. **As Pete:** "All done, washer replaced". The visit hasn't started yet, so nothing changes: Pete is told when it is booked for, and the message waits unread on the Ticket. A visit is never done before it starts.
+2. **Time travel** past Pete's visit (+24h or +72h in the simulator, until the clock is past its start), then **as Pete** send "All done, washer replaced" again. Tom is asked whether it was fixed properly.
+3. **As Tom:** "5". On the Ticket, Alice rates Pete as well.
+4. **Close the Ticket.** Tom and Olivia are told the repair is complete.
 
 ### 4. An Urgent Repair (about 1 minute)
 
 1. **As Tom (SMS):** "There is a gas smell in the kitchen". This is Urgent, so it never becomes a Ticket: Tom is told to arrange the repair now, with King St's Nominated Tradies (Nina, Sam), and can claim up to $1,000 back. He gets a link for the receipt.
-2. **Open the receipt link** and upload a photo or PDF of a receipt. It is forwarded to Olivia, and the Urgent Repair shows on Alice's dashboard.
+2. **Open the receipt link** and upload a photo or PDF of a receipt, with the amount if you like. The Reimbursement Request waits for Alice: it is counted beside Approvals and listed there as Awaiting your review.
+3. **As Alice**, open it from Approvals (or the dashboard's Urgent Repairs), check the receipt and the amount, and **Forward to Property Owner**: Olivia gets the receipt by email with Alice copied in. Once Olivia has paid Tom back, **Mark reimbursed** and Tom is told.
 
 ### 5. A Common Area issue (about 1 minute)
 
@@ -239,7 +241,7 @@ Manual checklist with real providers:
 
 1. `npm run smoke:live -- --to <your mobile>`: the SMS arrives, Jev answers each question with an option and a confidence, the geocode is near 12 King St, Newtown.
 2. Demo with Twilio set and `DEMO_SEND_TO=<your mobile>`, and a Tenant added in Setup with your mobile: text the Agency's Twilio number from your phone, get the acknowledgement by SMS, reply, and see the reply land.
-3. Add a Property Owner with your mobile and no email, and a Tenant at their Property: report an Urgent Repair as the Tenant and upload a receipt photo. The Owner's SMS arrives as an MMS with the receipt; its `/media/...` link stops working after an hour. (Quote Requests only attach photos on email.)
+3. Add a Property Owner with your mobile and no email, and a Tenant at their Property: report an Urgent Repair as the Tenant, upload a receipt photo and forward it from its Reimbursement Request. The Owner's SMS arrives as an MMS with the receipt; its `/media/...` link stops working after an hour. (Quote Requests only attach photos on email.)
 4. With SendGrid set, a Tradie on email gets the Quote Request with the photos attached; replying lands in the Ticket through Inbound Parse.
 
 ## Running it for real on a home server

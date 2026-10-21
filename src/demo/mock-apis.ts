@@ -4,27 +4,78 @@
 
 import { Hono, type Context } from 'hono';
 import { wallClock, zonedInstant } from '../zoned-time.ts';
+import type { Summariser } from '../ports.ts';
 import { mockClassify } from './mock-classifier.ts';
+import { isTrade, mockTradeAnswers } from './mock-trades.ts';
+
+/** A Google listing the demo's mock Places API knows. A listing may lack a phone, website or summary, as real ones do. */
+interface DemoListing {
+  placeId: string;
+  name: string;
+  address: string;
+  rating: number;
+  reviewCount: number;
+  phone?: string;
+  website?: string;
+  /** Google's place types. */
+  types: string[];
+  /** Google's name for the main type. */
+  primaryType: string;
+  summary?: string;
+}
+
+const PLUMBER = { types: ['plumber', 'point_of_interest', 'establishment'], primaryType: 'Plumber' };
+const ELECTRICIAN = { types: ['electrician', 'point_of_interest', 'establishment'], primaryType: 'Electrician' };
+const CONTRACTOR = { types: ['general_contractor', 'point_of_interest', 'establishment'], primaryType: 'General contractor' };
+const APPLIANCES = { types: ['home_appliance_repair_service', 'point_of_interest', 'establishment'], primaryType: 'Appliance repair service' };
 
 /** Google listings the demo's mock Places API knows. Demo Tradies link to these. */
-export const DEMO_PLACES = [
-  { placeId: 'demo-petes-plumbing', name: "Pete's Plumbing", address: '4 Illawarra Rd, Marrickville NSW 2204', rating: 4.8, reviewCount: 120 },
-  { placeId: 'demo-quick-pipes', name: 'Quick Pipes', address: '88 Regent St, Redfern NSW 2016', rating: 4.2, reviewCount: 40 },
-  { placeId: 'demo-flow-bros', name: 'Flow Bros Plumbing', address: '17 Crystal St, Petersham NSW 2049', rating: 4.9, reviewCount: 15 },
-  { placeId: 'demo-ninas-plumbing', name: "Nina's Plumbing", address: '210 Enmore Rd, Enmore NSW 2042', rating: 4.2, reviewCount: 33 },
-  { placeId: 'demo-sparky-sam', name: 'Sparky Sam Electrical', address: '12 Glebe Point Rd, Glebe NSW 2037', rating: 4.5, reviewCount: 60 },
-  { placeId: 'demo-fixit-carpentry', name: 'FixIt Carpentry', address: '3 Parramatta Rd, Annandale NSW 2038', rating: 4.6, reviewCount: 48 },
-  { placeId: 'demo-cool-appliances', name: 'Cool Appliance Repairs', address: '55 Victoria Rd, Rozelle NSW 2039', rating: 4.3, reviewCount: 72 },
-  { placeId: 'demo-ellis-electrical', name: 'Ellis Electrical', address: '41 Addison Rd, Marrickville NSW 2204', rating: 4.7, reviewCount: 89 },
-  { placeId: 'demo-ridgeline-roofing', name: 'Ridgeline Roofing', address: '9 Botany Rd, Alexandria NSW 2015', rating: 4.4, reviewCount: 27 },
-  { placeId: 'demo-appliance-rescue', name: 'Appliance Rescue', address: '160 Oxford St, Bondi Junction NSW 2022', rating: 3.9, reviewCount: 210 },
-  { placeId: 'demo-handy-harry', name: "Handy Harry's", address: '22 Booth St, Annandale NSW 2038', rating: 4.8, reviewCount: 64 },
-  { placeId: 'demo-bugs-away', name: 'Bugs Away Pest Control', address: '5 Princes Hwy, St Peters NSW 2044', rating: 4.1, reviewCount: 132 },
-] as const;
+export const DEMO_PLACES: readonly DemoListing[] = [
+  {
+    placeId: 'demo-petes-plumbing', name: "Pete's Plumbing", address: '4 Illawarra Rd, Marrickville NSW 2204', rating: 4.8, reviewCount: 120,
+    phone: '+61 412 555 018', website: 'https://petes-plumbing.example', ...PLUMBER, summary: 'Local plumbers for blocked drains, leaks and hot water systems.',
+  },
+  { placeId: 'demo-quick-pipes', name: 'Quick Pipes', address: '88 Regent St, Redfern NSW 2016', rating: 4.2, reviewCount: 40, phone: '+61 2 9319 0044', ...PLUMBER },
+  {
+    placeId: 'demo-flow-bros', name: 'Flow Bros Plumbing', address: '17 Crystal St, Petersham NSW 2049', rating: 4.9, reviewCount: 15,
+    phone: '+61 423 555 071', website: 'https://flowbros.example', ...PLUMBER,
+  },
+  {
+    placeId: 'demo-ninas-plumbing', name: "Nina's Plumbing", address: '210 Enmore Rd, Enmore NSW 2042', rating: 4.2, reviewCount: 33,
+    phone: '+61 2 9557 0120', ...PLUMBER, summary: 'Plumbing and gas fitting for homes and rentals.',
+  },
+  {
+    placeId: 'demo-sparky-sam', name: 'Sparky Sam Electrical', address: '12 Glebe Point Rd, Glebe NSW 2037', rating: 4.5, reviewCount: 60,
+    phone: '+61 2 9660 0188', website: 'https://sparkysam.example', ...ELECTRICIAN, summary: 'Electricians for power points, switchboards and safety switches.',
+  },
+  {
+    placeId: 'demo-fixit-carpentry', name: 'FixIt Carpentry', address: '3 Parramatta Rd, Annandale NSW 2038', rating: 4.6, reviewCount: 48,
+    phone: '+61 2 9550 0173', ...CONTRACTOR, summary: 'Carpenters for doors, decks and cabinets.',
+  },
+  {
+    placeId: 'demo-cool-appliances', name: 'Cool Appliance Repairs', address: '55 Victoria Rd, Rozelle NSW 2039', rating: 4.3, reviewCount: 72,
+    phone: '+61 2 9818 0166', website: 'https://coolappliances.example', ...APPLIANCES, summary: 'Appliance repairs, plus electrical work for ovens and air conditioners.',
+  },
+  {
+    placeId: 'demo-ellis-electrical', name: 'Ellis Electrical', address: '41 Addison Rd, Marrickville NSW 2204', rating: 4.7, reviewCount: 89,
+    phone: '+61 431 555 092', website: 'https://ellis-electrical.example', ...ELECTRICIAN,
+  },
+  {
+    placeId: 'demo-ridgeline-roofing', name: 'Ridgeline Roofing', address: '9 Botany Rd, Alexandria NSW 2015', rating: 4.4, reviewCount: 27,
+    phone: '+61 2 9319 0155', types: ['roofing_contractor', 'point_of_interest', 'establishment'], primaryType: 'Roofing contractor', summary: 'Roof repairs, re-roofing and gutters.',
+  },
+  { placeId: 'demo-appliance-rescue', name: 'Appliance Rescue', address: '160 Oxford St, Bondi Junction NSW 2022', rating: 3.9, reviewCount: 210, phone: '+61 2 9387 0129', ...APPLIANCES },
+  // No phone, website or summary: the form has to be completed by hand.
+  { placeId: 'demo-handy-harry', name: "Handy Harry's", address: '22 Booth St, Annandale NSW 2038', rating: 4.8, reviewCount: 64, ...CONTRACTOR },
+  {
+    placeId: 'demo-bugs-away', name: 'Bugs Away Pest Control', address: '5 Princes Hwy, St Peters NSW 2044', rating: 4.1, reviewCount: 132,
+    phone: '+61 2 9519 0148', types: ['pest_control_service', 'point_of_interest', 'establishment'], primaryType: 'Pest control service',
+  },
+];
 
 /**
  * Dummy versions of every external API the app calls, at these paths:
- * /jev/v1/classify, /vision/v1/image-match, /quotes/v1/quote-read (also /quotes/v1/read),
+ * /jev/v1/classify, /jev/v1/systemone (Trades for a Google listing), /vision/v1/image-match, /quotes/v1/quote-read (also /quotes/v1/read),
  * /google/places/v1/places:searchText, /google/places/v1/places/:id,
  * /google/maps/api/geocode/json (also /google/maps/maps/api/geocode/json).
  * Wire the real adapters to it with `mockFetch()` and baseUrls under http://mock.local.
@@ -33,6 +84,21 @@ export function mockApis() {
   const app = new Hono();
 
   app.post('/jev/v1/classify', async (c) => c.json(mockClassify(await jsonBody(c))));
+
+  // The Noul questions about a Trade that a Google listing is asked. The classifier's choice questions
+  // are served at /jev/v1/classify.
+  app.post('/jev/v1/systemone', async (c) => {
+    const body = await jsonBody(c);
+    const questions = isObject(body) ? body.questions : null;
+    // TypeSafe's validation error for a request it can't answer.
+    const refused = (problem: string) => c.json({ detail: [{ loc: ['body'], msg: problem, type: 'value_error' }] }, 422);
+    if (!isObject(body) || !isObject(body.state)) return refused('state is required');
+    if (!isObject(questions) || Object.keys(questions).length === 0) return refused('questions is required');
+    if (!Object.entries(questions).every(([name, q]) => isTrade(name) && isObject(q) && q.type === 'noul')) {
+      return refused('the demo only answers noul questions named for a Trade');
+    }
+    return c.json(mockTradeAnswers(body.state, questions));
+  });
 
   app.post('/vision/v1/image-match', async (c) => {
     const body = await jsonBody(c);
@@ -169,8 +235,6 @@ function readQuote(text: string, now: Date, timeZone: string) {
 
 // --- Google Places and Geocoding ---
 
-type DemoPlace = (typeof DEMO_PLACES)[number];
-
 /** Lowercase words and numbers, apostrophes and punctuation dropped. */
 const searchable = (text: string) => text.toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9/]+/g, ' ').trim();
 
@@ -184,14 +248,26 @@ function searchPlaces(textQuery: string) {
   });
 }
 
-function googlePlace(p: DemoPlace): Record<string, unknown> {
+function googlePlace(p: DemoListing): Record<string, unknown> {
   return {
     id: p.placeId,
     displayName: { text: p.name, languageCode: 'en' },
     formattedAddress: p.address,
+    // Google writes the same number both ways; the demo's national form drops the country code.
+    ...(p.phone ? { internationalPhoneNumber: p.phone, nationalPhoneNumber: nationalNumber(p.phone) } : {}),
+    ...(p.website ? { websiteUri: p.website } : {}),
+    types: p.types,
+    primaryTypeDisplayName: { text: p.primaryType, languageCode: 'en' },
+    ...(p.summary ? { editorialSummary: { text: p.summary, languageCode: 'en' } } : {}),
     rating: p.rating,
     userRatingCount: p.reviewCount,
   };
+}
+
+/** "+61 2 9319 0044" as "(02) 9319 0044" and "+61 412 555 018" as "0412 555 018". */
+function nationalNumber(international: string) {
+  const [, area, ...rest] = international.split(' ');
+  return area!.length === 1 ? `(0${area}) ${rest.join(' ')}` : `0${area} ${rest.join(' ')}`;
 }
 
 function fieldMask(c: Context) {
@@ -272,3 +348,13 @@ function geocodeResponse(address: string) {
     status: 'OK',
   };
 }
+
+/** The demo's Summariser: the description's first sentence trimmed to 120 characters, then the location when known. Deterministic. */
+export const mockSummariser: Summariser = {
+  async summarise({ description, answers }) {
+    const first = (description.trim().split(/(?<=[.!?])\s+|\n/)[0] ?? '').replace(/\s+/g, ' ').replace(/[.!?]+$/, '').trim();
+    const head = first.length > 120 ? `${first.slice(0, 119).trimEnd()}…` : first;
+    const location = answers.location?.trim();
+    return { summary: location ? `${head} (${location.slice(0, 30)})` : head };
+  },
+};

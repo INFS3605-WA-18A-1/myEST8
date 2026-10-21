@@ -72,7 +72,7 @@
 
 **Tenant flow:**
 1. Message the agency on the channel they already use: email, SMS or WhatsApp.
-2. If the issue is urgent, receive a reminder that tenants arrange urgent repairs themselves, using the property's nominated tradies where possible, and can claim up to $1,000 back from the property owner. Send the receipt to the agency, which forwards it to the owner. The flow ends here for urgent repairs.
+2. If the issue is urgent, receive a reminder that tenants arrange urgent repairs themselves, using the property's nominated tradies where possible, and can claim up to $1,000 back from the property owner. Send the receipt (a photo or PDF) to the agency; the property manager checks it and forwards it to the owner. The flow ends here for urgent repairs.
 3. Otherwise, answer a few guided questions from the agent and upload photos through the link it sends.
 4. Receive a confirmation when the property manager confirms the issue as a ticket, or the reason if it's rejected.
 5. Follow progress through status updates and the progress tracker.
@@ -99,7 +99,7 @@
 1. Receive an approval request when a ticket's repair cost would go over the property's max repair cost. It shows the full repair cost.
 2. Reply YES or NO. A reminder follows after 24 hours.
 3. Receive updates as the work goes ahead.
-4. For urgent repairs the tenant arranged, receive the tenant's receipt, forwarded with the property manager copied in, and reimburse the tenant up to $1,000.
+4. For urgent repairs the tenant arranged, receive the tenant's receipt once the property manager has checked and forwarded it (copied in), and reimburse the tenant up to $1,000.
 
 ## 4. Prioritised feature list
 
@@ -161,7 +161,7 @@ The MVP is a web app that also works in mobile browsers, built over 4 weeks.
     - **Common area issue:** forwarded to the building manager, and the tenant is told it has been passed on.
     - **Other:** goes to the property manager's inbox untouched.
 2. **Verification:** the agent asks a few guided questions and sends an upload link by SMS or WhatsApp. Each photo gets two automatic checks: its metadata, which is flagged only if it contradicts the report (taken before the tenancy began or well before the report, or far from the property; missing metadata doesn't count against it), and whether the image matches the description. The issue is then a maintenance request. A property manager confirms it, which creates the ticket, or rejects it, and the tenant is told why.
-3. **Urgency:** each issue is ranked Urgent, High or Routine. Anything threatening safety, the structure, security or an essential service (e.g. gas leak, flooding, dangerous electrical fault, no hot water) is Urgent: the agent reminds the tenant that they arrange urgent repairs themselves, using the property's nominated tradies where possible, and can claim up to $1,000 back from the property owner. When the tenant sends the receipt, it's forwarded to the owner with the property manager copied in as a third party. Damage that will worsen if left (e.g. a slow leak) is High; everything else is Routine. Tickets are sorted by urgency, then by submission time.
+3. **Urgency:** each issue is ranked Urgent, High or Routine. Anything threatening safety, the structure, security or an essential service (e.g. gas leak, flooding, dangerous electrical fault, no hot water) is Urgent: the agent reminds the tenant that they arrange urgent repairs themselves, using the property's nominated tradies where possible, and can claim up to $1,000 back from the property owner. When the tenant sends the receipt, it becomes a Reimbursement Request: the property manager checks it and forwards it to the owner (copied in as a third party), then marks it reimbursed once the owner has paid. Damage that will worsen if left (e.g. a slow leak) is High; everything else is Routine. Tickets are sorted by urgency, then by submission time.
 4. **Trades:** the trade for the ticket's first job is proposed automatically from a fixed list (plumbing, electrical, carpentry, roofing, appliances, locksmith, pest control, general handyman). The property manager can change it and add more jobs.
 5. **Tradie recommendation:** for each job, recommend tradies with that trade, ranked by their myEST8 rating, Google rating and previous quotes. The two ratings are shown side by side, not combined. A tradie who isn't on Google keeps the starting rating the property manager gave them.
 6. **Quotes:** the property manager sends quote requests to 3–4 recommended tradies. The agent reads the price and proposed time from each reply, and the property manager confirms them. Tradies who don't reply get a reminder after 48 hours; after 72 hours the property manager is prompted to invite more. At least 2 quotes are needed before a work order, unless the property manager records a reason for going ahead with one.
@@ -179,8 +179,9 @@ The MVP is a web app that also works in mobile browsers, built over 4 weeks.
 | Canva | Quick visuals and presentation slides | Limited for interactive wireframes | _TBC_ |
 | Twilio | SMS, WhatsApp and (through SendGrid) inbound email from one provider | The WhatsApp sandbox only allows 3 preset templates for messages we send first; real WhatsApp numbers need Meta verification | _TBC_ |
 | Jev (TypeSafe AI) | Fast, typed classification decisions: message type, urgency, trade | Text and JSON input only, can't write replies, limited early access | _TBC_ |
+| Claude Haiku (Anthropic) | Composes outbound emails and messages, and each request's one-line Summary, from the ticket's facts | Can invent details unless it's constrained to given facts; a cost per call | _TBC_ |
 
-**Preferred:** One web app that works in mobile browsers, built with GitHub and VS Code, using Twilio for the messaging channels and Jev for classification. Figma is used only for process wireframes (TBD).  
+**Preferred:** One web app that works in mobile browsers, built with GitHub and VS Code, using Twilio for the messaging channels, Jev for classification and Claude Haiku for composing messages. Figma is used only for process wireframes (TBD).  
 **Reason:** Twilio covers all three channels with one integration. Jev returns typed decisions quickly and cheaply, which suits sorting every incoming message. A single app with internal modules keeps a 4-week build manageable for a team of 5.
 
 ## Peer check

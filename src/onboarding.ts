@@ -77,10 +77,18 @@ export function createOnboarding({ ports, modules }: Context) {
      * Stores an address the caller has already proved (the demo seed, Gmail
      * OAuth, or confirmChannelVerification). A number typed into the channels
      * form goes through startChannelVerification and is not stored here.
+     * `verified` marks the address as proved, for one myEST8 itself holds (an SMS number it bought, or one
+     * from the Agency's own Twilio account), so no code is needed.
      */
-    async connectChannel(agencyId: number, channelType: ChannelType, address: string) {
+    async connectChannel(agencyId: number, channelType: ChannelType, address: string, o: { verified?: boolean } = {}) {
       if (!CHANNEL_TYPES.includes(channelType)) invalid(`Unknown channel ${channelType}`);
       await profiles.connectChannel(agencyId, channelType, address);
+      if (o.verified) await profiles.markChannelTested(agencyId, channelType);
+    },
+
+    /** Forgets the Agency's channel of this type, if it is still `address`. */
+    async disconnectChannel(agencyId: number, channelType: ChannelType, address: string) {
+      await profiles.disconnectChannel(agencyId, channelType, address);
     },
 
     async sendTestMessage(agencyId: number, channelType: ChannelType, to: string) {
@@ -103,8 +111,36 @@ export function createOnboarding({ ports, modules }: Context) {
       return profiles.addPerson(agencyId, { role: 'tenant', ...input });
     },
 
+    /**
+     * Takes a Tenant off their Property (Profiles' endTenancy). Refuses while they have an
+     * open Ticket or a Maintenance Request waiting, whose messages still need to reach them.
+     */
+    async removeTenant(agencyId: number, tenantId: number) {
+      const tenant = await profiles.personInAgency(agencyId, tenantId, 'tenant');
+      if (tenant.propertyId === null) invalid(`${tenant.name} has already left their Property`);
+      const [open, waiting] = await Promise.all([modules.tickets.openTickets(agencyId, null), modules.tickets.maintenanceRequests(agencyId, null)]);
+      if (open.some((t) => t.tenantId === tenantId)) invalid(`Close ${tenant.name}'s open Tickets before removing them`);
+      if (waiting.some((i) => i.tenantId === tenantId)) invalid(`Confirm or reject ${tenant.name}'s waiting Maintenance Requests before removing them`);
+      await profiles.endTenancy(tenantId);
+      return tenant.name;
+    },
+
     findGoogleListings(query: string) {
       return ports.places.findListings(query);
+    },
+
+    /**
+     * A Google listing's details with the Trades Jev suggests for it. If suggesting fails
+     * the details still come back, with no Trades and `tradesSuggested: false`, so the
+     * form says to choose them: it never stops a Tradie being added.
+     */
+    async googleListing(placeId: string) {
+      const listing = await ports.places.listingDetails(placeId);
+      try {
+        return { ...listing, suggestedTrades: await ports.tradeSuggester.suggestTrades(listing), tradesSuggested: true };
+      } catch {
+        return { ...listing, suggestedTrades: [] as Trade[], tradesSuggested: false };
+      }
     },
 
     /** Adds a Tradie linked to their Google listing, or marked as not on Google. */

@@ -1,7 +1,11 @@
 import type { Context } from './context.ts';
-import { MIN_QUOTES } from './quotes.ts';
-import { addMs, HOUR_MS, iso, URGENCIES } from './shared.ts';
-import type { Issue, Job, JobStatus, Ticket } from './tickets.ts';
+import { URGENT_REPAIR_LIMIT_CENTS } from './intake.ts';
+import { MIN_QUOTE_REQUESTS, MIN_QUOTES } from './quotes.ts';
+import { addMs, HOUR_MS, iso, URGENCIES, type Trade, type Urgency } from './shared.ts';
+import type { Issue, Job, JobStatus, Ticket, UrgentRepairStatus } from './tickets.ts';
+
+/** Reimbursement Requests in the order Approvals lists them: the ones to check first, then those waiting on the Tenant, then on the Property Owner. */
+const REIMBURSEMENT_ORDER: UrgentRepairStatus[] = ['receipt_received', 'reminder_sent', 'receipt_forwarded', 'reimbursed'];
 
 /** What the Property Manager's screens show, composed from each module's queries. */
 /** How far ahead the dashboard's calendar looks. */
@@ -13,14 +17,23 @@ export type Stage = Exclude<JobStatus, 'cancelled'>;
 /** The lanes in workflow order. */
 export const STAGES: Stage[] = ['quoting', 'awaiting_owner', 'approved', 'scheduled', 'done'];
 
-/** Across a Ticket's Jobs being quoted: Quote Requests not declined, Quotes in, and Quotes the Property Manager confirmed. */
-export type Quoting = { asked: number; received: number; confirmed: number };
+/**
+ * Across a Ticket's Jobs being quoted: Quote Requests not declined (`asked`), Estimates in
+ * (`received`) and confirmed (`confirmed`), Quotes of either stage still to check
+ * (`toCheck`), Firm Quotes ready to choose from (`firm`), and Tradies who need a Site
+ * Inspection that isn't booked yet (`toInspect`).
+ */
+export type Quoting = { asked: number; received: number; confirmed: number; toCheck: number; firm: number; toInspect: number };
 
 /**
- * What a Ticket being quoted needs from the Property Manager: Quotes in but not yet
- * confirmed are to check; once a Job has MIN_QUOTES confirmed Quotes one can be chosen.
+ * What a Ticket being quoted needs from the Property Manager: Quotes read from a reply but
+ * not yet confirmed are to check; then Site Inspections a Tradie asked for are to book; once
+ * a Job has MIN_QUOTES Firm Quotes one can be chosen. Estimates never make a Job ready to
+ * choose: the Property Manager may still proceed on one for a routine Job.
  */
-export type QuotingDecision = 'check_quotes' | 'choose_quote';
+export type QuotingDecision = 'check_quotes' | 'book_inspection' | 'choose_quote';
+
+const NO_QUOTING: Quoting = { asked: 0, received: 0, confirmed: 0, toCheck: 0, firm: 0, toInspect: 0 };
 
 /**
  * The lane of a Ticket: its least advanced open Job (quoting < awaiting_owner <
@@ -33,12 +46,19 @@ export function stageOf(jobs: { status: JobStatus }[]): Stage {
   return jobs.length ? 'done' : 'quoting';
 }
 
-/** Unconfirmed Quotes come first: they are what stands between the Property Manager and choosing. */
+/** Quotes to check come first: they are what stands between the Property Manager and the rest. */
 export function quotingDecision(q: Quoting): QuotingDecision | null {
-  if (q.received > q.confirmed) return 'check_quotes';
-  if (q.confirmed >= MIN_QUOTES) return 'choose_quote';
+  if (q.toCheck > 0) return 'check_quotes';
+  if (q.toInspect > 0) return 'book_inspection';
+  if (q.firm >= MIN_QUOTES) return 'choose_quote';
   return null;
 }
+
+/**
+ * What a list of Maintenance Requests or Tickets is narrowed to: Mine or All, then
+ * optionally one Urgency, one Trade and one Property. A Property outside Mine shows nothing.
+ */
+export type ListOptions = { filter: 'mine' | 'all'; urgency?: Urgency; trade?: Trade; propertyId?: number };
 
 /** Caches an async lookup for one read, so Tickets on the same Property share it. */
 function cached<K, V>(lookup: (key: K) => Promise<V>) {
@@ -63,36 +83,62 @@ export function createViews({ clock, modules }: Context) {
     photos: (await tickets.photos(issue.id)).map(({ photoId, fileId, metadata, reasons }) => ({ photoId, fileId, metadata, reasons })),
     imageMatch: issue.imageMatch,
     noPhotos: issue.noPhotos,
+    tenantId: issue.tenantId,
     tenantName: (await profiles.person(issue.tenantId)).name,
   });
 
-  const ticketSummary = async (ticket: Ticket) => ({
-    ticketId: ticket.id,
-    ...(await propertyLabel(ticket.propertyId)),
-    tenantName: (await profiles.person(ticket.tenantId)).name,
-    description: (await tickets.issue(ticket.issueId)).description,
-    urgency: ticket.urgency,
-    checkUrgency: ticket.checkUrgency,
-    reportedAt: ticket.reportedAt,
-    jobs: (await tickets.jobsOf(ticket.id)).map((j) => ({ jobId: j.id, trade: j.trade, status: j.status })),
-    unreadMessages: await tickets.unreadCount(ticket.issueId),
-  });
+  /**
+   * Tickets as a list shows them, in the order given. Their jobs, issues (with unread
+   * counts) and photos are read in one query each for the whole list.
+   */
+  const ticketSummaries = async (list: Ticket[]) => {
+    const [jobs, issues, photos] = await Promise.all([
+      tickets.jobsOfTickets(list.map((t) => t.id)),
+      tickets.issuesWithUnread(list.map((t) => t.issueId)),
+      tickets.photosOfIssues(list.map((t) => t.issueId)),
+    ]);
+    return Promise.all(
+      list.map(async (ticket) => {
+        const issue = issues.get(ticket.issueId)!;
+        return {
+          ticketId: ticket.id,
+          propertyId: ticket.propertyId,
+          ...(await propertyLabel(ticket.propertyId)),
+          tenantName: (await profiles.person(ticket.tenantId)).name,
+          description: issue.description,
+          urgency: ticket.urgency,
+          checkUrgency: ticket.checkUrgency,
+          reportedAt: ticket.reportedAt,
+          jobs: jobs.filter((j) => j.ticketId === ticket.id).map((j) => ({ jobId: j.id, trade: j.trade, status: j.status })),
+          unreadMessages: issue.unreadMessages,
+          // The issue's photos, for a list's thumbnail (the first) and anything that counts them.
+          photos: photos.get(ticket.issueId) ?? [],
+        };
+      }),
+    );
+  };
 
-  const maintenanceRequestView = async (issue: Issue) => ({
-    issueId: issue.id,
-    propertyId: issue.propertyId,
-    ...(await propertyLabel(issue.propertyId)),
-    ...(await issueDetails(issue)),
-    urgency: issue.urgency,
-    checkUrgency: issue.checkUrgency,
-    trade: issue.trade,
-    checkTrade: issue.checkTrade,
-    reportedAt: issue.reportedAt,
-    unreadMessages: await tickets.unreadCount(issue.id),
-  });
-
-  const maintenanceRequestViews = async (agencyId: number, propertyIds: number[] | null) =>
-    Promise.all((await tickets.maintenanceRequests(agencyId, propertyIds)).map(maintenanceRequestView));
+  /** Maintenance Requests as a list shows them, in the order given, their unread counts read in one query. */
+  const maintenanceRequestViews = async (list: Issue[]) => {
+    const unread = await tickets.issuesWithUnread(list.map((i) => i.id));
+    return Promise.all(
+      list.map(async (issue) => ({
+        issueId: issue.id,
+        propertyId: issue.propertyId,
+        ...(await propertyLabel(issue.propertyId)),
+        ...(await issueDetails(issue)),
+        urgency: issue.urgency,
+        checkUrgency: issue.checkUrgency,
+        trade: issue.trade,
+        checkTrade: issue.checkTrade,
+        reportedAt: issue.reportedAt,
+        summary: issue.summary,
+        summaryBy: issue.summaryBy,
+        photosOnArrival: issue.photosOnArrival,
+        unreadMessages: unread.get(issue.id)!.unreadMessages,
+      })),
+    );
+  };
 
   /**
    * The open Tickets as the dashboard's board shows them: each Ticket's summary, its
@@ -107,7 +153,8 @@ export function createViews({ clock, modules }: Context) {
       tickets.issuesWithUnread(open.map((t) => t.issueId)),
       modules.scheduling.visitsOfTickets(ids),
     ]);
-    const quoting = await modules.quotes.quotingOf(jobs.filter((j) => j.status === 'quoting').map((j) => j.id));
+    const quotingJobIds = jobs.filter((j) => j.status === 'quoting').map((j) => j.id);
+    const quoting = await modules.quotes.quotingOf(quotingJobIds);
     const label = cached(propertyLabel);
     const person = cached(profiles.person);
     const jobsOf = new Map<number, Job[]>();
@@ -122,8 +169,17 @@ export function createViews({ clock, modules }: Context) {
           stage === 'quoting'
             ? inStage.reduce<Quoting>((sum, j) => {
                 const c = quoting.get(j.id);
-                return c ? { asked: sum.asked + c.asked, received: sum.received + c.received, confirmed: sum.confirmed + c.confirmed } : sum;
-              }, { asked: 0, received: 0, confirmed: 0 })
+                return c
+                  ? {
+                      asked: sum.asked + c.asked,
+                      received: sum.received + c.received,
+                      confirmed: sum.confirmed + c.confirmed,
+                      toCheck: sum.toCheck + c.toCheck,
+                      firm: sum.firm + c.firm,
+                      toInspect: sum.toInspect + c.toInspect,
+                    }
+                  : sum;
+              }, NO_QUOTING)
             : null;
         return {
           ticketId: ticket.id,
@@ -148,12 +204,19 @@ export function createViews({ clock, modules }: Context) {
   /** The Properties a list is limited to: the Property Manager's own, or all of the Agency's. */
   const scope = (propertyManagerId: number, filter: 'mine' | 'all') => (filter === 'mine' ? profiles.propertyIdsOf(propertyManagerId) : Promise.resolve(null));
 
+  /** `scope`, narrowed to the one Property a list is filtered to: none at all when it is not among them. */
+  const listScope = async (propertyManagerId: number, o: ListOptions) => {
+    const ids = await scope(propertyManagerId, o.filter);
+    if (o.propertyId === undefined) return ids;
+    return ids === null || ids.includes(o.propertyId) ? [o.propertyId] : [];
+  };
+
   return {
     async dashboard(agencyId: number, propertyManagerId: number, filter: 'mine' | 'all') {
       const now = clock.now();
       const propertyIds = filter === 'mine' ? await profiles.propertyIdsOf(propertyManagerId) : null;
       const [maintenanceRequests, openTickets, urgentRepairs, inbox, quoteAlerts, schedulingAlerts, calendar] = await Promise.all([
-        maintenanceRequestViews(agencyId, propertyIds),
+        tickets.maintenanceRequests(agencyId, propertyIds).then(maintenanceRequestViews),
         tickets.openTickets(agencyId, propertyIds),
         tickets.urgentRepairs(agencyId, propertyIds),
         intake.inbox(agencyId),
@@ -178,79 +241,127 @@ export function createViews({ clock, modules }: Context) {
       return { maintenanceRequests, tickets: boardTickets, urgentRepairs: repairs, inbox, alerts: [...quoteAlerts, ...schedulingAlerts], calendar };
     },
 
-    /** The Maintenance Requests waiting for a Property Manager to confirm, oldest first. */
-    async requests(agencyId: number, propertyManagerId: number, filter: 'mine' | 'all') {
-      return maintenanceRequestViews(agencyId, await scope(propertyManagerId, filter));
+    /**
+     * The Maintenance Requests waiting for a Property Manager to confirm, narrowed by `o`
+     * (Trade is the Trade it was classified as): Urgent, High, then Routine, oldest first within each.
+     */
+    async requests(agencyId: number, propertyManagerId: number, o: ListOptions) {
+      const rank = (u: string) => ['urgent', 'high', 'routine'].indexOf(u);
+      const waiting = (await tickets.maintenanceRequests(agencyId, await listScope(propertyManagerId, o))).filter(
+        (i) => (!o.urgency || i.urgency === o.urgency) && (!o.trade || i.trade === o.trade),
+      );
+      const views = await maintenanceRequestViews(waiting);
+      return views.sort((a, b) => rank(a.urgency) - rank(b.urgency) || a.reportedAt.localeCompare(b.reportedAt));
     },
 
     /** One Maintenance Request waiting for review anywhere in the Agency, or null when there is none with that number. */
     async request(agencyId: number, issueId: number) {
       const issue = (await tickets.maintenanceRequests(agencyId, null)).find((i) => i.id === issueId);
-      return issue ? maintenanceRequestView(issue) : null;
+      return issue ? (await maintenanceRequestViews([issue]))[0]! : null;
     },
 
     /**
-     * The rail's counts for a Property Manager's own Properties: Requests is the
-     * Maintenance Requests to confirm plus the Agency's inbox; Approvals is the Jobs
-     * ready for a Work Order plus the alerts (Quotes short, Property Owner silent, rating due).
+     * The rail's counts for a Property Manager's own Properties: Tickets is the new
+     * Maintenance Requests to confirm; Approvals is the Quotes waiting on a Property
+     * Owner and the Reimbursement Requests waiting for the Property Manager to check.
      */
     async navCounts(agencyId: number, propertyManagerId: number) {
       const propertyIds = await profiles.propertyIdsOf(propertyManagerId);
-      const [requests, inbox, waitingOnOwner] = await Promise.all([
+      // Tickets counts the new Maintenance Requests /tickets lists; inbox messages wait on the dashboard instead.
+      const [requests, waitingOnOwner, urgentRepairs] = await Promise.all([
         tickets.maintenanceRequests(agencyId, propertyIds),
-        intake.inbox(agencyId),
         modules.quotes.waitingOnOwner(agencyId, propertyIds),
+        tickets.urgentRepairs(agencyId, propertyIds),
       ]);
-      return { requests: requests.length + inbox.length, approvals: waitingOnOwner.length };
+      const toReview = urgentRepairs.filter((u) => u.status === 'receipt_received').length;
+      return { tickets: requests.length, approvals: waitingOnOwner.length + toReview };
     },
 
     /**
-     * Tickets of one status, Urgent before High before Routine and then oldest first,
-     * optionally of one Urgency. `counts` are for the same Properties: open and closed
-     * Tickets, and the open or closed ones (whichever `status` is) by Urgency.
+     * Tickets of one status, narrowed by `o` (a Ticket has a Trade when any of its Jobs
+     * does). Open ones come Urgent before High before Routine and then oldest first; closed
+     * ones (the Archive) the most recently closed first.
      */
-    async tickets(
-      agencyId: number,
-      propertyManagerId: number,
-      o: { filter: 'mine' | 'all'; status: 'open' | 'closed'; urgency: Ticket['urgency'] | null },
-    ) {
-      const every = await tickets.list(agencyId, await scope(propertyManagerId, o.filter));
-      const inStatus = every.filter((t) => t.status === o.status);
-      const countOf = (urgency: Ticket['urgency']) => inStatus.filter((t) => t.urgency === urgency).length;
+    async tickets(agencyId: number, propertyManagerId: number, o: ListOptions & { status: 'open' | 'closed' }) {
+      const inStatus = (await tickets.list(agencyId, await listScope(propertyManagerId, o))).filter(
+        (t) => t.status === o.status && (!o.urgency || t.urgency === o.urgency),
+      );
+      const withTrade = o.trade ? new Set((await tickets.jobsOfTickets(inStatus.map((t) => t.id))).filter((j) => j.trade === o.trade).map((j) => j.ticketId)) : null;
+      const shown = withTrade ? inStatus.filter((t) => withTrade.has(t.id)) : inStatus;
+      if (o.status === 'closed') shown.sort((a, b) => (b.closedAt ?? '').localeCompare(a.closedAt ?? '') || b.id - a.id);
+      return (await ticketSummaries(shown)).map((summary, i) => ({ ...summary, status: shown[i]!.status, closedAt: shown[i]!.closedAt }));
+    },
+
+    /**
+     * What is waiting on a Property Owner, or on a Tenant's Reimbursement Request:
+     * Quotes over the Max Repair Cost, and every Reimbursement Request not yet
+     * reimbursed, the ones for the Property Manager to check first, then oldest first.
+     */
+    async approvals(agencyId: number, propertyManagerId: number, filter: 'mine' | 'all') {
+      const propertyIds = await scope(propertyManagerId, filter);
+      const open = (await tickets.urgentRepairs(agencyId, propertyIds))
+        .filter((u) => u.status !== 'reimbursed')
+        .sort((a, b) => REIMBURSEMENT_ORDER.indexOf(a.status) - REIMBURSEMENT_ORDER.indexOf(b.status) || a.createdAt.localeCompare(b.createdAt) || a.id - b.id);
       return {
-        counts: {
-          open: every.filter((t) => t.status === 'open').length,
-          closed: every.filter((t) => t.status === 'closed').length,
-          urgent: countOf('urgent'),
-          high: countOf('high'),
-          routine: countOf('routine'),
-        },
-        tickets: await Promise.all(
-          inStatus.filter((t) => o.urgency === null || t.urgency === o.urgency).map(async (t) => ({ ...(await ticketSummary(t)), status: t.status })),
+        waitingOnOwner: await modules.quotes.waitingOnOwner(agencyId, propertyIds),
+        reimbursements: await Promise.all(
+          open.map(async (u) => {
+            const property = await profiles.property(u.propertyId);
+            const issue = await tickets.issue(u.issueId);
+            return {
+              urgentRepairId: u.id,
+              propertyId: property.id,
+              propertyAddress: property.address,
+              ownerName: (await profiles.person(property.ownerId)).name,
+              tenantName: (await profiles.person(u.tenantId)).name,
+              description: issue.summary ?? issue.description,
+              status: u.status,
+              amountCents: u.amountCents,
+              limitCents: URGENT_REPAIR_LIMIT_CENTS,
+              receipts: u.receiptFileIds.length,
+              reportedAt: u.createdAt,
+              forwardedAt: u.forwardedAt,
+            };
+          }),
         ),
       };
     },
 
-    /** What is waiting on someone outside the Agency: Quotes on a Property Owner, and Urgent Repairs on a Tenant's receipt. */
-    async approvals(agencyId: number, propertyManagerId: number, filter: 'mine' | 'all') {
-      const propertyIds = await scope(propertyManagerId, filter);
+    /**
+     * One Reimbursement Request, for its page: the issue and who is involved, the
+     * amount against the limit, the receipts, when each step happened, its timeline
+     * (from the Tenant's report) and the messages on its issue.
+     */
+    async reimbursement(agencyId: number, urgentRepairId: number) {
+      const u = await tickets.urgentRepairInAgency(agencyId, urgentRepairId);
+      const issue = await tickets.issue(u.issueId);
+      const property = await profiles.property(u.propertyId);
+      const [tenant, owner] = await Promise.all([profiles.person(u.tenantId), profiles.person(property.ownerId)]);
+      const events = await tickets.urgentRepairTimeline(u.id);
+      const contact = (p: typeof tenant) => ({ personId: p.id, name: p.name, mobile: p.mobile, email: p.email });
       return {
-        waitingOnOwner: await modules.quotes.waitingOnOwner(agencyId, propertyIds),
-        waitingOnReceipt: await Promise.all(
-          (await tickets.urgentRepairs(agencyId, propertyIds))
-            .filter((u) => u.status === 'reminder_sent')
-            .map(async (u) => {
-              const property = await profiles.property(u.propertyId);
-              return {
-                urgentRepairId: u.id,
-                propertyAddress: property.address,
-                ownerName: (await profiles.person(property.ownerId)).name,
-                tenantName: (await profiles.person(u.tenantId)).name,
-                description: (await tickets.issue(u.issueId)).description,
-                reportedAt: u.createdAt,
-              };
-            }),
-        ),
+        urgentRepairId: u.id,
+        issueId: issue.id,
+        status: u.status,
+        description: issue.description,
+        summary: issue.summary,
+        propertyId: property.id,
+        propertyAddress: property.address,
+        propertyManager: (await profiles.propertyManager(property.propertyManagerId)).name,
+        tenant: contact(tenant),
+        owner: contact(owner),
+        amountCents: u.amountCents,
+        limitCents: URGENT_REPAIR_LIMIT_CENTS,
+        overLimit: u.amountCents !== null && u.amountCents > URGENT_REPAIR_LIMIT_CENTS,
+        receipts: await tickets.urgentRepairReceipts(u.id),
+        reportedAt: issue.reportedAt,
+        createdAt: u.createdAt,
+        /** When the latest receipt came; null before any did. */
+        receivedAt: events.findLast((e) => e.kind === 'receipt_received')?.at ?? (u.receiptFileIds.length ? u.createdAt : null),
+        forwardedAt: u.forwardedAt,
+        reimbursedAt: u.reimbursedAt,
+        timeline: [{ kind: 'reported', at: issue.reportedAt } as (typeof events)[number], ...events],
+        messages: await tickets.messages(issue.id),
       };
     },
 
@@ -265,7 +376,7 @@ export function createViews({ clock, modules }: Context) {
           maxRepairCostCents: p.maxRepairCostCents,
           ownerName: (await profiles.person(p.ownerId)).name,
           propertyManager: (await profiles.propertyManager(p.propertyManagerId)).name,
-          tenants: tenants.filter((t) => t.propertyId === p.id).map((t) => t.name),
+          tenants: tenants.filter((t) => t.propertyId === p.id).map((t) => ({ personId: t.id, name: t.name })),
           openTickets: openTickets.filter((t) => t.propertyId === p.id).length,
         })),
       );
@@ -276,6 +387,8 @@ export function createViews({ clock, modules }: Context) {
       const property = await profiles.propertyInAgency(agencyId, propertyId);
       const owner = await profiles.person(property.ownerId);
       const buildingManager = property.buildingManagerId ? await profiles.person(property.buildingManagerId) : null;
+      const every = await tickets.list(agencyId, [property.id]);
+      const closed = every.filter((t) => t.status === 'closed').sort((a, b) => (b.closedAt ?? '').localeCompare(a.closedAt ?? '') || b.id - a.id);
       return {
         propertyId: property.id,
         address: property.address,
@@ -293,30 +406,25 @@ export function createViews({ clock, modules }: Context) {
           }),
         ),
         frequentIssues: await profiles.frequentIssues(property.id),
-        openTickets: await Promise.all(
-          (await tickets.list(agencyId, [property.id])).filter((t) => t.status === 'open').map(ticketSummary),
-        ),
+        openTickets: await ticketSummaries(every.filter((t) => t.status === 'open')),
         /** The Property's history: its closed Tickets, most recently closed first. */
-        closedTickets: await Promise.all(
-          (await tickets.list(agencyId, [property.id]))
-            .filter((t) => t.status === 'closed')
-            .sort((a, b) => (b.closedAt ?? '').localeCompare(a.closedAt ?? '') || b.id - a.id)
-            .map(async (t) => ({ ...(await ticketSummary(t)), closedAt: t.closedAt })),
-        ),
+        closedTickets: (await ticketSummaries(closed)).map((summary, i) => ({ ...summary, closedAt: closed[i]!.closedAt })),
       };
     },
 
     /** The Agency's Tradies, best myEST8 rating first, with both ratings and how many Quotes each has given. */
     async tradies(agencyId: number) {
+      const tradies = await profiles.people(agencyId, 'tradie');
+      const quoteCounts = await modules.quotes.quoteCounts(tradies.map((t) => t.id));
       const directory = await Promise.all(
-        (await profiles.people(agencyId, 'tradie')).map(async (t) => ({
+        tradies.map(async (t) => ({
           tradieId: t.id,
           name: t.name,
           businessName: t.businessName,
           trades: t.trades,
           myEst8Rating: await profiles.myEst8Rating(t.id),
           googleRating: t.googlePlaceId ? { rating: t.googleRating, reviewCount: t.googleReviewCount } : null,
-          quotes: await modules.quotes.quoteCount(t.id),
+          quotes: quoteCounts.get(t.id) ?? 0,
         })),
       );
       return directory.sort((a, b) => b.myEst8Rating.average - a.myEst8Rating.average || (a.businessName ?? a.name).localeCompare(b.businessName ?? b.name));
@@ -329,13 +437,52 @@ export function createViews({ clock, modules }: Context) {
      * Properties: Tradies are shared, and dispatch looks across the Agency.
      */
     async dispatch(agencyId: number) {
+      /**
+       * What a Job needs from dispatch, if anything: Tradies to quote while it has fewer
+       * than two Quote Requests (`candidates`, the Tradies of its Trade not asked yet,
+       * ranked as the Ticket ranks them), or its Work Order once a Quote is approved
+       * (`booking`: the chosen Tradie, the price and their next free slots).
+       */
+      async function dispatchJob(job: Job) {
+        const base = { jobId: job.id, trade: job.trade, status: job.status };
+        if (job.status === 'quoting') {
+          const [rule, ranked] = await Promise.all([modules.quotes.quoteRequestRule(agencyId, job.id), modules.quotes.recommend(agencyId, job.id)]);
+          const candidates = ranked
+            .filter((r) => !r.requested)
+            .map(({ tradieId, businessName, nominated, myEst8Rating, googleRating }) => ({ tradieId, businessName, nominated, myEst8Rating, googleRating }));
+          const needs = rule.asked < MIN_QUOTE_REQUESTS && candidates.length > 0 ? ('tradies' as const) : null;
+          return { ...base, needs, asked: rule.asked, minimum: rule.minimum, singleReason: rule.singleReason, candidates, booking: null };
+        }
+        if (job.status === 'approved') {
+          const quote = (await modules.quotes.approvedQuote(job.id))!;
+          const tradie = await profiles.person(quote.tradieId);
+          const freeSlots = (await modules.scheduling.freeSlots(agencyId, tradie.id)).slice(0, 3);
+          return {
+            ...base,
+            needs: 'booking' as const,
+            asked: 0,
+            minimum: 0,
+            singleReason: null,
+            candidates: [],
+            booking: { tradieId: tradie.id, businessName: tradie.businessName ?? tradie.name, priceCents: quote.notToExceedCents ?? quote.priceCents, proposedTime: quote.proposedTime, freeSlots },
+          };
+        }
+        return { ...base, needs: null, asked: 0, minimum: 0, singleReason: null, candidates: [], booking: null };
+      }
+
+      const openTickets = await tickets.openTickets(agencyId, null);
+      const [issues, jobs] = await Promise.all([
+        tickets.issuesWithUnread(openTickets.map((t) => t.issueId)),
+        tickets.jobsOfTickets(openTickets.map((t) => t.id)),
+      ]);
       const open = await Promise.all(
-        (await tickets.openTickets(agencyId, null)).map(async (ticket) => ({
+        openTickets.map(async (ticket) => ({
           ticketId: ticket.id,
           propertyId: ticket.propertyId,
-          description: (await tickets.issue(ticket.issueId)).description,
+          description: issues.get(ticket.issueId)!.description,
           urgency: ticket.urgency,
           reportedAt: ticket.reportedAt,
+          jobs: await Promise.all(jobs.filter((j) => j.ticketId === ticket.id && j.status !== 'cancelled' && j.status !== 'done').map(dispatchJob)),
         })),
       );
       return {
@@ -347,7 +494,7 @@ export function createViews({ clock, modules }: Context) {
             address: property.address,
             suburb: property.suburb,
             location: property.location,
-            openTickets: openTickets.map(({ ticketId, description, urgency, reportedAt }) => ({ ticketId, description, urgency, reportedAt })),
+            openTickets: openTickets.map(({ ticketId, description, urgency, reportedAt, jobs }) => ({ ticketId, description, urgency, reportedAt, jobs })),
             worstUrgency,
           };
         }),
@@ -425,27 +572,154 @@ export function createViews({ clock, modules }: Context) {
       };
     },
 
+    /**
+     * The Tenants, by name: each with their Property and its Property Manager, when the
+     * tenancy started, how to reach them and their open Tickets. Mine is the Tenants of
+     * the Property Manager's own Properties.
+     */
+    async tenants(agencyId: number, propertyManagerId: number, filter: 'mine' | 'all') {
+      const [people, properties, propertyManagers, every] = await Promise.all([
+        profiles.people(agencyId, 'tenant'),
+        profiles.properties(agencyId),
+        profiles.propertyManagers(agencyId),
+        tickets.list(agencyId, null),
+      ]);
+      const propertyOf = new Map(properties.map((p) => [p.id, p]));
+      const managerName = new Map(propertyManagers.map((m) => [m.id, m.name]));
+      const open = every.filter((t) => t.status === 'open');
+      return people
+        .map((t) => {
+          const property = t.propertyId === null ? undefined : propertyOf.get(t.propertyId);
+          return {
+            tenantId: t.id,
+            name: t.name,
+            property: property ? { propertyId: property.id, address: property.address } : null,
+            propertyManagerId: property?.propertyManagerId ?? null,
+            propertyManager: property ? (managerName.get(property.propertyManagerId) ?? null) : null,
+            tenancyStart: t.tenancyStart,
+            mobile: t.mobile,
+            email: t.email,
+            openTickets: open.filter((x) => x.tenantId === t.id).length,
+          };
+        })
+        .filter((t) => filter === 'all' || t.propertyManagerId === propertyManagerId)
+        .sort((a, b) => a.name.localeCompare(b.name) || a.tenantId - b.tenantId)
+        .map(({ propertyManagerId: _, ...t }) => t);
+    },
+
+    /**
+     * A Tenant's profile: their Property, contact details and when they are usually home,
+     * the Tickets they raised (open first, then the most recently closed), their
+     * Maintenance Requests still waiting and their Reimbursement Requests. Refuses
+     * (not_found) anyone who isn't a Tenant of the Agency.
+     */
+    async tenant(agencyId: number, tenantId: number) {
+      const tenant = await profiles.personInAgency(agencyId, tenantId, 'tenant');
+      const property = tenant.propertyId === null ? null : await profiles.property(tenant.propertyId);
+      const [every, waiting, repairs] = await Promise.all([
+        tickets.list(agencyId, null),
+        tickets.maintenanceRequests(agencyId, null),
+        tickets.urgentRepairs(agencyId, null),
+      ]);
+      const address = cached(async (propertyId: number) => (await profiles.property(propertyId)).address);
+      const raised = every.filter((t) => t.tenantId === tenant.id);
+      const closed = raised.filter((t) => t.status === 'closed').sort((a, b) => (b.closedAt ?? '').localeCompare(a.closedAt ?? '') || b.id - a.id);
+      return {
+        tenantId: tenant.id,
+        name: tenant.name,
+        property: property ? { propertyId: property.id, address: property.address } : null,
+        propertyManager: property ? (await profiles.propertyManager(property.propertyManagerId)).name : null,
+        tenancyStart: tenant.tenancyStart,
+        mobile: tenant.mobile,
+        email: tenant.email,
+        availability: tenant.availability,
+        tickets: await Promise.all(
+          [...raised.filter((t) => t.status === 'open'), ...closed].map(async (t) => ({
+            ticketId: t.id,
+            propertyId: t.propertyId,
+            propertyAddress: await address(t.propertyId),
+            description: (await tickets.issue(t.issueId)).description,
+            urgency: t.urgency,
+            status: t.status,
+            reportedAt: t.reportedAt,
+            closedAt: t.closedAt,
+          })),
+        ),
+        maintenanceRequests: await Promise.all(
+          waiting
+            .filter((i) => i.tenantId === tenant.id)
+            .map(async (i) => ({
+              issueId: i.id,
+              propertyAddress: await address(i.propertyId),
+              description: i.description,
+              summary: i.summary,
+              urgency: i.urgency,
+              reportedAt: i.reportedAt,
+            })),
+        ),
+        reimbursementRequests: await Promise.all(
+          repairs
+            .filter((u) => u.tenantId === tenant.id)
+            .map(async (u) => ({
+              urgentRepairId: u.id,
+              propertyAddress: await address(u.propertyId),
+              description: (await tickets.issue(u.issueId)).description,
+              status: u.status,
+              receipts: u.receiptFileIds.length,
+              reportedAt: u.createdAt,
+            })),
+        ),
+      };
+    },
+
     async ticket(agencyId: number, ticketId: number) {
       const ticket = await tickets.ticketInAgency(agencyId, ticketId);
       const issue = await tickets.issue(ticket.issueId);
       const property = await profiles.property(ticket.propertyId);
       return {
-        ...(await ticketSummary(ticket)),
+        ...(await ticketSummaries([ticket]))[0]!,
         ...(await issueDetails(issue)),
         status: ticket.status,
+        summary: issue.summary,
+        summaryBy: issue.summaryBy,
         propertyId: property.id,
         maxRepairCostCents: property.maxRepairCostCents,
         frequentIssues: await profiles.frequentIssues(property.id),
         repairCostCents: await modules.quotes.repairCost(ticket.id),
         jobs: await Promise.all(
-          (await tickets.jobsOf(ticket.id)).map(async (job) => ({
-            jobId: job.id,
-            trade: job.trade,
-            checkTrade: job.checkTrade,
-            status: job.status,
-            ...(await modules.quotes.jobView(agencyId, job.id)),
-            workOrder: await modules.scheduling.workOrderForJob(job.id),
-          })),
+          (await tickets.jobsOf(ticket.id)).map(async (job) => {
+            const quotesView = await modules.quotes.jobView(agencyId, job.id);
+            const quoting = job.status === 'quoting';
+            const counts = (await modules.quotes.quotingOf([job.id])).get(job.id) ?? NO_QUOTING;
+            return {
+              jobId: job.id,
+              trade: job.trade,
+              checkTrade: job.checkTrade,
+              status: job.status,
+              ...quotesView,
+              /** Every Quote, Estimates and Firm Quotes alike, with its Tradie's ratings. */
+              quotes: await Promise.all(
+                quotesView.quotes.map(async (q) => {
+                  const tradie = await profiles.personInAgency(agencyId, q.tradieId, 'tradie');
+                  return {
+                    ...q,
+                    myEst8Rating: await profiles.myEst8Rating(q.tradieId),
+                    googleRating: tradie.googlePlaceId ? { rating: tradie.googleRating, reviewCount: tradie.googleReviewCount } : null,
+                  };
+                }),
+              ),
+              /** The Job's Quote counts, as the board reads them. */
+              quoting: counts,
+              /** What the Property Manager decides next while the Job is getting Quotes; null otherwise. */
+              decision: quoting ? quotingDecision(counts) : null,
+              workOrder: await modules.scheduling.workOrderForJob(job.id),
+              /** Site Inspections (not cancelled), and free slots to prefill booking the ones Tradies need. */
+              inspections: {
+                visits: await modules.scheduling.inspectionVisits(job.id),
+                slots: quoting && counts.toInspect ? await modules.scheduling.inspectionSlots(agencyId, job.id) : [],
+              },
+            };
+          }),
         ),
         timeline: await tickets.timeline(ticket.id),
         messages: await tickets.messages(ticket.issueId),

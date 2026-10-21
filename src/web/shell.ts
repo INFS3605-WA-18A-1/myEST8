@@ -5,11 +5,11 @@
 import type { Context, MiddlewareHandler } from 'hono';
 import type { WebEnv } from './env.ts';
 
-/** The rail's counts: Maintenance Requests to review and Quotes waiting on a Property Owner. */
-export type NavCounts = { requests: number; approvals: number };
+/** The rail's counts: new Maintenance Requests to review (on Tickets), and Quotes waiting on a Property Owner with Reimbursement Requests to review (on Approvals). */
+export type NavCounts = { tickets: number; approvals: number };
 
 /** The shell's facts, passed to `page()` as its `shell` option. */
-export type ShellInfo = { agencyName: string; today: string; counts?: NavCounts; demo?: boolean };
+export type ShellInfo = { agencyName: string; today: string; counts?: NavCounts; demo?: boolean; setupHref?: string };
 
 /**
  * Reads the rail's counts once for the request, so every signed-in page can show
@@ -30,5 +30,5 @@ export function shellInfo(c: Context<WebEnv>): ShellInfo {
   const when = actions.now();
   const weekday = new Intl.DateTimeFormat('en-AU', { timeZone: agency.timeZone, weekday: 'short' }).format(when);
   const dayMonth = new Intl.DateTimeFormat('en-AU', { timeZone: agency.timeZone, day: 'numeric', month: 'short' }).format(when);
-  return { agencyName: agency.name, today: `${weekday} ${dayMonth}`, counts: c.var.navCounts, demo: c.var.demo ?? false };
+  return { agencyName: agency.name, today: `${weekday} ${dayMonth}`, counts: c.var.navCounts, demo: c.var.demo ?? false, setupHref: c.var.setupHref };
 }

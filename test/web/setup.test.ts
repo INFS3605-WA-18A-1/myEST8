@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { webWorld } from '../support/web.ts';
+import { visible, webWorld } from '../support/web.ts';
 import { KING_ST } from '../support/world.ts';
 
 type Web = Awaited<ReturnType<typeof webWorld>>;
@@ -31,7 +31,10 @@ describe('the onboarding guide', () => {
     expect(setup).not.toContain('/webhooks/twilio');
     expect(setup).not.toContain('/webhooks/sendgrid');
     for (const text of ['Olivia Owens', 'Barry Strata', KING_ST, 'Tom Tran', 'Flow Bros', 'Add a Tradie', 'Add a Property', '$500.00']) expect(setup).toContain(text);
-    expect(setup).toContain('action="/setup/tradies?from=setup"');
+    // The Tradie form comes once a listing is picked, or "not on Google" is chosen.
+    expect(setup).toContain('Not on Google? Enter their details yourself');
+    expect(setup).not.toContain('action="/setup/tradies');
+    expect(await page(w, '/setup?manual=1', cookie)).toContain('action="/setup/tradies?from=setup&amp;manual=1"');
     expect(setup).toContain('action="/setup/properties?from=setup"');
 
     const properties = await page(w, '/properties', cookie);
@@ -40,6 +43,24 @@ describe('the onboarding guide', () => {
     const tradies = await page(w, '/tradies', cookie);
     for (const text of ['Flow Bros', 'Not on Google']) expect(tradies).toContain(text);
     expect(tradies).toContain(`href="/tradies/${w.tradies.finn.id}"`);
+  });
+
+  test('opens with the areas in order, each a link to its section saying what it has so far', async () => {
+    const w = await webWorld();
+
+    const nav = (html: string) => {
+      const found = html.match(/<nav aria-label="Setup areas"[^>]*>[\s\S]*?<\/nav>/)?.[0] ?? '';
+      return { html: found, text: visible(found).replace(/\s+/g, ' ') };
+    };
+    const harbour = nav(await page(w, '/setup', await w.signIn()));
+    for (const id of ['channels', 'people', 'tradies', 'properties', 'tenants']) expect(harbour.html).toMatch(new RegExp(`<a href="#${id}"`));
+    expect(harbour.html).not.toMatch(/class="link[ "]/);
+    expect(harbour.text).toMatch(/Tradies \d+ Tradies/);
+    expect(harbour.text).toMatch(/Properties \d+ Properties/);
+
+    const sunrise = nav(await page(w, '/setup', await w.signUp()));
+    expect(sunrise.text).toContain('Tradies None yet');
+    expect(sunrise.text).toContain('Tenants None yet');
   });
 
   test('verifies a typed SMS number with a code, and does not store a typed email address', async () => {
@@ -67,21 +88,22 @@ describe('the onboarding guide', () => {
 
     const added = await submit(
       w,
-      '/setup/tenants',
+      '/setup/tenants?from=setup',
       { name: 'Tina Test', mobile: '0412 000 111', propertyId: w.ids.kingSt, tenancyStart: '2026-09-01' },
       cookie,
     );
 
     expect(added.page).toContain('Tina Test added as a Tenant');
-    expect(added.page).toContain('2026-09-01');
-    expect(await page(w, '/properties', cookie)).toContain('Hana Ho, Tina Test, Tom Tran');
+    expect(visible(added.page)).toContain('1 Sep 2026');
+    // Each Tenant's name links to their profile.
+    expect(visible(await page(w, '/properties', cookie))).toMatch(/Hana Ho\s+Tina Test\s+Tom Tran/);
   });
 
   test('a Tenant with no mobile or email is refused, with the reason next to the form', async () => {
     const w = await webWorld();
     const cookie = await w.signIn();
 
-    const refused = await submit(w, '/setup/tenants', { name: 'Tina Test', propertyId: w.ids.kingSt, tenancyStart: '2026-09-01' }, cookie);
+    const refused = await submit(w, '/setup/tenants?from=setup', { name: 'Tina Test', propertyId: w.ids.kingSt, tenancyStart: '2026-09-01' }, cookie);
 
     expect(refused.location).toMatch(/^\/setup\?form=tenant&error=/);
     expect(refused.page).toContain('Enter a mobile number or email address');
@@ -125,8 +147,8 @@ describe('the onboarding guide', () => {
     const refused = await submit(w, '/setup/tradies?google=lucky', tradie, cookie);
     expect(refused.location).toMatch(/^\/tradies\?form=tradie&google=lucky&error=/);
     expect(refused.page).toContain('Link the Tradie to their Google listing, or mark them as not on Google');
-    expect(refused.page).toContain('value="place-lucky"');
-    expect(refused.page).toContain('Lucky Locks, Surry Hills');
+    expect(refused.page).toContain('/tradies?google=lucky&amp;place=place-lucky#add-tradie');
+    expect(refused.page).toContain('Surry Hills');
 
     const added = await submit(w, '/setup/tradies?google=lucky', { ...tradie, placeId: 'place-lucky' }, cookie);
     expect(added.page).toContain('Lucky Locks added as a Tradie');
@@ -144,7 +166,7 @@ describe('the onboarding guide', () => {
     const refused = await submit(w, '/setup/tradies?from=setup&google=lucky', tradie, cookie);
     expect(refused.location).toMatch(/^\/setup\?form=tradie&google=lucky&error=/);
     expect(refused.page).toContain('Link the Tradie to their Google listing, or mark them as not on Google');
-    expect(refused.page).toContain('value="place-lucky"');
+    expect(refused.page).toContain('/setup?google=lucky&amp;place=place-lucky#tradies');
     expect(refused.page).toMatch(/<details class="mt-4" open>\s*<summary[^>]*>Add a Tradie/);
 
     const added = await submit(w, '/setup/tradies?from=setup&google=lucky', { ...tradie, placeId: 'place-lucky' }, cookie);

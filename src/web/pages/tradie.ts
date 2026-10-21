@@ -11,9 +11,9 @@ import type { WebEnv } from '../env.ts';
 import { formAction, text } from '../forms.ts';
 import { icon } from '../icons.ts';
 import { shellInfo } from '../shell.ts';
-import { alert, badge, button, dl, emptyState, field, flashFrom, formatMoney, formatWhen, humanise, linkButton, page, section, sectionHeader, stat, statGroup, table, ticketCell, type Html } from '../ui.ts';
+import { alert, badge, button, contactLink, emptyState, field, flashFrom, formatMoney, formatWhen, humanise, linkButton, page, ratingChip, rowLink, section, sectionHeader, stat, statGroup, table, ticketCell, type Html } from '../ui.ts';
 import { timeRange } from './calendar.ts';
-import { googleSearchForm, importPanel, searchListings, tradieFields } from './onboarding-forms.ts';
+import { addTradieSection, importPanel, listingChoice } from './onboarding-forms.ts';
 
 type TradieView = Awaited<ReturnType<PropertyManagerActions['tradie']>>;
 type DirectoryEntry = Awaited<ReturnType<PropertyManagerActions['tradieDirectory']>>[number];
@@ -28,9 +28,8 @@ export function tradiePages() {
     const flash = flashFrom(c.req.url);
     const refused = flash?.kind === 'error' ? c.req.query('form') : undefined;
     const errorFor = (key: string): Html => (refused === key && flash ? alert(flash.message, 'error') : html``);
-    const googleQuery = c.req.query('google')?.trim() ?? '';
-    const [everyone, { listings, problem }] = await Promise.all([actions.tradieDirectory(), searchListings(actions, googleQuery)]);
-    const addAction = `/setup/tradies${googleQuery ? `?google=${encodeURIComponent(googleQuery)}` : ''}`;
+    const choice = listingChoice((name) => c.req.query(name));
+    const everyone = await actions.tradieDirectory();
     const tradies = trade ? everyone.filter((t) => t.trades.includes(trade)) : everyone;
     return c.html(
       page({
@@ -41,17 +40,20 @@ export function tradiePages() {
         shell: shellInfo(c),
         subtitle: 'Best myEST8 rating first. The two ratings are shown side by side, never combined.',
         actions: linkButton('Add a Tradie', '#add-tradie', { variant: 'primary', size: 'sm' }),
-        body: html`${tradeFilter(trade)}${directory(tradies, trade)}
+        body: html`${tradeFilter(everyone, trade)}${directory(tradies, trade)}
           ${section({
             id: 'add-tradie',
             title: 'Add a Tradie',
             body: html`
-              ${googleSearchForm('/tradies#add-tradie', googleQuery, problem, listings.length)}
-              <form method="post" action="${addAction}" class="mt-4">
-                ${errorFor('tradie')}
-                ${tradieFields({ listings })}
-                <div class="mt-3">${button('Add Tradie', { variant: 'primary' })}</div>
-              </form>
+              ${await addTradieSection({
+                actions,
+                choice,
+                path: '/tradies',
+                anchor: '#add-tradie',
+                postTo: '/setup/tradies',
+                submit: button('Add Tradie', { variant: 'primary' }),
+                refusal: errorFor('tradie'),
+              })}
               <details class="import-details mt-4 border-t border-line pt-3" id="import-tradies" ${refused === 'import-tradies' ? 'open' : ''}>
                 <summary class="cursor-pointer font-semibold text-action">${icon('file-xls', { size: 'size-4' })}<span>Add many from a spreadsheet</span></summary>
                 <div class="mt-3">${importPanel('tradies', { error: errorFor('import-tradies') })}</div>
@@ -91,7 +93,7 @@ export function tradiePages() {
         flash,
         subtitle: tradie.businessName ? tradie.name : undefined,
         actions: linkButton('Back to Tradies', '/tradies', { variant: 'ghost', size: 'sm' }),
-        body: html`${header(tradie)} ${addressForm(tradie, flash, c.req.query('form'))} ${bookings(tradie, timeZone)} ${quotes(tradie, timeZone)} ${ratings(tradie, timeZone)}`,
+        body: html`${header(tradie)} ${quotes(tradie, timeZone)} ${bookings(tradie, timeZone)} ${ratings(tradie, timeZone)} ${addressForm(tradie, flash, c.req.query('form'))}`,
       }),
     );
   });
@@ -118,7 +120,7 @@ function addressForm(t: TradieView, flash: ReturnType<typeof flashFrom>, form: s
     body: html`<form method="post" action="/tradies/${t.tradieId}/address" class="grid max-w-xl gap-3">
       ${refused}
       ${field({
-        label: 'Business address',
+        label: 'Address',
         name: 'businessAddress',
         id: 'tradie-address',
         value: t.businessAddress ?? '',
@@ -135,18 +137,19 @@ function addressForm(t: TradieView, flash: ReturnType<typeof flashFrom>, form: s
 }
 
 /**
- * A GET form, so it works without JavaScript: pick a Trade and Filter. With
- * JavaScript the list narrows as soon as a Trade is picked (`data-autosubmit` in
- * app.js); the Filter button stays, secondary, for when JavaScript is off.
+ * The Trades as links, each with how many Tradies do it, so filtering is one click and
+ * works without JavaScript. A Trade nobody does isn't offered, unless it's the one asked for.
  */
-function tradeFilter(selected: Trade | null): Html {
-  return html`<form method="get" action="/tradies" class="flex flex-wrap items-end gap-2" aria-label="Filter Tradies" data-autosubmit>
-    <div class="w-full max-w-xs">
-      ${field({ label: 'Trade', name: 'trade', type: 'select', value: selected, placeholder: 'All Trades', options: TRADES.map((t) => ({ value: t, label: humanise(t) })) })}
-    </div>
-    <div class="pb-1">${button('Filter', { variant: 'secondary', size: 'sm' })}</div>
-    ${selected ? html`<div class="pb-1">${linkButton('Show all Trades', '/tradies', { variant: 'ghost', size: 'sm' })}</div>` : ''}
-  </form>`;
+function tradeFilter(everyone: DirectoryEntry[], selected: Trade | null): Html {
+  const counts = TRADES.map((t) => ({ trade: t, count: everyone.filter((x) => x.trades.includes(t)).length })).filter((c) => c.count || c.trade === selected);
+  const item = (label: string, href: string, count: number, active: boolean) =>
+    html`<li><a href="${href}" class="trade-filter-item"${active ? html` aria-current="page"` : ''}>${label} <span class="trade-filter-count num">${count}</span></a></li>`;
+  return html`<nav class="trade-filter" aria-label="Filter by Trade">
+    <ul>
+      ${item('All Trades', '/tradies', everyone.length, selected === null)}
+      ${counts.map((c) => item(humanise(c.trade), `/tradies?trade=${c.trade}`, c.count, c.trade === selected))}
+    </ul>
+  </nav>`;
 }
 
 /** Every Tradie with both ratings next to each other and the number of Quotes they have given. */
@@ -159,36 +162,48 @@ function directory(tradies: DirectoryEntry[], trade: Trade | null): Html {
     tradies.map((t) => {
       const { average, count } = t.myEst8Rating;
       return [
-        html`<a class="link font-medium" href="/tradies/${t.tradieId}">${t.businessName ?? t.name}</a>${t.businessName ? html`<br /><span class="text-sm text-muted">${t.name}</span>` : ''}`,
+        html`${rowLink(t.businessName ?? t.name, `/tradies/${t.tradieId}`)}${t.businessName ? html`<br /><span class="text-xs text-muted">${t.name}</span>` : ''}`,
         html`<span class="flex flex-wrap gap-1">${t.trades.map((x) => badge(humanise(x), 'info'))}</span>`,
-        html`<span class="num font-medium">${average.toFixed(1)}</span> <span class="text-sm text-muted">from ${count}</span>`,
-        t.googleRating
-          ? html`<span class="num font-medium">${t.googleRating.rating === null ? '—' : t.googleRating.rating.toFixed(1)}</span> <span class="text-sm text-muted">${t.googleRating.reviewCount ?? 0} reviews</span>`
-          : html`<span class="text-muted">Not on Google</span>`,
+        ratingChip({ source: 'myEST8', rating: average, count, named: false }),
+        ratingChip({ source: 'Google', rating: t.googleRating?.rating ?? null, count: t.googleRating?.reviewCount ?? 0, onGoogle: !!t.googleRating, named: false }),
         html`${t.quotes}`,
       ];
     }),
-    { stack: true, caption: trade ? `${humanise(trade)} Tradies` : 'Tradies', align: ['left', 'left', 'left', 'left', 'right'] },
+    { stack: 'labelled', caption: trade ? `${humanise(trade)} Tradies` : 'Tradies', align: ['left', 'left', 'left', 'left', 'right'] },
   );
 }
 
-/** The Trades, the contact details, and the two ratings side by side (two columns from 1024 px). */
+/**
+ * What a Property Manager weighs up first: the Trades and how to reach them, then the
+ * ratings. The myEST8 rating (the starting rating and every rating since) comes with
+ * the Property Managers' and the Tenants' averages on their own, and Google's rating
+ * beside them, never combined.
+ */
 function header(t: TradieView): Html {
   const { average, count } = t.myEst8Rating;
-  return html`<section class="section" aria-label="Tradie details">
-    <div class="flex flex-wrap items-center gap-2">${t.trades.map((trade) => badge(humanise(trade), 'info'))}</div>
-    <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-      ${dl([
-        ['Name', t.name],
-        ['Mobile', t.mobile ? html`<a class="link num" href="tel:${t.mobile}">${t.mobile}</a>` : '—'],
-        ['Email', t.email ? html`<a class="link break-all" href="mailto:${t.email}">${t.email}</a>` : '—'],
-      ])}
+  const bySource = (label: string, source: TradieView['ratings'][number]['source']) => {
+    const scores = t.ratings.filter((r) => r.source === source).map((r) => r.score);
+    return scores.length
+      ? stat({ label, value: (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1), hint: `${scores.length} ${scores.length === 1 ? 'rating' : 'ratings'}` })
+      : stat({ label, value: 'No ratings yet' });
+  };
+  return html`<section class="section tradie-head" aria-label="Tradie details">
+    <div class="tradie-contact">
+      <div class="flex flex-wrap items-center gap-2">${t.trades.map((trade) => badge(humanise(trade), 'info'))}</div>
+      <dl>
+        <div><dt>Mobile</dt><dd>${t.mobile ? html`${contactLink('mobile', t.mobile)}` : '—'}</dd></div>
+        <div><dt>Email</dt><dd>${t.email ? html`${contactLink('email', t.email)}` : '—'}</dd></div>
+      </dl>
+    </div>
+    <div class="tradie-ratings">
       ${statGroup([
         stat({
           label: 'myEST8 rating',
           value: average.toFixed(1),
           hint: count === 1 ? 'The starting rating; no Jobs rated yet' : `From ${count} ratings, including the starting rating`,
         }),
+        bySource('From Property Managers', 'property_manager'),
+        bySource('From Tenants', 'tenant'),
         t.googleRating
           ? stat({
               label: 'Google rating',

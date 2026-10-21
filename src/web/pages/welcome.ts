@@ -12,7 +12,7 @@
 //   5 First Property   address, Max Repair Cost, Property Owner, Tenant, Building Manager
 //   6 Done             what's set up, and where to go next
 
-import { Hono, type Context } from 'hono';
+import { Hono, type Context, type MiddlewareHandler } from 'hono';
 import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
 import type { ImportKind } from '../../imports.ts';
@@ -21,7 +21,8 @@ import { ActionError, isEmail, normalizeAddress, type Role } from '../../shared.
 import { NO_CONNECTORS, type ChannelConnectors } from '../connectors.ts';
 import type { WebEnv } from '../env.ts';
 import { gmailControls } from './oauth-google.ts';
-import { cents, list, text, type FormValues } from '../forms.ts';
+import { icon } from '../icons.ts';
+import { cents, text, type FormValues } from '../forms.ts';
 import { shareButton } from '../share.ts';
 import { shellInfo } from '../shell.ts';
 import {
@@ -34,10 +35,8 @@ import {
   flashFrom,
   flashMessage,
   formatMoney,
-  humanise,
   linkButton,
   page,
-  section,
   steps,
   table,
   withFlash,
@@ -46,6 +45,7 @@ import {
 } from '../ui.ts';
 import {
   addTradieFrom,
+  addTradieSection,
   CHANNELS,
   channelBadge,
   channelGuide,
@@ -56,22 +56,22 @@ import {
   channelState,
   inboundEmailField,
   phoneChannelForm,
-  choiceGroup,
+  nominatedFrom,
+  tradiePicker,
   contactFields,
   contactFrom,
   fieldGrid,
-  googleSearchForm,
   IMPORT_NOUNS,
   importPanel,
+  listingChoice,
   scoped,
-  searchListings,
-  tradieFields,
   tradiesTable,
   valueOf,
   valuesOf,
   type Errors,
   type Values,
 } from './onboarding-forms.ts';
+import { smsNumberPanel, smsNumbersOffered } from './sms-number.ts';
 import { TIME_ZONES } from './signup.ts';
 
 type Actions = PropertyManagerActions;
@@ -91,17 +91,10 @@ type StepKey = (typeof STEPS)[number]['key'];
 /** What a new Agency needs before Tenants' messages can be handled, in guide order. Adding colleagues is optional. */
 const NEEDED = ['channels', 'tradies', 'property'] as const;
 
-/** Each needed step as the "Finish setting up" banner says it. */
-const STILL_TO_DO: Record<(typeof NEEDED)[number], string> = {
-  channels: 'connect SMS and email',
-  property: 'add your first Property',
-  tradies: 'add the Tradies you use',
-};
-
 const ROLE_LABEL: Record<Role, string> = { tenant: 'Tenant', owner: 'Property Owner', tradie: 'Tradie', building_manager: 'Building Manager' };
 
 /** How far the Agency's setup has got, read from what it has. */
-export async function setupProgress(actions: Actions, unavailable: readonly ChannelType[] = []) {
+async function setupProgress(actions: Actions, unavailable: readonly ChannelType[] = []) {
   const channels = await actions.channels();
   return {
     team: (await actions.propertyManagers()).length > 1,
@@ -120,23 +113,25 @@ function isDone(key: StepKey, progress: Progress): boolean {
 }
 
 /** Where to pick setup up again: the first needed step not done, or null once the Agency is set up. */
-export function nextSetupStep(progress: Progress): string | null {
+function nextSetupStep(progress: Progress): string | null {
   const key = NEEDED.find((k) => !progress[k]);
   return key ? STEPS.find((s) => s.key === key)!.path : null;
 }
 
-/** The dashboard's "Finish setting up" banner, or nothing once the Agency is set up. */
-export async function finishSetupBanner(actions: Actions, unavailable: readonly ChannelType[] = []): Promise<Html> {
-  const progress = await setupProgress(actions, unavailable);
-  const next = nextSetupStep(progress);
-  if (!next) return html``;
-  const left = NEEDED.filter((k) => !progress[k]).map((k) => STILL_TO_DO[k]);
-  // One line on wide screens: a hi-vis stripe, the sentence, and the one link to the next step.
-  return html`<div data-banner="finish-setup" class="flex flex-wrap items-center gap-x-3 gap-y-1 overflow-hidden rounded-md border border-line bg-surface text-sm">
-    <span aria-hidden="true" class="inline-block h-6 w-4 shrink-0 self-center bg-[image:repeating-linear-gradient(-45deg,var(--ink)_0_4px,var(--hivis)_4px_8px)] sm:ml-2"></span>
-    <p class="min-w-0 flex-1 py-2 pl-2 sm:pl-0"><strong class="font-semibold">Finish setting up ${actions.agency().name}.</strong> Still to do: ${sentence(left)}.</p>
-    <div class="py-1.5 pr-3">${linkButton('Continue setup', next, { variant: 'primary', size: 'sm' })}</div>
-  </div>`;
+/**
+ * Sets `setupHref` for pages shown to a Property Manager while the Agency is not fully set up,
+ * so the rail can offer a "Setup guide" link. Setup is optional: nothing else on the page nags.
+ * Skips files and the setup pages themselves.
+ */
+export function loadSetupLink(): MiddlewareHandler<WebEnv> {
+  return async (c, next) => {
+    const path = c.req.path;
+    if (c.req.method === 'GET' && !path.startsWith('/files/') && !path.startsWith('/welcome') && !path.startsWith('/setup')) {
+      const href = nextSetupStep(await setupProgress(c.var.actions, c.var.unavailableChannels ?? []));
+      if (href) c.set('setupHref', href);
+    }
+    await next();
+  };
 }
 
 /** The wizard, mounted at /welcome behind requirePropertyManager. `demo` suggests made-up channel addresses for the phone simulator. */
@@ -224,30 +219,31 @@ async function wizardPage(
   const index = STEPS.findIndex((s) => s.key === o.step);
   const back = STEPS[index - 1];
   const forward = STEPS[index + 1];
-  // A step not done yet moves on with "Skip for now"; a done one with "Continue".
+  // A step not done yet moves on with "Skip for now"; a done one with "Continue". The last step leads to the dashboard.
   const onward = forward
     ? isDone(o.step, progress)
       ? linkButton(o.step === 'welcome' ? "Let's start" : 'Continue', forward.path, { variant: 'primary' })
       : linkButton('Skip for now', forward.path, { variant: 'ghost' })
-    : '';
+    : linkButton('Go to your dashboard', '/', { variant: 'primary' });
   return page({
     title: o.title,
-    subtitle: html`<span class="flex flex-wrap gap-x-4"><span>Step ${index + 1} of ${STEPS.length}</span><span>Setting up ${actions.agency().name}</span></span>`,
     pm,
     fullPage: true,
     shell: await shellInfo(c),
     flash: o.flash ?? null,
-    body: html`<div class="mx-auto flex w-full max-w-[720px] flex-col gap-4">
-      <nav aria-label="Setup steps">
+    // Which step this is sits with the steps, in the wizard's own column.
+    body: html`<div class="wizard">
+      <nav aria-label="Setup steps" class="wizard-steps">
+        <p class="wizard-where"><span>Step ${index + 1} of ${STEPS.length}</span><span>Setting up ${actions.agency().name}</span></p>
         ${steps(
           STEPS.map((s) => ({ label: s.label, done: isDone(s.key, progress), href: s.path })),
           { current: index, horizontal: true },
         )}
       </nav>
       ${o.body}
-      <div class="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
+      <div class="wizard-foot">
         ${back ? linkButton('Back', back.path, { variant: 'secondary' }) : linkButton('Set up later', '/', { variant: 'ghost' })}
-        <div class="flex flex-wrap items-center gap-2">${onward}</div>
+        <div class="wizard-onward">${onward}</div>
       </div>
     </div>`,
   });
@@ -386,9 +382,14 @@ async function channelsStep(c: WizardContext, demo: boolean, connectors: Channel
   const flash = flashFrom(c.req.url);
   const flashChannel = c.req.query('channel');
   const origin = new URL(c.req.url).origin;
-  const verified = connected.filter((ch) => channelState(ch, { verified: ch.type === 'email' && email.state === 'verified', waiting: ch.type === 'email' && email.state === 'waiting' }) === 'verified').length;
+  const verifiedTypes = connected
+    .filter((ch) => channelState(ch, { verified: ch.type === 'email' && email.state === 'verified', waiting: ch.type === 'email' && email.state === 'waiting' }) === 'verified')
+    .map((ch) => ch.type);
   const rowForm = 'mt-2 grid items-end gap-3 md:grid-cols-[minmax(0,1fr)_auto]';
   const gmailBlock = connectors.gmail ? await gmailControls(connectors.gmail, agency.id, 'welcome') : null;
+  // Where this server sets up SMS numbers, the SMS row offers the two ways to get one instead of a typed number and a code.
+  const smsNumbers = await smsNumbersOffered(actions);
+  const smsPanel = smsNumbers ? await smsNumberPanel(actions, { from: 'welcome', current: connected.find((ch) => ch.type === 'sms')?.address }) : null;
   return wizardPage(c, {
     step: 'channels',
     title: 'Channels',
@@ -396,10 +397,11 @@ async function channelsStep(c: WizardContext, demo: boolean, connectors: Channel
     flash: flash && !CHANNELS.some((ch) => ch.type === flashChannel) ? flash : null,
     body: html`
       <p>
-        Tenants, Tradies and Property Owners reach ${agency.name} by SMS and email. Verify SMS with a code sent to the number.
+        Tenants, Tradies and Property Owners reach ${agency.name} by SMS and email.
+        ${smsNumbers ? 'Set up the number Tenants will text.' : 'Verify SMS with a code sent to the number.'}
         Email arrives at the address below once you forward the Agency inbox to it.${demo ? ' In the demo nothing is really sent, and the addresses work with the phone simulator.' : ''}
       </p>
-      <p class="text-sm text-muted">${connected.length} of ${CHANNELS.length} connected, ${verified} verified.</p>
+      <p class="wizard-next">${channelsStillToDo(CHANNELS.filter((ch) => !connectors.unavailable.includes(ch.type)).map((ch) => ({ type: ch.type, verified: verifiedTypes.includes(ch.type) })), smsNumbers)}</p>
       <div class="flex flex-col gap-4">
         ${CHANNELS.map((channel) => {
           const current = connected.find((ch) => ch.type === channel.type);
@@ -416,10 +418,12 @@ async function channelsStep(c: WizardContext, demo: boolean, connectors: Channel
             <div class="min-w-0">
               ${flash && flashChannel === channel.type ? flashMessage(flash) : ''}
               ${unavailable ? unavailableNote(channel.type, connectors.unavailable) : ''}
-              ${unavailable ? '' : current ? channelLine(current, agency.timeZone, { waiting, smsInbound: connectors.smsInbound }) : ''}
+              ${unavailable || (channel.type === 'sms' && smsPanel) ? '' : current ? channelLine(current, agency.timeZone, { waiting, smsInbound: connectors.smsInbound }) : ''}
               ${unavailable ? '' : channel.type === 'email'
                 ? html`<div class="mt-2">${inboundEmailField(email.address)}</div>${gmailBlock ?? ''}<div class="mt-2">${channelGuide(channel.type, origin)}</div>`
-                : html`${phoneChannelForm({
+                : smsPanel
+                  ? html`<div class="mt-2">${smsPanel}</div>`
+                  : html`${phoneChannelForm({
                       channel,
                       postTo: '/welcome/channels',
                       confirmTo: '/welcome/channels/confirm',
@@ -436,6 +440,16 @@ async function channelsStep(c: WizardContext, demo: boolean, connectors: Channel
   });
 }
 
+/** What the channels still need, as one sentence: what's next rather than a count. */
+function channelsStillToDo(channels: { type: ChannelType; verified: boolean }[], smsNumbers = false): string {
+  const left = channels
+    .filter((ch) => !ch.verified)
+    .map((ch) => (ch.type === 'email' ? "send one email to the Agency inbox so it's forwarded here" : smsNumbers ? 'set up the Agency\'s SMS number' : "verify the Agency's SMS number with a code"));
+  if (!channels.length) return 'Nothing to connect on this server. Continue to the next step.';
+  if (!left.length) return `${sentence(channels.map((ch) => (ch.type === 'email' ? 'email' : 'SMS')))} ${channels.length > 1 ? 'are' : 'is'} verified.`.replace(/^./, (c) => c.toUpperCase());
+  return `Still to do: ${left.join(', and ')}.`;
+}
+
 /** A made-up channel address for a demo Agency, unique to it: channel addresses can belong to only one Agency. */
 function demoAddress(type: ChannelType, agency: { id: number; name: string }) {
   if (type === 'email') {
@@ -450,8 +464,6 @@ function demoAddress(type: ChannelType, agency: { id: number; name: string }) {
 async function tradiesStep(c: WizardContext, o: { values?: Values; errors?: Errors; message?: string }): Promise<Html> {
   const { actions } = c.var;
   const tradies = await actions.people('tradie');
-  const query = c.req.query('google')?.trim() ?? '';
-  const { listings, problem } = await searchListings(actions, query);
   const unplaced = o.message && !Object.keys(o.errors ?? {}).length ? o.message : null;
   return wizardPage(c, {
     step: 'tradies',
@@ -468,12 +480,17 @@ async function tradiesStep(c: WizardContext, o: { values?: Values; errors?: Erro
         id: 'add-tradie',
         title: 'Add a Tradie',
         body: html`
-          ${googleSearchForm('/welcome/tradies#add-tradie', query, problem, listings.length)}
-          <form method="post" action="/welcome/tradies${query ? `?google=${encodeURIComponent(query)}` : ''}" class="mt-4 space-y-3">
-            ${unplaced ? alert(unplaced, 'error') : ''}
-            ${tradieFields({ listings, values: o.values, errors: o.errors })}
-            <div>${button('Add Tradie', { variant: tradies.length ? 'secondary' : 'primary' })}</div>
-          </form>
+          ${await addTradieSection({
+            actions,
+            choice: listingChoice((name) => c.req.query(name)),
+            path: '/welcome/tradies',
+            anchor: '#add-tradie',
+            postTo: '/welcome/tradies',
+            submit: button('Add Tradie', { variant: tradies.length ? 'secondary' : 'primary' }),
+            values: o.values,
+            errors: o.errors,
+            refusal: unplaced ? alert(unplaced, 'error') : undefined,
+          })}
         `,
       })}
     `,
@@ -520,7 +537,7 @@ async function readPropertyForm(actions: Actions, form: FormValues, myId: number
   if (!managers.some((m) => m.id === chosenManager)) errors.propertyManagerId = 'Choose a Property Manager in your Agency';
 
   const tradies = await actions.people('tradie');
-  const nominatedTradieIds = list(form, 'nominatedTradieIds').map(Number);
+  const nominatedTradieIds = nominatedFrom(form);
   if (nominatedTradieIds.some((id) => !tradies.some((t) => t.id === id))) errors.nominatedTradieIds = 'Choose Tradies from the list';
 
   // Who already has each mobile and email, so nobody is added twice.
@@ -752,13 +769,11 @@ async function propertyForm(actions: Actions, myId: number, o: { values?: Values
         </div>
       </details>
       ${tradies.length
-        ? choiceGroup({
+        ? tradiePicker({
+            id: 'welcome-property',
             legend: 'Nominated Tradies (optional)',
-            name: 'nominatedTradieIds',
-            type: 'checkbox',
-            options: tradies.map((t) => ({ value: String(t.id), label: `${t.businessName ?? t.name} (${t.trades.map(humanise).join(', ')})` })),
-            checked: Array.isArray(nominated) ? nominated : nominated ? [nominated] : [],
-            hint: 'Who the Tenant can call for an Urgent Repair.',
+            tradies,
+            chosen: (Array.isArray(nominated) ? nominated : nominated ? [nominated] : []).filter(Boolean),
             error: errors.nominatedTradieIds,
           })
         : html`<p class="text-sm text-muted">Add Tradies in the Tradies step to nominate them for Urgent Repairs.</p>`}
@@ -834,11 +849,13 @@ async function doneStep(c: WizardContext, demo: boolean): Promise<Html> {
           ? `Email is ${current.address}, waiting for your first message`
           : verified
             ? `${ch.name} verified at ${current.address}`
-            : `${ch.name} connected to ${current.address}`;
+            : `${ch.name} connected to ${current.address}, not verified yet`;
+      // The button says the next thing to do for this channel.
+      const fix = ch.type === 'email' ? 'Check email' : current ? 'Verify SMS' : 'Connect SMS';
       return {
         done: verified,
         text,
-        fix: ['Check channels', `/welcome/channels#${ch.type}`] as [string, string],
+        fix: [fix, `/welcome/channels#${ch.type}`] as [string, string],
       };
     }),
     { done: progress.tradies, text: progress.tradies ? count(tradies.length, 'Tradie') : 'No Tradies yet', fix: ['Add Tradies', '/welcome/tradies'] },
@@ -863,13 +880,13 @@ async function doneStep(c: WizardContext, demo: boolean): Promise<Html> {
       </p>
       ${card({
         title: 'Your setup',
-        body: html`<ul class="space-y-1" aria-label="Setup checklist">
+        body: html`<ul class="wizard-checklist" aria-label="Setup checklist">
           ${items.map(
-            (item) => html`<li class="flex items-start gap-3 text-sm">
-              <span class="${item.done ? 'text-done' : 'text-muted'} w-4 shrink-0 text-center font-semibold" aria-hidden="true">${item.done ? '✓' : '–'}</span>
+            (item) => html`<li class="${item.done ? 'is-done' : 'is-todo'}">
+              <span class="wizard-check" aria-hidden="true">${item.done ? icon('check-circle', { size: 'size-5' }) : icon('circle', { size: 'size-5' })}</span>
               <span class="sr-only">${item.done ? 'Done: ' : 'To do: '}</span>
-              <span class="min-w-0 flex-1">${item.text}</span>
-              ${!item.done && item.fix ? html`<a class="link text-sm" href="${item.fix[1]}">${item.fix[0]}</a>` : ''}
+              <span class="wizard-check-text">${item.text}</span>
+              ${!item.done && item.fix ? linkButton(item.fix[0], item.fix[1], { size: 'sm' }) : ''}
             </li>`,
           )}
         </ul>`,
@@ -887,7 +904,6 @@ async function doneStep(c: WizardContext, demo: boolean): Promise<Html> {
               questions, and it arrives on your dashboard as a Maintenance Request.
             </p>`,
       })}
-      <p>${linkButton('Go to your dashboard', '/', { variant: 'primary' })}</p>
     `,
   });
 }

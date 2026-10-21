@@ -1,6 +1,6 @@
 # Move the data layer to Supabase Postgres, with separate test and production databases
 
-Status: needs-triage
+Status: resolved
 
 ## Goal
 
@@ -37,3 +37,7 @@ Run myEST8 on Supabase Postgres so production data lives in a hosted, backed-up 
 
 - Port one module at a time behind the existing functions and keep `npm run check` green after each.
 - Add tests for what Postgres changes: concurrent requests interleaving inside what used to be one synchronous transaction (two Quotes chosen at once, two webhooks for the same message), and ids and timestamps round-tripping.
+
+## Comments
+
+2026-10-19: resolved by work already merged. The data layer runs on postgres.js against Supabase Postgres (`src/db.ts`), with migrations in `supabase/migrations/` (`src/migrate.ts`), files in Supabase Storage, and a separate schema per test. The hosted project is live behind the Vercel deployment.

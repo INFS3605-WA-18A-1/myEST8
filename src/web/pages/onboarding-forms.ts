@@ -11,10 +11,11 @@ import { MAX_SHEET_BYTES } from '../../spreadsheet.ts';
 import { ActionError, TRADES, type Trade } from '../../shared.ts';
 import { int, list, optional, text, type FormValues } from '../forms.ts';
 import { icon } from '../icons.ts';
-import { badge, button, emptyState, field, formatWhen, humanise, table, type Html } from '../ui.ts';
+import { alert, badge, button, contactLink, dl, emptyState, field, formatWhen, humanise, ratingChip, rowLink, table, type Html, type Option } from '../ui.ts';
 
 type Person = Awaited<ReturnType<PropertyManagerActions['people']>>[number];
 type Listing = Awaited<ReturnType<PropertyManagerActions['findGoogleListings']>>[number];
+type ListingDetails = Awaited<ReturnType<PropertyManagerActions['googleListing']>>;
 type AgencyChannel = Awaited<ReturnType<PropertyManagerActions['channels']>>[number];
 
 /** Posted values to show again in a refused form, by field name. Files are never shown again. */
@@ -22,8 +23,8 @@ export type Values = Record<string, string | string[]>;
 /** Messages to show next to controls, by field name. */
 export type Errors = Record<string, string>;
 
-/** The radio value for a Tradie who has no Google listing. */
-export const NOT_ON_GOOGLE = 'none';
+/** The `placeId` posted for a Tradie who has no Google listing. */
+const NOT_ON_GOOGLE = 'none';
 
 /**
  * The Agency's channels, as the forms describe them: SMS and email. WhatsApp is not offered
@@ -127,7 +128,7 @@ export function phoneChannelForm(o: {
   className: string;
 }): Html {
   const value = o.pending?.address || o.current || o.suggestion || '';
-  return html`<form method="post" action="${o.postTo}" class="${o.className}">
+  return html`<form method="post" action="${o.postTo}" class="control-row ${o.className}">
       <input type="hidden" name="type" value="${o.channel.type}" />
       ${field({
         label: o.channel.addressLabel,
@@ -138,7 +139,7 @@ export function phoneChannelForm(o: {
         value,
         placeholder: o.channel.placeholder,
       })}
-      ${button(o.current || o.pending ? 'Send a new code' : 'Send code', { size: 'sm', variant: o.current ? 'secondary' : 'primary' })}
+      ${button(o.current || o.pending ? 'Send a new code' : 'Send code', { variant: o.current ? 'secondary' : 'primary' })}
     </form>
     ${o.pending
       ? html`<form method="post" action="${o.confirmTo}" class="${o.className}">
@@ -153,7 +154,7 @@ export function phoneChannelForm(o: {
             placeholder: '123456',
             hint: `Sent to ${o.pending.address}. It expires in 10 minutes.`,
           })}
-          ${button(`Verify ${o.channel.name}`, { size: 'sm' })}
+          ${button(`Verify ${o.channel.name}`)}
         </form>`
       : ''}`;
 }
@@ -165,7 +166,7 @@ export function inboundEmailField(address: string): Html {
       <label class="field-label" for="email-address">Inbound email address</label>
       <input id="email-address" class="input w-full" type="email" readonly value="${address}" />
     </div>
-    <button type="button" class="btn btn-secondary btn-sm" data-copy-for="email-address">Copy</button>
+    <button type="button" class="btn btn-outline" data-copy-for="email-address">Copy</button>
   </div>`;
 }
 
@@ -237,7 +238,49 @@ export function scoped(scope: string | undefined, name: string) {
 }
 
 /** Checkboxes (in `columns` from 768px) or radio buttons in a labelled group. `checked` ticks the given values. */
-export function choiceGroup(o: {
+/** Properties for a searchable select: the address, found by its street, suburb or postcode too. */
+export function propertyOptions(properties: { id: number; address: string; suburb: string }[]): Option[] {
+  return properties.map((p) => ({ value: String(p.id), label: p.address, keywords: p.suburb }));
+}
+
+/** Tradies for a searchable select: the business and its Trades, found by the Tradie's own name too. */
+export function tradieOptions(tradies: { id: number; name: string; businessName: string | null; trades: Trade[] }[]): Option[] {
+  return tradies.map((t) => ({ value: String(t.id), label: `${t.businessName ?? t.name} (${t.trades.map(humanise).join(', ')})`, keywords: t.name }));
+}
+
+/**
+ * The Nominated Tradies: a searchable Tradie select per Tradie chosen, each with a
+ * Remove button, and "Add Tradie" for another (app.js). With nothing chosen it starts
+ * with one empty select, so it works without JavaScript too; empty ones post nothing
+ * (`nominatedFrom`).
+ */
+export function tradiePicker(o: { id: string; tradies: Parameters<typeof tradieOptions>[0]; chosen?: string[]; legend?: string; hint?: string; error?: string }): Html {
+  const options = tradieOptions(o.tradies);
+  const chosen = o.chosen?.length ? o.chosen : [''];
+  const row = (value: string, id: string) => html`<li class="picker-row" data-picker-row>
+    <label class="sr-only" for="${id}">Nominated Tradie</label>
+    <select id="${id}" name="nominatedTradieIds" class="select w-full" data-combobox>
+      <option value="">Search Tradies by name or Trade</option>
+      ${options.map((opt) => html`<option value="${opt.value}" ${value === opt.value ? 'selected' : ''} data-keywords="${opt.keywords ?? ''}">${opt.label}</option>`)}
+    </select>
+    <button type="button" class="btn btn-ghost btn-sm picker-remove" data-picker-remove>${icon('x', { size: 'size-4' })}<span>Remove</span></button>
+  </li>`;
+  return html`<fieldset class="picker min-w-0" data-picker ${o.error ? html`aria-invalid="true"` : ''}>
+    <legend class="field-label mb-1">${o.legend ?? 'Nominated Tradies'}</legend>
+    <ul class="picker-rows" data-picker-rows>${chosen.map((value, i) => row(value, `${o.id}-tradie-${i}`))}</ul>
+    <template data-picker-template>${row('', `${o.id}-tradie`)}</template>
+    <button type="button" class="btn btn-secondary btn-sm picker-add" data-picker-add hidden>${icon('plus', { size: 'size-4' })}<span>Add Tradie</span></button>
+    ${o.error ? html`<p class="field-error">${o.error}</p>` : ''}
+    <p class="field-hint">${o.hint ?? 'Who the Tenant can call for an Urgent Repair.'}</p>
+  </fieldset>`;
+}
+
+/** The Tradies a `tradiePicker` posted, each once, leaving out rows left empty. */
+export function nominatedFrom(form: FormValues): number[] {
+  return [...new Set(list(form, 'nominatedTradieIds').filter(Boolean).map(Number))];
+}
+
+function choiceGroup(o: {
   legend: string;
   name: string;
   type: 'checkbox' | 'radio';
@@ -272,28 +315,149 @@ export function choiceGroup(o: {
   </fieldset>`;
 }
 
-/** The Google listing search that comes before the Tradie form. Submits `google` to `action` by GET. */
-export function googleSearchForm(action: string, query: string, problem: string | null, found: number): Html {
-  return html`<form method="get" action="${action}" class="grid items-end gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
-      ${field({ label: 'First, find their Google listing', name: 'google', id: 'google-search', value: query, placeholder: 'Business name and suburb' })}
-      ${button('Search Google', { variant: 'secondary', size: 'sm' })}
-    </form>
-    ${problem ? html`<p class="mt-2 text-sm text-high">${problem}</p>` : ''}
-    ${query && !problem && !found ? html`<p class="mt-2 text-sm">No Google listings found for "${query}".</p>` : ''}`;
+const GOOGLE_DOWN = "Google search isn't working right now. Try again, or mark the Tradie as not on Google.";
+
+/**
+ * Which Google listing the Tradie form is for, as the page's address says: what was
+ * searched for, the listing picked from the results, or "not on Google" (`manual`).
+ */
+export type ListingChoice = { query: string; place: string; manual: boolean };
+
+/** The choice a page was asked for, from its `google`, `place` and `manual` parameters. */
+export function listingChoice(param: (name: string) => string | undefined): ListingChoice {
+  const manual = param('manual') === '1';
+  return { query: param('google')?.trim() ?? '', place: manual ? '' : (param('place')?.trim() ?? ''), manual };
+}
+
+/** The choice as query parameters, so a link or a refused form comes back to it. */
+export function listingParams(choice: ListingChoice): string {
+  return [choice.query && `google=${encodeURIComponent(choice.query)}`, choice.place && `place=${encodeURIComponent(choice.place)}`, choice.manual && 'manual=1'].filter(Boolean).join('&');
+}
+
+/** `url` with `params` added to its query. */
+function withParams(url: string, params: string) {
+  return params ? `${url}${url.includes('?') ? '&' : '?'}${params}` : url;
 }
 
 /** Google listings for `query`, or the problem to show when the search failed. */
-export async function searchListings(actions: PropertyManagerActions, query: string): Promise<{ listings: Listing[]; problem: string | null }> {
+async function searchListings(actions: PropertyManagerActions, query: string): Promise<{ listings: Listing[]; problem: string | null }> {
   if (!query) return { listings: [], problem: null };
   try {
     return { listings: await actions.findGoogleListings(query), problem: null };
   } catch {
-    return { listings: [], problem: "Google search isn't working right now. Try again, or mark the Tradie as not on Google." };
+    return { listings: [], problem: GOOGLE_DOWN };
   }
 }
 
-/** The fields of the Tradie form: business, contact, Trades, starting rating and Google listing. */
-export function tradieFields(o: { listings: Listing[]; values?: Values; errors?: Errors }): Html {
+/** The picked listing's details with Jev's Trades, or the problem to show when Google failed. */
+async function loadListing(actions: PropertyManagerActions, placeId: string): Promise<{ listing: ListingDetails | null; problem: string | null }> {
+  if (!placeId) return { listing: null, problem: null };
+  try {
+    return { listing: await actions.googleListing(placeId), problem: null };
+  } catch {
+    return { listing: null, problem: GOOGLE_DOWN };
+  }
+}
+
+/** The listing's phone when it is an Australian mobile (04… or +614…). A landline isn't put in Mobile: myEST8 texts that number. */
+function australianMobile(phone: string | null): string | null {
+  const number = phone?.trim() ?? '';
+  return /^(?:0|\+61)4\d{8}$/.test(number.replace(/[\s()-]/g, '')) ? number : null;
+}
+
+/** What a listing fills the Tradie form in with. The contact, email and rating are the Property Manager's to give. */
+function listingValues(listing: ListingDetails): Values {
+  return { businessName: listing.name, mobile: australianMobile(listing.phone) ?? '', trades: listing.suggestedTrades };
+}
+
+/** What Google and Jev say about the picked listing, above the form it fills in. */
+function listingCard(listing: ListingDetails): Html {
+  const mobile = australianMobile(listing.phone);
+  const site = listing.website && /^https?:\/\//i.test(listing.website) ? html`<a class="link" href="${listing.website}" target="_blank" rel="noopener noreferrer">${listing.website}</a>` : null;
+  const trades = listing.tradesSuggested
+    ? listing.suggestedTrades.length
+      ? html`<span class="flex flex-wrap gap-1">${listing.suggestedTrades.map((trade) => badge(humanise(trade), 'info'))}</span>`
+      : 'None'
+    : "Jev couldn't suggest any right now";
+  const facts: [string, Html | string][] = [];
+  if (listing.phone) {
+    facts.push(['Phone', html`${contactLink('mobile', listing.phone)}${mobile ? '' : html`<span class="block text-muted">Not put in Mobile, because myEST8 texts that number.</span>`}`]);
+  }
+  if (site) facts.push(['Website', site]);
+  facts.push(['Google rating', ratingChip({ source: 'Google', rating: listing.rating, count: listing.reviewCount, named: false })]);
+  facts.push(['Trades Jev suggests', trades]);
+  return html`<div class="listing-card">
+    <h3 class="listing-card-name">${listing.name}</h3>
+    <p class="listing-card-address">${listing.address}</p>
+    ${dl(facts)}
+  </div>`;
+}
+
+/**
+ * Adding a Tradie from their Google listing, the one component of the welcome wizard,
+ * Setup and the Tradies page: the search, its results as links, a card for the listing
+ * picked, then the form filled in from it. `path` and `anchor` are where the page is;
+ * `postTo` is where the form posts, to which the choice is added so that a refusal
+ * comes back to it. `values` and `errors` are a refused form's, shown again over the
+ * listing's own; `refusal` is why it was refused. Nothing is stored until the form is posted.
+ */
+export async function addTradieSection(o: {
+  actions: PropertyManagerActions;
+  choice: ListingChoice;
+  path: string;
+  anchor: string;
+  postTo: string;
+  submit: Html;
+  values?: Values;
+  errors?: Errors;
+  refusal?: Html;
+}): Promise<Html> {
+  const { actions, values, errors } = o;
+  // A form that was refused is still for the listing it was posted with.
+  const posted = valueOf(values, 'placeId');
+  const choice =
+    o.choice.place || o.choice.manual || !posted ? o.choice : posted === NOT_ON_GOOGLE ? { ...o.choice, manual: true } : { ...o.choice, place: posted };
+  const [search, picked] = await Promise.all([searchListings(actions, choice.query), loadListing(actions, choice.place)]);
+  const problem = search.problem ?? picked.problem;
+  const { listing } = picked;
+  const href = (to: Partial<ListingChoice>) => `${o.path}?${listingParams({ query: choice.query, place: '', manual: false, ...to })}${o.anchor}`;
+  const placeId = choice.manual ? NOT_ON_GOOGLE : listing ? choice.place : '';
+  const tradesHint = !listing ? undefined : listing.suggestedTrades.length ? 'Suggested from their Google listing. Check them.' : 'Choose their Trades.';
+  return html`
+    <form method="get" action="${o.path}${o.anchor}" class="control-row grid items-end gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+      ${field({ label: 'First, find their Google listing', name: 'google', id: 'google-search', value: choice.query, placeholder: 'Business name and suburb' })}
+      ${button('Search Google', { variant: 'secondary' })}
+    </form>
+    ${problem ? html`<p class="mt-2 text-sm text-high">${problem}</p>` : ''}
+    ${choice.query && !problem && !search.listings.length ? html`<p class="mt-2 text-sm">No Google listings found for "${choice.query}".</p>` : ''}
+    ${search.listings.length
+      ? html`<ul class="listing-results" role="list" aria-label="Google listings">
+          ${search.listings.map((l) => {
+            const current = l.placeId === choice.place;
+            return html`<li><a class="listing-result" href="${href({ place: l.placeId })}" ${current ? html`aria-current="true"` : ''}>
+              <span class="listing-result-name">${l.name}</span>
+              <span class="listing-result-address">${l.address}</span>
+              ${current ? html`<span class="listing-result-chosen">${icon('check-circle', { size: 'size-4' })}Chosen</span>` : ''}
+            </a></li>`;
+          })}
+        </ul>`
+      : ''}
+    <p class="mt-3 text-sm"><a class="link" href="${href({ manual: true })}">Not on Google? Enter their details yourself</a></p>
+    ${listing ? listingCard(listing) : ''}
+    ${placeId
+      ? html`<form method="post" action="${withParams(o.postTo, listingParams(choice))}" class="mt-4 space-y-3">
+          ${o.refusal ?? ''}
+          ${errors?.placeId ? alert(errors.placeId, 'error') : ''}
+          <input type="hidden" name="placeId" value="${placeId}" />
+          ${tradieFields({ values: values ?? (listing ? listingValues(listing) : undefined), errors, tradesHint })}
+          <div>${o.submit}</div>
+        </form>`
+      : (o.refusal ?? '')}
+  `;
+}
+
+/** The fields of the Tradie form: business, contact, Trades and starting rating. */
+export function tradieFields(o: { values?: Values; errors?: Errors; tradesHint?: string }): Html {
   const { values, errors } = o;
   const trades = values?.trades;
   return fieldGrid(html`
@@ -307,6 +471,7 @@ export function tradieFields(o: { listings: Listing[]; values?: Values; errors?:
         options: TRADES.map((trade) => ({ value: trade, label: humanise(trade) })),
         columns: 4,
         checked: Array.isArray(trades) ? trades : trades ? [trades] : [],
+        hint: o.tradesHint,
         error: errors?.trades,
       })}
     </div>
@@ -322,18 +487,6 @@ export function tradieFields(o: { listings: Listing[]; values?: Values; errors?:
       hint: 'How good they have been for the Agency so far. Ratings after each Job build on it.',
       error: errors?.startingRating,
     })}
-    <div class="md:col-span-2">
-      ${choiceGroup({
-        legend: 'Google listing',
-        name: 'placeId',
-        type: 'radio',
-        required: true,
-        options: [...o.listings.map((l) => ({ value: l.placeId, label: `${l.name}, ${l.address}` })), { value: NOT_ON_GOOGLE, label: 'Not on Google' }],
-        checked: [valueOf(values, 'placeId')],
-        hint: o.listings.length ? undefined : 'Search above to link their listing, so their Google rating shows next to ours.',
-        error: errors?.placeId,
-      })}
-    </div>
   `);
 }
 
@@ -363,18 +516,19 @@ export async function addTradieFrom(actions: PropertyManagerActions, form: FormV
 /** The Agency's Tradies with their Trades and both ratings. */
 export async function tradiesTable(actions: PropertyManagerActions, tradies: Person[], empty = 'No Tradies yet.'): Promise<Html> {
   if (!tradies.length) return emptyState(empty);
-  const ratings = await Promise.all(tradies.map(async (t) => (await actions.tradie(t.id)).myEst8Rating));
-  const rows = tradies.map((t, i) => {
-    const { average, count } = ratings[i]!;
+  // The directory has every Tradie's rating; a Tradie's whole profile isn't needed for it.
+  const ratings = new Map((await actions.tradieDirectory()).map((t) => [t.tradieId, t.myEst8Rating]));
+  const rows = tradies.map((t) => {
+    const { average, count } = ratings.get(t.id)!;
     return [
-      html`<a class="link font-medium" href="/tradies/${t.id}">${t.businessName ?? t.name}</a>`,
+      rowLink(t.businessName ?? t.name, `/tradies/${t.id}`),
       html`${t.name}`,
       html`${t.trades.map((trade) => html`${badge(humanise(trade), 'info')} `)}`,
-      html`${average.toFixed(1)} <span class="text-sm text-muted">(${count})</span>`,
-      html`${t.googlePlaceId ? `${t.googleRating?.toFixed(1) ?? '—'} (${t.googleReviewCount ?? 0} reviews)` : 'Not on Google'}`,
+      ratingChip({ source: 'myEST8', rating: average, count, named: false }),
+      ratingChip({ source: 'Google', rating: t.googleRating, count: t.googleReviewCount ?? 0, onGoogle: !!t.googlePlaceId, named: false }),
     ];
   });
-  return table(['Business', 'Name', 'Trades', 'myEST8 rating', 'Google rating'], rows, { stack: true, caption: 'Tradies' });
+  return table(['Business', 'Name', 'Trades', 'myEST8 rating', 'Google rating'], rows, { stack: 'labelled', caption: 'Tradies' });
 }
 
 // Importing from a spreadsheet

@@ -1,7 +1,7 @@
 // The design system's static files, served from this server so the demo works
-// offline: Tailwind's browser build, daisyUI and Leaflet (the Dispatch map) from
+// offline: the prebuilt Tailwind utilities (static/tw.css, from `npm run css`), daisyUI and MapLibre GL JS (the Dispatch map) from
 // node_modules, the app's own CSS, JS and favicon from ./static, and the
-// self-hosted Lexend and Red Hat Text fonts. Each file is read once, on first request.
+// self-hosted Bricolage Grotesque and Public Sans variable fonts. Each file is read once, on first request.
 
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -14,41 +14,31 @@ const JS = 'text/javascript; charset=utf-8';
 const CSS = 'text/css; charset=utf-8';
 const WOFF2 = 'font/woff2';
 const SVG = 'image/svg+xml';
-const PNG = 'image/png';
 
-/** Leaflet's built files, in its package's dist/ folder. */
-const leaflet = (...path: string[]) => join(dirname(require.resolve('leaflet/package.json')), 'dist', ...path);
+/** MapLibre GL JS's built files, in its package's dist/ folder. It is published as ES modules only. */
+const maplibre = (name: string) => join(dirname(require.resolve('maplibre-gl/package.json')), 'dist', name);
 
 const ASSETS: Record<string, { file: () => string; type: string }> = {
-  'tailwind.js': { file: () => require.resolve('@tailwindcss/browser'), type: JS },
+  'tw.css': { file: () => fileURLToPath(new URL('./static/tw.css', import.meta.url)), type: CSS },
   'daisyui.css': { file: () => require.resolve('daisyui/daisyui.css'), type: CSS },
   'app.css': { file: () => fileURLToPath(new URL('./static/app.css', import.meta.url)), type: CSS },
   'landing.css': { file: () => fileURLToPath(new URL('./static/landing.css', import.meta.url)), type: CSS },
   'auth.css': { file: () => fileURLToPath(new URL('./static/auth.css', import.meta.url)), type: CSS },
   'tenant.css': { file: () => fileURLToPath(new URL('./static/tenant.css', import.meta.url)), type: CSS },
   'app.js': { file: () => fileURLToPath(new URL('./static/app.js', import.meta.url)), type: JS },
-  'leaflet.js': { file: () => leaflet('leaflet.js'), type: JS },
-  'leaflet.css': { file: () => leaflet('leaflet.css'), type: CSS },
+  // MapLibre starts its worker from the module's own URL, with maplibre-gl-worker.mjs beside it.
+  'maplibre-gl.mjs': { file: () => maplibre('maplibre-gl.mjs'), type: JS },
+  'maplibre-gl-worker.mjs': { file: () => maplibre('maplibre-gl-worker.mjs'), type: JS },
+  'maplibre-gl.css': { file: () => maplibre('maplibre-gl.css'), type: CSS },
   'dispatch-map.js': { file: () => fileURLToPath(new URL('./static/dispatch-map.js', import.meta.url)), type: JS },
   'favicon.svg': { file: () => fileURLToPath(new URL('./static/favicon.svg', import.meta.url)), type: SVG },
 };
 
 /** The fonts the design uses, by package and file name. Only these are served under /assets/fonts/. */
 const FONTS: Record<string, string> = {
-  'lexend-latin-400-normal.woff2': '@fontsource/lexend',
-  'lexend-latin-600-normal.woff2': '@fontsource/lexend',
-  'lexend-latin-700-normal.woff2': '@fontsource/lexend',
-  'red-hat-text-latin-400-normal.woff2': '@fontsource/red-hat-text',
-  'red-hat-text-latin-400-italic.woff2': '@fontsource/red-hat-text',
-  'red-hat-text-latin-500-normal.woff2': '@fontsource/red-hat-text',
-  'red-hat-text-latin-600-normal.woff2': '@fontsource/red-hat-text',
+  'bricolage-grotesque-latin-opsz-normal.woff2': '@fontsource-variable/bricolage-grotesque',
+  'public-sans-latin-wght-normal.woff2': '@fontsource-variable/public-sans',
 };
-
-/**
- * The images leaflet.css refers to (`url(images/layers.png)`, resolved against /assets/leaflet.css,
- * so they are served from /assets/images/). Only these are served there.
- */
-const LEAFLET_IMAGES = ['layers.png', 'layers-2x.png', 'marker-icon.png', 'marker-icon-2x.png', 'marker-shadow.png'];
 
 const cache = new Map<string, Uint8Array<ArrayBuffer>>();
 
@@ -68,8 +58,8 @@ function fontFile(name: string) {
 }
 
 /**
- * Serves /assets/*: Tailwind's browser build, daisyUI, Leaflet and its images, the app's own
- * CSS, JS and favicon, and the Lexend and Red Hat Text fonts under /assets/fonts/. Anything
+ * Serves /assets/*: the prebuilt Tailwind utilities, daisyUI, MapLibre GL JS, the app's own
+ * CSS, JS and favicon, and the Bricolage Grotesque and Public Sans fonts under /assets/fonts/. Anything
  * else there is a 404.
  */
 export function assetRoutes() {
@@ -80,15 +70,6 @@ export function assetRoutes() {
     return c.body(read(`fonts/${name}`, () => fontFile(name)), 200, {
       'content-type': WOFF2,
       'cache-control': 'public, max-age=31536000, immutable',
-      'x-content-type-options': 'nosniff',
-    });
-  });
-  routes.get('/assets/images/:name', (c, next) => {
-    const name = c.req.param('name');
-    if (!LEAFLET_IMAGES.includes(name)) return next();
-    return c.body(read(`images/${name}`, () => leaflet('images', name)), 200, {
-      'content-type': PNG,
-      'cache-control': 'public, max-age=3600',
       'x-content-type-options': 'nosniff',
     });
   });

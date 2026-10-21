@@ -4,6 +4,16 @@
 // and closing the user menu.
 
 (() => {
+  // A button with data-fill="<input id>" and data-value puts that value in the input (a quick choice of time).
+  document.addEventListener('click', (event) => {
+    const button = event.target instanceof Element ? event.target.closest('[data-fill]') : null;
+    const input = button && document.getElementById(button.dataset.fill);
+    if (input instanceof HTMLInputElement) {
+      input.value = button.dataset.value ?? '';
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  });
+
   // Forms with data-confirm (postButton's `confirm`) ask first. A form already
   // on its way isn't sent twice; the guard lifts after a while in case the
   // response didn't navigate (a download, say).
@@ -31,14 +41,17 @@
   // Coming back with the browser's Back button restores the page as it was left.
   window.addEventListener('pageshow', () => document.querySelectorAll('form[data-submitting]').forEach(release));
 
-  // Flash messages get a close button; "ok" ones also fade after a while,
-  // unless the pointer or focus is on them. Errors stay until closed.
+  // Flash messages get a close button (Phosphor's x, like every other icon); "ok"
+  // ones also fade after a while, unless the pointer or focus is on them. Errors
+  // stay until closed.
+  const X_ICON =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" width="16" height="16" aria-hidden="true" focusable="false"><path d="M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z"/></svg>';
   for (const flash of document.querySelectorAll('[data-flash]')) {
     const close = document.createElement('button');
     close.type = 'button';
-    close.className = 'btn btn-ghost btn-sm btn-square';
+    close.className = 'btn btn-ghost btn-sm btn-square flash-close';
     close.setAttribute('aria-label', 'Dismiss message');
-    close.textContent = '×';
+    close.innerHTML = X_ICON;
     close.addEventListener('click', () => flash.remove());
     flash.append(close);
     if (flash.dataset.flash === 'ok') {
@@ -251,16 +264,6 @@
   });
 })();
 
-// === autosubmit ===
-// A GET filter form marked data-autosubmit (the Tradies' Trade filter) applies as
-// soon as a select in it changes. Without this file its own button submits it.
-document.addEventListener('change', (event) => {
-  const select = event.target;
-  if (!(select instanceof HTMLSelectElement)) return;
-  const form = select.form;
-  if (form && form.hasAttribute('data-autosubmit')) form.requestSubmit();
-});
-
 // === copy ===
 // A button with data-copy-for="<input id>" copies that field. Without this file
 // the field is still there to copy by hand.
@@ -319,11 +322,200 @@ document.addEventListener('change', (event) => {
         const put = await fetch(slots[i].url, { method: 'PUT', headers: { 'content-type': file.type || 'application/octet-stream' }, body: file });
         if (!put.ok) throw new Error('upload');
       }
-      const done = await post('complete', { files: files.map((f, i) => ({ path: slots[i].path, filename: f.name, contentType: f.type })) });
+      // A receipt's form also says how much the Tenant claims.
+      const amount = form.querySelector('input[name=amount]');
+      const done = await post('complete', {
+        files: files.map((f, i) => ({ path: slots[i].path, filename: f.name, contentType: f.type })),
+        ...(amount instanceof HTMLInputElement && amount.value.trim() ? { amount: amount.value } : {}),
+      });
       if (!done.ok) throw new Error('complete');
       location.assign(`/u/${token}?ok=${files.length}`);
     } catch {
       fallback();
     }
   });
+})();
+
+// === filter bar ===
+// A filter bar's selects apply as soon as one changes, so its Apply button is only
+// for pages without this file.
+(() => {
+  for (const form of document.querySelectorAll('form[data-autosubmit]')) {
+    form.addEventListener('change', () => form.requestSubmit());
+    form.querySelector('.filter-bar-apply')?.setAttribute('hidden', '');
+  }
+})();
+
+// === searchable selects ===
+// A <select data-combobox> (field's `search`) becomes a text box that filters its
+// options as you type: every word typed must appear in the option's label or its
+// data-keywords (a Property's suburb and postcode, a Tradie's name). The select stays
+// in the form, hidden, and holds the value that is posted; picking an option sets it
+// and fires its change event, so a filter bar still applies at once. Without this file
+// it is a plain select.
+//
+// A Nominated Tradies picker ([data-picker]) adds a row of its <template> for each
+// "Add Tradie" press, and each row's Remove button takes it away.
+(() => {
+  let made = 0;
+
+  function enhance(select) {
+    if (select.dataset.comboboxReady || select.multiple) return;
+    select.dataset.comboboxReady = 'true';
+    const n = ++made;
+    const options = [...select.options].map((option) => ({
+      value: option.value,
+      label: option.textContent.trim(),
+      text: `${option.textContent} ${option.dataset.keywords || ''}`.toLowerCase(),
+    }));
+    const blank = options.find((o) => o.value === '');
+    const labelOf = (value) => options.find((o) => o.value === value)?.label ?? '';
+
+    const box = document.createElement('div');
+    box.className = 'combobox';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = `${select.className.replace(/\bselect\b/g, 'input')} combobox-input`;
+    input.autocomplete = 'off';
+    input.spellcheck = false;
+    input.setAttribute('role', 'combobox');
+    input.setAttribute('aria-autocomplete', 'list');
+    input.setAttribute('aria-expanded', 'false');
+    input.placeholder = blank && blank.label ? blank.label : 'Type to search';
+    const list = document.createElement('ul');
+    list.className = 'combobox-list';
+    list.id = `combobox-${n}-list`;
+    list.setAttribute('role', 'listbox');
+    list.hidden = true;
+    input.setAttribute('aria-controls', list.id);
+
+    // The label, hint and error point at the text box now; the select keeps the value.
+    if (select.id) {
+      input.id = select.id;
+      select.id = `${select.id}-value`;
+    }
+    for (const name of ['aria-describedby', 'aria-invalid', 'aria-label']) {
+      if (select.hasAttribute(name)) input.setAttribute(name, select.getAttribute(name));
+    }
+    input.required = select.required;
+    select.required = false;
+    select.hidden = true;
+    select.tabIndex = -1;
+    select.after(box);
+    box.append(input, list, select);
+    input.value = select.value ? labelOf(select.value) : '';
+
+    let shown = [];
+    let active = -1;
+
+    function render(query) {
+      const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+      shown = options.filter((o) => (o.value === '' ? !words.length && blank?.label : words.every((w) => o.text.includes(w))));
+      list.replaceChildren(
+        ...(shown.length
+          ? shown.map((o, i) => {
+              const item = document.createElement('li');
+              item.id = `combobox-${n}-${i}`;
+              item.className = 'combobox-option';
+              item.setAttribute('role', 'option');
+              item.setAttribute('aria-selected', String(o.value === select.value && o.value !== ''));
+              item.textContent = o.label;
+              item.addEventListener('mousedown', (event) => event.preventDefault());
+              item.addEventListener('click', () => choose(o));
+              return item;
+            })
+          : [Object.assign(document.createElement('li'), { className: 'combobox-empty', textContent: 'No matches' })]),
+      );
+      setActive(shown.length ? Math.max(0, shown.findIndex((o) => o.value === select.value && o.value !== '')) : -1);
+    }
+
+    function setActive(i) {
+      active = i;
+      for (const item of list.querySelectorAll('[role="option"]')) item.classList.toggle('is-active', item.id === `combobox-${n}-${i}`);
+      if (i >= 0) {
+        input.setAttribute('aria-activedescendant', `combobox-${n}-${i}`);
+        document.getElementById(`combobox-${n}-${i}`)?.scrollIntoView({ block: 'nearest' });
+      } else input.removeAttribute('aria-activedescendant');
+    }
+
+    function open() {
+      if (!list.hidden) return;
+      render(input.value === labelOf(select.value) ? '' : input.value);
+      list.hidden = false;
+      input.setAttribute('aria-expanded', 'true');
+    }
+
+    function close() {
+      list.hidden = true;
+      input.setAttribute('aria-expanded', 'false');
+      input.removeAttribute('aria-activedescendant');
+    }
+
+    function choose(o) {
+      const changed = select.value !== o.value;
+      select.value = o.value;
+      input.value = o.value ? o.label : '';
+      input.setCustomValidity('');
+      close();
+      if (changed) select.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    input.addEventListener('focus', () => input.select());
+    input.addEventListener('click', open);
+    input.addEventListener('input', () => {
+      list.hidden = false;
+      input.setAttribute('aria-expanded', 'true');
+      render(input.value);
+    });
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        if (list.hidden) return open();
+        if (shown.length) setActive((active + (event.key === 'ArrowDown' ? 1 : shown.length - 1)) % shown.length);
+      } else if (event.key === 'Enter' && !list.hidden) {
+        event.preventDefault();
+        if (active >= 0) choose(shown[active]);
+      } else if (event.key === 'Escape' && !list.hidden) {
+        event.preventDefault();
+        input.value = labelOf(select.value);
+        close();
+      }
+    });
+    // Leaving the box keeps what was picked: typed words that picked nothing go back to it.
+    input.addEventListener('blur', () => {
+      close();
+      if (!input.value.trim() && select.value && blank) choose(blank);
+      else input.value = labelOf(select.value);
+    });
+    // A required box with nothing picked says so when the form is sent.
+    input.addEventListener('invalid', () => input.setCustomValidity(select.value ? '' : 'Choose one from the list'));
+  }
+
+  for (const select of document.querySelectorAll('select[data-combobox]')) enhance(select);
+
+  for (const picker of document.querySelectorAll('[data-picker]')) {
+    const rows = picker.querySelector('[data-picker-rows]');
+    const template = picker.querySelector('template[data-picker-template]');
+    const add = picker.querySelector('[data-picker-add]');
+    if (!rows || !template || !add) continue;
+    add.hidden = false;
+    let count = rows.children.length;
+    add.addEventListener('click', () => {
+      const row = template.content.firstElementChild.cloneNode(true);
+      count += 1;
+      for (const element of row.querySelectorAll('[id]')) element.id = `${element.id}-${count}`;
+      for (const label of row.querySelectorAll('label[for]')) label.htmlFor = `${label.htmlFor}-${count}`;
+      rows.append(row);
+      for (const select of row.querySelectorAll('select[data-combobox]')) enhance(select);
+      row.querySelector('input, select')?.focus();
+    });
+    picker.addEventListener('click', (event) => {
+      const remove = event.target instanceof Element ? event.target.closest('[data-picker-remove]') : null;
+      if (!remove) return;
+      const row = remove.closest('[data-picker-row]');
+      const next = row?.nextElementSibling || row?.previousElementSibling;
+      row?.remove();
+      (next?.querySelector('input, select') || add).focus();
+    });
+  }
 })();

@@ -3,6 +3,7 @@ import { all, one, run, transaction } from './db.ts';
 import { checkPhotoMetadata } from './photo-checks.ts';
 import type { ChannelType, ClassifierAnswer, ClassifierQuestion, InboundMessage } from './ports.ts';
 import type { Person, Property } from './profiles.ts';
+import { requireClaim, type ReceiptVia } from './tickets.ts';
 import { addMs, AVAILABILITY, HOUR_MS, invalid, iso, notFound, TRADES, URGENCIES, type Availability, type Trade, type Urgency } from './shared.ts';
 import type { GuidedQuestion } from './templates.ts';
 
@@ -12,6 +13,8 @@ export const MAX_UPLOAD_FILES = 10;
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 /** Photo formats phones produce. Not SVG, which can carry script into the Property Manager's pages. */
 const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/heic', 'image/heif', 'image/webp', 'image/gif'];
+/** What a Reimbursement Request's receipt can be: a photo of it, or the PDF the Tradie sent. */
+const RECEIPT_TYPES = [...PHOTO_TYPES, 'application/pdf'];
 
 /** What the agent is waiting for this person to answer. */
 type Awaiting =
@@ -239,6 +242,9 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
     });
     await logInbound(msg, tenant.id, issueId);
     if ((await modules.tickets.issue(issueId)).urgency === 'urgent') return startUrgentRepair(issueId);
+    // Photos sent with the first message are the issue's photos; other attachments are ignored here.
+    const arrived = await savePhotos(issueId, msg.fileIds);
+    if (arrived) await modules.tickets.updateIssue(issueId, { photosOnArrival: arrived });
     // If the Tenant stops answering, the issue still reaches a Property Manager.
     await worker.schedule('intake.no_photos', { issueId, stage: 'gathering' }, addMs(clock.now(), NO_PHOTOS_TIMEOUT_MS));
     await modules.notifications.send(
@@ -248,6 +254,41 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
       { issueId },
     );
     await askGuidedQuestion(tenant.id, issueId, 'location');
+  }
+
+  /** Saves each stored image as one of the issue's photos, with its metadata checked. Returns how many were photos. */
+  async function savePhotos(issueId: number, fileIds: number[]): Promise<number> {
+    const issue = await modules.tickets.issue(issueId);
+    const tenant = await modules.profiles.person(issue.tenantId);
+    const property = await modules.profiles.property(issue.propertyId);
+    const { timeZone } = await modules.profiles.agency(issue.agencyId);
+    let saved = 0;
+    for (const fileId of fileIds) {
+      const file = await files.get(fileId);
+      if (!PHOTO_TYPES.includes(file.contentType)) continue;
+      await addCheckedPhoto(issue, tenant, property, timeZone, fileId, file.content);
+      saved++;
+    }
+    return saved;
+  }
+
+  async function addCheckedPhoto(
+    issue: Awaited<ReturnType<typeof modules.tickets.issue>>,
+    tenant: Person,
+    property: Property,
+    timeZone: string,
+    fileId: number,
+    content: Uint8Array,
+  ) {
+    const check = await checkPhotoMetadata(content, {
+      reportedAt: new Date(issue.reportedAt),
+      tenancyStart: tenant.tenancyStart,
+      propertyLocation: property.location,
+      timeZone,
+      maxAgeDays: settings.photoMaxAgeDays,
+      maxDistanceKm: settings.photoMaxDistanceKm,
+    });
+    await modules.tickets.addPhoto(issue.id, fileId, check.metadata, check.reasons);
   }
 
   async function askGuidedQuestion(tenantId: number, issueId: number, next: GuidedQuestion) {
@@ -289,21 +330,31 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
     const urgency = readUrgency(answers);
     await modules.tickets.updateIssue(issueId, { ...urgency, ...readTrade(answers) });
     if (urgency.urgency === 'urgent') return startUrgentRepair(issueId);
+    await worker.schedule('intake.summarise', { issueId });
+    const have = (await modules.tickets.photos(issueId)).length;
+    const uploadLink = `${settings.baseUrl}/u/${issue.photosToken}`;
+    if (have > 0) {
+      await modules.tickets.updateIssue(issueId, { status: 'checking' });
+      await worker.schedule('intake.match_photos', { issueId });
+      await modules.notifications.send(issue.tenantId, 'tenant.upload_link', { uploadLink, alreadyHave: have }, { issueId });
+      return;
+    }
     await modules.tickets.updateIssue(issueId, { status: 'awaiting_photos' });
-    await modules.notifications.send(
-      issue.tenantId,
-      'tenant.upload_link',
-      { uploadLink: `${settings.baseUrl}/u/${issue.photosToken}` },
-      { issueId },
-    );
+    await modules.notifications.send(issue.tenantId, 'tenant.upload_link', { uploadLink }, { issueId });
     await worker.schedule('intake.no_photos', { issueId, stage: 'awaiting_photos' }, addMs(clock.now(), NO_PHOTOS_TIMEOUT_MS));
   }
 
   async function startUrgentRepair(issueId: number) {
     const issue = await modules.tickets.issue(issueId);
-    const property = await modules.profiles.property(issue.propertyId);
     const { receiptToken } = await modules.tickets.createUrgentRepair(issueId);
     if ((await awaitingFrom(issue.tenantId)).some((a) => a.kind === 'guided' && a.issueId === issueId)) await stopWaiting(issue.tenantId, 'guided');
+    await sendReceiptReminder(issueId, receiptToken);
+  }
+
+  /** What to do now, the Property's Nominated Tradies, and the link for the receipt the Reimbursement Request needs. */
+  async function sendReceiptReminder(issueId: number, receiptToken: string) {
+    const issue = await modules.tickets.issue(issueId);
+    const property = await modules.profiles.property(issue.propertyId);
     const nominatedTradies = (await Promise.all(property.nominatedTradieIds.map((id) => modules.profiles.person(id))))
       .filter((t) => t.mobile)
       .map((t) => ({ businessName: t.businessName ?? t.name, phone: t.mobile! }));
@@ -315,28 +366,74 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
     );
   }
 
-  async function forwardReceipt(urgentRepairId: number, fileIds: number[]) {
-    const urgentRepair = await modules.tickets.urgentRepair(urgentRepairId);
-    await modules.tickets.addReceipt(urgentRepairId, fileIds);
-    const issue = await modules.tickets.issue(urgentRepair.issueId);
-    const property = await modules.profiles.property(urgentRepair.propertyId);
+  /**
+   * A receipt for a Reimbursement Request arrived. It waits for the Property Manager
+   * to check it and forward it (the rail's Approvals count and the dashboard show
+   * it); nothing goes to the Property Owner yet.
+   */
+  async function receiveReceipt(urgentRepairId: number, fileIds: number[], o: { amountCents?: number | null; via: ReceiptVia }) {
+    await modules.tickets.addReceipt(urgentRepairId, fileIds, o);
+  }
+
+  /**
+   * The Property Manager forwards a checked Reimbursement Request to the Property
+   * Owner: by email where the Owner has one, with every receipt attached and the
+   * Property Manager copied in. Forwarding again sends another copy.
+   */
+  async function forwardReimbursement(agencyId: number, urgentRepairId: number, o: { amountCents?: number | null } = {}) {
+    const found = await modules.tickets.urgentRepairInAgency(agencyId, urgentRepairId);
+    const property = await modules.profiles.property(found.propertyId);
+    const owner = await modules.profiles.person(property.ownerId);
+    const forwarded = await modules.tickets.forwardUrgentRepair(agencyId, urgentRepairId, { amountCents: o.amountCents ?? null, ownerName: owner.name });
+    const issue = await modules.tickets.issue(forwarded.issueId);
     await modules.notifications.send(
-      property.ownerId,
+      owner.id,
       'owner.urgent_repair_receipt',
       {
         propertyAddress: property.address,
-        tenantName: (await modules.profiles.person(urgentRepair.tenantId)).name,
-        description: issue.description,
+        tenantName: (await modules.profiles.person(forwarded.tenantId)).name,
+        description: issue.summary ?? issue.description,
+        amountCents: forwarded.amountCents,
         limitCents: URGENT_REPAIR_LIMIT_CENTS,
       },
       {
         issueId: issue.id,
-        attachmentFileIds: fileIds,
+        attachmentFileIds: forwarded.receiptFileIds,
         preferEmail: true,
         copyPropertyManagerId: property.propertyManagerId,
       },
     );
-    await modules.tickets.setUrgentRepairStatus(urgentRepairId, 'receipt_forwarded');
+  }
+
+  /** The Property Owner has paid the Tenant back: the Reimbursement Request is done, and the Tenant is told. */
+  async function markReimbursed(agencyId: number, urgentRepairId: number) {
+    const done = await modules.tickets.markUrgentRepairReimbursed(agencyId, urgentRepairId);
+    const property = await modules.profiles.property(done.propertyId);
+    await modules.notifications.send(
+      done.tenantId,
+      'tenant.reimbursed',
+      { propertyAddress: property.address, amountCents: done.amountCents },
+      { issueId: done.issueId },
+    );
+  }
+
+  /** Sends the Tenant the receipt link again, while the Reimbursement Request still waits for the receipt. */
+  async function resendReceiptLink(agencyId: number, urgentRepairId: number) {
+    const found = await modules.tickets.urgentRepairInAgency(agencyId, urgentRepairId);
+    if (found.status !== 'reminder_sent') invalid('The Tenant has already sent the receipt');
+    await sendReceiptReminder(found.issueId, found.receiptToken);
+    await modules.tickets.recordUrgentRepairEvent(found.id, 'link_resent');
+  }
+
+  /** The files among `fileIds` that can be a receipt (a photo or a PDF). */
+  async function receiptFilesAmong(fileIds: number[]) {
+    if (!fileIds.length) return [];
+    const rows = await all<{ id: number; content_type: string }>(
+      db,
+      'SELECT id, content_type FROM files WHERE id IN (SELECT value::bigint FROM jsonb_array_elements_text(?::text::jsonb) AS ids (value)) ORDER BY id',
+      JSON.stringify(fileIds),
+    );
+    return rows.filter((f) => RECEIPT_TYPES.includes(f.content_type)).map((f) => f.id);
   }
 
   async function attachDuplicate(msg: Received, tenant: Person, property: Property, issueId: number) {
@@ -369,9 +466,11 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
       await logInbound(msg, tenant.id, related.issueId);
       return modules.scheduling.recordVisitConfirmation(workOrder.id);
     }
-    if (updateType === 'receipt' && related.urgentRepairId !== undefined && msg.fileIds.length) {
+    // A receipt counts only with a photo or PDF in it; anything else waits for the Property Manager as an update.
+    const receipts = updateType === 'receipt' && related.urgentRepairId !== undefined ? await receiptFilesAmong(msg.fileIds) : [];
+    if (receipts.length && (await modules.tickets.urgentRepair(related.urgentRepairId!)).status !== 'reimbursed') {
       await logInbound(msg, tenant.id, related.issueId);
-      return forwardReceipt(related.urgentRepairId, msg.fileIds);
+      return receiveReceipt(related.urgentRepairId!, receipts, { via: msg.channelType });
     }
     // A general update: logged and left unread for the Property Manager.
     await logInbound(msg, tenant.id, related.issueId, true);
@@ -414,17 +513,32 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
     const issueId = await issueIdOf(ref);
 
     if (kind === 'quote_request' && (replyType === 'quote' || replyType === 'decline')) {
-      await logInbound(msg, tradie.id, issueId);
+      // A price after the Estimate can't be a Firm Quote (a message can't carry its scope and
+      // dates): the Tradie is sent their quote page once a Firm Quote is allowed, and the message is left unread.
+      const afterEstimate = replyType === 'quote' && !!(await modules.quotes.quoteRequest(id))?.estimated;
+      await logInbound(msg, tradie.id, issueId, afterEstimate);
       const pdf = (await Promise.all(msg.fileIds.map((fileId) => files.get(fileId)))).find((f) => f.contentType === 'application/pdf');
-      return modules.quotes.recordTradieReply(id, { kind: replyType, text: msg.text, pdfFileId: pdf?.id ?? null });
+      await modules.quotes.recordTradieReply(id, { kind: replyType, text: msg.text, pdfFileId: pdf?.id ?? null });
+      return;
+    }
+    if (kind === 'work_order' && replyType === 'quote') {
+      // A price sent about a Site Inspection is for that request's Firm Quote, given on the quote page.
+      const visit = await modules.scheduling.workOrder(id);
+      if (visit?.kind !== 'inspection' || !visit.quoteRequestId) return toInbox(msg, tradie.id, 'low_confidence', answers);
+      await logInbound(msg, tradie.id, issueId, true);
+      await modules.quotes.recordTradieReply(visit.quoteRequestId, { kind: 'quote', text: msg.text, pdfFileId: null });
+      return;
     }
     if (kind === 'work_order' && replyType === 'reschedule_request') {
       await logInbound(msg, tradie.id, issueId, true);
       return modules.scheduling.recordRescheduleRequest(id, 'tradie');
     }
     if (kind === 'work_order' && replyType === 'done') {
-      await logInbound(msg, tradie.id, issueId);
-      return modules.scheduling.markDone(id);
+      // A visit is never done before it starts: the Tradie is told when it is booked for,
+      // and the message is left unread for the Property Manager.
+      const early = !(await modules.scheduling.hasStarted(id));
+      await logInbound(msg, tradie.id, issueId, early);
+      return early ? modules.scheduling.tellDoneTooEarly(id) : modules.scheduling.markDone(id);
     }
     return toInbox(msg, tradie.id, 'low_confidence', answers);
   }
@@ -485,6 +599,21 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
     await claim(msg);
   });
 
+  /** Writes the Summary. A Property Manager's own edit is never overwritten. A failure throws, so the worker retries. */
+  worker.on<{ issueId: number }>('intake.summarise', async ({ issueId }) => {
+    const issue = await modules.tickets.issue(issueId);
+    if (issue.summaryBy === 'property_manager') return;
+    const { summary } = await ports.summariser.summarise({
+      description: issue.description,
+      answers: { location: issue.answers.location, started: issue.answers.started, worsening: issue.answers.worsening },
+      trade: issue.trade,
+      photoCount: (await modules.tickets.photos(issueId)).length,
+    });
+    // Read again: the Property Manager may have edited while the model was writing.
+    if ((await modules.tickets.issue(issueId)).summaryBy === 'property_manager') return;
+    await modules.tickets.updateIssue(issueId, { summary, summaryBy: 'ai' });
+  });
+
   worker.on<{ issueId: number }>('intake.match_photos', async ({ issueId }) => {
     const issue = await modules.tickets.issue(issueId);
     if (issue.status !== 'checking' && issue.status !== 'maintenance_request') return;
@@ -508,15 +637,20 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
     await modules.tickets.updateIssue(issueId, { status: 'maintenance_request', noPhotos: true });
   });
 
+  // Uploads once handed their receipt over through this task, which forwarded it straight
+  // to the Property Owner. A task still queued from then is now received for review.
   worker.on<{ urgentRepairId: number; fileIds: number[] }>('intake.forward_receipt', ({ urgentRepairId, fileIds }) =>
-    forwardReceipt(urgentRepairId, fileIds),
+    receiveReceipt(urgentRepairId, fileIds, { via: 'upload' }),
   );
 
   return {
-    /** Stores an inbound message and leaves it for the worker. Safe to call again with the same provider message. */
-    async receive(message: InboundMessage) {
+    /**
+     * Stores an inbound message and leaves it for the worker. Safe to call again with the same provider message.
+     * Returns false, storing nothing, when no Agency has the address the message was sent to.
+     */
+    async receive(message: InboundMessage): Promise<boolean> {
       const agencyId = await modules.profiles.agencyByChannel(message.channelType, message.agencyChannel);
-      if (agencyId === null) return;
+      if (agencyId === null) return false;
       await transaction(db, async () => {
         if (await one(db, 'SELECT 1 FROM inbound_messages WHERE provider_message_id = ?', message.providerMessageId)) return;
         const attachments: StoredAttachment[] = [];
@@ -541,6 +675,7 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
         );
         await worker.schedule('intake.process', { inboundId });
       });
+      return true;
     },
 
     /** The Agency a no-login upload link belongs to; refuses a link that isn't one. */
@@ -550,50 +685,58 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
       return target.agencyId;
     },
 
-    /** Handles photos or a receipt uploaded through a no-login link. */
-    async upload(token: string, uploads: { filename: string; contentType: string; content: Uint8Array }[]) {
-      if (!uploads.length || uploads.length > MAX_UPLOAD_FILES) invalid(`Upload between 1 and ${MAX_UPLOAD_FILES} files`);
+    /**
+     * Handles photos or a receipt uploaded through a no-login link. A receipt must be
+     * photos or PDFs, and may come with the amount the Tenant claims (`amountCents`,
+     * ignored for photos of an issue).
+     */
+    async upload(token: string, uploads: { filename: string; contentType: string; content: Uint8Array }[], o: { amountCents?: number | null } = {}) {
+      if (uploads.length > MAX_UPLOAD_FILES) invalid(`Upload between 1 and ${MAX_UPLOAD_FILES} files`);
       if (uploads.some((u) => u.content.byteLength > MAX_UPLOAD_BYTES)) invalid('Each file must be under 10 MB');
 
       const issue = await modules.tickets.issueByPhotosToken(token);
       if (issue) {
+        if (!uploads.length) invalid(`Upload between 1 and ${MAX_UPLOAD_FILES} files`);
         if (!['awaiting_photos', 'checking', 'maintenance_request'].includes(issue.status)) invalid('This upload link has expired');
         if (uploads.some((u) => !PHOTO_TYPES.includes(u.contentType))) invalid('Only photos can be uploaded here (JPEG, PNG, HEIC, WebP or GIF)');
         const tenant = await modules.profiles.person(issue.tenantId);
         const property = await modules.profiles.property(issue.propertyId);
         const { timeZone } = await modules.profiles.agency(issue.agencyId);
         for (const photo of uploads) {
-          const fileId = await files.save(issue.agencyId, photo);
-          const check = await checkPhotoMetadata(photo.content, {
-            reportedAt: new Date(issue.reportedAt),
-            tenancyStart: tenant.tenancyStart,
-            propertyLocation: property.location,
-            timeZone,
-            maxAgeDays: settings.photoMaxAgeDays,
-            maxDistanceKm: settings.photoMaxDistanceKm,
-          });
-          await modules.tickets.addPhoto(issue.id, fileId, check.metadata, check.reasons);
+          await addCheckedPhoto(issue, tenant, property, timeZone, await files.save(issue.agencyId, photo), photo.content);
         }
         await modules.tickets.updateIssue(issue.id, {
           noPhotos: false,
           ...(issue.status === 'awaiting_photos' ? { status: 'checking' as const } : {}),
         });
         await worker.schedule('intake.match_photos', { issueId: issue.id });
+        // New photos can change the Summary, until a Property Manager edits it.
+        if (issue.summaryBy !== 'property_manager') await worker.schedule('intake.summarise', { issueId: issue.id });
         return;
       }
 
       const urgentRepair = await modules.tickets.urgentRepairByToken(token);
       if (!urgentRepair) notFound('Upload link');
-      if (uploads.some((u) => !PHOTO_TYPES.includes(u.contentType) && u.contentType !== 'application/pdf')) {
-        invalid('Upload the receipt as a photo or PDF');
-      }
+      if (urgentRepair.status === 'reimbursed') invalid('This link has expired: the Reimbursement Request is already reimbursed');
+      // The receipt is what lets the Tenant be paid back, so one must come, and only as something a person can read.
+      if (!uploads.length) invalid('Add a photo or PDF of the receipt');
+      if (uploads.some((u) => !RECEIPT_TYPES.includes(u.contentType))) invalid('Upload the receipt as a photo or PDF');
+      if (o.amountCents != null) requireClaim(o.amountCents);
       const fileIds: number[] = [];
       for (const u of uploads) fileIds.push(await files.save(urgentRepair.agencyId, u));
-      await worker.schedule('intake.forward_receipt', { urgentRepairId: urgentRepair.id, fileIds });
+      await receiveReceipt(urgentRepair.id, fileIds, { amountCents: o.amountCents ?? null, via: 'upload' });
     },
 
     startUrgentRepair,
+    forwardReimbursement,
+    markReimbursed,
+    resendReceiptLink,
     expectAnswer,
+
+    /** Stops waiting for the Tenant to confirm a visit that is no longer happening (a Site Inspection cancelled). */
+    async stopWaitingOnVisit(personId: number, workOrderId: number) {
+      if ((await awaitingFrom(personId)).some((a) => a.kind === 'visit' && a.workOrderId === workOrderId)) await stopWaiting(personId, 'visit');
+    },
 
     async inbox(agencyId: number) {
       const items = await all<{ id: number; inbound_id: number; person_id: number | null; reason: InboxReason; best_guess: string | null; at: string }>(

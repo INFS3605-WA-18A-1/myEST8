@@ -1,6 +1,8 @@
 // Ports: interfaces owned by the app for every external service, so a provider
 // can be swapped and tests can use fakes.
 
+import type { Trade } from './shared.ts';
+
 export type ChannelType = 'sms' | 'whatsapp' | 'email';
 
 export type InboundAttachment = { filename: string; contentType: string } & (
@@ -128,15 +130,59 @@ export interface QuoteReader {
   read(input: { text: string; pdf?: Uint8Array }): Promise<{ priceCents?: number; proposedTime?: Date }>;
 }
 
+/**
+ * Writes a Maintenance Request's Summary from the Tenant's words and answers.
+ * The one place a model writes prose (ADR 0008). Throws on failure, so the
+ * worker task retries; the request stays confirmable without a Summary.
+ */
+export interface Summariser {
+  /** One line, at most 160 characters, plain English, only facts in the input. */
+  summarise(input: {
+    description: string;
+    answers: { location: string | null; started: string | null; worsening: string | null };
+    trade: Trade;
+    photoCount: number;
+  }): Promise<{ summary: string }>;
+}
+
+/** A business's Google listing, as much of it as myEST8 uses to fill in a Tradie. */
+export interface ListingDetails {
+  placeId: string;
+  name: string;
+  address: string;
+  /** The international number when Google has one, otherwise the national one, as Google writes it. */
+  phone: string | null;
+  website: string | null;
+  /** Google's place types ("plumber"). */
+  types: string[];
+  /** Google's name for the main type ("Plumber"). */
+  primaryType: string | null;
+  /** Google's one-line description of the business. */
+  summary: string | null;
+  rating: number | null;
+  reviewCount: number;
+}
+
 export interface PlacesLookup {
   findListings(query: string): Promise<{ placeId: string; name: string; address: string }[]>;
   getRating(placeId: string): Promise<{ rating: number | null; reviewCount: number }>;
+  /** A listing's details. Throws when the lookup fails or the place isn't there. */
+  listingDetails(placeId: string): Promise<ListingDetails>;
   /**
    * The latitude and longitude of a street address: a Property's, or a Tradie's
    * business address for the Dispatch map. Null when the address can't be found
    * (or is blank); throws when the lookup itself fails, so the caller's task retries.
    */
   geocode(address: string): Promise<{ lat: number; lng: number } | null>;
+}
+
+export interface TradeSuggester {
+  /**
+   * The Trades a business does, judged from its Google listing: none when nothing in
+   * it points to one. A suggestion for the Property Manager to check. Throws when the
+   * lookup fails.
+   */
+  suggestTrades(listing: ListingDetails): Promise<Trade[]>;
 }
 
 export interface Clock {

@@ -16,7 +16,7 @@ import { icon } from '../icons.ts';
 import { badge, button, docket, head, linkButton, logo, steps, urgencyBadge, type Html } from '../ui.ts';
 
 /** The demo Agency's sign-ins, shown on the landing page when the app runs as the demo. */
-export const DEMO_LOGINS = { emails: ['alice@harbour.example', 'bob@harbour.example'], password: 'demo1234' };
+const DEMO_LOGINS = { emails: ['alice@harbour.example', 'bob@harbour.example'], password: 'demo1234' };
 
 /**
  * GET / for a signed-out visitor. A signed-in Property Manager falls through to
@@ -34,7 +34,7 @@ export function landingRoutes(app: App, sessions: Sessions, o: { demo: boolean }
 const SIGN_UP = 'Create your Agency’s account';
 
 /** The landing page: the hero, the demo sign-ins (demo only), the workflow, who does what, and the way in again. */
-export function landingPage(o: { demo: boolean }): Html {
+function landingPage(o: { demo: boolean }): Html {
   return html`<!doctype html>
     <html lang="en-AU" data-theme="myest8">
       <head>
@@ -66,27 +66,23 @@ export function landingPage(o: { demo: boolean }): Html {
 /**
  * The headline, in three short sentences, one to a line: the Tenant's part, the
  * Property Manager's, myEST8's. "You decide." carries the Wattle stripe a decision
- * row has on the dashboard. Beside it, a Tenant's thread and its Maintenance Request.
+ * row has on the dashboard. Beside it (under it on phones), one repair from the
+ * Tenant's text to the Ticket it becomes.
  */
 function hero(): Html {
   return html`<section class="lp-hero" aria-labelledby="lp-title">
     <div class="lp-wrap lp-hero-grid">
-      <h1 id="lp-title" class="lp-headline">
-        <span class="lp-line">Tenants text the problem.</span>
-        <span class="lp-line is-you">You decide.</span>
-        <span class="lp-line">myEST8 does the chasing.</span>
-      </h1>
       <div class="lp-intro">
+        <h1 id="lp-title" class="lp-headline">
+          <span class="lp-line">Tenants text the problem.</span>
+          <span class="lp-line is-you">You decide.</span>
+          <span class="lp-line">myEST8 does the chasing.</span>
+        </h1>
         <p class="lp-lead">
-          A maintenance desk for Property Managers at small Agencies. Tenants report repairs in their own words. myEST8 asks the follow-up
-          questions, works out the Trade and Urgency, gets the Quotes, books the Tradie and keeps the Tenant posted. You confirm and choose,
-          from one desk.
+          A maintenance desk for Property Managers at small Agencies. Tenants report repairs by SMS or email. myEST8 asks the follow-up questions,
+          checks the photos, writes the summary and gets the Quotes. You confirm the repair and choose the Quote.
         </p>
         <div class="lp-actions">${linkButton(SIGN_UP, '/signup', { variant: 'primary', size: 'lg' })} ${linkButton('Sign in', '/login', { size: 'lg' })}</div>
-        <ul class="lp-channels" aria-label="How Tenants reach the Agency">
-          <li>${icon('chat-text', { size: 'size-5' })}<span>SMS</span></li>
-          <li>${icon('envelope-simple', { size: 'size-5' })}<span>Email</span></li>
-        </ul>
         <p class="lp-note">Tenants, Tradies and Property Owners never need an account. They reply by text or a link.</p>
       </div>
       ${scene()}
@@ -98,9 +94,10 @@ function hero(): Html {
 const found = (words: string) => html`<mark class="lp-found">${words}</mark>`;
 
 /**
- * The hero's picture: a Tenant's SMS thread with myEST8 (its follow-up question
- * settles the Urgency), and the Maintenance Request it makes, waiting for the
- * Property Manager. An illustration: nothing in it is a link or a control.
+ * The hero's picture, top to bottom: a Tenant's SMS thread with myEST8 (its
+ * follow-up question settles the Urgency), the Maintenance Request it makes,
+ * waiting for the Property Manager, and the Ticket it becomes once confirmed.
+ * An illustration: nothing in it is a link or a control.
  */
 function scene(): Html {
   return html`<figure class="lp-scene">
@@ -112,11 +109,11 @@ function scene(): Html {
       </div>
       <ol class="lp-msgs">
         <li class="lp-msg is-in">
-          <p class="lp-bubble">hi the ${found('tap under the kitchen sink')} keeps dripping and there’s a puddle in the cupboard. started sunday</p>
+          <p class="lp-bubble">hi the ${found('tap under the kitchen sink')} keeps dripping, there’s a puddle in the cupboard</p>
           <p class="lp-msg-meta">Priya, 7:42 am</p>
         </li>
         <li class="lp-msg is-out">
-          <p class="lp-bubble">Thanks Priya. Is the water near any power points, or spreading past the cupboard? A photo of the tap would help.</p>
+          <p class="lp-bubble">Thanks Priya. Is the water near any power points? A photo of the tap would help.</p>
           <p class="lp-msg-meta">myEST8, 7:43 am</p>
         </li>
         <li class="lp-msg is-in">
@@ -128,22 +125,33 @@ function scene(): Html {
     <div class="lp-request">
       <p class="lp-request-kind"><span>Maintenance Request</span><span class="lp-request-age">Waiting for you</span></p>
       <p class="lp-request-address">12 King St, Newtown</p>
-      <p class="lp-request-issue">Kitchen tap dripping under the sink. Water pooling in the cupboard since Sunday.</p>
-      <dl class="lp-request-fields">
-        <div>
-          <dt>Trade</dt>
-          <dd>${badge('Plumbing')}<span class="lp-from">from “tap under the kitchen sink”</span></dd>
-        </div>
-        <div>
-          <dt>Urgency</dt>
-          <dd>${urgencyBadge('routine')}<span class="lp-from">from “just the cupboard”</span></dd>
-        </div>
-        <div>
-          <dt>Photos</dt>
-          <dd>${tapPhoto()}</dd>
-        </div>
-      </dl>
-      <p class="lp-request-actions" aria-hidden="true"><span class="lp-fake-btn is-primary">Confirm</span><span class="lp-fake-btn">Review</span></p>
+      <p class="lp-request-issue">Kitchen tap dripping under the sink since Sunday.</p>
+      <p class="lp-ai"><span class="lp-ai-tag">Filled in by AI</span> You can edit the summary before you confirm.</p>
+      <div class="lp-request-body">
+        <dl class="lp-request-fields">
+          <div>
+            <dt>Trade</dt>
+            <dd>${badge('Plumbing')}<span class="lp-from">from “tap under the kitchen sink”</span></dd>
+          </div>
+          <div>
+            <dt>Urgency</dt>
+            <dd>${urgencyBadge('routine')}<span class="lp-from">from “just the cupboard”</span></dd>
+          </div>
+        </dl>
+        ${tapPhoto()}
+      </div>
+      <p class="lp-request-actions" aria-hidden="true"><span class="lp-fake-btn is-primary">Confirm</span><span class="lp-fake-btn">Change</span></p>
+    </div>
+    <div class="lp-became">
+      <p class="lp-became-note">Confirmed at 9:10 am. Now it’s a Ticket.</p>
+      ${docket({
+        number: 12,
+        urgency: 'routine',
+        address: '12 King St, Newtown',
+        issue: 'Kitchen tap dripping under the sink',
+        meta: [html`Plumbing`, html`Quoting`],
+        age: 'just now',
+      })}
     </div>
     <figcaption class="lp-caption">The marked words are where myEST8 found the Trade and the Urgency.</figcaption>
   </figure>`;
@@ -231,13 +239,13 @@ const STAGES: Stage[] = [
   {
     when: 'Mon 7:46 am',
     who: 'myEST8',
-    title: 'It becomes a Maintenance Request',
+    title: 'Photos are checked and a summary is written',
     picture: () =>
       html`<div class="lp-card">
         <p class="lp-card-title">12 King St, Newtown</p>
         <p>Kitchen tap dripping under the sink</p>
         <p class="lp-badges">${urgencyBadge('routine')}${badge('Plumbing')}</p>
-        <p class="lp-card-meta">Two follow-up questions asked, one photo</p>
+        <p class="lp-card-meta">One photo, checked on arrival. Summary filled in by AI.</p>
       </div>`,
   },
   {
@@ -265,7 +273,7 @@ const STAGES: Stage[] = [
   {
     when: 'Mon 9:11 am',
     who: 'myEST8',
-    title: 'Quote Requests go to Tradies',
+    title: 'Quote Requests go to at least two Tradies',
     picture: () =>
       html`<div class="lp-card">
         <p class="lp-card-title">Quote Requests sent to 3 Tradies</p>
@@ -274,7 +282,7 @@ const STAGES: Stage[] = [
             (name) => html`<li>${icon('paper-plane-tilt', { size: 'size-4' })}<span>${name}</span></li>`,
           )}
         </ul>
-        <p class="lp-card-meta">Anyone who hasn’t quoted in 48 hours gets a reminder</p>
+        <p class="lp-card-meta">Up to four suggested. Anyone who hasn’t quoted in 48 hours gets a reminder.</p>
       </div>`,
   },
   {
@@ -357,23 +365,27 @@ function workflow(): Html {
 
 /* ----- Who does what ----- */
 
-/** The two calls that stay with the Property Manager. */
+/** The calls that stay with the Property Manager. */
 const DECISIONS = [
   {
     title: 'Confirm each Maintenance Request',
-    text: 'Check the Trade and Urgency myEST8 filled in, change them if you need to, and confirm. It becomes a Ticket.',
+    text: 'Check the summary, Trade and Urgency myEST8 filled in, edit them if you need to, and confirm. It becomes a Ticket.',
   },
   {
-    title: 'Choose the Quote',
-    text: 'Once two Quotes are in, pick one. If it takes the Repair Cost over the Property’s Max Repair Cost, myEST8 asks the Property Owner first.',
+    title: 'Book a Site Inspection when a Tradie needs one',
+    text: 'Each Tradie gives an Estimate and says if they need to see the issue before a Firm Quote. Book their visit, or proceed on an Estimate for a cheap routine Job.',
+  },
+  {
+    title: 'Choose the Firm Quote',
+    text: 'Pick one. If it takes the Repair Cost over the Property’s Max Repair Cost, myEST8 asks the Property Owner first.',
   },
 ];
 
 /** What myEST8 does without being asked. */
 const CHORES = [
-  { icon: 'chat-circle-dots', text: 'Asks the Tenant follow-up questions and for photos until the Maintenance Request is complete.' },
+  { icon: 'chat-circle-dots', text: 'Asks the Tenant follow-up questions, checks the photos when they arrive, and fills in a summary of the issue with AI.' },
   { icon: 'siren', text: 'Spots an Urgent Repair and reminds the Tenant to arrange it with a Nominated Tradie, so it never waits on Quotes.' },
-  { icon: 'paper-plane-tilt', text: 'Sends Quote Requests to the Agency’s Tradies for the Trade, and reminds them after 48 hours.' },
+  { icon: 'paper-plane-tilt', text: 'Suggests up to four Tradies for the Trade, sends Quote Requests to at least two, and reminds them after 48 hours.' },
   { icon: 'signature', text: 'Asks the Property Owner to approve a Quote over the Max Repair Cost, and reminds them after a day.' },
   { icon: 'calendar-check', text: 'Sends the Work Order, books the visit and tells the Tenant when the Tradie is coming.' },
 ];
@@ -429,6 +441,7 @@ function closing(): Html {
   return html`<section class="lp-close" aria-labelledby="lp-close-title">
     <div class="lp-wrap lp-close-inner">
       <div class="lp-close-copy">
+        <span class="lp-close-logo">${logo()}</span>
         <h2 id="lp-close-title" class="lp-h2">Put your Agency’s repairs on one desk</h2>
         <p>Create the Agency’s account, add your Properties and Tradies, and give Tenants the number to text.</p>
       </div>

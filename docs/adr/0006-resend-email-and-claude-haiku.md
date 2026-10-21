@@ -6,4 +6,6 @@ The Gmail adapter, mailbox polling and `/oauth/google` stay in the tree. They st
 
 Classification uses Claude Haiku when `ANTHROPIC_API_KEY` is set, otherwise Jev when `JEV_API_URL` is set, otherwise the in-process mock. The maintenance templates stay deterministic. Haiku may compose a free-text email body, and only when that key is set.
 
+**Amended by [ADR 0011](0011-jev-classifies-haiku-composes.md):** Jev classifies every inbound message, and Claude Haiku composes outbound messages instead of classifying. The paragraph above describes the code until ADR 0011 is built.
+
 `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET` and `RESEND_INBOUND_DOMAIN` are set together or not at all. `ANTHROPIC_API_KEY` is separate. Examples use placeholders (`re_xxx`); real values live only in `~/.config/myest8/live.env`.

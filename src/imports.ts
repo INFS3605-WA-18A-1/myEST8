@@ -29,7 +29,7 @@ export type ImportKind = (typeof IMPORT_KINDS)[number];
 /** Sheets with more data rows than this are refused. */
 export const MAX_IMPORT_ROWS = 500;
 /** How long an upload waits for review. */
-export const IMPORT_TTL_MS = 24 * HOUR_MS;
+const IMPORT_TTL_MS = 24 * HOUR_MS;
 
 /** The question ids the classifier is asked. */
 export const IMPORT_QUESTIONS = { column: 'importColumn', trade: 'importTrade' } as const;
@@ -108,7 +108,7 @@ const MOBILE_FIELD: ImportField = { key: 'mobile', label: 'Mobile', example: '04
 const EMAIL_FIELD: ImportField = { key: 'email', label: 'Email', example: '', synonyms: EMAIL };
 const contact = (name: ImportField): ImportField[] => [name, MOBILE_FIELD, EMAIL_FIELD];
 
-export const IMPORT_FIELDS: Record<ImportKind, ImportField[]> = {
+const IMPORT_FIELDS: Record<ImportKind, ImportField[]> = {
   owners: contact({
     key: 'name',
     label: 'Name',

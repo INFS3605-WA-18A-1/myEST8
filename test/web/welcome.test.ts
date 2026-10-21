@@ -169,6 +169,7 @@ describe('the onboarding wizard', () => {
 
     // 3 Channels: a code verifies a typed number. Email is the allocated inbound address.
     const before = visible(await page(w, '/welcome/channels', sam));
+    expect(before).toContain("Still to do: verify the Agency's SMS number with a code, and send one email to the Agency inbox so it's forwarded here.");
     expect(before).toContain('sunrise-realty@mail.example.test');
     expect(before).toContain('Waiting for your first message');
     expect(before).toContain('Copy');
@@ -184,7 +185,7 @@ describe('the onboarding wizard', () => {
     const verified = await submit(w, '/welcome/channels/confirm', { type: 'sms', address: '+61 2 9100 0002', code: smsCode }, sam);
     expect(visible(verified.page)).toContain('SMS verified');
 
-    expect(visible(verified.page)).toContain('2 of 2 connected, 1 verified');
+    expect(visible(verified.page)).toContain("Still to do: send one email to the Agency inbox so it's forwarded here.");
     const typed = await w.post('/welcome/channels', { type: 'email', address: 'inbox@sunrise.example' }, sam);
     expect(decodeURIComponent(typed.headers.get('location')!)).not.toContain('inbox@sunrise.example');
     expect(visible(await page(w, '/welcome/channels', sam))).not.toContain('inbox@sunrise.example');
@@ -231,6 +232,40 @@ describe('the onboarding wizard', () => {
     }
     expect(visible(await page(w, '/welcome', sam))).toContain('Set up later');
     expect((await w.get('/tickets', sam)).status).toBe(200);
+  });
+
+  test('says which step this is inside the steps, not at the far edge of the page', async () => {
+    const w = await webWorld();
+    const sam = await w.signUp();
+
+    const html = await page(w, '/welcome/channels', sam);
+
+    const nav = html.match(/<nav aria-label="Setup steps"[^>]*>[\s\S]*?<\/nav>/)?.[0] ?? '';
+    expect(visible(nav)).toContain('Step 3 of 6');
+    expect(visible(nav)).toContain('Setting up Sunrise Realty');
+    expect(html).not.toMatch(/class="page-subtitle"[^>]*>[\s\S]*?Step 3 of 6/);
+  });
+
+  test('the last step lists what is left with a button for each, and ends with the way to the dashboard', async () => {
+    const w = await webWorld();
+    const sam = await w.signUp();
+
+    const html = await page(w, '/welcome/done', sam);
+
+    for (const [href, label] of [
+      ['/welcome/team', 'Add colleagues'],
+      ['/welcome/channels#sms', 'Connect SMS'],
+      ['/welcome/channels#email', 'Check email'],
+      ['/welcome/tradies', 'Add Tradies'],
+      ['/welcome/property', 'Add a Property'],
+    ]) {
+      expect(html).toMatch(new RegExp(`<a href="${href}" class="btn [^"]*">${label}</a>`));
+    }
+    const checklist = html.match(/<ul[^>]*aria-label="Setup checklist"[\s\S]*?<\/ul>/)?.[0] ?? '';
+    expect(checklist).toContain('Connect SMS');
+    expect(checklist).not.toMatch(/class="link[ "]/);
+    const foot = html.match(/<div class="wizard-foot[^"]*">[\s\S]*?<\/main>/)?.[0] ?? '';
+    expect(foot).toMatch(/<a href="\/" class="btn [^"]*btn-primary[^"]*">Go to your dashboard<\/a>/);
   });
 
   test('shows where the Agency is up to: each step offers "Skip for now" until it is done, then "Continue"', async () => {
@@ -316,14 +351,15 @@ describe('the onboarding wizard', () => {
 });
 
 describe('a new Agency', () => {
-  test('sees a "Finish setting up" banner on its dashboard, pointing at the next step it needs', async () => {
+  test('keeps setup off its dashboard, with a "Setup guide" link in the rail pointing at the next step it needs', async () => {
     const w = await webWorld();
     const sam = await w.signUp();
 
     const dashboard = await page(w, '/', sam);
-    expect(visible(dashboard)).toContain('Finish setting up Sunrise Realty');
-    expect(visible(dashboard)).toContain('connect SMS and email, add the Tradies you use and add your first Property');
-    expect(dashboard).toMatch(/data-banner="finish-setup"[\s\S]*href="\/welcome\/channels"/);
+    expect(visible(dashboard)).not.toContain('Finish setting up');
+    expect(dashboard).not.toContain('data-banner="finish-setup"');
+    expect(dashboard).toMatch(/class="rail-link rail-setup-link"[\s\S]*Setup guide/);
+    expect(dashboard).toMatch(/href="\/welcome\/channels"[^>]*class="rail-link rail-setup-link"/);
 
     await page(w, '/welcome/channels', sam);
     for (const type of ['sms'] as const) {
@@ -331,12 +367,14 @@ describe('a new Agency', () => {
       const code = String(w.h.messenger.last('+61291000002')?.data.code);
       await w.post('/welcome/channels/confirm', { type, address: '+61 2 9100 0002', code }, sam);
     }
-    expect(await page(w, '/', sam)).toMatch(/data-banner="finish-setup"[\s\S]*href="\/welcome\/tradies"/);
+    expect(await page(w, '/', sam)).toMatch(/href="\/welcome\/tradies"[^>]*class="rail-link rail-setup-link"/);
   });
 
-  test('a set-up Agency gets no banner', async () => {
+  test('a set-up Agency gets no Setup guide link', async () => {
     const w = await webWorld();
-    expect(visible(await page(w, '/', await w.signIn()))).not.toContain('Finish setting up');
+    const dashboard = await page(w, '/', await w.signIn());
+    expect(visible(dashboard)).not.toContain('Finish setting up');
+    expect(dashboard).not.toContain('rail-setup-link');
   });
 
   test("can't see or use Harbour Realty's Properties, people, Tradies or channels", async () => {

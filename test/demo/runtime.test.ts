@@ -32,6 +32,14 @@ describe('the demo', () => {
     expect(apis.classifier).toBe('mock');
   });
 
+  test("a demo listing's details and suggested Trades come from the mock Google and Jev", async () => {
+    const { app, seed, errors } = await demoWorld();
+    const alice = await app.asPropertyManager(seed.ids.aliceId);
+
+    expect(await alice.googleListing('demo-sparky-sam')).toMatchObject({ name: 'Sparky Sam Electrical', phone: '+61 2 9660 0188', suggestedTrades: ['electrical'], tradesSuggested: true });
+    expect(errors).toEqual([]);
+  });
+
   test('starts with Harbour Realty seeded and every external API mocked', async () => {
     const { demo, app, seed, apis, errors } = await demoWorld();
     expect(apis).toEqual({ classifier: 'mock', imageMatcher: 'mock', quoteReader: 'mock', places: 'mock', messenger: 'mock' });

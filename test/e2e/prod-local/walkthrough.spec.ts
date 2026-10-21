@@ -114,14 +114,21 @@ test('the dashboard and rail show the new Agency, empty of work', async ({ page 
 });
 
 test('the Dispatch map draws, with a pin for the Property', async ({ page }) => {
+  // The basemap is OpenFreeMap's, off this machine: answer its style with a blank one so the test never needs the network.
+  await page.route('https://tiles.openfreemap.org/**', (route) =>
+    route.request().url().endsWith('/styles/positron')
+      ? route.fulfill({ json: { version: 8, sources: {}, layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#f2f3f0' } }] } })
+      : route.abort(),
+  );
+  // MapLibre and its worker are served by the function itself, as on Vercel.
+  const served = Promise.all(['maplibre-gl.mjs', 'maplibre-gl-worker.mjs'].map((file) => page.waitForResponse((res) => new URL(res.url()).pathname === `/assets/${file}` && res.ok())));
   await signInAs(page);
   await main(page).getByRole('link', { name: 'Dispatch' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Dispatch' })).toBeVisible();
   const map = page.getByRole('region', { name: /^Map\./ });
   await expect(map).toBeVisible();
   await expect(map.getByRole('button', { name: new RegExp(`^${ADDRESS}`) })).toBeVisible();
-  // Leaflet and its assets are served by the function itself, as on Vercel.
-  await expect(page.locator('.leaflet-container')).toBeVisible();
+  await served;
 });
 
 test('signing out ends the session, and signing in again returns to the page they asked for', async ({ page }) => {

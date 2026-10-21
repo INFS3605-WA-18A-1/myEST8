@@ -1,7 +1,9 @@
 import { createApp, type PropertyManagerActions } from '../../src/app.ts';
-import type { BlobStore, ChannelType, InboundAttachment } from '../../src/ports.ts';
+import type { Db } from '../../src/db.ts';
+import type { BlobStore, ChannelType, Clock, InboundAttachment } from '../../src/ports.ts';
+import type { SmsNumbers } from '../../src/sms-numbers.ts';
 import { testDb } from './db.ts';
-import { FakeClassifier, FakeClock, FakeImageMatcher, FakeMessenger, FakePlaces, FakeQuoteReader } from './fakes.ts';
+import { FakeClassifier, FakeClock, FakeImageMatcher, FakeMessenger, FakePlaces, FakeQuoteReader, FakeSummariser, FakeTradeSuggester } from './fakes.ts';
 
 /** Thursday 8 October 2026, 9:00 am in Sydney. */
 export const START = new Date('2026-10-08T09:00:00+11:00');
@@ -15,14 +17,17 @@ export const AGENCY_INBOX = 'inbox@harbour.example';
 export type Harness = Awaited<ReturnType<typeof createHarness>>;
 
 /** Drives the app through its boundary: inbound messages, uploads, Property Manager actions and the clock. */
-export async function createHarness(options: { blobs?: BlobStore } = {}) {
+export async function createHarness(options: { blobs?: BlobStore; smsNumbers?: (db: Db, clock: Clock) => SmsNumbers } = {}) {
   const clock = new FakeClock(START);
   const messenger = new FakeMessenger();
   const classifier = new FakeClassifier();
   const imageMatcher = new FakeImageMatcher();
   const quoteReader = new FakeQuoteReader();
+  const summariser = new FakeSummariser();
   const places = new FakePlaces();
+  const tradeSuggester = new FakeTradeSuggester();
   const db = await testDb();
+  const smsNumbers = options.smsNumbers?.(db, clock) ?? null;
   const app = createApp({
     db,
     clock,
@@ -30,12 +35,15 @@ export async function createHarness(options: { blobs?: BlobStore } = {}) {
     classifier,
     imageMatcher,
     quoteReader,
+    summariser,
     places,
+    tradeSuggester,
     fetchMedia: async (url) => {
       throw new Error(`no media at ${url}`);
     },
     settings: { baseUrl: 'https://myest8.test' },
     blobs: options.blobs ?? null,
+    smsNumbers,
   });
 
   async function drain() {
@@ -66,12 +74,15 @@ export async function createHarness(options: { blobs?: BlobStore } = {}) {
   return {
     app,
     db,
+    smsNumbers,
     clock,
     messenger,
     classifier,
     imageMatcher,
     quoteReader,
+    summariser,
     places,
+    tradeSuggester,
     drain,
     receive,
 
@@ -89,8 +100,8 @@ export async function createHarness(options: { blobs?: BlobStore } = {}) {
       await receive(from, text, options);
     },
 
-    async upload(link: string, files: { filename: string; contentType: string; content: Uint8Array }[]) {
-      await app.upload(tokenOf(link), files);
+    async upload(link: string, files: { filename: string; contentType: string; content: Uint8Array }[], options: { amountCents?: number } = {}) {
+      await app.upload(tokenOf(link), files, options);
       await drain();
     },
 
