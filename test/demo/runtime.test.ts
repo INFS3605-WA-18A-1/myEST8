@@ -1,6 +1,7 @@
-import { describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { createDemo } from '../../src/demo/runtime.ts';
 import { closeAfter, demoEnv } from '../support/db.ts';
+import { addPropertyTo, stubFetch } from '../support/geocoding.ts';
 
 const HOUR = 3_600_000;
 
@@ -17,6 +18,8 @@ async function demoWorldWith(extra: Record<string, string> = {}) {
 }
 
 describe('the demo', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
   test('ANTHROPIC_API_KEY counts the classifier as real without a Jev URL', async () => {
     const { apis } = await demoWorldWith({ ANTHROPIC_API_KEY: 'test-anthropic-key' });
     expect(apis.classifier).toBe('real');
@@ -32,6 +35,29 @@ describe('the demo', () => {
     expect(apis.classifier).toBe('mock');
   });
 
+  test('NOMINATIM_URL counts the geocoder as real, and the demo geocodes through it', async () => {
+    const requests = stubFetch();
+    // Unseeded: a real Nominatim is asked one address a second, and the demo Agency has a dozen.
+    const d = await createDemo({ env: demoEnv({ NOMINATIM_URL: 'https://nominatim.example', PUBLIC_URL: 'https://myest8.test' }), seedAgency: false });
+    closeAfter(d);
+    expect(d.apis.geocoder).toBe('real');
+    await addPropertyTo(d.app, '12 King St, Newtown NSW 2042');
+
+    const [request] = requests;
+    expect(request!.url).toMatch(/^https:\/\/nominatim\.example\/search\?/);
+    expect(request!.headers.get('user-agent')).toBe('myEST8 (https://myest8.test)');
+  });
+
+  test('a live server (npm start) geocodes through the public Nominatim by default, never the mock', async () => {
+    const requests = stubFetch();
+    const d = await createDemo({ env: demoEnv({ PUBLIC_URL: 'https://myest8.test' }), seedAgency: false, live: true });
+    closeAfter(d);
+    expect(d.apis.geocoder).toBe('real');
+    await addPropertyTo(d.app, '12 King St, Newtown NSW 2042');
+
+    expect(requests.map((r) => new URL(r.url).origin)).toEqual(['https://nominatim.openstreetmap.org']);
+  });
+
   test("a demo listing's details and suggested Trades come from the mock Google and Jev", async () => {
     const { app, seed, errors } = await demoWorld();
     const alice = await app.asPropertyManager(seed.ids.aliceId);
@@ -42,7 +68,7 @@ describe('the demo', () => {
 
   test('starts with Harbour Realty seeded and every external API mocked', async () => {
     const { demo, app, seed, apis, errors } = await demoWorld();
-    expect(apis).toEqual({ classifier: 'mock', imageMatcher: 'mock', quoteReader: 'mock', places: 'mock', messenger: 'mock' });
+    expect(apis).toEqual({ classifier: 'mock', imageMatcher: 'mock', quoteReader: 'mock', places: 'mock', geocoder: 'mock', messenger: 'mock' });
     expect(await app.login('alice@harbour.example', 'demo1234')).toBe(seed.ids.aliceId);
     expect(await app.login('bob@harbour.example', 'demo1234')).toBe(seed.ids.bobId);
 

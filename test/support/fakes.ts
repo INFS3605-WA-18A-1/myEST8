@@ -5,6 +5,7 @@ import type {
   Summariser,
   ClassifierAnswer,
   Clock,
+  Geocoder,
   ImageMatcher,
   ImageMatchResult,
   ListingDetails,
@@ -140,8 +141,15 @@ export class FakeTradeSuggester implements TradeSuggester {
   }
 }
 
-export class FakePlaces implements PlacesLookup {
+/** Finds an address's point in `locations`, null when it isn't there. */
+export class FakeGeocoder implements Geocoder {
   locations = new Map<string, { lat: number; lng: number }>();
+  async geocode(address: string) {
+    return this.locations.get(address) ?? null;
+  }
+}
+
+export class FakePlaces implements PlacesLookup {
   /** A listing's name, address and rating; `listingDetails` adds what it has beyond them (nothing, unless set here). */
   listings = new Map<
     string,
@@ -161,9 +169,6 @@ export class FakePlaces implements PlacesLookup {
     const listing = this.listings.get(placeId);
     if (!listing) throw new Error(`FakePlaces: unknown place ${placeId}`);
     return { placeId, phone: null, website: null, types: [], primaryType: null, summary: null, ...listing };
-  }
-  async geocode(address: string) {
-    return this.locations.get(address) ?? null;
   }
 }
 

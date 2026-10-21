@@ -110,7 +110,7 @@ describe('Tradies', () => {
   test('saving a business address puts the Tradie on the map', async () => {
     const w = await webWorld();
     const cookie = await w.signIn();
-    w.h.places.locations.set('4 Illawarra Rd, Marrickville NSW 2204', { lat: -33.906, lng: 151.158 });
+    w.h.geocoder.locations.set('4 Illawarra Rd, Marrickville NSW 2204', { lat: -33.906, lng: 151.158 });
 
     const res = await w.post(`/tradies/${w.ids.pete}/address`, { businessAddress: '4 Illawarra Rd, Marrickville NSW 2204' }, cookie);
     expect(res.status).toBe(303);

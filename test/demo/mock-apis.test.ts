@@ -24,7 +24,7 @@ const quoteReader = createQuoteReader({
 });
 // The mock needs no pacing between requests, so the geocoder doesn't wait.
 const geocoder = createNominatimGeocoder({ baseUrl: 'http://mock.local/nominatim', userAgent: 'myEST8 (test)', fetch, wait: async () => {} });
-const places = createGooglePlaces({ apiKey: 'demo', fetch, placesBaseUrl: 'http://mock.local/google/places', geocodeBaseUrl: 'http://mock.local/google/maps' });
+const places = createGooglePlaces({ apiKey: 'demo', fetch, placesBaseUrl: 'http://mock.local/google/places' });
 
 type Item = { ref: string; summary: string };
 
@@ -297,7 +297,7 @@ describe('mock quote reader', () => {
   });
 });
 
-describe('mock Google Places', () => {
+describe('mock Google Places and Nominatim', () => {
   test.each([
     ['plumbing', ["Pete's Plumbing", 'Flow Bros Plumbing', "Nina's Plumbing"]],
     ["Pete's Plumbing Marrickville", ["Pete's Plumbing"]],
@@ -358,17 +358,6 @@ describe('mock Google Places', () => {
     ['21 Glebe Point Rd, Glebe NSW 2037', { lat: -33.879, lng: 151.187 }],
     ['4 Illawarra Rd, Marrickville NSW 2204', { lat: -33.906, lng: 151.158 }],
     ['1 Nowhere Rd', { lat: -33.875, lng: 151.2135 }],
-  ])('geocode %s', async (address, location) => {
-    expect(await places.geocode(address)).toEqual(location);
-  });
-
-  test.each([
-    ['12 King St, Newtown NSW 2042', { lat: -33.897, lng: 151.179 }],
-    ['5/40 Ocean Ave, Bondi NSW 2026', { lat: -33.8908, lng: 151.2743 }],
-    ['7 Wilson St Newtown NSW 2042', { lat: -33.8955, lng: 151.1823 }],
-    ['21 Glebe Point Rd, Glebe NSW 2037', { lat: -33.879, lng: 151.187 }],
-    ['4 Illawarra Rd, Marrickville NSW 2204', { lat: -33.906, lng: 151.158 }],
-    ['1 Nowhere Rd', { lat: -33.875, lng: 151.2135 }],
   ])('Nominatim geocode %s', async (address, location) => {
     expect(await geocoder.geocode(address)).toEqual(location);
   });
@@ -381,14 +370,6 @@ describe('mock Google Places', () => {
   test('Nominatim finds nothing for an empty query', async () => {
     const response = await mockApis().request('http://mock.local/nominatim/search?q=&format=jsonv2');
     expect(await response.json()).toEqual([]);
-  });
-
-  test('geocoding an empty address has no results, at either geocode path', async () => {
-    const app = mockApis();
-    for (const path of ['/google/maps/api/geocode/json', '/google/maps/maps/api/geocode/json']) {
-      const response = await app.request(`http://mock.local${path}?address=&key=demo`);
-      expect(await response.json()).toEqual({ results: [], status: 'ZERO_RESULTS' });
-    }
   });
 
   test('the Places API needs a field mask, as Google does', async () => {

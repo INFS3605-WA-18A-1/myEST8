@@ -293,7 +293,7 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
   /** An address's point on the map, or null when the lookup finds nothing or fails (it can be retried later). */
   async function geocode(address: string) {
     try {
-      return await ports.places.geocode(address);
+      return await ports.geocoder.geocode(address);
     } catch {
       return null;
     }

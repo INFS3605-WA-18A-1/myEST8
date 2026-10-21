@@ -51,6 +51,7 @@ export function createApp(
       quoteReader: deps.quoteReader,
       summariser: deps.summariser,
       places: deps.places,
+      geocoder: deps.geocoder,
       tradeSuggester: deps.tradeSuggester,
       fetchMedia: deps.fetchMedia,
     },

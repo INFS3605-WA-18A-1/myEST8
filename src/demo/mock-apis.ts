@@ -77,7 +77,7 @@ export const DEMO_PLACES: readonly DemoListing[] = [
  * Dummy versions of every external API the app calls, at these paths:
  * /jev/v1/classify, /jev/v1/systemone (Trades for a Google listing), /vision/v1/image-match, /quotes/v1/quote-read (also /quotes/v1/read),
  * /google/places/v1/places:searchText, /google/places/v1/places/:id,
- * /google/maps/api/geocode/json (also /google/maps/maps/api/geocode/json), /nominatim/search.
+ * /nominatim/search.
  * Wire the real adapters to it with `mockFetch()` and baseUrls under http://mock.local.
  */
 export function mockApis() {
@@ -139,12 +139,7 @@ export function mockApis() {
     return c.json(masked(googlePlace(place), fields, ''));
   });
 
-  // The prefix stands for the host, so geocodeBaseUrl http://mock.local/google/maps plus Google's
-  // path /maps/api/geocode/json lands on the second route; the first serves geocodeBaseUrl http://mock.local/google.
-  const geocode = (c: Context) => c.json(geocodeResponse(c.req.query('address') ?? ''));
-  app.get('/google/maps/api/geocode/json', geocode);
-  app.get('/google/maps/maps/api/geocode/json', geocode);
-
+  // Nominatim: the demo addresses' points.
   app.get('/nominatim/search', (c) => c.json(nominatimResponse(c.req.query('q') ?? '')));
 
   return app;
@@ -235,7 +230,7 @@ function readQuote(text: string, now: Date, timeZone: string) {
   return { priceCents: readPrice(text), proposedTime: readProposedTime(text, now, timeZone)?.toISOString() ?? null };
 }
 
-// --- Google Places and Geocoding ---
+// --- Google Places and Nominatim ---
 
 /** Lowercase words and numbers, apostrophes and punctuation dropped. */
 const searchable = (text: string) => text.toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9/]+/g, ' ').trim();
@@ -333,22 +328,6 @@ function locate(address: string) {
   const h = hash(searchable(address));
   const nudge = (bits: number) => Math.round(((bits / 0xffff - 0.5) * 0.04) * 10_000) / 10_000;
   return { lat: Math.round((SYDNEY_CBD.lat + nudge(h & 0xffff)) * 10_000) / 10_000, lng: Math.round((SYDNEY_CBD.lng + nudge(h >>> 16)) * 10_000) / 10_000 };
-}
-
-function geocodeResponse(address: string) {
-  if (!address.trim()) return { results: [], status: 'ZERO_RESULTS' };
-  const location = locate(address);
-  return {
-    results: [
-      {
-        formatted_address: address.trim(),
-        geometry: { location, location_type: 'ROOFTOP' },
-        place_id: `demo-geocode-${hash(searchable(address)).toString(16)}`,
-        types: ['street_address'],
-      },
-    ],
-    status: 'OK',
-  };
 }
 
 /** Nominatim's jsonv2 answer to a search: no results for a blank query, else the demo's point for the address, as a street-level result. */
