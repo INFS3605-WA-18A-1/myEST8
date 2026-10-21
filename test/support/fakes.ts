@@ -7,6 +7,7 @@ import type {
   Clock,
   ImageMatcher,
   ImageMatchResult,
+  ListingDetails,
   Messenger,
   OutboundMessage,
   PlacesLookup,
@@ -128,7 +129,11 @@ export class FakeQuoteReader implements QuoteReader {
 
 export class FakePlaces implements PlacesLookup {
   locations = new Map<string, { lat: number; lng: number }>();
-  listings = new Map<string, { name: string; address: string; rating: number | null; reviewCount: number }>();
+  /** A listing's name, address and rating; `listingDetails` adds what it has beyond them (nothing, unless set here). */
+  listings = new Map<
+    string,
+    { name: string; address: string; rating: number | null; reviewCount: number } & Partial<Pick<ListingDetails, 'phone' | 'website' | 'types' | 'primaryType' | 'summary'>>
+  >();
   async findListings(query: string) {
     return [...this.listings]
       .filter(([, l]) => l.name.toLowerCase().includes(query.toLowerCase()))
@@ -138,6 +143,11 @@ export class FakePlaces implements PlacesLookup {
     const listing = this.listings.get(placeId);
     if (!listing) throw new Error(`FakePlaces: unknown place ${placeId}`);
     return { rating: listing.rating, reviewCount: listing.reviewCount };
+  }
+  async listingDetails(placeId: string) {
+    const listing = this.listings.get(placeId);
+    if (!listing) throw new Error(`FakePlaces: unknown place ${placeId}`);
+    return { placeId, phone: null, website: null, types: [], primaryType: null, summary: null, ...listing };
   }
   async geocode(address: string) {
     return this.locations.get(address) ?? null;
