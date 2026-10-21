@@ -1332,7 +1332,8 @@
     }
     .visit-row {
       display: grid;
-      grid-template-columns: auto minmax(0, 1fr) auto;
+      /* 4.5rem fits "12:30 pm", so "9:00 am" does not pull the issue to a different edge. */
+      grid-template-columns: minmax(4.5rem, max-content) minmax(0, 1fr) auto;
       gap: 8px;
       align-items: baseline;
       padding: 10px 0;
@@ -5413,6 +5414,10 @@
     .schedule-now.is-day .schedule-now-line {
       grid-column: 2 / -1;
     }
+    /* display: grid would otherwise beat the hidden attribute, and the line would show before 7 am. */
+    .schedule-now[hidden] {
+      display: none;
+    }
     .schedule-block {
       position: relative;
       z-index: 2;
@@ -5453,9 +5458,28 @@
       font-size: 13px;
     }
     .schedule-block-meta,
-    .schedule-block-tradie {
+    .schedule-block-tradie,
+    .schedule-block-place {
       font-weight: 400;
       color: var(--muted);
+    }
+    /* On the Day the issue and the Tradie are their own links. The issue stays Night,
+       like the Week's block; the Tradie is a Harbour link to the profile. */
+    a.schedule-block-issue {
+      color: var(--ink);
+      text-decoration: none;
+    }
+    a.schedule-block-issue:hover {
+      color: var(--action);
+      text-decoration: underline;
+    }
+    a.schedule-block-tradie {
+      color: var(--action);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    a.schedule-block-tradie:hover {
+      color: var(--action-hover);
     }
     .schedule-marker {
       align-self: flex-start;

@@ -707,7 +707,9 @@ export function createImports({ db, clock, settings, ports, modules }: Context, 
               ownerId = cache.get(ownerKey) ?? (await onboarding.addOwner(agencyId, newOwner));
               cache.set(ownerKey, ownerId);
             }
-            return onboarding.addProperty(agencyId, { ...property, ownerId: ownerId! });
+            // No lookup here. A sheet would wait on Nominatim's one request a second and
+            // run past the host's time limit. Dispatch's Look up missing addresses places them.
+            return onboarding.addProperty(agencyId, { ...property, ownerId: ownerId!, location: null });
           };
           break;
         }

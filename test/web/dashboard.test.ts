@@ -308,6 +308,22 @@ function nextSeven(board: string) {
   return board.slice(start, board.indexOf('</section>', start));
 }
 
+/** The day chip linking to `href`, so its attributes and text are checked on their own. */
+function dayChip(section: string, href: string): string {
+  const needle = `href="${href.replaceAll('&', '&amp;')}"`;
+  const at = section.indexOf(needle);
+  if (at < 0) throw new Error(`No day chip links to ${href}`);
+  const start = section.lastIndexOf('<a ', at);
+  return section.slice(start, section.indexOf('</a>', at));
+}
+
+/** The Mine/All control, so its links are not confused with the day chips. */
+function viewsNav(board: string) {
+  const start = board.indexOf('aria-label="Views"');
+  if (start < 0) throw new Error('No Mine/All control');
+  return board.slice(start, board.indexOf('</nav>', start));
+}
+
 describe('picking a day in the Next 7 days', () => {
   // The harness clock starts at Thursday 8 October 2026, 9:00 am Sydney, and signing in does not move it.
   const DAYS = ['2026-10-08', '2026-10-09', '2026-10-10', '2026-10-11', '2026-10-12', '2026-10-13', '2026-10-14'];
@@ -348,8 +364,10 @@ describe('picking a day in the Next 7 days', () => {
     const { cookie, tuesday, monday, w } = await twoDays();
 
     const strip = nextSeven(await page(w, '/', cookie));
+    const todayChip = dayChip(strip, '/?day=2026-10-12#next-7-days');
 
-    expect(strip).toContain('href="/?day=2026-10-12#next-7-days" aria-current="date"');
+    expect(todayChip).toContain('aria-current="date"');
+    expect(todayChip).toContain('class="day-chip is-today"');
     expect(strip).toContain('2:00 pm');
     expect(strip).toContain(`href="/tickets/${monday.ticketId}"`);
     expect(strip).not.toContain('9:00 am');
@@ -360,9 +378,13 @@ describe('picking a day in the Next 7 days', () => {
     const { w, cookie, tuesday, monday } = await twoDays();
 
     const strip = nextSeven(await page(w, '/?day=2026-10-13', cookie));
+    const chosenChip = dayChip(strip, '/?day=2026-10-13#next-7-days');
+    const todayChip = dayChip(strip, '/?day=2026-10-12#next-7-days');
 
-    expect(strip).toContain('href="/?day=2026-10-13#next-7-days" aria-current="date"');
-    expect(strip).toContain('class="day-chip is-today" href="/?day=2026-10-12#next-7-days"');
+    expect(chosenChip).toContain('aria-current="date"');
+    expect(chosenChip).toContain('class="day-chip"');
+    expect(todayChip).toContain('class="day-chip is-today"');
+    expect(todayChip).not.toContain('aria-current');
     expect(strip).toContain('9:00 am');
     expect(strip).toContain(`href="/tradies/${w.tradies.pete.id}"`);
     expect(strip).toContain(`href="/tickets/${tuesday.ticketId}"`);
@@ -370,6 +392,29 @@ describe('picking a day in the Next 7 days', () => {
     expect(strip).not.toContain('2:00 pm');
     expect(strip).not.toContain(`href="/tickets/${monday.ticketId}"`);
     expect(strip).toContain('Tuesday 13 October');
+  });
+
+  test("today's chip says today when another day is chosen", async () => {
+    const { w, cookie } = await twoDays();
+
+    const strip = nextSeven(await page(w, '/?day=2026-10-13', cookie));
+
+    expect(dayChip(strip, '/?day=2026-10-12#next-7-days')).toContain('<span class="sr-only">today</span>');
+    expect(dayChip(strip, '/?day=2026-10-13#next-7-days')).not.toContain('today</span>');
+  });
+
+  test('Mine and All keep the chosen day, and Open calendar keeps All', async () => {
+    const { w, cookie } = await twoDays();
+
+    const mine = viewsNav(await page(w, '/?day=2026-10-13', cookie));
+    expect(mine).toContain('href="/?day=2026-10-13#next-7-days"');
+    expect(mine).toContain('href="/?filter=all&amp;day=2026-10-13#next-7-days"');
+
+    const all = await page(w, '/?filter=all&day=2026-10-13', cookie);
+    const allNav = viewsNav(all);
+    expect(allNav).toContain('href="/?day=2026-10-13#next-7-days"');
+    expect(allNav).toContain('href="/?filter=all&amp;day=2026-10-13#next-7-days"');
+    expect(nextSeven(all)).toContain('href="/calendar?view=day&amp;date=2026-10-13&amp;filter=all"');
   });
 
   test('an empty day says nothing is booked and links to that day on the calendar', async () => {
@@ -390,11 +435,33 @@ describe('picking a day in the Next 7 days', () => {
     for (const day of ['2026-10-11', '2026-10-19', 'nope', '2026-02-31', '']) {
       const strip = nextSeven(await page(w, `/?day=${encodeURIComponent(day)}`, cookie));
       expect(strip, day).toContain('Monday 12 October');
-      expect(strip, day).toContain('href="/?day=2026-10-12#next-7-days" aria-current="date"');
+      expect(dayChip(strip, '/?day=2026-10-12#next-7-days'), day).toContain('aria-current="date"');
       expect(strip, day).toContain('2:00 pm');
       expect(strip, day).toContain(`href="/tickets/${monday.ticketId}"`);
       expect(strip, day).not.toContain('9:00 am');
     }
+  });
+
+  /**
+   * Saturday 10 October 2026, 9:00 am, is where one Ticket leaves the clock.
+   * The visit is Tuesday 13 October, 9:00 am to 11:00 am. 79 hours later is
+   * 4:00 pm that Tuesday: 72 hours to 9:00 am, then 7 hours.
+   */
+  test('a visit earlier today that has ended is listed under today', async () => {
+    const w = await webWorld();
+    const job = await tomsTapTicket(w);
+    await bookVisit(w, job, new Date('2026-10-13T09:00:00+11:00'));
+    w.h.clock.advance(79 * HOUR);
+    const cookie = await w.signIn();
+
+    const strip = nextSeven(await page(w, '/', cookie));
+
+    expect(strip).toContain('Tuesday 13 October');
+    expect(strip).toContain('9:00 am');
+    expect(strip).toContain('The kitchen tap is dripping');
+    expect(strip).toContain(`href="/tickets/${job.ticketId}"`);
+    expect(strip).toContain('aria-label="Has a visit"');
+    expect(strip).not.toContain('Nothing booked on Tuesday.');
   });
 
   test('a Site Inspection is badged, and links to the Tradie and the Ticket', async () => {

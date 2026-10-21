@@ -35,12 +35,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
-      # The same Postgres as `npm run db:start` runs locally, on the same port. The
-      # tests make their own database on it and apply supabase/migrations themselves.
+      # The same Postgres as `npm run db:start` runs locally. The tests make their own
+      # database on it and apply supabase/migrations themselves. Docker picks a free
+      # host port: a fixed one (54340) failed a run when the runner already held it.
       postgres:
         image: postgres:17-alpine
         ports:
-          - 54340:5432
+          - 5432
         env:
           POSTGRES_PASSWORD: postgres
           POSTGRES_INITDB_ARGS: --locale-provider=builtin --locale=C.UTF-8
@@ -49,9 +50,11 @@ jobs:
           --health-interval 2s
           --health-timeout 5s
           --health-retries 30
-    env:
-      TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:54340/postgres
     steps:
+      # The service's host port is only known once the job runs, and a job's own env can't read it.
+      - name: Point the tests at the Postgres service
+        run: echo "TEST_DATABASE_URL=postgres://postgres:postgres@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/postgres" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4

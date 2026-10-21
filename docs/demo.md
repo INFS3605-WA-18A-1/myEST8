@@ -195,8 +195,8 @@ Each external API can be pointed at a real endpoint with env vars. Anything not 
 | `VISION_API_URL`, `VISION_API_KEY`    | The photo matcher                                     |
 | `QUOTES_API_URL`, `QUOTES_API_KEY`    | The quote reader                                      |
 | `GOOGLE_MAPS_API_KEY`                 | Google Places (New) only                              |
-| `NOMINATIM_URL`                       | Geocoding, which places addresses on the Dispatch map. Needs no key. Hosted mode defaults to `https://nominatim.openstreetmap.org` |
-| `PHOTON_URL`                          | Address suggestions as a Property's address is typed. Needs no key. Hosted mode defaults to `https://photon.komoot.io` |
+| `NOMINATIM_URL`                       | Geocoding, which places addresses on the Dispatch map. Needs no key. Hosted mode and `npm start` default to `https://nominatim.openstreetmap.org` |
+| `PHOTON_URL`                          | Address suggestions as a Property's address is typed. Needs no key. Hosted mode and `npm start` default to `https://photon.komoot.io` |
 | `TWILIO_*`, `SENDGRID_*`, `FILE_LINK_SECRET`, `DEMO_SEND_TO` | Real SMS and email. See [Sending real messages](#sending-real-messages) |
 | `PORT`                                | The port to listen on (default 3000)                  |
 | `PUBLIC_URL`                          | The address used in upload and tracker links (default `http://localhost:$PORT`) |

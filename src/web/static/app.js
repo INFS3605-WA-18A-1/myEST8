@@ -521,9 +521,13 @@
 })();
 
 // === schedule ===
-// The current-time line is placed by the server from the Agency's clock. Once a
-// minute it is moved to where that clock is now. There is no transition, so it
-// never animates, including when less motion is asked for.
+// The current-time line is placed by the server from the Agency's clock. The
+// offset between that instant (data-now) and Date.now() is taken once, and the
+// line is not moved on load: the browser clock can disagree. Once a minute the
+// line moves to server time plus the time since the page opened. It hides when
+// the Agency's date is no longer data-today, or the clock is outside the hours
+// shown. There is no transition, so it never animates, including when less
+// motion is asked for.
 (() => {
   const line = document.querySelector('[data-schedule-now]');
   if (line) {
@@ -531,21 +535,30 @@
     const first = Number(line.dataset.first);
     const last = Number(line.dataset.last);
     const header = line.dataset.header === '1';
+    const serverNow = Number(line.dataset.now);
+    const today = line.dataset.today;
+    const opened = Date.now();
     const place = () => {
-      const parts = new Intl.DateTimeFormat('en-US', { timeZone: zone, hour: 'numeric', minute: 'numeric', hourCycle: 'h23' }).formatToParts(new Date());
-      const part = (type) => Number(parts.find((p) => p.type === type)?.value ?? 0);
-      const mins = part('hour') * 60 + part('minute');
+      const when = new Date(serverNow + (Date.now() - opened));
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: zone,
+        hourCycle: 'h23',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: 'numeric',
+        minute: 'numeric',
+      }).formatToParts(when);
+      const part = (type) => parts.find((p) => p.type === type)?.value ?? '';
+      const date = `${part('year')}-${part('month')}-${part('day')}`;
+      const mins = Number(part('hour')) * 60 + Number(part('minute'));
       const start = first * 60;
-      if (mins < start || mins >= last * 60) {
-        line.hidden = true;
-        return;
-      }
-      line.hidden = false;
+      line.hidden = date !== today || mins < start || mins >= last * 60;
       const into = mins - start;
       line.style.gridRow = String(Math.floor(into / 15) + (header ? 2 : 1));
-      line.style.setProperty('--now-frac', String((into % 15) / 15));
+      const fraction = ((into % 15) + 15) % 15;
+      line.style.setProperty('--now-frac', String(fraction / 15));
     };
-    place();
     setInterval(place, 60_000);
   }
 
@@ -566,8 +579,10 @@
 // A Property's Address (input[data-address-suggest]) offers matching addresses as
 // you type, from /properties/address-suggestions. Choosing one fills Address,
 // Suburb and the hidden lat and lng. Arrow keys move, Enter picks, Escape closes
-// the list. Without this file it is a plain text box, the hidden pin stays empty,
-// and the address is geocoded on save.
+// the list. A reply still on its way is dropped when the query goes below 3
+// characters, a suggestion is chosen, Escape is pressed, or the field is left,
+// and nothing is drawn while the field isn't focused. Without this file it is a
+// plain text box, the hidden pin stays empty, and the address is geocoded on save.
 (() => {
   let made = 0;
 
@@ -604,7 +619,11 @@
 
     function setActive(i) {
       active = i;
-      for (const item of list.querySelectorAll('[role="option"]')) item.classList.toggle('is-active', item.id === `address-suggest-${n}-${i}`);
+      for (const item of list.querySelectorAll('[role="option"]')) {
+        const on = item.id === `address-suggest-${n}-${i}`;
+        item.classList.toggle('is-active', on);
+        item.setAttribute('aria-selected', on ? 'true' : 'false');
+      }
       if (i >= 0) {
         input.setAttribute('aria-activedescendant', `address-suggest-${n}-${i}`);
         document.getElementById(`address-suggest-${n}-${i}`)?.scrollIntoView({ block: 'nearest' });
@@ -617,7 +636,15 @@
       input.removeAttribute('aria-activedescendant');
     }
 
+    /** Drops a suggestion that has been asked for but not drawn yet. */
+    function dropInFlight() {
+      window.clearTimeout(timer);
+      request++;
+    }
+
     function render(suggestions) {
+      // The field was left while this reply was on its way.
+      if (document.activeElement !== input) return;
       shown = suggestions;
       list.replaceChildren(
         ...(shown.length
@@ -640,6 +667,7 @@
     }
 
     function choose(suggestion) {
+      dropInFlight();
       input.value = suggestion.address;
       suburb.value = suggestion.suburb;
       lat.value = String(suggestion.location.lat);
@@ -653,7 +681,10 @@
       lng.value = '';
       window.clearTimeout(timer);
       const query = input.value.trim();
-      if (query.length < 3) return close();
+      if (query.length < 3) {
+        dropInFlight();
+        return close();
+      }
       const mine = ++request;
       timer = window.setTimeout(async () => {
         let suggestions = [];
@@ -676,11 +707,17 @@
       } else if (event.key === 'Enter' && !list.hidden && active >= 0) {
         event.preventDefault();
         choose(shown[active]);
-      } else if (event.key === 'Escape' && !list.hidden) {
-        event.preventDefault();
-        close();
+      } else if (event.key === 'Escape') {
+        dropInFlight();
+        if (!list.hidden) {
+          event.preventDefault();
+          close();
+        }
       }
     });
-    input.addEventListener('blur', () => close());
+    input.addEventListener('blur', () => {
+      dropInFlight();
+      close();
+    });
   }
 })();

@@ -80,6 +80,72 @@ async function visitsText(week: Locator) {
   return (await lists.nth(1).innerText()).trim();
 }
 
+/** The issue text on each visit the Day view shows for `day`, from the schedule rather than the dashboard list. */
+async function issuesOnDay(page: Page, day: string): Promise<string[]> {
+  const html = await page.evaluate(async (day) => {
+    const res = await fetch(`/calendar?view=day&date=${day}`);
+    if (!res.ok) throw new Error(`Calendar for ${day} returned ${res.status}`);
+    return res.text();
+  }, day);
+  return [...html.matchAll(/class="schedule-block-issue"[^>]*>[\s\S]*?title="([^"]*)"/g)].map((found) =>
+    found[1]!.replaceAll('&amp;', '&').replaceAll('&quot;', '"').replaceAll('&#39;', "'").replaceAll('&apos;', "'"),
+  );
+}
+
+/** `YYYY-MM-DD` from a day chip's href. */
+function dayOfHref(href: string) {
+  const day = new URL(href, 'http://localhost').searchParams.get('day');
+  if (!day) throw new Error(`No day in ${href}`);
+  return day;
+}
+
+test('a visit time keeps a column wide enough for 12:30 pm', async ({ browser }) => {
+  test.setTimeout(300_000);
+  const server = await startDemo({ port: freePort(), schema: uniqueSchema(), stories: true });
+  try {
+    const context = await browser.newContext({ baseURL: server.url });
+    const page = await context.newPage();
+    page.setDefaultTimeout(20_000);
+    await page.setViewportSize({ width: 1366, height: 900 });
+    await signIn(page);
+    await page.goto('/');
+
+    const week = nextSeven(page);
+    await (await laterBookedDay(week)).click();
+    const time = week.locator('.visit-time').first();
+    await expect(time).toBeVisible();
+    const measured = await time.evaluate((el) => {
+      const doc = el.ownerDocument;
+      const view = doc.defaultView;
+      if (!view) throw new Error('No window');
+      const probe = doc.createElement('span');
+      const style = view.getComputedStyle(el);
+      probe.textContent = '12:30 pm';
+      probe.style.font = style.font;
+      probe.style.fontWeight = style.fontWeight;
+      probe.style.fontVariantNumeric = style.fontVariantNumeric;
+      probe.style.position = 'absolute';
+      probe.style.whiteSpace = 'nowrap';
+      probe.style.visibility = 'hidden';
+      doc.body.appendChild(probe);
+      const needed = probe.getBoundingClientRect().width;
+      probe.remove();
+      return { column: el.getBoundingClientRect().width, needed };
+    });
+    expect(measured.column).toBeGreaterThanOrEqual(measured.needed - 1);
+
+    const edges = await week.locator('.visit-what').evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().left)));
+    expect(new Set(edges).size).toBe(1);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(await week.evaluate((el) => el.scrollWidth - el.clientWidth)).toBe(0);
+
+    await context.close();
+  } finally {
+    await server.stop();
+  }
+});
+
 test("pressing a later day shows that day's visit and not today's, by mouse and by keyboard", async ({ browser }) => {
   test.setTimeout(300_000);
   const server = await startDemo({ port: freePort(), schema: uniqueSchema(), stories: true });
@@ -94,17 +160,21 @@ test("pressing a later day shows that day's visit and not today's, by mouse and 
     const week = nextSeven(page);
     const heading = week.getByRole('heading', { level: 3 });
     const today = ((await heading.textContent()) ?? '').trim();
-    const todayVisits = await visitsText(week);
+    const todayChip = week.getByRole('list').first().locator('[aria-current="date"]');
+    const todayIssues = await issuesOnDay(page, dayOfHref((await todayChip.getAttribute('href'))!));
     const later = await laterBookedDay(week);
     const href = (await later.getAttribute('href'))!;
+    const chosenIssues = await issuesOnDay(page, dayOfHref(href));
+    expect(chosenIssues.length).toBeGreaterThan(0);
+    for (const issue of todayIssues) expect(chosenIssues, issue).not.toContain(issue);
 
     await later.click();
     await expect(page).toHaveURL(/[?&]day=\d{4}-\d{2}-\d{2}/);
     await expect(page).toHaveURL(/#next-7-days/);
     await expect(heading).not.toHaveText(today);
     const chosen = await visitsText(week);
-    expect(chosen).not.toBe(todayVisits);
-    expect(chosen).not.toContain(today);
+    for (const issue of chosenIssues) expect(chosen).toContain(issue);
+    for (const issue of todayIssues) expect(chosen).not.toContain(issue);
     await expect(week.getByRole('list').nth(1).getByRole('link').first()).toBeVisible();
 
     await page.setViewportSize({ width: 390, height: 844 });
