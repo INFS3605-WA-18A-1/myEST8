@@ -179,8 +179,9 @@ The MVP is a web app that also works in mobile browsers, built over 4 weeks.
 | Canva | Quick visuals and presentation slides | Limited for interactive wireframes | _TBC_ |
 | Twilio | SMS, WhatsApp and (through SendGrid) inbound email from one provider | The WhatsApp sandbox only allows 3 preset templates for messages we send first; real WhatsApp numbers need Meta verification | _TBC_ |
 | Jev (TypeSafe AI) | Fast, typed classification decisions: message type, urgency, trade | Text and JSON input only, can't write replies, limited early access | _TBC_ |
+| Claude Haiku (Anthropic) | Composes outbound emails and messages, and each request's one-line Summary, from the ticket's facts | Can invent details unless it's constrained to given facts; a cost per call | _TBC_ |
 
-**Preferred:** One web app that works in mobile browsers, built with GitHub and VS Code, using Twilio for the messaging channels and Jev for classification. Figma is used only for process wireframes (TBD).  
+**Preferred:** One web app that works in mobile browsers, built with GitHub and VS Code, using Twilio for the messaging channels, Jev for classification and Claude Haiku for composing messages. Figma is used only for process wireframes (TBD).  
 **Reason:** Twilio covers all three channels with one integration. Jev returns typed decisions quickly and cheaply, which suits sorting every incoming message. A single app with internal modules keeps a 4-week build manageable for a team of 5.
 
 ## Peer check

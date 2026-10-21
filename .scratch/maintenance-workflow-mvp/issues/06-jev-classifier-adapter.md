@@ -1,6 +1,6 @@
 # Classifier adapter for Jev
 
-Status: ready-for-human
+Status: ready-for-agent
 
 ## Goal
 
@@ -26,3 +26,12 @@ A real `Classifier` (`src/ports.ts`) backed by Jev (TypeSafe AI): one call per i
 ## Testing
 
 - Adapter tests against recorded Jev responses with a stubbed `fetch`. Manual demo checklist for the live service.
+
+## Comments
+
+**2026-10-21:** Reopened. The adapter was built against a contract guessed before TypeSafe published its API (`POST /v1/classify`, an `options` list, a list of answers). The real API is `POST https://api.typesafe.ai/v1/systemone`. It takes `model` (e.g. `jev-latest`) and a `questions` map. Each `choice` question has a `criteria` map, and answers come back keyed by question name with `choice`, `confidence` and `probabilities` (https://docs.typesafe.ai/api.md). [ADR 0011](../../../docs/adr/0011-jev-classifies-haiku-composes.md) also makes Jev *the* classifier: Claude Haiku stops classifying and composes outbound messages instead. New acceptance:
+
+- [ ] `jev.ts` speaks `/v1/systemone` with a `model`, and maps each `ClassifierQuestion` to a `choice` question (criteria from its options).
+- [ ] An unanswered question, or an answer outside the options, still comes back with confidence 0.
+- [ ] The demo's mock Jev (`src/demo/mock-apis.ts`) speaks the same contract.
+- [ ] `src/demo/runtime.ts` uses Jev as the classifier whenever `JEV_API_URL` is set, regardless of `ANTHROPIC_API_KEY`.

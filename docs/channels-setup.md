@@ -106,15 +106,19 @@ Limits: Australian numbers can't receive pictures. A number inside a Twilio Mess
 
 `TWILIO_WHATSAPP_FROM` is optional (without it Twilio sends no WhatsApp) and unused while the Meta pair in section 2 is set: Meta takes the WhatsApp channel.
 
-## 4. Classifier (optional)
+## 4. AI: Jev classifies, Claude Haiku composes ([ADR 0011](adr/0011-jev-classifies-haiku-composes.md))
 
 ```sh
+JEV_API_URL=https://api.typesafe.ai
+JEV_API_KEY=xxx
 ANTHROPIC_API_KEY=sk-ant-xxx
 ```
 
-That value is a placeholder. When `ANTHROPIC_API_KEY` is set, classification uses Claude Haiku. When it is unset, the classifier is Jev if `JEV_API_URL` is set, and the in-process mock otherwise.
+The keys are placeholders. Jev (TypeSafe) classifies every inbound message: its kind, Urgency, Trade, and reply type. Claude Haiku composes the messages myEST8 sends, such as the email when a Property Manager forwards a Ticket to the Property Owner, and writes each request's Summary. Either one left empty runs its mock.
 
-`JEV_API_URL`, `JEV_API_KEY`, `VISION_API_*`, `QUOTES_API_*` and `GOOGLE_MAPS_API_KEY` are the same as before: leave them empty and the mocks run. For the maps key, enable the Geocoding API and the Places API (New) and restrict the key to those two.
+**Not built yet:** today classification uses Claude Haiku whenever `ANTHROPIC_API_KEY` is set, and Jev only without it. `src/adapters/jev.ts` still speaks a guessed pre-release contract rather than TypeSafe's `/v1/systemone`. Outbound messages are fixed templates. ADR 0011 lists the gaps.
+
+`VISION_API_*`, `QUOTES_API_*` and `GOOGLE_MAPS_API_KEY` are the same as before: leave them empty and the mocks run. For the maps key, enable the Geocoding API and the Places API (New) and restrict the key to those two.
 
 `src/main.ts` exits if any of these is still a mock, unless `ALLOW_MOCKS=1`.
 
