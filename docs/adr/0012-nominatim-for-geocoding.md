@@ -20,6 +20,14 @@ A request is `GET {NOMINATIM_URL}/search` with the address as `q`, `format=jsonv
 
 **Configuration:** `NOMINATIM_URL` is the base URL. It is optional. Hosted mode defaults to `https://nominatim.openstreetmap.org`, so it is never a missing setting. The local demo and the tests use the in-process mock unless it is set.
 
+**Address suggestions** use [Photon](https://photon.komoot.io) (`PHOTON_URL`), Komoot's geocoder over the same OpenStreetMap data. Nominatim's usage policy forbids search-as-you-type, and Photon allows it. No key. The public server is fair use and may throttle.
+
+A request is `GET {PHOTON_URL}/api/?q=…&limit=5&lang=en&countrycode=AU&layer=house&layer=street`. Photon's API offers `countrycode` (a 2-letter country code; checked on the public server, which accepts `AU`), so suggestions are limited to Australia that way rather than with `bbox`. `layer` asks for houses and streets. Photon still returns some points of interest as `house` when they have a street number (a restaurant, a bus stop), so the adapter keeps a house only when its OSM key is `building` or `place`, and keeps a `street` by its name. A result's coordinates are `[longitude, latitude]`. A blank or under-3-character query makes no request.
+
+Choosing a suggestion fills the Property's Address and Suburb and a hidden pin. `addProperty` stores that pin when both numbers sit inside mainland Australia and Tasmania (about 10°S–44°S, 112°E–154°E). Otherwise, and when the form is used without JavaScript, the address is geocoded with Nominatim as before.
+
+`PHOTON_URL` is optional. Hosted mode defaults to `https://photon.komoot.io`, so it is never a missing setting. The local demo and the tests use the in-process mock unless it is set. The mock answers from the demo's addresses.
+
 ## Consequences
 
 - No key to get, restrict or pay for.

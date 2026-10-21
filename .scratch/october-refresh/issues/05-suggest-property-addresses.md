@@ -1,6 +1,6 @@
 # Suggest a Property's address as it is typed
 
-Status: ready-for-agent
+Status: resolved
 Branch: nominatim-geocoding
 Spec: ../spec.md, and ADR 0012 on that branch
 
@@ -23,17 +23,17 @@ Nominatim's usage policy forbids search-as-you-type, so suggestions use **Photon
 
 ## Acceptance criteria
 
-- [ ] Adapter tests (`test/adapters/photon.test.ts`):
+- [x] Adapter tests (`test/adapters/photon.test.ts`):
   - the request's URL, parameters and User-Agent
   - features read into suggestions (Photon gives `[lon, lat]`, so assert lat and lng the right way round from a worked example)
   - non-street results left out
   - a short query makes no request
   - an HTTP error throws
-- [ ] Page and route tests:
+- [x] Page and route tests:
   - the route needs a sign-in
   - it returns suggestions from the fake, and `[]` when the fake throws
   - posting a Property with valid `lat`/`lng` stores that location without calling the geocoder
   - out-of-range or missing `lat`/`lng` falls back to the geocoder
-- [ ] Browser test (demo): type part of a demo address, pick the suggestion by keyboard, see Address and Suburb filled, save, and the Property has a pin on Dispatch.
-- [ ] ADR 0012 gets a short section on Photon for suggestions, and the env examples list `PHOTON_URL` as optional.
-- [ ] `npm run check` passes.
+- [x] Browser test (demo): type part of a demo address, pick the suggestion by keyboard, see Address and Suburb filled, save, and the Property has a pin on Dispatch.
+- [x] ADR 0012 gets a short section on Photon for suggestions, and the env examples list `PHOTON_URL` as optional.
+- [x] `npm run check` passes.
