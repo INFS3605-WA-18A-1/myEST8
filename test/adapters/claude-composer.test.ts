@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { createClaudeComposer } from '../../src/adapters/claude-composer.ts';
+import { mockComposer } from '../../src/demo/mock-apis.ts';
 import type { ComposeInput } from '../../src/ports.ts';
 import { json, stubFetch } from './stub-fetch.ts';
 
@@ -75,5 +76,21 @@ describe('Claude composer', () => {
     await expect(createClaudeComposer({ apiKey: API_KEY, fetch: empty.fetch }).compose(input)).rejects.toThrow(/malformed/);
     const blank = stubFetch(() => reply('  \n '));
     await expect(createClaudeComposer({ apiKey: API_KEY, fetch: blank.fetch }).compose(input)).rejects.toThrow(/malformed/);
+  });
+});
+
+describe('mock composer', () => {
+  test('wraps the draft in a greeting and a sign-off, so it reads as written from notes', async () => {
+    const { text } = await mockComposer.compose({
+      ...input,
+      facts: { tenantName: 'Tom Tran' },
+      draft: 'Is the tap still dripping?',
+    });
+    expect(text).toBe('Hi Tom Tran,\n\nIs the tap still dripping?\n\nHarbour Realty');
+  });
+
+  test('leaves out the greeting when the facts name no one', async () => {
+    const { text } = await mockComposer.compose({ ...input, facts: {}, draft: 'Is the tap still dripping?' });
+    expect(text).toBe('Is the tap still dripping?\n\nHarbour Realty');
   });
 });
