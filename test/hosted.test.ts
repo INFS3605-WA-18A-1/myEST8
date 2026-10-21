@@ -81,6 +81,7 @@ describe('hosted mode and missing provider settings', () => {
     for (const name of Object.keys(ALL_SETTINGS)) expect((error as Error).message).toContain(name);
     expect((error as Error).message).toContain('ALLOW_MOCKS=1');
     expect((error as Error).message).not.toContain('NOMINATIM_URL');
+    expect((error as Error).message).not.toContain('PHOTON_URL');
     expect(lines).toEqual([]);
   });
 
@@ -101,7 +102,7 @@ describe('hosted mode and missing provider settings', () => {
     const lines: string[] = [];
     const hosted = await hostedApp(await hostedEnv({ ANTHROPIC_API_KEY: 'test-anthropic' }), (line) => lines.push(line));
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toMatch(/Real: classifier, geocoder\./);
+    expect(lines[0]).toMatch(/Real: classifier, geocoder, address suggestions\./);
     expect(lines[0]).toMatch(/Mocked or off: .*places.*email.*worker cron/);
     expect(lines[0]).toContain('ALLOW_MOCKS=1');
     expect(JSON.stringify(lines)).not.toContain('test-anthropic');
@@ -111,7 +112,7 @@ describe('hosted mode and missing provider settings', () => {
   test('with everything set it starts on real providers and logs that', async () => {
     const lines: string[] = [];
     const hosted = await hostedApp(await hostedEnv({ ALLOW_MOCKS: '', ...ALL_SETTINGS }), (line) => lines.push(line));
-    expect(lines[0]).toMatch(/Real: classifier, places, geocoder, file storage, email, inbound email, file links, worker cron/);
+    expect(lines[0]).toMatch(/Real: classifier, places, geocoder, address suggestions, file storage, email, inbound email, file links, worker cron/);
     expect(lines[0]).toMatch(/Mocked or off: imageMatcher, quoteReader\./);
     await hosted.close();
   });

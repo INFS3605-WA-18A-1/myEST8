@@ -58,6 +58,61 @@ describe('the demo', () => {
     expect(requests.map((r) => new URL(r.url).origin)).toEqual(['https://nominatim.openstreetmap.org']);
   });
 
+  test('the demo suggests a known address from the mock, unless PHOTON_URL is set', async () => {
+    const d = await createDemo({ env: demoEnv(), seedAgency: false });
+    closeAfter(d);
+    expect(d.apis.addressSuggester).toBe('mock');
+    const propertyManagerId = await d.app.signUp({
+      agencyName: 'Sunrise Realty',
+      timeZone: 'Australia/Brisbane',
+      name: 'Sam Sun',
+      email: 'sam@sunrise.example',
+      password: 'sunrise-2026',
+    });
+    const sam = await d.app.asPropertyManager(propertyManagerId);
+
+    expect(await sam.suggestAddresses('Parramatta')).toEqual([
+      {
+        label: '3 Parramatta Rd, Annandale NSW 2038',
+        address: '3 Parramatta Rd',
+        suburb: 'Annandale',
+        postcode: '2038',
+        state: 'NSW',
+        location: { lat: -33.885, lng: 151.183 },
+      },
+    ]);
+  });
+
+  test('PHOTON_URL sends suggestions there, and a live server uses the public Photon by default', async () => {
+    const requests: Request[] = [];
+    vi.stubGlobal('fetch', async (input: string | URL | Request, init?: RequestInit) => {
+      requests.push(new Request(input, init));
+      return Response.json({ type: 'FeatureCollection', features: [] });
+    });
+    const signUp = {
+      agencyName: 'Sunrise Realty',
+      timeZone: 'Australia/Brisbane',
+      name: 'Sam Sun',
+      email: 'sam@sunrise.example',
+      password: 'sunrise-2026',
+    };
+
+    const custom = await createDemo({ env: demoEnv({ PHOTON_URL: 'https://photon.example', PUBLIC_URL: 'https://myest8.test' }), seedAgency: false });
+    closeAfter(custom);
+    expect(custom.apis.addressSuggester).toBe('real');
+    const customPm = await custom.app.asPropertyManager(await custom.app.signUp(signUp));
+    await customPm.suggestAddresses('King Street');
+    expect(new URL(requests[0]!.url).origin).toBe('https://photon.example');
+    expect(requests[0]!.headers.get('user-agent')).toBe('myEST8 (https://myest8.test)');
+
+    requests.length = 0;
+    const live = await createDemo({ env: demoEnv({ PUBLIC_URL: 'https://myest8.test' }), seedAgency: false, live: true });
+    closeAfter(live);
+    const livePm = await live.app.asPropertyManager(await live.app.signUp(signUp));
+    await livePm.suggestAddresses('King Street');
+    expect(requests.map((r) => new URL(r.url).origin)).toEqual(['https://photon.komoot.io']);
+  });
+
   test("a demo listing's details and suggested Trades come from the mock Google and Jev", async () => {
     const { app, seed, errors } = await demoWorld();
     const alice = await app.asPropertyManager(seed.ids.aliceId);
@@ -68,7 +123,7 @@ describe('the demo', () => {
 
   test('starts with Harbour Realty seeded and every external API mocked', async () => {
     const { demo, app, seed, apis, errors } = await demoWorld();
-    expect(apis).toEqual({ classifier: 'mock', imageMatcher: 'mock', quoteReader: 'mock', places: 'mock', geocoder: 'mock', messenger: 'mock' });
+    expect(apis).toEqual({ classifier: 'mock', imageMatcher: 'mock', quoteReader: 'mock', places: 'mock', geocoder: 'mock', addressSuggester: 'mock', messenger: 'mock' });
     expect(await app.login('alice@harbour.example', 'demo1234')).toBe(seed.ids.aliceId);
     expect(await app.login('bob@harbour.example', 'demo1234')).toBe(seed.ids.bobId);
 

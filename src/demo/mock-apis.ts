@@ -77,7 +77,7 @@ export const DEMO_PLACES: readonly DemoListing[] = [
  * Dummy versions of every external API the app calls, at these paths:
  * /jev/v1/classify, /jev/v1/systemone (Trades for a Google listing), /vision/v1/image-match, /quotes/v1/quote-read (also /quotes/v1/read),
  * /google/places/v1/places:searchText, /google/places/v1/places/:id,
- * /nominatim/search.
+ * /nominatim/search, /photon/api/.
  * Wire the real adapters to it with `mockFetch()` and baseUrls under http://mock.local.
  */
 export function mockApis() {
@@ -139,8 +139,9 @@ export function mockApis() {
     return c.json(masked(googlePlace(place), fields, ''));
   });
 
-  // Nominatim: the demo addresses' points.
+  // Nominatim: the demo addresses' points. Photon: the same addresses, as suggestions.
   app.get('/nominatim/search', (c) => c.json(nominatimResponse(c.req.query('q') ?? '')));
+  app.get('/photon/api/', (c) => c.json(photonResponse(c.req.query('q') ?? '')));
 
   return app;
 }
@@ -285,34 +286,32 @@ function googleError(c: Context, code: 400 | 404, status: string, message: strin
 const SYDNEY_CBD = { lat: -33.8688, lng: 151.2093 };
 
 /** Fixed points for the demo's Properties and listings. Keys are `searchable` addresses. */
-const KNOWN_LOCATIONS = new Map(
-  (
-    [
-      ['12 King St, Newtown NSW 2042', -33.897, 151.179],
-      ['5/40 Ocean Ave, Bondi NSW 2026', -33.8908, 151.2743],
-      ['7 Wilson St, Newtown NSW 2042', -33.8955, 151.1823],
-      ['21 Glebe Point Rd, Glebe NSW 2037', -33.879, 151.187],
-      ['4 Illawarra Rd, Marrickville NSW 2204', -33.906, 151.158],
-      ['88 Regent St, Redfern NSW 2016', -33.893, 151.203],
-      ['17 Crystal St, Petersham NSW 2049', -33.893, 151.153],
-      ['210 Enmore Rd, Enmore NSW 2042', -33.899, 151.173],
-      ['12 Glebe Point Rd, Glebe NSW 2037', -33.881, 151.194],
-      ['3 Parramatta Rd, Annandale NSW 2038', -33.885, 151.183],
-      ['55 Victoria Rd, Rozelle NSW 2039', -33.864, 151.172],
-      ['2/31 Australia St, Camperdown NSW 2050', -33.8905, 151.1765],
-      ['9 Albion St, Annandale NSW 2038', -33.8815, 151.17],
-      ['27 Llewellyn St, Marrickville NSW 2204', -33.9105, 151.156],
-      ['17 Glenmore Rd, Paddington NSW 2021', -33.883, 151.224],
-      ['42 Coogee Bay Rd, Coogee NSW 2034', -33.9205, 151.251],
-      ['3/15 Bronte Rd, Bondi Junction NSW 2022', -33.8935, 151.252],
-      ['41 Addison Rd, Marrickville NSW 2204', -33.901, 151.1605],
-      ['9 Botany Rd, Alexandria NSW 2015', -33.9, 151.1985],
-      ['160 Oxford St, Bondi Junction NSW 2022', -33.8915, 151.247],
-      ['22 Booth St, Annandale NSW 2038', -33.88, 151.172],
-      ['5 Princes Hwy, St Peters NSW 2044', -33.912, 151.18],
-    ] as const
-  ).map(([address, lat, lng]) => [searchable(address), { lat, lng }]),
-);
+const DEMO_ADDRESSES = [
+  ['12 King St, Newtown NSW 2042', -33.897, 151.179],
+  ['5/40 Ocean Ave, Bondi NSW 2026', -33.8908, 151.2743],
+  ['7 Wilson St, Newtown NSW 2042', -33.8955, 151.1823],
+  ['21 Glebe Point Rd, Glebe NSW 2037', -33.879, 151.187],
+  ['4 Illawarra Rd, Marrickville NSW 2204', -33.906, 151.158],
+  ['88 Regent St, Redfern NSW 2016', -33.893, 151.203],
+  ['17 Crystal St, Petersham NSW 2049', -33.893, 151.153],
+  ['210 Enmore Rd, Enmore NSW 2042', -33.899, 151.173],
+  ['12 Glebe Point Rd, Glebe NSW 2037', -33.881, 151.194],
+  ['3 Parramatta Rd, Annandale NSW 2038', -33.885, 151.183],
+  ['55 Victoria Rd, Rozelle NSW 2039', -33.864, 151.172],
+  ['2/31 Australia St, Camperdown NSW 2050', -33.8905, 151.1765],
+  ['9 Albion St, Annandale NSW 2038', -33.8815, 151.17],
+  ['27 Llewellyn St, Marrickville NSW 2204', -33.9105, 151.156],
+  ['17 Glenmore Rd, Paddington NSW 2021', -33.883, 151.224],
+  ['42 Coogee Bay Rd, Coogee NSW 2034', -33.9205, 151.251],
+  ['3/15 Bronte Rd, Bondi Junction NSW 2022', -33.8935, 151.252],
+  ['41 Addison Rd, Marrickville NSW 2204', -33.901, 151.1605],
+  ['9 Botany Rd, Alexandria NSW 2015', -33.9, 151.1985],
+  ['160 Oxford St, Bondi Junction NSW 2022', -33.8915, 151.247],
+  ['22 Booth St, Annandale NSW 2038', -33.88, 151.172],
+  ['5 Princes Hwy, St Peters NSW 2044', -33.912, 151.18],
+] as const;
+
+const KNOWN_LOCATIONS = new Map(DEMO_ADDRESSES.map(([address, lat, lng]) => [searchable(address), { lat, lng }]));
 
 /** FNV-1a: a stable 32-bit number for a string. */
 function hash(text: string) {
@@ -335,6 +334,26 @@ function nominatimResponse(query: string) {
   if (!query.trim()) return [];
   const { lat, lng } = locate(query);
   return [{ place_id: hash(searchable(query)), lat: String(lat), lon: String(lng), place_rank: 30, category: 'building', type: 'yes', display_name: query.trim() }];
+}
+
+/** Photon's GeoJSON for the demo addresses whose words all appear in the query, at most 5. */
+function photonResponse(query: string) {
+  const words = searchable(query).split(' ').filter(Boolean);
+  const features = DEMO_ADDRESSES.filter(([address]) => words.every((word) => searchable(address).includes(word)))
+    .slice(0, 5)
+    .map(([address, lat, lng]) => photonFeature(address, lat, lng));
+  return { type: 'FeatureCollection', features };
+}
+
+/** One demo address as a Photon house, so the real adapter reads it. Coordinates are [lon, lat]. */
+function photonFeature(address: string, lat: number, lng: number) {
+  const [, streetLine = address, suburb = '', state = '', postcode = ''] = /^(.*), (.+) ([A-Z]{2,3}) (\d{4})$/.exec(address) ?? [];
+  const [, housenumber = '', street = streetLine] = /^(\S+)\s+(.+)$/.exec(streetLine) ?? [];
+  return {
+    type: 'Feature',
+    properties: { osm_key: 'building', osm_value: 'house', type: 'house', housenumber, street, district: suburb, state, postcode, countrycode: 'AU' },
+    geometry: { type: 'Point', coordinates: [lng, lat] },
+  };
 }
 
 /** The demo's Summariser: the description's first sentence trimmed to 120 characters, then the location when known. Deterministic. */
