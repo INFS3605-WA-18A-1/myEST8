@@ -13,7 +13,7 @@ import { icon } from '../icons.ts';
 import { shellInfo } from '../shell.ts';
 import { alert, badge, button, contactLink, emptyState, field, flashFrom, formatMoney, formatWhen, humanise, linkButton, page, ratingChip, rowLink, section, sectionHeader, stat, statGroup, table, ticketCell, type Html } from '../ui.ts';
 import { timeRange } from './calendar.ts';
-import { googleSearchForm, importPanel, searchListings, tradieFields } from './onboarding-forms.ts';
+import { addTradieSection, importPanel, listingChoice } from './onboarding-forms.ts';
 
 type TradieView = Awaited<ReturnType<PropertyManagerActions['tradie']>>;
 type DirectoryEntry = Awaited<ReturnType<PropertyManagerActions['tradieDirectory']>>[number];
@@ -28,9 +28,8 @@ export function tradiePages() {
     const flash = flashFrom(c.req.url);
     const refused = flash?.kind === 'error' ? c.req.query('form') : undefined;
     const errorFor = (key: string): Html => (refused === key && flash ? alert(flash.message, 'error') : html``);
-    const googleQuery = c.req.query('google')?.trim() ?? '';
-    const [everyone, { listings, problem }] = await Promise.all([actions.tradieDirectory(), searchListings(actions, googleQuery)]);
-    const addAction = `/setup/tradies${googleQuery ? `?google=${encodeURIComponent(googleQuery)}` : ''}`;
+    const choice = listingChoice((name) => c.req.query(name));
+    const everyone = await actions.tradieDirectory();
     const tradies = trade ? everyone.filter((t) => t.trades.includes(trade)) : everyone;
     return c.html(
       page({
@@ -46,12 +45,15 @@ export function tradiePages() {
             id: 'add-tradie',
             title: 'Add a Tradie',
             body: html`
-              ${googleSearchForm('/tradies#add-tradie', googleQuery, problem, listings.length)}
-              <form method="post" action="${addAction}" class="mt-4">
-                ${errorFor('tradie')}
-                ${tradieFields({ listings })}
-                <div class="mt-3">${button('Add Tradie', { variant: 'primary' })}</div>
-              </form>
+              ${await addTradieSection({
+                actions,
+                choice,
+                path: '/tradies',
+                anchor: '#add-tradie',
+                postTo: '/setup/tradies',
+                submit: button('Add Tradie', { variant: 'primary' }),
+                refusal: errorFor('tradie'),
+              })}
               <details class="import-details mt-4 border-t border-line pt-3" id="import-tradies" ${refused === 'import-tradies' ? 'open' : ''}>
                 <summary class="cursor-pointer font-semibold text-action">${icon('file-xls', { size: 'size-4' })}<span>Add many from a spreadsheet</span></summary>
                 <div class="mt-3">${importPanel('tradies', { error: errorFor('import-tradies') })}</div>
