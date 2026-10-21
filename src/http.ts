@@ -14,6 +14,7 @@ import { twilioToInbound, verifyTwilioSignature } from './adapters/twilio.ts';
 import type { App } from './app.ts';
 import type { FileLinks } from './file-links.ts';
 import type { Clock } from './ports.ts';
+import type { SmsNumbers } from './sms-numbers.ts';
 import { ActionError, invalid } from './shared.ts';
 import { optionalCents } from './web/forms.ts';
 import { streamOf } from './web/stream.ts';
@@ -26,8 +27,13 @@ export function createHttpApp(
   config: {
     /** The address providers call, which Twilio signs: "https://myest8.example". */
     publicUrl: string;
-    /** Twilio's auth token. Null (hosted, none set) turns /webhooks/twilio off with a 404. */
+    /** Twilio's auth token. With no Agency numbers either, null (hosted, none set) turns /webhooks/twilio off with a 404. */
     twilioAuthToken: string | null;
+    /**
+     * Agencies' own Twilio numbers (ADR 0005). A text to one is checked with the token of the
+     * account that owns the number; the server's token covers every other number, as before.
+     */
+    smsNumbers?: Pick<SmsNumbers, 'authTokenFor'> | null;
     /** SendGrid's verification key (base64 DER). Every email webhook must be signed with it. */
     sendgridPublicKey: string;
     clock: Clock;
@@ -48,12 +54,15 @@ export function createHttpApp(
   };
 
   http.post('/webhooks/twilio', bodyLimit({ maxSize: MB }), async (c) => {
-    if (!config.twilioAuthToken) return c.notFound();
+    if (!config.twilioAuthToken && !config.smsNumbers) return c.notFound();
     const params = Object.fromEntries(new URLSearchParams(await c.req.text()));
-    if (!verifyTwilioSignature(config.twilioAuthToken, publicUrl(c), params, c.req.header('x-twilio-signature') ?? '')) {
-      return c.text('Invalid signature', 403);
-    }
-    await app.receiveInbound(twilioToInbound(params, config.clock.now()));
+    const message = twilioToInbound(params, config.clock.now());
+    // The token that signs a text is the one of the Twilio account that owns the number it was sent to.
+    const token = (message.channelType === 'sms' ? await config.smsNumbers?.authTokenFor(message.agencyChannel) : null) ?? config.twilioAuthToken;
+    // A bad signature and a number no Agency has get the same answer, so neither says which was wrong.
+    const refused = () => c.text('Forbidden', 403);
+    if (!token || !verifyTwilioSignature(token, publicUrl(c), params, c.req.header('x-twilio-signature') ?? '')) return refused();
+    if (!(await app.receiveInbound(message))) return refused();
     return c.body('<Response/>', 200, { 'content-type': 'text/xml' });
   });
 

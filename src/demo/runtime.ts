@@ -19,9 +19,11 @@ import { twilioFetchMedia } from '../adapters/twilio.ts';
 import { createApp } from '../app.ts';
 import { all, ident, LOCAL_DATABASE_URL, one, openDb, requireDatabaseUrl, run, type Db } from '../db.ts';
 import { createGmailMailboxes } from '../mailboxes.ts';
+import type { FileLinks } from '../file-links.ts';
 import { migrate } from '../migrate.ts';
 import { UndeliverableError, type ChannelType, type Clock, type Messenger } from '../ports.ts';
 import { ActionError, normalizeAddress } from '../shared.ts';
+import { createSmsNumbers, type SmsNumbers } from '../sms-numbers.ts';
 import { createSessions } from '../web/auth.ts';
 import { createWebApp } from '../web/server.ts';
 import { OffsetClock } from './clock.ts';
@@ -251,7 +253,15 @@ export async function createDemo<Seeded extends boolean = true>(
   // numbers are made up and could belong to someone. The simulator records every
   // message once it's sent. File links run on real time, as Twilio fetches them in
   // real time however far the demo clock has moved.
-  const providers = messengersFromEnv(env, { clock: { now: () => new Date() }, strict: hosted, ...(options.log ? { log: options.log } : {}) });
+  const encryptionKey = tokenEncryptionKey(env);
+  const providers = messengersFromEnv(env, {
+    clock: { now: () => new Date() },
+    strict: hosted,
+    // With TOKEN_ENCRYPTION_KEY, Agencies set up their own SMS numbers (ADR 0005): the shared number becomes optional.
+    agencyNumbers: encryptionKey !== null,
+    ...(options.log ? { log: options.log } : {}),
+  });
+  const smsNumbers = encryptionKey ? smsNumbersFromEnv(env, { db, baseUrl, fileLinks: providers.fileLinks, encryptionKey }) : null;
   // Gmail (ADR 0004): each Agency connects its own mailbox by OAuth, so its
   // Messenger and reader need the database, not just env vars.
   const mailboxes = gmailFromEnv(env, db, baseUrl);
@@ -260,7 +270,9 @@ export async function createDemo<Seeded extends boolean = true>(
   const reallySends = (to: string) => hosted || sendTo.has('*') || sendTo.has(normalizeAddress(to));
   const outbound: Messenger = {
     async send(message) {
-      const provider = providers.channels[message.channelType];
+      // An Agency's own number sends through the Twilio account that owns it; any other SMS through the shared number.
+      const own = message.channelType === 'sms' && smsNumbers && (await smsNumbers.owns(message.from));
+      const provider = own ? smsNumbers.messenger : providers.channels[message.channelType];
       if (provider && reallySends(message.to)) await provider.send({ ...message, cc: message.cc.filter(reallySends) });
       // Hosted, nothing records into the phone simulator: no provider means it can't be sent.
       else if (hosted) throw new UndeliverableError(message.channelType, message.to, `no ${message.channelType} provider is configured`, `${message.channelType === 'sms' ? 'SMS' : message.channelType === 'whatsapp' ? 'WhatsApp' : 'email'} isn't set up on this server yet`);
@@ -277,9 +289,10 @@ export async function createDemo<Seeded extends boolean = true>(
     imageMatcher: createImageMatcher({ ...vision, apiKey: env.VISION_API_KEY ?? 'demo' }),
     quoteReader: createQuoteReader({ ...quotes, apiKey: env.QUOTES_API_KEY ?? 'demo', clock, timeZone }),
     places: createGooglePlaces(google),
-    fetchMedia: mediaFetcher(env),
+    fetchMedia: mediaFetcher(env, smsNumbers),
     settings: { baseUrl },
     blobs: storageFromEnv(env),
+    smsNumbers,
   });
 
   // Worker runs never overlap: each call waits for the one before.
@@ -294,7 +307,7 @@ export async function createDemo<Seeded extends boolean = true>(
         // New Gmail mail is read at most every 30 seconds, on real time.
         if (mailboxes && Date.now() - lastMailPoll >= MAIL_POLL_MS) {
           lastMailPoll = Date.now();
-          for (const error of await mailboxes.poll((message) => app.receiveInbound(message))) logError(error);
+          for (const error of await mailboxes.poll(async (message) => void (await app.receiveInbound(message)))) logError(error);
         }
         for (const error of await app.runWorker(options)) logError(error);
       } catch (e) {
@@ -394,6 +407,7 @@ export async function createDemo<Seeded extends boolean = true>(
     publicUrl: baseUrl,
     // Hosted with no Twilio token: /webhooks/twilio is off (404), never checked against 'demo'.
     twilioAuthToken: twilioAuthToken || (hosted ? null : 'demo'),
+    smsNumbers,
     sendgridPublicKey:
       env.SENDGRID_INBOUND_PUBLIC_KEY?.trim() ||
       generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).publicKey.export({ format: 'der', type: 'spki' }).toString('base64'),
@@ -407,7 +421,7 @@ export async function createDemo<Seeded extends boolean = true>(
       smsInbound: hosted ? 'none' : 'simulator',
       unavailable: [
         // The demo simulates SMS; a hosted server needs a real provider, or a code can only fail.
-        ...(hosted && !providers.channels.sms ? (['sms'] as const) : []),
+        ...(hosted && !providers.channels.sms && !smsNumbers ? (['sms'] as const) : []),
         // Hosted email arrives through Resend inbound (or an Agency's own Gmail).
         ...(hosted && (!resend || !env.RESEND_INBOUND_DOMAIN?.trim()) && !mailboxes ? (['email'] as const) : []),
       ],
@@ -448,20 +462,58 @@ function gmailFromEnv(env: Env, db: Db, baseUrl: string) {
   return createGmailMailboxes({ db, clock: { now: () => new Date() }, clientId, clientSecret, redirectUri: `${baseUrl}/oauth/google/callback`, encryptionKey });
 }
 
+/** TOKEN_ENCRYPTION_KEY when it is set (base64 of 32 bytes), null when it isn't. A key of the wrong size is refused. */
+function tokenEncryptionKey(env: Env): string | null {
+  const key = env.TOKEN_ENCRYPTION_KEY?.trim();
+  if (!key) return null;
+  if (Buffer.from(key, 'base64').length !== 32) throw new Error('TOKEN_ENCRYPTION_KEY must be 32 random bytes in base64 (`openssl rand -base64 32`)');
+  return key;
+}
+
+/**
+ * Agencies' own Twilio SMS numbers (ADR 0005), when TOKEN_ENCRYPTION_KEY is set, because a registered
+ * Agency's auth token is stored encrypted. Creating a number also needs the server's Twilio account
+ * (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN) and TWILIO_BUNDLE_SID and TWILIO_ADDRESS_SID; without them
+ * "Create a new number" is shown disabled, and registering a number the Agency already has still works.
+ * TWILIO_API_BASE_URL points Twilio's REST API at a local fake.
+ */
+function smsNumbersFromEnv(env: Env, o: { db: Db; baseUrl: string; fileLinks: FileLinks | null; encryptionKey: string }): SmsNumbers {
+  const set = (name: string) => env[name]?.trim() || undefined;
+  const accountSid = set('TWILIO_ACCOUNT_SID');
+  const authToken = set('TWILIO_AUTH_TOKEN');
+  return createSmsNumbers({
+    db: o.db,
+    clock: { now: () => new Date() },
+    encryptionKey: o.encryptionKey,
+    server: accountSid && authToken ? { accountSid, authToken } : null,
+    bundleSid: set('TWILIO_BUNDLE_SID'),
+    addressSid: set('TWILIO_ADDRESS_SID'),
+    publicUrl: o.baseUrl,
+    ...(set('TWILIO_API_BASE_URL') ? { apiBaseUrl: set('TWILIO_API_BASE_URL')! } : {}),
+    fileLinks: o.fileLinks,
+  });
+}
+
 /**
  * Fetches an inbound attachment by its URL: Meta media ids (`meta-media:<id>`)
- * through the WhatsApp Cloud API, other URLs through Twilio when it's configured.
- * The simulator sends attachments directly, so it never needs this.
+ * through the WhatsApp Cloud API, Twilio's own media URLs with the credentials of
+ * the account they belong to (the server's, or an Agency's own). Twilio's credentials
+ * go nowhere else: an Agency can sign a webhook with its own token, so the address in
+ * one is not trusted. The simulator sends attachments directly, so it never needs this.
  */
-function mediaFetcher(env: Env): (url: string) => Promise<Uint8Array> {
+function mediaFetcher(env: Env, smsNumbers: SmsNumbers | null): (url: string) => Promise<Uint8Array> {
   const metaToken = env.META_WHATSAPP_ACCESS_TOKEN?.trim();
   const twilioSid = env.TWILIO_ACCOUNT_SID?.trim();
   const twilioToken = env.TWILIO_AUTH_TOKEN?.trim();
+  const twilioApi = (env.TWILIO_API_BASE_URL?.trim() || 'https://api.twilio.com').replace(/\/$/, '');
   const meta = metaToken ? metaFetchMedia({ accessToken: metaToken }) : null;
-  const twilio = twilioSid && twilioToken ? twilioFetchMedia(twilioSid, twilioToken) : null;
   return async (url) => {
     if (url.startsWith('meta-media:') && meta) return meta(url);
-    if (!url.startsWith('meta-media:') && twilio) return twilio(url);
+    if (url.startsWith(`${twilioApi}/`)) {
+      const accountSid = /\/Accounts\/(AC[0-9a-f]{32})\//i.exec(url)?.[1];
+      const token = !accountSid ? null : accountSid === twilioSid ? (twilioToken ?? null) : ((await smsNumbers?.authTokenForAccount(accountSid)) ?? null);
+      if (accountSid && token) return twilioFetchMedia(accountSid, token)(url);
+    }
     throw new Error(`No provider is configured to fetch the attachment at ${url}`);
   };
 }

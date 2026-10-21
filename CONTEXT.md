@@ -118,3 +118,19 @@ _Avoid_: spending limit, approval limit
 **Tenant Score**:
 An Agency-internal measure of a Tenant built only from verified events: Tenant-caused damage confirmed by a Tradie or Property Manager, and lease breaches a Property Manager records.
 _Avoid_: tenant rating
+
+### Channels
+
+**Channel**:
+A way people reach the Agency, and the Agency reaches them: an SMS number, an email address or WhatsApp. An Agency connects its Channels in the welcome wizard and in Settings.
+_Avoid_: integration, inbox (on its own)
+
+**Agency SMS number**:
+The Agency's SMS Channel when its number is managed through Twilio. Tenants, Tradies and Property Owners text it, and myEST8 replies from it. It is either created by myEST8 or registered by the Agency, and an Agency has one at a time. It differs from a Channel the Agency types in, which is any address plus a verification code.
+_Avoid_: Twilio number (to the Agency), virtual number, shared number
+
+**Created number**:
+An Agency SMS number myEST8 bought on its own Twilio account. The platform pays its monthly fee, and disconnecting it releases it back to Twilio.
+
+**Registered number**:
+An Agency SMS number on the Agency's own Twilio account. myEST8 points its incoming texts at itself and stores the Agency's Account SID and Auth Token, encrypted. Disconnecting it only unlinks it: the number stays on the Agency's Twilio account.

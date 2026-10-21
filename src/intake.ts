@@ -644,10 +644,13 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
   );
 
   return {
-    /** Stores an inbound message and leaves it for the worker. Safe to call again with the same provider message. */
-    async receive(message: InboundMessage) {
+    /**
+     * Stores an inbound message and leaves it for the worker. Safe to call again with the same provider message.
+     * Returns false, storing nothing, when no Agency has the address the message was sent to.
+     */
+    async receive(message: InboundMessage): Promise<boolean> {
       const agencyId = await modules.profiles.agencyByChannel(message.channelType, message.agencyChannel);
-      if (agencyId === null) return;
+      if (agencyId === null) return false;
       await transaction(db, async () => {
         if (await one(db, 'SELECT 1 FROM inbound_messages WHERE provider_message_id = ?', message.providerMessageId)) return;
         const attachments: StoredAttachment[] = [];
@@ -672,6 +675,7 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
         );
         await worker.schedule('intake.process', { inboundId });
       });
+      return true;
     },
 
     /** The Agency a no-login upload link belongs to; refuses a link that isn't one. */

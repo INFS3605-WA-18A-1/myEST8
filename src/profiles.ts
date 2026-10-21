@@ -408,6 +408,11 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
       });
     },
 
+    /** Forgets the Agency's channel of this type, when it is still `address`: texts to it no longer reach the Agency. */
+    async disconnectChannel(agencyId: number, channelType: ChannelType, address: string) {
+      await run(db, 'DELETE FROM agency_channels WHERE agency_id = ? AND channel_type = ? AND address = ?', agencyId, channelType, normalizeAddress(address));
+    },
+
     /** The Agency's connected channels: SMS, then WhatsApp, then email. */
     async channels(agencyId: number): Promise<AgencyChannel[]> {
       return (await all<{ channel_type: ChannelType; address: string; tested_at: string | null }>(

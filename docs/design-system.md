@@ -277,6 +277,17 @@ All of these are in `src/web/ui.ts`; pages use them instead of hand-building mar
 - **Copy:** Property Manager pages carry the note "Only Property Managers in your Agency can open this link" (`COLLEAGUES_ONLY`). The tracker warns that anyone with the link can see the page.
 - **Links** are absolute, built by `shareUrl(c, path?)` from the address the request came to, with any `?ok=` or `?error=` flash dropped.
 
+### SMS number
+
+`smsNumberPanel(actions, { from, current })` in `src/web/pages/sms-number.ts` is the one component for an Agency's SMS number. The welcome wizard's Channels step, the Setup page and Settings all render it, so the three can't drift.
+
+- **Two paths, side by side** (stacked under 768 px): "Create a new number" and "Register a Twilio number". Each is a `section` card with its own plain explanation and its own button. Don't merge them into one form.
+- **Create** is a primary button. If the server can't buy numbers, the button is disabled, with a one-line muted reason for the person who runs the server underneath it (`data-sms-create-unavailable`). "Register" still works.
+- **Register** is a short form (Account SID, Auth Token), then a radio list of the numbers that can send and receive texts, or a note that there are none with a link to buy one in Twilio. "Use different details" starts over.
+- **Connected** shows the number in bold and one line about who owns it, then "Release this number" (created) or "Disconnect this number" (registered), a secondary small link button.
+- **Releasing and disconnecting** go through a confirmation page (`/sms-number/release`) that says what happens. Releasing a created number can't be undone, so its text says so, and "Keep it" sits next to the confirm button.
+- Results come back as the page's flash, and the page returns to the anchor `#sms`.
+
 ### Importing from a spreadsheet
 
 Each setup step that creates many records (Property Owners, Building Managers, Tradies, Properties, Tenants) has "Add many from a spreadsheet" on `/setup`, folded like the "Add" forms, and the guide's Tradies and Properties steps have the same uploads (`importPanel()` in `onboarding-forms.ts`). The guide lists them in the order they must happen: Property Owners, then Properties, then Tenants.

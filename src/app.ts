@@ -11,6 +11,7 @@ import type { BlobStore, ChannelType, Clock, InboundMessage } from './ports.ts';
 import { createProfiles, type SignUp } from './profiles.ts';
 import { createQuotes, type EstimateInput, type FirmQuoteInput } from './quotes.ts';
 import { createScheduling } from './scheduling.ts';
+import type { SmsNumbers } from './sms-numbers.ts';
 import { DEFAULT_SETTINGS, invalid, notFound, type Role, type Settings, type Trade, type Urgency } from './shared.ts';
 import { createTickets } from './tickets.ts';
 import { createViews, type ListOptions } from './views.ts';
@@ -22,7 +23,16 @@ export type Upload = { filename: string; contentType: string; content: Uint8Arra
  * The whole app behind its boundary: inbound messages, uploads through links,
  * Property Manager actions and the background worker.
  */
-export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partial<Settings> & Pick<Settings, 'baseUrl'>; blobs?: BlobStore | null }) {
+export function createApp(
+  deps: Ports & {
+    db: Db;
+    clock: Clock;
+    settings: Partial<Settings> & Pick<Settings, 'baseUrl'>;
+    blobs?: BlobStore | null;
+    /** Setting up an Agency's own Twilio SMS number (ADR 0005). Null where this server doesn't offer it. */
+    smsNumbers?: SmsNumbers | null;
+  },
+) {
   const { db, clock } = deps;
   const settings: Settings = { ...DEFAULT_SETTINGS, ...deps.settings };
   const worker = createWorker(db, clock);
@@ -57,6 +67,8 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
   const imports = createImports(ctx, onboarding);
   const views = createViews(ctx);
   const { profiles, tickets, intake, quotes, scheduling } = modules;
+  const smsNumbers = deps.smsNumbers ?? null;
+  const sms = () => smsNumbers ?? invalid("This server doesn't set up SMS numbers");
 
   return {
     /** Creating an Agency and its Property Managers, before anyone can sign in. */
@@ -76,8 +88,8 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
     /** Checks a Property Manager's email and password. Returns their id, or null. */
     login: (email: string, password: string) => profiles.verifyLogin(email, password),
 
-    /** Called by the webhooks: stores the message and returns straight away. */
-    receiveInbound: (message: InboundMessage) => intake.receive(message),
+    /** Called by the webhooks: stores the message and returns straight away. False when no Agency has the address it was sent to. */
+    receiveInbound: (message: InboundMessage): Promise<boolean> => intake.receive(message),
 
     /** A WhatsApp delivery failure from Meta, recorded on the outbound message. */
     recordDeliveryFailure: (failure: { to: string; code: number; title: string }) => tickets.recordDeliveryFailure(failure),
@@ -197,6 +209,32 @@ export function createApp(deps: Ports & { db: Db; clock: Clock; settings: Partia
         pendingChannelVerifications: () => verification.pending(agencyId),
         ensureInboundEmail: () => verification.ensureInboundEmail(agencyId),
         sendTestMessage: (channelType: ChannelType, to: string) => onboarding.sendTestMessage(agencyId, channelType, to),
+
+        // The Agency's own SMS number on Twilio (ADR 0005)
+        /** Where the Agency's SMS number stands, or null when this server doesn't set up SMS numbers. */
+        smsNumber: async () => (smsNumbers ? smsNumbers.status(agencyId) : null),
+        /** Buys an Australian mobile number for the Agency on the server's Twilio account and connects it as its SMS channel. Asking again returns the same number. */
+        createSmsNumber: async () => {
+          const number = await sms().create(agencyId);
+          await onboarding.connectChannel(agencyId, 'sms', number, { verified: true });
+          return number;
+        },
+        /** Checks the Agency's own Twilio Account SID and Auth Token with Twilio and keeps them, encrypted. Returns how many SMS-capable numbers the account has. */
+        checkTwilioAccount: (accountSid: string, authToken: string) => sms().checkAccount(agencyId, accountSid, authToken),
+        /** The SMS-capable numbers on the Twilio account the Agency gave, to pick from. */
+        twilioNumbers: async () => (await sms().offered(agencyId)) ?? [],
+        /** Points the chosen number's incoming texts at myEST8 and connects it as the Agency's SMS channel. */
+        registerTwilioNumber: async (numberSid: string) => {
+          const number = await sms().register(agencyId, numberSid);
+          await onboarding.connectChannel(agencyId, 'sms', number, { verified: true });
+          return number;
+        },
+        /** Disconnects the Agency's SMS number: a created one is released on Twilio, a registered one is only unlinked. */
+        releaseSmsNumber: async () => {
+          const { number } = await sms().status(agencyId);
+          await sms().release(agencyId);
+          if (number) await onboarding.disconnectChannel(agencyId, 'sms', number.phoneNumber);
+        },
         addOwner: (input: Parameters<typeof onboarding.addOwner>[1]) => onboarding.addOwner(agencyId, input),
         addBuildingManager: (input: Parameters<typeof onboarding.addBuildingManager>[1]) => onboarding.addBuildingManager(agencyId, input),
         addTenant: (input: Parameters<typeof onboarding.addTenant>[1]) => onboarding.addTenant(agencyId, input),

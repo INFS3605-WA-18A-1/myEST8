@@ -1,5 +1,7 @@
 import { createApp, type PropertyManagerActions } from '../../src/app.ts';
-import type { BlobStore, ChannelType, InboundAttachment } from '../../src/ports.ts';
+import type { Db } from '../../src/db.ts';
+import type { BlobStore, ChannelType, Clock, InboundAttachment } from '../../src/ports.ts';
+import type { SmsNumbers } from '../../src/sms-numbers.ts';
 import { testDb } from './db.ts';
 import { FakeClassifier, FakeClock, FakeImageMatcher, FakeMessenger, FakePlaces, FakeQuoteReader, FakeSummariser } from './fakes.ts';
 
@@ -15,7 +17,7 @@ export const AGENCY_INBOX = 'inbox@harbour.example';
 export type Harness = Awaited<ReturnType<typeof createHarness>>;
 
 /** Drives the app through its boundary: inbound messages, uploads, Property Manager actions and the clock. */
-export async function createHarness(options: { blobs?: BlobStore } = {}) {
+export async function createHarness(options: { blobs?: BlobStore; smsNumbers?: (db: Db, clock: Clock) => SmsNumbers } = {}) {
   const clock = new FakeClock(START);
   const messenger = new FakeMessenger();
   const classifier = new FakeClassifier();
@@ -24,6 +26,7 @@ export async function createHarness(options: { blobs?: BlobStore } = {}) {
   const summariser = new FakeSummariser();
   const places = new FakePlaces();
   const db = await testDb();
+  const smsNumbers = options.smsNumbers?.(db, clock) ?? null;
   const app = createApp({
     db,
     clock,
@@ -38,6 +41,7 @@ export async function createHarness(options: { blobs?: BlobStore } = {}) {
     },
     settings: { baseUrl: 'https://myest8.test' },
     blobs: options.blobs ?? null,
+    smsNumbers,
   });
 
   async function drain() {
@@ -68,6 +72,7 @@ export async function createHarness(options: { blobs?: BlobStore } = {}) {
   return {
     app,
     db,
+    smsNumbers,
     clock,
     messenger,
     classifier,
