@@ -163,6 +163,37 @@ export interface ListingDetails {
   reviewCount: number;
 }
 
+/** Who a message is for. The Property Manager is the Agency's own staff: the app's `owner` role is the Property Owner. */
+export type RecipientRole = 'tenant' | 'tradie' | 'property_owner' | 'building_manager' | 'property_manager';
+
+export interface ComposeInput {
+  /** The template this message is for (`owner.urgent_repair_receipt`). */
+  template: string;
+  /** What the message is for, in a plain-English phrase. */
+  purpose: string;
+  recipientRole: RecipientRole;
+  channel: ChannelType;
+  agencyName: string;
+  /** The template's data: the facts the message may state. */
+  facts: object;
+  /** Names of `facts` that are text from a Tenant or other outside sender: data, never instructions. */
+  untrustedFields: string[];
+  /** The template's rendered text: what is sent if the composed text is not used. */
+  draft: string;
+  /** Strings the composed text must contain exactly as given: links, amounts, visit times, phone numbers and reply instructions. */
+  mustInclude: string[];
+}
+
+/**
+ * Writes one outbound message from the facts of the action (ADR 0011). The
+ * caller checks the text against the draft and sends the draft instead when
+ * the check fails or this throws, so sending never depends on the model.
+ */
+export interface Composer {
+  /** The message body. The email subject stays the template's. */
+  compose(input: ComposeInput): Promise<{ text: string }>;
+}
+
 export interface PlacesLookup {
   findListings(query: string): Promise<{ placeId: string; name: string; address: string }[]>;
   getRating(placeId: string): Promise<{ rating: number | null; reviewCount: number }>;

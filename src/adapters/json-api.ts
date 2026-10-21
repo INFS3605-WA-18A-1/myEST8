@@ -16,14 +16,14 @@ export async function callJson(
   fetchImpl: typeof fetch,
   service: string,
   url: string,
-  options: { headers: Record<string, string>; body?: unknown },
+  options: { headers: Record<string, string>; body?: unknown; timeoutMs?: number },
 ): Promise<unknown> {
   const hasBody = options.body !== undefined;
   const response = await fetchImpl(url, {
     method: hasBody ? 'POST' : 'GET',
     headers: { accept: 'application/json', ...(hasBody ? { 'content-type': 'application/json' } : {}), ...options.headers },
     ...(hasBody ? { body: JSON.stringify(options.body) } : {}),
-    signal: AbortSignal.timeout(TIMEOUT_MS),
+    signal: AbortSignal.timeout(options.timeoutMs ?? TIMEOUT_MS),
   });
   const text = await response.text();
   if (!response.ok) throw new Error(`${service} returned ${response.status}: ${excerpt(text)}`);
