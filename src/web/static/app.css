@@ -3356,6 +3356,82 @@
       }
     }
 
+    /* Adding a Tradie from a Google listing (addTradieSection in pages/onboarding-forms.ts). The results are
+       bounded entries like a Dispatch Tradie entry, each one link: name and address, with the chosen one in the
+       picked state (info tint, Harbour border) and the word "Chosen" so colour isn't the only signal. The card
+       for the picked listing has the same boundary. */
+    .listing-results {
+      display: grid;
+      gap: 8px;
+      margin: 12px 0 0;
+      padding: 0;
+      list-style: none;
+    }
+    .listing-result {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      column-gap: 12px;
+      row-gap: 2px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--ink);
+      text-decoration: none;
+    }
+    .listing-result:hover {
+      border-color: var(--control);
+    }
+    .listing-result[aria-current='true'] {
+      border-color: var(--action);
+      background: var(--info-bg);
+    }
+    .listing-result-name {
+      font-family: var(--font-head);
+      font-size: 16px;
+      font-weight: 600;
+      line-height: 1.3;
+      overflow-wrap: anywhere;
+    }
+    .listing-result-address {
+      grid-column: 1;
+      font-size: 14px;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+    .listing-result-chosen {
+      grid-column: 2;
+      grid-row: 1 / span 2;
+      align-self: center;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--action);
+    }
+    .listing-card {
+      margin-top: 16px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--surface);
+    }
+    .listing-card-name {
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 16px;
+      font-weight: 600;
+      line-height: 1.3;
+      overflow-wrap: anywhere;
+    }
+    .listing-card-address {
+      margin: 0 0 8px;
+      font-size: 14px;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+
     /* A Ticket in a table row (ticketCell() in ui.ts): the issue first and strong, its
        number quiet beside it, the unread mark in words, then the address, muted. */
     .ticket-cell {
