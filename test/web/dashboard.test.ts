@@ -364,8 +364,10 @@ describe('picking a day in the Next 7 days', () => {
     const { cookie, tuesday, monday, w } = await twoDays();
 
     const strip = nextSeven(await page(w, '/', cookie));
+    const todayChip = dayChip(strip, '/?day=2026-10-12#next-7-days');
 
-    expect(strip).toContain('href="/?day=2026-10-12#next-7-days" aria-current="date"');
+    expect(todayChip).toContain('aria-current="date"');
+    expect(todayChip).toContain('class="day-chip is-today"');
     expect(strip).toContain('2:00 pm');
     expect(strip).toContain(`href="/tickets/${monday.ticketId}"`);
     expect(strip).not.toContain('9:00 am');
@@ -376,9 +378,13 @@ describe('picking a day in the Next 7 days', () => {
     const { w, cookie, tuesday, monday } = await twoDays();
 
     const strip = nextSeven(await page(w, '/?day=2026-10-13', cookie));
+    const chosenChip = dayChip(strip, '/?day=2026-10-13#next-7-days');
+    const todayChip = dayChip(strip, '/?day=2026-10-12#next-7-days');
 
-    expect(strip).toContain('href="/?day=2026-10-13#next-7-days" aria-current="date"');
-    expect(strip).toContain('class="day-chip is-today" href="/?day=2026-10-12#next-7-days"');
+    expect(chosenChip).toContain('aria-current="date"');
+    expect(chosenChip).toContain('class="day-chip"');
+    expect(todayChip).toContain('class="day-chip is-today"');
+    expect(todayChip).not.toContain('aria-current');
     expect(strip).toContain('9:00 am');
     expect(strip).toContain(`href="/tradies/${w.tradies.pete.id}"`);
     expect(strip).toContain(`href="/tickets/${tuesday.ticketId}"`);
@@ -429,7 +435,7 @@ describe('picking a day in the Next 7 days', () => {
     for (const day of ['2026-10-11', '2026-10-19', 'nope', '2026-02-31', '']) {
       const strip = nextSeven(await page(w, `/?day=${encodeURIComponent(day)}`, cookie));
       expect(strip, day).toContain('Monday 12 October');
-      expect(strip, day).toContain('href="/?day=2026-10-12#next-7-days" aria-current="date"');
+      expect(dayChip(strip, '/?day=2026-10-12#next-7-days'), day).toContain('aria-current="date"');
       expect(strip, day).toContain('2:00 pm');
       expect(strip, day).toContain(`href="/tickets/${monday.ticketId}"`);
       expect(strip, day).not.toContain('9:00 am');
