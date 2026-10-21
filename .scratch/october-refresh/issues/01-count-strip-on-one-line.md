@@ -1,6 +1,6 @@
 # The dashboard's count strip on one line
 
-Status: ready-for-agent
+Status: resolved
 Branch: dashboard-week-and-kpis
 Spec: ../spec.md
 
@@ -17,7 +17,7 @@ The dashboard's count strip has six counts (Maintenance Requests to confirm, Tic
 
 ## Acceptance criteria
 
-- [ ] Browser test (`test/e2e/`), demo dashboard at 1366 px and 1024 px: the six count tiles share one `top` offset, and none has `scrollWidth > clientWidth`. At 390 px the page has no sideways scroll.
-- [ ] The existing dashboard page tests still pass: the counts, their links and their numbers are unchanged.
-- [ ] `docs/design-system.md`'s Dashboard section describes the new breakpoints.
-- [ ] `npm run check` passes.
+- [x] Browser test (`test/e2e/`), demo dashboard at 1366 px and 1024 px: the six count tiles share one `top` offset, and none has `scrollWidth > clientWidth`. At 390 px the page has no sideways scroll.
+- [x] The existing dashboard page tests still pass: the counts, their links and their numbers are unchanged.
+- [x] `docs/design-system.md`'s Dashboard section describes the new breakpoints.
+- [x] `npm run check` passes.
