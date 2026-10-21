@@ -1,6 +1,6 @@
 # The Geocoder port and its Nominatim adapter
 
-Status: ready-for-agent
+Status: resolved
 Spec: ../spec.md
 
 ## What to build
@@ -12,9 +12,9 @@ Spec: ../spec.md
 ## Acceptance criteria
 
 `test/adapters/nominatim.test.ts`, with a stubbed fetch (see `test/adapters/stub-fetch.ts`):
-- [ ] The request is `GET {baseUrl}/search` with `q`, `format=jsonv2`, `limit=1` and `countrycodes=au`, and the `User-Agent` header. A trailing slash on `baseUrl` is handled.
-- [ ] `lat`/`lon` strings come back as numbers.
-- [ ] An empty result is `null`. A blank address is `null` with no request made. A `place_rank` below 26 is `null`.
-- [ ] HTTP 429 and 500 throw, and so do a body that isn't an array and a non-numeric `lat`.
-- [ ] Three geocodes started together are sent at least 1000 ms apart, in order, checked with the fake clock and wait function.
-- [ ] `npm run typecheck` and the new tests pass.
+- [x] The request is `GET {baseUrl}/search` with `q`, `format=jsonv2`, `limit=1` and `countrycodes=au`, and the `User-Agent` header. A trailing slash on `baseUrl` is handled.
+- [x] `lat`/`lon` strings come back as numbers.
+- [x] An empty result is `null`. A blank address is `null` with no request made. A `place_rank` below 26 is `null`.
+- [x] HTTP 429 and 500 throw, and so do a body that isn't an array and a non-numeric `lat`.
+- [x] Three geocodes started together are sent at least 1000 ms apart, in order, checked with the fake clock and wait function.
+- [x] `npm run typecheck` and the new tests pass.
