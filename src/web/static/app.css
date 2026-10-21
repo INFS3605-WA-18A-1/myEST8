@@ -3747,8 +3747,9 @@
 @layer utilities {
   @layer app {
     /* The Maintenance Request review (pages/requests.ts): what the Tenant reported leads, with
-       Checks and Decide beside it from 1024px (sticky, so the decision stays in reach while the
-       photos scroll) and straight under it on phones, before the answers and the photos. */
+       Checks, Decide and the follow-up panel beside it from 1024px and straight under it on
+       phones, before the answers and the photos. The column isn't sticky: with a draft open it is
+       taller than a laptop screen, and a sticky column that tall hides its foot until the page ends. */
     .request-review {
       display: grid;
       grid-template-columns: minmax(0, 1fr);
@@ -3777,8 +3778,6 @@
       }
       .request-side {
         grid-area: side;
-        position: sticky;
-        top: 16px;
       }
     }
     /* The issue in the Tenant's words: the most-read thing on the page. */
@@ -3933,6 +3932,15 @@
     }
     .request-reject-form .fieldset {
       align-self: stretch;
+    }
+    /* Follow-up: the notes, Draft with AI, then the draft and Send once there is one. */
+    .request-follow-up {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .request-follow-up .fieldset {
+      min-width: 0;
     }
     /* Decide is the one thing on the page waiting on the Property Manager: the Wattle stripe. */
     .request-side > #decide {

@@ -237,3 +237,134 @@ describe('the Summary on a Maintenance Request', () => {
     expect(text).toMatch(/1 photo, (sent with the message|uploaded)/);
   });
 });
+
+describe('following up with the Tenant from the review', () => {
+  const NOTES = 'Is it still dripping? Can you turn the water off at the meter?';
+
+  /** A request with one photo, and the review's address and cookie. */
+  async function waiting(options: { composer?: null } = {}) {
+    const w = await webWorld(options);
+    await w.h.upload(await report(w, TOM, 'The kitchen tap is dripping'), [upload('tap.jpg')]);
+    const r = await onlyRequest(w);
+    return { w, r, base: `/requests/${r.issueId}`, cookie: await w.signIn() };
+  }
+
+  /** The follow-up panel's markup, from the page it is on. */
+  const panel = (html: string) => html.slice(html.indexOf('id="follow-up"')).split('</section>')[0]!;
+
+  test('shows on a request in intake with the Tenant\'s first name, beside Decide, before anything is drafted', async () => {
+    const { w, base, cookie } = await waiting();
+    const html = await page(w, base, cookie);
+
+    const side = html.slice(html.indexOf('class="request-side"'), html.indexOf('class="request-details"'));
+    expect(visible(side)).toContain('Follow up with Tom');
+    expect(visible(side).indexOf('Decide')).toBeLessThan(visible(side).indexOf('Follow up with Tom'));
+    expect(html).toContain(`action="${base}/follow-up/draft#follow-up"`);
+    expect(visible(panel(html))).toContain('Draft with AI');
+    expect(panel(html)).toMatch(/<button[^>]*>\s*<svg[^>]*aria-hidden="true"[\s\S]*?<\/svg>\s*Draft with AI/);
+    expect(visible(panel(html))).not.toContain('Send to Tom');
+    expect(visible(panel(html))).not.toContain('Written by AI');
+  });
+
+  test('drafting shows the editable draft under the sparkle and the AI note, with the notes still in their field', async () => {
+    const { w, base, cookie } = await waiting();
+    const sent = w.h.messenger.sent.length;
+
+    const res = await w.post(`${base}/follow-up/draft`, { notes: NOTES }, cookie);
+
+    expect(res.status).toBe(200);
+    const html = panel(await res.text());
+    expect(html).toMatch(/<textarea[^>]*name="notes"[^>]*>\s*Is it still dripping\? Can you turn the water off at the meter\?<\/textarea>/);
+    expect(html).toMatch(/<textarea[^>]*name="text"[^>]*>\s*Composed: Is it still dripping\?/);
+    expect(html).toMatch(/class="ai-filled-label">\s*<svg[^>]*aria-hidden="true"[\s\S]*?<\/svg>\s*<span>Written by AI\. Check it before you send\.<\/span>/);
+    expect(visible(html)).toContain('Send to Tom');
+    expect(visible(html)).not.toContain("AI drafting isn't available");
+    expect(w.h.messenger.sent).toHaveLength(sent);
+  });
+
+  test.each([
+    ['the composer fails', { composer: undefined }],
+    ['there is no composer', { composer: null }],
+  ])('when %s, the notes come back as the draft with the fallback note and no AI mark', async (_, options) => {
+    const { w, base, cookie } = await waiting(options as { composer?: null });
+    w.h.composer.next = new Error('Claude is down');
+
+    const res = await w.post(`${base}/follow-up/draft`, { notes: NOTES }, cookie);
+
+    expect(res.status).toBe(200);
+    const html = panel(await res.text());
+    expect(html).toMatch(/<textarea[^>]*name="text"[^>]*>\s*Is it still dripping\?/);
+    expect(visible(html)).toContain("AI drafting isn't available right now. Your notes are below: edit them and send, or try again.");
+    expect(visible(html)).toContain('Send to Tom');
+    expect(visible(html)).not.toContain('Written by AI');
+    expect(html).not.toContain('ai-filled');
+  });
+
+  test('sending flashes "Follow-up sent to" the Tenant, who gets the text as it was edited', async () => {
+    const { w, base, cookie } = await waiting();
+    const edited = 'Hi Tom, is the tap still dripping? Please turn the water off at the meter.';
+
+    const res = await w.post(`${base}/follow-up/send`, { notes: NOTES, text: edited }, cookie);
+
+    expect(res.status).toBe(303);
+    expect(res.headers.get('location')).toBe(`${base}?ok=${encodeURIComponent('Follow-up sent to Tom Tran')}`);
+    expect(w.h.messenger.last(TOM)).toMatchObject({ template: 'tenant.follow_up', text: edited });
+    expect(visible(await page(w, res.headers.get('location')!, cookie))).toContain('Follow-up sent to Tom Tran');
+  });
+
+  test('refuses blank notes with the field error under the notes, and no draft', async () => {
+    const { w, base, cookie } = await waiting();
+
+    const res = await w.post(`${base}/follow-up/draft`, { notes: '   ' }, cookie);
+
+    expect(res.status).toBe(400);
+    const html = panel(await res.text());
+    expect(visible(html)).toContain('Write what you want to say');
+    expect(html).toMatch(/<textarea[^>]*name="notes"[^>]*aria-invalid="true"/);
+    expect(html).not.toContain('name="text"');
+    expect(w.h.composer.calls).toEqual([]);
+  });
+
+  test('refuses blank text with the field error under the draft, keeping the notes, and sends nothing', async () => {
+    const { w, base, cookie } = await waiting();
+    const sent = w.h.messenger.sent.length;
+
+    const res = await w.post(`${base}/follow-up/send`, { notes: NOTES, text: '  ' }, cookie);
+
+    expect(res.status).toBe(400);
+    const html = panel(await res.text());
+    expect(visible(html)).toContain('Write a message to send');
+    expect(html).toMatch(/<textarea[^>]*name="text"[^>]*aria-invalid="true"/);
+    expect(html).toContain('Is it still dripping?');
+    expect(w.h.messenger.sent).toHaveLength(sent);
+  });
+
+  test('a refused send keeps the text that was typed, and does not tint it as the AI\'s', async () => {
+    const { w, base, cookie } = await waiting();
+    const long = `Hi Tom, ${'x'.repeat(4000)}`;
+
+    const res = await w.post(`${base}/follow-up/send`, { notes: NOTES, text: long }, cookie);
+
+    expect(res.status).toBe(400);
+    const html = panel(await res.text());
+    expect(visible(html)).toContain('Keep the message to 4000 characters');
+    expect(html).toContain(long);
+    expect(html).not.toContain('ai-filled');
+  });
+
+  test('a request that has left intake sends the Property Manager back with the reason, drafting and sending nothing', async () => {
+    const { w, r, base, cookie } = await waiting();
+    await w.alice.confirmMaintenanceRequest(r.issueId);
+    const sent = w.h.messenger.sent.length;
+
+    const draft = await w.post(`${base}/follow-up/draft`, { notes: NOTES }, cookie);
+    const send = await w.post(`${base}/follow-up/send`, { text: NOTES }, cookie);
+
+    for (const res of [draft, send]) {
+      expect(res.status).toBe(303);
+      expect(res.headers.get('location')).toMatch(new RegExp(`^${base}\\?error=`));
+    }
+    expect(w.h.composer.calls).toEqual([]);
+    expect(w.h.messenger.sent).toHaveLength(sent);
+  });
+});

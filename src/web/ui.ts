@@ -337,12 +337,12 @@ function buttonClass(variant: Variant, size: ButtonSize | undefined, block: bool
   return `btn ${VARIANT[variant]}${size === 'sm' ? ' btn-sm' : size === 'lg' ? ' btn-lg' : ''}${block ? ' btn-block' : ''}`;
 }
 
-/** A form button (daisyUI btn). `block` makes it full width, as on phone forms. */
+/** A form button (daisyUI btn). `block` makes it full width, as on phone forms; `icon` is a Phosphor icon name shown before the label; `formaction` sends a form's fields somewhere other than its own action. */
 export function button(
   label: string,
-  o: { variant?: Variant; type?: 'submit' | 'button'; name?: string; value?: string; size?: ButtonSize; block?: boolean; disabled?: boolean } = {},
+  o: { variant?: Variant; type?: 'submit' | 'button'; name?: string; value?: string; size?: ButtonSize; block?: boolean; disabled?: boolean; icon?: string; formaction?: string } = {},
 ): Html {
-  return html`<button type="${o.type ?? 'submit'}" class="${buttonClass(o.variant ?? 'primary', o.size, o.block)}" ${o.name ? html`name="${o.name}" value="${o.value ?? ''}"` : ''} ${o.disabled ? 'disabled' : ''}>${label}</button>`;
+  return html`<button type="${o.type ?? 'submit'}" class="${buttonClass(o.variant ?? 'primary', o.size, o.block)}" ${o.name ? html`name="${o.name}" value="${o.value ?? ''}"` : ''} ${o.disabled ? 'disabled' : ''} ${o.formaction ? html`formaction="${o.formaction}"` : ''}>${o.icon ? icon(o.icon, { size: 'size-4' }) : ''}${label}</button>`;
 }
 
 /** A link styled as a button. */
@@ -1031,7 +1031,7 @@ export function countStrip(items: { label: string; count: number; href: string; 
 export function aiFilled(content: Html | string, o: { label?: string; edit?: Html } = {}): Html {
   return html`<div class="ai-filled">
     <span class="ai-filled-label">${icon('sparkle', { size: 'size-3.5', weight: 'fill' })}<span>${o.label ?? 'Filled in by AI'}</span></span>
-    <div class="flex items-start justify-between gap-3"><div class="min-w-0">${content}</div>${o.edit ?? ''}</div>
+    <div class="flex items-start justify-between gap-3"><div class="min-w-0 flex-1">${content}</div>${o.edit ?? ''}</div>
   </div>`;
 }
 
