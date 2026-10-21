@@ -463,11 +463,6 @@ export function ratingChip(o: { source: 'myEST8' | 'Google'; rating: number | nu
   </span>`;
 }
 
-/** A distance as a chip: "0.6 km" with a route icon. */
-export function distanceChip(km: number): Html {
-  return html`<span class="metric metric-distance">${icon('navigation-arrow', { weight: 'fill', size: 'size-3.5' })}<strong class="num">${km.toFixed(1)}</strong><span>km</span></span>`;
-}
-
 const STATUS_TONE: Record<string, Tone> = {
   gathering: 'neutral',
   awaiting_photos: 'warning',
