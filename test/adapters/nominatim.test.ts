@@ -74,3 +74,74 @@ describe('Nominatim geocoding', () => {
     await expect(geocoder.geocode('12 King St, Newtown NSW 2042')).rejects.toThrow(message);
   });
 });
+
+describe('Nominatim usage policy: one request per second', () => {
+  /** A clock that only moves when the adapter waits, so no test sleeps. */
+  const fakeTime = () => {
+    let now = 5_000;
+    const waits: number[] = [];
+    return {
+      clock: { now: () => new Date(now) },
+      wait: async (ms: number) => {
+        waits.push(ms);
+        now += ms;
+      },
+      waits,
+      advance: (ms: number) => (now += ms),
+      at: () => now,
+    };
+  };
+
+  /** A geocoder whose requests are stamped with the fake time they were sent at. */
+  const timed = (respond: (request: Request) => Response = () => json([NEWTOWN])) => {
+    const time = fakeTime();
+    const sentAt: { q: string | null; at: number }[] = [];
+    const stub = stubFetch((request) => {
+      sentAt.push({ q: new URL(request.url).searchParams.get('q'), at: time.at() });
+      return respond(request);
+    });
+    const geocoder = createNominatimGeocoder({ baseUrl: 'https://nominatim.example', userAgent: USER_AGENT, fetch: stub.fetch, clock: time.clock, wait: time.wait });
+    return { geocoder, time, sentAt };
+  };
+
+  test('three geocodes started together are sent in order, at least 1000 ms apart', async () => {
+    const { geocoder, sentAt } = timed();
+
+    await Promise.all([geocoder.geocode('1 King St, Newtown'), geocoder.geocode('2 King St, Newtown'), geocoder.geocode('3 King St, Newtown')]);
+
+    expect(sentAt.map((sent) => sent.q)).toEqual(['1 King St, Newtown', '2 King St, Newtown', '3 King St, Newtown']);
+    expect(sentAt[1]!.at - sentAt[0]!.at).toBeGreaterThanOrEqual(1000);
+    expect(sentAt[2]!.at - sentAt[1]!.at).toBeGreaterThanOrEqual(1000);
+  });
+
+  test('the first request, and one after a quiet second, go straight out', async () => {
+    const { geocoder, time } = timed();
+
+    await geocoder.geocode('1 King St, Newtown');
+    time.advance(1000);
+    await geocoder.geocode('2 King St, Newtown');
+
+    expect(time.waits).toEqual([]);
+  });
+
+  test('a request only waits for what is left of the second', async () => {
+    const { geocoder, time } = timed();
+
+    await geocoder.geocode('1 King St, Newtown');
+    time.advance(400);
+    await geocoder.geocode('2 King St, Newtown');
+
+    expect(time.waits).toEqual([600]);
+  });
+
+  test('a failed lookup still holds its place in the queue, and does not stop the next', async () => {
+    let calls = 0;
+    const { geocoder, sentAt } = timed(() => (++calls === 1 ? new Response('Too many requests', { status: 429 }) : json([NEWTOWN])));
+
+    const [first, second] = await Promise.allSettled([geocoder.geocode('1 King St, Newtown'), geocoder.geocode('2 King St, Newtown')]);
+
+    expect(first.status).toBe('rejected');
+    expect(second).toEqual({ status: 'fulfilled', value: { lat: -33.897, lng: 151.179 } });
+    expect(sentAt[1]!.at - sentAt[0]!.at).toBeGreaterThanOrEqual(1000);
+  });
+});
