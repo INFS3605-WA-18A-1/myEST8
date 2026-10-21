@@ -1,6 +1,6 @@
 # Geocode through Nominatim everywhere, and drop Google Geocoding
 
-Status: ready-for-agent
+Status: resolved
 Blocked by: 01
 Spec: ../spec.md
 
@@ -20,8 +20,8 @@ Spec: ../spec.md
 
 ## Acceptance criteria
 
-- [ ] Nothing calls Google's Geocoding API any more: `grep -rn "geocode/json\|geocodeBaseUrl" src test` finds nothing.
-- [ ] The existing geocoding behaviour tests still pass against the geocoder fake: a Property added with a geocoder that fails, `geocodeMissing`, Tradie addresses, and the Dispatch tests.
-- [ ] A hosted test shows the hosted app builds a Nominatim geocoder pointed at `https://nominatim.openstreetmap.org` when `NOMINATIM_URL` is unset, and doesn't name it as a missing setting.
-- [ ] `npm run demo` still places the demo Properties on the Dispatch map (the e2e Dispatch tests cover this).
-- [ ] `npm run check` passes.
+- [x] Nothing calls Google's Geocoding API any more: `grep -rn "geocode/json\|geocodeBaseUrl" src test` finds nothing.
+- [x] The existing geocoding behaviour tests still pass against the geocoder fake: a Property added with a geocoder that fails, `geocodeMissing`, Tradie addresses, and the Dispatch tests.
+- [x] A hosted test shows the hosted app builds a Nominatim geocoder pointed at `https://nominatim.openstreetmap.org` when `NOMINATIM_URL` is unset, and doesn't name it as a missing setting.
+- [x] `npm run demo` still places the demo Properties on the Dispatch map (the e2e Dispatch tests cover this).
+- [x] `npm run check` passes.
