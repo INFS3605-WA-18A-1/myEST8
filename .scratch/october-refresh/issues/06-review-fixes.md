@@ -1,6 +1,6 @@
 # Fixes from reviewing #37, #38 and #39
 
-Status: ready-for-agent
+Status: resolved
 Branch: october-refresh-fixes
 Spec: ../spec.md (the same ground rules: test-first in vertical slices, the agreed seams, the design system, no JavaScript required)
 
@@ -51,5 +51,5 @@ Three Claude Sonnet reviewers read the merged changes. These are the findings th
 
 ## Acceptance criteria
 
-- [ ] A, B and C each done test-first, every new test failing before its fix.
-- [ ] `npm run check` passes on the branch with all three parts merged.
+- [x] A, B and C each done test-first, every new test failing before its fix.
+- [x] `npm run check` passes on the branch with all three parts merged.
