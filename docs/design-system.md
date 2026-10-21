@@ -248,7 +248,7 @@ All of these are in `src/web/ui.ts`; pages use them instead of hand-building mar
 - **Icons** come from [Phosphor](https://phosphoricons.com) (MIT) through `icon(name, { weight?, size? })` in `src/web/icons.ts`, rendered inline in `currentColor` and always `aria-hidden`. The word beside an icon carries the meaning. Don't add another icon set or hand-draw icons.
 - **One weight: regular.** The only exception is the 14 px tick inside a done step circle, which uses bold so it doesn't thin out at that size.
 - Sizes: 18 px in the rail (`size-[18px]`), 16 px for the Phone simulator link, 20 px in alerts and flash messages (the default), 24 px for the menu button, 16 px for the user menu caret and timeline dots.
-- The app's icons: Dashboard `squares-four`, Dispatch `map-pin`, Tickets `ticket`, Archive `archive`, Approvals `seal-check`, Schedule `calendar-blank`, Properties `house-line`, Tradies `wrench`, Tenants `users`, Settings `gear-six`, Phone simulator `device-mobile`, menu `list`, user menu `caret-down`, done `check-circle`, warning and error `warning-circle`, note `info`, timeline dot `circle` (fill).
+- The app's icons: Dashboard `squares-four`, Dispatch `map-pin`, Tickets `ticket`, Archive `archive`, Approvals `seal-check`, Schedule `calendar-blank`, Properties `house-line`, Tradies `wrench`, Tenants `users`, Settings `gear-six`, Phone simulator `device-mobile`, menu `list`, user menu `caret-down`, AI mark and Draft with AI `sparkle`, done `check-circle`, warning and error `warning-circle`, note `info`, timeline dot `circle` (fill).
 - **The logo** is `logo({ size })` in `src/web/ui.ts`: the key tag beside the wordmark. The rail and the public bar both use it; nothing else hand-builds it.
   - **The key tag:** a house-shaped tag with the key ring's hole at the top and an 8 cut out, the tag every Agency hangs on its key board. One solid shape (an even-odd path on a 256 grid, `currentColor`), so it holds at 16 px and works as an app icon as it is. It is only ever Night, White or Wattle: Night on the Paper rail and the white public bar, White or Wattle on Night bands; Night on Wattle for an app tile.
   - **The wordmark:** "myEST8" in Bricolage Grotesque, "my" at 400 and "EST8" at 700, so the pun reads without decoration. Night on light surfaces, White on Night.
@@ -276,6 +276,30 @@ All of these are in `src/web/ui.ts`; pages use them instead of hand-building mar
   - The Tenant's tracker: the tracker, to send to someone they live with.
 - **Copy:** Property Manager pages carry the note "Only Property Managers in your Agency can open this link" (`COLLEAGUES_ONLY`). The tracker warns that anyone with the link can see the page.
 - **Links** are absolute, built by `shareUrl(c, path?)` from the address the request came to, with any `?ok=` or `?error=` flash dropped.
+
+### Following up with a Tenant
+
+The **Follow up with <first name>** panel is a `section` (`#follow-up`) on the Maintenance Request review (`pages/requests.ts`, `followUpForm`). It sits under Decide in the side column from 1024px and under the Summary on a phone, like Decide. The column isn't sticky: with a draft open it is taller than a laptop screen, and a sticky column that tall hides its foot.
+
+```
+┌ Follow up with Ruby ──────────────────┐
+│ What do you want to say to Ruby?      │  notes, 4 rows, hint under it
+│ ┌───────────────────────────────────┐ │
+│ └───────────────────────────────────┘ │
+│ [✦ Draft with AI]                     │  Secondary
+│ ┌ ✦ Written by AI. Check it ────────┐ │  `aiFilled`, only when the AI wrote it
+│ │ Message to Ruby                   │ │
+│ │ ┌───────────────────────────────┐ │ │  the draft, 8 rows, editable
+│ │ └───────────────────────────────┘ │ │
+│ └───────────────────────────────────┘ │
+│ [Send to Ruby]                        │  Secondary
+└───────────────────────────────────────┘
+```
+
+- **One form, two buttons.** The notes and the draft are in the same form, so the notes stay in their field for a redraft. Draft with AI posts to `/requests/:id/follow-up/draft` and the page comes back with the draft (no redirect), at `#follow-up`; Send posts the same fields to `/follow-up/send` through the button's `formaction` and redirects with "Follow-up sent to <Tenant>". Nothing is sent until Send.
+- **Both buttons are Secondary.** Confirm is the review's one primary action. Draft with AI carries the `sparkle` icon.
+- **The AI mark.** A draft the AI wrote is wrapped in `aiFilled` with the label "Written by AI. Check it before you send." When the AI isn't there or fails, the notes are the draft: no tint, no sparkle, and an info alert says "AI drafting isn't available right now. Your notes are below: edit them and send, or try again." Text kept after a refused send is the Property Manager's by then, so it isn't tinted either.
+- **A refused field** (blank notes, blank or over-long text) comes back as a 400 with the page and the error under the field (`aria-invalid`, `aria-describedby`), keeping what was typed. A refusal that isn't about a field (the request has left intake) redirects with the reason as the flash.
 
 ### SMS number
 
@@ -366,6 +390,8 @@ A Ticket is Open or Closed.
 | Proceed on Estimate | With a Not-to-exceed Cap; offered only when it can work |
 | Enter a Firm Quote they sent | For a Firm Quote that came by email or PDF |
 | Send Work Order | |
+| Draft with AI | With the `sparkle` icon. The follow-up panel |
+| Send to <Tenant's first name> | Sends the follow-up as it is in the field |
 | Suggest new times | |
 | Use this time | |
 | Rate | |
