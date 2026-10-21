@@ -5055,8 +5055,7 @@
       background: transparent;
     }
     .schedule-day.is-today {
-      border-color: var(--action);
-      box-shadow: inset 0 0 0 1px var(--action);
+      background: var(--info-bg);
     }
     .schedule-day-title,
     .schedule-col-title {
@@ -5174,14 +5173,74 @@
     }
     .schedule-col-title {
       grid-row: 1;
-      gap: 0 6px;
-      padding: 8px;
+      justify-content: center;
+      gap: 0;
+      padding: 8px 4px;
       border-bottom: 1px solid var(--line);
-      background: var(--surface);
+      background: transparent;
       font-size: 14px;
     }
-    .schedule-col.is-today .schedule-col-title {
-      box-shadow: inset 0 -2px 0 var(--action);
+    /* Weekday small, date large, centred. Today is a Harbour circle; the column
+       behind it is a light Harbour tint, and a weekend sits on Paper. The tint is a
+       layer behind the hour lines, so the rules still show. */
+    .schedule-date {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      color: var(--ink);
+      text-decoration: none;
+    }
+    .schedule-day-title .schedule-date {
+      flex-direction: row;
+      gap: 8px;
+    }
+    .schedule-date:hover {
+      color: var(--action);
+    }
+    .schedule-weekday {
+      font-family: var(--font-body);
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1.2;
+      color: var(--muted);
+    }
+    .schedule-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 2rem;
+      height: 2rem;
+      border-radius: 999px;
+      font-family: var(--font-head);
+      font-size: 20px;
+      font-weight: 600;
+      line-height: 1;
+    }
+    .schedule-col.is-today .schedule-num,
+    .schedule-day.is-today .schedule-num {
+      background: var(--action);
+      color: var(--surface);
+    }
+    .schedule-col.is-today .schedule-date:hover .schedule-num,
+    .schedule-day.is-today .schedule-date:hover .schedule-num {
+      color: var(--surface);
+    }
+    .schedule-col {
+      position: relative;
+    }
+    .schedule-col::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      background: var(--surface);
+    }
+    .schedule-col.is-weekend::before {
+      background: var(--page);
+    }
+    .schedule-col.is-today::before {
+      background: var(--info-bg);
     }
     .schedule-col-title .schedule-day-count {
       flex-basis: 100%;

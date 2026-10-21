@@ -183,9 +183,30 @@ function summary(bookings: Booking[], meId: number, noun: string, more: Html | '
   </div>`;
 }
 
-/** "Mon 12" seen, "Monday 12 October" heard (the month is in the page's subtitle). */
-function dayName(day: string): Html {
-  return html`<time datetime="${day}"><span aria-hidden="true">${shortDay(day)}</span><span class="sr-only">${longDay(day)}</span></time>`;
+/** "Mon", for the small weekday over a date. */
+function weekdayOf(day: string): string {
+  return new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', weekday: 'short' }).format(new Date(`${day}T00:00:00Z`));
+}
+
+/** Saturday or Sunday, which sit on Paper. */
+function weekend(day: string): boolean {
+  const n = new Date(`${day}T00:00:00Z`).getUTCDay();
+  return n === 0 || n === 6;
+}
+
+/**
+ * A day's heading: the weekday small, the date large, the full date for a screen
+ * reader. Today's date is marked, so the Harbour circle has something to sit on.
+ */
+function dateLink(day: string, ctx: Ctx): Html {
+  const isToday = day === ctx.today;
+  return html`<a class="schedule-date" href="${hrefFor('day', day, ctx.filter)}" ${isToday ? html`aria-current="date"` : ''}>
+    <time datetime="${day}">
+      <span class="schedule-weekday" aria-hidden="true">${weekdayOf(day)}</span>
+      <span class="schedule-num num" aria-hidden="true">${Number(day.slice(8))}</span>
+      <span class="sr-only">${longDay(day)}</span>
+    </time>
+  </a>`;
 }
 
 /** "7 am", "12 pm" */
@@ -223,12 +244,9 @@ function weekView(days: string[], byDay: Map<string, Booking[]>, ctx: Ctx): Html
 /** One day of the Week's grid: its name (opening the Day), then its visits on their times, an overlap as one block. */
 function weekColumn(day: string, count: number, layout: DayLayout<Booking>, ctx: Ctx): Html {
   const isToday = day === ctx.today;
-  return html`<li class="schedule-col ${isToday ? 'is-today' : ''}" ${isToday ? html`aria-current="date"` : ''}>
-    <h2 class="schedule-col-title">
-      <a href="${hrefFor('day', day, ctx.filter)}">${dayName(day)}</a>
-      ${isToday ? badge('Today', 'info') : ''}
-      ${count ? html`<span class="schedule-day-count num">${plural(count, 'visit', 'visits')}</span>` : ''}
-    </h2>
+  const classes = ['schedule-col', isToday ? 'is-today' : '', weekend(day) ? 'is-weekend' : ''].filter(Boolean).join(' ');
+  return html`<li class="${classes}" ${isToday ? html`aria-current="date"` : ''}>
+    <h2 class="schedule-col-title">${dateLink(day, ctx)}</h2>
     ${count
       ? html`<ol class="schedule-slots">
           ${layout.clusters.map((cl) => {
@@ -380,7 +398,7 @@ function dayItem(day: string, bookings: Booking[], ctx: Ctx): Html {
   const classes = ['schedule-day', bookings.length ? 'is-booked' : 'is-empty', isToday ? 'is-today' : ''].join(' ');
   return html`<li class="${classes}" ${isToday ? html`aria-current="date"` : ''}>
     <h2 class="schedule-day-title">
-      <a href="${hrefFor('day', day, ctx.filter)}">${dayName(day)}</a>
+      ${dateLink(day, ctx)}
       ${isToday ? badge('Today', 'info') : ''}
       ${bookings.length ? html`<span class="schedule-day-count num">${plural(bookings.length, 'visit', 'visits')}</span>` : ''}
     </h2>

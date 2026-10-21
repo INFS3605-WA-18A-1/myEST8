@@ -94,7 +94,12 @@ describe('Schedule: the week', () => {
     const days = week(html);
     const text = visible(days);
     // The month is in the subtitle, so a day is "Tue 13"; screen readers hear the whole date.
-    expect(days).toContain('<span aria-hidden="true">Tue 13</span><span class="sr-only">Tuesday 13 October</span>');
+    const weekday = days.indexOf('aria-hidden="true">Tue</span>');
+    const numeral = days.indexOf('class="schedule-num num" aria-hidden="true">13</span>');
+    const long = days.indexOf('<span class="sr-only">Tuesday 13 October</span>');
+    expect(weekday).toBeGreaterThan(-1);
+    expect(numeral).toBeGreaterThan(weekday);
+    expect(long).toBeGreaterThan(numeral);
     expect(days).toMatch(new RegExp(`<a class="booking-issue" href="/tickets/${job.ticketId}">.*The kitchen tap is dripping`));
     expect(days).toContain(`href="/tradies/${w.tradies.pete.id}"`);
     expect(text).toContain('9:00 am – 11:00 am');
@@ -416,6 +421,25 @@ describe('Schedule: the toolbar', () => {
     const current = toolbar(await page(w, '/calendar', cookie));
     expect(current).toMatch(/class="btn btn-outline btn-sm"[^>]*>Today</);
     expect(visible(current)).toContain('5 – 11 October 2026');
+  });
+});
+
+describe("Schedule: today's column", () => {
+  test("today's column and its date are marked", async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    // Now is Thursday 8 October, in the week of Monday 5 October.
+    const thu = column(await page(w, '/calendar', cookie), '2026-10-08');
+    expect(thu).toMatch(/<li class="schedule-col is-today[^"]*" aria-current="date"/);
+    expect(thu).toMatch(/<a [^>]*aria-current="date"/);
+    // The weekday is small and the date stands on its own, so today can wear the circle.
+    expect(thu).toContain('aria-hidden="true">Thu</span>');
+    expect(thu).toContain('class="schedule-num num" aria-hidden="true">8</span>');
+    expect(thu).toContain('<span class="sr-only">Thursday 8 October</span>');
+
+    const other = column(await page(w, '/calendar?view=week&date=2026-10-12', cookie), '2026-10-13');
+    expect(other).not.toContain('aria-current="date"');
   });
 });
 
