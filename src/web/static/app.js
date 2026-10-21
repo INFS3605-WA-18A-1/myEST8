@@ -555,7 +555,9 @@
   const open = document.querySelector('[data-schedule-open]');
   const frame = open?.closest('.schedule-scroll');
   if (open && frame) {
+    const header = frame.querySelector('.schedule-col-title');
+    const headerHeight = header ? header.getBoundingClientRect().height : 0;
     const top = open.getBoundingClientRect().top - frame.getBoundingClientRect().top + frame.scrollTop;
-    frame.scrollTop = Math.max(0, top);
+    frame.scrollTop = Math.max(0, top - headerHeight);
   }
 })();

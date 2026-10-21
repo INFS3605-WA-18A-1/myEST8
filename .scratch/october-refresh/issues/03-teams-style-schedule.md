@@ -54,8 +54,8 @@ A visit with no flag (confirmed, or not confirmed yet) takes the Harbour edge; "
 - Period title: Bricolage 20px, weight 600, Night. "12 – 18 October 2026", "Thursday 8 October", "October 2026".
 - Weekday: Public Sans 12px, weight 500, Slate.
 - Date numeral: Bricolage 20px, weight 600, tabular (`num`). Today: white on a 32px Harbour circle.
-- Hour gutter: Public Sans 12px, Slate, tabular, right-aligned on the hour line.
-- Visit: Public Sans. Time and issue 600, Night; Tradie 400, Slate. An hour or less is one line, cut with an ellipsis; the link's accessible name still reads the time, the issue and the Tradie.
+- Hour gutter: Public Sans 12px, Slate, tabular, right-aligned just under the hour line.
+- Visit: Public Sans. Time and issue 600, Night; Tradie 400, Slate. An hour or less is one line: the start time and as much of the issue as fits. The full time, the Tradie and how the visit stands stay in the link's accessible name.
 
 ### Wireframe (Week, from 768px)
 
@@ -81,7 +81,7 @@ The grid is a window on the working day. It opens scrolled to an hour before the
 
 - Toolbar: one row, items centred on the same line. Today (outlined), then the two icon buttons, then the period. The view switch and Mine/All sit on the right, with Share after them. Under 768px the switch and filter drop to a second row.
 - Day headings: centred in the column. The weekday sits above the numeral. Every numeral occupies the same 32px box, so the seven dates share one line.
-- Hour labels: right-aligned in the 3.5rem gutter, centred on the hour rule. Half-hour rules have no label.
+- Hour labels: right-aligned in the 3.5rem gutter, just under the hour rule, so the hour above does not show through the stuck day headings. Half-hour rules have no label.
 - Visit blocks: 4px in from the column, 4px radius, 4px left edge, text left-aligned.
 
 ### What makes it a Teams-style calendar

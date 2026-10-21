@@ -313,10 +313,10 @@ function visitBlock(b: Booking, style: string, rows: number, ctx: Ctx): Html {
   const flags = [rows <= 4 ? 'is-short' : '', ...bookingFlags(b, b.propertyManagerId === ctx.meId)].filter(Boolean).join(' ');
   return html`<li class="schedule-block ${flags}" style="${style}">
     <a class="schedule-block-link" href="${ticketHref(b)}" aria-label="${blockName(b, ctx)}">
-      <span class="schedule-block-time num"><time datetime="${b.start}">${formatTime(b.start, ctx.timeZone)}</time> – <time datetime="${b.end}">${formatTime(b.end, ctx.timeZone)}</time></span>
+      <span class="schedule-block-time num"><time datetime="${b.start}">${formatTime(b.start, ctx.timeZone)}</time><span class="schedule-block-end"> – <time datetime="${b.end}">${formatTime(b.end, ctx.timeZone)}</time></span></span>
       ${kind ? html`<span class="schedule-marker">${kind}</span>` : ''}
       <span class="schedule-block-issue">${clip(b.issue, { lines: 2 })}</span>
-      <span class="schedule-block-meta">${b.businessName}</span>
+      <span class="schedule-block-tradie">${b.businessName}</span>
       ${words ? html`<span class="schedule-block-meta">${words}</span>` : ''}
     </a>
   </li>`;
@@ -344,7 +344,7 @@ function clusterBlock(day: string, bookings: Booking[], style: string, ctx: Ctx)
 function dayView(day: string, bookings: Booking[], ctx: Ctx): Html {
   const layout = layoutDay(bookings, day, ctx.timeZone);
   const lanes = layout.lanes;
-  return html`${bookings.length ? '' : html`<p class="schedule-empty">Nothing booked on ${longDay(day)}.</p>`}
+  return html`${bookings.length ? '' : html`<p class="schedule-empty sr-only">Nothing booked on ${longDay(day)}.</p>`}
     <div class="schedule-scroll is-day${weekend(day) ? ' is-weekend' : ''}" role="region" aria-label="${longDay(day)}, hour by hour. Visits at the same time sit side by side: scroll sideways to see them all." tabindex="0">
       <div class="schedule-grid is-day" style="--slots: ${layout.rows}; --cols: ${lanes}">
         ${hourLines(layout.range, anchorHour(layout.range, layout.clusters))}

@@ -4957,6 +4957,7 @@
     /* Day, Week and Month read as a switch, the same shape as Mine and All. */
     .schedule-toolbar .tabs-border {
       display: inline-flex;
+      flex-wrap: nowrap;
       gap: 2px;
       padding: 3px;
       border: 1px solid var(--control);
@@ -4974,16 +4975,28 @@
       color: var(--surface);
       --tab-border-color: transparent;
     }
+    @media (max-width: 40rem), (pointer: coarse) {
+      .schedule-toolbar .tabs-border > .tab {
+        min-height: 36px;
+        padding-inline: 16px;
+      }
+    }
+    /* Under 768px the switch and filter wrap onto a second row. The period drops to
+       16px so the date stays on one line, and the tabs tighten so Share can sit
+       with them. The switch itself never breaks onto two lines. */
     @media (max-width: 767.98px) {
       .schedule-toolbar-end {
         flex-basis: 100%;
         margin-left: 0;
       }
-    }
-    @media (max-width: 40rem), (pointer: coarse) {
+      .schedule-nav {
+        gap: 4px;
+      }
+      .schedule-period {
+        font-size: 16px;
+      }
       .schedule-toolbar .tabs-border > .tab {
-        min-height: 36px;
-        padding-inline: 16px;
+        padding-inline: 10px;
       }
     }
 
@@ -5032,8 +5045,8 @@
 
     /* The Schedule's Week under 768px: a list of days, where a run of empty days is one
        line (.schedule-quiet). Booked days are white; empty ones stay on Paper behind a
-       hairline so the work stands out; today is ringed in Harbour. From 768px the time grid
-       below takes its place. */
+       hairline so the work stands out; today is tinted and its date is a Harbour circle.
+       From 768px the time grid below takes its place. */
     .schedule-week {
       display: grid;
       gap: 12px;
@@ -5137,11 +5150,13 @@
       grid-template-rows: repeat(var(--slots), minmax(var(--slot), auto));
     }
     .schedule-hours {
+      z-index: 1;
       display: grid;
       grid-column: 1 / -1;
       grid-row: 2 / -1;
       grid-template-columns: subgrid;
       grid-template-rows: subgrid;
+      pointer-events: none;
     }
     .schedule-grid.is-day .schedule-hours {
       grid-row: 1 / -1;
@@ -5158,8 +5173,7 @@
     .schedule-hour-label {
       display: block;
       width: var(--gutter);
-      padding-right: 8px;
-      transform: translateY(-50%);
+      padding: 2px 8px 0 0;
       font-size: 12px;
       line-height: 1.2;
       text-align: right;
@@ -5182,19 +5196,34 @@
       grid-template-rows: subgrid;
       min-width: 0;
       border-left: 1px solid var(--line);
+      background: var(--surface);
+    }
+    .schedule-col.is-weekend {
+      background: var(--page);
+    }
+    .schedule-col.is-today {
+      background: var(--info-bg);
     }
     .schedule-col-title {
+      position: sticky;
+      top: 0;
+      z-index: 4;
       grid-row: 1;
       justify-content: center;
       gap: 0;
       padding: 8px 4px;
       border-bottom: 1px solid var(--line);
-      background: transparent;
+      background: var(--surface);
       font-size: 14px;
     }
+    .schedule-col.is-weekend .schedule-col-title {
+      background: var(--page);
+    }
+    .schedule-col.is-today .schedule-col-title {
+      background: var(--info-bg);
+    }
     /* Weekday small, date large, centred. Today is a Harbour circle; the column
-       behind it is a light Harbour tint, and a weekend sits on Paper. The tint is a
-       layer behind the hour lines, so the rules still show. */
+       behind it is a light Harbour tint, and a weekend sits on Paper. */
     .schedule-date {
       display: flex;
       flex-direction: column;
@@ -5237,22 +5266,6 @@
     .schedule-col.is-today .schedule-date:hover .schedule-num,
     .schedule-day.is-today .schedule-date:hover .schedule-num {
       color: var(--surface);
-    }
-    .schedule-col {
-      position: relative;
-    }
-    .schedule-col::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      z-index: -1;
-      background: var(--surface);
-    }
-    .schedule-col.is-weekend::before {
-      background: var(--page);
-    }
-    .schedule-col.is-today::before {
-      background: var(--info-bg);
     }
     .schedule-col-title .schedule-day-count {
       flex-basis: 100%;
@@ -5299,7 +5312,8 @@
       grid-column: 2 / -1;
     }
     .schedule-block {
-      z-index: 1;
+      position: relative;
+      z-index: 2;
       min-width: 0;
       margin: 1px 0;
     }
@@ -5336,7 +5350,8 @@
     .schedule-block-issue {
       font-size: 13px;
     }
-    .schedule-block-meta {
+    .schedule-block-meta,
+    .schedule-block-tradie {
       font-weight: 400;
       color: var(--muted);
     }
@@ -5349,18 +5364,40 @@
       font-weight: 600;
       color: var(--action);
     }
-    /* An hour or less has no room for three lines: one line, cut off, the full words in the link's name. */
+    /* An hour or less is one line: the start time, then as much of the issue as fits.
+       The end time, the Tradie and how it stands stay in the link's name. */
     .schedule-block.is-short .schedule-block-link {
       flex-direction: row;
       align-items: baseline;
       gap: 6px;
       white-space: nowrap;
     }
-    .schedule-block.is-short .schedule-block-issue,
-    .schedule-block.is-short .schedule-block-meta {
+    .schedule-block.is-short .schedule-block-time,
+    .schedule-block.is-short .schedule-marker {
+      flex: none;
+    }
+    .schedule-block.is-short .schedule-block-end,
+    .schedule-block.is-short .schedule-block-meta,
+    .schedule-block.is-short .schedule-block-tradie {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+    .schedule-block.is-short .schedule-block-issue {
+      flex: 1 1 auto;
       min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .schedule-block.is-short .line-clamp-2 {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .schedule-block.is-reschedule .schedule-block-link,
     .schedule-chip.is-reschedule a {
