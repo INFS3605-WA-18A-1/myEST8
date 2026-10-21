@@ -39,8 +39,8 @@ and Cloudflare Tunnel in `docs/hosting.md`, which still works for self-hosting.
 
 | Event | Jobs |
 | --- | --- |
-| Pull request | `test` only, with no secrets (forks included). There are no previews: the single Supabase project is production, and a preview would use its data. |
-| Push to `master` | `test`, then `migrate-prod` (`supabase db push`), `deploy-prod`, and `smoke` (landing page 200, worker route 401 without the secret and 200 with it). |
+| Pull request | `test` and `build`, with no secrets (forks included). There are no previews: the single Supabase project is production, and a preview would use its data. Instead `build` runs production's `vercel build` without deploying, and `scripts/check-vercel-function.ts` checks the function holds every file the app reads at run time. |
+| Push to `master` | `test` and `build`, then `migrate-prod` (`supabase db push`), `deploy-prod`, and `smoke` (landing page 200, worker route 401 without the secret and 200 with it). |
 | Manual | `Rollback`: give it an earlier deployment's address or id (`vercel ls --prod`). |
 
 Migrations only ever add (new tables, new nullable columns); anything that removes something is a separate, deliberate change. That is what lets Rollback run older code on the newer database.
