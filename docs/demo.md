@@ -236,7 +236,7 @@ For replies to come back in, point the Twilio number's "A message comes in" webh
 
 ### Checking the live services by hand
 
-`npm run smoke:live -- --to +61412345678` sends one SMS to that number, makes one Jev classify call and one Nominatim geocode, and prints each result. It refuses to run without `--to` and every key it needs (`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_SMS_FROM` or `--from`, `JEV_API_URL`, `JEV_API_KEY`, `GOOGLE_MAPS_API_KEY`). Automated tests never call a real provider.
+`npm run smoke:live -- --to +61412345678` sends one SMS to that number, makes one Jev classify call and one Nominatim geocode, and prints each result. It refuses to run without `--to` and every key it needs (`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_SMS_FROM` or `--from`, `JEV_API_URL`, `JEV_API_KEY`). The geocode needs no key. Automated tests never call a real provider.
 
 Manual checklist with real providers:
 

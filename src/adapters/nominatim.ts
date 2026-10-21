@@ -8,6 +8,9 @@
 import type { Clock, Geocoder } from '../ports.ts';
 import { callJson, isObject, malformed } from './json-api.ts';
 
+/** OpenStreetMap's public Nominatim, which needs no key. Live use defaults to it when NOMINATIM_URL is unset. */
+export const PUBLIC_NOMINATIM_URL = 'https://nominatim.openstreetmap.org';
+
 /** Nominatim's `place_rank` for a street: 26. Lower ranks are suburbs, cities and regions. */
 const MIN_PLACE_RANK = 26;
 
