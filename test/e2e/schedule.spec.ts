@@ -3,6 +3,7 @@
 // ever scrolls the page sideways.
 
 import { expect, test } from '@playwright/test';
+import { zonedInstant } from '../../src/zoned-time.ts';
 import { signIn } from './support/actions.ts';
 
 const overflow = (page: import('@playwright/test').Page) => page.evaluate<number>('document.documentElement.scrollWidth - document.documentElement.clientWidth');
@@ -82,6 +83,39 @@ test('the Free today panel sits beside the Week on a laptop and above it on a ph
   const listBox = (await list.boundingBox())!;
   expect(panelPhone.y + panelPhone.height).toBeLessThanOrEqual(listBox.y + 4);
   expect(await overflow(page)).toBe(0);
+});
+
+test('the current-time line moves after a minute and hides the next day', async ({ page }) => {
+  // A browser clock years off the server. A script that trusts Date.now() jumps the line on load.
+  await page.clock.install({ time: new Date('2030-06-01T15:00:00+10:00') });
+  await page.setViewportSize({ width: 1366, height: 900 });
+  await signIn(page);
+
+  const response = page.waitForResponse((res) => {
+    const url = new URL(res.url());
+    return url.pathname === '/calendar' && res.request().method() === 'GET' && res.status() === 200;
+  });
+  await page.goto('/calendar');
+  const html = await (await response).text();
+
+  const line = page.locator('[data-schedule-now]');
+  await expect(line).toBeAttached();
+  const served = html.slice(html.indexOf('<div class="schedule-now"'), html.indexOf('</div>', html.indexOf('data-schedule-now')));
+  const servedStyle = served.match(/style="([^"]*)"/)?.[1];
+  expect(await line.getAttribute('style')).toBe(servedStyle);
+
+  await page.clock.fastForward(60_000);
+  expect(await line.getAttribute('style')).not.toBe(servedStyle);
+
+  // 10:00 the next Agency day is inside the grid's hours. The line still hides, because that day is no longer data-today.
+  const today = (await line.getAttribute('data-today'))!;
+  const zone = (await line.getAttribute('data-zone'))!;
+  const serverNow = Number(await line.getAttribute('data-now'));
+  const [year, month, day] = today.split('-').map(Number);
+  const next = new Date(Date.UTC(year!, month! - 1, day! + 1));
+  const ten = zonedInstant(zone, next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate(), 10, 0).getTime();
+  await page.clock.fastForward(ten - serverNow - 60_000);
+  await expect(line).toBeHidden();
 });
 
 test('on a phone the Week is a list of days, and no view scrolls the page sideways', async ({ page }) => {

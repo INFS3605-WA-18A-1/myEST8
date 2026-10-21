@@ -618,6 +618,37 @@ describe('Schedule: the current time', () => {
     expect(early).toContain(' hidden');
   });
 
+  test('9:40 am is ten quarter-hours down and two thirds of the way through the next', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+    // 9:00 am plus 40 minutes. From 7 am that is 160 minutes: 10 rows, then 10 of the next 15.
+    w.h.clock.advance(40 * 60_000);
+
+    const line = nowMark(grid(await page(w, '/calendar', cookie)));
+
+    // The week paints a heading row, so those 10 rows start at grid row 12. Thursday runs through column 6.
+    expect(line).toContain('grid-row: 12;');
+    expect(line).toContain('grid-column: 1 / 6');
+    expect(line).toContain('--now-frac: 0.6666666666666666');
+  });
+
+  test('a Perth agency draws the line for Perth, not Sydney', async () => {
+    const w = await webWorld();
+    const cookie = await w.signUp({ timeZone: 'Australia/Perth', agencyName: 'West Realty', email: 'sam@west.example' });
+    // The clock starts at 9:00 am Sydney, which is 6:00 am in Perth. Three hours later is 9:00 am Perth
+    // (noon in Sydney). 1791421200000 is 9:00 am AWST on Thursday 8 October 2026.
+    w.h.clock.advance(3 * HOUR);
+
+    const line = nowMark(grid(await page(w, '/calendar', cookie)));
+
+    expect(line).toContain('data-zone="Australia/Perth"');
+    expect(line).toContain('data-today="2026-10-08"');
+    expect(line).toContain('data-now="1791421200000"');
+    expect(line).toContain('grid-row: 10;');
+    expect(line).toContain('grid-column: 1 / 6');
+    expect(line).not.toContain('grid-row: 22');
+  });
+
   test('the Day draws the current-time line only on today', async () => {
     const w = await webWorld();
     const cookie = await w.signIn();

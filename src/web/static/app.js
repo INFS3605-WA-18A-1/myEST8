@@ -521,9 +521,13 @@
 })();
 
 // === schedule ===
-// The current-time line is placed by the server from the Agency's clock. Once a
-// minute it is moved to where that clock is now. There is no transition, so it
-// never animates, including when less motion is asked for.
+// The current-time line is placed by the server from the Agency's clock. The
+// offset between that instant (data-now) and Date.now() is taken once, and the
+// line is not moved on load: the browser clock can disagree. Once a minute the
+// line moves to server time plus the time since the page opened. It hides when
+// the Agency's date is no longer data-today, or the clock is outside the hours
+// shown. There is no transition, so it never animates, including when less
+// motion is asked for.
 (() => {
   const line = document.querySelector('[data-schedule-now]');
   if (line) {
@@ -531,21 +535,30 @@
     const first = Number(line.dataset.first);
     const last = Number(line.dataset.last);
     const header = line.dataset.header === '1';
+    const serverNow = Number(line.dataset.now);
+    const today = line.dataset.today;
+    const opened = Date.now();
     const place = () => {
-      const parts = new Intl.DateTimeFormat('en-US', { timeZone: zone, hour: 'numeric', minute: 'numeric', hourCycle: 'h23' }).formatToParts(new Date());
-      const part = (type) => Number(parts.find((p) => p.type === type)?.value ?? 0);
-      const mins = part('hour') * 60 + part('minute');
+      const when = new Date(serverNow + (Date.now() - opened));
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: zone,
+        hourCycle: 'h23',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: 'numeric',
+        minute: 'numeric',
+      }).formatToParts(when);
+      const part = (type) => parts.find((p) => p.type === type)?.value ?? '';
+      const date = `${part('year')}-${part('month')}-${part('day')}`;
+      const mins = Number(part('hour')) * 60 + Number(part('minute'));
       const start = first * 60;
-      if (mins < start || mins >= last * 60) {
-        line.hidden = true;
-        return;
-      }
-      line.hidden = false;
+      line.hidden = date !== today || mins < start || mins >= last * 60;
       const into = mins - start;
       line.style.gridRow = String(Math.floor(into / 15) + (header ? 2 : 1));
-      line.style.setProperty('--now-frac', String((into % 15) / 15));
+      const fraction = ((into % 15) + 15) % 15;
+      line.style.setProperty('--now-frac', String(fraction / 15));
     };
-    place();
     setInterval(place, 60_000);
   }
 
