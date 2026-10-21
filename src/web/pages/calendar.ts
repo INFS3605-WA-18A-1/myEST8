@@ -7,7 +7,9 @@
 // grid, Monday to Sunday, each day a small weekday over a large date. A visit sits on
 // its time; visits that overlap fold into one "N Jobs booked" block that opens that
 // Day. Day is the same grid for one day, with overlapping visits side by side in lanes
-// that scroll sideways when a busy day needs more room. Month is a table of days, each
+// that scroll sideways when a busy day needs more room. A Day block is wide enough to
+// name the street and suburb, link the Tradie, and (under All) the Property Manager.
+// Month is a table of days, each
 // with up to two visits or "N Jobs booked". src/web/schedule-layout.ts works out where
 // everything goes. A current-time line is drawn on today from the Agency's clock.
 //
@@ -21,7 +23,7 @@ import { Hono } from 'hono';
 import { html } from 'hono/html';
 import { TRADES, type Trade } from '../../shared.ts';
 import { addDays, dayOf, daysFrom, mondayOf, parseDay, startOfDay, wallClock } from '../../zoned-time.ts';
-import { bookingCard, bookingFlags, bookingsByDay, dayRange, longDay, shortDay, ticketHref, visitKind, visitWords, type Booking } from '../bookings.ts';
+import { bookingCard, bookingFlags, bookingsByDay, dayRange, longDay, shortDay, streetOf, ticketHref, visitKind, visitWords, type Booking } from '../bookings.ts';
 import type { WebEnv } from '../env.ts';
 import { icon } from '../icons.ts';
 import { layoutDay, hourRange, minuteOfDay, type DayLayout, type HourRange } from '../schedule-layout.ts';
@@ -383,9 +385,10 @@ function blockName(b: Booking, ctx: Ctx): string {
 }
 
 /**
- * A visit on the grid: a rounded block, the time and the issue in bold, then the
+ * A visit on the Week's grid: a rounded block, the time and the issue in bold, then the
  * Tradie. `rows` is how many quarter-hours it spans; an hour or less is one line.
- * The colour comes from bookingFlags and visitKind.
+ * The colour comes from bookingFlags and visitKind. The Day uses dayBlock, which has room
+ * for the address and the links a Week column does not.
  */
 function visitBlock(b: Booking, style: string, rows: number, ctx: Ctx): Html {
   const kind = visitKind(b);
@@ -400,6 +403,51 @@ function visitBlock(b: Booking, style: string, rows: number, ctx: Ctx): Html {
       ${words ? html`<span class="schedule-block-meta">${words}</span>` : ''}
     </a>
   </li>`;
+}
+
+/** "12 King St, Newtown": the street, then the suburb. The state and postcode are noise here. */
+function placeLine(b: Booking): string {
+  const street = streetOf(b.propertyAddress);
+  return b.suburb && street !== b.propertyAddress ? `${street}, ${b.suburb}` : b.propertyAddress;
+}
+
+/**
+ * A visit on the Day. The lane is wide enough for what the Week's block leaves out:
+ * the street and suburb, the Tradie's profile, the Property Manager when All is on,
+ * and Reschedule requested as a link to the suggested times. The issue's name still
+ * reads the whole visit, including the address, when the card is clipped.
+ */
+function dayBlock(b: Booking, style: string, ctx: Ctx): Html {
+  const kind = visitKind(b);
+  const place = placeLine(b);
+  const flags = bookingFlags(b, b.propertyManagerId === ctx.meId).join(' ');
+  const time = `${formatTime(b.start, ctx.timeZone)} – ${formatTime(b.end, ctx.timeZone)}`;
+  const name = [time, kind, b.issue, b.businessName, place, visitWords(b)].filter((part) => part).join(', ');
+  return html`<li class="schedule-block ${flags}" style="${style}">
+    <div class="schedule-block-link">
+      <span class="schedule-block-time num"><time datetime="${b.start}">${formatTime(b.start, ctx.timeZone)}</time><span class="schedule-block-end"> – <time datetime="${b.end}">${formatTime(b.end, ctx.timeZone)}</time></span></span>
+      ${kind ? html`<span class="schedule-marker">${kind}</span>` : ''}
+      <a class="schedule-block-issue" href="${ticketHref(b)}" aria-label="${name}">${clip(b.issue, { lines: 2 })}</a>
+      <a class="schedule-block-tradie" href="/tradies/${b.tradieId}">${b.businessName}</a>
+      <span class="schedule-block-place">${place}</span>
+      ${ctx.filter === 'all' ? html`<span class="schedule-block-meta"><span class="sr-only">Property Manager: </span>${b.propertyManager}</span>` : ''}
+      ${dayStatus(b)}
+    </div>
+  </li>`;
+}
+
+/** How the visit stands on the Day, where there is room for the reschedule link. */
+function dayStatus(b: Booking): Html | '' {
+  switch (b.visit) {
+    case 'done':
+      return html`<span class="schedule-block-meta">Done</span>`;
+    case 'reschedule_requested':
+      return html`<a class="booking-reschedule" href="/tickets/${b.ticketId}?suggest=${b.workOrderId}">Reschedule requested</a>`;
+    case 'not_confirmed':
+      return html`<span class="schedule-block-meta">Not confirmed yet</span>`;
+    case 'confirmed':
+      return '';
+  }
 }
 
 /** Visits that overlap, as one block over their time that opens the Day they are on. */
@@ -433,7 +481,7 @@ function dayView(day: string, bookings: Booking[], ctx: Ctx): Html {
             cl.items.map((p) => {
               const from = Math.floor((p.lane * lanes) / cl.lanes) + 1;
               const to = Math.floor(((p.lane + 1) * lanes) / cl.lanes) + 1;
-              return visitBlock(p.item, `grid-row: ${p.rowStart} / ${p.rowEnd}; grid-column: ${from} / ${to}`, p.rowEnd - p.rowStart, ctx);
+              return dayBlock(p.item, `grid-row: ${p.rowStart} / ${p.rowEnd}; grid-column: ${from} / ${to}`, ctx);
             }),
           )}
         </ol>

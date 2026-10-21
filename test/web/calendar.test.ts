@@ -380,7 +380,28 @@ describe('Schedule: the Day', () => {
     expect(g.indexOf(`/tickets/${tap.ticketId}`)).toBeLessThan(g.indexOf(`/tickets/${fan.ticketId}`));
     const text = visible(g);
     expect(text).toContain("9:00 am – 11:00 am The kitchen tap is dripping Pete's Plumbing");
+    // The Day's lanes are wide enough for the street and suburb the Week's blocks leave out.
+    expect(text).toContain("The kitchen tap is dripping Pete's Plumbing 12 King St, Newtown");
+    expect(text).not.toContain('NSW 2042');
+    expect(g).toContain(`href="/tradies/${w.tradies.pete.id}"`);
+    expect(g).toContain('aria-label="9:00 am – 11:00 am, The kitchen tap is dripping, Pete&#39;s Plumbing, 12 King St, Newtown');
     expect(text).toContain('10:00 am – 12:00 pm The bathroom fan is rattling Drip Doctors');
+    // Mine doesn't name the Property Manager: every visit here is Alice's.
+    expect(text).not.toContain('Property Manager');
+  });
+
+  test('under All a Day block names the Property Manager, and a reschedule request links to the Ticket', async () => {
+    const w = await webWorld();
+    const job = await bookedTap(w);
+    await w.h.answer(TOM, 'I have work on Tuesday, can we do another day?', 'reschedule');
+    const { workOrder } = await jobView(w, job);
+    const bob = await w.signIn('bob@harbour.example');
+
+    const g = grid(await page(w, '/calendar?view=day&date=2026-10-13&filter=all', bob), 'day');
+
+    expect(visible(g)).toContain('Property Manager: Alice Archer');
+    expect(g).toContain(`<a class="booking-reschedule" href="/tickets/${job.ticketId}?suggest=${workOrder!.workOrderId}">Reschedule requested</a>`);
+    expect(g).toContain(`href="/tradies/${w.tradies.pete.id}"`);
   });
 
   test('a visit alone at its time takes the whole width, and an empty day says so', async () => {
