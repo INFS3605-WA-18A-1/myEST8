@@ -459,6 +459,20 @@ describe('Schedule: the current time', () => {
     const other = grid(await page(w, '/calendar?view=week&date=2026-10-12', cookie));
     expect(other).not.toContain('schedule-now');
   });
+
+  test('the Day draws the current-time line only on today', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    // No heading row on the Day, so 9:00 am is grid row 9, across the whole day.
+    const today = grid(await page(w, '/calendar?view=day&date=2026-10-08', cookie), 'day');
+    expect(today).toContain('class="schedule-now is-day"');
+    expect(today).toContain('grid-row: 9; grid-column: 1 / -1;');
+
+    const other = await page(w, '/calendar?view=day&date=2026-10-13', cookie);
+    expect(other).not.toContain('schedule-now');
+    expect(visible(other)).toContain('Nothing booked on Tuesday 13 October.');
+  });
 });
 
 describe('Schedule: views and links', () => {

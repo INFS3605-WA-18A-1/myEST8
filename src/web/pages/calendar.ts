@@ -314,27 +314,28 @@ function clusterBlock(day: string, bookings: Booking[], style: string, ctx: Ctx)
  * the cards. A visit alone at its time takes every lane's width.
  */
 function dayView(day: string, bookings: Booking[], ctx: Ctx): Html {
-  if (!bookings.length) return html`<p class="schedule-empty">Nothing booked on ${longDay(day)}.</p>`;
   const layout = layoutDay(bookings, day, ctx.timeZone);
   const lanes = layout.lanes;
-  return html`<div class="schedule-scroll is-day" role="region" aria-label="${longDay(day)}, hour by hour. Visits at the same time sit side by side: scroll sideways to see them all." tabindex="0">
-    <div class="schedule-grid is-day" style="--slots: ${layout.rows}; --cols: ${lanes}">
-      ${hourLines(layout.range)}
-      <ol class="schedule-lanes" aria-label="Visits on ${longDay(day)}, in time order">
-        ${layout.clusters.flatMap((cl) =>
-          cl.items.map((p) => {
-            const from = Math.floor((p.lane * lanes) / cl.lanes) + 1;
-            const to = Math.floor(((p.lane + 1) * lanes) / cl.lanes) + 1;
-            return bookingCard(p.item, ctx.timeZone, {
-              propertyManager: ctx.filter === 'all',
-              decision: p.item.propertyManagerId === ctx.meId,
-              style: `grid-row: ${p.rowStart} / ${p.rowEnd}; grid-column: ${from} / ${to}`,
-            });
-          }),
-        )}
-      </ol>
-    </div>
-  </div>`;
+  return html`${bookings.length ? '' : html`<p class="schedule-empty">Nothing booked on ${longDay(day)}.</p>`}
+    <div class="schedule-scroll is-day${weekend(day) ? ' is-weekend' : ''}" role="region" aria-label="${longDay(day)}, hour by hour. Visits at the same time sit side by side: scroll sideways to see them all." tabindex="0">
+      <div class="schedule-grid is-day" style="--slots: ${layout.rows}; --cols: ${lanes}">
+        ${hourLines(layout.range)}
+        <ol class="schedule-lanes" aria-label="Visits on ${longDay(day)}, in time order">
+          ${layout.clusters.flatMap((cl) =>
+            cl.items.map((p) => {
+              const from = Math.floor((p.lane * lanes) / cl.lanes) + 1;
+              const to = Math.floor(((p.lane + 1) * lanes) / cl.lanes) + 1;
+              return bookingCard(p.item, ctx.timeZone, {
+                propertyManager: ctx.filter === 'all',
+                decision: p.item.propertyManagerId === ctx.meId,
+                style: `grid-row: ${p.rowStart} / ${p.rowEnd}; grid-column: ${from} / ${to}`,
+              });
+            }),
+          )}
+        </ol>
+        ${nowLine(layout.range, day === ctx.today ? 0 : -1, ctx, false)}
+      </div>
+    </div>`;
 }
 
 /**
