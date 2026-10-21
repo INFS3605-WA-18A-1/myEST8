@@ -1,6 +1,7 @@
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import type { Context } from './context.ts';
 import { all, one, run, transaction } from './db.ts';
+import { inAustralia } from './geo.ts';
 import type { ChannelType } from './ports.ts';
 import { ActionError, invalid, isEmail, iso, normalizeAddress, notFound, type Availability, type Role, type Trade } from './shared.ts';
 
@@ -96,7 +97,7 @@ export type NewPerson = {
 
 export type NewProperty = Omit<Property, 'id' | 'agencyId' | 'location' | 'buildingManagerId'> & {
   buildingManagerId?: number | null;
-  /** Where the address is on the map, when already looked up (so addProperty can run inside a transaction). Looked up when missing. */
+  /** Where the address is on the map, when already looked up (so addProperty can run inside a transaction). A point outside Australia is ignored and the address is looked up. Null means the lookup already found nothing. */
   location?: { lat: number; lng: number } | null;
 };
 
@@ -537,8 +538,12 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
     },
 
     async addProperty(agencyId: number, input: NewProperty) {
-      // A lookup that fails leaves the Property without a location, as for a Tradie's address: geocodeMissing tries it again.
-      const location = input.location !== undefined ? input.location : await geocode(input.address);
+      // A pin the form already has is kept when it is in Australia. Anything else,
+      // including a pin outside the country, is looked up. A lookup that fails
+      // leaves the Property without a location: geocodeMissing tries it again.
+      // `location: null` was already looked up and found nothing, so it is not tried again here.
+      const given = input.location;
+      const location = given && inAustralia(given) ? given : given === null ? null : await geocode(input.address);
       return transaction(db, async () => {
         const id = await run(
           db,

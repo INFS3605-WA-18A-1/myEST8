@@ -1,4 +1,6 @@
 import type {
+  AddressSuggestion,
+  AddressSuggester,
   BlobStore,
   ChannelType,
   Classifier,
@@ -160,6 +162,17 @@ export class FakeGeocoder implements Geocoder {
   locations = new Map<string, { lat: number; lng: number }>();
   async geocode(address: string) {
     return this.locations.get(address) ?? null;
+  }
+}
+
+/** Suggests `suggestions`, or throws when that is an Error. */
+export class FakeAddressSuggester implements AddressSuggester {
+  suggestions: AddressSuggestion[] | Error = [];
+  queries: string[] = [];
+  async suggest(query: string) {
+    this.queries.push(query);
+    if (this.suggestions instanceof Error) throw this.suggestions;
+    return this.suggestions;
   }
 }
 

@@ -56,7 +56,9 @@ import {
   channelState,
   inboundEmailField,
   phoneChannelForm,
+  propertyPlaceFields,
   nominatedFrom,
+  postedLocation,
   tradiePicker,
   contactFields,
   contactFrom,
@@ -508,6 +510,7 @@ type PropertyInput = {
   owner: { name: string; mobile?: string; email?: string; existing: Person | null };
   tenant: { name: string; mobile?: string; email?: string; tenancyStart: string };
   buildingManager: { name: string; mobile?: string; email?: string; existing: Person | null } | null;
+  location?: { lat: number; lng: number };
 };
 
 /**
@@ -595,6 +598,7 @@ async function readPropertyForm(actions: Actions, form: FormValues, myId: number
       owner: { ...contactFrom(form, 'owner'), existing: ownerExisting },
       tenant: { ...tenantContact, tenancyStart },
       buildingManager: hasBuildingManager ? { ...bm, existing: bmExisting } : null,
+      location: postedLocation(form),
     },
   };
 }
@@ -617,6 +621,7 @@ async function addPropertyFrom(actions: Actions, input: PropertyInput): Promise<
       maxRepairCostCents: input.maxRepairCostCents,
       nominatedTradieIds: input.nominatedTradieIds,
       buildingManagerId,
+      ...(input.location ? { location: input.location } : {}),
     })
     .catch((error: unknown) => {
       throw renamed(error, { maxRepairCostCents: 'maxRepairCost' });
@@ -703,8 +708,7 @@ async function propertyForm(actions: Actions, myId: number, o: { values?: Values
       ${group(
         'The Property',
         fieldGrid(html`
-          ${field({ label: 'Address', name: 'address', id: 'property-address', required: true, placeholder: '12 King St, Newtown NSW 2042', value: valueOf(values, 'address'), error: errors.address })}
-          ${field({ label: 'Suburb', name: 'suburb', id: 'property-suburb', required: true, value: valueOf(values, 'suburb'), error: errors.suburb })}
+          ${propertyPlaceFields({ values, errors })}
           ${field({
             label: 'Max Repair Cost ($)',
             name: 'maxRepairCost',

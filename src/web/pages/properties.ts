@@ -11,7 +11,7 @@ import { icon } from '../icons.ts';
 import type { WebEnv } from '../env.ts';
 import { shellInfo } from '../shell.ts';
 import { alert, badge, button, contactLink, emptyState, entityLink, field, flashFrom, formatAge, formatMoney, humanise, linkButton, page, rowLink, section, sectionHeader, statusBadge, table, ticketCell, urgencyBadge, type Html } from '../ui.ts';
-import { fieldGrid, importPanel, tradiePicker } from './onboarding-forms.ts';
+import { fieldGrid, importPanel, propertyPlaceFields, tradiePicker } from './onboarding-forms.ts';
 
 type Overview = Awaited<ReturnType<PropertyManagerActions['propertyOverviews']>>[number];
 type PropertyView = Awaited<ReturnType<PropertyManagerActions['property']>>;
@@ -19,6 +19,15 @@ type PropertyView = Awaited<ReturnType<PropertyManagerActions['property']>>;
 /** Properties under /properties. */
 export function propertyPages() {
   const pages = new Hono<WebEnv>();
+
+  pages.get('/address-suggestions', async (c) => {
+    try {
+      return c.json(await c.var.actions.suggestAddresses(c.req.query('q') ?? ''));
+    } catch (error) {
+      console.error('Address suggestions failed', error);
+      return c.json([]);
+    }
+  });
 
   pages.get('/', async (c) => {
     const { actions, pm } = c.var;
@@ -50,8 +59,7 @@ export function propertyPages() {
               <form method="post" action="/setup/properties">
                 ${errorFor('property')}
                 ${fieldGrid(html`
-                  ${field({ label: 'Address', name: 'address', id: 'property-address', required: true, placeholder: '12 King St, Newtown NSW 2042' })}
-                  ${field({ label: 'Suburb', name: 'suburb', id: 'property-suburb', required: true })}
+                  ${propertyPlaceFields()}
                   ${field({
                     label: 'Property Owner',
                     name: 'ownerId',
