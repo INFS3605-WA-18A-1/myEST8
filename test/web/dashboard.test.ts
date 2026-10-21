@@ -308,6 +308,13 @@ function nextSeven(board: string) {
   return board.slice(start, board.indexOf('</section>', start));
 }
 
+/** The Mine/All control, so its links are not confused with the day chips. */
+function viewsNav(board: string) {
+  const start = board.indexOf('aria-label="Views"');
+  if (start < 0) throw new Error('No Mine/All control');
+  return board.slice(start, board.indexOf('</nav>', start));
+}
+
 describe('picking a day in the Next 7 days', () => {
   // The harness clock starts at Thursday 8 October 2026, 9:00 am Sydney, and signing in does not move it.
   const DAYS = ['2026-10-08', '2026-10-09', '2026-10-10', '2026-10-11', '2026-10-12', '2026-10-13', '2026-10-14'];
@@ -370,6 +377,20 @@ describe('picking a day in the Next 7 days', () => {
     expect(strip).not.toContain('2:00 pm');
     expect(strip).not.toContain(`href="/tickets/${monday.ticketId}"`);
     expect(strip).toContain('Tuesday 13 October');
+  });
+
+  test('Mine and All keep the chosen day, and Open calendar keeps All', async () => {
+    const { w, cookie } = await twoDays();
+
+    const mine = viewsNav(await page(w, '/?day=2026-10-13', cookie));
+    expect(mine).toContain('href="/?day=2026-10-13#next-7-days"');
+    expect(mine).toContain('href="/?filter=all&amp;day=2026-10-13#next-7-days"');
+
+    const all = await page(w, '/?filter=all&day=2026-10-13', cookie);
+    const allNav = viewsNav(all);
+    expect(allNav).toContain('href="/?day=2026-10-13#next-7-days"');
+    expect(allNav).toContain('href="/?filter=all&amp;day=2026-10-13#next-7-days"');
+    expect(nextSeven(all)).toContain('href="/calendar?view=day&amp;date=2026-10-13&amp;filter=all"');
   });
 
   test('an empty day says nothing is booked and links to that day on the calendar', async () => {

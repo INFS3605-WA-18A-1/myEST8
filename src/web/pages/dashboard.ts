@@ -109,6 +109,7 @@ export function dashboardPages() {
     const now = actions.now();
     const people = view.inbox.some((item) => item.personId === null) ? await actions.people() : [];
     const q = filter === 'all' ? '?filter=all' : '';
+    const shown = shownDay(now, timeZone, c.req.query('day'));
     const needReceipt = view.urgentRepairs.filter((u) => u.status === 'reminder_sent').length;
     const decided = {
       toCheck: view.tickets.filter((t) => t.decision === 'check_quotes'),
@@ -125,8 +126,8 @@ export function dashboardPages() {
         flash: flashFrom(c.req.url),
         shell: await shellInfo(c),
         controls: segmented([
-          { label: 'Mine', href: '/', active: filter === 'mine' },
-          { label: 'All', href: '/?filter=all', active: filter === 'all' },
+          { label: 'Mine', href: scopeHref('mine', shown.kept), active: filter === 'mine' },
+          { label: 'All', href: scopeHref('all', shown.kept), active: filter === 'all' },
         ]),
         body: html`
           ${countStrip([
@@ -465,21 +466,43 @@ function dayHref(day: string, filter: Filter) {
   return `/?${params.toString()}#next-7-days`;
 }
 
+/** Mine or All, keeping the chosen day and returning to the strip when one is set. */
+function scopeHref(filter: Filter, day: string | undefined) {
+  const params = new URLSearchParams();
+  if (filter === 'all') params.set('filter', 'all');
+  if (day) params.set('day', day);
+  const query = params.toString();
+  return `/${query ? `?${query}` : ''}${day ? '#next-7-days' : ''}`;
+}
+
+/** Open calendar for `date`, keeping All when the dashboard is showing everyone's visits. */
+function calendarHref(date: string, filter: Filter) {
+  const params = new URLSearchParams({ view: 'day', date });
+  if (filter === 'all') params.set('filter', 'all');
+  return `/calendar?${params}`;
+}
+
+/** Today, the seven days from it, and the day the strip shows. `kept` is set only when the query named one of those days. */
+function shownDay(now: Date, timeZone: string, dayQuery: string | undefined) {
+  const today = dayOf(now, timeZone);
+  const days = Array.from({ length: 7 }, (_, i) => addDays(today, i));
+  const asked = parseDay(dayQuery);
+  const kept = asked && days.includes(asked) ? asked : undefined;
+  return { today, days, chosen: kept ?? today, kept };
+}
+
 /**
  * Today and the six days after it, in the Agency's time zone. Each day is a link, and the
  * chosen one (today, when `day` is missing or not one of the seven) is filled; today stays
  * ringed when another day is chosen. Under the strip, that day's visits in time order.
  */
 function nextSevenDays(bookings: Booking[], now: Date, timeZone: string, dayQuery: string | undefined, filter: Filter): Html {
-  const today = dayOf(now, timeZone);
+  const { today, days, chosen } = shownDay(now, timeZone, dayQuery);
   const byDay = new Map<string, Booking[]>();
   for (const b of bookings) {
     const day = dayOf(b.start, timeZone);
     byDay.set(day, [...(byDay.get(day) ?? []), b]);
   }
-  const days = Array.from({ length: 7 }, (_, i) => addDays(today, i));
-  const asked = parseDay(dayQuery);
-  const chosen = asked && days.includes(asked) ? asked : today;
   const weekday = new Intl.DateTimeFormat('en-AU', { timeZone: 'UTC', weekday: 'short' });
   const weekdayLong = new Intl.DateTimeFormat('en-AU', { timeZone: 'UTC', weekday: 'long' });
   const dateOf = new Intl.DateTimeFormat('en-AU', { timeZone: 'UTC', day: 'numeric' });
@@ -487,7 +510,7 @@ function nextSevenDays(bookings: Booking[], now: Date, timeZone: string, dayQuer
   return section({
     title: 'Next 7 days',
     id: 'next-7-days',
-    actions: linkButton('Open calendar', `/calendar?view=day&date=${chosen}`, { variant: 'ghost', size: 'sm' }),
+    actions: linkButton('Open calendar', calendarHref(chosen, filter), { variant: 'ghost', size: 'sm' }),
     body: html`<ol class="day-strip">
         ${days.map((day) => {
           const at = new Date(`${day}T00:00:00Z`);
