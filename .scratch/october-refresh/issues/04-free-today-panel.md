@@ -1,6 +1,6 @@
 # Free today as a panel, not a dropdown
 
-Status: ready-for-agent
+Status: resolved
 Branch: schedule-teams-calendar
 Blocked by: 03 (same page, done first)
 Spec: ../spec.md
@@ -24,10 +24,10 @@ The schedule's summary has "Free today (N)" as a bare `<details>` dropdown of na
 
 ## Acceptance criteria
 
-- [ ] Page tests (`test/web/`):
+- [x] Page tests (`test/web/`):
   - this week shows the panel with each free Tradie's name (linked), Trades and rating, and leaves out a Tradie booked today
   - with everyone booked, "Every Tradie has a visit today."
   - next week shows no panel
-- [ ] Browser test: at 1366 px the panel sits beside the grid, and at 390 px it is above the grid with no sideways page scroll.
-- [ ] `docs/design-system.md` describes the panel.
-- [ ] `npm run check` passes.
+- [x] Browser test: at 1366 px the panel sits beside the grid, and at 390 px it is above the grid with no sideways page scroll.
+- [x] `docs/design-system.md` describes the panel.
+- [x] `npm run check` passes.
