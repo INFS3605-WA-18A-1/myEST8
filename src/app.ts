@@ -50,6 +50,7 @@ export function createApp(
       imageMatcher: deps.imageMatcher,
       quoteReader: deps.quoteReader,
       summariser: deps.summariser,
+      composer: deps.composer,
       places: deps.places,
       tradeSuggester: deps.tradeSuggester,
       fetchMedia: deps.fetchMedia,
@@ -271,6 +272,14 @@ export function createApp(
         /** Edits a Maintenance Request's or Ticket's Summary without confirming it. The model never overwrites an edit. */
         editSummary: (target: { issueId: number } | { ticketId: number }, summary: string) => tickets.editSummary(agencyId, target, summary),
         rejectMaintenanceRequest: (issueId: number, reason: string) => tickets.rejectMaintenanceRequest(agencyId, issueId, reason),
+        /**
+         * Writes the notes up as a message to the Maintenance Request's Tenant, from the facts and nothing else,
+         * for the Property Manager to check. `byAI` is false when the model isn't there or fails and the notes
+         * come back as written. Refuses (field `notes`) blank notes or over 1000 characters. Sends nothing.
+         */
+        draftFollowUp: (issueId: number, notes: string) => tickets.draftFollowUp(agencyId, propertyManagerId, issueId, notes),
+        /** Sends the Tenant the checked follow-up, as it stands, on their usual channel. Refuses (field `text`) blank text or over 4000 characters. Returns the Tenant's name. */
+        sendFollowUp: (issueId: number, text: string) => tickets.sendFollowUp(agencyId, issueId, text),
         changeUrgency: (target: { issueId: number } | { ticketId: number }, urgency: Urgency) =>
           tickets.changeUrgency(agencyId, target, urgency),
         setJobTrade: (jobId: number, trade: Trade) => tickets.setJobTrade(agencyId, jobId, trade),

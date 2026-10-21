@@ -37,6 +37,14 @@ describe('the demo stories', () => {
     expect(requests.some((r) => r.checkUrgency && r.urgency === 'high')).toBe(true);
   });
 
+  test("draft a follow-up with the demo's mock composer, as a draft written from the notes", async () => {
+    const [request] = (await dashboard()).maintenanceRequests;
+    const { text, byAI } = await (await alice()).draftFollowUp(request!.issueId, 'Is it still leaking?');
+
+    expect(byAI).toBe(true);
+    expect(text).toBe(`Hi ${request!.tenantName},\n\nIs it still leaking?\n\nHarbour Realty`);
+  });
+
   test('give each Property Manager their own work', async () => {
     for (const pm of [d.seed.ids.aliceId, d.seed.ids.bobId]) {
       const mine = await (await d.app.asPropertyManager(pm)).dashboard({ filter: 'mine' });

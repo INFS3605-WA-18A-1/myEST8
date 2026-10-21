@@ -5,6 +5,7 @@ import type {
   Summariser,
   ClassifierAnswer,
   Clock,
+  Composer,
   ImageMatcher,
   ImageMatchResult,
   ListingDetails,
@@ -31,6 +32,7 @@ export class FakeClock implements Clock {
 
 export interface SentMessage {
   to: string;
+  subject: string;
   cc: string[];
   channel: ChannelType;
   template: string;
@@ -50,6 +52,7 @@ export class FakeMessenger implements Messenger {
     }
     this.sent.push({
       to: message.to,
+      subject: message.subject,
       cc: message.cc,
       channel: message.channelType,
       template: message.template,
@@ -116,6 +119,17 @@ export class FakeSummariser implements Summariser {
     this.calls.push(input);
     if (this.next instanceof Error) throw this.next;
     return { summary: this.next ?? `Summary: ${input.description}` };
+  }
+}
+
+/** Composes "Composed: <draft>" unless `next` is set (a text to return, or an Error to throw). */
+export class FakeComposer implements Composer {
+  next: string | Error | null = null;
+  calls: Parameters<Composer['compose']>[0][] = [];
+  async compose(input: Parameters<Composer['compose']>[0]) {
+    this.calls.push(input);
+    if (this.next instanceof Error) throw this.next;
+    return { text: this.next ?? `Composed: ${input.draft}` };
   }
 }
 
