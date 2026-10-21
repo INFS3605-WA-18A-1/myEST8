@@ -1,6 +1,6 @@
 # Listing details from Google and Trade suggestions from Jev
 
-Status: ready-for-agent
+Status: resolved
 Spec: ../spec.md
 
 ## What to build
@@ -14,8 +14,8 @@ The two lookups the form needs, behind ports, with the demo's HTTP mocks. No UI 
 
 ## Acceptance criteria
 
-- [ ] `test/adapters/google-places.test.ts`: details are read from a stubbed response, with the field mask asserted; a missing phone, website or summary is null.
-- [ ] `test/adapters/jev-trades.test.ts`: the request has one Noul per Trade with the listing as state and the bearer key; Trades at or above 0.5 come back; a malformed answer throws; the key never appears in an error.
-- [ ] An onboarding test: `googleListing` returns details with suggested Trades, and with `suggestedTrades: []` and `tradesSuggested: false` when the suggester throws.
-- [ ] `test/demo/mock-apis.test.ts` covers the new mock routes.
-- [ ] `npm run check` passes.
+- [x] `test/adapters/google-places.test.ts`: details are read from a stubbed response, with the field mask asserted; a missing phone, website or summary is null.
+- [x] `test/adapters/jev-trades.test.ts`: the request has one Noul per Trade with the listing as state and the bearer key; Trades at or above 0.5 come back; a malformed answer throws; the key never appears in an error.
+- [x] An onboarding test: `googleListing` returns details with suggested Trades, and with `suggestedTrades: []` and `tradesSuggested: false` when the suggester throws.
+- [x] `test/demo/mock-apis.test.ts` covers the new mock routes.
+- [x] `npm run check` passes.
