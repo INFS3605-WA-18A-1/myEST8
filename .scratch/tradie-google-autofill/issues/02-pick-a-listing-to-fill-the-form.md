@@ -1,6 +1,6 @@
 # Pick a Google listing to fill in the Tradie form
 
-Status: ready-for-agent
+Status: resolved
 Blocked by: 01
 Spec: ../spec.md
 
@@ -18,7 +18,7 @@ The flow in the spec, steps 1–4, using `actions.googleListing` from issue 01. 
 
 ## Acceptance criteria
 
-- [ ] Page tests (`test/web/`): results are links under the search bar; choosing one shows the card and prefills the business name, mobile only when it's an AU mobile, ticked Trades and the hidden `placeId`; manual mode posts `NOT_ON_GOOGLE`; a failed submit keeps the listing and values; Jev failure shows "Choose their Trades."
-- [ ] An e2e test (`test/e2e/`) in the demo: search, pick a listing, fill in the contact name and rating, add, and see the Tradie in the table with its Trades.
-- [ ] Works at 390 px with no sideways scroll, and by keyboard alone.
-- [ ] `npm run check` passes.
+- [x] Page tests (`test/web/`): results are links under the search bar; choosing one shows the card and prefills the business name, mobile only when it's an AU mobile, ticked Trades and the hidden `placeId`; manual mode posts `NOT_ON_GOOGLE`; a failed submit keeps the listing and values; Jev failure shows "Choose their Trades."
+- [x] An e2e test (`test/e2e/`) in the demo: search, pick a listing, fill in the contact name and rating, add, and see the Tradie in the table with its Trades.
+- [x] Works at 390 px with no sideways scroll, and by keyboard alone.
+- [x] `npm run check` passes.
