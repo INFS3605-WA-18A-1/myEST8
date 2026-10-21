@@ -10,7 +10,10 @@ export function createSupabaseStorage(o: { url: string; serviceKey: string; buck
   const base = `${o.url.replace(/\/$/, '')}/storage/v1`;
   const bucket = o.bucket ?? 'files';
   const fetchImpl = o.fetch ?? fetch;
-  const auth = { authorization: `Bearer ${o.serviceKey}`, apikey: o.serviceKey };
+  // A legacy service_role key is a JWT and goes in both headers. A new sb_secret_ key isn't one:
+  // Storage refuses it as a Bearer token ("Invalid Compact JWS"), so it goes in apikey alone and
+  // Supabase's gateway hands Storage a JWT for it.
+  const auth: Record<string, string> = o.serviceKey.startsWith('sb_') ? { apikey: o.serviceKey } : { authorization: `Bearer ${o.serviceKey}`, apikey: o.serviceKey };
   // A path is app-made (agency id, uuid), but encode it anyway so a stray character can't change the route.
   const object = (path: string) => `${base}/object/${bucket}/${path.split('/').map(encodeURIComponent).join('/')}`;
   const sign = async (route: string, body: unknown) => {
