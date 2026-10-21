@@ -1022,13 +1022,15 @@ export function countStrip(items: { label: string; count: number; href: string; 
 }
 
 /**
- * Text the AI filled in (a Summary) on the info tint, with a quiet "Filled in by AI"
- * label. Pass `edit` for the control that changes it (a pencil link). Text a person wrote
- * or edited, or the Tenant's own words, is not tinted.
+ * Text the AI wrote (a Summary, a drafted follow-up) on the info tint, with a quiet label
+ * after the sparkle: "Filled in by AI" unless `label` says more. The sparkle is the one
+ * AI mark and is decorative; the label carries the meaning. Pass `edit` for the control
+ * that changes it (a pencil link). Text a person wrote or edited, or the Tenant's own
+ * words, is not tinted.
  */
 export function aiFilled(content: Html | string, o: { label?: string; edit?: Html } = {}): Html {
   return html`<div class="ai-filled">
-    <span class="ai-filled-label">${o.label ?? 'Filled in by AI'}</span>
+    <span class="ai-filled-label">${icon('sparkle', { size: 'size-3.5', weight: 'fill' })}<span>${o.label ?? 'Filled in by AI'}</span></span>
     <div class="flex items-start justify-between gap-3"><div class="min-w-0">${content}</div>${o.edit ?? ''}</div>
   </div>`;
 }

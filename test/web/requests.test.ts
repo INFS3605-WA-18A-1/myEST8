@@ -198,6 +198,12 @@ describe('the Summary on a Maintenance Request', () => {
     expect(html).toContain('aria-label="Edit Summary"');
   });
 
+  test('carries the sparkle before its label, as every AI-written thing does', async () => {
+    const { w, r, cookie } = await summarised();
+    const html = await page(w, `/requests/${r.issueId}`, cookie);
+    expect(html).toMatch(/class="ai-filled-label">\s*<svg[^>]*aria-hidden="true"[\s\S]*?<\/svg>\s*<span>Filled in by AI<\/span>/);
+  });
+
   test('a Summary the Property Manager edited loses the AI label, and Confirm can carry an edit', async () => {
     const { w, r, cookie } = await summarised();
     const form = await page(w, `/requests/${r.issueId}?edit=summary`, cookie);
