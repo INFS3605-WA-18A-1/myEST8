@@ -145,15 +145,44 @@ export interface Summariser {
   }): Promise<{ summary: string }>;
 }
 
+/** A business's Google listing, as much of it as myEST8 uses to fill in a Tradie. */
+export interface ListingDetails {
+  placeId: string;
+  name: string;
+  address: string;
+  /** The international number when Google has one, otherwise the national one, as Google writes it. */
+  phone: string | null;
+  website: string | null;
+  /** Google's place types ("plumber"). */
+  types: string[];
+  /** Google's name for the main type ("Plumber"). */
+  primaryType: string | null;
+  /** Google's one-line description of the business. */
+  summary: string | null;
+  rating: number | null;
+  reviewCount: number;
+}
+
 export interface PlacesLookup {
   findListings(query: string): Promise<{ placeId: string; name: string; address: string }[]>;
   getRating(placeId: string): Promise<{ rating: number | null; reviewCount: number }>;
+  /** A listing's details. Throws when the lookup fails or the place isn't there. */
+  listingDetails(placeId: string): Promise<ListingDetails>;
   /**
    * The latitude and longitude of a street address: a Property's, or a Tradie's
    * business address for the Dispatch map. Null when the address can't be found
    * (or is blank); throws when the lookup itself fails, so the caller's task retries.
    */
   geocode(address: string): Promise<{ lat: number; lng: number } | null>;
+}
+
+export interface TradeSuggester {
+  /**
+   * The Trades a business does, judged from its Google listing: none when nothing in
+   * it points to one. A suggestion for the Property Manager to check. Throws when the
+   * lookup fails.
+   */
+  suggestTrades(listing: ListingDetails): Promise<Trade[]>;
 }
 
 export interface Clock {

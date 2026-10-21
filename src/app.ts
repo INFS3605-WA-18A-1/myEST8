@@ -51,6 +51,7 @@ export function createApp(
       quoteReader: deps.quoteReader,
       summariser: deps.summariser,
       places: deps.places,
+      tradeSuggester: deps.tradeSuggester,
       fetchMedia: deps.fetchMedia,
     },
     modules,
@@ -243,6 +244,8 @@ export function createApp(
         addTradie: (input: Parameters<typeof onboarding.addTradie>[1]) => onboarding.addTradie(agencyId, input),
         addProperty: (input: Parameters<typeof onboarding.addProperty>[1]) => onboarding.addProperty(agencyId, input),
         findGoogleListings: (query: string) => onboarding.findGoogleListings(query),
+        /** A Google listing's details and the Trades Jev suggests for it, to fill in the Tradie form. Stores nothing. */
+        googleListing: (placeId: string) => onboarding.googleListing(placeId),
 
         // Importing from a spreadsheet: upload, review, then add
         /** Reads an .xlsx or .csv of Property Owners, Building Managers, Tradies, Properties or Tenants and keeps it for review. Returns its token. */

@@ -45,6 +45,7 @@ import {
 } from '../ui.ts';
 import {
   addTradieFrom,
+  addTradieSection,
   CHANNELS,
   channelBadge,
   channelGuide,
@@ -60,12 +61,10 @@ import {
   contactFields,
   contactFrom,
   fieldGrid,
-  googleSearchForm,
   IMPORT_NOUNS,
   importPanel,
+  listingChoice,
   scoped,
-  searchListings,
-  tradieFields,
   tradiesTable,
   valueOf,
   valuesOf,
@@ -465,8 +464,6 @@ function demoAddress(type: ChannelType, agency: { id: number; name: string }) {
 async function tradiesStep(c: WizardContext, o: { values?: Values; errors?: Errors; message?: string }): Promise<Html> {
   const { actions } = c.var;
   const tradies = await actions.people('tradie');
-  const query = c.req.query('google')?.trim() ?? '';
-  const { listings, problem } = await searchListings(actions, query);
   const unplaced = o.message && !Object.keys(o.errors ?? {}).length ? o.message : null;
   return wizardPage(c, {
     step: 'tradies',
@@ -483,12 +480,17 @@ async function tradiesStep(c: WizardContext, o: { values?: Values; errors?: Erro
         id: 'add-tradie',
         title: 'Add a Tradie',
         body: html`
-          ${googleSearchForm('/welcome/tradies#add-tradie', query, problem, listings.length)}
-          <form method="post" action="/welcome/tradies${query ? `?google=${encodeURIComponent(query)}` : ''}" class="mt-4 space-y-3">
-            ${unplaced ? alert(unplaced, 'error') : ''}
-            ${tradieFields({ listings, values: o.values, errors: o.errors })}
-            <div>${button('Add Tradie', { variant: tradies.length ? 'secondary' : 'primary' })}</div>
-          </form>
+          ${await addTradieSection({
+            actions,
+            choice: listingChoice((name) => c.req.query(name)),
+            path: '/welcome/tradies',
+            anchor: '#add-tradie',
+            postTo: '/welcome/tradies',
+            submit: button('Add Tradie', { variant: tradies.length ? 'secondary' : 'primary' }),
+            values: o.values,
+            errors: o.errors,
+            refusal: unplaced ? alert(unplaced, 'error') : undefined,
+          })}
         `,
       })}
     `,

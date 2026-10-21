@@ -54,8 +54,9 @@ describe('Tradies', () => {
   test('the add form and spreadsheet import stay on the page', async () => {
     const w = await webWorld();
     const cookie = await w.signIn();
-    const page = await (await w.get('/tradies', cookie)).text();
-    expect(page).toContain('action="/setup/tradies');
+    const page = await (await w.get('/tradies?manual=1', cookie)).text();
+    expect(page).toContain('action="/setup/tradies?manual=1"');
+    expect(page).toContain('id="import-tradies"');
   });
 
   test('a profile splits the ratings by source and lists bookings and Quotes by Ticket', async () => {

@@ -25,6 +25,7 @@ import { smsNumberPanel, smsNumbersOffered } from './sms-number.ts';
 import { alert, button, emptyState, field, flashFrom, formatMoney, linkButton, page, section, table, type Flash, type Html } from '../ui.ts';
 import {
   addTradieFrom,
+  addTradieSection,
   CHANNELS,
   channelChip,
   unavailableChip,
@@ -41,10 +42,10 @@ import {
   contactFields,
   contactFrom,
   fieldGrid,
-  googleSearchForm,
   importPanel,
-  searchListings,
-  tradieFields,
+  listingChoice,
+  listingParams,
+  type ListingChoice,
   tradiesTable,
 } from './onboarding-forms.ts';
 
@@ -86,7 +87,7 @@ export function setupPages(o: { connectors?: ChannelConnectors } = {}) {
     const flash = flashFrom(c.req.url);
     const refusedForm = flash?.kind === 'error' ? c.req.query('form') : undefined;
     const shownFor = (key: FormKey): Shown => ({ error: refusedForm === key && flash ? formError(flash) : html``, open: refusedForm === key });
-    const googleQuery = c.req.query('google')?.trim() ?? '';
+    const choice = listingChoice((name) => c.req.query(name));
     const agency: Agency = {
       owners: await actions.people('owner'),
       buildingManagers: await actions.people('building_manager'),
@@ -116,7 +117,7 @@ export function setupPages(o: { connectors?: ChannelConnectors } = {}) {
           ${areasNav(agency, channels, connectors.unavailable)}
           ${section({ id: 'channels', title: 'Channels', body: await channelsArea(origin, channels, timeZone, shownFor('channels'), connectors, actions.agency().id, email, pending, smsPanel) })}
           ${section({ id: 'people', title: 'Property Owners and Building Managers', body: peopleArea(agency, shownFor) })}
-          ${section({ id: 'tradies', title: 'Tradies', body: html`${await tradiesArea(c, agency, googleQuery, shownFor('tradie'))}${importForm('tradies', shownFor('import-tradies'))}` })}
+          ${section({ id: 'tradies', title: 'Tradies', body: html`${await tradiesArea(c, agency, choice, shownFor('tradie'))}${importForm('tradies', shownFor('import-tradies'))}` })}
           ${section({ id: 'properties', title: 'Properties', body: html`${propertiesArea(agency, pm.id, shownFor('property'))}${importForm('properties', shownFor('import-properties'))}` })}
           ${section({ id: 'tenants', title: 'Tenants', body: html`${tenantsArea(agency, shownFor('tenant'))}${importForm('tenants', shownFor('import-tenants'))}` })}
         `,
@@ -166,9 +167,9 @@ export function setupPages(o: { connectors?: ChannelConnectors } = {}) {
   const home = (c: Context<WebEnv>, page: '/tradies' | '/properties' | '/tenants') => (c.req.query('from') === 'setup' ? '/setup' : page);
 
   pages.post('/tradies', (c) => {
-    const google = c.req.query('google');
+    const chosen = listingParams(listingChoice((name) => c.req.query(name)));
     const here = home(c, '/tradies');
-    const back = `${here}?form=tradie${google ? `&google=${encodeURIComponent(google)}` : ''}`;
+    const back = `${here}?form=tradie${chosen ? `&${chosen}` : ''}`;
     return formAction(c, back, async (form) => {
       const businessName = await addTradieFrom(c.var.actions, form);
       return { ok: `${businessName} added as a Tradie`, redirect: here };
@@ -370,24 +371,23 @@ function peopleArea(agency: Agency, shownFor: (key: FormKey) => Shown): Html {
   </div>`;
 }
 
-async function tradiesArea(c: Context<WebEnv>, agency: Agency, googleQuery: string, shown: Shown): Promise<Html> {
+async function tradiesArea(c: Context<WebEnv>, agency: Agency, choice: ListingChoice, shown: Shown): Promise<Html> {
   const { actions } = c.var;
-  const { listings, problem } = await searchListings(actions, googleQuery);
-  const action = `/setup/tradies?from=setup${googleQuery ? `&google=${encodeURIComponent(googleQuery)}` : ''}`;
   return html`
     <p class="text-sm">Add the Tradies the Agency already uses. They're shared by every Property Manager. Each Tradie's page is under <a class="link" href="/tradies">Tradies</a>.</p>
     ${await tradiesTable(actions, agency.tradies)}
     ${addForm(
       'Add a Tradie',
-      shown.open || googleQuery !== '',
-      html`
-        ${googleSearchForm('/setup#tradies', googleQuery, problem, listings.length)}
-        <form method="post" action="${action}" class="mt-4">
-          ${shown.error}
-          ${tradieFields({ listings })}
-          <div class="mt-3">${button('Add Tradie', { size: 'sm' })}</div>
-        </form>
-      `,
+      shown.open || !!(choice.query || choice.place || choice.manual),
+      await addTradieSection({
+        actions,
+        choice,
+        path: '/setup',
+        anchor: '#tradies',
+        postTo: '/setup/tradies?from=setup',
+        submit: button('Add Tradie', { size: 'sm' }),
+        refusal: shown.error,
+      }),
     )}
   `;
 }

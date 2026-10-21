@@ -31,7 +31,10 @@ describe('the onboarding guide', () => {
     expect(setup).not.toContain('/webhooks/twilio');
     expect(setup).not.toContain('/webhooks/sendgrid');
     for (const text of ['Olivia Owens', 'Barry Strata', KING_ST, 'Tom Tran', 'Flow Bros', 'Add a Tradie', 'Add a Property', '$500.00']) expect(setup).toContain(text);
-    expect(setup).toContain('action="/setup/tradies?from=setup"');
+    // The Tradie form comes once a listing is picked, or "not on Google" is chosen.
+    expect(setup).toContain('Not on Google? Enter their details yourself');
+    expect(setup).not.toContain('action="/setup/tradies');
+    expect(await page(w, '/setup?manual=1', cookie)).toContain('action="/setup/tradies?from=setup&amp;manual=1"');
     expect(setup).toContain('action="/setup/properties?from=setup"');
 
     const properties = await page(w, '/properties', cookie);
@@ -144,8 +147,8 @@ describe('the onboarding guide', () => {
     const refused = await submit(w, '/setup/tradies?google=lucky', tradie, cookie);
     expect(refused.location).toMatch(/^\/tradies\?form=tradie&google=lucky&error=/);
     expect(refused.page).toContain('Link the Tradie to their Google listing, or mark them as not on Google');
-    expect(refused.page).toContain('value="place-lucky"');
-    expect(refused.page).toContain('Lucky Locks, Surry Hills');
+    expect(refused.page).toContain('/tradies?google=lucky&amp;place=place-lucky#add-tradie');
+    expect(refused.page).toContain('Surry Hills');
 
     const added = await submit(w, '/setup/tradies?google=lucky', { ...tradie, placeId: 'place-lucky' }, cookie);
     expect(added.page).toContain('Lucky Locks added as a Tradie');
@@ -163,7 +166,7 @@ describe('the onboarding guide', () => {
     const refused = await submit(w, '/setup/tradies?from=setup&google=lucky', tradie, cookie);
     expect(refused.location).toMatch(/^\/setup\?form=tradie&google=lucky&error=/);
     expect(refused.page).toContain('Link the Tradie to their Google listing, or mark them as not on Google');
-    expect(refused.page).toContain('value="place-lucky"');
+    expect(refused.page).toContain('/setup?google=lucky&amp;place=place-lucky#tradies');
     expect(refused.page).toMatch(/<details class="mt-4" open>\s*<summary[^>]*>Add a Tradie/);
 
     const added = await submit(w, '/setup/tradies?from=setup&google=lucky', { ...tradie, placeId: 'place-lucky' }, cookie);
