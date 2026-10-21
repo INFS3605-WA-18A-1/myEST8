@@ -176,6 +176,15 @@ export interface PlacesLookup {
   geocode(address: string): Promise<{ lat: number; lng: number } | null>;
 }
 
+export interface Geocoder {
+  /**
+   * The latitude and longitude of a street address: a Property's, or a Tradie's
+   * business address for the Dispatch map. Null when the address can't be found
+   * (or is blank); throws when the lookup itself fails, so the caller's task retries.
+   */
+  geocode(address: string): Promise<{ lat: number; lng: number } | null>;
+}
+
 export interface TradeSuggester {
   /**
    * The Trades a business does, judged from its Google listing: none when nothing in
