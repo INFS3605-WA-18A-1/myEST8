@@ -1,6 +1,6 @@
 # Draft and send a follow-up (actions and wiring)
 
-Status: ready-for-agent
+Status: resolved
 Spec: ../spec.md
 
 ## What to build
@@ -16,9 +16,9 @@ Spec: ../spec.md
 
 ## Acceptance criteria
 
-- [ ] Tests (follow the style of the existing module and `test/` tests):
+- [x] Tests (follow the style of the existing module and `test/` tests):
   - the draft comes from the composer with the facts, untrusted fields and draft from the spec (asserted on the fake)
   - the composer missing or throwing gives the notes back with `byAI: false`
   - blank, too-long and wrong-Agency inputs are refused, and so is an issue that isn't in intake
   - sending reaches the Tenant on their channel with the template's subject, and is logged against the issue
-- [ ] `npm run check` passes.
+- [x] `npm run check` passes.
