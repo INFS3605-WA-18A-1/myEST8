@@ -537,7 +537,8 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
     },
 
     async addProperty(agencyId: number, input: NewProperty) {
-      const location = input.location !== undefined ? input.location : await ports.places.geocode(input.address);
+      // A lookup that fails leaves the Property without a location, as for a Tradie's address: geocodeMissing tries it again.
+      const location = input.location !== undefined ? input.location : await geocode(input.address);
       return transaction(db, async () => {
         const id = await run(
           db,

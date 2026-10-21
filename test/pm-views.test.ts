@@ -208,6 +208,20 @@ describe('Tradie locations and Dispatch', () => {
     expect((await w.alice.properties()).find((p) => p.id === w.ids.kingSt)!.location).toEqual({ lat: -33.897, lng: 151.179 });
   });
 
+  test('a Property is added without a location when the geocoder fails, and geocodeMissing places it later', async () => {
+    const w = await world();
+    w.h.places.geocode = async () => {
+      throw new Error('Google Geocoding returned REQUEST_DENIED');
+    };
+    const id = await unknownProperty(w);
+    expect((await w.alice.properties()).find((p) => p.id === id)!.location).toBeNull();
+
+    w.h.places.geocode = async (address) => w.h.places.locations.get(address) ?? null;
+    w.h.places.locations.set(UNKNOWN_ADDRESS, { lat: -33.89, lng: 151.18 });
+    expect(await w.alice.geocodeMissing()).toBe(1);
+    expect((await w.alice.properties()).find((p) => p.id === id)!.location).toEqual({ lat: -33.89, lng: 151.18 });
+  });
+
   test('the dispatch view has every Property with its worst open Urgency, and Tradies with where they are', async () => {
     const w = await world();
     const { ticketId } = await tomsTapTicket(w);
