@@ -474,6 +474,14 @@ describe('Schedule: the Month', () => {
   });
 });
 
+/** The current-time line, without the rest of the grid. */
+function nowMark(html: string) {
+  const at = html.indexOf('data-schedule-now');
+  expect(at, 'no current-time line').toBeGreaterThan(-1);
+  const start = html.lastIndexOf('<div', at);
+  return html.slice(start, html.indexOf('</div>', at));
+}
+
 /** The toolbar over the calendar, without the summary and the grid. */
 function toolbar(html: string) {
   const start = html.indexOf('class="schedule-toolbar"');
@@ -552,6 +560,25 @@ describe('Schedule: the current time', () => {
 
     const other = grid(await page(w, '/calendar?view=week&date=2026-10-12', cookie));
     expect(other).not.toContain('schedule-now');
+  });
+
+  test('the line carries the server clock, and stays on today, hidden, before the grid opens', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    // Thursday 8 October 2026, 9:00 am Sydney. 1791410400000 is that instant.
+    const morning = grid(await page(w, '/calendar', cookie));
+    const line = nowMark(morning);
+    expect(line).toContain('data-now="1791410400000"');
+    expect(line).toContain('data-today="2026-10-08"');
+    expect(line).not.toContain(' hidden');
+
+    // 6:30 am is before the grid's 7 am, so the line is drawn but not shown.
+    w.h.clock.advance(-2.5 * HOUR);
+    const early = nowMark(grid(await page(w, '/calendar', cookie)));
+    expect(early).toContain('data-now="1791401400000"');
+    expect(early).toContain('data-today="2026-10-08"');
+    expect(early).toContain(' hidden');
   });
 
   test('the Day draws the current-time line only on today', async () => {

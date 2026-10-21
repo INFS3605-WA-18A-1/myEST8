@@ -298,20 +298,22 @@ function dateLink(day: string, ctx: Ctx): Html {
 /**
  * The current-time line across today's column, with its dot in the gutter. Placed
  * from the Agency's clock, so it is there with no JavaScript; app.js moves it
- * each minute. Absent when today is not on this grid, or the clock is outside
- * the hours shown. `header` is the Week's row of dates, which the Day grid has not.
+ * each minute from `data-now` (this instant, epoch ms) and hides it once `data-today`
+ * has passed. Absent only when today is not on this grid. Outside the hours shown
+ * it is still rendered, hidden, so it can appear when the hours begin without a
+ * reload. `header` is the Week's row of dates, which the Day grid has not.
  */
 function nowLine(range: HourRange, todayIndex: number, ctx: Ctx, header: boolean): Html | '' {
   if (todayIndex < 0) return '';
   const clock = wallClock(ctx.now, ctx.timeZone);
   const mins = clock.hour * 60 + clock.minute;
   const start = range.first * 60;
-  if (mins < start || mins >= range.last * 60) return '';
-  const into = mins - start;
+  const outside = mins < start || mins >= range.last * 60;
+  const into = outside ? 0 : mins - start;
   const row = Math.floor(into / 15) + (header ? 2 : 1);
   // The gutter is column 1 and Monday is column 2, so Thursday (index 3) ends at column 6.
   const column = header ? `1 / ${todayIndex + 3}` : '1 / -1';
-  return html`<div class="schedule-now${header ? '' : ' is-day'}" data-schedule-now data-zone="${ctx.timeZone}" data-first="${range.first}" data-last="${range.last}" data-header="${header ? '1' : '0'}" style="grid-row: ${row}; grid-column: ${column}; --now-frac: ${(into % 15) / 15}" aria-hidden="true"><span class="schedule-now-dot"></span><span class="schedule-now-line"></span></div>`;
+  return html`<div class="schedule-now${header ? '' : ' is-day'}"${outside ? html` hidden` : ''} data-schedule-now data-now="${String(ctx.now.getTime())}" data-today="${ctx.today}" data-zone="${ctx.timeZone}" data-first="${range.first}" data-last="${range.last}" data-header="${header ? '1' : '0'}" style="grid-row: ${row}; grid-column: ${column}; --now-frac: ${outside ? 0 : (into % 15) / 15}" aria-hidden="true"><span class="schedule-now-dot"></span><span class="schedule-now-line"></span></div>`;
 }
 
 /** "7 am", "12 pm" */
