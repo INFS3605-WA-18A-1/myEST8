@@ -7,6 +7,9 @@
 import type { Geocoder } from '../ports.ts';
 import { callJson, isObject, malformed } from './json-api.ts';
 
+/** Nominatim's `place_rank` for a street: 26. Lower ranks are suburbs, cities and regions. */
+const MIN_PLACE_RANK = 26;
+
 /** The Geocoder port over Nominatim's search API. */
 export function createNominatimGeocoder({
   baseUrl,
@@ -20,12 +23,19 @@ export function createNominatimGeocoder({
 }): Geocoder {
   return {
     async geocode(address) {
+      // Nominatim answers a blank query with an error; it has no location either way.
+      if (!address.trim()) return null;
       const service = 'Nominatim';
       const params = new URLSearchParams({ q: address, format: 'jsonv2', limit: '1', countrycodes: 'au' });
       const body = await callJson(fetchImpl, service, `${baseUrl.replace(/\/+$/, '')}/search?${params}`, { headers: { 'user-agent': userAgent } });
       if (!Array.isArray(body)) malformed(service, 'expected a list of results', body);
+      // No match is an empty list.
+      if (body.length === 0) return null;
       const first: unknown = body[0];
       if (!isObject(first)) malformed(service, 'a result that is not an object', body);
+      // Below a street (a suburb, a postcode) is not the address: a pin in the
+      // middle of a suburb is worse than none.
+      if ((first.place_rank as number) < MIN_PLACE_RANK) return null;
       return { lat: Number(first.lat), lng: Number(first.lon) };
     },
   };
