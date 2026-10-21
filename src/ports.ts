@@ -210,6 +210,27 @@ export interface Geocoder {
   geocode(address: string): Promise<{ lat: number; lng: number } | null>;
 }
 
+/** One address a Property Manager can pick while typing a Property's address. */
+export interface AddressSuggestion {
+  /** The line in the list, such as "12 King Street, Ashbury NSW 2193". */
+  label: string;
+  /** The street address, without the suburb, for the Address field. */
+  address: string;
+  suburb: string;
+  postcode?: string;
+  /** Photon's name for the state, such as "New South Wales". */
+  state?: string;
+  location: { lat: number; lng: number };
+}
+
+export interface AddressSuggester {
+  /**
+   * Street addresses matching what was typed, at most 5. A blank or very short
+   * query is an empty list, and no lookup is made. Throws when the lookup itself fails.
+   */
+  suggest(query: string): Promise<AddressSuggestion[]>;
+}
+
 export interface TradeSuggester {
   /**
    * The Trades a business does, judged from its Google listing: none when nothing in
