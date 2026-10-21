@@ -5,6 +5,7 @@ import { createGooglePlaces } from '../../src/adapters/google-places.ts';
 import { createImageMatcher } from '../../src/adapters/image-matcher.ts';
 import { createJevClassifier } from '../../src/adapters/jev.ts';
 import { createJevTradeSuggester } from '../../src/adapters/jev-trades.ts';
+import { createNominatimGeocoder } from '../../src/adapters/nominatim.ts';
 import { createQuoteReader } from '../../src/adapters/quote-reader.ts';
 import { DEMO_PLACES, mockApis, mockFetch } from '../../src/demo/mock-apis.ts';
 import type { ClassifierQuestion, ListingDetails } from '../../src/ports.ts';
@@ -21,6 +22,8 @@ const quoteReader = createQuoteReader({
   timeZone: 'Australia/Sydney',
   fetch,
 });
+// The mock needs no pacing between requests, so the geocoder doesn't wait.
+const geocoder = createNominatimGeocoder({ baseUrl: 'http://mock.local/nominatim', userAgent: 'myEST8 (test)', fetch, wait: async () => {} });
 const places = createGooglePlaces({ apiKey: 'demo', fetch, placesBaseUrl: 'http://mock.local/google/places', geocodeBaseUrl: 'http://mock.local/google/maps' });
 
 type Item = { ref: string; summary: string };
@@ -357,6 +360,27 @@ describe('mock Google Places', () => {
     ['1 Nowhere Rd', { lat: -33.875, lng: 151.2135 }],
   ])('geocode %s', async (address, location) => {
     expect(await places.geocode(address)).toEqual(location);
+  });
+
+  test.each([
+    ['12 King St, Newtown NSW 2042', { lat: -33.897, lng: 151.179 }],
+    ['5/40 Ocean Ave, Bondi NSW 2026', { lat: -33.8908, lng: 151.2743 }],
+    ['7 Wilson St Newtown NSW 2042', { lat: -33.8955, lng: 151.1823 }],
+    ['21 Glebe Point Rd, Glebe NSW 2037', { lat: -33.879, lng: 151.187 }],
+    ['4 Illawarra Rd, Marrickville NSW 2204', { lat: -33.906, lng: 151.158 }],
+    ['1 Nowhere Rd', { lat: -33.875, lng: 151.2135 }],
+  ])('Nominatim geocode %s', async (address, location) => {
+    expect(await geocoder.geocode(address)).toEqual(location);
+  });
+
+  test('Nominatim answers in jsonv2: the point as strings, and a street-level place_rank', async () => {
+    const response = await mockApis().request('http://mock.local/nominatim/search?q=12+King+St%2C+Newtown+NSW+2042&format=jsonv2&limit=1&countrycodes=au');
+    expect(await response.json()).toMatchObject([{ lat: '-33.897', lon: '151.179', place_rank: 30, display_name: '12 King St, Newtown NSW 2042' }]);
+  });
+
+  test('Nominatim finds nothing for an empty query', async () => {
+    const response = await mockApis().request('http://mock.local/nominatim/search?q=&format=jsonv2');
+    expect(await response.json()).toEqual([]);
   });
 
   test('geocoding an empty address has no results, at either geocode path', async () => {

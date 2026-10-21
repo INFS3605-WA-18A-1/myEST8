@@ -77,7 +77,7 @@ export const DEMO_PLACES: readonly DemoListing[] = [
  * Dummy versions of every external API the app calls, at these paths:
  * /jev/v1/classify, /jev/v1/systemone (Trades for a Google listing), /vision/v1/image-match, /quotes/v1/quote-read (also /quotes/v1/read),
  * /google/places/v1/places:searchText, /google/places/v1/places/:id,
- * /google/maps/api/geocode/json (also /google/maps/maps/api/geocode/json).
+ * /google/maps/api/geocode/json (also /google/maps/maps/api/geocode/json), /nominatim/search.
  * Wire the real adapters to it with `mockFetch()` and baseUrls under http://mock.local.
  */
 export function mockApis() {
@@ -144,6 +144,8 @@ export function mockApis() {
   const geocode = (c: Context) => c.json(geocodeResponse(c.req.query('address') ?? ''));
   app.get('/google/maps/api/geocode/json', geocode);
   app.get('/google/maps/maps/api/geocode/json', geocode);
+
+  app.get('/nominatim/search', (c) => c.json(nominatimResponse(c.req.query('q') ?? '')));
 
   return app;
 }
@@ -347,6 +349,13 @@ function geocodeResponse(address: string) {
     ],
     status: 'OK',
   };
+}
+
+/** Nominatim's jsonv2 answer to a search: no results for a blank query, else the demo's point for the address, as a street-level result. */
+function nominatimResponse(query: string) {
+  if (!query.trim()) return [];
+  const { lat, lng } = locate(query);
+  return [{ place_id: hash(searchable(query)), lat: String(lat), lon: String(lng), place_rank: 30, category: 'building', type: 'yes', display_name: query.trim() }];
 }
 
 /** The demo's Summariser: the description's first sentence trimmed to 120 characters, then the location when known. Deterministic. */
