@@ -48,7 +48,7 @@ interface Period {
   days: string[];
   prev: string;
   next: string;
-  /** "Tuesday 13 October", "12 – 18 October 2026", "October 2026". */
+  /** "Tuesday 13 October 2026", "12 – 18 October 2026", "October 2026". */
   label: string;
   /** How the summary speaks of it: "on this day", "this week", "this month". */
   noun: string;
@@ -130,7 +130,7 @@ const jobsBooked = (n: number) => `${plural(n, 'Job', 'Jobs')} booked`;
 /** The days a view shows around `date`, and the days before and after it. */
 function periodOf(view: View, date: string, today: string): Period {
   if (view === 'day') {
-    return { view, first: date, days: [date], prev: addDays(date, -1), next: addDays(date, 1), label: longDay(date), noun: 'on this day', current: date === today };
+    return { view, first: date, days: [date], prev: addDays(date, -1), next: addDays(date, 1), label: dayTitle(date), noun: 'on this day', current: date === today };
   }
   if (view === 'week') {
     const monday = mondayOf(date);
@@ -149,12 +149,18 @@ function monthName(day: string): string {
   return new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', month: 'long', year: 'numeric' }).format(new Date(`${day}T00:00:00Z`));
 }
 
-/** "12 – 18 October 2026", or "26 October – 1 November 2026" when the week crosses a month. */
+/** "12 – 18 October 2026", "26 October – 1 November 2026", or "28 December 2026 – 3 January 2027" when the years differ. */
 function weekTitle(days: string[]): string {
   const first = days[0]!;
   const last = days.at(-1)!;
+  if (first.slice(0, 4) !== last.slice(0, 4)) return `${dayAndMonth(first, true)} – ${dayAndMonth(last, true)}`;
   const sameMonth = first.slice(0, 7) === last.slice(0, 7);
   return sameMonth ? `${Number(first.slice(8))} – ${dayAndMonth(last, true)}` : `${dayAndMonth(first)} – ${dayAndMonth(last, true)}`;
+}
+
+/** "Tuesday 13 October 2026". The Day title and its share text name the year; a weekday in the grid does not. */
+function dayTitle(day: string): string {
+  return `${longDay(day)} ${day.slice(0, 4)}`;
 }
 
 /** "18 October", or "18 October 2026" with the year. */
@@ -164,7 +170,7 @@ function dayAndMonth(day: string, year = false): string {
 
 /** The share panel's words for the period shown. */
 function shareWords(p: Period, count: number): { title: string; text: string } {
-  const when = p.view === 'day' ? `on ${longDay(p.first)}` : p.view === 'week' ? `in the week of ${longDay(p.first)}` : `in ${monthName(p.first)}`;
+  const when = p.view === 'day' ? `on ${p.label}` : p.view === 'week' ? `in the week of ${longDay(p.first)}` : `in ${monthName(p.first)}`;
   return {
     title: `Jobs booked, ${p.label}`,
     text: count ? `${jobsBooked(count)} ${when} across the Agency.` : `Nothing booked yet ${when}.`,

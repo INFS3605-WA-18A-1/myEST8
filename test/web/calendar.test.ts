@@ -542,6 +542,19 @@ describe('Schedule: the toolbar', () => {
     expect(current).toMatch(/class="btn btn-outline btn-sm"[^>]*>Today</);
     expect(visible(current)).toContain('5 – 11 October 2026');
   });
+
+  test('a week across two years names both, and a Day title includes the year', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    // Monday 28 December 2026 to Sunday 3 January 2027.
+    const across = toolbar(await page(w, '/calendar?view=week&date=2026-12-30', cookie));
+    expect(visible(across)).toContain('28 December 2026 – 3 January 2027');
+
+    const day = await page(w, '/calendar?view=day&date=2026-10-13', cookie);
+    expect(visible(toolbar(day))).toContain('Tuesday 13 October 2026');
+    expect(day).toContain('on Tuesday 13 October 2026');
+  });
 });
 
 describe("Schedule: today's column", () => {
