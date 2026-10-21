@@ -118,3 +118,19 @@ test('a suggestion that arrives after you have moved on stays closed', async ({ 
   expect(await left.arrive()).toBe(false);
   await left.stop();
 });
+
+test('the highlighted address suggestion is selected for a screen reader', async ({ page }) => {
+  await signIn(page);
+  await page.goto('/properties#add-property');
+  const address = page.getByRole('combobox', { name: 'Address' });
+  await address.fill('Newtown');
+
+  const king = page.getByRole('option', { name: '12 King St, Newtown NSW 2042' });
+  const wilson = page.getByRole('option', { name: '7 Wilson St, Newtown NSW 2042' });
+  await expect(king).toHaveAttribute('aria-selected', 'true');
+  await expect(wilson).toHaveAttribute('aria-selected', 'false');
+
+  await address.press('ArrowDown');
+  await expect(wilson).toHaveAttribute('aria-selected', 'true');
+  await expect(king).toHaveAttribute('aria-selected', 'false');
+});

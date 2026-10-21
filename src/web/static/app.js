@@ -606,7 +606,11 @@
 
     function setActive(i) {
       active = i;
-      for (const item of list.querySelectorAll('[role="option"]')) item.classList.toggle('is-active', item.id === `address-suggest-${n}-${i}`);
+      for (const item of list.querySelectorAll('[role="option"]')) {
+        const on = item.id === `address-suggest-${n}-${i}`;
+        item.classList.toggle('is-active', on);
+        item.setAttribute('aria-selected', on ? 'true' : 'false');
+      }
       if (i >= 0) {
         input.setAttribute('aria-activedescendant', `address-suggest-${n}-${i}`);
         document.getElementById(`address-suggest-${n}-${i}`)?.scrollIntoView({ block: 'nearest' });
