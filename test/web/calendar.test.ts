@@ -90,7 +90,7 @@ describe('Schedule: the week', () => {
 
     const html = await page(w, '/calendar?week=2026-10-14', cookie);
 
-    expect(visible(html)).toContain('Week of Monday 12 October 2026');
+    expect(visible(html)).toContain('12 – 18 October 2026');
     const days = week(html);
     const text = visible(days);
     // The month is in the subtitle, so a day is "Tue 13"; screen readers hear the whole date.
@@ -291,7 +291,7 @@ describe('Schedule: the Day', () => {
 
     const html = await page(w, '/calendar?view=day&date=2026-10-13', cookie);
 
-    expect(visible(html)).toContain('Tuesday 13 October 2026');
+    expect(visible(html)).toContain('Tuesday 13 October');
     expect(visible(html)).toContain('2 visits booked');
     const g = grid(html, 'day');
     expect(g).toMatch(/role="region" aria-label="Tuesday 13 October, hour by hour\. Visits at the same time sit side by side: scroll sideways to see them all\." tabindex="0"/);
@@ -375,6 +375,50 @@ describe('Schedule: the Month', () => {
   });
 });
 
+/** The toolbar over the calendar, without the summary and the grid. */
+function toolbar(html: string) {
+  const start = html.indexOf('class="schedule-toolbar"');
+  expect(start, 'no toolbar on the page').toBeGreaterThan(-1);
+  return html.slice(start, html.indexOf('class="schedule-summary"', start));
+}
+
+describe('Schedule: the toolbar', () => {
+  test('Today, the previous and next arrows, and the period title, for each view', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    // Thursday 8 October is this week, so the week of the 20th is not, and Today leaves it.
+    const week = toolbar(await page(w, '/calendar?view=week&date=2026-10-20', cookie));
+    expect(week).toMatch(/class="btn btn-outline btn-sm"[^>]*>Today</);
+    expect(week).toContain('aria-label="Previous week"');
+    expect(week).toContain('aria-label="Next week"');
+    expect(week).toContain('href="/calendar?view=week&amp;date=2026-10-12"');
+    expect(week).toContain('href="/calendar?view=week&amp;date=2026-10-26"');
+    expect(visible(week)).toContain('19 – 25 October 2026');
+    expect(week).toMatch(/href="\/calendar"[^>]*>Today</);
+
+    // A week that crosses a month names both months.
+    const across = toolbar(await page(w, '/calendar?view=week&date=2026-11-01', cookie));
+    expect(visible(across)).toContain('26 October – 1 November 2026');
+
+    const day = toolbar(await page(w, '/calendar?view=day&date=2026-10-23&filter=all', cookie));
+    expect(day).toContain('aria-label="Previous day"');
+    expect(day).toContain('aria-label="Next day"');
+    expect(visible(day)).toContain('Friday 23 October');
+    expect(day).toMatch(/href="\/calendar\?view=day&amp;filter=all"[^>]*>Today</);
+
+    const month = toolbar(await page(w, '/calendar?view=month&date=2026-11-02', cookie));
+    expect(month).toContain('aria-label="Previous month"');
+    expect(month).toContain('aria-label="Next month"');
+    expect(visible(month)).toContain('November 2026');
+
+    // Today stays on the toolbar when the period shown is already this one.
+    const current = toolbar(await page(w, '/calendar', cookie));
+    expect(current).toMatch(/class="btn btn-outline btn-sm"[^>]*>Today</);
+    expect(visible(current)).toContain('5 – 11 October 2026');
+  });
+});
+
 describe('Schedule: views and links', () => {
   test('Day, Week and Month tabs keep the date in view and Mine or All', async () => {
     const w = await webWorld();
@@ -396,7 +440,7 @@ describe('Schedule: views and links', () => {
 
     const html = await page(w, '/calendar?week=2026-10-21', cookie);
 
-    expect(visible(html)).toContain('Week of Monday 19 October 2026');
+    expect(visible(html)).toContain('19 – 25 October 2026');
     expect(html).toContain('href="/calendar?view=week&amp;date=2026-10-12"');
   });
 });

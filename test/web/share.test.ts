@@ -100,7 +100,7 @@ describe('where people share', () => {
 
     const share = shareControls(page);
     expect(share.url).toBe('https://desk.harbour.example/calendar?view=week&date=2026-10-19');
-    expect(share.email).toContain(encodeURIComponent('Jobs booked, week of Monday 19 October 2026'));
+    expect(share.email).toContain(encodeURIComponent('Jobs booked, 19 – 25 October 2026'));
     expect(share.block).toContain('Only Property Managers in your Agency can open this link');
 
     // "This week" is shared as its dates, so the link still shows the same week next month.

@@ -4922,6 +4922,71 @@
       border-radius: 2px;
     }
 
+    /* The Schedule's toolbar: Today, the arrows and the period on the left; the view
+       switch and Mine or All on the right. One row on a laptop. Under 768px the switch
+       and filter wrap onto a second row, so a phone never scrolls sideways for them. */
+    .schedule-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px 16px;
+    }
+    .schedule-nav {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+    .schedule-period {
+      margin: 0;
+      min-width: 0;
+      font-family: var(--font-head);
+      font-size: 20px;
+      font-weight: 600;
+      line-height: 1.1;
+      color: var(--ink);
+    }
+    .schedule-toolbar-end {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin-left: auto;
+    }
+    /* Day, Week and Month read as a switch, the same shape as Mine and All. */
+    .schedule-toolbar .tabs-border {
+      display: inline-flex;
+      gap: 2px;
+      padding: 3px;
+      border: 1px solid var(--control);
+      border-radius: 6px;
+      background: var(--surface);
+    }
+    .schedule-toolbar .tabs-border > .tab {
+      min-height: 28px;
+      padding-inline: 12px;
+      border: 0;
+      border-radius: 4px;
+    }
+    .schedule-toolbar .tabs-border > .tab.tab-active {
+      background: var(--action);
+      color: var(--surface);
+      --tab-border-color: transparent;
+    }
+    @media (max-width: 767.98px) {
+      .schedule-toolbar-end {
+        flex-basis: 100%;
+        margin-left: 0;
+      }
+    }
+    @media (max-width: 40rem), (pointer: coarse) {
+      .schedule-toolbar .tabs-border > .tab {
+        min-height: 36px;
+        padding-inline: 16px;
+      }
+    }
+
     /* The Schedule's week in one line: the count of visits, then flags for how they
        stand. A reschedule request waiting on you carries the Wattle stripe; a
        colleague's the warning stripe; not confirmed yet is plain. */
