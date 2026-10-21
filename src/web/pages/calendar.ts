@@ -272,21 +272,32 @@ function weekColumn(day: string, count: number, layout: DayLayout<Booking>, ctx:
       ? html`<ol class="schedule-slots">
           ${layout.clusters.map((cl) => {
             const style = `grid-row: ${cl.rowStart} / ${cl.rowEnd}`;
-            return cl.items.length > 1 ? clusterBlock(day, cl.items.map((p) => p.item), style, ctx) : visitBlock(cl.items[0]!.item, style, ctx);
+            return cl.items.length > 1 ? clusterBlock(day, cl.items.map((p) => p.item), style, ctx) : visitBlock(cl.items[0]!.item, style, cl.rowEnd - cl.rowStart, ctx);
           })}
         </ol>`
       : html`<p class="sr-only">Nothing booked</p>`}
   </li>`;
 }
 
-/** A visit on the Week's grid, condensed to one link to its Ticket: the time, what it is for, the Tradie and how it stands. */
-function visitBlock(b: Booking, style: string, ctx: Ctx): Html {
+/** "9:00 am – 11:00 am, The kitchen tap is dripping, Pete's Plumbing". The link's name, in full, even when a short visit shows one line. */
+function blockName(b: Booking, ctx: Ctx): string {
+  const time = `${formatTime(b.start, ctx.timeZone)} – ${formatTime(b.end, ctx.timeZone)}`;
+  return [time, visitKind(b), b.issue, b.businessName, visitWords(b)].filter((part) => part).join(', ');
+}
+
+/**
+ * A visit on the grid: a rounded block, the time and the issue in bold, then the
+ * Tradie. `rows` is how many quarter-hours it spans; an hour or less is one line.
+ * The colour comes from bookingFlags and visitKind.
+ */
+function visitBlock(b: Booking, style: string, rows: number, ctx: Ctx): Html {
   const kind = visitKind(b);
   const words = visitWords(b);
-  return html`<li class="schedule-block ${bookingFlags(b, b.propertyManagerId === ctx.meId).join(' ')}" style="${style}">
-    <a class="schedule-block-link" href="${ticketHref(b)}">
+  const flags = [rows <= 4 ? 'is-short' : '', ...bookingFlags(b, b.propertyManagerId === ctx.meId)].filter(Boolean).join(' ');
+  return html`<li class="schedule-block ${flags}" style="${style}">
+    <a class="schedule-block-link" href="${ticketHref(b)}" aria-label="${blockName(b, ctx)}">
       <span class="schedule-block-time num"><time datetime="${b.start}">${formatTime(b.start, ctx.timeZone)}</time> – <time datetime="${b.end}">${formatTime(b.end, ctx.timeZone)}</time></span>
-      ${kind ? html`<span class="schedule-block-meta">${kind}</span>` : ''}
+      ${kind ? html`<span class="schedule-marker">${kind}</span>` : ''}
       <span class="schedule-block-issue">${clip(b.issue, { lines: 2 })}</span>
       <span class="schedule-block-meta">${b.businessName}</span>
       ${words ? html`<span class="schedule-block-meta">${words}</span>` : ''}
@@ -325,11 +336,7 @@ function dayView(day: string, bookings: Booking[], ctx: Ctx): Html {
             cl.items.map((p) => {
               const from = Math.floor((p.lane * lanes) / cl.lanes) + 1;
               const to = Math.floor(((p.lane + 1) * lanes) / cl.lanes) + 1;
-              return bookingCard(p.item, ctx.timeZone, {
-                propertyManager: ctx.filter === 'all',
-                decision: p.item.propertyManagerId === ctx.meId,
-                style: `grid-row: ${p.rowStart} / ${p.rowEnd}; grid-column: ${from} / ${to}`,
-              });
+              return visitBlock(p.item, `grid-row: ${p.rowStart} / ${p.rowEnd}; grid-column: ${from} / ${to}`, p.rowEnd - p.rowStart, ctx);
             }),
           )}
         </ol>

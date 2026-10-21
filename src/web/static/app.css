@@ -5296,15 +5296,17 @@
       flex-direction: column;
       gap: 1px;
       height: 100%;
-      padding: 4px 6px;
+      min-width: 0;
+      padding: 4px 6px 4px 8px;
       border: 1px solid var(--line);
+      border-left: 4px solid var(--action);
       border-radius: 4px;
       background: var(--surface);
       font-size: 12px;
       line-height: 1.3;
       color: var(--ink);
       text-decoration: none;
-      overflow-wrap: anywhere;
+      overflow: hidden;
     }
     .schedule-block-link:hover {
       border-color: var(--action);
@@ -5315,15 +5317,38 @@
       outline: 2px solid var(--action);
       outline-offset: 2px;
     }
-    .schedule-block-time {
-      font-weight: 500;
+    .schedule-block-time,
+    .schedule-block-issue {
+      font-weight: 600;
     }
     .schedule-block-issue {
       font-size: 13px;
-      font-weight: 600;
     }
     .schedule-block-meta {
+      font-weight: 400;
       color: var(--muted);
+    }
+    .schedule-marker {
+      align-self: flex-start;
+      padding: 0 6px;
+      border-radius: 4px;
+      background: var(--info-bg);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--action);
+    }
+    /* An hour or less has no room for three lines: one line, cut off, the full words in the link's name. */
+    .schedule-block.is-short .schedule-block-link {
+      flex-direction: row;
+      align-items: baseline;
+      gap: 6px;
+      white-space: nowrap;
+    }
+    .schedule-block.is-short .schedule-block-issue,
+    .schedule-block.is-short .schedule-block-meta {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .schedule-block.is-reschedule .schedule-block-link,
     .schedule-chip.is-reschedule a {
@@ -5334,6 +5359,7 @@
       border-left-color: var(--hivis);
     }
     .schedule-block.is-done .schedule-block-link {
+      border-left-color: var(--done);
       color: var(--muted);
     }
     /* Visits at the same time, folded into one block that opens the Day. */

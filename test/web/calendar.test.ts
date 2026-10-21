@@ -249,7 +249,7 @@ describe('Schedule: the Week as a time grid', () => {
     const tue = column(html, '2026-10-13');
     // 9 am is 8 quarter hours after 7 am, so line 9; 11 am is line 17.
     expect(tue).toContain('style="grid-row: 9 / 17"');
-    expect(tue).toMatch(new RegExp(`<a class="schedule-block-link" href="/tickets/${job.ticketId}">`));
+    expect(tue).toMatch(new RegExp(`<a class="schedule-block-link" href="/tickets/${job.ticketId}"`));
     expect(visible(tue)).toContain("9:00 am – 11:00 am The kitchen tap is dripping Pete's Plumbing Not confirmed yet");
     // Each day's name opens its Day.
     expect(tue).toContain('href="/calendar?view=day&amp;date=2026-10-13"');
@@ -306,8 +306,8 @@ describe('Schedule: the Day', () => {
     expect(g).toContain('style="grid-row: 13 / 21; grid-column: 2 / 3"');
     expect(g.indexOf(`/tickets/${tap.ticketId}`)).toBeLessThan(g.indexOf(`/tickets/${fan.ticketId}`));
     const text = visible(g);
-    expect(text).toContain("The kitchen tap is dripping Pete's Plumbing 12 King St, Newtown");
-    expect(text).toContain('The bathroom fan is rattling Drip Doctors');
+    expect(text).toContain("9:00 am – 11:00 am The kitchen tap is dripping Pete's Plumbing");
+    expect(text).toContain('10:00 am – 12:00 pm The bathroom fan is rattling Drip Doctors');
   });
 
   test('a visit alone at its time takes the whole width, and an empty day says so', async () => {
@@ -472,6 +472,21 @@ describe('Schedule: the current time', () => {
     const other = await page(w, '/calendar?view=day&date=2026-10-13', cookie);
     expect(other).not.toContain('schedule-now');
     expect(visible(other)).toContain('Nothing booked on Tuesday 13 October.');
+  });
+});
+
+describe('Schedule: visit blocks', () => {
+  test("a visit block's accessible name reads its time, its issue and its Tradie", async () => {
+    const w = await webWorld();
+    await bookedTap(w);
+    const cookie = await w.signIn();
+
+    const name = 'aria-label="9:00 am – 11:00 am, The kitchen tap is dripping, Pete&#39;s Plumbing';
+    const tue = column(await page(w, '/calendar?view=week&date=2026-10-12', cookie), '2026-10-13');
+    expect(tue).toContain(name);
+
+    const day = grid(await page(w, '/calendar?view=day&date=2026-10-13', cookie), 'day');
+    expect(day).toContain(name);
   });
 });
 
