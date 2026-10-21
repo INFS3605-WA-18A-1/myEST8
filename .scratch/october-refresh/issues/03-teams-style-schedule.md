@@ -1,6 +1,6 @@
 # A Teams-style schedule
 
-Status: ready-for-agent
+Status: resolved
 Branch: schedule-teams-calendar
 Spec: ../spec.md
 
@@ -90,12 +90,12 @@ The period is a title beside the arrows, not a sentence under the page name. Eac
 
 ## Acceptance criteria
 
-- [ ] Page tests (`test/web/`):
+- [x] Page tests (`test/web/`):
   - the toolbar's Today link, Previous and Next (with accessible names) and the period title, for each view
   - today's column and date are marked (`aria-current="date"`)
   - the current-time line is present on today and absent on other weeks
   - each visit block's accessible name has its time, issue and Tradie
   - every existing calendar test still passes, or is updated only where the markup it checked changed, never weakened
-- [ ] Browser test at 1366 px: the Week grid is visible with the toolbar on one row, and pressing Next then Today returns to this week. At 390 px: no sideways page scroll.
-- [ ] `docs/design-system.md`'s Schedule section describes the new look.
-- [ ] `npm run check` passes.
+- [x] Browser test at 1366 px: the Week grid is visible with the toolbar on one row, and pressing Next then Today returns to this week. At 390 px: no sideways page scroll.
+- [x] `docs/design-system.md`'s Schedule section describes the new look.
+- [x] `npm run check` passes.
