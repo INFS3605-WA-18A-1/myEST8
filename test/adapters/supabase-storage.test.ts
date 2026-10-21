@@ -18,6 +18,14 @@ describe('Supabase Storage', () => {
     expect([...(await blobs.get('7/abc'))]).toEqual([1, 2, 3]);
   });
 
+  test('a new sb_secret_ key goes only in apikey: it is not a JWT, so Storage refuses it as a Bearer token', async () => {
+    const stub = stubFetch(() => new Response('{}'));
+    const blobs = createSupabaseStorage({ url: 'https://abc.supabase.co', serviceKey: 'sb_secret_abc123', fetch: stub.fetch });
+    await blobs.put('7/abc', new Uint8Array([1]), 'image/jpeg');
+    expect(stub.requests[0]!.headers.get('apikey')).toBe('sb_secret_abc123');
+    expect(stub.requests[0]!.headers.get('authorization')).toBeNull();
+  });
+
   test('asks for an upload URL and returns it whole', async () => {
     const { blobs, requests } = storage(() => json({ url: '/object/upload/sign/files/staging/7/abc?token=t0k' }));
     expect(await blobs.uploadUrl('staging/7/abc')).toBe('https://abc.supabase.co/storage/v1/object/upload/sign/files/staging/7/abc?token=t0k');

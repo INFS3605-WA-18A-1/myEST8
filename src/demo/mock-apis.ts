@@ -4,7 +4,7 @@
 
 import { Hono, type Context } from 'hono';
 import { wallClock, zonedInstant } from '../zoned-time.ts';
-import type { Summariser } from '../ports.ts';
+import type { Composer, Summariser } from '../ports.ts';
 import { mockClassify } from './mock-classifier.ts';
 import { isTrade, mockTradeAnswers } from './mock-trades.ts';
 
@@ -344,5 +344,13 @@ export const mockSummariser: Summariser = {
     const head = first.length > 120 ? `${first.slice(0, 119).trimEnd()}…` : first;
     const location = answers.location?.trim();
     return { summary: location ? `${head} (${location.slice(0, 30)})` : head };
+  },
+};
+
+/** The demo's Composer: the draft between a greeting to `facts.tenantName` (when it has one) and the Agency's name, so it reads as written from notes. Deterministic. */
+export const mockComposer: Composer = {
+  async compose({ facts, draft, agencyName }) {
+    const { tenantName } = facts as { tenantName?: unknown };
+    return { text: [typeof tenantName === 'string' ? `Hi ${tenantName},` : null, draft, agencyName].filter((part) => part !== null).join('\n\n') };
   },
 };

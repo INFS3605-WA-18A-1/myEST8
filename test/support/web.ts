@@ -32,8 +32,8 @@ export function visible(page: string) {
 }
 
 /** The standard world behind the web app, with helpers to sign in and click through pages. */
-export async function webWorld(options: { demo?: DemoControls; connectors?: ChannelConnectors } = {}) {
-  const w = await world();
+export async function webWorld(options: { demo?: DemoControls; connectors?: ChannelConnectors; composer?: null } = {}) {
+  const w = await world(options.composer === null ? { composer: null } : {});
   const web = createWebApp({
     app: w.h.app,
     sessions: createSessions(w.h.db, w.h.clock),

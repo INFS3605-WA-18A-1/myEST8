@@ -21,6 +21,9 @@ export type UrgentRepairStatus = 'reminder_sent' | 'receipt_received' | 'receipt
 export type ReceiptVia = 'upload' | ChannelType;
 /** A claim over this is surely a typo (the limit is $1,000): refused rather than stored. */
 const MAX_CLAIM_CENTS = 100_000_00;
+/** What a Property Manager may type to have a follow-up drafted, and the most a follow-up may say once sent. */
+const MAX_FOLLOW_UP_NOTES = 1000;
+const MAX_FOLLOW_UP_TEXT = 4000;
 export type PhotoMetadata = 'ok' | 'flagged' | 'no_metadata';
 
 export interface Issue {
@@ -258,7 +261,7 @@ function propertyFilter(propertyIds: number[] | null): [string, Param[]] {
 }
 
 /** Issues in intake, Maintenance Requests, Tickets, Jobs, Urgent Repairs, the message log and the Ticket timeline. */
-export function createTickets({ db, clock, settings, modules }: Context) {
+export function createTickets({ db, clock, settings, ports, modules }: Context) {
 
   async function issue(id: number): Promise<Issue> {
     const row = await one<IssueRow>(db, 'SELECT * FROM issues WHERE id = ?', id);
@@ -276,6 +279,13 @@ export function createTickets({ db, clock, settings, modules }: Context) {
     const row = await one<TicketRow>(db, 'SELECT * FROM tickets WHERE id = ?', id);
     if (!row) throw new Error(`Ticket ${id} not found`);
     return toTicket(row);
+  }
+
+  /** An issue of the Agency still in intake: the only kind a follow-up to the Tenant can be about. */
+  async function followUpIssue(agencyId: number, issueId: number) {
+    const found = await issueInAgency(agencyId, issueId);
+    if (!IN_INTAKE.includes(found.status)) invalid('Only a Maintenance Request still in intake can be followed up');
+    return found;
   }
 
   async function ticketInAgency(agencyId: number, id: number) {
@@ -534,6 +544,60 @@ export function createTickets({ db, clock, settings, modules }: Context) {
         return rejected;
       });
       await modules.notifications.send(rejected.tenantId, 'tenant.rejected', { reason: trimmed }, { issueId });
+    },
+
+    /**
+     * Writes the Property Manager's notes up as a message to the Tenant, for them to check and edit. The model
+     * only rewords the notes (ADR 0011); with no model, or when it fails, the notes come back as written, not
+     * marked as AI. Sends nothing.
+     */
+    async draftFollowUp(agencyId: number, propertyManagerId: number, issueId: number, notes: string) {
+      const trimmed = notes.trim();
+      const found = await followUpIssue(agencyId, issueId);
+      if (!trimmed) invalid('Write what you want to say', 'notes');
+      if (trimmed.length > MAX_FOLLOW_UP_NOTES) invalid(`Keep your notes to ${MAX_FOLLOW_UP_NOTES} characters`, 'notes');
+      const { composer } = ports;
+      if (!composer) return { text: trimmed, byAI: false };
+      const { profiles } = modules;
+      const [tenant, property, agency, propertyManager, channel] = await Promise.all([
+        profiles.person(found.tenantId),
+        profiles.property(found.propertyId),
+        profiles.agency(agencyId),
+        profiles.propertyManager(propertyManagerId),
+        modules.notifications.channelFor(found.tenantId),
+      ]);
+      try {
+        const { text } = await composer.compose({
+          template: 'tenant.follow_up',
+          purpose: 'A Property Manager following up with the Tenant about their Maintenance Request',
+          recipientRole: 'tenant',
+          channel,
+          agencyName: agency.name,
+          facts: {
+            tenantName: tenant.name,
+            propertyAddress: property.address,
+            request: found.summary ?? found.description,
+            propertyManagerName: propertyManager.name,
+            notes: trimmed,
+          },
+          untrustedFields: ['request'],
+          draft: trimmed,
+          mustInclude: [],
+        });
+        return { text, byAI: true };
+      } catch {
+        return { text: trimmed, byAI: false };
+      }
+    },
+
+    /** Sends the Tenant the follow-up as the Property Manager left it, on the channel intake would reply on. Returns the Tenant's name. */
+    async sendFollowUp(agencyId: number, issueId: number, text: string) {
+      const trimmed = text.trim();
+      const found = await followUpIssue(agencyId, issueId);
+      if (!trimmed) invalid('Write a message to send', 'text');
+      if (trimmed.length > MAX_FOLLOW_UP_TEXT) invalid(`Keep the message to ${MAX_FOLLOW_UP_TEXT} characters`, 'text');
+      await modules.notifications.send(found.tenantId, 'tenant.follow_up', { text: trimmed }, { issueId });
+      return (await modules.profiles.person(found.tenantId)).name;
     },
 
     async changeUrgency(agencyId: number, target: { issueId: number } | { ticketId: number }, urgency: Urgency) {

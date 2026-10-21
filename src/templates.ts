@@ -111,6 +111,8 @@ export const templates = {
     'Repair complete',
     (d) => `The repair at ${d.propertyAddress} is complete and we've closed it. Thanks for your patience.`,
   ),
+  // The Property Manager's own message, checked and sent as it stands: the body is the text, whoever or whatever drafted it.
+  'tenant.follow_up': template<{ text: string }>('About your maintenance request', (d) => d.text),
 
   'tradie.quote_request': template<{ trade: Trade; urgency: Urgency; description: string; suburb: string; quoteLink: string }>(
     'Quote request',
