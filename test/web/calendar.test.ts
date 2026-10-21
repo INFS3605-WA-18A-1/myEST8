@@ -292,6 +292,24 @@ describe('Schedule: Site Inspections and who is free', () => {
     expect(text).not.toContain("Pete's Plumbing");
   }, 60_000);
 
+  test('the panel starts with a skip link to the schedule', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    const html = await page(w, '/calendar', cookie);
+    const panel = freePanel(html);
+
+    // First in the panel, so a keyboard user can jump past every free Tradie.
+    const skip = panel.indexOf('Skip to the schedule');
+    expect(skip).toBeGreaterThan(-1);
+    expect(skip).toBeLessThan(panel.indexOf('id="free-today"'));
+    expect(panel).toContain('<a href="#schedule" class="skip-link">Skip to the schedule</a>');
+    expect(html).toContain('id="schedule"');
+
+    const next = await page(w, '/calendar?view=week&date=2026-10-19', cookie);
+    expect(next).not.toContain('Skip to the schedule');
+  });
+
   test('with no Tradies, the panel links to add one', async () => {
     const w = await webWorld();
     const cookie = await w.signUp();

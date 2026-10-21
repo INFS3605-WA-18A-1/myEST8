@@ -100,7 +100,7 @@ export function calendarPages() {
           )}
           <div class="schedule-board">
             ${directory ? freeTodayPanel(freeToday(directory, every, today, timeZone), directory.length) : ''}
-            <div class="schedule-main">${view === 'day' ? dayView(first, byDay.get(first) ?? [], ctx) : view === 'week' ? weekView(days, byDay, ctx) : monthView(period, byDay, ctx)}</div>
+            <div class="schedule-main" id="schedule" tabindex="-1">${view === 'day' ? dayView(first, byDay.get(first) ?? [], ctx) : view === 'week' ? weekView(days, byDay, ctx) : monthView(period, byDay, ctx)}</div>
           </div>
         `,
       }),
@@ -244,6 +244,8 @@ function initials(name: string): string {
  * Who is free today, when today is in the period. One bounded entry per Tradie, the
  * same block as Dispatch's Tradie entry: initials, the business name, their Trades,
  * their myEST8 rating. No distance and no Google rating, which that entry also shows.
+ * The first item is a skip link: from 1024 px the panel is painted on the right but
+ * comes first in the page, so the keyboard would otherwise walk every Tradie before the grid.
  */
 function freeTodayPanel(free: FreeTradie[], tradieCount: number): Html {
   const body = free.length
@@ -252,6 +254,7 @@ function freeTodayPanel(free: FreeTradie[], tradieCount: number): Html {
       ? html`<p class="schedule-free-note">Every Tradie has a visit today.</p>`
       : html`<p class="schedule-free-note">No Tradies yet. <a class="link" href="/tradies#add-tradie">Add a Tradie</a></p>`;
   return html`<aside class="schedule-free" aria-labelledby="free-today">
+    <a href="#schedule" class="skip-link">Skip to the schedule</a>
     <h2 id="free-today" class="schedule-free-title">Free today${tradieCount ? html` <span class="num">(${free.length})</span>` : ''}</h2>
     ${body}
   </aside>`;
