@@ -1,6 +1,6 @@
 # Document geocoding with Nominatim
 
-Status: ready-for-agent
+Status: resolved
 Spec: ../spec.md
 
 ## What to write
@@ -17,6 +17,6 @@ Spec: ../spec.md
 
 ## Acceptance criteria
 
-- [ ] ADR 0012 exists, with the decision and its consequences.
-- [ ] No doc says the Google key needs the Geocoding API, or that Google places addresses on the map.
-- [ ] The env examples list `NOMINATIM_URL` as optional, with its default.
+- [x] ADR 0012 exists, with the decision and its consequences.
+- [x] No doc says the Google key needs the Geocoding API, or that Google places addresses on the map.
+- [x] The env examples list `NOMINATIM_URL` as optional, with its default.
