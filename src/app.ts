@@ -50,6 +50,7 @@ export function createApp(
       imageMatcher: deps.imageMatcher,
       quoteReader: deps.quoteReader,
       summariser: deps.summariser,
+      composer: deps.composer,
       places: deps.places,
       tradeSuggester: deps.tradeSuggester,
       fetchMedia: deps.fetchMedia,
