@@ -308,6 +308,15 @@ function nextSeven(board: string) {
   return board.slice(start, board.indexOf('</section>', start));
 }
 
+/** The day chip linking to `href`, so its attributes and text are checked on their own. */
+function dayChip(section: string, href: string): string {
+  const needle = `href="${href.replaceAll('&', '&amp;')}"`;
+  const at = section.indexOf(needle);
+  if (at < 0) throw new Error(`No day chip links to ${href}`);
+  const start = section.lastIndexOf('<a ', at);
+  return section.slice(start, section.indexOf('</a>', at));
+}
+
 /** The Mine/All control, so its links are not confused with the day chips. */
 function viewsNav(board: string) {
   const start = board.indexOf('aria-label="Views"');
@@ -377,6 +386,15 @@ describe('picking a day in the Next 7 days', () => {
     expect(strip).not.toContain('2:00 pm');
     expect(strip).not.toContain(`href="/tickets/${monday.ticketId}"`);
     expect(strip).toContain('Tuesday 13 October');
+  });
+
+  test("today's chip says today when another day is chosen", async () => {
+    const { w, cookie } = await twoDays();
+
+    const strip = nextSeven(await page(w, '/?day=2026-10-13', cookie));
+
+    expect(dayChip(strip, '/?day=2026-10-12#next-7-days')).toContain('<span class="sr-only">today</span>');
+    expect(dayChip(strip, '/?day=2026-10-13#next-7-days')).not.toContain('today</span>');
   });
 
   test('Mine and All keep the chosen day, and Open calendar keeps All', async () => {

@@ -514,7 +514,7 @@ function nextSevenDays(bookings: Booking[], now: Date, timeZone: string, dayQuer
     body: html`<ol class="day-strip">
         ${days.map((day) => {
           const at = new Date(`${day}T00:00:00Z`);
-          return html`<li><a class="day-chip${day === today ? ' is-today' : ''}" href="${dayHref(day, filter)}" ${day === chosen ? html`aria-current="date"` : ''}><time datetime="${day}"><span class="day-name">${weekday.format(at)}</span><span class="day-num">${dateOf.format(at)}</span></time>${byDay.has(day) ? html`<span class="day-dot" role="img" aria-label="Has a visit"></span>` : ''}</a></li>`;
+          return html`<li><a class="day-chip${day === today ? ' is-today' : ''}" href="${dayHref(day, filter)}" ${day === chosen ? html`aria-current="date"` : ''}><time datetime="${day}"><span class="day-name">${weekday.format(at)}</span><span class="day-num">${dateOf.format(at)}</span></time>${day === today ? html`<span class="sr-only">today</span>` : ''}${byDay.has(day) ? html`<span class="day-dot" role="img" aria-label="Has a visit"></span>` : ''}</a></li>`;
         })}
       </ol>
       <h3 class="visit-heading">${longDay(chosen)}</h3>
