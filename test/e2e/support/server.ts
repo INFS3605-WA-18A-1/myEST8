@@ -56,22 +56,24 @@ export type DemoServer = { url: string; stop(): Promise<void> };
 
 /**
  * Starts the demo on `port` with its data kept in `schema` of this run's
- * database, and resolves once it is serving. `stop()` sends SIGTERM, as Ctrl+C
- * would, so the database is closed cleanly before the process exits.
+ * database, and resolves once it is serving. `stories` plays the demo stories
+ * (the dashboard then has visits); otherwise the Agency is empty. `stop()` sends
+ * SIGTERM, as Ctrl+C would, so the database is closed cleanly before the process exits.
  */
-export async function startDemo({ port, schema }: { port: number; schema: string }): Promise<DemoServer> {
+export async function startDemo({ port, schema, stories = false }: { port: number; schema: string; stories?: boolean }): Promise<DemoServer> {
   const url = `http://localhost:${port}`;
   const databaseUrl = process.env.E2E_DATABASE_URL;
   if (!databaseUrl) throw new Error('E2E_DATABASE_URL is not set: run the browser tests with `npm run test:e2e`');
   const child = spawn(DEMO_COMMAND[0], DEMO_COMMAND.slice(1), {
-    env: { ...process.env, ...MOCKED_APIS, PORT: String(port), PUBLIC_URL: url, SUPABASE_DB_URL: databaseUrl, DATABASE_SCHEMA: schema, DEMO_DATA: 'empty' },
+    env: { ...process.env, ...MOCKED_APIS, PORT: String(port), PUBLIC_URL: url, SUPABASE_DB_URL: databaseUrl, DATABASE_SCHEMA: schema, DEMO_DATA: stories ? 'stories' : 'empty' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let output = '';
   child.stdout!.on('data', (chunk) => (output += chunk));
   child.stderr!.on('data', (chunk) => (output += chunk));
+  const startMs = stories ? 180_000 : 30_000;
   await new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`The demo didn't start within 30s:\n${output}`)), 30_000);
+    const timer = setTimeout(() => reject(new Error(`The demo didn't start within ${startMs / 1000}s:\n${output}`)), startMs);
     child.stdout!.on('data', () => {
       if (output.includes('myEST8 demo running at')) {
         clearTimeout(timer);

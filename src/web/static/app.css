@@ -962,35 +962,50 @@
       text-decoration-color: var(--ink);
     }
 
-    /* ----- The count strip (the dashboard): numbers that link into the queues, under a Harbour line. */
+    /* ----- The count strip (the dashboard): numbers that link into the queues, under a Harbour line.
+       Two equal tiles per row under 640px, three from 640px, and all six on one row from 1024px.
+       The old auto-fit floor (10.5rem) wrapped them once the rail left less than that times six.
+       A 1px gap over the line colour is the divider, so it follows the row whatever the width. */
     .count-strip {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1px;
       margin: 0;
       padding: 0;
       list-style: none;
       overflow: hidden;
-      background: var(--surface);
+      background: var(--line);
       border: 1px solid var(--line);
       border-top: 3px solid var(--action);
       border-radius: 8px;
       box-shadow: var(--shadow-soft);
       font-size: 14px;
     }
-    .count-strip > li + li {
-      border-left: 1px solid var(--line);
-    }
-    @media (max-width: 40rem) {
-      .count-strip > li + li {
-        border-left: 0;
-        border-top: 1px solid var(--line);
+    @media (min-width: 40rem) {
+      .count-strip {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
       }
+    }
+    @media (min-width: 64rem) {
+      .count-strip {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+      }
+    }
+    .count-strip > li {
+      display: flex;
+      min-width: 0;
+      background: var(--surface);
+      /* The tile's own width decides the label size, not the screen: beside the rail at
+         1024px a tile is about 125px, and 14px cannot fit "Requests to confirm" on one line. */
+      container-type: inline-size;
     }
     .count-item {
       display: flex;
+      flex: 1 1 auto;
       flex-direction: column;
       align-items: flex-start;
       gap: 2px;
+      min-width: 0;
       min-height: 44px;
       padding: 10px 16px;
       color: var(--ink);
@@ -1039,7 +1054,14 @@
       background: #c8372d;
     }
     .count-label {
+      min-width: 0;
       color: var(--muted);
+      overflow-wrap: break-word;
+    }
+    @container (max-width: 10.5rem) {
+      .count-label {
+        font-size: 12px;
+      }
     }
 
     /* The dashboard: Urgent Repairs lead the right column, and long lists scroll inside their own box so the page stays short. */
@@ -1237,7 +1259,7 @@
       box-shadow: inset 3px 0 0 var(--hivis);
     }
 
-    /* Next 7 days: a strip of day chips (today filled, a dot where a visit is booked), then one row per visit. */
+    /* Next 7 days: day chips (the chosen day filled, today ringed, a dot where a visit is booked), then that day's visits. */
     .day-strip {
       display: grid;
       grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -1256,6 +1278,10 @@
       border-radius: 10px;
       font-size: 12px;
       color: var(--muted);
+      text-decoration: none;
+    }
+    a.day-chip:hover {
+      color: var(--ink);
     }
     .day-chip time {
       display: grid;
@@ -1268,13 +1294,22 @@
       line-height: 1.2;
       color: var(--ink);
     }
+    /* Today stays ringed in Harbour. The chosen day is filled, including when it is today. */
     .day-chip.is-today {
-      background: #e8f0f7;
-      border-color: #8fb0cc;
+      border-color: var(--action);
     }
-    .day-chip.is-today .day-name {
+    .day-chip[aria-current='date'] {
+      background: var(--info-bg);
+      border-color: var(--action);
+    }
+    .day-chip[aria-current='date'] .day-name {
       font-weight: 600;
       color: var(--ink);
+    }
+    @media (max-width: 40rem), (pointer: coarse) {
+      .day-chip {
+        min-height: 44px;
+      }
     }
     .day-dot {
       width: 5px;
@@ -1282,6 +1317,12 @@
       margin-top: 1px;
       border-radius: 50%;
       background: var(--action);
+    }
+    .visit-heading {
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 16px;
+      font-weight: 600;
     }
     .visit-list {
       display: grid;
@@ -1291,17 +1332,12 @@
     }
     .visit-row {
       display: grid;
-      grid-template-columns: 3.5rem minmax(0, 1fr) auto;
+      grid-template-columns: auto minmax(0, 1fr) auto;
       gap: 8px;
       align-items: baseline;
       padding: 10px 0;
       border-top: 1px solid var(--line);
       font-size: 14px;
-    }
-    .visit-day {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--muted);
     }
     .visit-what {
       display: grid;
