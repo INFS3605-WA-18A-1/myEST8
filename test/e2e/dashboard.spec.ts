@@ -99,6 +99,50 @@ function dayOfHref(href: string) {
   return day;
 }
 
+test('a visit time keeps a column wide enough for 12:30 pm', async ({ browser }) => {
+  test.setTimeout(300_000);
+  const server = await startDemo({ port: freePort(), schema: uniqueSchema(), stories: true });
+  try {
+    const context = await browser.newContext({ baseURL: server.url });
+    const page = await context.newPage();
+    page.setDefaultTimeout(20_000);
+    await page.setViewportSize({ width: 1366, height: 900 });
+    await signIn(page);
+    await page.goto('/');
+
+    const week = nextSeven(page);
+    await (await laterBookedDay(week)).click();
+    const time = week.locator('.visit-time').first();
+    await expect(time).toBeVisible();
+    const measured = await time.evaluate((el) => {
+      const probe = document.createElement('span');
+      const style = getComputedStyle(el);
+      probe.textContent = '12:30 pm';
+      probe.style.font = style.font;
+      probe.style.fontWeight = style.fontWeight;
+      probe.style.fontVariantNumeric = style.fontVariantNumeric;
+      probe.style.position = 'absolute';
+      probe.style.whiteSpace = 'nowrap';
+      probe.style.visibility = 'hidden';
+      document.body.appendChild(probe);
+      const needed = probe.getBoundingClientRect().width;
+      probe.remove();
+      return { column: el.getBoundingClientRect().width, needed };
+    });
+    expect(measured.column).toBeGreaterThanOrEqual(measured.needed - 1);
+
+    const edges = await week.locator('.visit-what').evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().left)));
+    expect(new Set(edges).size).toBe(1);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(await week.evaluate((el) => el.scrollWidth - el.clientWidth)).toBe(0);
+
+    await context.close();
+  } finally {
+    await server.stop();
+  }
+});
+
 test("pressing a later day shows that day's visit and not today's, by mouse and by keyboard", async ({ browser }) => {
   test.setTimeout(300_000);
   const server = await startDemo({ port: freePort(), schema: uniqueSchema(), stories: true });
