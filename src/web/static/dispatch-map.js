@@ -1,10 +1,20 @@
 // The Dispatch map (src/web/pages/dispatch.ts). The page works without this file, as
-// a table with a panel per Property; this adds the Leaflet map, and makes the map
+// a table with a panel per Property; this adds the MapLibre GL JS map, and makes the map
 // pins and the table rows pick the panel shown beside the map.
+//
+// MapLibre draws the basemap (OpenFreeMap's Positron style) and works out which pins
+// overlap (a GeoJSON source with `cluster: true`). The pins and the groups themselves are
+// HTML buttons laid over the map, so each one is a real focusable element: Tab to it, Enter
+// or a click picks it.
 //
 // Everything it draws comes from the JSON block #dispatch-data, and is built with
 // DOM calls and textContent, never innerHTML, so an address can't inject markup. Colours
-// come from the design tokens in app.css through the classes below, never from here.
+// come from the design tokens in app.css through the classes below, never from here
+// (the one exception is the search ring, drawn by MapLibre: it reads --action from the CSS).
+//
+// This is an ES module, so MapLibre (an ES module too) is imported once the page has run
+// far enough to need it: if that, WebGL or the basemap's style fails, the map's place
+// says so and the table and panels still work.
 
 (() => {
   const dataElement = document.getElementById('dispatch-data');
@@ -15,7 +25,6 @@
   const data = JSON.parse(dataElement.textContent || '{}');
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const sideBySide = window.matchMedia('(min-width: 64rem)'); // the breakpoint where the panel sits beside the map
-  const SVG = 'http://www.w3.org/2000/svg';
 
   // === Pins ===
   // Two glyphs, copied from the page's #dispatch-pin-icons template: a house on a disc for
@@ -24,6 +33,9 @@
   // none small and white), with its number of open Tickets on its shoulder.
   const glyphs = document.getElementById('dispatch-pin-icons');
   const PIN_SIZE = { urgent: 44, high: 38, routine: 32, none: 26, tradie: 28 };
+  const GROUP_SIZE = 36;
+  const RANK = { urgent: 3, high: 2, routine: 1 };
+  const WORST = ['', 'routine', 'high', 'urgent'];
 
   function glyph(kind) {
     const svg = glyphs?.content.querySelector(`[data-icon="${kind}"] svg`);
@@ -53,14 +65,26 @@
     return element;
   }
 
+  /** The button a map marker is: it is what takes focus, and what a screen reader reads. */
+  function markerButton(inner, size, label) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'map-pin-icon';
+    button.style.width = button.style.height = `${size}px`;
+    button.setAttribute('aria-label', label);
+    button.append(inner);
+    return button;
+  }
+
   // === Picking something ===
   const panels = new Map([...side.querySelectorAll('[data-panel]')].map((panel) => [panel.dataset.panel, panel]));
-  const markers = new Map(); // key -> { marker, element, latlng }
+  const markers = new Map(); // key -> { marker, button, element, lngLat, rank, shown }
+  const groups = new Map(); // cluster id -> { marker, button, disc }: the groups on the map now
   let selected = null;
   let trigger = null;
-  let ring = null;
-  let map = null;
-  let group = null; // the pins, grouped where they overlap
+  let map = null; // null until MapLibre has loaded the basemap's style, and again if the map fails
+  let maplibregl = null;
+  let step = 0; // counts picks and hand moves, so a pick that is overtaken stops moving the map
 
   function select(key, from) {
     const panel = panels.get(key);
@@ -73,18 +97,7 @@
     for (const button of panel.querySelectorAll('[data-dispatch-clear]')) button.hidden = false;
     for (const row of document.querySelectorAll(`[data-row="${key}"]`)) row.dataset.selected = 'true';
     for (const link of document.querySelectorAll(`[data-select="${key}"]`)) link.setAttribute('aria-current', 'true');
-
-    const pinned = markers.get(key);
-    if (pinned && map) {
-      pinned.element.classList.add('is-selected');
-      pinned.marker.setZIndexOffset(100000);
-      // A group holding the picked pin is marked too, in case the map is zoomed out again.
-      group.refreshClusters(pinned.marker);
-      // The ring is the Tradie search radius, drawn quietly; the map doesn't zoom out to it.
-      if (key.startsWith('property-')) ring = L.circle(pinned.latlng, { radius: data.radiusKm * 1000, className: 'dispatch-ring', interactive: false }).addTo(map);
-      // Zoom in until the pin stands on its own, if it was in a group, and bring it into view.
-      group.zoomToShowLayer(pinned.marker);
-    }
+    if (map) showOnMap(key, !(from && from.dataset.pinKey));
 
     // Picked from the table, the map and panel are above: scroll up to them.
     const board = side.parentElement;
@@ -97,21 +110,21 @@
   function clearSelection(returnFocus) {
     if (!selected) return;
     const pinned = markers.get(selected);
+    step++;
     panels.get(selected)?.classList.remove('is-open');
     side.classList.remove('has-selection');
-    pinned?.element.classList.remove('is-selected');
     if (pinned) {
-      pinned.marker.setZIndexOffset((pinned.marker.options.rank + 1) * 1000);
-      group?.refreshClusters(pinned.marker);
+      pinned.element.classList.remove('is-selected');
+      pinned.button.style.zIndex = String((pinned.rank + 1) * 1000);
     }
     for (const row of document.querySelectorAll('[data-row][data-selected]')) delete row.dataset.selected;
     for (const link of document.querySelectorAll('[data-select][aria-current]')) link.removeAttribute('aria-current');
-    ring?.remove();
-    ring = null;
+    for (const shown of groups.values()) shown.disc.classList.remove('is-selected');
+    setRing(null);
     selected = null;
     if (returnFocus && trigger) {
-      // A pin's element is made again when its group splits or forms: focus the one there now, or the map.
-      const target = trigger.isConnected ? trigger : trigger.dataset.pinKey ? pinned?.marker.getElement() || mapElement : null;
+      // A pin's button is taken off the map when a group forms: focus the one there now, or the map.
+      const target = trigger.isConnected ? trigger : trigger.dataset.pinKey ? (pinned?.shown ? pinned.button : map?.getCanvas()) : null;
       target?.focus();
     }
     trigger = null;
@@ -131,100 +144,275 @@
   });
 
   // === The map ===
-  // Without Leaflet or its grouping (a file didn't load) the table and panels still work.
-  if (typeof L !== 'undefined' && L.MarkerClusterGroup) {
-    mapElement.replaceChildren();
-    map = L.map(mapElement, { scrollWheelZoom: false, zoomAnimation: !reduceMotion, fadeAnimation: !reduceMotion, markerZoomAnimation: !reduceMotion });
-    // A view first: markers only get their elements once the map has one.
-    map.setView([-33.8688, 151.2093], 12);
-    const { url, subdomains, attribution, maxZoom } = data.tiles;
-    L.tileLayer(url, { ...(subdomains ? { subdomains } : {}), attribution, maxZoom }).addTo(map);
-    // Street level is close enough to tell neighbours apart; past it, pins still together fan out.
-    map.setMaxZoom(Math.min(maxZoom, 18));
-    // The page scrolls: the wheel only zooms the map once the map has been clicked or focused.
-    map.on('focus', () => map.scrollWheelZoom.enable());
-    map.on('blur', () => map.scrollWheelZoom.disable());
+  const PINS = 'dispatch-pins';
+  const RING = 'dispatch-ring';
 
-    // Leaflet makes a marker's element again each time it is shown (a group splitting does that),
-    // so the element's name and key are set wherever it is made, here.
-    const PinIcon = L.DivIcon.extend({
-      createIcon(old) {
-        const element = L.DivIcon.prototype.createIcon.call(this, old);
-        element.setAttribute('aria-label', this.options.label);
-        if (this.options.key) element.dataset.pinKey = this.options.key;
-        return element;
-      },
-    });
+  function note(text) {
+    const paragraph = document.createElement('p');
+    paragraph.className = 'dispatch-map-fallback';
+    paragraph.textContent = text;
+    return paragraph;
+  }
 
-    const RANK = { urgent: 3, high: 2, routine: 1 };
-    const WORST = ['', 'routine', 'high', 'urgent'];
+  /** The map can't run: say so in its place, pointing to the table, which has every pin's facts. */
+  function fail() {
+    map?.remove();
+    map = null;
+    for (const entry of markers.values()) entry.shown = false;
+    markers.clear();
+    groups.clear();
+    mapElement.replaceChildren(note('The map could not load. The table below lists the same Properties, each with its Tickets and urgency.'));
+    mapElement.setAttribute('aria-label', 'Map (not available)');
+  }
 
-    // A group: a white disc with the number of pins in it, ringed in Rust or Ochre when a
-    // Property in it has an Urgent or High Ticket. Enter or a click zooms in to it.
-    group = L.markerClusterGroup({
-      maxClusterRadius: 40,
-      showCoverageOnHover: false,
-      animate: !reduceMotion,
-      spiderLegPolylineOptions: { className: 'dispatch-spider-leg', weight: 1.5 },
-      iconCreateFunction(cluster) {
-        const children = cluster.getAllChildMarkers();
-        const properties = children.filter((m) => m.options.rank >= 0);
-        const tradies = children.length - properties.length;
-        const worst = WORST[Math.max(0, ...properties.map((m) => m.options.rank))];
-        const element = groupDisc(children.length);
-        if (selected && children.includes(markers.get(selected)?.marker)) element.classList.add('is-selected');
-        if (worst === 'urgent' || worst === 'high') element.classList.add(`is-${worst}`);
-        const parts = [];
-        if (properties.length) parts.push(properties.length === 1 ? '1 Property' : `${properties.length} Properties`);
-        if (tradies) parts.push(tradies === 1 ? '1 Tradie' : `${tradies} Tradies`);
-        const label = `Group of ${children.length} pins: ${parts.join(' and ')}${worst && worst !== 'routine' ? `, worst urgency ${worst}` : ''}. Press Enter to zoom in.`;
-        return new PinIcon({ className: 'map-pin-icon map-group-icon', html: element, iconSize: [36, 36], label });
-      },
-    });
+  function canUseWebgl() {
+    const canvas = document.createElement('canvas');
+    return !!(canvas.getContext('webgl2') || canvas.getContext('webgl'));
+  }
 
-    function add(key, kind, level, count, name, item, rank) {
-      const latlng = L.latLng(item.lat, item.lng);
-      const element = pin(kind, level, count);
-      const size = PIN_SIZE[kind === 'tradie' ? 'tradie' : level];
-      const marker = L.marker(latlng, {
-        icon: new PinIcon({ className: 'map-pin-icon', html: element, iconSize: [size, size], iconAnchor: [size / 2, size / 2], label: name, key }),
-        keyboard: true,
-        title: name,
-        zIndexOffset: (rank + 1) * 1000,
-        riseOnHover: true,
-        rank,
+  function groupName(count, properties, tradies, worst) {
+    const parts = [];
+    if (properties) parts.push(properties === 1 ? '1 Property' : `${properties} Properties`);
+    if (tradies) parts.push(tradies === 1 ? '1 Tradie' : `${tradies} Tradies`);
+    return `Group of ${count} pins: ${parts.join(' and ')}${worst && worst !== 'routine' ? `, worst urgency ${worst}` : ''}. Press Enter to zoom in.`;
+  }
+
+  function addPin(key, kind, level, count, label, item, rank) {
+    const element = pin(kind, level, count);
+    const size = PIN_SIZE[kind === 'tradie' ? 'tradie' : level];
+    const button = markerButton(element, size, label);
+    button.dataset.pinKey = key;
+    button.style.zIndex = String((rank + 1) * 1000);
+    button.addEventListener('click', () => select(key, button));
+    const lngLat = [item.lng, item.lat];
+    const marker = new maplibregl.Marker({ element: button, anchor: 'center' }).setLngLat(lngLat);
+    const entry = { marker, button, element, lngLat, rank, shown: false };
+    markers.set(key, entry);
+    return entry;
+  }
+
+  /** Every pin as a GeoJSON point, which is all MapLibre needs to work out the groups. */
+  function pinFeatures() {
+    return [...markers].map(([key, entry]) => ({ type: 'Feature', geometry: { type: 'Point', coordinates: entry.lngLat }, properties: { key, rank: entry.rank } }));
+  }
+
+  /** The groups MapLibre has made at this zoom, one feature each (a tile edge can repeat one). */
+  function clusterFeatures() {
+    const seen = new Map();
+    for (const feature of map.querySourceFeatures(PINS, { filter: ['has', 'point_count'] })) seen.set(feature.properties.cluster_id, feature);
+    return [...seen.values()];
+  }
+
+  /** Puts a button on the map for each pin and group MapLibre has made at this zoom, and takes the rest off. */
+  function drawMarkers() {
+    if (!map.getSource(PINS) || !map.isSourceLoaded(PINS)) return;
+    const standing = new Set();
+    const grouped = new Set();
+    for (const feature of map.querySourceFeatures(PINS)) {
+      const props = feature.properties;
+      if (props.cluster) {
+        const id = props.cluster_id;
+        grouped.add(id);
+        if (!groups.has(id)) addGroup(id, feature.geometry.coordinates, props);
+      } else {
+        standing.add(props.key);
+      }
+    }
+    for (const [key, entry] of markers) {
+      if (standing.has(key) === entry.shown) continue;
+      if (standing.has(key)) entry.marker.addTo(map);
+      else entry.marker.remove();
+      entry.shown = standing.has(key);
+    }
+    for (const [id, shown] of groups) {
+      if (grouped.has(id)) continue;
+      shown.marker.remove();
+      groups.delete(id);
+    }
+  }
+
+  // A group: a white disc with the number of pins in it, ringed in Rust or Ochre when a
+  // Property in it has an Urgent or High Ticket. Enter or a click zooms in to it.
+  function addGroup(id, lngLat, props) {
+    const count = props.point_count;
+    const worst = WORST[Math.max(0, props.rank)];
+    const disc = groupDisc(count);
+    if (worst === 'urgent' || worst === 'high') disc.classList.add(`is-${worst}`);
+    const button = markerButton(disc, GROUP_SIZE, groupName(count, props.properties, props.tradies, worst));
+    button.classList.add('map-group-icon');
+    button.style.zIndex = '500';
+    button.addEventListener('click', () => zoomToGroup(id, lngLat));
+    const marker = new maplibregl.Marker({ element: button, anchor: 'center' }).setLngLat(lngLat).addTo(map);
+    groups.set(id, { marker, button, disc });
+  }
+
+  async function zoomToGroup(id, lngLat) {
+    const zoom = await map.getSource(PINS).getClusterExpansionZoom(id);
+    map.easeTo({ center: lngLat, zoom: Math.min(zoom, map.getMaxZoom()), animate: !reduceMotion });
+    // The group's button goes when it splits: keep the keyboard on the map.
+    map.getCanvas().focus({ preventScroll: true });
+  }
+
+  /** The group holding this pin at the zoom the map is at, if the pin is in one. */
+  async function groupHolding(key) {
+    const source = map.getSource(PINS);
+    for (const feature of clusterFeatures()) {
+      const leaves = await source.getClusterLeaves(feature.properties.cluster_id, feature.properties.point_count, 0);
+      if (leaves.some((leaf) => leaf.properties.key === key)) return feature;
+    }
+    return null;
+  }
+
+  /** A group holding the picked pin is marked too, in case the map is zoomed out again. */
+  async function markSelectedGroup() {
+    const pinned = selected && markers.get(selected);
+    const turn = step;
+    const holder = pinned && !pinned.shown ? await groupHolding(selected) : null;
+    if (turn !== step) return;
+    for (const [id, shown] of groups) shown.disc.classList.toggle('is-selected', id === holder?.properties.cluster_id);
+  }
+
+  /** Waits for the map to finish moving and drawing (or a moment, if there was nothing to do). */
+  function settled() {
+    return new Promise((resolve) => {
+      const timer = setTimeout(resolve, 1500);
+      map.once('idle', () => {
+        clearTimeout(timer);
+        resolve();
       });
-      marker.on('click', () => select(key, marker.getElement()));
-      markers.set(key, { marker, element, latlng });
-      return marker;
+    });
+  }
+
+  // The picked pin: raised and ringed, with the Tradie search radius drawn quietly around a Property.
+  // Picked from the table (`bring`), the map zooms in until the pin stands on its own, and
+  // shows it; the map doesn't zoom out to the ring.
+  async function showOnMap(key, bring) {
+    const pinned = markers.get(key);
+    if (!pinned) return;
+    const turn = step;
+    pinned.element.classList.add('is-selected');
+    pinned.button.style.zIndex = '100000';
+    if (key.startsWith('property-')) setRing(pinned.lngLat);
+    if (bring && (!pinned.shown || !map.getBounds().contains(pinned.lngLat))) {
+      map.easeTo({ center: pinned.lngLat, animate: !reduceMotion });
+      await settled();
+    }
+    for (let attempt = 0; attempt < 6 && turn === step; attempt++) {
+      const holder = bring ? await groupHolding(key) : null;
+      if (!holder || turn !== step) break;
+      const zoom = await map.getSource(PINS).getClusterExpansionZoom(holder.properties.cluster_id);
+      if (zoom <= map.getZoom() && map.getZoom() >= map.getMaxZoom()) break;
+      map.easeTo({ center: pinned.lngLat, zoom: Math.min(Math.max(zoom, map.getZoom() + 0.01), map.getMaxZoom()), animate: !reduceMotion });
+      await settled();
+    }
+    if (turn === step) markSelectedGroup();
+  }
+
+  /** A line around `lngLat` at the Tradie search radius, or none. */
+  function setRing(lngLat) {
+    const source = map?.getSource(RING);
+    if (!source) return;
+    const coordinates = [];
+    if (lngLat) {
+      const dLat = data.radiusKm / 111.32;
+      const dLng = dLat / Math.cos((lngLat[1] * Math.PI) / 180);
+      for (let i = 0; i <= 128; i++) {
+        const angle = (i / 128) * 2 * Math.PI;
+        coordinates.push([lngLat[0] + dLng * Math.cos(angle), lngLat[1] + dLat * Math.sin(angle)]);
+      }
+    }
+    source.setData({ type: 'FeatureCollection', features: coordinates.length ? [{ type: 'Feature', geometry: { type: 'LineString', coordinates }, properties: {} }] : [] });
+  }
+
+  async function start() {
+    mapElement.replaceChildren(note('Loading the map…'));
+    if (!canUseWebgl()) return fail();
+    try {
+      maplibregl = await import('/assets/maplibre-gl.mjs');
+    } catch {
+      return fail();
     }
 
-    const propertyPins = data.properties.map((p) => {
-      const open = p.openTickets === 1 ? '1 open Ticket' : `${p.openTickets} open Tickets`;
-      const worst = p.urgency ? `, worst urgency ${p.urgency}` : '';
-      return add(p.key, 'property', p.urgency || 'none', p.openTickets, `${p.address}, ${open}${worst}`, p, RANK[p.urgency] || 0);
-    });
-    const tradiePins = data.tradies.map((t) =>
-      add(t.key, 'tradie', 'tradie', 0, `Tradie: ${t.name}, ${t.trades.join(', ').replaceAll('_', ' ')}`, t, -1),
-    );
-    group.addLayers([...propertyPins, ...tradiePins]);
-    map.addLayer(group);
-
-    // A pin is a button: Enter or Space picks it. (Leaflet turns Enter into a click only for markers with a popup.)
-    mapElement.addEventListener('keydown', (event) => {
-      if (event.key !== 'Enter' && event.key !== ' ') return;
-      const button = event.target instanceof Element ? event.target.closest('[data-pin-key]') : null;
-      if (!button) return;
-      event.preventDefault();
-      select(button.dataset.pinKey, button);
-    });
-
+    const propertyPoints = data.properties.map((p) => [p.lng, p.lat]);
+    const tradiePoints = data.tradies.map((t) => [t.lng, t.lat]);
     // Open on the Agency's Properties (the Tradies around them may be spread across Sydney).
-    const framed = propertyPins.length ? propertyPins : tradiePins;
-    if (framed.length) map.fitBounds(L.latLngBounds(framed.map((m) => m.getLatLng())), { padding: [32, 32], maxZoom: 15, animate: false });
-    // The map was sized by the stylesheet after it was made; make sure it knows.
-    requestAnimationFrame(() => map.invalidateSize());
+    const framed = propertyPoints.length ? propertyPoints : tradiePoints;
+    const bounds = framed.length ? framed.reduce((box, [lng, lat]) => box.extend([lng, lat]), new maplibregl.LngLatBounds(framed[0], framed[0])) : null;
+
+    mapElement.replaceChildren();
+    try {
+      map = new maplibregl.Map({
+        container: mapElement,
+        style: data.style,
+        center: [151.2093, -33.8688],
+        zoom: 11,
+        ...(bounds ? { bounds, fitBoundsOptions: { padding: 32, maxZoom: 15, animate: false } } : {}),
+        // Street level is close enough to tell neighbours apart.
+        maxZoom: 18,
+        // North up and flat: no rotating or tilting with the mouse, touch or keyboard.
+        dragRotate: false,
+        pitchWithRotate: false,
+        touchPitch: false,
+        maxPitch: 0,
+        // The credit OpenFreeMap asks for comes with its style: keep it written out in the corner.
+        attributionControl: { compact: false },
+      });
+    } catch {
+      return fail();
+    }
+    const current = map;
+    map.touchZoomRotate.disableRotation();
+    map.keyboard.disableRotation();
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false, showZoom: true, visualizePitch: false }), 'top-left');
+    // The page scrolls: the wheel only zooms the map once the map has been clicked or focused.
+    map.scrollZoom.disable();
+    mapElement.addEventListener('focusin', () => map?.scrollZoom.enable());
+    mapElement.addEventListener('focusout', () => map?.scrollZoom.disable());
+
+    let styled = false;
+    map.on('error', (event) => {
+      // Before its style is in, nothing can be drawn. After, a tile, sprite or font that fails just leaves the basemap plain.
+      if (map === current && !styled && !event.sourceId && !event.tile) fail();
+    });
+    map.once('style.load', () => {
+      styled = true;
+      const ring = getComputedStyle(mapElement).getPropertyValue('--action').trim() || '#1f5c8b';
+      map.addSource(RING, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addLayer({ id: RING, type: 'line', source: RING, paint: { 'line-color': ring, 'line-width': 1.5, 'line-opacity': 0.55, 'line-dasharray': [2.7, 4] } });
+      for (const p of data.properties) {
+        const open = p.openTickets === 1 ? '1 open Ticket' : `${p.openTickets} open Tickets`;
+        const worst = p.urgency ? `, worst urgency ${p.urgency}` : '';
+        addPin(p.key, 'property', p.urgency || 'none', p.openTickets, `${p.address}, ${open}${worst}`, p, RANK[p.urgency] || 0);
+      }
+      for (const t of data.tradies) addPin(t.key, 'tradie', 'tradie', 0, `Tradie: ${t.name}, ${t.trades.join(', ').replaceAll('_', ' ')}`, t, -1);
+      // MapLibre groups the points that are within 40 px of each other, as the map is zoomed, and says
+      // how many Properties and Tradies are in each, and the worst Urgency among them. Its layer draws nothing:
+      // the groups and pins are the buttons above.
+      map.addSource(PINS, {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: pinFeatures() },
+        cluster: true,
+        clusterRadius: 40,
+        clusterMaxZoom: 17,
+        clusterProperties: {
+          rank: ['max', ['get', 'rank']],
+          properties: ['+', ['case', ['>=', ['get', 'rank'], 0], 1, 0]],
+          tradies: ['+', ['case', ['<', ['get', 'rank'], 0], 1, 0]],
+        },
+      });
+      map.addLayer({ id: PINS, type: 'circle', source: PINS, paint: { 'circle-radius': 1, 'circle-opacity': 0 } });
+      map.on('render', drawMarkers);
+      // Moving the map by hand (the mouse, touch, keys, the zoom buttons) ends a pick's own zooming in.
+      map.on('movestart', (event) => {
+        if (event.originalEvent) step++;
+      });
+      map.on('moveend', markSelectedGroup);
+      // Arrived on a link to a panel before the map was ready: its pin is picked now.
+      if (selected) showOnMap(selected, true);
+    });
   }
+
+  start();
 
   // Arriving on a link to a panel (a reload, a shared address) picks it.
   const fromHash = location.hash.startsWith('#panel-') ? location.hash.slice('#panel-'.length) : null;

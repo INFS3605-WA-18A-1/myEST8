@@ -2997,7 +2997,7 @@
       gap: 8px;
       min-width: 0;
     }
-    /* Leaflet's panes stack up to z-index 1000: contain them so they stay under the top bar and the drawer. */
+    /* MapLibre's markers and controls carry z-indexes of their own: contain them so they stay under the top bar and the drawer. */
     .dispatch-map {
       position: relative;
       z-index: 0;
@@ -3027,24 +3027,33 @@
       font-size: 14px;
       color: var(--muted);
     }
-    .leaflet-container {
-      font-family: var(--font-body) !important;
-      background: var(--page) !important;
+    /* MapLibre's own stylesheet is loaded after this one: these are as specific as its rules, so they win. */
+    .dispatch-map.maplibregl-map {
+      font-family: var(--font-body);
     }
-    .leaflet-container a {
-      color: var(--action);
-    }
-    .leaflet-container:focus-visible {
+    .dispatch-map .maplibregl-canvas:focus-visible {
       outline: 2px solid var(--action);
-      outline-offset: 2px;
+      outline-offset: -2px;
+    }
+    .dispatch-map .maplibregl-ctrl-attrib {
+      font-family: var(--font-body);
+      font-size: 12px;
+    }
+    .dispatch-map .maplibregl-ctrl-group:not(:empty) {
+      border-radius: 8px;
+      box-shadow: 0 1px 4px rgb(19 33 46 / 0.2);
     }
 
-    .map-pin-icon {
+    /* A map marker is a button, so a pin or a group takes focus and Enter like any other. */
+    .dispatch-map .map-pin-icon {
+      display: block;
+      padding: 0;
       background: none;
       border: 0;
       border-radius: 50%;
+      cursor: pointer;
     }
-    .leaflet-marker-icon.map-pin-icon:focus-visible {
+    .dispatch-map .map-pin-icon:focus-visible {
       outline: 2px solid var(--action);
       outline-offset: 4px;
     }
@@ -3061,10 +3070,7 @@
       box-shadow: 0 1px 4px rgb(19 33 46 / 0.35);
       color: var(--surface);
     }
-    /* Leaflet gives svg elements inside its panes a z-index of 200, which would hide the count: set both. */
     .map-pin svg {
-      position: relative;
-      z-index: 0 !important;
       width: 55%;
       height: 55%;
     }
@@ -3120,15 +3126,6 @@
     .map-pin-tradie.is-selected::before {
       border-radius: 12px;
     }
-    /* The Tradie search radius: a quiet dashed line, no fill, so it never covers the streets. */
-    .dispatch-ring {
-      stroke: var(--action);
-      stroke-width: 1.5;
-      stroke-opacity: 0.55;
-      stroke-dasharray: 4 6;
-      fill: none;
-    }
-
     /* A group of pins that overlap: a white disc with how many, ringed in Night, or in Rust or
        Ochre when it holds an Urgent or High Property. */
     .map-group {
@@ -3156,16 +3153,6 @@
     .map-group.is-selected {
       outline: 3px solid var(--action);
       outline-offset: 2px;
-    }
-    .dispatch-spider-leg {
-      stroke: var(--ink);
-      stroke-opacity: 0.5;
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .leaflet-cluster-anim :where(.leaflet-marker-icon, .leaflet-marker-shadow),
-      .leaflet-cluster-spider-leg {
-        transition: none;
-      }
     }
 
     /* The side column: a hint, then the one panel picked. Without JavaScript a row's link picks it (:target). */

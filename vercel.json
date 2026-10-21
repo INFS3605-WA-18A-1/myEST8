@@ -6,7 +6,7 @@
   "functions": {
     "api/index.ts": {
       "maxDuration": 60,
-      "includeFiles": "{src/web/static/**,node_modules/daisyui/**,node_modules/leaflet/dist/**,node_modules/leaflet.markercluster/dist/**,node_modules/@fontsource/lexend/**,node_modules/@fontsource/red-hat-text/**,node_modules/@phosphor-icons/core/assets/**}"
+      "includeFiles": "{src/web/static/**,node_modules/daisyui/**,node_modules/maplibre-gl/package.json,node_modules/maplibre-gl/dist/maplibre-gl.mjs,node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs,node_modules/maplibre-gl/dist/maplibre-gl.css,node_modules/@fontsource/lexend/**,node_modules/@fontsource/red-hat-text/**,node_modules/@phosphor-icons/core/assets/**}"
     }
   },
   "crons": [{ "path": "/api/cron/worker", "schedule": "0 6 * * *" }]

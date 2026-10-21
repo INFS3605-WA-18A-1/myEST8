@@ -9,8 +9,8 @@
 // every fact the map does and every row picks its pin; the page works with JavaScript
 // off, as the table and per-Property panels reached by their row's link (:target).
 // static/dispatch-map.js adds the map: it reads the pin data from the
-// JSON block this page writes, draws Leaflet markers and the Tradie search ring, and
-// shows the panel of the pin or row picked.
+// JSON block this page writes, draws the MapLibre map with a marker for each pin and
+// the Tradie search ring, and shows the panel of the pin or row picked.
 //
 // Opening the page never looks addresses up: a Property or Tradie is placed when it is
 // added, and the ones the lookup missed are tried again only when the Property Manager
@@ -26,7 +26,6 @@ import { bookingCard, type Booking } from '../bookings.ts';
 import type { WebEnv } from '../env.ts';
 import { formAction, isoToLocal, list, localToIso, text } from '../forms.ts';
 import { icon } from '../icons.ts';
-import { mapTiles } from '../map-config.ts';
 import { shellInfo } from '../shell.ts';
 import {
   badge,
@@ -60,6 +59,15 @@ type Waiting = { job: DispatchJob; ticket: PropertyView['openTickets'][number]; 
 
 /** How many Tradies a Job's card offers to ask for Quotes. */
 const CANDIDATES_SHOWN = 6;
+
+/**
+ * The map's basemap: OpenFreeMap's Positron, a calm light grey vector style, so the pins carry the
+ * colour. It is free and needs no key (https://openfreemap.org/quick_start/); MapLibre shows the
+ * credit it requires ("OpenFreeMap © OpenMapTiles Data from OpenStreetMap") in the map's corner
+ * from the style's own tile source. Never OpenStreetMap's own tile server, whose usage policy
+ * is not for production apps.
+ */
+const MAP_STYLE_URL = 'https://tiles.openfreemap.org/styles/positron';
 
 /** How many days a Tradie's panel lists their bookings for, today first. */
 const BOOKED_DAYS = 7;
@@ -128,11 +136,9 @@ export function dispatchPages() {
           ${section({ title: 'Properties', id: 'properties', body: propertyTable(ordered) })}
           ${pinIcons()}
           ${pinData(ordered, tradies)}
-          <link rel="stylesheet" href="/assets/leaflet.css" />
-          <link rel="stylesheet" href="/assets/MarkerCluster.css" />
-          <script src="/assets/leaflet.js" defer></script>
-          <script src="/assets/leaflet.markercluster.js" defer></script>
-          <script src="/assets/dispatch-map.js" defer></script>
+          <link rel="stylesheet" href="/assets/maplibre-gl.css" />
+          <link rel="modulepreload" href="/assets/maplibre-gl.mjs" />
+          <script type="module" src="/assets/dispatch-map.js"></script>
         `,
       }),
     );
@@ -261,7 +267,8 @@ function pinIcons(): Html {
  * The map. Each pin says what it is in its own shape (a house or a wrench), and a
  * Property's house grows and reddens with the worst Urgency among its open Tickets, so
  * no key is needed; each pin's name says the same in words. Without JavaScript the map's
- * place says so and points to the table.
+ * place says so and points to the table; static/dispatch-map.js says the same when the map
+ * can't run (no WebGL, or the basemap's style doesn't load).
  */
 function mapSection(): Html {
   return html`<section class="dispatch-map-section" aria-labelledby="dispatch-map-title">
@@ -455,13 +462,13 @@ function addressCell(p: PropertyView): Html {
 }
 
 /**
- * The pins for static/dispatch-map.js as a JSON block (`<script type="application/json">`): the tile
- * source, the search radius, every Property with a location and every located Tradie. The JSON
+ * The pins for static/dispatch-map.js as a JSON block (`<script type="application/json">`): the basemap
+ * style's URL, the search radius, every Property with a location and every located Tradie. The JSON
  * is escaped so no address or name can close the script element or start a comment in it.
  */
 function pinData(properties: PropertyView[], tradies: TradieView[]): Html {
   const data = {
-    tiles: mapTiles(),
+    style: MAP_STYLE_URL,
     radiusKm: TRADIE_SEARCH_RADIUS_KM,
     properties: properties.flatMap((p) =>
       p.location
