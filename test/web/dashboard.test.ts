@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { HOUR } from '../support/harness.ts';
 import { upload } from '../support/photos.ts';
 import { webWorld } from '../support/web.ts';
-import { confirmedQuotes, firmQuote, jobView, KING_ST, quoteToken, STRANGER, TOM, tomsTapTicket, tradieQuotes, type World } from '../support/world.ts';
+import { confirmedQuotes, firmQuote, inspectionBooked, jobView, KING_ST, quoteToken, STRANGER, TOM, tomsTapTicket, tradieQuotes, type World } from '../support/world.ts';
 
 type Web = Awaited<ReturnType<typeof webWorld>>;
 
@@ -294,6 +294,126 @@ describe('the Agency inbox', () => {
   });
 });
 
+/** Books the chosen Tradie at `start` and sends the Work Order. */
+async function bookVisit(w: Web, job: { ticketId: number; jobId: number }, start: Date) {
+  const [quote] = await confirmedQuotes(w, job, [[w.tradies.pete, 150_00, start]]);
+  await w.alice.chooseQuote(quote!.quoteId, 'Usual plumber');
+  await w.alice.sendWorkOrder(job.jobId);
+}
+
+/** The Next 7 days section, from its heading through the end of that section. */
+function nextSeven(board: string) {
+  const start = board.indexOf('id="next-7-days"');
+  if (start < 0) throw new Error('No Next 7 days section');
+  return board.slice(start, board.indexOf('</section>', start));
+}
+
+describe('picking a day in the Next 7 days', () => {
+  // The harness clock starts at Thursday 8 October 2026, 9:00 am Sydney, and signing in does not move it.
+  const DAYS = ['2026-10-08', '2026-10-09', '2026-10-10', '2026-10-11', '2026-10-12', '2026-10-13', '2026-10-14'];
+
+  test('each day chip links to that day', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    const strip = nextSeven(await page(w, '/', cookie));
+
+    expect(strip.match(/class="day-chip/g)).toHaveLength(7);
+    for (const day of DAYS) expect(strip).toContain(`href="/?day=${day}#next-7-days"`);
+  });
+
+  test("a day chip keeps the dashboard's other state", async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    const strip = nextSeven(await page(w, '/?filter=all', cookie));
+
+    for (const day of DAYS) expect(strip).toContain(`href="/?filter=all&amp;day=${day}#next-7-days"`);
+  });
+
+  /**
+   * Two Tickets, so the clock stands at Monday 12 October 2026, 9:00 am.
+   * Monday has a 2:00 pm visit and Tuesday a 9:00 am visit, both Pete's Plumbing at King St.
+   */
+  async function twoDays() {
+    const w = await webWorld();
+    const tuesday = await tomsTapTicket(w);
+    const monday = await tomsTapTicket(w);
+    await bookVisit(w, tuesday, TUE_9AM);
+    await bookVisit(w, monday, new Date('2026-10-12T14:00:00+11:00'));
+    return { w, cookie: await w.signIn(), tuesday, monday };
+  }
+
+  test("with no day, today is current and only today's visits are listed", async () => {
+    const { cookie, tuesday, monday, w } = await twoDays();
+
+    const strip = nextSeven(await page(w, '/', cookie));
+
+    expect(strip).toContain('href="/?day=2026-10-12#next-7-days" aria-current="date"');
+    expect(strip).toContain('2:00 pm');
+    expect(strip).toContain(`href="/tickets/${monday.ticketId}"`);
+    expect(strip).not.toContain('9:00 am');
+    expect(strip).not.toContain(`href="/tickets/${tuesday.ticketId}"`);
+  });
+
+  test("a chosen day lists only that day's visits, each with its Tradie and Ticket", async () => {
+    const { w, cookie, tuesday, monday } = await twoDays();
+
+    const strip = nextSeven(await page(w, '/?day=2026-10-13', cookie));
+
+    expect(strip).toContain('href="/?day=2026-10-13#next-7-days" aria-current="date"');
+    expect(strip).toContain('class="day-chip is-today" href="/?day=2026-10-12#next-7-days"');
+    expect(strip).toContain('9:00 am');
+    expect(strip).toContain(`href="/tradies/${w.tradies.pete.id}"`);
+    expect(strip).toContain(`href="/tickets/${tuesday.ticketId}"`);
+    expect(strip).toContain('12 King St');
+    expect(strip).not.toContain('2:00 pm');
+    expect(strip).not.toContain(`href="/tickets/${monday.ticketId}"`);
+    expect(strip).toContain('Tuesday 13 October');
+  });
+
+  test('an empty day says nothing is booked and links to that day on the calendar', async () => {
+    const { w, cookie } = await twoDays();
+
+    const strip = nextSeven(await page(w, '/?day=2026-10-14', cookie));
+
+    expect(strip).toContain('Wednesday 14 October');
+    expect(strip).toContain('Nothing booked on Wednesday.');
+    expect(strip).toContain('href="/calendar?view=day&amp;date=2026-10-14"');
+    expect(strip).not.toContain('2:00 pm');
+    expect(strip).not.toContain('9:00 am');
+  });
+
+  test('a day outside the next 7 days, or one that is not a date, falls back to today', async () => {
+    const { w, cookie, monday } = await twoDays();
+
+    for (const day of ['2026-10-11', '2026-10-19', 'nope', '2026-02-31', '']) {
+      const strip = nextSeven(await page(w, `/?day=${encodeURIComponent(day)}`, cookie));
+      expect(strip, day).toContain('Monday 12 October');
+      expect(strip, day).toContain('href="/?day=2026-10-12#next-7-days" aria-current="date"');
+      expect(strip, day).toContain('2:00 pm');
+      expect(strip, day).toContain(`href="/tickets/${monday.ticketId}"`);
+      expect(strip, day).not.toContain('9:00 am');
+    }
+  });
+
+  test('a Site Inspection is badged, and links to the Tradie and the Ticket', async () => {
+    const w = await webWorld();
+    const job = await tomsTapTicket(w);
+    await w.alice.sendQuoteRequests(job.jobId, [w.tradies.pete.id, w.tradies.dana.id]);
+    await inspectionBooked(w, job, w.tradies.dana, new Date('2026-10-13T10:00:00+11:00'));
+    const cookie = await w.signIn();
+
+    const strip = nextSeven(await page(w, '/?day=2026-10-13', cookie));
+
+    expect(strip).toContain('Site inspection');
+    expect(strip).toContain('10:00 am');
+    expect(strip).toContain(`href="/tradies/${w.tradies.dana.id}"`);
+    expect(strip).toContain(`href="/tickets/${job.ticketId}#job-${job.jobId}"`);
+    expect(strip).toContain('12 King St');
+  });
+});
+
 describe('the Next 7 days and Tradie profiles', () => {
   test("a booked visit shows on the dashboard and the Tradie's profile", async () => {
     const w = await webWorld();
@@ -315,13 +435,16 @@ describe('the Next 7 days and Tradie profiles', () => {
     expect(week).toContain('Plumbing');
 
     expect(await page(w, '/calendar?week=2026-10-19', cookie)).not.toContain(KING_ST);
-    expect(await page(w, '/', cookie)).toContain(`href="/tradies/${w.tradies.pete.id}"`);
+    // Today is Saturday 10 October, so Tuesday's visit marks its chip and is not listed yet.
+    const today = nextSeven(await page(w, '/', cookie));
+    expect(today).toContain('datetime="2026-10-13"');
+    expect(today).not.toContain(`href="/tickets/${job.ticketId}"`);
 
     const pete = await page(w, `/tradies/${w.tradies.pete.id}`, cookie);
     for (const text of ['Pete Park', 'myEST8 rating', '4.0', '4.8', '120 reviews', '$150.00', KING_ST]) expect(pete).toContain(text);
   });
 
-  test('the Next 7 days strip shows a visit booked within a week of today, with its Tradie and Ticket', async () => {
+  test('a visit later in the week marks its day chip, and is not listed on today', async () => {
     const w = await webWorld();
     const job = await tomsTapTicket(w);
     const [quote] = await confirmedQuotes(w, job, [[w.tradies.pete, 150_00, TUE_9AM]]);
@@ -329,14 +452,9 @@ describe('the Next 7 days and Tradie profiles', () => {
     await w.alice.sendWorkOrder(job.jobId);
     const cookie = await w.signIn();
 
-    const board = await page(w, '/', cookie);
-    const start = board.indexOf('id="next-7-days"');
-    expect(start).toBeGreaterThan(-1);
-    const strip = board.slice(start, board.indexOf('</section>', start));
-    expect(strip).toContain('Tue 13');
-    expect(strip).toContain(`href="/tradies/${w.tradies.pete.id}"`);
-    expect(strip).toContain(`href="/tickets/${job.ticketId}"`);
-    expect(strip).toContain('12 King St');
+    const strip = nextSeven(await page(w, '/', cookie));
+    expect(strip).toContain('datetime="2026-10-13"');
+    expect(strip).not.toContain(`href="/tickets/${job.ticketId}"`);
     expect(strip.match(/class="day-chip/g)).toHaveLength(7);
     expect(strip.match(/class="day-dot"/g)).toHaveLength(1);
   });

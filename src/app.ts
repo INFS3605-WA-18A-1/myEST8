@@ -52,6 +52,8 @@ export function createApp(
       summariser: deps.summariser,
       composer: deps.composer,
       places: deps.places,
+      geocoder: deps.geocoder,
+      addressSuggester: deps.addressSuggester,
       tradeSuggester: deps.tradeSuggester,
       fetchMedia: deps.fetchMedia,
     },
@@ -247,6 +249,8 @@ export function createApp(
         findGoogleListings: (query: string) => onboarding.findGoogleListings(query),
         /** A Google listing's details and the Trades Jev suggests for it, to fill in the Tradie form. Stores nothing. */
         googleListing: (placeId: string) => onboarding.googleListing(placeId),
+        /** Street addresses matching what was typed, for the Property form. An empty list when the lookup fails. */
+        suggestAddresses: (query: string) => ctx.ports.addressSuggester.suggest(query),
 
         // Importing from a spreadsheet: upload, review, then add
         /** Reads an .xlsx or .csv of Property Owners, Building Managers, Tradies, Properties or Tenants and keeps it for review. Returns its token. */

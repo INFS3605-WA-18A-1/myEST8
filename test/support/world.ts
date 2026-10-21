@@ -38,8 +38,8 @@ export async function world(options: Parameters<typeof createHarness>[0] = {}) {
   await alice.connectChannel('whatsapp', AGENCY_NUMBER);
   await alice.connectChannel('email', AGENCY_INBOX);
 
-  h.places.locations.set(KING_ST, KING_ST_LOCATION);
-  h.places.locations.set(OCEAN_AVE, { lat: -33.8908, lng: 151.2743 });
+  h.geocoder.locations.set(KING_ST, KING_ST_LOCATION);
+  h.geocoder.locations.set(OCEAN_AVE, { lat: -33.8908, lng: 151.2743 });
   h.places.listings.set('place-pete', { name: "Pete's Plumbing", address: 'Marrickville', rating: 4.8, reviewCount: 120 });
   h.places.listings.set('place-quick', { name: 'Quick Pipes', address: 'Redfern', rating: 4.2, reviewCount: 40 });
   h.places.listings.set('place-finn', { name: 'Flow Bros', address: 'Petersham', rating: 4.9, reviewCount: 15 });

@@ -1,6 +1,6 @@
 # Pick a day in Next 7 days
 
-Status: ready-for-agent
+Status: resolved
 Branch: dashboard-week-and-kpis
 Blocked by: 01 (same file, done first)
 Spec: ../spec.md
@@ -26,12 +26,12 @@ Next 7 days (`nextSevenDays` in `src/web/pages/dashboard.ts`) shows seven day ch
 
 ## Acceptance criteria
 
-- [ ] Page tests (`test/web/`):
+- [x] Page tests (`test/web/`):
   - each chip links to its day
   - with no `day`, today is current and only today's visits are listed
   - `?day=` a booked day lists only that day's visits, each with the Tradie and the Ticket link
   - an empty day shows "Nothing booked on …" and links to that day's calendar
   - an out-of-range or junk `day` falls back to today
-- [ ] Browser test: on the demo dashboard, pressing a later chip with a visit shows that visit and not today's, by mouse and by keyboard (Tab, then Enter).
-- [ ] `docs/design-system.md`'s Next 7 days line is updated.
-- [ ] `npm run check` passes.
+- [x] Browser test: on the demo dashboard, pressing a later chip with a visit shows that visit and not today's, by mouse and by keyboard (Tab, then Enter).
+- [x] `docs/design-system.md`'s Next 7 days line is updated.
+- [x] `npm run check` passes.

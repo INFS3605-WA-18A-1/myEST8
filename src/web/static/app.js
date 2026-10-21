@@ -561,3 +561,126 @@
     frame.scrollTop = Math.max(0, top - headerHeight);
   }
 })();
+
+// === address suggestions ===
+// A Property's Address (input[data-address-suggest]) offers matching addresses as
+// you type, from /properties/address-suggestions. Choosing one fills Address,
+// Suburb and the hidden lat and lng. Arrow keys move, Enter picks, Escape closes
+// the list. Without this file it is a plain text box, the hidden pin stays empty,
+// and the address is geocoded on save.
+(() => {
+  let made = 0;
+
+  for (const input of document.querySelectorAll('input[data-address-suggest]')) {
+    if (!(input instanceof HTMLInputElement) || !input.form) continue;
+    const form = input.form;
+    const suburb = form.elements.namedItem('suburb');
+    const lat = form.elements.namedItem('lat');
+    const lng = form.elements.namedItem('lng');
+    if (!(suburb instanceof HTMLInputElement) || !(lat instanceof HTMLInputElement) || !(lng instanceof HTMLInputElement)) continue;
+
+    const n = ++made;
+    const box = document.createElement('div');
+    box.className = 'combobox';
+    input.before(box);
+    input.classList.add('combobox-input');
+    input.autocomplete = 'off';
+    input.setAttribute('role', 'combobox');
+    input.setAttribute('aria-autocomplete', 'list');
+    input.setAttribute('aria-expanded', 'false');
+    const list = document.createElement('ul');
+    list.className = 'combobox-list';
+    list.id = `address-suggest-${n}-list`;
+    list.setAttribute('role', 'listbox');
+    list.hidden = true;
+    input.setAttribute('aria-controls', list.id);
+    box.append(input, list);
+
+    /** @type {{ label: string, address: string, suburb: string, location: { lat: number, lng: number } }[]} */
+    let shown = [];
+    let active = -1;
+    let timer = 0;
+    let request = 0;
+
+    function setActive(i) {
+      active = i;
+      for (const item of list.querySelectorAll('[role="option"]')) item.classList.toggle('is-active', item.id === `address-suggest-${n}-${i}`);
+      if (i >= 0) {
+        input.setAttribute('aria-activedescendant', `address-suggest-${n}-${i}`);
+        document.getElementById(`address-suggest-${n}-${i}`)?.scrollIntoView({ block: 'nearest' });
+      } else input.removeAttribute('aria-activedescendant');
+    }
+
+    function close() {
+      list.hidden = true;
+      input.setAttribute('aria-expanded', 'false');
+      input.removeAttribute('aria-activedescendant');
+    }
+
+    function render(suggestions) {
+      shown = suggestions;
+      list.replaceChildren(
+        ...(shown.length
+          ? shown.map((suggestion, i) => {
+              const item = document.createElement('li');
+              item.id = `address-suggest-${n}-${i}`;
+              item.className = 'combobox-option';
+              item.setAttribute('role', 'option');
+              item.setAttribute('aria-selected', 'false');
+              item.textContent = suggestion.label;
+              item.addEventListener('mousedown', (event) => event.preventDefault());
+              item.addEventListener('click', () => choose(suggestion));
+              return item;
+            })
+          : [Object.assign(document.createElement('li'), { className: 'combobox-empty', textContent: 'No matches' })]),
+      );
+      setActive(shown.length ? 0 : -1);
+      list.hidden = false;
+      input.setAttribute('aria-expanded', 'true');
+    }
+
+    function choose(suggestion) {
+      input.value = suggestion.address;
+      suburb.value = suggestion.suburb;
+      lat.value = String(suggestion.location.lat);
+      lng.value = String(suggestion.location.lng);
+      close();
+    }
+
+    input.addEventListener('input', () => {
+      // A typed change is no longer the pin that was picked.
+      lat.value = '';
+      lng.value = '';
+      window.clearTimeout(timer);
+      const query = input.value.trim();
+      if (query.length < 3) return close();
+      const mine = ++request;
+      timer = window.setTimeout(async () => {
+        let suggestions = [];
+        try {
+          const response = await fetch(`/properties/address-suggestions?q=${encodeURIComponent(query)}`, { headers: { accept: 'application/json' } });
+          const body = response.ok ? await response.json() : [];
+          if (Array.isArray(body)) suggestions = body;
+        } catch {
+          suggestions = [];
+        }
+        if (mine === request) render(suggestions);
+      }, 300);
+    });
+
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        if (list.hidden || !shown.length) return;
+        setActive((active + (event.key === 'ArrowDown' ? 1 : shown.length - 1)) % shown.length);
+      } else if (event.key === 'Enter' && !list.hidden && active >= 0) {
+        event.preventDefault();
+        choose(shown[active]);
+      } else if (event.key === 'Escape' && !list.hidden) {
+        event.preventDefault();
+        close();
+      }
+    });
+    input.addEventListener('blur', () => close());
+  }
+})();

@@ -674,6 +674,8 @@ export function field(o: {
   checked?: boolean;
   /** Why the posted value was refused, shown under the control. */
   error?: string;
+  /** Address suggestions as you type (app.js). The field stays a plain text box without JavaScript. */
+  suggest?: boolean;
 }): Html {
   const id = o.id ?? `field-${o.name}`;
   const type = o.type ?? 'text';
@@ -705,7 +707,7 @@ export function field(o: {
           </select>`
         : type === 'file'
           ? html`<input ${common} type="file" class="file-input w-full${invalid.replace('input', 'file-input')}" ${o.accept ? html`accept="${o.accept}"` : ''} />`
-          : html`<input ${common} type="${type}" class="input w-full${invalid}" value="${o.value ?? ''}" placeholder="${o.placeholder ?? ''}" ${o.autocomplete ? html`autocomplete="${o.autocomplete}"` : ''} ${o.step ? html`step="${o.step}"` : ''} ${o.min !== undefined ? html`min="${o.min}"` : ''} ${o.max !== undefined ? html`max="${o.max}"` : ''} />`;
+          : html`<input ${common} type="${type}" class="input w-full${invalid}" value="${o.value ?? ''}" placeholder="${o.placeholder ?? ''}" ${o.suggest ? 'data-address-suggest' : ''} ${o.autocomplete || o.suggest ? html`autocomplete="${o.suggest ? 'off' : o.autocomplete}"` : ''} ${o.step ? html`step="${o.step}"` : ''} ${o.min !== undefined ? html`min="${o.min}"` : ''} ${o.max !== undefined ? html`max="${o.max}"` : ''} />`;
   return html`<div class="fieldset">
     <label for="${id}" class="field-label">${o.label}</label>
     ${control} ${error} ${hint}

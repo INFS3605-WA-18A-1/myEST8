@@ -42,7 +42,7 @@ function sectionText(html: string, id: string) {
 
 async function locateTradies(w: World, bases: [number, { address: string; location: { lat: number; lng: number } }][]) {
   for (const [tradieId, base] of bases) {
-    w.h.places.locations.set(base.address, base.location);
+    w.h.geocoder.locations.set(base.address, base.location);
     await w.alice.setTradieAddress(tradieId, base.address);
   }
 }
@@ -91,7 +91,7 @@ describe('Dispatch: the map data', () => {
   test('a Property whose address contains </script> and quotes cannot break out of the data block', async () => {
     const w = await webWorld();
     const hostile = `1 "Quote" St </script><img src=x onerror=alert(1)> & <!-- \u2028 end`;
-    w.h.places.locations.set(hostile, { lat: -33.9, lng: 151.2 });
+    w.h.geocoder.locations.set(hostile, { lat: -33.9, lng: 151.2 });
     await w.alice.addProperty({ address: hostile, suburb: 'Newtown', ownerId: w.ids.olivia, propertyManagerId: w.ids.aliceId, maxRepairCostCents: 500_00, nominatedTradieIds: [] });
     const cookie = await w.signIn();
 
@@ -320,12 +320,12 @@ describe('Dispatch: finding addresses again', () => {
     const id = await w.alice.addProperty({ address: UNKNOWN_ADDRESS, suburb: 'Newtown', ownerId: w.ids.olivia, propertyManagerId: w.ids.aliceId, maxRepairCostCents: 500_00, nominatedTradieIds: [] });
     const cookie = await w.signIn();
     let lookups = 0;
-    const geocode = w.h.places.geocode.bind(w.h.places);
-    w.h.places.geocode = async (address) => {
+    const geocode = w.h.geocoder.geocode.bind(w.h.geocoder);
+    w.h.geocoder.geocode = async (address) => {
       lookups++;
       return geocode(address);
     };
-    w.h.places.locations.set(UNKNOWN_ADDRESS, { lat: -33.89, lng: 151.18 });
+    w.h.geocoder.locations.set(UNKNOWN_ADDRESS, { lat: -33.89, lng: 151.18 });
 
     const before = await dispatch(w, cookie);
     expect(lookups).toBe(0);
@@ -345,7 +345,7 @@ describe('Dispatch: finding addresses again', () => {
   test('a geocoder that fails leaves the address marked, and says nothing was found', async () => {
     const w = await webWorld();
     await w.alice.addProperty({ address: UNKNOWN_ADDRESS, suburb: 'Newtown', ownerId: w.ids.olivia, propertyManagerId: w.ids.aliceId, maxRepairCostCents: 500_00, nominatedTradieIds: [] });
-    w.h.places.geocode = async () => {
+    w.h.geocoder.geocode = async () => {
       throw new Error('Geocoding is down');
     };
     const cookie = await w.signIn();
@@ -362,8 +362,8 @@ describe('Dispatch: finding addresses again', () => {
     const id = await w.alice.addProperty({ address: UNKNOWN_ADDRESS, suburb: 'Newtown', ownerId: w.ids.olivia, propertyManagerId: w.ids.aliceId, maxRepairCostCents: 500_00, nominatedTradieIds: [] });
     expect(await w.alice.geocodeMissing()).toBe(0);
 
-    w.h.places.locations.set(UNKNOWN_ADDRESS, { lat: -33.89, lng: 151.18 });
-    w.h.places.locations.set(KING_ST, { lat: 0, lng: 0 });
+    w.h.geocoder.locations.set(UNKNOWN_ADDRESS, { lat: -33.89, lng: 151.18 });
+    w.h.geocoder.locations.set(KING_ST, { lat: 0, lng: 0 });
     expect(await w.alice.geocodeMissing()).toBe(1);
 
     expect((await w.alice.properties()).find((p) => p.id === id)!.location).toEqual({ lat: -33.89, lng: 151.18 });
@@ -375,7 +375,7 @@ describe('Dispatch: finding addresses again', () => {
     await w.alice.setTradieAddress(w.ids.nina, NINA_BASE.address);
     expect((await w.alice.people('tradie')).find((t) => t.id === w.ids.nina)).toMatchObject({ businessAddress: NINA_BASE.address, location: null });
 
-    w.h.places.locations.set(NINA_BASE.address, NINA_BASE.location);
+    w.h.geocoder.locations.set(NINA_BASE.address, NINA_BASE.location);
     expect(await w.alice.geocodeMissing()).toBe(1);
 
     expect((await w.alice.people('tradie')).find((t) => t.id === w.ids.nina)!.location).toEqual(NINA_BASE.location);

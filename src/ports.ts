@@ -199,12 +199,36 @@ export interface PlacesLookup {
   getRating(placeId: string): Promise<{ rating: number | null; reviewCount: number }>;
   /** A listing's details. Throws when the lookup fails or the place isn't there. */
   listingDetails(placeId: string): Promise<ListingDetails>;
+}
+
+export interface Geocoder {
   /**
    * The latitude and longitude of a street address: a Property's, or a Tradie's
    * business address for the Dispatch map. Null when the address can't be found
    * (or is blank); throws when the lookup itself fails, so the caller's task retries.
    */
   geocode(address: string): Promise<{ lat: number; lng: number } | null>;
+}
+
+/** One address a Property Manager can pick while typing a Property's address. */
+export interface AddressSuggestion {
+  /** The line in the list, such as "12 King Street, Ashbury NSW 2193". */
+  label: string;
+  /** The street address, without the suburb, for the Address field. */
+  address: string;
+  suburb: string;
+  postcode?: string;
+  /** Photon's name for the state, such as "New South Wales". */
+  state?: string;
+  location: { lat: number; lng: number };
+}
+
+export interface AddressSuggester {
+  /**
+   * Street addresses matching what was typed, at most 5. A blank or very short
+   * query is an empty list, and no lookup is made. Throws when the lookup itself fails.
+   */
+  suggest(query: string): Promise<AddressSuggestion[]>;
 }
 
 export interface TradeSuggester {

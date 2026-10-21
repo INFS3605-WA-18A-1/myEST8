@@ -1,6 +1,7 @@
-import { describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { hostedApp } from '../src/hosted.ts';
 import { demoEnv, testDb } from './support/db.ts';
+import { addPropertyTo, stubFetch } from './support/geocoding.ts';
 
 // A migrated schema stands in for the hosted database, which `supabase db push` migrates.
 // ALLOW_MOCKS=1: these tests have no provider keys, and the missing ones run on mocks.
@@ -71,12 +72,16 @@ describe('the hosted app', () => {
 });
 
 describe('hosted mode and missing provider settings', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
   test('refuses to start, naming every missing setting', async () => {
     const lines: string[] = [];
     const error = await hostedApp({ SUPABASE_DB_URL: 'postgres://x', PUBLIC_URL: 'https://myest8.test' }, (line) => lines.push(line)).catch((e: Error) => e);
     expect(error).toBeInstanceOf(Error);
     for (const name of Object.keys(ALL_SETTINGS)) expect((error as Error).message).toContain(name);
     expect((error as Error).message).toContain('ALLOW_MOCKS=1');
+    expect((error as Error).message).not.toContain('NOMINATIM_URL');
+    expect((error as Error).message).not.toContain('PHOTON_URL');
     expect(lines).toEqual([]);
   });
 
@@ -97,7 +102,7 @@ describe('hosted mode and missing provider settings', () => {
     const lines: string[] = [];
     const hosted = await hostedApp(await hostedEnv({ ANTHROPIC_API_KEY: 'test-anthropic' }), (line) => lines.push(line));
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toMatch(/Real: classifier\./);
+    expect(lines[0]).toMatch(/Real: classifier, geocoder, address suggestions\./);
     expect(lines[0]).toMatch(/Mocked or off: .*places.*email.*worker cron/);
     expect(lines[0]).toContain('ALLOW_MOCKS=1');
     expect(JSON.stringify(lines)).not.toContain('test-anthropic');
@@ -107,7 +112,7 @@ describe('hosted mode and missing provider settings', () => {
   test('with everything set it starts on real providers and logs that', async () => {
     const lines: string[] = [];
     const hosted = await hostedApp(await hostedEnv({ ALLOW_MOCKS: '', ...ALL_SETTINGS }), (line) => lines.push(line));
-    expect(lines[0]).toMatch(/Real: classifier, places, file storage, email, inbound email, file links, worker cron/);
+    expect(lines[0]).toMatch(/Real: classifier, places, geocoder, address suggestions, file storage, email, inbound email, file links, worker cron/);
     expect(lines[0]).toMatch(/Mocked or off: imageMatcher, quoteReader\./);
     await hosted.close();
   });
@@ -117,6 +122,28 @@ describe('hosted mode and missing provider settings', () => {
     await expect(hostedApp({ ...env, VISION_API_URL: 'https://vision.test' }, () => {})).rejects.toThrow(/VISION_API_KEY/);
     await expect(hostedApp({ ...env, QUOTES_API_URL: 'https://quotes.test' }, () => {})).rejects.toThrow(/QUOTES_API_KEY/);
     await expect(hostedApp({ ...env, JEV_API_URL: 'https://jev.test' }, () => {})).rejects.toThrow(/JEV_API_KEY/);
+  });
+
+  test('geocodes through the public Nominatim with no NOMINATIM_URL, naming the app and its address, and never calls it missing', async () => {
+    const requests = stubFetch();
+    const lines: string[] = [];
+    const hosted = await hostedApp(await hostedEnv({ ALLOW_MOCKS: '', ...ALL_SETTINGS }), (line) => lines.push(line));
+    expect(lines[0]).toMatch(/Real: .*geocoder/);
+    await addPropertyTo(hosted.app, '12 King St, Newtown NSW 2042');
+
+    const [request] = requests.filter((r) => r.url.includes('/search'));
+    expect(request!.url).toMatch(/^https:\/\/nominatim\.openstreetmap\.org\/search\?/);
+    expect(request!.headers.get('user-agent')).toBe('myEST8 (https://myest8.test)');
+    await hosted.close();
+  });
+
+  test('NOMINATIM_URL points the geocoder elsewhere', async () => {
+    const requests = stubFetch();
+    const hosted = await hostedApp(await hostedEnv({ NOMINATIM_URL: 'https://nominatim.example' }), () => {});
+    await addPropertyTo(hosted.app, '12 King St, Newtown NSW 2042');
+
+    expect(requests.filter((r) => r.url.includes('/search')).map((r) => new URL(r.url).origin)).toEqual(['https://nominatim.example']);
+    await hosted.close();
   });
 
   test('Twilio credentials without TWILIO_SMS_FROM refuse to start', async () => {

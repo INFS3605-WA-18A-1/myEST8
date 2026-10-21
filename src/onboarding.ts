@@ -19,6 +19,8 @@ export type PropertyInput = {
   maxRepairCostCents: number;
   nominatedTradieIds: number[];
   buildingManagerId?: number;
+  /** A pin the form already has. Used when it sits inside Australia; otherwise the address is geocoded. */
+  location?: { lat: number; lng: number } | null;
 };
 
 const CHANNEL_TYPES: ChannelType[] = ['sms', 'whatsapp', 'email'];
