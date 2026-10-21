@@ -1259,7 +1259,7 @@
       box-shadow: inset 3px 0 0 var(--hivis);
     }
 
-    /* Next 7 days: a strip of day chips (today filled, a dot where a visit is booked), then one row per visit. */
+    /* Next 7 days: day chips (the chosen day filled, today ringed, a dot where a visit is booked), then that day's visits. */
     .day-strip {
       display: grid;
       grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -1278,6 +1278,10 @@
       border-radius: 10px;
       font-size: 12px;
       color: var(--muted);
+      text-decoration: none;
+    }
+    a.day-chip:hover {
+      color: var(--ink);
     }
     .day-chip time {
       display: grid;
@@ -1290,13 +1294,22 @@
       line-height: 1.2;
       color: var(--ink);
     }
+    /* Today stays ringed in Harbour. The chosen day is filled, including when it is today. */
     .day-chip.is-today {
-      background: #e8f0f7;
-      border-color: #8fb0cc;
+      border-color: var(--action);
     }
-    .day-chip.is-today .day-name {
+    .day-chip[aria-current='date'] {
+      background: var(--info-bg);
+      border-color: var(--action);
+    }
+    .day-chip[aria-current='date'] .day-name {
       font-weight: 600;
       color: var(--ink);
+    }
+    @media (max-width: 40rem), (pointer: coarse) {
+      .day-chip {
+        min-height: 44px;
+      }
     }
     .day-dot {
       width: 5px;
@@ -1304,6 +1317,12 @@
       margin-top: 1px;
       border-radius: 50%;
       background: var(--action);
+    }
+    .visit-heading {
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 16px;
+      font-weight: 600;
     }
     .visit-list {
       display: grid;
@@ -1313,17 +1332,12 @@
     }
     .visit-row {
       display: grid;
-      grid-template-columns: 3.5rem minmax(0, 1fr) auto;
+      grid-template-columns: auto minmax(0, 1fr) auto;
       gap: 8px;
       align-items: baseline;
       padding: 10px 0;
       border-top: 1px solid var(--line);
       font-size: 14px;
-    }
-    .visit-day {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--muted);
     }
     .visit-what {
       display: grid;
