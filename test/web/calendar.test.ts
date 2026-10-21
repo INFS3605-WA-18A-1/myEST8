@@ -490,6 +490,21 @@ describe('Schedule: visit blocks', () => {
   });
 });
 
+describe('Schedule: where the grid opens', () => {
+  test('the grid opens an hour before the first visit, or at 7 am when nothing is booked', async () => {
+    const w = await webWorld();
+    await bookedTap(w);
+    const cookie = await w.signIn();
+
+    // Pete is booked at 9 am, so the week opens at 8 am.
+    const booked = grid(await page(w, '/calendar?view=week&date=2026-10-12', cookie));
+    expect(booked).toContain('data-schedule-open><span class="schedule-hour-label">8 am</span>');
+
+    const empty = grid(await page(w, '/calendar?view=week&date=2026-10-19', cookie));
+    expect(empty).toContain('data-schedule-open><span class="schedule-hour-label">7 am</span>');
+  });
+});
+
 describe('Schedule: views and links', () => {
   test('Day, Week and Month tabs keep the date in view and Mine or All', async () => {
     const w = await webWorld();

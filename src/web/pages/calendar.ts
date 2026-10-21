@@ -2,11 +2,14 @@
 // Tradie, by Day, Week or Month in the Agency's time zone. Mine shows the visits on the
 // Property Manager's own Properties, All everyone's.
 //
-// Week is an hour-by-hour grid, Monday to Sunday: a visit sits on its time, and visits
-// that overlap fold into one "N Jobs booked" block that opens that Day. Day is the same
-// grid for one day, with overlapping visits side by side in lanes that scroll sideways
-// when a busy day needs more room. Month is a table of days, each with up to two visits
-// or "N Jobs booked". src/web/schedule-layout.ts works out where everything goes.
+// The toolbar is one row: Today, the previous and next arrows, and the period as the
+// title, with Day / Week / Month and Mine / All on the right. Week is an hour-by-hour
+// grid, Monday to Sunday, each day a small weekday over a large date. A visit sits on
+// its time; visits that overlap fold into one "N Jobs booked" block that opens that
+// Day. Day is the same grid for one day, with overlapping visits side by side in lanes
+// that scroll sideways when a busy day needs more room. Month is a table of days, each
+// with up to two visits or "N Jobs booked". src/web/schedule-layout.ts works out where
+// everything goes. A current-time line is drawn on today from the Agency's clock.
 //
 // Under 768 px the Week is a list of days instead, where a run of empty days folds into
 // one line ("Nothing booked Tue 13 – Wed 14"). Every visit on the grid is a list item
@@ -234,11 +237,24 @@ function hourName(hour: number): string {
   return `${hour % 12 || 12} ${hour < 12 || hour === 24 ? 'am' : 'pm'}`;
 }
 
-/** The hour lines and their times down the left: decoration, since every visit names its own time. */
-function hourLines(range: HourRange): Html {
+/**
+ * The hour the grid opens on: an hour before the first visit, or 7 am when the
+ * period has none, kept inside the hours on show. app.js scrolls the frame to the
+ * hour marked data-schedule-open.
+ */
+function anchorHour(range: HourRange, spans: { from: number }[]): number {
+  const target = spans.length ? Math.floor((Math.min(...spans.map((s) => s.from)) - 60) / 60) : 7;
+  return Math.min(range.last - 1, Math.max(range.first, target));
+}
+
+/** The hour lines and their times down the left: decoration, since every visit names its own time. Half-hours are the fainter rules. */
+function hourLines(range: HourRange, anchor: number): Html {
   const hours = Array.from({ length: range.last - range.first }, (_, i) => range.first + i);
   return html`<div class="schedule-hours" aria-hidden="true">
-    ${hours.map((h, i) => html`<span class="schedule-hour" style="grid-row: ${i * 4 + 1} / span 4">${hourName(h)}</span>`)}
+    ${hours.map(
+      (h, i) =>
+        html`<span class="schedule-hour" style="grid-row: ${i * 4 + 1} / span 4"${h === anchor ? ' data-schedule-open' : ''}><span class="schedule-hour-label">${hourName(h)}</span></span><span class="schedule-half" style="grid-row: ${i * 4 + 3}"></span>`,
+    )}
   </div>`;
 }
 
@@ -247,13 +263,14 @@ function hourLines(range: HourRange): Html {
  * CSS shows the one that suits the screen, so each screen reads one of the two.
  */
 function weekView(days: string[], byDay: Map<string, Booking[]>, ctx: Ctx): Html {
-  const range = hourRange(days.flatMap((d) => (byDay.get(d) ?? []).map((b) => ({ from: minuteOfDay(b.start, d, ctx.timeZone), to: minuteOfDay(b.end, d, ctx.timeZone) }))));
+  const spans = days.flatMap((d) => (byDay.get(d) ?? []).map((b) => ({ from: minuteOfDay(b.start, d, ctx.timeZone), to: minuteOfDay(b.end, d, ctx.timeZone) })));
+  const range = hourRange(spans);
   const layouts = days.map((d) => ({ day: d, bookings: byDay.get(d) ?? [], layout: layoutDay(byDay.get(d) ?? [], d, ctx.timeZone, range) }));
   const rows = layouts[0]!.layout.rows;
   return html`${weekList(days, byDay, ctx)}
     <div class="schedule-scroll is-week" role="region" aria-label="The week, hour by hour" tabindex="0">
       <div class="schedule-grid is-week" style="--slots: ${rows}; --cols: 7">
-        ${hourLines(range)}
+        ${hourLines(range, anchorHour(range, spans))}
         <ol class="schedule-cols" aria-label="The week, Monday to Sunday">
           ${layouts.map(({ day, bookings, layout }) => weekColumn(day, bookings.length, layout, ctx))}
         </ol>
@@ -330,7 +347,7 @@ function dayView(day: string, bookings: Booking[], ctx: Ctx): Html {
   return html`${bookings.length ? '' : html`<p class="schedule-empty">Nothing booked on ${longDay(day)}.</p>`}
     <div class="schedule-scroll is-day${weekend(day) ? ' is-weekend' : ''}" role="region" aria-label="${longDay(day)}, hour by hour. Visits at the same time sit side by side: scroll sideways to see them all." tabindex="0">
       <div class="schedule-grid is-day" style="--slots: ${layout.rows}; --cols: ${lanes}">
-        ${hourLines(layout.range)}
+        ${hourLines(layout.range, anchorHour(layout.range, layout.clusters))}
         <ol class="schedule-lanes" aria-label="Visits on ${longDay(day)}, in time order">
           ${layout.clusters.flatMap((cl) =>
             cl.items.map((p) => {
@@ -376,7 +393,7 @@ function monthDay(day: string, bookings: Booking[] | null, ctx: Ctx): Html {
   const isToday = day === ctx.today;
   const classes = ['schedule-mday', bookings === null ? 'is-outside' : '', bookings?.length ? 'is-booked' : '', isToday ? 'is-today' : ''].filter(Boolean).join(' ');
   const dayHref = hrefFor('day', day, ctx.filter);
-  const number = html`<a class="schedule-mday-num num" href="${dayHref}"><span aria-hidden="true">${Number(day.slice(8))}</span><span class="sr-only">${longDay(day)}</span></a>`;
+  const number = html`<a class="schedule-mday-num num" href="${dayHref}"${isToday ? html` aria-current="date"` : ''}><span aria-hidden="true">${Number(day.slice(8))}</span><span class="sr-only">${longDay(day)}</span></a>`;
   const current = isToday ? html` aria-current="date"` : '';
   if (!bookings?.length) return html`<td class="${classes}"${current}>${number}</td>`;
   const overlaps = layoutDay(bookings, day, ctx.timeZone).clusters.some((cl) => cl.items.length > 1);

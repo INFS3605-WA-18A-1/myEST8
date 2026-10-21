@@ -5102,7 +5102,8 @@
        inside its frame (a focusable region) and never the page. */
     .schedule-scroll {
       min-width: 0;
-      overflow-x: auto;
+      max-height: min(40rem, calc(100dvh - 16rem));
+      overflow: auto;
       border: 1px solid var(--line);
       border-radius: 8px;
       background: var(--page);
@@ -5145,12 +5146,23 @@
     .schedule-grid.is-day .schedule-hours {
       grid-row: 1 / -1;
     }
-    .schedule-hour {
+    .schedule-hour,
+    .schedule-half {
       grid-column: 1 / -1;
-      padding: 2px 8px 0;
+      align-self: start;
       border-top: 1px solid var(--line);
+    }
+    .schedule-half {
+      opacity: 0.45;
+    }
+    .schedule-hour-label {
+      display: block;
+      width: var(--gutter);
+      padding-right: 8px;
+      transform: translateY(-50%);
       font-size: 12px;
       line-height: 1.2;
+      text-align: right;
       color: var(--muted);
     }
     .schedule-cols,
@@ -5358,7 +5370,8 @@
     .schedule-chip.is-reschedule.is-decision a {
       border-left-color: var(--hivis);
     }
-    .schedule-block.is-done .schedule-block-link {
+    .schedule-block.is-done .schedule-block-link,
+    .schedule-chip.is-done a {
       border-left-color: var(--done);
       color: var(--muted);
     }
@@ -5440,7 +5453,13 @@
       color: var(--muted);
     }
     .schedule-mday.is-today .schedule-mday-num {
+      width: 2rem;
+      height: 2rem;
+      border-radius: 999px;
       background: var(--action);
+      color: var(--surface);
+    }
+    .schedule-mday.is-today .schedule-mday-num:hover {
       color: var(--surface);
     }
     .schedule-chips {
@@ -5452,10 +5471,11 @@
     }
     .schedule-chip a {
       display: block;
-      padding: 1px 4px;
+      padding: 1px 8px;
       border: 1px solid var(--line);
-      border-radius: 4px;
-      background: var(--page);
+      border-left: 4px solid var(--action);
+      border-radius: 999px;
+      background: var(--surface);
       font-size: 12px;
       color: var(--ink);
       text-decoration: none;
