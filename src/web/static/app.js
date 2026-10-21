@@ -566,8 +566,10 @@
 // A Property's Address (input[data-address-suggest]) offers matching addresses as
 // you type, from /properties/address-suggestions. Choosing one fills Address,
 // Suburb and the hidden lat and lng. Arrow keys move, Enter picks, Escape closes
-// the list. Without this file it is a plain text box, the hidden pin stays empty,
-// and the address is geocoded on save.
+// the list. A reply still on its way is dropped when the query goes below 3
+// characters, a suggestion is chosen, Escape is pressed, or the field is left,
+// and nothing is drawn while the field isn't focused. Without this file it is a
+// plain text box, the hidden pin stays empty, and the address is geocoded on save.
 (() => {
   let made = 0;
 
@@ -617,7 +619,15 @@
       input.removeAttribute('aria-activedescendant');
     }
 
+    /** Drops a suggestion that has been asked for but not drawn yet. */
+    function dropInFlight() {
+      window.clearTimeout(timer);
+      request++;
+    }
+
     function render(suggestions) {
+      // The field was left while this reply was on its way.
+      if (document.activeElement !== input) return;
       shown = suggestions;
       list.replaceChildren(
         ...(shown.length
@@ -640,6 +650,7 @@
     }
 
     function choose(suggestion) {
+      dropInFlight();
       input.value = suggestion.address;
       suburb.value = suggestion.suburb;
       lat.value = String(suggestion.location.lat);
@@ -653,7 +664,10 @@
       lng.value = '';
       window.clearTimeout(timer);
       const query = input.value.trim();
-      if (query.length < 3) return close();
+      if (query.length < 3) {
+        dropInFlight();
+        return close();
+      }
       const mine = ++request;
       timer = window.setTimeout(async () => {
         let suggestions = [];
@@ -676,11 +690,17 @@
       } else if (event.key === 'Enter' && !list.hidden && active >= 0) {
         event.preventDefault();
         choose(shown[active]);
-      } else if (event.key === 'Escape' && !list.hidden) {
-        event.preventDefault();
-        close();
+      } else if (event.key === 'Escape') {
+        dropInFlight();
+        if (!list.hidden) {
+          event.preventDefault();
+          close();
+        }
       }
     });
-    input.addEventListener('blur', () => close());
+    input.addEventListener('blur', () => {
+      dropInFlight();
+      close();
+    });
   }
 })();
