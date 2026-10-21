@@ -397,6 +397,28 @@ describe('picking a day in the Next 7 days', () => {
     }
   });
 
+  /**
+   * Saturday 10 October 2026, 9:00 am, is where one Ticket leaves the clock.
+   * The visit is Tuesday 13 October, 9:00 am to 11:00 am. 79 hours later is
+   * 4:00 pm that Tuesday: 72 hours to 9:00 am, then 7 hours.
+   */
+  test('a visit earlier today that has ended is listed under today', async () => {
+    const w = await webWorld();
+    const job = await tomsTapTicket(w);
+    await bookVisit(w, job, new Date('2026-10-13T09:00:00+11:00'));
+    w.h.clock.advance(79 * HOUR);
+    const cookie = await w.signIn();
+
+    const strip = nextSeven(await page(w, '/', cookie));
+
+    expect(strip).toContain('Tuesday 13 October');
+    expect(strip).toContain('9:00 am');
+    expect(strip).toContain('The kitchen tap is dripping');
+    expect(strip).toContain(`href="/tickets/${job.ticketId}"`);
+    expect(strip).toContain('aria-label="Has a visit"');
+    expect(strip).not.toContain('Nothing booked on Tuesday.');
+  });
+
   test('a Site Inspection is badged, and links to the Tradie and the Ticket', async () => {
     const w = await webWorld();
     const job = await tomsTapTicket(w);
