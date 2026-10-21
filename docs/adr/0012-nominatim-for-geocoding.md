@@ -12,21 +12,21 @@ A request is `GET {NOMINATIM_URL}/search` with the address as `q`, `format=jsonv
 **Usage policy** ([Nominatim's](https://operations.osmfoundation.org/policies/nominatim/)):
 
 - Every request sends a `User-Agent` of `myEST8 (<PUBLIC_URL>)`.
-- At most one request a second. The adapter queues its own requests so they start at least 1000 ms apart, even when several are asked for at once.
+- At most one request a second. The adapter queues its own requests so they start at least 1000 ms apart, even when several are asked for at once. The queue holds per server instance, and Vercel can run several, which is accepted at this app's traffic.
 - Results are kept. A found location is stored on the Property or Tradie and never looked up again.
 - Attribution: the Dispatch map already shows OpenStreetMap's credit through its attribution control.
 
 **What stays on Google:** the Places API (New), for listing search, details and ratings, and the Tradie autofill. `GOOGLE_MAPS_API_KEY` needs only that API enabled.
 
-**Configuration:** `NOMINATIM_URL` is the base URL. It is optional. Hosted mode defaults to `https://nominatim.openstreetmap.org`, so it is never a missing setting. The local demo and the tests use the in-process mock unless it is set.
+**Configuration:** `NOMINATIM_URL` is the base URL. It is optional. Hosted mode and `npm start` default to `https://nominatim.openstreetmap.org`, so it is never a missing setting. The local demo and the tests use the in-process mock unless it is set.
 
 **Address suggestions** use [Photon](https://photon.komoot.io) (`PHOTON_URL`), Komoot's geocoder over the same OpenStreetMap data. Nominatim's usage policy forbids search-as-you-type, and Photon allows it. No key. The public server is fair use and may throttle.
 
 A request is `GET {PHOTON_URL}/api/?q=…&limit=5&lang=en&countrycode=AU&layer=house&layer=street`. Photon's API offers `countrycode` (a 2-letter country code; checked on the public server, which accepts `AU`), so suggestions are limited to Australia that way rather than with `bbox`. `layer` asks for houses and streets. Photon still returns some points of interest as `house` when they have a street number (a restaurant, a bus stop), so the adapter keeps a house only when its OSM key is `building` or `place`, and keeps a `street` by its name. A result's coordinates are `[longitude, latitude]`. A blank or under-3-character query makes no request.
 
-Choosing a suggestion fills the Property's Address and Suburb and a hidden pin. `addProperty` stores that pin when both numbers sit inside mainland Australia and Tasmania (about 10°S–44°S, 112°E–154°E). Otherwise, and when the form is used without JavaScript, the address is geocoded with Nominatim as before.
+Choosing a suggestion fills the Property's Address and Suburb and a hidden pin. `addProperty` stores that pin when both numbers sit inside mainland Australia and Tasmania (about 10°S–44°S, 112°E–154°E). A posted pin inside the box is trusted as the Property Manager's choice, and isn't checked against the address. Otherwise, and when the form is used without JavaScript, the address is geocoded with Nominatim as before.
 
-`PHOTON_URL` is optional. Hosted mode defaults to `https://photon.komoot.io`, so it is never a missing setting. The local demo and the tests use the in-process mock unless it is set. The mock answers from the demo's addresses.
+`PHOTON_URL` is optional. Hosted mode and `npm start` default to `https://photon.komoot.io`, so it is never a missing setting. The local demo and the tests use the in-process mock unless it is set. The mock answers from the demo's addresses.
 
 ## Consequences
 
