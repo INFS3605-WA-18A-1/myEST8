@@ -31,6 +31,63 @@ Restyle the calendar in the Teams/Outlook calendar idiom, within this app's desi
 
 Before building, write a short design plan (tokens and an ASCII wireframe of the Week view) into this issue under `## Design plan`, and check it against the design system. Then build it. Screenshot Week, Day and Month at 1366 px and Week at 390 px, and fix what looks off.
 
+## Design plan
+
+Checked against `docs/design-system.md`. The Schedule keeps this app's palette and type. It does not take Microsoft's blue, Segoe, or all-caps hour labels: the gutter stays "8 am", the same sentence case as "9:00 am" everywhere else (the design system forbids all-caps).
+
+### Colour
+
+- **Harbour** (`--action`): today's date circle, with a white numeral; the selected Day/Week/Month and Mine/All; a plain visit's 4px left edge (the block is a link, and Harbour means act). A Site inspection keeps that edge and adds a Harbour-on-`--info-bg` marker, the info pair `visitKind` already uses.
+- **Wattle** (`--hivis`): the 4px left edge only, when a reschedule waits on this Property Manager (`is-decision`). Never text, never a button, never a wash.
+- **Ochre** (`--high`): the left edge of someone else's reschedule (`is-reschedule`).
+- **Done** (`--done`): the left edge of a finished visit (`is-done`), with the words still there. Colour is never the only signal.
+- **Rust** (`--urgent`): the current-time line and the dot in the gutter. The only red.
+- **Sand** (`--page`, called Paper in the design system): weekend columns, and the tray behind the grid.
+- **`--info-bg`**: today's column, a light Harbour tint. Visit blocks stay white (`--surface`) on it.
+- **Slate** (`--muted`): the weekday, the hour labels, the Tradie's name.
+- **Line** (`--line`): the hour rules. Half-hour rules are the same line at lower opacity, so they read as fainter. No new token.
+
+A visit with no flag (confirmed, or not confirmed yet) takes the Harbour edge; "Not confirmed yet" stays in words, because `bookingFlags` gives that state no colour of its own.
+
+### Type
+
+- Period title: Bricolage 20px, weight 600, Night. "12 – 18 October 2026", "Thursday 8 October", "October 2026".
+- Weekday: Public Sans 12px, weight 500, Slate.
+- Date numeral: Bricolage 20px, weight 600, tabular (`num`). Today: white on a 32px Harbour circle.
+- Hour gutter: Public Sans 12px, Slate, tabular, right-aligned on the hour line.
+- Visit: Public Sans. Time and issue 600, Night; Tradie 400, Slate. An hour or less is one line, cut with an ellipsis; the link's accessible name still reads the time, the issue and the Tradie.
+
+### Wireframe (Week, from 768px)
+
+```
+Schedule                                      Sun 18 Oct   Alice
+[Today]  <  >   12 – 18 October 2026     [Day|Week|Month] [Mine|All]
+1 visit booked
+
+        Mon    Tue    Wed    Thu     Fri    Sat    Sun
+        12     13     14    (15)     16     17     18     <- circle on today
+ 7 am  ─────────────────────────────────────────────
+ 8 am  - - - - - - - - - - - - - - - - - - - - - - - -    <- fainter
+ 9 am  ┌────────────┐            ·━━━━━━━━━━━━━━━        <- Rust, today only
+       │ 9:00–11:00 │            (column tinted)
+       │ Kitchen tap│            Sat–Sun on Paper
+       │ Pete's Pl. │
+       └────────────┘
+```
+
+The grid is a window on the working day. It opens scrolled to an hour before the first visit, or to 7 am, and scrolls inside its frame. The page does not scroll sideways.
+
+### Alignment
+
+- Toolbar: one row, items centred on the same line. Today (outlined), then the two icon buttons, then the period. The view switch and Mine/All sit on the right, with Share after them. Under 768px the switch and filter drop to a second row.
+- Day headings: centred in the column. The weekday sits above the numeral. Every numeral occupies the same 32px box, so the seven dates share one line.
+- Hour labels: right-aligned in the 3.5rem gutter, centred on the hour rule. Half-hour rules have no label.
+- Visit blocks: 4px in from the column, 4px radius, 4px left edge, text left-aligned.
+
+### What makes it a Teams-style calendar
+
+The period is a title beside the arrows, not a sentence under the page name. Each day is a column headed by a small weekday and a large date; today is a filled circle and a tinted column. Time runs down a gutter, hour rules stronger than half-hours, and a red line marks now. Visits are compact rounded blocks with a coloured edge, not full cards. Overlaps stay as they are: the Week folds them into "N Jobs booked", the Day puts them in lanes.
+
 ## Acceptance criteria
 
 - [ ] Page tests (`test/web/`):
