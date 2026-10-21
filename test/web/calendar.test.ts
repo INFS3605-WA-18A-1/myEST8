@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { visible, webWorld } from '../support/web.ts';
 import { HOUR } from '../support/harness.ts';
-import { confirmedQuotes, HANA, inspectionBooked, jobView, TOM, tomsTapTicket } from '../support/world.ts';
+import { confirmedQuotes, HANA, inspectionBooked, jobView, TOM, tomsTapTicket, visitStarted } from '../support/world.ts';
 
 type Web = Awaited<ReturnType<typeof webWorld>>;
 
@@ -80,6 +80,13 @@ function summaryOf(html: string) {
   const start = html.indexOf('class="schedule-summary"');
   expect(start, 'no summary on the page').toBeGreaterThan(-1);
   return html.slice(start, html.indexOf('</div>', start));
+}
+
+/** The Free today panel, without the calendar around it. */
+function freePanel(html: string) {
+  const start = html.indexOf('<aside class="schedule-free"');
+  expect(start, 'no Free today panel').toBeGreaterThan(-1);
+  return html.slice(start, html.indexOf('</aside>', start));
 }
 
 describe('Schedule: the week', () => {
@@ -217,17 +224,83 @@ describe('Schedule: Site Inspections and who is free', () => {
     expect(html).toContain(`href="/tickets/${job.ticketId}#job-${job.jobId}"`);
   });
 
-  test('the summary lists the Tradies with no booking as Free today, when today is shown', async () => {
+  test('every Tradie is free today when none is booked, and another week shows no panel', async () => {
     const w = await webWorld();
     await bookedTap(w);
     const cookie = await w.signIn();
 
-    const free = visible(summaryOf(await page(w, '/calendar', cookie)));
+    const free = visible(freePanel(await page(w, '/calendar', cookie)));
     // Now is Saturday 10 October; Pete's visit is on Tuesday, so every Tradie is free today.
     expect(free).toContain('Free today (6)');
     expect(free).toContain("Pete's Plumbing");
 
-    expect(visible(summaryOf(await page(w, '/calendar?view=week&date=2026-10-19', cookie)))).not.toContain('Free today');
+    const next = await page(w, '/calendar?view=week&date=2026-10-19', cookie);
+    expect(next).not.toContain('class="schedule-free"');
+    expect(visible(next)).not.toContain('Free today');
+  });
+
+  test('this week lists each Tradie free today, with their Trade and myEST8 rating, and leaves out one booked today', async () => {
+    const w = await webWorld();
+    await bookedTap(w);
+    // Pete's visit is Tuesday 13 October at 9 am. Move to that morning, so today is a day he is booked.
+    visitStarted(w, TUE_9AM);
+    const cookie = await w.signIn();
+
+    const panel = freePanel(await page(w, '/calendar', cookie));
+    const text = visible(panel);
+
+    expect(text).toContain('Free today (5)');
+    expect(panel).not.toContain(`href="/tradies/${w.tradies.pete.id}"`);
+    expect(text).not.toContain("Pete's Plumbing");
+    // Plumbing before electrical (the fixed Trade list), then by business name.
+    const names = ["Drip Doctors", 'Flow Bros', "Nina's Plumbing", 'Quick Pipes', 'Sparky Sam'];
+    let at = -1;
+    for (const name of names) {
+      const found = text.indexOf(name);
+      expect(found, name).toBeGreaterThan(at);
+      at = found;
+    }
+    expect(panel).toContain(`href="/tradies/${w.tradies.dana.id}"`);
+    expect(panel).toContain('aria-hidden="true">DD</span>');
+    expect(text).toContain('Plumbing');
+    expect(text).toContain('Electrical');
+    expect(text).toContain('myEST8 5.0 (1) from 1 rating');
+    expect(text).toContain('myEST8 3.0 (1) from 1 rating');
+  });
+
+  test('with everyone booked, the panel says every Tradie has a visit today', async () => {
+    const w = await webWorld();
+    const first = await tomsTapTicket(w);
+    // Saturday 10 October, 9 am. Book each Tradie later that day, on their own Job.
+    const start = new Date('2026-10-10T11:00:00+11:00');
+    const jobs = [first];
+    for (const trade of ['plumbing', 'plumbing', 'plumbing', 'plumbing', 'electrical'] as const) {
+      jobs.push({ ticketId: first.ticketId, jobId: await w.alice.addJob(first.ticketId, trade) });
+    }
+    const tradies = [w.tradies.pete, w.tradies.quick, w.tradies.dana, w.tradies.finn, w.tradies.nina, w.tradies.sam];
+    for (let i = 0; i < tradies.length; i++) {
+      // Kept under the Property's Max Repair Cost once all six Quotes are approved.
+      const [quote] = await confirmedQuotes(w, jobs[i]!, [[tradies[i]!, 50_00, start]]);
+      await w.alice.chooseQuote(quote!.quoteId, 'Today');
+      await w.alice.sendWorkOrder(jobs[i]!.jobId);
+    }
+    const cookie = await w.signIn();
+
+    const text = visible(freePanel(await page(w, '/calendar', cookie)));
+
+    expect(text).toContain('Every Tradie has a visit today.');
+    expect(text).not.toContain("Pete's Plumbing");
+  }, 60_000);
+
+  test('with no Tradies, the panel links to add one', async () => {
+    const w = await webWorld();
+    const cookie = await w.signUp();
+
+    const panel = freePanel(await page(w, '/calendar', cookie));
+
+    expect(panel).toContain('href="/tradies#add-tradie"');
+    expect(visible(panel)).toContain('Add a Tradie');
+    expect(visible(panel)).not.toContain('Every Tradie has a visit today.');
   });
 });
 

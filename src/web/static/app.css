@@ -4894,21 +4894,87 @@
     .booking-kind {
       margin: 0 0 2px;
     }
+    /* Free today (pages/calendar.ts): the same bounded Tradie entry as Dispatch, with
+       initials in a Harbour circle instead of the wrench, and only the myEST8 rating. */
     .schedule-free {
-      margin: 8px 0 0;
-      font-size: 13px;
-      color: var(--muted);
-      overflow-wrap: anywhere;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 0;
     }
-    .schedule-free-label {
-      cursor: pointer;
+    .schedule-free-title {
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 16px;
       font-weight: 600;
+      line-height: 1.2;
       color: var(--ink);
     }
-    .schedule-free-list {
-      margin: 4px 0 0;
-      padding: 0;
-      list-style: none;
+    .tradie-initials {
+      grid-column: 1;
+      grid-row: 1;
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--action);
+      color: var(--surface);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    .schedule-free-note {
+      margin: 0;
+      font-size: 14px;
+      color: var(--muted);
+    }
+    /* Beside the grid from 1024px. Under that, the panel is first, so it sits above
+       the Week, and its entries scroll sideways inside the panel rather than the page. */
+    .schedule-board {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      min-width: 0;
+    }
+    .schedule-main {
+      min-width: 0;
+    }
+    @media (max-width: 63.99rem) {
+      .schedule-free .tradie-entries {
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 8px;
+        width: 100%;
+        min-width: 0;
+        overflow-x: auto;
+        overscroll-behavior-x: contain;
+        padding-bottom: 4px;
+      }
+      .schedule-free .tradie-entry {
+        flex: 0 0 17rem;
+      }
+    }
+    @media (min-width: 64rem) {
+      .schedule-board:has(.schedule-free) {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 20rem;
+        align-items: start;
+        column-gap: 16px;
+      }
+      .schedule-free {
+        grid-column: 2;
+        grid-row: 1;
+        max-height: min(40rem, calc(100dvh - 16rem));
+      }
+      .schedule-free .tradie-entries {
+        min-height: 0;
+        overflow-y: auto;
+      }
+      .schedule-main {
+        grid-column: 1;
+        grid-row: 1;
+      }
     }
     .booking-reschedule {
       font-weight: 600;

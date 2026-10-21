@@ -14,9 +14,12 @@
 // Under 768 px the Week is a list of days instead, where a run of empty days folds into
 // one line ("Nothing booked Tue 13 – Wed 14"). Every visit on the grid is a list item
 // whose link names its time, what it is for and the Tradie, so the grid reads as text.
+// When today is in the period, Free today lists the Tradies with no visit today, beside
+// the grid from 1024 px and as a sideways row of entries under that.
 
 import { Hono } from 'hono';
 import { html } from 'hono/html';
+import { TRADES, type Trade } from '../../shared.ts';
 import { addDays, dayOf, daysFrom, mondayOf, parseDay, startOfDay, wallClock } from '../../zoned-time.ts';
 import { bookingCard, bookingFlags, bookingsByDay, dayRange, longDay, shortDay, ticketHref, visitKind, visitWords, type Booking } from '../bookings.ts';
 import type { WebEnv } from '../env.ts';
@@ -24,7 +27,7 @@ import { icon } from '../icons.ts';
 import { layoutDay, hourRange, minuteOfDay, type DayLayout, type HourRange } from '../schedule-layout.ts';
 import { COLLEAGUES_ONLY, shareButton, shareUrl } from '../share.ts';
 import { shellInfo } from '../shell.ts';
-import { badge, clip, flashFrom, formatTime, formatWhen, linkButton, page, segmented, tabs, type Html } from '../ui.ts';
+import { badge, clip, flashFrom, formatTime, formatWhen, humanise, linkButton, page, segmented, tabs, type Html } from '../ui.ts';
 
 export type { Booking } from '../bookings.ts';
 
@@ -64,13 +67,13 @@ export function calendarPages() {
     const view: View = VIEWS.find((v) => v === c.req.query('view')) ?? 'week';
     const period = periodOf(view, parseDay(c.req.query('date')) ?? legacyWeek ?? today, today);
     const { first, days } = period;
-    const tradies = await actions.people('tradie');
     const every = await actions.calendar({ from: startOfDay(first, timeZone).toISOString(), to: startOfDay(addDays(days.at(-1)!, 1), timeZone).toISOString() });
     const bookings = filter === 'mine' ? every.filter((b) => b.propertyManagerId === pm.id) : every;
     const hidden = every.length - bookings.length;
     const byDay = bookingsByDay(bookings, first, timeZone);
     const ctx: Ctx = { timeZone, filter, meId: pm.id, today, now: actions.now() };
-    const free = days.includes(today) ? freeToday(tradies, every, today, timeZone) : null;
+    // Ratings come from the directory. Only when today is on show: another period has no panel.
+    const directory = days.includes(today) ? await actions.tradieDirectory() : null;
     const focus = days.includes(today) ? today : first;
 
     return c.html(
@@ -92,9 +95,11 @@ export function calendarPages() {
             pm.id,
             period.noun,
             hidden ? html`${hidden} more ${hidden === 1 ? 'visit' : 'visits'} ${period.noun} on other Property Managers’ Properties. <a class="link" href="${hrefFor(view, first, 'all')}">Show all</a>` : '',
-            free,
           )}
-          ${view === 'day' ? dayView(first, byDay.get(first) ?? [], ctx) : view === 'week' ? weekView(days, byDay, ctx) : monthView(period, byDay, ctx)}
+          <div class="schedule-board">
+            ${directory ? freeTodayPanel(freeToday(directory, every, today, timeZone), directory.length) : ''}
+            <div class="schedule-main">${view === 'day' ? dayView(first, byDay.get(first) ?? [], ctx) : view === 'week' ? weekView(days, byDay, ctx) : monthView(period, byDay, ctx)}</div>
+          </div>
         `,
       }),
     );
@@ -167,10 +172,9 @@ function shareWords(p: Period, count: number): { title: string; text: string } {
 /**
  * The period in one line: how many visits are booked, then how they stand. A reschedule
  * request on the Property Manager's own Property waits on them, so it carries the
- * Wattle stripe; a colleague's only stands out. `more` says what Mine leaves out; `free`
- * lists the Tradies free today, when today is shown.
+ * Wattle stripe; a colleague's only stands out. `more` says what Mine leaves out.
  */
-function summary(bookings: Booking[], meId: number, noun: string, more: Html | '', free: string[] | null): Html {
+function summary(bookings: Booking[], meId: number, noun: string, more: Html | ''): Html {
   const reschedules = bookings.filter((b) => b.visit === 'reschedule_requested');
   const mine = reschedules.filter((b) => b.propertyManagerId === meId).length;
   const others = reschedules.length - mine;
@@ -183,8 +187,84 @@ function summary(bookings: Booking[], meId: number, noun: string, more: Html | '
       ${unconfirmed ? html`<span class="schedule-flag">${unconfirmed} not confirmed yet</span>` : ''}
     </p>
     ${more ? html`<p class="schedule-more">${more}</p>` : ''}
-    ${free?.length ? html`<details class="schedule-free"><summary class="schedule-free-label">Free today (${free.length})</summary><ul class="schedule-free-list">${free.map((n) => html`<li>${n}</li>`)}</ul></details>` : ''}
   </div>`;
+}
+
+/** A Tradie with no visit today: who they are, the Trades they do, and their myEST8 rating. */
+interface FreeTradie {
+  id: number;
+  businessName: string;
+  trades: Trade[];
+  rating: { average: number; count: number };
+}
+
+/** What `tradieDirectory` gives `freeToday`. The panel only needs a few of its fields. */
+type DirectoryTradie = {
+  tradieId: number;
+  name: string;
+  businessName: string | null;
+  trades: Trade[];
+  myEst8Rating: { average: number; count: number };
+};
+
+/**
+ * The Agency's Tradies with no visit starting or running today (the calendar returns
+ * all Agency visits, not only Mine), in Trade order and then by business name.
+ */
+function freeToday(tradies: DirectoryTradie[], every: Booking[], today: string, timeZone: string): FreeTradie[] {
+  const busy = new Set(every.filter((b) => dayOf(b.start, timeZone) <= today && dayOf(new Date(Date.parse(b.end) - 1).toISOString(), timeZone) >= today).map((b) => b.tradieId));
+  return tradies
+    .filter((t) => !busy.has(t.tradieId))
+    .map((t) => ({ id: t.tradieId, businessName: t.businessName ?? t.name, trades: t.trades, rating: t.myEst8Rating }))
+    .sort((a, b) => tradeRank(a.trades) - tradeRank(b.trades) || a.businessName.localeCompare(b.businessName, 'en'));
+}
+
+/** Where a Tradie's Trades sit in the fixed list. Several Trades count as the earliest. */
+function tradeRank(trades: Trade[]): number {
+  const ranks = trades.map((t) => TRADES.indexOf(t)).filter((i) => i >= 0);
+  return ranks.length ? Math.min(...ranks) : TRADES.length;
+}
+
+/** "Drip Doctors" is DD; a single word gives its first two letters. */
+function initials(name: string): string {
+  const words = name.split(/\s+/).filter(Boolean);
+  if (words.length > 1) {
+    return words
+      .slice(0, 2)
+      .map((word) => word.replace(/^[^A-Za-z0-9]+/, '')[0] ?? '')
+      .join('')
+      .toUpperCase();
+  }
+  return (words[0] ?? name).slice(0, 2).toUpperCase();
+}
+
+/**
+ * Who is free today, when today is in the period. One bounded entry per Tradie, the
+ * same block as Dispatch's Tradie entry: initials, the business name, their Trades,
+ * their myEST8 rating. No distance and no Google rating, which that entry also shows.
+ */
+function freeTodayPanel(free: FreeTradie[], tradieCount: number): Html {
+  const body = free.length
+    ? html`<ul class="tradie-entries schedule-free-list">${free.map((t) => freeEntry(t))}</ul>`
+    : tradieCount
+      ? html`<p class="schedule-free-note">Every Tradie has a visit today.</p>`
+      : html`<p class="schedule-free-note">No Tradies yet. <a class="link" href="/tradies#add-tradie">Add a Tradie</a></p>`;
+  return html`<aside class="schedule-free" aria-labelledby="free-today">
+    <h2 id="free-today" class="schedule-free-title">Free today${tradieCount ? html` <span class="num">(${free.length})</span>` : ''}</h2>
+    ${body}
+  </aside>`;
+}
+
+/** One free Tradie. The circle's letters repeat the business name, so they are hidden from assistive tech. */
+function freeEntry(t: FreeTradie): Html {
+  const noun = t.rating.count === 1 ? 'rating' : 'ratings';
+  const trades = [...t.trades].sort((a, b) => TRADES.indexOf(a) - TRADES.indexOf(b)).map((trade) => humanise(trade)).join(', ');
+  return html`<li class="tradie-entry" data-tradie="${t.id}">
+    <span class="tradie-initials" aria-hidden="true">${initials(t.businessName)}</span>
+    <span class="tradie-line"><a class="tradie-name" href="/tradies/${t.id}">${t.businessName}</a></span>
+    <span class="tradie-trades">${trades}</span>
+    <span class="tradie-scores"><span class="tradie-rating"><span class="tradie-source">myEST8</span>${icon('star', { weight: 'fill', size: 'size-3.5' })}<strong class="num">${t.rating.average.toFixed(1)}</strong><span class="num" aria-hidden="true">(${t.rating.count})</span><span class="sr-only">from ${t.rating.count} ${noun}</span></span></span>
+  </li>`;
 }
 
 /** "Mon", for the small weekday over a date. */
@@ -452,12 +532,6 @@ function dayItem(day: string, bookings: Booking[], ctx: Ctx): Html {
       ? html`<ul class="booking-list">${bookings.map((b) => bookingCard(b, ctx.timeZone, { propertyManager: ctx.filter === 'all', decision: b.propertyManagerId === ctx.meId }))}</ul>`
       : html`<p class="text-sm text-muted">Nothing booked</p>`}
   </li>`;
-}
-
-/** The Agency's Tradies with no visit starting or running today (the calendar returns all Agency visits, not only Mine). */
-function freeToday(tradies: { id: number; name: string; businessName: string | null }[], every: Booking[], today: string, timeZone: string): string[] {
-  const busy = new Set(every.filter((b) => dayOf(b.start, timeZone) <= today && dayOf(new Date(Date.parse(b.end) - 1).toISOString(), timeZone) >= today).map((b) => b.tradieId));
-  return tradies.filter((t) => !busy.has(t.id)).map((t) => t.businessName ?? t.name);
 }
 
 /**

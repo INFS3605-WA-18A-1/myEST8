@@ -60,6 +60,30 @@ test('the toolbar is one row on a laptop, Next then Today returns to this week, 
   expect(weekPhone.y).toBeGreaterThan(todayPhone.y + todayPhone.height - 4);
 });
 
+test('the Free today panel sits beside the Week on a laptop and above it on a phone', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 900 });
+  await signIn(page);
+  await page.goto('/calendar?filter=all');
+
+  const panel = page.getByRole('complementary', { name: /^Free today/ });
+  const grid = page.getByRole('region', { name: 'The week, hour by hour' });
+  await expect(panel).toBeVisible();
+  const panelBox = (await panel.boundingBox())!;
+  const gridBox = (await grid.boundingBox())!;
+  // Beside: the panel's left edge is the grid's right edge, and they share a top.
+  expect(panelBox.x).toBeGreaterThan(gridBox.x + gridBox.width - 2);
+  expect(Math.abs(panelBox.y - gridBox.y)).toBeLessThan(8);
+  expect(await overflow(page)).toBe(0);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const panelPhone = (await panel.boundingBox())!;
+  // Under 768px the Week is the list of days; the hour grid is not on screen.
+  const list = page.getByRole('list', { name: 'The week, Monday to Sunday' });
+  const listBox = (await list.boundingBox())!;
+  expect(panelPhone.y + panelPhone.height).toBeLessThanOrEqual(listBox.y + 4);
+  expect(await overflow(page)).toBe(0);
+});
+
 test('on a phone the Week is a list of days, and no view scrolls the page sideways', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await signIn(page);
