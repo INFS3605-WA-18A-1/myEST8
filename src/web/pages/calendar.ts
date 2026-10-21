@@ -376,7 +376,7 @@ function weekView(days: string[], byDay: Map<string, Booking[]>, ctx: Ctx): Html
 function weekColumn(day: string, count: number, layout: DayLayout<Booking>, ctx: Ctx): Html {
   const isToday = day === ctx.today;
   const classes = ['schedule-col', isToday ? 'is-today' : '', weekend(day) ? 'is-weekend' : ''].filter(Boolean).join(' ');
-  return html`<li class="${classes}" ${isToday ? html`aria-current="date"` : ''}>
+  return html`<li class="${classes}">
     <h2 class="schedule-col-title">${dateLink(day, ctx)}</h2>
     ${count
       ? html`<ol class="schedule-slots">
@@ -533,12 +533,11 @@ function monthDay(day: string, bookings: Booking[] | null, ctx: Ctx): Html {
   const classes = ['schedule-mday', bookings === null ? 'is-outside' : '', bookings?.length ? 'is-booked' : '', isToday ? 'is-today' : ''].filter(Boolean).join(' ');
   const dayHref = hrefFor('day', day, ctx.filter);
   const number = html`<a class="schedule-mday-num num" href="${dayHref}"${isToday ? html` aria-current="date"` : ''}><span aria-hidden="true">${Number(day.slice(8))}</span><span class="sr-only">${longDay(day)}</span></a>`;
-  const current = isToday ? html` aria-current="date"` : '';
-  if (!bookings?.length) return html`<td class="${classes}"${current}>${number}</td>`;
+  if (!bookings?.length) return html`<td class="${classes}">${number}</td>`;
   const overlaps = layoutDay(bookings, day, ctx.timeZone).clusters.some((cl) => cl.items.length > 1);
   const folded = overlaps || bookings.length > MONTH_CHIPS;
   const sorted = [...bookings].sort((a, b) => a.start.localeCompare(b.start));
-  return html`<td class="${classes}"${current}>
+  return html`<td class="${classes}">
     ${number}
     ${folded
       ? ''
@@ -581,7 +580,7 @@ function weekList(days: string[], byDay: Map<string, Booking[]>, ctx: Ctx): Html
 function dayItem(day: string, bookings: Booking[], ctx: Ctx): Html {
   const isToday = day === ctx.today;
   const classes = ['schedule-day', bookings.length ? 'is-booked' : 'is-empty', isToday ? 'is-today' : ''].join(' ');
-  return html`<li class="${classes}" ${isToday ? html`aria-current="date"` : ''}>
+  return html`<li class="${classes}">
     <h2 class="schedule-day-title">
       ${dateLink(day, ctx)}
       ${isToday ? badge('Today', 'info') : ''}
@@ -605,17 +604,20 @@ function scheduleToolbar(p: Period, filter: Filter, focus: string, share: Html):
       ${linkButton('Today', hrefFor(p.view, null, filter), { size: 'sm' })}
       <a class="btn btn-ghost btn-sm btn-square" href="${hrefFor(p.view, p.prev, filter)}" aria-label="Previous ${unit}">${icon('caret-left', { size: 'size-4' })}</a>
       <a class="btn btn-ghost btn-sm btn-square" href="${hrefFor(p.view, p.next, filter)}" aria-label="Next ${unit}">${icon('caret-right', { size: 'size-4' })}</a>
-      <p class="schedule-period">${p.label}</p>
+      <h2 class="schedule-period">${p.label}</h2>
     </nav>
     <div class="schedule-toolbar-end">
       ${tabs(
         VIEWS.map((v) => ({ label: v === 'day' ? 'Day' : v === 'week' ? 'Week' : 'Month', href: hrefFor(v, focus, filter), active: v === p.view })),
         'Calendar views',
       )}
-      ${segmented([
-        { label: 'Mine', href: hrefFor(p.view, p.first, 'mine'), active: filter === 'mine' },
-        { label: 'All', href: hrefFor(p.view, p.first, 'all'), active: filter === 'all' },
-      ])}
+      ${segmented(
+        [
+          { label: 'Mine', href: hrefFor(p.view, p.first, 'mine'), active: filter === 'mine' },
+          { label: 'All', href: hrefFor(p.view, p.first, 'all'), active: filter === 'all' },
+        ],
+        'Whose visits',
+      )}
       ${share}
     </div>
   </div>`;

@@ -171,6 +171,7 @@ describe('Schedule: the week', () => {
     const days = week(await page(w, '/calendar', cookie));
 
     expect(days).toContain('aria-current="date"');
+    expect(days).not.toMatch(/<li class="schedule-day[^"]*" aria-current="date"/);
     // Now is Thursday 8 October.
     expect(visible(days)).toMatch(/Thu 8 Thursday 8 October Today Nothing booked/);
     expect(visible(days)).toContain('Nothing booked Mon 5 – Wed 7');
@@ -457,8 +458,10 @@ describe('Schedule: the Month', () => {
     expect(month.match(/<tr>/g)).toHaveLength(6);
     expect(month).toContain('<td class="schedule-mday is-outside"><a class="schedule-mday-num num" href="/calendar?view=day&amp;date=2026-09-28">');
     expect(month).toContain('href="/calendar?view=day&amp;date=2026-11-01"');
-    // Now is Thursday 8 October.
-    expect(month).toMatch(/<td class="schedule-mday is-today" aria-current="date">/);
+    // Now is Thursday 8 October. The number is a link, so the cell itself is not current too.
+    expect(month).toMatch(/<td class="schedule-mday is-today">/);
+    expect(month).not.toMatch(/<td class="schedule-mday is-today"[^>]*aria-current/);
+    expect(month).toMatch(/<a class="schedule-mday-num num" href="\/calendar\?view=day&amp;date=2026-10-08" aria-current="date">/);
     expect(month).toContain('<span class="sr-only">Thursday 8 October</span>');
     expect(html).toContain('href="/calendar?view=month&amp;date=2026-09-01"');
     expect(html).toContain('href="/calendar?view=month&amp;date=2026-11-01"');
@@ -541,6 +544,8 @@ describe('Schedule: the toolbar', () => {
     const current = toolbar(await page(w, '/calendar', cookie));
     expect(current).toMatch(/class="btn btn-outline btn-sm"[^>]*>Today</);
     expect(visible(current)).toContain('5 – 11 October 2026');
+    expect(current).toContain('<h2 class="schedule-period">5 – 11 October 2026</h2>');
+    expect(current).toContain('<nav class="segmented" aria-label="Whose visits">');
   });
 
   test('a week across two years names both, and a Day title includes the year', async () => {
@@ -564,7 +569,8 @@ describe("Schedule: today's column", () => {
 
     // Now is Thursday 8 October, in the week of Monday 5 October.
     const thu = column(await page(w, '/calendar', cookie), '2026-10-08');
-    expect(thu).toMatch(/<li class="schedule-col is-today[^"]*" aria-current="date"/);
+    // The date is a link, so "today" sits on that link and not also on the column.
+    expect(thu).not.toMatch(/<li class="schedule-col[^"]*" aria-current="date"/);
     expect(thu).toMatch(/<a [^>]*aria-current="date"/);
     // The weekday is small and the date stands on its own, so today can wear the circle.
     expect(thu).toContain('aria-hidden="true">Thu</span>');
