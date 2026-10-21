@@ -301,6 +301,35 @@ Each setup step that creates many records (Property Owners, Building Managers, T
 - **"Filled in by AI"** is the one bold mark: a Harbour chip on `--info-bg` with the `sparkle` icon, on every value the AI supplied and on columns it matched. Values worked out by a fixed rule ("From the address", "No rating in the sheet, so 3") are muted notes instead; when every row has the same one, it's said once under the column heading.
 - AI answers below the confidence threshold are never applied: the column is ignored, or the cell is flagged with "The AI isn't sure. Its guess: Carpentry."
 
+### Adding a Tradie from their Google listing
+
+`addTradieSection()` in `onboarding-forms.ts` is the one component for adding a Tradie. The welcome wizard's Tradies step, Setup's Tradies section and the Tradies page all render it, so the three can't drift. Don't copy its markup into a page.
+
+```
+First, find their Google listing
+[ Business name and suburb          ] [Search Google]
+┌─────────────────────────────────────────────────┐
+│ Pete's Plumbing                      ✓ Chosen    │  results, one link each
+│ 4 Illawarra Rd, Marrickville NSW 2204            │
+└─────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────┐
+│ Flow Bros Plumbing                               │
+└─────────────────────────────────────────────────┘
+Not on Google? Enter their details yourself
+┌─────────────────────────────────────────────────┐
+│ Pete's Plumbing                                  │  the listing's card
+│ Phone  Website  Google rating  Trades Jev suggests│
+└─────────────────────────────────────────────────┘
+Business name, Contact name, Mobile, Email, Trades, Starting rating   [Add Tradie]
+```
+
+- **Results** are a list (`aria-label="Google listings"`) of links to `?google=<query>&place=<placeId>`, so choosing works without JavaScript. Each is a bounded entry like the Dispatch Tradie entry: a 1 px `--line` border, 6 px radius, 12 px padding, white (`.listing-result`). The name is Bricolage 16 px 600 and the address 14 px Slate. The chosen one is `aria-current="true"` with `--info-bg` and a Harbour border, and says "Chosen" with a tick so colour isn't the only signal.
+- **The card** (`.listing-card`) has the same boundary and sits above the form: the name, the address, then `dl` rows for Phone, Website, Google rating and the Trades Jev suggests. A row is left out when Google has nothing for it. A landline is shown with "Not put in Mobile, because myEST8 texts that number."
+- **The form** appears only once a listing is chosen or "Not on Google? Enter their details yourself" (`?manual=1`) is. Until then there is just the search and its results. The listing is a hidden `placeId`, never a radio group: the listing's id, or `none` for not on Google.
+- **Filled in from the listing:** the business name; the Mobile when the phone is an Australian mobile (04… or +614…); the Trades Jev suggests, ticked. Under the Trades: "Suggested from their Google listing. Check them." or, when Jev suggested none or failed, "Choose their Trades." The contact name, the email and the starting rating are always the Property Manager's to give.
+- **When Google fails** while loading a listing, the page shows "Google search isn't working right now. Try again, or mark the Tradie as not on Google." and the manual link. When Jev fails the form still fills in, with no Trades ticked.
+- **A refused form** comes back to the same choice: the form posts to a URL that carries `google`, `place` or `manual`. The wizard shows the posted values again; Setup and the Tradies page redirect back (`listingParams` builds the address) and fill in from the listing again. Nothing is stored until Add Tradie.
+
 ## Vocabulary
 
 Each screen uses the same words for the same thing. `src/web/ui.ts` owns these labels; pages import them instead of writing their own.
