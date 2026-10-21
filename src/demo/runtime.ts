@@ -10,6 +10,7 @@ import { createClaudeSummariser } from '../adapters/claude-summariser.ts';
 import { createGooglePlaces } from '../adapters/google-places.ts';
 import { createImageMatcher } from '../adapters/image-matcher.ts';
 import { createJevClassifier } from '../adapters/jev.ts';
+import { createJevTradeSuggester } from '../adapters/jev-trades.ts';
 import { messengersFromEnv } from '../adapters/messenger.ts';
 import { metaFetchMedia } from '../adapters/meta-whatsapp.ts';
 import { createQuoteReader } from '../adapters/quote-reader.ts';
@@ -289,6 +290,7 @@ export async function createDemo<Seeded extends boolean = true>(
     imageMatcher: createImageMatcher({ ...vision, apiKey: env.VISION_API_KEY ?? 'demo' }),
     quoteReader: createQuoteReader({ ...quotes, apiKey: env.QUOTES_API_KEY ?? 'demo', clock, timeZone }),
     places: createGooglePlaces(google),
+    tradeSuggester: createJevTradeSuggester({ ...jev, apiKey: env.JEV_API_KEY ?? 'demo' }),
     fetchMedia: mediaFetcher(env, smsNumbers),
     settings: { baseUrl },
     blobs: storageFromEnv(env),

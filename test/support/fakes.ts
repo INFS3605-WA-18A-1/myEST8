@@ -12,7 +12,9 @@ import type {
   OutboundMessage,
   PlacesLookup,
   QuoteReader,
+  TradeSuggester,
 } from '../../src/ports.ts';
+import type { Trade } from '../../src/shared.ts';
 
 export class FakeClock implements Clock {
   #now: Date;
@@ -124,6 +126,17 @@ export class FakeQuoteReader implements QuoteReader {
   }
   async read(input: { text: string }) {
     return this.#rules.get(input.text) ?? {};
+  }
+}
+
+/** Suggests the Trades in `next` for any listing, or throws it when it is an Error. */
+export class FakeTradeSuggester implements TradeSuggester {
+  next: Trade[] | Error = [];
+  calls: ListingDetails[] = [];
+  async suggestTrades(listing: ListingDetails) {
+    this.calls.push(listing);
+    if (this.next instanceof Error) throw this.next;
+    return this.next;
   }
 }
 

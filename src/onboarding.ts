@@ -129,6 +129,20 @@ export function createOnboarding({ ports, modules }: Context) {
       return ports.places.findListings(query);
     },
 
+    /**
+     * A Google listing's details with the Trades Jev suggests for it. If suggesting fails
+     * the details still come back, with no Trades and `tradesSuggested: false`, so the
+     * form says to choose them: it never stops a Tradie being added.
+     */
+    async googleListing(placeId: string) {
+      const listing = await ports.places.listingDetails(placeId);
+      try {
+        return { ...listing, suggestedTrades: await ports.tradeSuggester.suggestTrades(listing), tradesSuggested: true };
+      } catch {
+        return { ...listing, suggestedTrades: [] as Trade[], tradesSuggested: false };
+      }
+    },
+
     /** Adds a Tradie linked to their Google listing, or marked as not on Google. */
     async addTradie(agencyId: number, input: TradieInput) {
       checkTradie(input);
