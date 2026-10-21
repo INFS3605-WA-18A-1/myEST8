@@ -4,13 +4,15 @@ import { describe, expect, test } from 'vitest';
 import { createGooglePlaces } from '../../src/adapters/google-places.ts';
 import { createImageMatcher } from '../../src/adapters/image-matcher.ts';
 import { createJevClassifier } from '../../src/adapters/jev.ts';
+import { createJevTradeSuggester } from '../../src/adapters/jev-trades.ts';
 import { createQuoteReader } from '../../src/adapters/quote-reader.ts';
 import { DEMO_PLACES, mockApis, mockFetch } from '../../src/demo/mock-apis.ts';
-import type { ClassifierQuestion } from '../../src/ports.ts';
-import { AVAILABILITY, TRADES, URGENCIES } from '../../src/shared.ts';
+import type { ClassifierQuestion, ListingDetails } from '../../src/ports.ts';
+import { AVAILABILITY, TRADES, URGENCIES, type Trade } from '../../src/shared.ts';
 
 const fetch = mockFetch();
 const classifier = createJevClassifier({ baseUrl: 'http://mock.local/jev', apiKey: 'demo', fetch });
+const tradeSuggester = createJevTradeSuggester({ baseUrl: 'http://mock.local/jev', apiKey: 'demo', fetch });
 const imageMatcher = createImageMatcher({ baseUrl: 'http://mock.local/vision', apiKey: 'demo', fetch });
 const quoteReader = createQuoteReader({
   baseUrl: 'http://mock.local/quotes',
@@ -168,6 +170,94 @@ describe('mock classifier', () => {
 
   test('a question it has no rule for gets its first option, unsure', async () => {
     expect(await ask('Hello', tenant(), { id: 'mood', options: ['happy', 'sad'] })).toEqual({ answer: 'happy', confidence: 0.5 });
+  });
+});
+
+/** A listing with nothing in it that names a Trade, then what each test gives it. */
+const listing = (overrides: Partial<ListingDetails>): ListingDetails => ({
+  placeId: 'demo-test',
+  name: 'Acme Pty Ltd',
+  address: '1 King St, Newtown NSW 2042',
+  phone: null,
+  website: null,
+  types: ['point_of_interest', 'establishment'],
+  primaryType: null,
+  summary: null,
+  rating: null,
+  reviewCount: 0,
+  ...overrides,
+});
+
+describe('mock trade suggestions', () => {
+  test.each<[string, Trade[]]>([
+    ['demo-petes-plumbing', ['plumbing']],
+    ['demo-quick-pipes', ['plumbing']],
+    ['demo-ninas-plumbing', ['plumbing']],
+    ['demo-sparky-sam', ['electrical']],
+    ['demo-fixit-carpentry', ['carpentry']],
+    ['demo-cool-appliances', ['electrical', 'appliances']],
+    ['demo-ridgeline-roofing', ['roofing']],
+    ['demo-appliance-rescue', ['appliances']],
+    ['demo-handy-harry', ['general_handyman']],
+    ['demo-bugs-away', ['pest_control']],
+  ])("the demo listing %s is suggested %j, through the real adapter", async (placeId, trades) => {
+    expect(await tradeSuggester.suggestTrades(await places.listingDetails(placeId))).toEqual(trades);
+  });
+
+  test.each<[Trade, Partial<ListingDetails>]>([
+    ['plumbing', { name: 'Reliable Plumbers' }],
+    ['electrical', { primaryType: 'Electrician' }],
+    ['carpentry', { summary: 'Custom joinery and cabinets.' }],
+    ['roofing', { types: ['roofing_contractor'] }],
+    ['appliances', { name: 'Fridge Fixers' }],
+    ['locksmith', { name: 'Keys & Locks 24/7', types: ['locksmith'] }],
+    ['pest_control', { name: 'Termite Busters' }],
+    ['general_handyman', { website: 'https://handyman-sydney.example' }],
+  ])('%s is suggested from its keywords in the listing', async (trade, overrides) => {
+    expect(await tradeSuggester.suggestTrades(listing(overrides))).toEqual([trade]);
+  });
+
+  test('a listing with no keyword gets no suggestions, and "blocked" is not a lock', async () => {
+    expect(await tradeSuggester.suggestTrades(listing({}))).toEqual([]);
+    expect(await tradeSuggester.suggestTrades(listing({ summary: 'We clear blocked access roads.' }))).toEqual([]);
+  });
+
+  test('a business that does several Trades is suggested all of them', async () => {
+    expect(await tradeSuggester.suggestTrades(listing({ name: 'Sparks & Pipes', summary: 'Plumbing and electrical.' }))).toEqual(['plumbing', 'electrical']);
+  });
+
+  test('answers every Trade asked, as noul probabilities', async () => {
+    const response = await mockApis().request('http://mock.local/jev/v1/systemone', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: 'jev-latest',
+        state: { name: "Pete's Plumbing", types: ['plumber'] },
+        questions: { plumbing: { type: 'noul', instructions: 'Plumbing?', criteria: { true: 'Yes', false: 'No' } }, locksmith: { type: 'noul', instructions: 'Locks?', criteria: { true: 'Yes', false: 'No' } } },
+      }),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ answers: { plumbing: { type: 'noul', noul: 0.9 }, locksmith: { type: 'noul', noul: 0.1 } } });
+  });
+
+  test.each([
+    ['no questions', { state: {}, questions: {} }],
+    ['no state', { questions: { plumbing: { type: 'noul' } } }],
+    ['a question that is not a noul', { state: {}, questions: { plumbing: { type: 'choice' } } }],
+    ['a question that is not about a Trade', { state: {}, questions: { painting: { type: 'noul' } } }],
+    ['a body that is not JSON', 'nope'],
+  ])('refuses %s with a 422, as TypeSafe does for a bad request', async (_, body) => {
+    const response = await mockApis().request('http://mock.local/jev/v1/systemone', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: typeof body === 'string' ? body : JSON.stringify(body),
+    });
+    expect(response.status).toBe(422);
+  });
+
+  test('the classifier route is still served', async () => {
+    const response = await mockApis().request('http://mock.local/jev/v1/classify', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ state: {}, questions: [] }) });
+    expect(response.status).toBe(200);
   });
 });
 

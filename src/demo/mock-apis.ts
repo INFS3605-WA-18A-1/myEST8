@@ -6,6 +6,7 @@ import { Hono, type Context } from 'hono';
 import { wallClock, zonedInstant } from '../zoned-time.ts';
 import type { Summariser } from '../ports.ts';
 import { mockClassify } from './mock-classifier.ts';
+import { isTrade, mockTradeAnswers } from './mock-trades.ts';
 
 /** A Google listing the demo's mock Places API knows. A listing may lack a phone, website or summary, as real ones do. */
 interface DemoListing {
@@ -74,7 +75,7 @@ export const DEMO_PLACES: readonly DemoListing[] = [
 
 /**
  * Dummy versions of every external API the app calls, at these paths:
- * /jev/v1/classify, /vision/v1/image-match, /quotes/v1/quote-read (also /quotes/v1/read),
+ * /jev/v1/classify, /jev/v1/systemone (Trades for a Google listing), /vision/v1/image-match, /quotes/v1/quote-read (also /quotes/v1/read),
  * /google/places/v1/places:searchText, /google/places/v1/places/:id,
  * /google/maps/api/geocode/json (also /google/maps/maps/api/geocode/json).
  * Wire the real adapters to it with `mockFetch()` and baseUrls under http://mock.local.
@@ -83,6 +84,21 @@ export function mockApis() {
   const app = new Hono();
 
   app.post('/jev/v1/classify', async (c) => c.json(mockClassify(await jsonBody(c))));
+
+  // The Noul questions about a Trade that a Google listing is asked. The classifier's choice questions
+  // are served at /jev/v1/classify.
+  app.post('/jev/v1/systemone', async (c) => {
+    const body = await jsonBody(c);
+    const questions = isObject(body) ? body.questions : null;
+    // TypeSafe's validation error for a request it can't answer.
+    const refused = (problem: string) => c.json({ detail: [{ loc: ['body'], msg: problem, type: 'value_error' }] }, 422);
+    if (!isObject(body) || !isObject(body.state)) return refused('state is required');
+    if (!isObject(questions) || Object.keys(questions).length === 0) return refused('questions is required');
+    if (!Object.entries(questions).every(([name, q]) => isTrade(name) && isObject(q) && q.type === 'noul')) {
+      return refused('the demo only answers noul questions named for a Trade');
+    }
+    return c.json(mockTradeAnswers(body.state, questions));
+  });
 
   app.post('/vision/v1/image-match', async (c) => {
     const body = await jsonBody(c);
