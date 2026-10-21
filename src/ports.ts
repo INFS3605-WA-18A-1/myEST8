@@ -176,6 +176,15 @@ export interface PlacesLookup {
   geocode(address: string): Promise<{ lat: number; lng: number } | null>;
 }
 
+export interface TradeSuggester {
+  /**
+   * The Trades a business does, judged from its Google listing: none when nothing in
+   * it points to one. A suggestion for the Property Manager to check. Throws when the
+   * lookup fails.
+   */
+  suggestTrades(listing: ListingDetails): Promise<Trade[]>;
+}
+
 export interface Clock {
   now(): Date;
 }
