@@ -1103,9 +1103,9 @@ export function filterBar(o: {
   </form>`;
 }
 
-/** The Mine/All control: links with the current one filled and aria-current. */
-export function segmented(items: { label: string; href: string; active: boolean }[]): Html {
-  return html`<nav class="segmented" aria-label="Views">
+/** The Mine/All control: links with the current one filled and aria-current. `label` names the group; most of these are views. */
+export function segmented(items: { label: string; href: string; active: boolean }[], label = 'Views'): Html {
+  return html`<nav class="segmented" aria-label="${label}">
     ${items.map((item) => html`<a href="${item.href}" class="segmented-item" ${item.active ? html`aria-current="page"` : ''}>${item.label}</a>`)}
   </nav>`;
 }
