@@ -59,4 +59,18 @@ describe('Nominatim geocoding', () => {
     const { geocoder } = nominatim(() => json([{ lat: '-33.8970', lon: '151.1790', place_rank: 26, display_name: 'King Street, Newtown, Sydney, New South Wales, 2042, Australia' }]));
     expect(await geocoder.geocode('King St, Newtown NSW 2042')).toEqual({ lat: -33.897, lng: 151.179 });
   });
+
+  test.each([
+    ['rate limiting (429)', () => new Response('Too many requests', { status: 429 }), 'Nominatim returned 429: Too many requests'],
+    ['a server error', () => new Response('Internal error', { status: 500 }), 'Nominatim returned 500: Internal error'],
+    ['a body that is not JSON', () => new Response('<html>Bad gateway</html>'), 'Nominatim returned a body that is not JSON'],
+    ['a body that is not a list', () => json({ error: 'Unable to geocode' }), 'Nominatim returned a malformed response (expected a list of results)'],
+    ['a result that is not an object', () => json(['12 King St']), 'Nominatim returned a malformed response (a result that is not an object)'],
+    ['a latitude that is not a number', () => json([{ ...NEWTOWN, lat: 'north' }]), 'Nominatim returned a malformed response (lat or lon is not a number)'],
+    ['a longitude that is missing', () => json([{ lat: '-33.8970', place_rank: 30 }]), 'Nominatim returned a malformed response (lat or lon is not a number)'],
+    ['a result without a place_rank', () => json([{ lat: '-33.8970', lon: '151.1790' }]), 'Nominatim returned a malformed response (place_rank is not a number)'],
+  ])('throws on %s', async (_, respond, message) => {
+    const { geocoder } = nominatim(respond);
+    await expect(geocoder.geocode('12 King St, Newtown NSW 2042')).rejects.toThrow(message);
+  });
 });
