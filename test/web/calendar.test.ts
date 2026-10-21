@@ -443,6 +443,24 @@ describe("Schedule: today's column", () => {
   });
 });
 
+describe('Schedule: the current time', () => {
+  test('a current-time line is drawn on today and left off other weeks', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    // Thursday 8 October 2026, 9:00 am. The week grid starts at 7 am under a heading
+    // row, so 9:00 is grid row 10. Thursday is the fourth day: the line runs from
+    // the gutter through that column, grid columns 1 to 6.
+    const today = grid(await page(w, '/calendar', cookie));
+    expect(today).toContain('class="schedule-now"');
+    expect(today).toContain('grid-row: 10');
+    expect(today).toContain('grid-column: 1 / 6');
+
+    const other = grid(await page(w, '/calendar?view=week&date=2026-10-12', cookie));
+    expect(other).not.toContain('schedule-now');
+  });
+});
+
 describe('Schedule: views and links', () => {
   test('Day, Week and Month tabs keep the date in view and Mine or All', async () => {
     const w = await webWorld();

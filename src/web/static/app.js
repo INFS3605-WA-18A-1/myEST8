@@ -519,3 +519,32 @@
     });
   }
 })();
+
+// === schedule ===
+// The current-time line is placed by the server from the Agency's clock. Once a
+// minute it is moved to where that clock is now. There is no transition, so it
+// never animates, including when less motion is asked for.
+(() => {
+  const line = document.querySelector('[data-schedule-now]');
+  if (!line) return;
+  const zone = line.dataset.zone;
+  const first = Number(line.dataset.first);
+  const last = Number(line.dataset.last);
+  const header = line.dataset.header === '1';
+  const place = () => {
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone: zone, hour: 'numeric', minute: 'numeric', hourCycle: 'h23' }).formatToParts(new Date());
+    const part = (type) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+    const mins = part('hour') * 60 + part('minute');
+    const start = first * 60;
+    if (mins < start || mins >= last * 60) {
+      line.hidden = true;
+      return;
+    }
+    line.hidden = false;
+    const into = mins - start;
+    line.style.gridRow = String(Math.floor(into / 15) + (header ? 2 : 1));
+    line.style.setProperty('--now-frac', String((into % 15) / 15));
+  };
+  place();
+  setInterval(place, 60_000);
+})();

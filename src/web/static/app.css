@@ -5255,6 +5255,37 @@
       padding: 0 4px;
       list-style: none;
     }
+    /* The current time: a Rust line across today's column and a dot in the gutter.
+       It does not animate; app.js jumps it once a minute. */
+    .schedule-now {
+      z-index: 3;
+      display: grid;
+      grid-template-columns: subgrid;
+      align-self: start;
+      height: 0;
+      position: relative;
+      top: calc(var(--now-frac) * 100%);
+      pointer-events: none;
+    }
+    .schedule-now-dot {
+      grid-column: 1;
+      justify-self: end;
+      width: 8px;
+      height: 8px;
+      margin-right: -4px;
+      border-radius: 50%;
+      background: var(--urgent);
+      transform: translateY(-50%);
+    }
+    .schedule-now-line {
+      grid-column: -2 / -1;
+      height: 2px;
+      background: var(--urgent);
+      transform: translateY(-50%);
+    }
+    .schedule-now.is-day .schedule-now-line {
+      grid-column: 2 / -1;
+    }
     .schedule-block {
       z-index: 1;
       min-width: 0;

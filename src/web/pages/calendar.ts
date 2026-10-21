@@ -14,7 +14,7 @@
 
 import { Hono } from 'hono';
 import { html } from 'hono/html';
-import { addDays, dayOf, daysFrom, mondayOf, parseDay, startOfDay } from '../../zoned-time.ts';
+import { addDays, dayOf, daysFrom, mondayOf, parseDay, startOfDay, wallClock } from '../../zoned-time.ts';
 import { bookingCard, bookingFlags, bookingsByDay, dayRange, longDay, shortDay, ticketHref, visitKind, visitWords, type Booking } from '../bookings.ts';
 import type { WebEnv } from '../env.ts';
 import { icon } from '../icons.ts';
@@ -66,7 +66,7 @@ export function calendarPages() {
     const bookings = filter === 'mine' ? every.filter((b) => b.propertyManagerId === pm.id) : every;
     const hidden = every.length - bookings.length;
     const byDay = bookingsByDay(bookings, first, timeZone);
-    const ctx: Ctx = { timeZone, filter, meId: pm.id, today };
+    const ctx: Ctx = { timeZone, filter, meId: pm.id, today, now: actions.now() };
     const free = days.includes(today) ? freeToday(tradies, every, today, timeZone) : null;
     const focus = days.includes(today) ? today : first;
 
@@ -106,6 +106,7 @@ interface Ctx {
   filter: Filter;
   meId: number;
   today: string;
+  now: Date;
 }
 
 /** "Tue 13 Oct, 9:00 am – 11:00 am": the start in full, then the end's time of day. */
@@ -209,6 +210,25 @@ function dateLink(day: string, ctx: Ctx): Html {
   </a>`;
 }
 
+/**
+ * The current-time line across today's column, with its dot in the gutter. Placed
+ * from the Agency's clock, so it is there with no JavaScript; app.js moves it
+ * each minute. Absent when today is not on this grid, or the clock is outside
+ * the hours shown. `header` is the Week's row of dates, which the Day grid has not.
+ */
+function nowLine(range: HourRange, todayIndex: number, ctx: Ctx, header: boolean): Html | '' {
+  if (todayIndex < 0) return '';
+  const clock = wallClock(ctx.now, ctx.timeZone);
+  const mins = clock.hour * 60 + clock.minute;
+  const start = range.first * 60;
+  if (mins < start || mins >= range.last * 60) return '';
+  const into = mins - start;
+  const row = Math.floor(into / 15) + (header ? 2 : 1);
+  // The gutter is column 1 and Monday is column 2, so Thursday (index 3) ends at column 6.
+  const column = header ? `1 / ${todayIndex + 3}` : '1 / -1';
+  return html`<div class="schedule-now${header ? '' : ' is-day'}" data-schedule-now data-zone="${ctx.timeZone}" data-first="${range.first}" data-last="${range.last}" data-header="${header ? '1' : '0'}" style="grid-row: ${row}; grid-column: ${column}; --now-frac: ${(into % 15) / 15}" aria-hidden="true"><span class="schedule-now-dot"></span><span class="schedule-now-line"></span></div>`;
+}
+
 /** "7 am", "12 pm" */
 function hourName(hour: number): string {
   return `${hour % 12 || 12} ${hour < 12 || hour === 24 ? 'am' : 'pm'}`;
@@ -237,6 +257,7 @@ function weekView(days: string[], byDay: Map<string, Booking[]>, ctx: Ctx): Html
         <ol class="schedule-cols" aria-label="The week, Monday to Sunday">
           ${layouts.map(({ day, bookings, layout }) => weekColumn(day, bookings.length, layout, ctx))}
         </ol>
+        ${nowLine(range, days.indexOf(ctx.today), ctx, true)}
       </div>
     </div>`;
 }
