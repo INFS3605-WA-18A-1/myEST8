@@ -1,6 +1,6 @@
 # The follow-up panel on the Maintenance Request review page
 
-Status: ready-for-agent
+Status: resolved
 Blocked by: 01
 Spec: ../spec.md
 
@@ -16,13 +16,13 @@ The flow in the spec, on `/requests/:issueId` (`src/web/pages/requests.ts`), usi
 
 ## Acceptance criteria
 
-- [ ] Page tests (`test/web/`):
+- [x] Page tests (`test/web/`):
   - the panel shows on a request in intake, with the Tenant's first name
   - drafting shows the editable draft with the sparkle and the AI note
   - a failed draft shows the notes and the fallback note, with no AI mark
   - sending flashes "Follow-up sent to …" and the Tenant got the message
   - blank notes or text are refused with the field error
   - the AI Summary label now has the sparkle
-- [ ] An e2e test (`test/e2e/`) in the demo: open a Maintenance Request, write notes, draft, edit, send, and see the message in the phone simulator.
-- [ ] Works at 390px with no sideways scroll, and by keyboard alone.
-- [ ] `npm run check` passes.
+- [x] An e2e test (`test/e2e/`) in the demo: open a Maintenance Request, write notes, draft, edit, send, and see the message in the phone simulator.
+- [x] Works at 390px with no sideways scroll, and by keyboard alone.
+- [x] `npm run check` passes.
