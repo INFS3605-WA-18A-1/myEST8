@@ -316,6 +316,15 @@ The **Follow up with <first name>** panel is a `section` (`#follow-up`) on the M
 - **Releasing and disconnecting** go through a confirmation page (`/sms-number/release`) that says what happens. Releasing a created number can't be undone, so its text says so, and "Keep it" sits next to the confirm button.
 - Results come back as the page's flash, and the page returns to the anchor `#sms`.
 
+### Server SMS phone
+
+`serverSmsPanel({ from, number, current })` in `src/web/pages/server-sms.ts` is the one component for the server's SMS phone (textbee, ADR 0013). The welcome wizard's Channels step, the Setup page and Settings all render it when `ChannelConnectors.smsPhone` is set, so the three can't drift. The pages don't read the environment. While it is set, the typed number and code and `smsNumberPanel` are not shown.
+
+- **Not connected:** "Tenants text +61 412 345 678. This is the server's SMS phone." The number is bold. **Connect SMS** is a primary small button. There is no code: the phone is the server's.
+- **Connected** (`current` is that number): the number in bold, one line that it is the Agency's SMS number, and **Disconnect**, a secondary small button. Disconnect posts straight away. There is no confirmation page, because the phone stays the server's.
+- A second Agency is told "This server's SMS number is connected to another Agency."
+- Results come back as the page's flash, and the page returns to the anchor `#sms`.
+
 ### Importing from a spreadsheet
 
 Each setup step that creates many records (Property Owners, Building Managers, Tradies, Properties, Tenants) has "Add many from a spreadsheet" on `/setup`, folded like the "Add" forms, and the guide's Tradies and Properties steps have the same uploads (`importPanel()` in `onboarding-forms.ts`). The guide lists them in the order they must happen: Property Owners, then Properties, then Tenants.

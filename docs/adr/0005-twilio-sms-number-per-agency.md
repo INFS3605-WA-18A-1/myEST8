@@ -1,6 +1,6 @@
 # Each Agency gets its own Twilio SMS number
 
-Amends the SMS part of [ADR 0004](0004-gmail-and-whatsapp-cloud-api.md). Built.
+Amends the SMS part of [ADR 0004](0004-gmail-and-whatsapp-cloud-api.md). Built, and now switched off: superseded by [ADR 0013](0013-textbee-sms-twilio-cannot-be-used.md), because Twilio rejected the Australian regulatory bundle and a trial account cannot send custom text.
 
 An Agency's SMS channel is a number that Twilio sends and receives for. There are two ways to get one, each with its own button and a short explanation, in the welcome wizard's Channels step, on the Setup page and in Settings. It is the same component in all three.
 

@@ -1,6 +1,6 @@
 import { createApp, type PropertyManagerActions } from '../../src/app.ts';
 import type { Db } from '../../src/db.ts';
-import type { BlobStore, ChannelType, Clock, ExtractedDetails, InboundAttachment } from '../../src/ports.ts';
+import type { BlobStore, ChannelType, Clock, ExtractedDetails, InboundAttachment, Messenger } from '../../src/ports.ts';
 import type { Availability } from '../../src/shared.ts';
 import type { SmsNumbers } from '../../src/sms-numbers.ts';
 import { AVAILABILITY_LABELS } from '../../src/templates.ts';
@@ -19,9 +19,21 @@ export const AGENCY_INBOX = 'inbox@harbour.example';
 export type Harness = Awaited<ReturnType<typeof createHarness>>;
 
 /** Drives the app through its boundary: inbound messages, uploads, Property Manager actions and the clock. */
-export async function createHarness(options: { blobs?: BlobStore; smsNumbers?: (db: Db, clock: Clock) => SmsNumbers; composer?: null; detailExtractor?: null } = {}) {
+export async function createHarness(
+  options: { blobs?: BlobStore; smsNumbers?: (db: Db, clock: Clock) => SmsNumbers; composer?: null; detailExtractor?: null; messenger?: Messenger } = {},
+) {
   const clock = new FakeClock(START);
-  const messenger = new FakeMessenger();
+  const recorded = new FakeMessenger();
+  const provider = options.messenger;
+  // A test can send through a real provider (textbee) and still read what went out.
+  const messenger: Messenger = provider
+    ? {
+        async send(message) {
+          await provider.send(message);
+          await recorded.send(message);
+        },
+      }
+    : recorded;
   const classifier = new FakeClassifier();
   const imageMatcher = new FakeImageMatcher();
   const quoteReader = new FakeQuoteReader();
@@ -100,7 +112,7 @@ export async function createHarness(options: { blobs?: BlobStore; smsNumbers?: (
     db,
     smsNumbers,
     clock,
-    messenger,
+    messenger: recorded,
     classifier,
     imageMatcher,
     quoteReader,

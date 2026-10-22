@@ -40,6 +40,8 @@ export function createWebApp(deps: {
   whatsapp?: { appSecret: string; verifyToken: string } | null;
   /** Resend inbound email, when both RESEND_WEBHOOK_SECRET and RESEND_API_KEY are set. */
   resend?: { webhookSecret: string; apiKey: string; fetch?: typeof fetch } | null;
+  /** The server's textbee phone (ADR 0013). Absent turns /webhooks/textbee off. */
+  textbee?: { webhookSecret: string; number: string } | null;
   /** What onboarding can connect (Gmail). */
   connectors?: ChannelConnectors;
   demo?: DemoControls;
