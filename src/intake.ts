@@ -9,6 +9,8 @@ import type { GuidedQuestion } from './templates.ts';
 
 export const URGENT_REPAIR_LIMIT_CENTS = 1000_00;
 const NO_PHOTOS_TIMEOUT_MS = 48 * HOUR_MS;
+/** A Tenant gets at most this many missing-details messages per issue: the first ask and one re-ask. */
+const MAX_MISSING_DETAILS_ASKS = 2;
 export const MAX_UPLOAD_FILES = 10;
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 /** Photo formats phones produce. Not SVG, which can carry script into the Property Manager's pages. */
@@ -19,7 +21,8 @@ const RECEIPT_TYPES = [...PHOTO_TYPES, 'application/pdf'];
 /** What the agent is waiting for this person to answer. */
 type Awaiting =
   // `question` is only on rows from when one question was asked at a time: a reply to one is read like any other.
-  | { kind: 'guided'; issueId: number; question?: GuidedQuestion }
+  // `asks` counts the missing-details messages sent for the issue (a row without it is the first ask).
+  | { kind: 'guided'; issueId: number; question?: GuidedQuestion; asks?: number }
   | { kind: 'fix_rating'; jobId: number }
   | { kind: 'visit'; workOrderId: number };
 
@@ -300,11 +303,11 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
     return Object.keys(found).length;
   }
 
-  /** Asks once, in one message, for whatever is still missing, or goes on when nothing is. */
-  async function askForMissingDetails(tenant: Person, issueId: number) {
+  /** Asks once, in one message, for whatever is still missing, or goes on when nothing is. `asks` is how many asks this makes. */
+  async function askForMissingDetails(tenant: Person, issueId: number, asks = 1) {
     const questions = missingDetails(await modules.tickets.issue(issueId));
     if (!questions.length) return finishGuidedQuestions(issueId);
-    await expectAnswer(tenant.id, { kind: 'guided', issueId });
+    await expectAnswer(tenant.id, { kind: 'guided', issueId, asks });
     await modules.notifications.send(tenant.id, 'tenant.missing_details', { tenantName: firstName(tenant), questions }, { issueId });
   }
 
@@ -314,9 +317,10 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
       await logInbound(msg, tenant.id, issue.id);
       await stopWaiting(tenant.id, 'guided');
       if (issue.status !== 'gathering') return;
-      // Ask again only while the replies keep adding answers, so nothing is asked in vain.
+      // Ask again only while the replies keep adding answers, and only once: after the second ask, intake goes on with the blanks.
       const added = await saveDetails(tenant, issue.id, msg.text);
-      return added ? askForMissingDetails(tenant, issue.id) : finishGuidedQuestions(issue.id);
+      const asks = awaiting.asks ?? 1;
+      return added && asks < MAX_MISSING_DETAILS_ASKS ? askForMissingDetails(tenant, issue.id, asks + 1) : finishGuidedQuestions(issue.id);
     }
     await stopWaiting(tenant.id, awaiting.kind);
     if (awaiting.kind === 'fix_rating') {

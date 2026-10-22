@@ -244,6 +244,28 @@ describe('asking only what is missing', () => {
       expect(await issueOf(w)).toMatchObject({ status: 'awaiting_photos', location: 'kitchen sink', worsening: null, availability: null });
     });
 
+    test('a Tenant who answers one detail per reply is asked twice at most, then intake goes on with the blanks', async () => {
+      const w = await world();
+      const { h, alice } = w;
+      h.classifier.when(SINK, SINK_CLASSIFIED);
+      await h.receive(TOM, SINK); // the first ask: nothing was stated, so all four questions
+
+      await h.answerDetails(TOM, 'In the kitchen', { location: 'In the kitchen' });
+      expect(h.messenger.last(TOM)).toMatchObject({ template: 'tenant.missing_details', data: { questions: ['started', 'worsening', 'availability'] } });
+
+      await h.answerDetails(TOM, 'Since last night', { started: 'Since last night' });
+      expect(h.messenger.templatesTo(TOM)).toEqual(['tenant.acknowledgement', 'tenant.missing_details', 'tenant.missing_details', 'tenant.upload_link']);
+      expect(await issueOf(w)).toMatchObject({ status: 'awaiting_photos', location: 'In the kitchen', started: 'Since last night', worsening: null, availability: null });
+
+      // A third reply is nothing the agent is waiting for: it asks nothing more and reads no details.
+      const extractions = h.detailExtractor.calls.length;
+      await h.answerDetails(TOM, 'No, the same', { worsening: 'no' });
+      expect(h.messenger.templatesTo(TOM).filter((t) => t === 'tenant.missing_details')).toHaveLength(2);
+      expect(h.detailExtractor.calls).toHaveLength(extractions);
+      expect(await issueOf(w)).toMatchObject({ worsening: null });
+      expect((await alice.dashboard()).maintenanceRequests).toEqual([]);
+    });
+
     test('a message the classifier does not read as an answer is not read for details', async () => {
       const w = await tomIsAsked();
       const { h, alice } = w;
