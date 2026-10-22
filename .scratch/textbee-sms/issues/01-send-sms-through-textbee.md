@@ -1,6 +1,6 @@
 # Send SMS through textbee
 
-Status: ready-for-agent
+Status: resolved
 Spec: ../spec.md
 
 ## What to build
@@ -11,14 +11,14 @@ Spec: ../spec.md
 
 ## Acceptance criteria
 
-- [ ] Adapter tests:
+- [x] Adapter tests:
   - the request (URL, method, `x-api-key`, body) for one text
   - a text with an attachment carries its signed link
   - a refused number and a server error are classified like Twilio's
   - the key never appears in an error
-- [ ] Runtime and hosted tests:
+- [x] Runtime and hosted tests:
   - a partial `TEXTBEE_*` set refuses to start, naming what's missing
   - with all four set, SMS goes through textbee, not Twilio and not the simulator
   - with all four set plus `TOKEN_ENCRYPTION_KEY`, the Twilio number panel isn't offered
   - hosted with textbee doesn't list SMS as unavailable
-- [ ] `npm run check` passes.
+- [x] `npm run check` passes.
