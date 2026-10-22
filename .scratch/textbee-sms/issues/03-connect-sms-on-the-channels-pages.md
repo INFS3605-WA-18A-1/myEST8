@@ -1,6 +1,6 @@
 # Connect SMS on the Channels screens, and the setup docs
 
-Status: ready-for-agent
+Status: resolved
 Blocked by: 01
 Spec: ../spec.md
 
@@ -23,11 +23,11 @@ Spec: ../spec.md
 
 ## Acceptance criteria
 
-- [ ] Page tests (`test/web/`):
-  - with textbee set and SMS not connected, each of the three screens shows "Tenants text …" and Connect SMS, and not the code form or the Twilio panel
-  - pressing it connects the number and shows it with Disconnect
-  - Disconnect removes it
-  - with another Agency already holding the number, Connect SMS is refused with the spec's message
-  - with textbee unset, the screens are as they were (the existing tests pass unchanged)
-- [ ] The docs and env examples above are updated.
-- [ ] `npm run check` passes.
+- [x] Page tests (`test/web/`):
+  - [x] with textbee set and SMS not connected, each of the three screens shows "Tenants text …" and Connect SMS, and not the code form or the Twilio panel
+  - [x] pressing it connects the number and shows it with Disconnect
+  - [x] Disconnect removes it
+  - [x] with another Agency already holding the number, Connect SMS is refused with the spec's message
+  - [x] with textbee unset, the screens are as they were (the existing tests pass unchanged)
+- [x] The docs and env examples above are updated.
+- [x] `npm run check` passes.

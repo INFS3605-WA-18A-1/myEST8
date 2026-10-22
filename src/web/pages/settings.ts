@@ -6,12 +6,15 @@
 import { Hono } from 'hono';
 import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
+import { normalizeAddress } from '../../shared.ts';
+import { NO_CONNECTORS, type ChannelConnectors } from '../connectors.ts';
 import type { WebEnv } from '../env.ts';
 import { shellInfo } from '../shell.ts';
 import type { ImportKind } from '../../imports.ts';
 import { icon } from '../icons.ts';
 import { contactLink, dl, emptyState, flashFrom, formatWhen, linkButton, page, section, sideTabs, table, type Html } from '../ui.ts';
 import { IMPORT_NOUNS, templatePath } from './onboarding-forms.ts';
+import { serverSmsPanel } from './server-sms.ts';
 import { smsNumberPanel } from './sms-number.ts';
 
 type AgencyChannel = Awaited<ReturnType<PropertyManagerActions['channels']>>[number];
@@ -61,7 +64,8 @@ const IMPORTS: { kind: ImportKind; hint: string }[] = [
 ];
 
 /** Settings under /settings. */
-export function settingsPages() {
+export function settingsPages(o: { connectors?: ChannelConnectors } = {}) {
+  const connectors = o.connectors ?? NO_CONNECTORS;
   const pages = new Hono<WebEnv>();
   pages.get('/', async (c) => {
     const { actions, pm } = c.var;
@@ -69,7 +73,7 @@ export function settingsPages() {
     const { timeZone } = actions.agency();
     const body: Html =
       tab === 'channels'
-        ? await channelsTab(actions, timeZone)
+        ? await channelsTab(actions, timeZone, connectors)
         : tab === 'team'
           ? teamTab(await actions.propertyManagers(), pm.id)
           : tab === 'import'
@@ -110,7 +114,7 @@ function agencyTab(agency: { name: string; timeZone: string }, team: number): Ht
   })}`;
 }
 
-async function channelsTab(actions: PropertyManagerActions, timeZone: string): Promise<Html> {
+async function channelsTab(actions: PropertyManagerActions, timeZone: string, connectors: ChannelConnectors): Promise<Html> {
   const channels = await actions.channels();
   const sms = await actions.smsNumber();
   const channelsSection = section({
@@ -120,20 +124,25 @@ async function channelsTab(actions: PropertyManagerActions, timeZone: string): P
       ? table(
           ['Channel', 'Address', 'Last test message'],
           channels.map((ch) => {
-            // An SMS number myEST8 set up with Twilio was proved when it was set up, so it has no test message.
+            // A number myEST8 set up (Twilio, or the server's own phone) was proved when it was connected, so it has no test message.
             const viaTwilio = ch.type === 'sms' && sms?.number?.phoneNumber === ch.address;
+            const viaServer = ch.type === 'sms' && connectors.smsPhone !== null && normalizeAddress(connectors.smsPhone) === normalizeAddress(ch.address);
             return [
               html`<span class="font-medium">${CHANNEL_NAME[ch.type]}</span>`,
               html`<span class="break-all">${ch.address}</span>${viaTwilio ? html` <span class="text-muted">${sms.number!.kind === 'created' ? 'Created by myEST8' : 'Your Twilio number'}</span>` : ''}`,
-              html`${viaTwilio ? html`<span class="text-muted">Not needed</span>` : ch.testedAt ? formatWhen(ch.testedAt, timeZone) : html`<span class="text-muted">Not tested</span>`}`,
+              html`${viaTwilio || viaServer ? html`<span class="text-muted">Not needed</span>` : ch.testedAt ? formatWhen(ch.testedAt, timeZone) : html`<span class="text-muted">Not tested</span>`}`,
             ];
           }),
           { caption: 'Channels', stack: 'labelled' },
         )
       : emptyState('No channels connected. Connect SMS or email so Tenants can reach you.', linkButton('Connect a channel', '/setup#channels', { variant: 'primary', size: 'sm' })),
   });
-  if (!sms) return channelsSection;
   const current = channels.find((ch) => ch.type === 'sms')?.address;
+  // The server's phone replaces the Twilio panel. A typed number is not offered here either way.
+  if (connectors.smsPhone) {
+    return html`${channelsSection}${section({ id: 'sms', title: 'SMS number', body: serverSmsPanel({ from: 'settings', number: connectors.smsPhone, current }) })}`;
+  }
+  if (!sms) return channelsSection;
   return html`${channelsSection}${section({ id: 'sms', title: 'SMS number', body: await smsNumberPanel(actions, { from: 'settings', current }) })}`;
 }
 

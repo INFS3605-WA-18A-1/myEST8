@@ -129,6 +129,10 @@ _Avoid_: integration, inbox (on its own)
 The Agency's SMS Channel when its number is managed through Twilio. Tenants, Tradies and Property Owners text it, and myEST8 replies from it. It is either created by myEST8 or registered by the Agency, and an Agency has one at a time. It differs from a Channel the Agency types in, which is any address plus a verification code.
 _Avoid_: Twilio number (to the Agency), virtual number, shared number
 
+**Server SMS phone**:
+The one SMS number for the server, an Android phone running textbee. Tenants text it, and myEST8 replies from it. An Agency connects it with Connect SMS. There is no verification code, because the server holds the phone. One Agency has it at a time.
+_Avoid_: textbee number (to the Agency), shared number
+
 **Created number**:
 An Agency SMS number myEST8 bought on its own Twilio account. The platform pays its monthly fee, and disconnecting it releases it back to Twilio.
 

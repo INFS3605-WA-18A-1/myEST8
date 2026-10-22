@@ -445,6 +445,8 @@ export async function createDemo<Seeded extends boolean = true>(
     connectors: {
       gmail: mailboxes?.connector ?? null,
       smsInbound: hosted ? 'none' : 'simulator',
+      // The phone's number is read in textbeeFromEnv. The pages only see it here.
+      smsPhone: providers.textbee?.number ?? null,
       unavailable: [
         // The demo simulates SMS; a hosted server needs a real provider, or a code can only fail.
         ...(hosted && !providers.channels.sms && !smsNumbers ? (['sms'] as const) : []),
