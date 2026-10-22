@@ -17,8 +17,9 @@ Two changes to what a Tenant experiences after reporting a repair.
 3. If some are missing, intake sends **one** message, template `tenant.missing_details`, subject "A few quick questions". It lists only the missing questions, numbered, in the usual order, with their reply hints. For example: "Thanks, Kevin. To get this sorted we just need: 1. Is it getting worse? (yes or no) 2. When are you usually home: weekday mornings, weekday afternoons, Saturdays or any time?" It then waits for a reply to those questions.
 4. **The reply.** The usual classifier gate decides whether a message is an answer (as `answer:guided` does now). If it is, the extractor reads it for the still-missing questions, saves what it finds and works out what's left.
    - Nothing left: go on.
-   - Something left and the reply added at least one answer: ask again for only what's left.
-   - The reply added nothing: go on without the rest, so the Tenant is never asked the same thing a third time. The Property Manager sees the blanks.
+   - Something left, the reply added at least one answer, and this was the first ask: ask again for only what's left (the one re-ask).
+   - The reply to the second ask: go on whatever is still missing. A Tenant gets **at most two** `tenant.missing_details` messages per issue, the first ask and one re-ask, so they are never asked the same thing a third time. The count is kept in the `asks` field of the `guided` awaiting row (a row without it is the first ask).
+   - The reply added nothing: go on at once without the rest. The Property Manager sees the blanks.
 5. **When the extractor fails** (throws, or no `ANTHROPIC_API_KEY` outside the demo), it's treated as finding nothing: all four questions in one message. Intake never stops because of it.
 6. **Requests already waiting.** Some issues in production are already waiting on a single guided question (`kind: 'guided'` awaiting rows, for example issue #1 waiting on `location`). A reply to one of those is handled by the new logic: extract, save, ask once for whatever is still missing. They don't fall back into the old one-at-a-time chain.
 7. Everything after (photos, the 48-hour no-photos task, Summary, Urgent Repairs) is unchanged.
