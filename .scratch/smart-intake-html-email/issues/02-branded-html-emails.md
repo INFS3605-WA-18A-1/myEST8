@@ -1,6 +1,6 @@
 # Branded HTML emails
 
-Status: ready-for-agent
+Status: resolved
 Spec: ../spec.md (section 2)
 
 ## What to build
@@ -13,7 +13,7 @@ Don't touch `src/intake.ts` or the guided questions: issue 01 does those, in ano
 
 ## Acceptance criteria
 
-- [ ] Renderer tests (`test/email-layout.test.ts`), each against a worked example:
+- [x] Renderer tests (`test/email-layout.test.ts`), each against a worked example:
   - the Agency's name in the header
   - paragraphs from blank lines
   - `1.`/`2.` lines as an ordered list
@@ -21,12 +21,12 @@ Don't touch `src/intake.ts` or the guided questions: issue 01 does those, in ano
   - `<script>` and `&` in the text escaped
   - the preheader is the first sentence
   - `lang="en-AU"`
-- [ ] Mailer tests:
+- [x] Mailer tests:
   - Resend's and SendGrid's request bodies carry `html` and `text`
   - a message without `html` sends as before
-- [ ] Notification test: an email send has `html` from the renderer, and an SMS send has none.
-- [ ] `docs/design-system.md` gets a short "Emails" section with the layout and tokens.
-- [ ] `npm run check` passes.
+- [x] Notification test: an email send has `html` from the renderer, and an SMS send has none.
+- [x] `docs/design-system.md` gets a short "Emails" section with the layout and tokens.
+- [x] `npm run check` passes.
 
 ## Design plan
 
@@ -109,3 +109,11 @@ Everything is left-aligned on one inset: the Agency's name, paragraphs, list, bu
 - The **label** comes from the sentence the link finishes: receipt gives "Upload receipt", quote or Estimate gives "Give your quote", photos gives "Upload photos", progress gives "Follow progress", otherwise "Open link". The URL is always shown as text under the button too.
 - Text after a link in the same paragraph ("Or reply with...") is its own paragraph under the button.
 - A single line break inside a paragraph is a `<br>`.
+
+## Comments
+
+Built as planned, with two changes after rendering at 600px and 375px (`.screenshots/email/`, not committed): the Wattle edge moved from flush against the card border to 8px in, 12px from the text, because at 24px it looked detached from what it marks; and the font stack uses single quotes, because double quotes broke the `style` attributes (a well-formedness test now guards it).
+
+- The missing-details template is issue 01's, so that sample was rendered from the spec's worked example text.
+- Gmail mailbox sending (`src/adapters/gmail.ts`) builds its own MIME and still sends text only; this issue named Resend and SendGrid. Agencies on a connected Gmail mailbox get plain text until that adapter sends `multipart/alternative`.
+- Not checked in real mail clients (Outlook, Gmail dark mode): only Chromium.
