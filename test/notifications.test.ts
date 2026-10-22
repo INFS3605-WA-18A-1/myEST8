@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { renderEmail } from '../src/email-layout.ts';
 import { HOUR } from './support/harness.ts';
 import { BELLA, HANA, HANA_EMAIL, OSCAR, TOM, world } from './support/world.ts';
 
@@ -81,5 +82,54 @@ describe('onboarding', () => {
       { to: TOM, channel: 'whatsapp', template: 'onboarding.test_message' },
       { to: 'alice@harbour.example', channel: 'email', template: 'onboarding.test_message' },
     ]);
+  });
+});
+
+describe('branded email', () => {
+  const TEST_TEXT = 'This is a test message from Harbour Realty on myEST8. This channel is working.';
+
+  test('an email carries the renderer\'s HTML for its text, and an SMS or WhatsApp message carries none', async () => {
+    const { h, alice } = await world();
+
+    await alice.sendTestMessage('email', 'alice@harbour.example');
+    await alice.sendTestMessage('sms', TOM);
+    await alice.sendTestMessage('whatsapp', TOM);
+
+    const [email, sms, whatsapp] = h.messenger.sent;
+    expect(email).toMatchObject({ channel: 'email', text: TEST_TEXT });
+    expect(email!.html).toBe(renderEmail({ agencyName: 'Harbour Realty', subject: 'Test message', text: TEST_TEXT }));
+    expect(email!.html).toContain('lang="en-AU"');
+    expect(sms).toMatchObject({ channel: 'sms', text: TEST_TEXT });
+    expect(sms).not.toHaveProperty('html');
+    expect(whatsapp).toMatchObject({ channel: 'whatsapp', text: TEST_TEXT });
+    expect(whatsapp).not.toHaveProperty('html');
+  });
+
+  test('a Tenant\'s acknowledgement by email is branded with the Agency\'s name, and by SMS is plain', async () => {
+    const { h } = await world();
+    h.classifier.when('The bathroom fan is rattling', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'electrical' });
+    h.classifier.when('The kitchen tap is dripping', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });
+
+    await h.receive(HANA_EMAIL, 'The bathroom fan is rattling');
+    await h.receive(TOM, 'The kitchen tap is dripping');
+
+    const byEmail = h.messenger.to(HANA_EMAIL).find((m) => m.template === 'tenant.acknowledgement')!;
+    expect(byEmail.html).toBe(renderEmail({ agencyName: 'Harbour Realty', subject: 'We got your message', text: byEmail.text }));
+    expect(byEmail.text).toBe("Hi Hana, this is Harbour Realty. Thanks for letting us know about an issue at 12 King St, Newtown NSW 2042. We've got your message.");
+    const bySms = h.messenger.to(TOM).find((m) => m.template === 'tenant.acknowledgement')!;
+    expect(bySms).not.toHaveProperty('html');
+  });
+
+  test('a verification code by email is branded and by SMS is not', async () => {
+    const { h, alice } = await world();
+
+    await alice.startChannelVerification('email', 'new@harbour.example');
+    await alice.startChannelVerification('sms', '+61 2 9000 1111');
+
+    const byEmail = h.messenger.last('new@harbour.example')!;
+    expect(byEmail.template).toBe('onboarding.verification_code');
+    expect(byEmail.html).toBe(renderEmail({ agencyName: 'Harbour Realty', subject: 'Your myEST8 code', text: byEmail.text }));
+    expect(byEmail.html).toContain(String(byEmail.data.code));
+    expect(h.messenger.last('+61290001111')).not.toHaveProperty('html');
   });
 });

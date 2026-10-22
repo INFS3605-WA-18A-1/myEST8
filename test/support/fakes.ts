@@ -42,6 +42,8 @@ export interface SentMessage {
   data: Record<string, unknown>;
   attachments: string[];
   text: string;
+  /** Only email carries an HTML body. */
+  html?: string;
 }
 
 export class FakeMessenger implements Messenger {
@@ -62,6 +64,7 @@ export class FakeMessenger implements Messenger {
       data: message.data as Record<string, unknown>,
       attachments: message.attachments.map((a) => a.filename),
       text: message.text,
+      ...(message.html === undefined ? {} : { html: message.html }),
     });
   }
   to(address: string) {
