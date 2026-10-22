@@ -280,6 +280,16 @@ describe('the demo', () => {
     });
   });
 
+  test('the textbee webhook is on when textbee is set, and off when it is not', async () => {
+    const on = await createDemo({ env: demoEnv(textbeeEnv), seedAgency: false });
+    closeAfter(on);
+    expect((await on.web.request('/webhooks/textbee', { method: 'POST', body: '{}' })).status).toBe(401);
+
+    const off = await createDemo({ env: demoEnv(), seedAgency: false });
+    closeAfter(off);
+    expect((await off.web.request('/webhooks/textbee', { method: 'POST', body: '{}' })).status).toBe(404);
+  });
+
   test('textbee set means the Twilio number panel is not offered, even with an encryption key', async () => {
     const d = await createDemo({ env: demoEnv({ ...textbeeEnv, TOKEN_ENCRYPTION_KEY: encryptionKey }), seedAgency: false });
     closeAfter(d);

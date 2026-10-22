@@ -441,6 +441,7 @@ export async function createDemo<Seeded extends boolean = true>(
     demoSignIns: seed !== null,
     whatsapp: env.META_APP_SECRET?.trim() && env.META_WEBHOOK_VERIFY_TOKEN?.trim() ? { appSecret: env.META_APP_SECRET.trim(), verifyToken: env.META_WEBHOOK_VERIFY_TOKEN.trim() } : null,
     resend,
+    textbee: providers.textbee,
     connectors: {
       gmail: mailboxes?.connector ?? null,
       smsInbound: hosted ? 'none' : 'simulator',
