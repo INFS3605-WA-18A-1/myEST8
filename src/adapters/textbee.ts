@@ -1,4 +1,5 @@
-// Outbound SMS through textbee (ADR 0013): an Android phone sends the text.
+// SMS through textbee (ADR 0013): an Android phone sends the text, and posts
+// what it receives to /webhooks/textbee.
 //   POST {apiBaseUrl}/api/v1/gateway/send-sms
 //   x-api-key: the dashboard API key
 //   { recipients, message, deviceId } -> 200 { data: { smsBatchId, ... } }
@@ -7,9 +8,12 @@
 // attachment goes out as its signed file link, appended to the text.
 // A 400 whose reason is "Invalid recipients" is a number that will never work.
 // Anything else is retried. The API key is never left in an error.
+// A delivery is signed in X-Signature: lowercase-hex HMAC-SHA256 of the raw body.
 
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { FileLinks } from '../file-links.ts';
-import { UndeliverableError, type Messenger, type OutboundMessage } from '../ports.ts';
+import { UndeliverableError, type InboundMessage, type Messenger, type OutboundMessage } from '../ports.ts';
+import { normalizeAddress } from '../shared.ts';
 
 const TIMEOUT_MS = 15_000;
 const TEXTBEE_ENV = ['TEXTBEE_API_KEY', 'TEXTBEE_DEVICE_ID', 'TEXTBEE_NUMBER', 'TEXTBEE_WEBHOOK_SECRET'] as const;
@@ -100,6 +104,35 @@ function errorReason(text: string): string | null {
   } catch {
     return null;
   }
+}
+
+/** Checks X-Signature: lowercase-hex HMAC-SHA256 of the raw body, keyed by the webhook secret. */
+export function verifyTextbeeSignature(secret: string, rawBody: Uint8Array, signature: string): boolean {
+  const expected = Buffer.from(createHmac('sha256', secret).update(rawBody).digest('hex'));
+  const given = Buffer.from(signature);
+  return given.length === expected.length && timingSafeEqual(given, expected);
+}
+
+/**
+ * A MESSAGE_RECEIVED webhook as an inbound SMS, or null when the event isn't one
+ * or the phone texted itself (both acknowledged and ignored). textbee doesn't say
+ * which number was texted, so the server's phone number is the Agency channel.
+ */
+export function textbeeToInbound(body: unknown, number: string): InboundMessage | null {
+  if (typeof body !== 'object' || body === null) return null;
+  const event = body as Record<string, unknown>;
+  if (event.webhookEvent !== 'MESSAGE_RECEIVED') return null;
+  const sender = typeof event.sender === 'string' ? event.sender : '';
+  if (sender && normalizeAddress(sender) === normalizeAddress(number)) return null;
+  return {
+    providerMessageId: typeof event.smsId === 'string' ? event.smsId : '',
+    agencyChannel: number,
+    channelType: 'sms',
+    from: sender,
+    text: typeof event.message === 'string' ? event.message : '',
+    attachments: [],
+    receivedAt: new Date(typeof event.receivedAt === 'string' ? event.receivedAt : ''),
+  };
 }
 
 /** The text, then one signed link per attachment. SMS has nowhere else to put a file. */
