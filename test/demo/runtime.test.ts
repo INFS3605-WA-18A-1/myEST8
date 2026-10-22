@@ -213,6 +213,97 @@ describe('the demo', () => {
     expect(res.status).toBe(403);
   });
 
+  const textbeeEnv = {
+    TEXTBEE_API_KEY: 'textbee-test-api-key',
+    TEXTBEE_DEVICE_ID: '664a9b8cd0e1f2a3b4c5d6e7',
+    TEXTBEE_NUMBER: '+61412345678',
+    TEXTBEE_WEBHOOK_SECRET: 'textbee-webhook-secret-20',
+  };
+  // 32 bytes, base64. The runtime only checks the length.
+  const encryptionKey = 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=';
+
+  test('a partial textbee set refuses to start, naming what is missing', async () => {
+    await expect(createDemo({ env: demoEnv({ TEXTBEE_API_KEY: 'textbee-test-api-key' }), seedAgency: false })).rejects.toThrow(
+      'Missing: TEXTBEE_DEVICE_ID, TEXTBEE_NUMBER, TEXTBEE_WEBHOOK_SECRET',
+    );
+  });
+
+  test('with textbee set, an SMS goes to textbee rather than Twilio or only the simulator', async () => {
+    const requests: Request[] = [];
+    vi.stubGlobal('fetch', async (input: string | URL | Request, init?: RequestInit) => {
+      requests.push(new Request(input, init));
+      return Response.json({ data: { success: true, message: 'SMS added to queue for processing', smsBatchId: '66b1f2c3a4d5e6f7a8b9c0d2', recipientCount: 1 } });
+    });
+    const lines: string[] = [];
+    const d = await createDemo({
+      env: demoEnv({
+        ...textbeeEnv,
+        TWILIO_ACCOUNT_SID: 'AC123',
+        TWILIO_AUTH_TOKEN: 'token',
+        TWILIO_SMS_FROM: '+61480000000',
+        FILE_LINK_SECRET: 'a-test-secret-that-is-long-enough-1234',
+        PUBLIC_URL: 'https://myest8.test',
+        DEMO_SEND_TO: '+61400000001',
+      }),
+      seedAgency: false,
+      log: (line) => lines.push(line),
+    });
+    closeAfter(d);
+    expect(d.apis.messenger).toBe('real');
+    expect(d.textbee).toEqual({
+      apiKey: 'textbee-test-api-key',
+      deviceId: '664a9b8cd0e1f2a3b4c5d6e7',
+      number: '+61412345678',
+      webhookSecret: 'textbee-webhook-secret-20',
+      apiBaseUrl: 'https://api.textbee.dev',
+    });
+    expect(lines.join('\n')).toContain('[messenger] textbee is set, so it sends SMS instead of Twilio.');
+
+    const pm = await d.app.signUp({
+      agencyName: 'Sunrise Realty',
+      timeZone: 'Australia/Brisbane',
+      name: 'Sam Sun',
+      email: 'sam@sunrise.example',
+      password: 'sunrise-2026',
+    });
+    const sunrise = await d.app.asPropertyManager(pm);
+    await sunrise.connectChannel('sms', '+61291000002');
+    await sunrise.sendTestMessage('sms', '+61400000001');
+
+    const sent = requests.filter((r) => r.url.includes('/gateway/send-sms') || r.url.includes('api.twilio.com'));
+    expect(sent.map((r) => r.url)).toEqual(['https://api.textbee.dev/api/v1/gateway/send-sms']);
+    expect(sent[0]!.headers.get('x-api-key')).toBe('textbee-test-api-key');
+    expect(await sent[0]!.json()).toEqual({
+      recipients: ['+61400000001'],
+      message: 'This is a test message from Sunrise Realty on myEST8. This channel is working.',
+      deviceId: '664a9b8cd0e1f2a3b4c5d6e7',
+    });
+  });
+
+  test('the textbee webhook is on when textbee is set, and off when it is not', async () => {
+    const on = await createDemo({ env: demoEnv(textbeeEnv), seedAgency: false });
+    closeAfter(on);
+    expect((await on.web.request('/webhooks/textbee', { method: 'POST', body: '{}' })).status).toBe(401);
+
+    const off = await createDemo({ env: demoEnv(), seedAgency: false });
+    closeAfter(off);
+    expect((await off.web.request('/webhooks/textbee', { method: 'POST', body: '{}' })).status).toBe(404);
+  });
+
+  test('textbee set means the Twilio number panel is not offered, even with an encryption key', async () => {
+    const d = await createDemo({ env: demoEnv({ ...textbeeEnv, TOKEN_ENCRYPTION_KEY: encryptionKey }), seedAgency: false });
+    closeAfter(d);
+    expect(d.apis.messenger).toBe('real');
+    const pm = await d.app.signUp({
+      agencyName: 'Sunrise Realty',
+      timeZone: 'Australia/Brisbane',
+      name: 'Sam Sun',
+      email: 'sam@sunrise.example',
+      password: 'sunrise-2026',
+    });
+    expect(await (await d.app.asPropertyManager(pm)).smsNumber()).toBeNull();
+  });
+
   test('serves the sign-in page and keeps the simulator behind it', async () => {
     const { web } = await demoWorld();
     expect((await web.request('/login')).status).toBe(200);

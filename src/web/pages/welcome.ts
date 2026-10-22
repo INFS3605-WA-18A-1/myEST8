@@ -7,7 +7,7 @@
 //
 //   1 Welcome          what we'll set up, and the Agency's details
 //   2 Your team        colleagues as Property Managers (optional)
-//   3 Channels         SMS verified with a code, email at the inbound address
+//   3 Channels         SMS by a code or the server's phone, email at the inbound address
 //   4 Tradies          the Tradies the Agency already uses, so a Property can nominate them
 //   5 First Property   address, Max Repair Cost, Property Owner, Tenant, Building Manager
 //   6 Done             what's set up, and where to go next
@@ -73,6 +73,7 @@ import {
   type Errors,
   type Values,
 } from './onboarding-forms.ts';
+import { serverSmsPanel } from './server-sms.ts';
 import { smsNumberPanel, smsNumbersOffered } from './sms-number.ts';
 import { TIME_ZONES } from './signup.ts';
 
@@ -389,9 +390,11 @@ async function channelsStep(c: WizardContext, demo: boolean, connectors: Channel
     .map((ch) => ch.type);
   const rowForm = 'mt-2 grid items-end gap-3 md:grid-cols-[minmax(0,1fr)_auto]';
   const gmailBlock = connectors.gmail ? await gmailControls(connectors.gmail, agency.id, 'welcome') : null;
-  // Where this server sets up SMS numbers, the SMS row offers the two ways to get one instead of a typed number and a code.
-  const smsNumbers = await smsNumbersOffered(actions);
-  const smsPanel = smsNumbers ? await smsNumberPanel(actions, { from: 'welcome', current: connected.find((ch) => ch.type === 'sms')?.address }) : null;
+  // The server's phone replaces both the typed number and code and the Twilio panel.
+  const serverPhone = connectors.smsPhone;
+  const smsNumbers = !serverPhone && (await smsNumbersOffered(actions));
+  const currentSms = connected.find((ch) => ch.type === 'sms')?.address;
+  const smsPanel = serverPhone ? serverSmsPanel({ from: 'welcome', number: serverPhone, current: currentSms }) : smsNumbers ? await smsNumberPanel(actions, { from: 'welcome', current: currentSms }) : null;
   return wizardPage(c, {
     step: 'channels',
     title: 'Channels',
@@ -400,10 +403,13 @@ async function channelsStep(c: WizardContext, demo: boolean, connectors: Channel
     body: html`
       <p>
         Tenants, Tradies and Property Owners reach ${agency.name} by SMS and email.
-        ${smsNumbers ? 'Set up the number Tenants will text.' : 'Verify SMS with a code sent to the number.'}
+        ${serverPhone ? "Connect the server's SMS phone." : smsNumbers ? 'Set up the number Tenants will text.' : 'Verify SMS with a code sent to the number.'}
         Email arrives at the address below once you forward the Agency inbox to it.${demo ? ' In the demo nothing is really sent, and the addresses work with the phone simulator.' : ''}
       </p>
-      <p class="wizard-next">${channelsStillToDo(CHANNELS.filter((ch) => !connectors.unavailable.includes(ch.type)).map((ch) => ({ type: ch.type, verified: verifiedTypes.includes(ch.type) })), smsNumbers)}</p>
+      <p class="wizard-next">${channelsStillToDo(
+        CHANNELS.filter((ch) => !connectors.unavailable.includes(ch.type)).map((ch) => ({ type: ch.type, verified: verifiedTypes.includes(ch.type) })),
+        serverPhone ? 'server' : smsNumbers ? 'twilio' : 'code',
+      )}</p>
       <div class="flex flex-col gap-4">
         ${CHANNELS.map((channel) => {
           const current = connected.find((ch) => ch.type === channel.type);
@@ -443,10 +449,11 @@ async function channelsStep(c: WizardContext, demo: boolean, connectors: Channel
 }
 
 /** What the channels still need, as one sentence: what's next rather than a count. */
-function channelsStillToDo(channels: { type: ChannelType; verified: boolean }[], smsNumbers = false): string {
+function channelsStillToDo(channels: { type: ChannelType; verified: boolean }[], sms: 'code' | 'twilio' | 'server' = 'code'): string {
+  const smsLeft = sms === 'server' ? "connect the Agency's SMS number" : sms === 'twilio' ? "set up the Agency's SMS number" : "verify the Agency's SMS number with a code";
   const left = channels
     .filter((ch) => !ch.verified)
-    .map((ch) => (ch.type === 'email' ? "send one email to the Agency inbox so it's forwarded here" : smsNumbers ? 'set up the Agency\'s SMS number' : "verify the Agency's SMS number with a code"));
+    .map((ch) => (ch.type === 'email' ? "send one email to the Agency inbox so it's forwarded here" : smsLeft));
   if (!channels.length) return 'Nothing to connect on this server. Continue to the next step.';
   if (!left.length) return `${sentence(channels.map((ch) => (ch.type === 'email' ? 'email' : 'SMS')))} ${channels.length > 1 ? 'are' : 'is'} verified.`.replace(/^./, (c) => c.toUpperCase());
   return `Still to do: ${left.join(', and ')}.`;

@@ -10,6 +10,7 @@ import { HTTPException } from 'hono/http-exception';
 import { metaStatusFailures, metaToInbound, verifyMetaSignature } from './adapters/meta-whatsapp.ts';
 import { resendToInbound, verifyResendSignature } from './adapters/resend.ts';
 import { sendgridToInbound, verifySendgridSignature } from './adapters/sendgrid.ts';
+import { textbeeToInbound, verifyTextbeeSignature } from './adapters/textbee.ts';
 import { twilioToInbound, verifyTwilioSignature } from './adapters/twilio.ts';
 import type { App } from './app.ts';
 import type { FileLinks } from './file-links.ts';
@@ -43,6 +44,8 @@ export function createHttpApp(
     whatsapp?: { appSecret: string; verifyToken: string } | null;
     /** Resend inbound email. Absent unless both the webhook secret and the API key are set. */
     resend?: { webhookSecret: string; apiKey: string; fetch?: typeof fetch } | null;
+    /** The server's textbee phone (ADR 0013). Absent turns /webhooks/textbee off with a 404. */
+    textbee?: { webhookSecret: string; number: string } | null;
   },
 ) {
   const http = new Hono();
@@ -64,6 +67,27 @@ export function createHttpApp(
     if (!token || !verifyTwilioSignature(token, publicUrl(c), params, c.req.header('x-twilio-signature') ?? '')) return refused();
     if (!(await app.receiveInbound(message))) return refused();
     return c.body('<Response/>', 200, { 'content-type': 'text/xml' });
+  });
+
+  // textbee posts one JSON event (ADR 0013). The signature covers the raw bytes, so check it before parsing.
+  http.post('/webhooks/textbee', bodyLimit({ maxSize: MB }), async (c) => {
+    if (!config.textbee) return c.notFound();
+    const raw = new Uint8Array(await c.req.arrayBuffer());
+    if (!verifyTextbeeSignature(config.textbee.webhookSecret, raw, c.req.header('x-signature') ?? '')) {
+      return c.text('Invalid signature', 401);
+    }
+    let body: unknown;
+    try {
+      body = JSON.parse(new TextDecoder().decode(raw));
+    } catch {
+      return c.text('Invalid JSON', 400);
+    }
+    const message = textbeeToInbound(body, config.textbee.number);
+    // No Agency yet: 200, not 4xx. textbee stops retrying a 4xx and pauses a webhook that keeps failing.
+    if (message && !(await app.receiveInbound(message))) {
+      console.log(`[textbee] a text from ${message.from} to ${config.textbee.number} arrived before any Agency connected it, so nothing was stored`);
+    }
+    return c.text('ok', 200);
   });
 
   http.get('/webhooks/whatsapp', (c) => {
