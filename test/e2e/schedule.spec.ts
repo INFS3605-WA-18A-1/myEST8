@@ -3,6 +3,7 @@
 // ever scrolls the page sideways.
 
 import { expect, test } from '@playwright/test';
+import { zonedInstant } from '../../src/zoned-time.ts';
 import { signIn } from './support/actions.ts';
 
 const overflow = (page: import('@playwright/test').Page) => page.evaluate<number>('document.documentElement.scrollWidth - document.documentElement.clientWidth');
@@ -30,6 +31,91 @@ test('on a laptop the Week is an hour grid of seven days, and the tabs switch to
   await expect(page.getByRole('table')).toBeVisible();
   await expect(page.getByRole('columnheader')).toHaveCount(7);
   expect(await overflow(page)).toBe(0);
+});
+
+test('the toolbar is one row on a laptop, Next then Today returns to this week, and a phone does not scroll sideways', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 900 });
+  await signIn(page);
+  await page.goto('/calendar?filter=all');
+
+  await expect(page.getByRole('region', { name: 'The week, hour by hour' })).toBeVisible();
+  const today = page.getByRole('link', { name: 'Today', exact: true });
+  const week = page.getByRole('navigation', { name: 'Calendar views' }).getByRole('link', { name: 'Week' });
+  const todayBox = await today.boundingBox();
+  const weekBox = await week.boundingBox();
+  expect(Math.abs(todayBox!.y - weekBox!.y)).toBeLessThan(8);
+  expect(await overflow(page)).toBe(0);
+
+  const period = page.locator('.schedule-period');
+  const title = (await period.textContent())!.trim();
+  await page.getByRole('link', { name: 'Next week' }).click();
+  await expect(period).not.toHaveText(title);
+  await today.click();
+  await expect(period).toHaveText(title);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/calendar?filter=all');
+  expect(await overflow(page)).toBe(0);
+  const todayPhone = (await page.getByRole('link', { name: 'Today', exact: true }).boundingBox())!;
+  const weekPhone = (await page.getByRole('navigation', { name: 'Calendar views' }).getByRole('link', { name: 'Week' }).boundingBox())!;
+  expect(weekPhone.y).toBeGreaterThan(todayPhone.y + todayPhone.height - 4);
+});
+
+test('the Free today panel sits beside the Week on a laptop and above it on a phone', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 900 });
+  await signIn(page);
+  await page.goto('/calendar?filter=all');
+
+  const panel = page.getByRole('complementary', { name: /^Free today/ });
+  const grid = page.getByRole('region', { name: 'The week, hour by hour' });
+  await expect(panel).toBeVisible();
+  const panelBox = (await panel.boundingBox())!;
+  const gridBox = (await grid.boundingBox())!;
+  // Beside: the panel's left edge is the grid's right edge, and they share a top.
+  expect(panelBox.x).toBeGreaterThan(gridBox.x + gridBox.width - 2);
+  expect(Math.abs(panelBox.y - gridBox.y)).toBeLessThan(8);
+  expect(await overflow(page)).toBe(0);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const panelPhone = (await panel.boundingBox())!;
+  // Under 768px the Week is the list of days; the hour grid is not on screen.
+  const list = page.getByRole('list', { name: 'The week, Monday to Sunday' });
+  const listBox = (await list.boundingBox())!;
+  expect(panelPhone.y + panelPhone.height).toBeLessThanOrEqual(listBox.y + 4);
+  expect(await overflow(page)).toBe(0);
+});
+
+test('the current-time line moves after a minute and hides the next day', async ({ page }) => {
+  // A browser clock years off the server. A script that trusts Date.now() jumps the line on load.
+  await page.clock.install({ time: new Date('2030-06-01T15:00:00+10:00') });
+  await page.setViewportSize({ width: 1366, height: 900 });
+  await signIn(page);
+
+  const response = page.waitForResponse((res) => {
+    const url = new URL(res.url());
+    return url.pathname === '/calendar' && res.request().method() === 'GET' && res.status() === 200;
+  });
+  await page.goto('/calendar');
+  const html = await (await response).text();
+
+  const line = page.locator('[data-schedule-now]');
+  await expect(line).toBeAttached();
+  const served = html.slice(html.indexOf('<div class="schedule-now"'), html.indexOf('</div>', html.indexOf('data-schedule-now')));
+  const servedStyle = served.match(/style="([^"]*)"/)?.[1];
+  expect(await line.getAttribute('style')).toBe(servedStyle);
+
+  await page.clock.fastForward(60_000);
+  expect(await line.getAttribute('style')).not.toBe(servedStyle);
+
+  // 10:00 the next Agency day is inside the grid's hours. The line still hides, because that day is no longer data-today.
+  const today = (await line.getAttribute('data-today'))!;
+  const zone = (await line.getAttribute('data-zone'))!;
+  const serverNow = Number(await line.getAttribute('data-now'));
+  const [year, month, day] = today.split('-').map(Number);
+  const next = new Date(Date.UTC(year!, month! - 1, day! + 1));
+  const ten = zonedInstant(zone, next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate(), 10, 0).getTime();
+  await page.clock.fastForward(ten - serverNow - 60_000);
+  await expect(line).toBeHidden();
 });
 
 test('on a phone the Week is a list of days, and no view scrolls the page sideways', async ({ page }) => {

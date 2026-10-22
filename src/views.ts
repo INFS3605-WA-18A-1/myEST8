@@ -2,6 +2,7 @@ import type { Context } from './context.ts';
 import { URGENT_REPAIR_LIMIT_CENTS } from './intake.ts';
 import { MIN_QUOTE_REQUESTS, MIN_QUOTES } from './quotes.ts';
 import { addMs, HOUR_MS, iso, URGENCIES, type Trade, type Urgency } from './shared.ts';
+import { dayOf, startOfDay } from './zoned-time.ts';
 import type { Issue, Job, JobStatus, Ticket, UrgentRepairStatus } from './tickets.ts';
 
 /** Reimbursement Requests in the order Approvals lists them: the ones to check first, then those waiting on the Tenant, then on the Property Owner. */
@@ -214,6 +215,8 @@ export function createViews({ clock, modules }: Context) {
   return {
     async dashboard(agencyId: number, propertyManagerId: number, filter: 'mine' | 'all') {
       const now = clock.now();
+      // From the start of today, so a visit that has already ended still marks the day and is listed.
+      const { timeZone } = await profiles.agency(agencyId);
       const propertyIds = filter === 'mine' ? await profiles.propertyIdsOf(propertyManagerId) : null;
       const [maintenanceRequests, openTickets, urgentRepairs, inbox, quoteAlerts, schedulingAlerts, calendar] = await Promise.all([
         tickets.maintenanceRequests(agencyId, propertyIds).then(maintenanceRequestViews),
@@ -222,7 +225,7 @@ export function createViews({ clock, modules }: Context) {
         intake.inbox(agencyId),
         modules.quotes.alerts(agencyId, propertyIds),
         modules.scheduling.alerts(agencyId, propertyIds),
-        modules.scheduling.calendar(agencyId, { from: iso(now), to: iso(addMs(now, CALENDAR_DAYS * 24 * HOUR_MS)) }),
+        modules.scheduling.calendar(agencyId, { from: iso(startOfDay(dayOf(now, timeZone), timeZone)), to: iso(addMs(now, CALENDAR_DAYS * 24 * HOUR_MS)) }),
       ]);
       const [boardTickets, repairs] = await Promise.all([
         board(openTickets),

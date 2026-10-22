@@ -37,7 +37,9 @@ import {
   phoneChannelForm,
   chosenId,
   nominatedFrom,
+  postedLocation,
   propertyOptions,
+  propertyPlaceFields,
   tradiePicker,
   contactFields,
   contactFrom,
@@ -181,6 +183,7 @@ export function setupPages(o: { connectors?: ChannelConnectors } = {}) {
       if (!text(form, 'maxRepairCost')) throw new ActionError('invalid', 'Enter the Max Repair Cost');
       const buildingManager = text(form, 'buildingManagerId');
       const address = text(form, 'address');
+      const location = postedLocation(form);
       await c.var.actions.addProperty({
         address,
         suburb: text(form, 'suburb'),
@@ -189,6 +192,7 @@ export function setupPages(o: { connectors?: ChannelConnectors } = {}) {
         maxRepairCostCents: cents(form, 'maxRepairCost', 'the Max Repair Cost'),
         nominatedTradieIds: nominatedFrom(form),
         buildingManagerId: buildingManager ? Number(buildingManager) : undefined,
+        ...(location ? { location } : {}),
       });
       return { ok: `${address} added. Now add its Tenants.` };
     }),
@@ -418,8 +422,7 @@ function propertiesArea(agency: Agency, myId: number, shown: Shown): Html {
         <form method="post" action="/setup/properties?from=setup">
           ${shown.error}
           ${fieldGrid(html`
-            ${field({ label: 'Address', name: 'address', id: 'property-address', required: true, placeholder: '12 King St, Newtown NSW 2042' })}
-            ${field({ label: 'Suburb', name: 'suburb', id: 'property-suburb', required: true })}
+            ${propertyPlaceFields()}
             ${field({
               label: 'Property Owner',
               name: 'ownerId',

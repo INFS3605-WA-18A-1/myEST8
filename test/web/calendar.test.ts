@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { visible, webWorld } from '../support/web.ts';
 import { HOUR } from '../support/harness.ts';
-import { confirmedQuotes, HANA, inspectionBooked, jobView, TOM, tomsTapTicket } from '../support/world.ts';
+import { confirmedQuotes, HANA, inspectionBooked, jobView, TOM, tomsTapTicket, visitStarted } from '../support/world.ts';
 
 type Web = Awaited<ReturnType<typeof webWorld>>;
 
@@ -82,6 +82,13 @@ function summaryOf(html: string) {
   return html.slice(start, html.indexOf('</div>', start));
 }
 
+/** The Free today panel, without the calendar around it. */
+function freePanel(html: string) {
+  const start = html.indexOf('<aside class="schedule-free"');
+  expect(start, 'no Free today panel').toBeGreaterThan(-1);
+  return html.slice(start, html.indexOf('</aside>', start));
+}
+
 describe('Schedule: the week', () => {
   test('a booking shows under its short day with what the visit is for, the Tradie, the street and suburb, and how it stands', async () => {
     const w = await webWorld();
@@ -90,11 +97,16 @@ describe('Schedule: the week', () => {
 
     const html = await page(w, '/calendar?week=2026-10-14', cookie);
 
-    expect(visible(html)).toContain('Week of Monday 12 October 2026');
+    expect(visible(html)).toContain('12 – 18 October 2026');
     const days = week(html);
     const text = visible(days);
     // The month is in the subtitle, so a day is "Tue 13"; screen readers hear the whole date.
-    expect(days).toContain('<span aria-hidden="true">Tue 13</span><span class="sr-only">Tuesday 13 October</span>');
+    const weekday = days.indexOf('aria-hidden="true">Tue</span>');
+    const numeral = days.indexOf('class="schedule-num num" aria-hidden="true">13</span>');
+    const long = days.indexOf('<span class="sr-only">Tuesday 13 October</span>');
+    expect(weekday).toBeGreaterThan(-1);
+    expect(numeral).toBeGreaterThan(weekday);
+    expect(long).toBeGreaterThan(numeral);
     expect(days).toMatch(new RegExp(`<a class="booking-issue" href="/tickets/${job.ticketId}">.*The kitchen tap is dripping`));
     expect(days).toContain(`href="/tradies/${w.tradies.pete.id}"`);
     expect(text).toContain('9:00 am – 11:00 am');
@@ -159,6 +171,7 @@ describe('Schedule: the week', () => {
     const days = week(await page(w, '/calendar', cookie));
 
     expect(days).toContain('aria-current="date"');
+    expect(days).not.toMatch(/<li class="schedule-day[^"]*" aria-current="date"/);
     // Now is Thursday 8 October.
     expect(visible(days)).toMatch(/Thu 8 Thursday 8 October Today Nothing booked/);
     expect(visible(days)).toContain('Nothing booked Mon 5 – Wed 7');
@@ -212,17 +225,101 @@ describe('Schedule: Site Inspections and who is free', () => {
     expect(html).toContain(`href="/tickets/${job.ticketId}#job-${job.jobId}"`);
   });
 
-  test('the summary lists the Tradies with no booking as Free today, when today is shown', async () => {
+  test('every Tradie is free today when none is booked, and another week shows no panel', async () => {
     const w = await webWorld();
     await bookedTap(w);
     const cookie = await w.signIn();
 
-    const free = visible(summaryOf(await page(w, '/calendar', cookie)));
+    const free = visible(freePanel(await page(w, '/calendar', cookie)));
     // Now is Saturday 10 October; Pete's visit is on Tuesday, so every Tradie is free today.
     expect(free).toContain('Free today (6)');
     expect(free).toContain("Pete's Plumbing");
 
-    expect(visible(summaryOf(await page(w, '/calendar?view=week&date=2026-10-19', cookie)))).not.toContain('Free today');
+    const next = await page(w, '/calendar?view=week&date=2026-10-19', cookie);
+    expect(next).not.toContain('class="schedule-free"');
+    expect(visible(next)).not.toContain('Free today');
+  });
+
+  test('this week lists each Tradie free today, with their Trade and myEST8 rating, and leaves out one booked today', async () => {
+    const w = await webWorld();
+    await bookedTap(w);
+    // Pete's visit is Tuesday 13 October at 9 am. Move to that morning, so today is a day he is booked.
+    visitStarted(w, TUE_9AM);
+    const cookie = await w.signIn();
+
+    const panel = freePanel(await page(w, '/calendar', cookie));
+    const text = visible(panel);
+
+    expect(text).toContain('Free today (5)');
+    expect(panel).not.toContain(`href="/tradies/${w.tradies.pete.id}"`);
+    expect(text).not.toContain("Pete's Plumbing");
+    // Plumbing before electrical (the fixed Trade list), then by business name.
+    const names = ["Drip Doctors", 'Flow Bros', "Nina's Plumbing", 'Quick Pipes', 'Sparky Sam'];
+    let at = -1;
+    for (const name of names) {
+      const found = text.indexOf(name);
+      expect(found, name).toBeGreaterThan(at);
+      at = found;
+    }
+    expect(panel).toContain(`href="/tradies/${w.tradies.dana.id}"`);
+    expect(panel).toContain('aria-hidden="true">DD</span>');
+    expect(text).toContain('Plumbing');
+    expect(text).toContain('Electrical');
+    expect(text).toContain('myEST8 5.0 (1) from 1 rating');
+    expect(text).toContain('myEST8 3.0 (1) from 1 rating');
+  });
+
+  test('with everyone booked, the panel says every Tradie has a visit today', async () => {
+    const w = await webWorld();
+    const first = await tomsTapTicket(w);
+    // Saturday 10 October, 9 am. Book each Tradie later that day, on their own Job.
+    const start = new Date('2026-10-10T11:00:00+11:00');
+    const jobs = [first];
+    for (const trade of ['plumbing', 'plumbing', 'plumbing', 'plumbing', 'electrical'] as const) {
+      jobs.push({ ticketId: first.ticketId, jobId: await w.alice.addJob(first.ticketId, trade) });
+    }
+    const tradies = [w.tradies.pete, w.tradies.quick, w.tradies.dana, w.tradies.finn, w.tradies.nina, w.tradies.sam];
+    for (let i = 0; i < tradies.length; i++) {
+      // Kept under the Property's Max Repair Cost once all six Quotes are approved.
+      const [quote] = await confirmedQuotes(w, jobs[i]!, [[tradies[i]!, 50_00, start]]);
+      await w.alice.chooseQuote(quote!.quoteId, 'Today');
+      await w.alice.sendWorkOrder(jobs[i]!.jobId);
+    }
+    const cookie = await w.signIn();
+
+    const text = visible(freePanel(await page(w, '/calendar', cookie)));
+
+    expect(text).toContain('Every Tradie has a visit today.');
+    expect(text).not.toContain("Pete's Plumbing");
+  }, 60_000);
+
+  test('the panel starts with a skip link to the schedule', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    const html = await page(w, '/calendar', cookie);
+    const panel = freePanel(html);
+
+    // First in the panel, so a keyboard user can jump past every free Tradie.
+    const skip = panel.indexOf('Skip to the schedule');
+    expect(skip).toBeGreaterThan(-1);
+    expect(skip).toBeLessThan(panel.indexOf('id="free-today"'));
+    expect(panel).toContain('<a href="#schedule" class="skip-link">Skip to the schedule</a>');
+    expect(html).toContain('id="schedule"');
+
+    const next = await page(w, '/calendar?view=week&date=2026-10-19', cookie);
+    expect(next).not.toContain('Skip to the schedule');
+  });
+
+  test('with no Tradies, the panel links to add one', async () => {
+    const w = await webWorld();
+    const cookie = await w.signUp();
+
+    const panel = freePanel(await page(w, '/calendar', cookie));
+
+    expect(panel).toContain('href="/tradies#add-tradie"');
+    expect(visible(panel)).toContain('Add a Tradie');
+    expect(visible(panel)).not.toContain('Every Tradie has a visit today.');
   });
 });
 
@@ -244,7 +341,7 @@ describe('Schedule: the Week as a time grid', () => {
     const tue = column(html, '2026-10-13');
     // 9 am is 8 quarter hours after 7 am, so line 9; 11 am is line 17.
     expect(tue).toContain('style="grid-row: 9 / 17"');
-    expect(tue).toMatch(new RegExp(`<a class="schedule-block-link" href="/tickets/${job.ticketId}">`));
+    expect(tue).toMatch(new RegExp(`<a class="schedule-block-link" href="/tickets/${job.ticketId}"`));
     expect(visible(tue)).toContain("9:00 am – 11:00 am The kitchen tap is dripping Pete's Plumbing Not confirmed yet");
     // Each day's name opens its Day.
     expect(tue).toContain('href="/calendar?view=day&amp;date=2026-10-13"');
@@ -291,7 +388,7 @@ describe('Schedule: the Day', () => {
 
     const html = await page(w, '/calendar?view=day&date=2026-10-13', cookie);
 
-    expect(visible(html)).toContain('Tuesday 13 October 2026');
+    expect(visible(html)).toContain('Tuesday 13 October');
     expect(visible(html)).toContain('2 visits booked');
     const g = grid(html, 'day');
     expect(g).toMatch(/role="region" aria-label="Tuesday 13 October, hour by hour\. Visits at the same time sit side by side: scroll sideways to see them all\." tabindex="0"/);
@@ -301,8 +398,29 @@ describe('Schedule: the Day', () => {
     expect(g).toContain('style="grid-row: 13 / 21; grid-column: 2 / 3"');
     expect(g.indexOf(`/tickets/${tap.ticketId}`)).toBeLessThan(g.indexOf(`/tickets/${fan.ticketId}`));
     const text = visible(g);
+    expect(text).toContain("9:00 am – 11:00 am The kitchen tap is dripping Pete's Plumbing");
+    // The Day's lanes are wide enough for the street and suburb the Week's blocks leave out.
     expect(text).toContain("The kitchen tap is dripping Pete's Plumbing 12 King St, Newtown");
-    expect(text).toContain('The bathroom fan is rattling Drip Doctors');
+    expect(text).not.toContain('NSW 2042');
+    expect(g).toContain(`href="/tradies/${w.tradies.pete.id}"`);
+    expect(g).toContain('aria-label="9:00 am – 11:00 am, The kitchen tap is dripping, Pete&#39;s Plumbing, 12 King St, Newtown');
+    expect(text).toContain('10:00 am – 12:00 pm The bathroom fan is rattling Drip Doctors');
+    // Mine doesn't name the Property Manager: every visit here is Alice's.
+    expect(text).not.toContain('Property Manager');
+  });
+
+  test('under All a Day block names the Property Manager, and a reschedule request links to the Ticket', async () => {
+    const w = await webWorld();
+    const job = await bookedTap(w);
+    await w.h.answer(TOM, 'I have work on Tuesday, can we do another day?', 'reschedule');
+    const { workOrder } = await jobView(w, job);
+    const bob = await w.signIn('bob@harbour.example');
+
+    const g = grid(await page(w, '/calendar?view=day&date=2026-10-13&filter=all', bob), 'day');
+
+    expect(visible(g)).toContain('Property Manager: Alice Archer');
+    expect(g).toContain(`<a class="booking-reschedule" href="/tickets/${job.ticketId}?suggest=${workOrder!.workOrderId}">Reschedule requested</a>`);
+    expect(g).toContain(`href="/tradies/${w.tradies.pete.id}"`);
   });
 
   test('a visit alone at its time takes the whole width, and an empty day says so', async () => {
@@ -340,8 +458,10 @@ describe('Schedule: the Month', () => {
     expect(month.match(/<tr>/g)).toHaveLength(6);
     expect(month).toContain('<td class="schedule-mday is-outside"><a class="schedule-mday-num num" href="/calendar?view=day&amp;date=2026-09-28">');
     expect(month).toContain('href="/calendar?view=day&amp;date=2026-11-01"');
-    // Now is Thursday 8 October.
-    expect(month).toMatch(/<td class="schedule-mday is-today" aria-current="date">/);
+    // Now is Thursday 8 October. The number is a link, so the cell itself is not current too.
+    expect(month).toMatch(/<td class="schedule-mday is-today">/);
+    expect(month).not.toMatch(/<td class="schedule-mday is-today"[^>]*aria-current/);
+    expect(month).toMatch(/<a class="schedule-mday-num num" href="\/calendar\?view=day&amp;date=2026-10-08" aria-current="date">/);
     expect(month).toContain('<span class="sr-only">Thursday 8 October</span>');
     expect(html).toContain('href="/calendar?view=month&amp;date=2026-09-01"');
     expect(html).toContain('href="/calendar?view=month&amp;date=2026-11-01"');
@@ -375,6 +495,205 @@ describe('Schedule: the Month', () => {
   });
 });
 
+/** The current-time line, without the rest of the grid. */
+function nowMark(html: string) {
+  const at = html.indexOf('data-schedule-now');
+  expect(at, 'no current-time line').toBeGreaterThan(-1);
+  const start = html.lastIndexOf('<div', at);
+  return html.slice(start, html.indexOf('</div>', at));
+}
+
+/** The toolbar over the calendar, without the summary and the grid. */
+function toolbar(html: string) {
+  const start = html.indexOf('class="schedule-toolbar"');
+  expect(start, 'no toolbar on the page').toBeGreaterThan(-1);
+  return html.slice(start, html.indexOf('class="schedule-summary"', start));
+}
+
+describe('Schedule: the toolbar', () => {
+  test('Today, the previous and next arrows, and the period title, for each view', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    // Thursday 8 October is this week, so the week of the 20th is not, and Today leaves it.
+    const week = toolbar(await page(w, '/calendar?view=week&date=2026-10-20', cookie));
+    expect(week).toMatch(/class="btn btn-outline btn-sm"[^>]*>Today</);
+    expect(week).toContain('aria-label="Previous week"');
+    expect(week).toContain('aria-label="Next week"');
+    expect(week).toContain('href="/calendar?view=week&amp;date=2026-10-12"');
+    expect(week).toContain('href="/calendar?view=week&amp;date=2026-10-26"');
+    expect(visible(week)).toContain('19 – 25 October 2026');
+    expect(week).toMatch(/href="\/calendar"[^>]*>Today</);
+
+    // A week that crosses a month names both months.
+    const across = toolbar(await page(w, '/calendar?view=week&date=2026-11-01', cookie));
+    expect(visible(across)).toContain('26 October – 1 November 2026');
+
+    const day = toolbar(await page(w, '/calendar?view=day&date=2026-10-23&filter=all', cookie));
+    expect(day).toContain('aria-label="Previous day"');
+    expect(day).toContain('aria-label="Next day"');
+    expect(visible(day)).toContain('Friday 23 October');
+    expect(day).toMatch(/href="\/calendar\?view=day&amp;filter=all"[^>]*>Today</);
+
+    const month = toolbar(await page(w, '/calendar?view=month&date=2026-11-02', cookie));
+    expect(month).toContain('aria-label="Previous month"');
+    expect(month).toContain('aria-label="Next month"');
+    expect(visible(month)).toContain('November 2026');
+
+    // Today stays on the toolbar when the period shown is already this one.
+    const current = toolbar(await page(w, '/calendar', cookie));
+    expect(current).toMatch(/class="btn btn-outline btn-sm"[^>]*>Today</);
+    expect(visible(current)).toContain('5 – 11 October 2026');
+    expect(current).toContain('<h2 class="schedule-period">5 – 11 October 2026</h2>');
+    expect(current).toContain('<nav class="segmented" aria-label="Whose visits">');
+  });
+
+  test('a week across two years names both, and a Day title includes the year', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    // Monday 28 December 2026 to Sunday 3 January 2027.
+    const across = toolbar(await page(w, '/calendar?view=week&date=2026-12-30', cookie));
+    expect(visible(across)).toContain('28 December 2026 – 3 January 2027');
+
+    const day = await page(w, '/calendar?view=day&date=2026-10-13', cookie);
+    expect(visible(toolbar(day))).toContain('Tuesday 13 October 2026');
+    expect(day).toContain('on Tuesday 13 October 2026');
+  });
+});
+
+describe("Schedule: today's column", () => {
+  test("today's column and its date are marked", async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    // Now is Thursday 8 October, in the week of Monday 5 October.
+    const thu = column(await page(w, '/calendar', cookie), '2026-10-08');
+    // The date is a link, so "today" sits on that link and not also on the column.
+    expect(thu).not.toMatch(/<li class="schedule-col[^"]*" aria-current="date"/);
+    expect(thu).toMatch(/<a [^>]*aria-current="date"/);
+    // The weekday is small and the date stands on its own, so today can wear the circle.
+    expect(thu).toContain('aria-hidden="true">Thu</span>');
+    expect(thu).toContain('class="schedule-num num" aria-hidden="true">8</span>');
+    expect(thu).toContain('<span class="sr-only">Thursday 8 October</span>');
+
+    const other = column(await page(w, '/calendar?view=week&date=2026-10-12', cookie), '2026-10-13');
+    expect(other).not.toContain('aria-current="date"');
+  });
+});
+
+describe('Schedule: the current time', () => {
+  test('a current-time line is drawn on today and left off other weeks', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    // Thursday 8 October 2026, 9:00 am. The week grid starts at 7 am under a heading
+    // row, so 9:00 is grid row 10. Thursday is the fourth day: the line runs from
+    // the gutter through that column, grid columns 1 to 6.
+    const today = grid(await page(w, '/calendar', cookie));
+    expect(today).toContain('class="schedule-now"');
+    expect(today).toContain('grid-row: 10');
+    expect(today).toContain('grid-column: 1 / 6');
+
+    const other = grid(await page(w, '/calendar?view=week&date=2026-10-12', cookie));
+    expect(other).not.toContain('schedule-now');
+  });
+
+  test('the line carries the server clock, and stays on today, hidden, before the grid opens', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    // Thursday 8 October 2026, 9:00 am Sydney. 1791410400000 is that instant.
+    const morning = grid(await page(w, '/calendar', cookie));
+    const line = nowMark(morning);
+    expect(line).toContain('data-now="1791410400000"');
+    expect(line).toContain('data-today="2026-10-08"');
+    expect(line).not.toContain(' hidden');
+
+    // 6:30 am is before the grid's 7 am, so the line is drawn but not shown.
+    w.h.clock.advance(-2.5 * HOUR);
+    const early = nowMark(grid(await page(w, '/calendar', cookie)));
+    expect(early).toContain('data-now="1791401400000"');
+    expect(early).toContain('data-today="2026-10-08"');
+    expect(early).toContain(' hidden');
+  });
+
+  test('9:40 am is ten quarter-hours down and two thirds of the way through the next', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+    // 9:00 am plus 40 minutes. From 7 am that is 160 minutes: 10 rows, then 10 of the next 15.
+    w.h.clock.advance(40 * 60_000);
+
+    const line = nowMark(grid(await page(w, '/calendar', cookie)));
+
+    // The week paints a heading row, so those 10 rows start at grid row 12. Thursday runs through column 6.
+    expect(line).toContain('grid-row: 12;');
+    expect(line).toContain('grid-column: 1 / 6');
+    expect(line).toContain('--now-frac: 0.6666666666666666');
+  });
+
+  test('a Perth agency draws the line for Perth, not Sydney', async () => {
+    const w = await webWorld();
+    const cookie = await w.signUp({ timeZone: 'Australia/Perth', agencyName: 'West Realty', email: 'sam@west.example' });
+    // The clock starts at 9:00 am Sydney, which is 6:00 am in Perth. Three hours later is 9:00 am Perth
+    // (noon in Sydney). 1791421200000 is 9:00 am AWST on Thursday 8 October 2026.
+    w.h.clock.advance(3 * HOUR);
+
+    const line = nowMark(grid(await page(w, '/calendar', cookie)));
+
+    expect(line).toContain('data-zone="Australia/Perth"');
+    expect(line).toContain('data-today="2026-10-08"');
+    expect(line).toContain('data-now="1791421200000"');
+    expect(line).toContain('grid-row: 10;');
+    expect(line).toContain('grid-column: 1 / 6');
+    expect(line).not.toContain('grid-row: 22');
+  });
+
+  test('the Day draws the current-time line only on today', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    // No heading row on the Day, so 9:00 am is grid row 9, across the whole day.
+    const today = grid(await page(w, '/calendar?view=day&date=2026-10-08', cookie), 'day');
+    expect(today).toContain('class="schedule-now is-day"');
+    expect(today).toContain('grid-row: 9; grid-column: 1 / -1;');
+
+    const other = await page(w, '/calendar?view=day&date=2026-10-13', cookie);
+    expect(other).not.toContain('schedule-now');
+    expect(visible(other)).toContain('Nothing booked on Tuesday 13 October.');
+  });
+});
+
+describe('Schedule: visit blocks', () => {
+  test("a visit block's accessible name reads its time, its issue and its Tradie", async () => {
+    const w = await webWorld();
+    await bookedTap(w);
+    const cookie = await w.signIn();
+
+    const name = 'aria-label="9:00 am – 11:00 am, The kitchen tap is dripping, Pete&#39;s Plumbing';
+    const tue = column(await page(w, '/calendar?view=week&date=2026-10-12', cookie), '2026-10-13');
+    expect(tue).toContain(name);
+
+    const day = grid(await page(w, '/calendar?view=day&date=2026-10-13', cookie), 'day');
+    expect(day).toContain(name);
+  });
+});
+
+describe('Schedule: where the grid opens', () => {
+  test('the grid opens an hour before the first visit, or at 7 am when nothing is booked', async () => {
+    const w = await webWorld();
+    await bookedTap(w);
+    const cookie = await w.signIn();
+
+    // Pete is booked at 9 am, so the week opens at 8 am.
+    const booked = grid(await page(w, '/calendar?view=week&date=2026-10-12', cookie));
+    expect(booked).toContain('data-schedule-open><span class="schedule-hour-label">8 am</span>');
+
+    const empty = grid(await page(w, '/calendar?view=week&date=2026-10-19', cookie));
+    expect(empty).toContain('data-schedule-open><span class="schedule-hour-label">7 am</span>');
+  });
+});
+
 describe('Schedule: views and links', () => {
   test('Day, Week and Month tabs keep the date in view and Mine or All', async () => {
     const w = await webWorld();
@@ -396,7 +715,7 @@ describe('Schedule: views and links', () => {
 
     const html = await page(w, '/calendar?week=2026-10-21', cookie);
 
-    expect(visible(html)).toContain('Week of Monday 19 October 2026');
+    expect(visible(html)).toContain('19 – 25 October 2026');
     expect(html).toContain('href="/calendar?view=week&amp;date=2026-10-12"');
   });
 });

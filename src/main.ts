@@ -3,6 +3,7 @@
 // (src/demo/runtime.ts) with no demo Agency: Agencies sign up, their data is kept
 // in a named Postgres schema, and each channel uses its real provider when its
 // environment variables are set (Gmail for email, Meta's WhatsApp Cloud API).
+// Addresses are geocoded by OpenStreetMap's Nominatim, as in hosted mode.
 // SMS stays on the phone simulator until an SMS provider is configured.
 //
 // It refuses to start without an https PUBLIC_URL, because webhooks, OAuth
@@ -27,7 +28,7 @@ env.DATABASE_SCHEMA ||= 'myest8';
 env.DEMO_SEND_TO ||= '*';
 
 const port = Number(env.PORT ?? 3000);
-const { web, apis, database, startWorkerLoop, close } = await createDemo({ env, seedAgency: false });
+const { web, apis, database, startWorkerLoop, close } = await createDemo({ env, seedAgency: false, live: true });
 
 const mocked = Object.entries(apis).filter(([, choice]) => choice === 'mock').map(([name]) => name);
 if (mocked.length && env.ALLOW_MOCKS !== '1') {

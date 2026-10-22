@@ -10,7 +10,7 @@ import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
 import { ActionError, type Urgency } from '../../shared.ts';
 import { STAGES, type Stage } from '../../views.ts';
-import { addDays, dayOf } from '../../zoned-time.ts';
+import { addDays, dayOf, parseDay } from '../../zoned-time.ts';
 import type { WebEnv } from '../env.ts';
 import { formAction, text, type FormValues } from '../forms.ts';
 import { requestFlags } from '../request-checks.ts';
@@ -41,7 +41,7 @@ import {
   type Html,
   type Tone,
 } from '../ui.ts';
-import { shortDay, streetOf, type Booking } from '../bookings.ts';
+import { longDay, streetOf, ticketHref, visitKind, type Booking } from '../bookings.ts';
 import { streamOf } from '../stream.ts';
 
 /** Kept for the pages that still import it from here; the words live with the other request checks. */
@@ -109,6 +109,7 @@ export function dashboardPages() {
     const now = actions.now();
     const people = view.inbox.some((item) => item.personId === null) ? await actions.people() : [];
     const q = filter === 'all' ? '?filter=all' : '';
+    const shown = shownDay(now, timeZone, c.req.query('day'));
     const needReceipt = view.urgentRepairs.filter((u) => u.status === 'reminder_sent').length;
     const decided = {
       toCheck: view.tickets.filter((t) => t.decision === 'check_quotes'),
@@ -125,8 +126,8 @@ export function dashboardPages() {
         flash: flashFrom(c.req.url),
         shell: await shellInfo(c),
         controls: segmented([
-          { label: 'Mine', href: '/', active: filter === 'mine' },
-          { label: 'All', href: '/?filter=all', active: filter === 'all' },
+          { label: 'Mine', href: scopeHref('mine', shown.kept), active: filter === 'mine' },
+          { label: 'All', href: scopeHref('all', shown.kept), active: filter === 'all' },
         ]),
         body: html`
           ${countStrip([
@@ -144,7 +145,7 @@ export function dashboardPages() {
             </div>
             <div class="dashboard-glance grid min-w-0 gap-4">
               <div class="${view.urgentRepairs.length ? 'urgent-panel' : ''}">${section({ title: 'Urgent Repairs', id: 'urgent-repairs', actions: countBadge(view.urgentRepairs.length, 'error'), body: urgentRepairsList(view.urgentRepairs, timeZone) })}</div>
-              ${nextSevenDays(view.calendar, now, timeZone)}
+              ${nextSevenDays(view.calendar, now, timeZone, c.req.query('day'), filter)}
               ${ticketsByStage(view.tickets, filter, now, timeZone)}
             </div>
           </div>
@@ -457,48 +458,83 @@ function ticketDocket(t: BoardTicket, now: Date, timeZone: string): Html {
 
 // Next 7 days
 
-/**
- * Today and the six days after it, in the Agency's time zone, as a strip of day chips
- * (a dot under each day with a visit, today filled), then one row for each booked visit:
- * its day, the Tradie and the issue, the time.
- */
-function nextSevenDays(bookings: Booking[], now: Date, timeZone: string): Html {
+/** A day chip's link: that day, and Mine or All as the page already has it. */
+function dayHref(day: string, filter: Filter) {
+  const params = new URLSearchParams();
+  if (filter === 'all') params.set('filter', 'all');
+  params.set('day', day);
+  return `/?${params.toString()}#next-7-days`;
+}
+
+/** Mine or All, keeping the chosen day and returning to the strip when one is set. */
+function scopeHref(filter: Filter, day: string | undefined) {
+  const params = new URLSearchParams();
+  if (filter === 'all') params.set('filter', 'all');
+  if (day) params.set('day', day);
+  const query = params.toString();
+  return `/${query ? `?${query}` : ''}${day ? '#next-7-days' : ''}`;
+}
+
+/** Open calendar for `date`, keeping All when the dashboard is showing everyone's visits. */
+function calendarHref(date: string, filter: Filter) {
+  const params = new URLSearchParams({ view: 'day', date });
+  if (filter === 'all') params.set('filter', 'all');
+  return `/calendar?${params}`;
+}
+
+/** Today, the seven days from it, and the day the strip shows. `kept` is set only when the query named one of those days. */
+function shownDay(now: Date, timeZone: string, dayQuery: string | undefined) {
   const today = dayOf(now, timeZone);
+  const days = Array.from({ length: 7 }, (_, i) => addDays(today, i));
+  const asked = parseDay(dayQuery);
+  const kept = asked && days.includes(asked) ? asked : undefined;
+  return { today, days, chosen: kept ?? today, kept };
+}
+
+/**
+ * Today and the six days after it, in the Agency's time zone. Each day is a link, and the
+ * chosen one (today, when `day` is missing or not one of the seven) is filled; today stays
+ * ringed when another day is chosen. Under the strip, that day's visits in time order.
+ */
+function nextSevenDays(bookings: Booking[], now: Date, timeZone: string, dayQuery: string | undefined, filter: Filter): Html {
+  const { today, days, chosen } = shownDay(now, timeZone, dayQuery);
   const byDay = new Map<string, Booking[]>();
   for (const b of bookings) {
     const day = dayOf(b.start, timeZone);
     byDay.set(day, [...(byDay.get(day) ?? []), b]);
   }
-  const days = Array.from({ length: 7 }, (_, i) => addDays(today, i));
   const weekday = new Intl.DateTimeFormat('en-AU', { timeZone: 'UTC', weekday: 'short' });
+  const weekdayLong = new Intl.DateTimeFormat('en-AU', { timeZone: 'UTC', weekday: 'long' });
   const dateOf = new Intl.DateTimeFormat('en-AU', { timeZone: 'UTC', day: 'numeric' });
-  const booked = days.filter((day) => byDay.has(day));
+  const visits = byDay.get(chosen) ?? [];
   return section({
     title: 'Next 7 days',
     id: 'next-7-days',
-    actions: linkButton('Open calendar', '/calendar', { variant: 'ghost', size: 'sm' }),
+    actions: linkButton('Open calendar', calendarHref(chosen, filter), { variant: 'ghost', size: 'sm' }),
     body: html`<ol class="day-strip">
-        ${days.map((day, i) => {
+        ${days.map((day) => {
           const at = new Date(`${day}T00:00:00Z`);
-          return html`<li class="day-chip${i === 0 ? ' is-today' : ''}" ${i === 0 ? html`aria-current="date"` : ''}><time datetime="${day}"><span class="day-name">${weekday.format(at)}</span><span class="day-num">${dateOf.format(at)}</span></time>${byDay.has(day) ? html`<span class="day-dot" role="img" aria-label="Has a visit"></span>` : ''}</li>`;
+          return html`<li><a class="day-chip${day === today ? ' is-today' : ''}" href="${dayHref(day, filter)}" ${day === chosen ? html`aria-current="date"` : ''}><time datetime="${day}"><span class="day-name">${weekday.format(at)}</span><span class="day-num">${dateOf.format(at)}</span></time>${day === today ? html`<span class="sr-only">today</span>` : ''}${byDay.has(day) ? html`<span class="day-dot" role="img" aria-label="Has a visit"></span>` : ''}</a></li>`;
         })}
       </ol>
-      ${booked.length
-        ? html`<ul class="visit-list">${booked.flatMap((day) => byDay.get(day)!.map((b) => visitRow(day, b, timeZone)))}</ul>`
-        : html`<p class="visit-none">Nothing booked in the next 7 days.</p>`}`,
+      <h3 class="visit-heading">${longDay(chosen)}</h3>
+      ${visits.length
+        ? html`<ul class="visit-list">${visits.map((b) => visitRow(b, timeZone))}</ul>`
+        : html`<p class="visit-none">Nothing booked on ${weekdayLong.format(new Date(`${chosen}T00:00:00Z`))}.</p>`}`,
   });
 }
 
-/** One booked visit: its day, the Tradie (linked to the profile) and the issue and street (linked to the Ticket), then the time. */
-function visitRow(day: string, b: Booking, timeZone: string): Html {
+/** One booked visit: the time, the Tradie (linked to the profile), the issue and street (linked to the Ticket), and a Site inspection badge when it is one. */
+function visitRow(b: Booking, timeZone: string): Html {
   const time = new Intl.DateTimeFormat('en-AU', { timeZone, hour: 'numeric', minute: '2-digit' }).format(new Date(b.start));
+  const kind = visitKind(b);
   return html`<li class="visit-row">
-    <span class="visit-day">${shortDay(day)}</span>
+    <time datetime="${b.start}" class="visit-time num">${time}</time>
     <span class="visit-what">
       <a class="visit-tradie" href="/tradies/${b.tradieId}">${b.businessName}</a>
-      <a class="visit-place" href="/tickets/${b.ticketId}">${clip(b.issue, { lines: 1 })} · ${streetOf(b.propertyAddress)}</a>
+      <a class="visit-place" href="${ticketHref(b)}">${clip(b.issue, { lines: 1 })} · ${streetOf(b.propertyAddress)}</a>
     </span>
-    <time datetime="${b.start}" class="visit-time num">${time}</time>
+    ${kind ? badge(kind, 'info', { outline: true }) : ''}
   </li>`;
 }
 

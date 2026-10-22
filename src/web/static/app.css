@@ -962,35 +962,50 @@
       text-decoration-color: var(--ink);
     }
 
-    /* ----- The count strip (the dashboard): numbers that link into the queues, under a Harbour line. */
+    /* ----- The count strip (the dashboard): numbers that link into the queues, under a Harbour line.
+       Two equal tiles per row under 640px, three from 640px, and all six on one row from 1024px.
+       The old auto-fit floor (10.5rem) wrapped them once the rail left less than that times six.
+       A 1px gap over the line colour is the divider, so it follows the row whatever the width. */
     .count-strip {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1px;
       margin: 0;
       padding: 0;
       list-style: none;
       overflow: hidden;
-      background: var(--surface);
+      background: var(--line);
       border: 1px solid var(--line);
       border-top: 3px solid var(--action);
       border-radius: 8px;
       box-shadow: var(--shadow-soft);
       font-size: 14px;
     }
-    .count-strip > li + li {
-      border-left: 1px solid var(--line);
-    }
-    @media (max-width: 40rem) {
-      .count-strip > li + li {
-        border-left: 0;
-        border-top: 1px solid var(--line);
+    @media (min-width: 40rem) {
+      .count-strip {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
       }
+    }
+    @media (min-width: 64rem) {
+      .count-strip {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+      }
+    }
+    .count-strip > li {
+      display: flex;
+      min-width: 0;
+      background: var(--surface);
+      /* The tile's own width decides the label size, not the screen: beside the rail at
+         1024px a tile is about 125px, and 14px cannot fit "Requests to confirm" on one line. */
+      container-type: inline-size;
     }
     .count-item {
       display: flex;
+      flex: 1 1 auto;
       flex-direction: column;
       align-items: flex-start;
       gap: 2px;
+      min-width: 0;
       min-height: 44px;
       padding: 10px 16px;
       color: var(--ink);
@@ -1039,7 +1054,14 @@
       background: #c8372d;
     }
     .count-label {
+      min-width: 0;
       color: var(--muted);
+      overflow-wrap: break-word;
+    }
+    @container (max-width: 10.5rem) {
+      .count-label {
+        font-size: 12px;
+      }
     }
 
     /* The dashboard: Urgent Repairs lead the right column, and long lists scroll inside their own box so the page stays short. */
@@ -1237,7 +1259,7 @@
       box-shadow: inset 3px 0 0 var(--hivis);
     }
 
-    /* Next 7 days: a strip of day chips (today filled, a dot where a visit is booked), then one row per visit. */
+    /* Next 7 days: day chips (the chosen day filled, today ringed, a dot where a visit is booked), then that day's visits. */
     .day-strip {
       display: grid;
       grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -1256,6 +1278,10 @@
       border-radius: 10px;
       font-size: 12px;
       color: var(--muted);
+      text-decoration: none;
+    }
+    a.day-chip:hover {
+      color: var(--ink);
     }
     .day-chip time {
       display: grid;
@@ -1268,13 +1294,22 @@
       line-height: 1.2;
       color: var(--ink);
     }
+    /* Today stays ringed in Harbour. The chosen day is filled, including when it is today. */
     .day-chip.is-today {
-      background: #e8f0f7;
-      border-color: #8fb0cc;
+      border-color: var(--action);
     }
-    .day-chip.is-today .day-name {
+    .day-chip[aria-current='date'] {
+      background: var(--info-bg);
+      border-color: var(--action);
+    }
+    .day-chip[aria-current='date'] .day-name {
       font-weight: 600;
       color: var(--ink);
+    }
+    @media (max-width: 40rem), (pointer: coarse) {
+      .day-chip {
+        min-height: 44px;
+      }
     }
     .day-dot {
       width: 5px;
@@ -1282,6 +1317,12 @@
       margin-top: 1px;
       border-radius: 50%;
       background: var(--action);
+    }
+    .visit-heading {
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 16px;
+      font-weight: 600;
     }
     .visit-list {
       display: grid;
@@ -1291,17 +1332,13 @@
     }
     .visit-row {
       display: grid;
-      grid-template-columns: 3.5rem minmax(0, 1fr) auto;
+      /* 4.5rem fits "12:30 pm", so "9:00 am" does not pull the issue to a different edge. */
+      grid-template-columns: minmax(4.5rem, max-content) minmax(0, 1fr) auto;
       gap: 8px;
       align-items: baseline;
       padding: 10px 0;
       border-top: 1px solid var(--line);
       font-size: 14px;
-    }
-    .visit-day {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--muted);
     }
     .visit-what {
       display: grid;
@@ -4894,21 +4931,87 @@
     .booking-kind {
       margin: 0 0 2px;
     }
+    /* Free today (pages/calendar.ts): the same bounded Tradie entry as Dispatch, with
+       initials in a Harbour circle instead of the wrench, and only the myEST8 rating. */
     .schedule-free {
-      margin: 8px 0 0;
-      font-size: 13px;
-      color: var(--muted);
-      overflow-wrap: anywhere;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 0;
     }
-    .schedule-free-label {
-      cursor: pointer;
+    .schedule-free-title {
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 16px;
       font-weight: 600;
+      line-height: 1.2;
       color: var(--ink);
     }
-    .schedule-free-list {
-      margin: 4px 0 0;
-      padding: 0;
-      list-style: none;
+    .tradie-initials {
+      grid-column: 1;
+      grid-row: 1;
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--action);
+      color: var(--surface);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    .schedule-free-note {
+      margin: 0;
+      font-size: 14px;
+      color: var(--muted);
+    }
+    /* Beside the grid from 1024px. Under that, the panel is first, so it sits above
+       the Week, and its entries scroll sideways inside the panel rather than the page. */
+    .schedule-board {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      min-width: 0;
+    }
+    .schedule-main {
+      min-width: 0;
+    }
+    @media (max-width: 63.99rem) {
+      .schedule-free .tradie-entries {
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 8px;
+        width: 100%;
+        min-width: 0;
+        overflow-x: auto;
+        overscroll-behavior-x: contain;
+        padding-bottom: 4px;
+      }
+      .schedule-free .tradie-entry {
+        flex: 0 0 17rem;
+      }
+    }
+    @media (min-width: 64rem) {
+      .schedule-board:has(.schedule-free) {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 20rem;
+        align-items: start;
+        column-gap: 16px;
+      }
+      .schedule-free {
+        grid-column: 2;
+        grid-row: 1;
+        max-height: min(40rem, calc(100dvh - 16rem));
+      }
+      .schedule-free .tradie-entries {
+        min-height: 0;
+        overflow-y: auto;
+      }
+      .schedule-main {
+        grid-column: 1;
+        grid-row: 1;
+      }
     }
     .booking-reschedule {
       font-weight: 600;
@@ -4920,6 +5023,84 @@
       outline: 2px solid var(--action);
       outline-offset: 2px;
       border-radius: 2px;
+    }
+
+    /* The Schedule's toolbar: Today, the arrows and the period on the left; the view
+       switch and Mine or All on the right. One row on a laptop. Under 768px the switch
+       and filter wrap onto a second row, so a phone never scrolls sideways for them. */
+    .schedule-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px 16px;
+    }
+    .schedule-nav {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+    .schedule-period {
+      margin: 0;
+      min-width: 0;
+      font-family: var(--font-head);
+      font-size: 20px;
+      font-weight: 600;
+      line-height: 1.1;
+      color: var(--ink);
+    }
+    .schedule-toolbar-end {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin-left: auto;
+    }
+    /* Day, Week and Month read as a switch, the same shape as Mine and All. */
+    .schedule-toolbar .tabs-border {
+      display: inline-flex;
+      flex-wrap: nowrap;
+      gap: 2px;
+      padding: 3px;
+      border: 1px solid var(--control);
+      border-radius: 6px;
+      background: var(--surface);
+    }
+    .schedule-toolbar .tabs-border > .tab {
+      min-height: 28px;
+      padding-inline: 12px;
+      border: 0;
+      border-radius: 4px;
+    }
+    .schedule-toolbar .tabs-border > .tab.tab-active {
+      background: var(--action);
+      color: var(--surface);
+      --tab-border-color: transparent;
+    }
+    @media (max-width: 40rem), (pointer: coarse) {
+      .schedule-toolbar .tabs-border > .tab {
+        min-height: 36px;
+        padding-inline: 16px;
+      }
+    }
+    /* Under 768px the switch and filter wrap onto a second row. The period drops to
+       16px so the date stays on one line, and the tabs tighten so Share can sit
+       with them. The switch itself never breaks onto two lines. */
+    @media (max-width: 767.98px) {
+      .schedule-toolbar-end {
+        flex-basis: 100%;
+        margin-left: 0;
+      }
+      .schedule-nav {
+        gap: 4px;
+      }
+      .schedule-period {
+        font-size: 16px;
+      }
+      .schedule-toolbar .tabs-border > .tab {
+        padding-inline: 10px;
+      }
     }
 
     /* The Schedule's week in one line: the count of visits, then flags for how they
@@ -4967,8 +5148,8 @@
 
     /* The Schedule's Week under 768px: a list of days, where a run of empty days is one
        line (.schedule-quiet). Booked days are white; empty ones stay on Paper behind a
-       hairline so the work stands out; today is ringed in Harbour. From 768px the time grid
-       below takes its place. */
+       hairline so the work stands out; today is tinted and its date is a Harbour circle.
+       From 768px the time grid below takes its place. */
     .schedule-week {
       display: grid;
       gap: 12px;
@@ -4990,8 +5171,7 @@
       background: transparent;
     }
     .schedule-day.is-today {
-      border-color: var(--action);
-      box-shadow: inset 0 0 0 1px var(--action);
+      background: var(--info-bg);
     }
     .schedule-day-title,
     .schedule-col-title {
@@ -5038,7 +5218,8 @@
        inside its frame (a focusable region) and never the page. */
     .schedule-scroll {
       min-width: 0;
-      overflow-x: auto;
+      max-height: min(40rem, calc(100dvh - 16rem));
+      overflow: auto;
       border: 1px solid var(--line);
       border-radius: 8px;
       background: var(--page);
@@ -5072,21 +5253,33 @@
       grid-template-rows: repeat(var(--slots), minmax(var(--slot), auto));
     }
     .schedule-hours {
+      z-index: 1;
       display: grid;
       grid-column: 1 / -1;
       grid-row: 2 / -1;
       grid-template-columns: subgrid;
       grid-template-rows: subgrid;
+      pointer-events: none;
     }
     .schedule-grid.is-day .schedule-hours {
       grid-row: 1 / -1;
     }
-    .schedule-hour {
+    .schedule-hour,
+    .schedule-half {
       grid-column: 1 / -1;
-      padding: 2px 8px 0;
+      align-self: start;
       border-top: 1px solid var(--line);
+    }
+    .schedule-half {
+      opacity: 0.45;
+    }
+    .schedule-hour-label {
+      display: block;
+      width: var(--gutter);
+      padding: 2px 8px 0 0;
       font-size: 12px;
       line-height: 1.2;
+      text-align: right;
       color: var(--muted);
     }
     .schedule-cols,
@@ -5106,17 +5299,76 @@
       grid-template-rows: subgrid;
       min-width: 0;
       border-left: 1px solid var(--line);
+      background: var(--surface);
+    }
+    .schedule-col.is-weekend {
+      background: var(--page);
+    }
+    .schedule-col.is-today {
+      background: var(--info-bg);
     }
     .schedule-col-title {
+      position: sticky;
+      top: 0;
+      z-index: 4;
       grid-row: 1;
-      gap: 0 6px;
-      padding: 8px;
+      justify-content: center;
+      gap: 0;
+      padding: 8px 4px;
       border-bottom: 1px solid var(--line);
       background: var(--surface);
       font-size: 14px;
     }
+    .schedule-col.is-weekend .schedule-col-title {
+      background: var(--page);
+    }
     .schedule-col.is-today .schedule-col-title {
-      box-shadow: inset 0 -2px 0 var(--action);
+      background: var(--info-bg);
+    }
+    /* Weekday small, date large, centred. Today is a Harbour circle; the column
+       behind it is a light Harbour tint, and a weekend sits on Paper. */
+    .schedule-date {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      color: var(--ink);
+      text-decoration: none;
+    }
+    .schedule-day-title .schedule-date {
+      flex-direction: row;
+      gap: 8px;
+    }
+    .schedule-date:hover {
+      color: var(--action);
+    }
+    .schedule-weekday {
+      font-family: var(--font-body);
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1.2;
+      color: var(--muted);
+    }
+    .schedule-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 2rem;
+      height: 2rem;
+      border-radius: 999px;
+      font-family: var(--font-head);
+      font-size: 20px;
+      font-weight: 600;
+      line-height: 1;
+    }
+    .schedule-col.is-today .schedule-num,
+    .schedule-day.is-today .schedule-num {
+      background: var(--action);
+      color: var(--surface);
+    }
+    .schedule-col.is-today .schedule-date:hover .schedule-num,
+    .schedule-day.is-today .schedule-date:hover .schedule-num {
+      color: var(--surface);
     }
     .schedule-col-title .schedule-day-count {
       flex-basis: 100%;
@@ -5131,8 +5383,44 @@
       padding: 0 4px;
       list-style: none;
     }
+    /* The current time: a Rust line across today's column and a dot in the gutter.
+       It does not animate; app.js jumps it once a minute. */
+    .schedule-now {
+      z-index: 3;
+      display: grid;
+      grid-template-columns: subgrid;
+      align-self: start;
+      height: 0;
+      position: relative;
+      top: calc(var(--now-frac) * 100%);
+      pointer-events: none;
+    }
+    .schedule-now-dot {
+      grid-column: 1;
+      justify-self: end;
+      width: 8px;
+      height: 8px;
+      margin-right: -4px;
+      border-radius: 50%;
+      background: var(--urgent);
+      transform: translateY(-50%);
+    }
+    .schedule-now-line {
+      grid-column: -2 / -1;
+      height: 2px;
+      background: var(--urgent);
+      transform: translateY(-50%);
+    }
+    .schedule-now.is-day .schedule-now-line {
+      grid-column: 2 / -1;
+    }
+    /* display: grid would otherwise beat the hidden attribute, and the line would show before 7 am. */
+    .schedule-now[hidden] {
+      display: none;
+    }
     .schedule-block {
-      z-index: 1;
+      position: relative;
+      z-index: 2;
       min-width: 0;
       margin: 1px 0;
     }
@@ -5141,15 +5429,17 @@
       flex-direction: column;
       gap: 1px;
       height: 100%;
-      padding: 4px 6px;
+      min-width: 0;
+      padding: 4px 6px 4px 8px;
       border: 1px solid var(--line);
+      border-left: 4px solid var(--action);
       border-radius: 4px;
       background: var(--surface);
       font-size: 12px;
       line-height: 1.3;
       color: var(--ink);
       text-decoration: none;
-      overflow-wrap: anywhere;
+      overflow: hidden;
     }
     .schedule-block-link:hover {
       border-color: var(--action);
@@ -5160,15 +5450,80 @@
       outline: 2px solid var(--action);
       outline-offset: 2px;
     }
-    .schedule-block-time {
-      font-weight: 500;
+    .schedule-block-time,
+    .schedule-block-issue {
+      font-weight: 600;
     }
     .schedule-block-issue {
       font-size: 13px;
-      font-weight: 600;
     }
-    .schedule-block-meta {
+    .schedule-block-meta,
+    .schedule-block-tradie,
+    .schedule-block-place {
+      font-weight: 400;
       color: var(--muted);
+    }
+    /* On the Day the issue and the Tradie are their own links. The issue stays Night,
+       like the Week's block; the Tradie is a Harbour link to the profile. */
+    a.schedule-block-issue {
+      color: var(--ink);
+      text-decoration: none;
+    }
+    a.schedule-block-issue:hover {
+      color: var(--action);
+      text-decoration: underline;
+    }
+    a.schedule-block-tradie {
+      color: var(--action);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    a.schedule-block-tradie:hover {
+      color: var(--action-hover);
+    }
+    .schedule-marker {
+      align-self: flex-start;
+      padding: 0 6px;
+      border-radius: 4px;
+      background: var(--info-bg);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--action);
+    }
+    /* An hour or less is one line: the start time, then as much of the issue as fits.
+       The end time, the Tradie and how it stands stay in the link's name. */
+    .schedule-block.is-short .schedule-block-link {
+      flex-direction: row;
+      align-items: baseline;
+      gap: 6px;
+      white-space: nowrap;
+    }
+    .schedule-block.is-short .schedule-block-time,
+    .schedule-block.is-short .schedule-marker {
+      flex: none;
+    }
+    .schedule-block.is-short .schedule-block-end,
+    .schedule-block.is-short .schedule-block-meta,
+    .schedule-block.is-short .schedule-block-tradie {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+    .schedule-block.is-short .schedule-block-issue {
+      flex: 1 1 auto;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .schedule-block.is-short .line-clamp-2 {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .schedule-block.is-reschedule .schedule-block-link,
     .schedule-chip.is-reschedule a {
@@ -5178,7 +5533,9 @@
     .schedule-chip.is-reschedule.is-decision a {
       border-left-color: var(--hivis);
     }
-    .schedule-block.is-done .schedule-block-link {
+    .schedule-block.is-done .schedule-block-link,
+    .schedule-chip.is-done a {
+      border-left-color: var(--done);
       color: var(--muted);
     }
     /* Visits at the same time, folded into one block that opens the Day. */
@@ -5259,7 +5616,13 @@
       color: var(--muted);
     }
     .schedule-mday.is-today .schedule-mday-num {
+      width: 2rem;
+      height: 2rem;
+      border-radius: 999px;
       background: var(--action);
+      color: var(--surface);
+    }
+    .schedule-mday.is-today .schedule-mday-num:hover {
       color: var(--surface);
     }
     .schedule-chips {
@@ -5271,10 +5634,11 @@
     }
     .schedule-chip a {
       display: block;
-      padding: 1px 4px;
+      padding: 1px 8px;
       border: 1px solid var(--line);
-      border-radius: 4px;
-      background: var(--page);
+      border-left: 4px solid var(--action);
+      border-radius: 999px;
+      background: var(--surface);
       font-size: 12px;
       color: var(--ink);
       text-decoration: none;

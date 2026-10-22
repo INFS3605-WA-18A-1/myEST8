@@ -519,3 +519,205 @@
     });
   }
 })();
+
+// === schedule ===
+// The current-time line is placed by the server from the Agency's clock. The
+// offset between that instant (data-now) and Date.now() is taken once, and the
+// line is not moved on load: the browser clock can disagree. Once a minute the
+// line moves to server time plus the time since the page opened. It hides when
+// the Agency's date is no longer data-today, or the clock is outside the hours
+// shown. There is no transition, so it never animates, including when less
+// motion is asked for.
+(() => {
+  const line = document.querySelector('[data-schedule-now]');
+  if (line) {
+    const zone = line.dataset.zone;
+    const first = Number(line.dataset.first);
+    const last = Number(line.dataset.last);
+    const header = line.dataset.header === '1';
+    const serverNow = Number(line.dataset.now);
+    const today = line.dataset.today;
+    const opened = Date.now();
+    const place = () => {
+      const when = new Date(serverNow + (Date.now() - opened));
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: zone,
+        hourCycle: 'h23',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: 'numeric',
+        minute: 'numeric',
+      }).formatToParts(when);
+      const part = (type) => parts.find((p) => p.type === type)?.value ?? '';
+      const date = `${part('year')}-${part('month')}-${part('day')}`;
+      const mins = Number(part('hour')) * 60 + Number(part('minute'));
+      const start = first * 60;
+      line.hidden = date !== today || mins < start || mins >= last * 60;
+      const into = mins - start;
+      line.style.gridRow = String(Math.floor(into / 15) + (header ? 2 : 1));
+      const fraction = ((into % 15) + 15) % 15;
+      line.style.setProperty('--now-frac', String(fraction / 15));
+    };
+    setInterval(place, 60_000);
+  }
+
+  // The server marks the hour the grid should open on (an hour before the first
+  // visit, or 7 am). Scroll the frame to it; without this file the grid starts
+  // at the top, which is still the working day.
+  const open = document.querySelector('[data-schedule-open]');
+  const frame = open?.closest('.schedule-scroll');
+  if (open && frame) {
+    const header = frame.querySelector('.schedule-col-title');
+    const headerHeight = header ? header.getBoundingClientRect().height : 0;
+    const top = open.getBoundingClientRect().top - frame.getBoundingClientRect().top + frame.scrollTop;
+    frame.scrollTop = Math.max(0, top - headerHeight);
+  }
+})();
+
+// === address suggestions ===
+// A Property's Address (input[data-address-suggest]) offers matching addresses as
+// you type, from /properties/address-suggestions. Choosing one fills Address,
+// Suburb and the hidden lat and lng. Arrow keys move, Enter picks, Escape closes
+// the list. A reply still on its way is dropped when the query goes below 3
+// characters, a suggestion is chosen, Escape is pressed, or the field is left,
+// and nothing is drawn while the field isn't focused. Without this file it is a
+// plain text box, the hidden pin stays empty, and the address is geocoded on save.
+(() => {
+  let made = 0;
+
+  for (const input of document.querySelectorAll('input[data-address-suggest]')) {
+    if (!(input instanceof HTMLInputElement) || !input.form) continue;
+    const form = input.form;
+    const suburb = form.elements.namedItem('suburb');
+    const lat = form.elements.namedItem('lat');
+    const lng = form.elements.namedItem('lng');
+    if (!(suburb instanceof HTMLInputElement) || !(lat instanceof HTMLInputElement) || !(lng instanceof HTMLInputElement)) continue;
+
+    const n = ++made;
+    const box = document.createElement('div');
+    box.className = 'combobox';
+    input.before(box);
+    input.classList.add('combobox-input');
+    input.autocomplete = 'off';
+    input.setAttribute('role', 'combobox');
+    input.setAttribute('aria-autocomplete', 'list');
+    input.setAttribute('aria-expanded', 'false');
+    const list = document.createElement('ul');
+    list.className = 'combobox-list';
+    list.id = `address-suggest-${n}-list`;
+    list.setAttribute('role', 'listbox');
+    list.hidden = true;
+    input.setAttribute('aria-controls', list.id);
+    box.append(input, list);
+
+    /** @type {{ label: string, address: string, suburb: string, location: { lat: number, lng: number } }[]} */
+    let shown = [];
+    let active = -1;
+    let timer = 0;
+    let request = 0;
+
+    function setActive(i) {
+      active = i;
+      for (const item of list.querySelectorAll('[role="option"]')) {
+        const on = item.id === `address-suggest-${n}-${i}`;
+        item.classList.toggle('is-active', on);
+        item.setAttribute('aria-selected', on ? 'true' : 'false');
+      }
+      if (i >= 0) {
+        input.setAttribute('aria-activedescendant', `address-suggest-${n}-${i}`);
+        document.getElementById(`address-suggest-${n}-${i}`)?.scrollIntoView({ block: 'nearest' });
+      } else input.removeAttribute('aria-activedescendant');
+    }
+
+    function close() {
+      list.hidden = true;
+      input.setAttribute('aria-expanded', 'false');
+      input.removeAttribute('aria-activedescendant');
+    }
+
+    /** Drops a suggestion that has been asked for but not drawn yet. */
+    function dropInFlight() {
+      window.clearTimeout(timer);
+      request++;
+    }
+
+    function render(suggestions) {
+      // The field was left while this reply was on its way.
+      if (document.activeElement !== input) return;
+      shown = suggestions;
+      list.replaceChildren(
+        ...(shown.length
+          ? shown.map((suggestion, i) => {
+              const item = document.createElement('li');
+              item.id = `address-suggest-${n}-${i}`;
+              item.className = 'combobox-option';
+              item.setAttribute('role', 'option');
+              item.setAttribute('aria-selected', 'false');
+              item.textContent = suggestion.label;
+              item.addEventListener('mousedown', (event) => event.preventDefault());
+              item.addEventListener('click', () => choose(suggestion));
+              return item;
+            })
+          : [Object.assign(document.createElement('li'), { className: 'combobox-empty', textContent: 'No matches' })]),
+      );
+      setActive(shown.length ? 0 : -1);
+      list.hidden = false;
+      input.setAttribute('aria-expanded', 'true');
+    }
+
+    function choose(suggestion) {
+      dropInFlight();
+      input.value = suggestion.address;
+      suburb.value = suggestion.suburb;
+      lat.value = String(suggestion.location.lat);
+      lng.value = String(suggestion.location.lng);
+      close();
+    }
+
+    input.addEventListener('input', () => {
+      // A typed change is no longer the pin that was picked.
+      lat.value = '';
+      lng.value = '';
+      window.clearTimeout(timer);
+      const query = input.value.trim();
+      if (query.length < 3) {
+        dropInFlight();
+        return close();
+      }
+      const mine = ++request;
+      timer = window.setTimeout(async () => {
+        let suggestions = [];
+        try {
+          const response = await fetch(`/properties/address-suggestions?q=${encodeURIComponent(query)}`, { headers: { accept: 'application/json' } });
+          const body = response.ok ? await response.json() : [];
+          if (Array.isArray(body)) suggestions = body;
+        } catch {
+          suggestions = [];
+        }
+        if (mine === request) render(suggestions);
+      }, 300);
+    });
+
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        if (list.hidden || !shown.length) return;
+        setActive((active + (event.key === 'ArrowDown' ? 1 : shown.length - 1)) % shown.length);
+      } else if (event.key === 'Enter' && !list.hidden && active >= 0) {
+        event.preventDefault();
+        choose(shown[active]);
+      } else if (event.key === 'Escape') {
+        dropInFlight();
+        if (!list.hidden) {
+          event.preventDefault();
+          close();
+        }
+      }
+    });
+    input.addEventListener('blur', () => {
+      dropInFlight();
+      close();
+    });
+  }
+})();
