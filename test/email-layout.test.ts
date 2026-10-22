@@ -115,7 +115,7 @@ describe('numbered questions', () => {
     const html = render(MISSING_DETAILS);
     expect(html.match(/<td width="4" bgcolor="#FFC233"/g)).toHaveLength(1);
     // The edge is on the list's row only.
-    const edged = html.match(/<tr><td width="4" bgcolor="#FFC233"[^>]*><\/td>.*?<\/tr>/s)![0];
+    const edged = html.match(/<tr><td width="8"><\/td><td width="4" bgcolor="#FFC233"[^>]*><\/td>.*?<\/tr>/s)![0];
     expect(edged).toContain('<ol');
     expect(edged).not.toContain('<p ');
   });
@@ -142,7 +142,7 @@ describe('links', () => {
 
   test('a button sits on the same Wattle edge as the questions, with its address', () => {
     const html = render(`Thanks, we have your 2 photos. Add more here if it helps: ${UPLOAD}`);
-    const edged = html.match(/<tr><td width="4" bgcolor="#FFC233".*?<td width="24"><\/td><\/tr>/s)![0];
+    const edged = html.match(/<tr><td width="8"><\/td><td width="4" bgcolor="#FFC233".*?<td width="24"><\/td><\/tr>/s)![0];
     expect(edged).not.toContain('Thanks, we have');
     expect(edged).toContain('>Upload photos<');
     expect(edged).toContain(`>${UPLOAD}</a>`);

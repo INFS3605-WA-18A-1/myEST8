@@ -121,11 +121,11 @@ const list = (start: number, items: string[]) =>
   items.map((item, i) => `<li style="margin:0${i === items.length - 1 ? '' : ' 0 8px'};padding:0 0 0 4px;">${inline(item)}</li>`).join('') +
   '</ol>';
 
-const SPACER = '<tr><td colspan="4" height="16" style="height:16px;font-size:0;line-height:0;">&nbsp;</td></tr>';
+const SPACER = '<tr><td colspan="5" height="16" style="height:16px;font-size:0;line-height:0;">&nbsp;</td></tr>';
 
-/** The columns are the Wattle edge (4px), a gap (20px), the content and the right inset (24px). */
+/** The columns are the left inset (24px: 8px, the 4px Wattle edge, then 12px), the content and the right inset (24px). */
 const row = (content: string, { wattle = false } = {}) =>
-  `<tr><td width="4"${wattle ? ` bgcolor="${WATTLE}" style="background-color:${WATTLE};"` : ''}></td><td width="20"></td><td>${content}</td><td width="24"></td></tr>`;
+  `<tr><td width="8"></td><td width="4"${wattle ? ` bgcolor="${WATTLE}" style="background-color:${WATTLE};"` : ''}></td><td width="12"></td><td>${content}</td><td width="24"></td></tr>`;
 
 /** The first sentence, for the inbox preview. */
 const preheaderOf = (text: string) => text.replace(/\s+/g, ' ').trim().match(/^.*?[.!?](?=\s|$)|^.*/)![0];
@@ -145,13 +145,13 @@ export function renderEmail({ agencyName, subject, text }: EmailContent): string
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${SAND}" style="background-color:${SAND};">
 <tr><td align="center" style="padding:24px 16px;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${SURFACE}" style="max-width:600px;background-color:${SURFACE};border:1px solid ${LINE};border-radius:8px;border-collapse:separate;overflow:hidden;">
-<tr><td colspan="4" bgcolor="${NIGHT}" style="background-color:${NIGHT};padding:16px 24px;font-family:${FONT};font-size:20px;line-height:28px;font-weight:700;color:${SURFACE};text-align:left;">${escapeHtml(agencyName)}</td></tr>
-<tr><td colspan="4" height="32" style="height:32px;font-size:0;line-height:0;">&nbsp;</td></tr>
+<tr><td colspan="5" bgcolor="${NIGHT}" style="background-color:${NIGHT};padding:16px 24px;font-family:${FONT};font-size:20px;line-height:28px;font-weight:700;color:${SURFACE};text-align:left;">${escapeHtml(agencyName)}</td></tr>
+<tr><td colspan="5" height="32" style="height:32px;font-size:0;line-height:0;">&nbsp;</td></tr>
 ${blocksOf(text)
   .flatMap(blocksIn)
   .flatMap((block) => (block.kind === 'list' ? [row(list(block.start, block.items), { wattle: true })] : paragraphRows(block.lines)))
   .join(SPACER + '\n')}
-<tr><td colspan="4" height="32" style="height:32px;font-size:0;line-height:0;">&nbsp;</td></tr>
+<tr><td colspan="5" height="32" style="height:32px;font-size:0;line-height:0;">&nbsp;</td></tr>
 </table>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;">
 <tr><td style="padding:16px 25px 0;font-family:${FONT};font-size:13px;line-height:20px;color:${SLATE};text-align:left;">Reply to this email to answer or ask a question.<br>Sent through myEST8</td></tr>
