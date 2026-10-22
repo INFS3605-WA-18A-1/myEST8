@@ -114,7 +114,7 @@ JEV_API_KEY=xxx
 ANTHROPIC_API_KEY=sk-ant-xxx
 ```
 
-The keys are placeholders. Jev (TypeSafe) classifies every inbound message: its kind, Urgency, Trade, and reply type. Claude Haiku composes the messages myEST8 sends, such as the email when a Property Manager forwards a Ticket to the Property Owner, and writes each request's Summary. Either one left empty runs its mock.
+The keys are placeholders. Jev (TypeSafe) classifies every inbound message: its kind, Urgency, Trade, and reply type. Claude Haiku composes the messages myEST8 sends, such as the email when a Property Manager forwards a Ticket to the Property Owner, writes each request's Summary, and reads the details a Tenant has already given in their first message so it asks only for what's missing ([ADR 0014](adr/0014-haiku-extracts-guided-answers.md)). Either one left empty runs its mock; hosted with no `ANTHROPIC_API_KEY`, nothing is read from the message and all four questions are asked.
 
 **Not built yet:** today classification uses Claude Haiku whenever `ANTHROPIC_API_KEY` is set, and Jev only without it. `src/adapters/jev.ts` still speaks a guessed pre-release contract rather than TypeSafe's `/v1/systemone`. Outbound messages are fixed templates. ADR 0011 lists the gaps.
 
