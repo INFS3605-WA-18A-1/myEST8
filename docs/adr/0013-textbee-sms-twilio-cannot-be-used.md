@@ -16,7 +16,7 @@ The Twilio code from #23 (ADR 0005: a number per Agency, Create or Register) sta
 
 SMS goes through **textbee** (https://textbee.dev): an Android phone with a SIM runs the textbee app, and myEST8 sends and receives through it.
 
-- **Sending:** `POST https://api.textbee.dev/api/v1/gateway/send-sms`, header `x-api-key`, body `{ "recipients": [...], "message": "..." }`.
+- **Sending:** `POST https://api.textbee.dev/api/v1/gateway/send-sms`, header `x-api-key`, body `{ "recipients": [...], "message": "...", "deviceId": "..." }` (the device id picks the phone). A 200 means textbee queued the text, not that it was delivered.
 - **Receiving:** textbee posts a `MESSAGE_RECEIVED` webhook to `${PUBLIC_URL}/webhooks/textbee`. The body has `smsId`, `sender`, `message`, `deviceId`, `receivedAt` and `idempotencyKey`. It is signed in `X-Signature` with the lowercase-hex HMAC-SHA256 of the raw body, keyed by the webhook's signing secret. textbee retries a 5xx up to 10 times, stops on a 4xx, and pauses a webhook whose deliveries keep failing.
 - **One number for the server.** The phone's number belongs to one Agency, the one that presses **Connect SMS** on its Channels page. There is no verification code, because the server's own phone is the number. A second Agency is told the number is taken.
 
