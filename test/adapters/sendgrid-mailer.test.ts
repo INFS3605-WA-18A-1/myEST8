@@ -44,6 +44,23 @@ describe('SendGrid outbound email', () => {
     });
   });
 
+  test('sends the plain text first and the HTML after it, as SendGrid requires', async () => {
+    const { stub, mailer } = sendgrid();
+    await mailer.send(message({ html: '<!doctype html><html lang="en-AU"><body><p>Could you quote for a dripping kitchen tap?</p></body></html>' }));
+    const body = (await stub.requests[0]!.json()) as { content: unknown };
+    expect(body.content).toEqual([
+      { type: 'text/plain', value: 'Could you quote for a dripping kitchen tap?' },
+      { type: 'text/html', value: '<!doctype html><html lang="en-AU"><body><p>Could you quote for a dripping kitchen tap?</p></body></html>' },
+    ]);
+  });
+
+  test('a message without html is sent as plain text only', async () => {
+    const { stub, mailer } = sendgrid();
+    await mailer.send(message());
+    const body = (await stub.requests[0]!.json()) as { content: unknown };
+    expect(body.content).toEqual([{ type: 'text/plain', value: 'Could you quote for a dripping kitchen tap?' }]);
+  });
+
   test('a configured sender replaces the from address, and replies still go to the Agency inbox', async () => {
     const { stub, mailer } = sendgrid(accepted, 'notifications@myest8.example');
     await mailer.send(message());

@@ -43,6 +43,8 @@ export interface OutboundMessage {
   cc: string[];
   subject: string;
   text: string;
+  /** The same message as an HTML email (`src/email-layout.ts`), sent with `text` as its plain-text alternative. Set for email only. */
+  html?: string;
   /** The template and its data. Production WhatsApp senders need both. */
   template: string;
   data: object;
