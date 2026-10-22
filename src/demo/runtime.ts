@@ -1,7 +1,7 @@
 // The whole app wired for a demo: a database (a throwaway Postgres schema, or
 // the schema named by DATABASE_SCHEMA so it survives restarts), the in-process mock APIs (or real
 // ones, from env vars), a simulated messenger (that also sends for real through
-// Twilio and SendGrid when their env vars are set), a movable clock, and the
+// Twilio, textbee and SendGrid when their env vars are set), a movable clock, and the
 // seeded Agency.
 
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
@@ -259,14 +259,14 @@ export async function createDemo<Seeded extends boolean = true>(
     places: env.GOOGLE_MAPS_API_KEY ? 'real' : 'mock',
     geocoder: nominatimUrl ? 'real' : 'mock',
     addressSuggester: photonUrl ? 'real' : 'mock',
-    messenger: env.TWILIO_ACCOUNT_SID || env.SENDGRID_API_KEY || env.RESEND_API_KEY || env.GOOGLE_CLIENT_ID || env.META_WHATSAPP_PHONE_NUMBER_ID ? 'real' : 'mock',
+    messenger: env.TWILIO_ACCOUNT_SID || env.SENDGRID_API_KEY || env.RESEND_API_KEY || env.GOOGLE_CLIENT_ID || env.META_WHATSAPP_PHONE_NUMBER_ID || env.TEXTBEE_API_KEY ? 'real' : 'mock',
   };
 
   const messenger = new SimulatedMessenger(clock, async (message) => {
     await store.addMessage('out', message);
     options.onOutbound?.(message);
   });
-  // Channels whose provider is configured (TWILIO_*, SENDGRID_*) really send, but
+  // Channels whose provider is configured (TWILIO_*, TEXTBEE_*, SENDGRID_*) really send, but
   // only to the addresses in DEMO_SEND_TO ("*" for anyone): the seeded people's
   // numbers are made up and could belong to someone. The simulator records every
   // message once it's sent. File links run on real time, as Twilio fetches them in
@@ -279,7 +279,8 @@ export async function createDemo<Seeded extends boolean = true>(
     agencyNumbers: encryptionKey !== null,
     ...(options.log ? { log: options.log } : {}),
   });
-  const smsNumbers = encryptionKey ? smsNumbersFromEnv(env, { db, baseUrl, fileLinks: providers.fileLinks, encryptionKey }) : null;
+  // textbee is the one SMS phone for the server (ADR 0013), so the Twilio number-per-Agency panel is not built.
+  const smsNumbers = encryptionKey && !providers.textbee ? smsNumbersFromEnv(env, { db, baseUrl, fileLinks: providers.fileLinks, encryptionKey }) : null;
   // Gmail (ADR 0004): each Agency connects its own mailbox by OAuth, so its
   // Messenger and reader need the database, not just env vars.
   const mailboxes = gmailFromEnv(env, db, baseUrl);
@@ -452,7 +453,7 @@ export async function createDemo<Seeded extends boolean = true>(
     },
   });
 
-  return { app, web, demo, sessions, clock, messenger, seed, stories, database, baseUrl, apis, runWorker, startWorkerLoop, close };
+  return { app, web, demo, sessions, clock, messenger, seed, stories, database, baseUrl, apis, textbee: providers.textbee, runWorker, startWorkerLoop, close };
 }
 
 const MAIL_POLL_MS = 30_000;
