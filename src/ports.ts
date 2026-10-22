@@ -1,7 +1,8 @@
 // Ports: interfaces owned by the app for every external service, so a provider
 // can be swapped and tests can use fakes.
 
-import type { Trade } from './shared.ts';
+import type { Availability, Trade } from './shared.ts';
+import type { GuidedQuestion } from './templates.ts';
 
 export type ChannelType = 'sms' | 'whatsapp' | 'email';
 
@@ -192,6 +193,18 @@ export interface ComposeInput {
 export interface Composer {
   /** The message body. The email subject stays the template's. */
   compose(input: ComposeInput): Promise<{ text: string }>;
+}
+
+/** The guided details a Tenant's message can state, as the extractor reads them. */
+export type ExtractedDetails = Partial<{ location: string; started: string; worsening: 'yes' | 'no'; availability: Availability }>;
+
+/**
+ * Reads the guided details a Tenant's message states (ADR 0014). Returns only
+ * what is clearly there, and only the `wanted` ones. Throws when it can't be
+ * read; intake treats that as finding nothing.
+ */
+export interface DetailExtractor {
+  extract(input: { text: string; wanted: GuidedQuestion[]; issue: { description: string } }): Promise<ExtractedDetails>;
 }
 
 export interface PlacesLookup {
