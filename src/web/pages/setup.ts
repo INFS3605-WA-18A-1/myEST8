@@ -21,6 +21,7 @@ import { cents, formAction, text } from '../forms.ts';
 import { icon } from '../icons.ts';
 import { shellInfo } from '../shell.ts';
 import { importPages } from './import.ts';
+import { serverSmsPanel } from './server-sms.ts';
 import { smsNumberPanel, smsNumbersOffered } from './sms-number.ts';
 import { alert, button, emptyState, field, flashFrom, formatMoney, linkButton, page, section, table, type Flash, type Html } from '../ui.ts';
 import {
@@ -103,8 +104,10 @@ export function setupPages(o: { connectors?: ChannelConnectors } = {}) {
     const email = await actions.ensureInboundEmail();
     const channels = await actions.channels();
     const pending = await actions.pendingChannelVerifications();
-    // Where this server sets up SMS numbers, SMS offers the two ways to get one instead of a typed number and a code.
-    const smsPanel = (await smsNumbersOffered(actions)) ? await smsNumberPanel(actions, { from: 'setup', current: channels.find((ch) => ch.type === 'sms')?.address }) : null;
+    // The server's phone replaces both the typed number and code and the Twilio panel.
+    const serverPhone = connectors.smsPhone;
+    const currentSms = channels.find((ch) => ch.type === 'sms')?.address;
+    const smsPanel = serverPhone ? serverSmsPanel({ from: 'setup', number: serverPhone, current: currentSms }) : (await smsNumbersOffered(actions)) ? await smsNumberPanel(actions, { from: 'setup', current: currentSms }) : null;
 
     return c.html(
       page({
@@ -292,7 +295,7 @@ async function channelsArea(
 ): Promise<Html> {
   const gmailBlock = connectors.gmail ? await gmailControls(connectors.gmail, agencyId, 'setup') : null;
   return html`
-    <p class="text-sm">Tenants, Tradies and Property Owners reach the Agency by SMS and email. ${smsPanel ? 'Set up the number Tenants will text.' : 'Verify a phone number with a code.'} Forward the Agency inbox to the email address below.</p>
+    <p class="text-sm">Tenants, Tradies and Property Owners reach the Agency by SMS and email. ${connectors.smsPhone ? "Connect the server's SMS phone." : smsPanel ? 'Set up the number Tenants will text.' : 'Verify a phone number with a code.'} Forward the Agency inbox to the email address below.</p>
     ${shown.error}
     <div class="mt-4 grid gap-4 ${smsPanel ? '' : 'md:grid-cols-2'}">
       ${CHANNELS.map((channel) => channelCard(channel, connected.find((c) => c.type === channel.type), timeZone, origin, { gmailBlock, unavailable: connectors.unavailable, smsInbound: connectors.smsInbound, smsPanel }, email, pending.find((row) => row.channelType === channel.type)))}

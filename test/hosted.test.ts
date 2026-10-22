@@ -173,7 +173,10 @@ describe('hosted mode and missing provider settings', () => {
   test('hosted with textbee does not list SMS as unavailable', async () => {
     const html = await channelsHtml(await hostedEnv(textbeeEnv));
     expect(html).not.toContain('data-unavailable="sms"');
-    expect(html).toContain('Agency SMS number');
+    // The server's phone is offered instead of the typed number and code.
+    expect(html).toContain('Tenants text <strong>+61 412 345 678.</strong> This is the server\'s SMS phone.');
+    expect(html).toContain('Connect SMS');
+    expect(html).not.toContain('id="sms-address"');
   });
 
   test('hosted without an SMS provider still lists SMS as unavailable', async () => {

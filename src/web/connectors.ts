@@ -29,7 +29,13 @@ export interface ChannelConnectors {
    * provider's number, so a typed number only proves who the Agency is.
    */
   smsInbound: 'simulator' | 'none';
+  /**
+   * The server's one SMS phone (textbee, ADR 0013), E.164, or null when this server
+   * has none. The Channels pages offer Connect SMS for it and don't read the environment.
+   * While it is set, the typed number and code and the Twilio panel are not offered.
+   */
+  smsPhone: string | null;
 }
 
 /** Nothing connectable, and every channel assumed deliverable: the default for tests and the plain web app. */
-export const NO_CONNECTORS: ChannelConnectors = { gmail: null, unavailable: [], smsInbound: 'simulator' };
+export const NO_CONNECTORS: ChannelConnectors = { gmail: null, unavailable: [], smsInbound: 'simulator', smsPhone: null };
