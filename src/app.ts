@@ -51,6 +51,7 @@ export function createApp(
       quoteReader: deps.quoteReader,
       summariser: deps.summariser,
       composer: deps.composer,
+      detailExtractor: deps.detailExtractor,
       places: deps.places,
       geocoder: deps.geocoder,
       addressSuggester: deps.addressSuggester,

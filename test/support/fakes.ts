@@ -8,6 +8,8 @@ import type {
   ClassifierAnswer,
   Clock,
   Composer,
+  DetailExtractor,
+  ExtractedDetails,
   Geocoder,
   ImageMatcher,
   ImageMatchResult,
@@ -19,6 +21,7 @@ import type {
   TradeSuggester,
 } from '../../src/ports.ts';
 import type { Trade } from '../../src/shared.ts';
+import type { GuidedQuestion } from '../../src/templates.ts';
 
 export class FakeClock implements Clock {
   #now: Date;
@@ -133,6 +136,22 @@ export class FakeComposer implements Composer {
     this.calls.push(input);
     if (this.next instanceof Error) throw this.next;
     return { text: this.next ?? `Composed: ${input.draft}` };
+  }
+}
+
+/** Finds the details scripted for each text, only those asked for, and nothing in an unscripted text. `next` is an Error to throw instead. */
+export class FakeDetailExtractor implements DetailExtractor {
+  #rules = new Map<string, ExtractedDetails>();
+  next: Error | null = null;
+  calls: Parameters<DetailExtractor['extract']>[0][] = [];
+  when(text: string, details: ExtractedDetails) {
+    this.#rules.set(text, details);
+  }
+  async extract(input: Parameters<DetailExtractor['extract']>[0]) {
+    this.calls.push(input);
+    if (this.next) throw this.next;
+    const scripted = this.#rules.get(input.text) ?? {};
+    return Object.fromEntries(Object.entries(scripted).filter(([key]) => input.wanted.includes(key as GuidedQuestion))) as ExtractedDetails;
   }
 }
 
