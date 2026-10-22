@@ -36,10 +36,7 @@ async function bellasDrainTicket(w: World) {
   const { h, bob } = w;
   h.classifier.when('The shower drain is blocked', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });
   await h.receive(BELLA, 'The shower drain is blocked');
-  await h.answer(BELLA, 'Bathroom');
-  await h.answer(BELLA, 'Yesterday');
-  await h.answer(BELLA, 'No', 'no');
-  await h.answer(BELLA, 'Any time', 'any_time');
+  await h.answerAll(BELLA, { location: 'Bathroom', started: 'Yesterday', worsening: 'no', availability: 'any_time' });
   await h.advance(48 * 3_600_000);
   const [request] = (await bob.dashboard()).maintenanceRequests;
   const ticketId = await bob.confirmMaintenanceRequest(request!.issueId);

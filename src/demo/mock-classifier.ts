@@ -227,7 +227,7 @@ const relatedItem: Rule = (r) => {
 
 // --- The answer the agent is waiting for, typed by its options ---
 
-const AVAILABILITY_WORDS: [option: Availability, pattern: RegExp][] = [
+export const AVAILABILITY_WORDS: [option: Availability, pattern: RegExp][] = [
   ['saturdays', /\b(saturdays?|sat|weekends?)\b/],
   ['weekday_mornings', /\bmornings?\b/],
   ['weekday_afternoons', /\bafternoons?\b/],

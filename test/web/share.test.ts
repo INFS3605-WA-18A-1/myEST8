@@ -112,7 +112,7 @@ describe('where people share', () => {
     const w = await webWorld();
     w.h.classifier.when('The kitchen tap is dripping', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });
     await w.h.receive(TOM, 'The kitchen tap is dripping');
-    for (const [answer, value] of [['Kitchen sink'], ['Since Monday'], ['No', 'no'], ['Mornings', 'weekday_mornings']] as const) await w.h.answer(TOM, answer, value);
+    await w.h.answerAll(TOM, { location: 'Kitchen sink', started: 'Since Monday', worsening: 'no', availability: 'weekday_mornings' });
     await w.h.advance(48 * 3_600_000); // no photos, so it waits for review
     const [request] = (await w.alice.dashboard()).maintenanceRequests;
     const cookie = await w.signIn();

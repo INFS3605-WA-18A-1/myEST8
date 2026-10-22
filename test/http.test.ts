@@ -57,7 +57,7 @@ describe('the Twilio webhook', () => {
     expect(h.messenger.sent).toEqual([]);
 
     await h.drain();
-    expect(h.messenger.templatesTo(TOM)).toEqual(['tenant.acknowledgement', 'tenant.guided_question']);
+    expect(h.messenger.templatesTo(TOM)).toEqual(['tenant.acknowledgement', 'tenant.missing_details']);
   });
 
   test('the same webhook delivered twice is processed once', async () => {
@@ -68,7 +68,7 @@ describe('the Twilio webhook', () => {
     await twilioWebhook(http, tomsSms);
     await h.drain();
 
-    expect(h.messenger.templatesTo(TOM)).toEqual(['tenant.acknowledgement', 'tenant.guided_question']);
+    expect(h.messenger.templatesTo(TOM)).toEqual(['tenant.acknowledgement', 'tenant.missing_details']);
   });
 
   test('a request with a bad signature is refused and nothing is stored', async () => {
@@ -119,7 +119,7 @@ describe('the SendGrid webhook', () => {
     await h.drain();
     expect(h.messenger.to(BELLA)).toMatchObject([
       { channel: 'email', template: 'tenant.acknowledgement' },
-      { channel: 'email', template: 'tenant.guided_question' },
+      { channel: 'email', template: 'tenant.missing_details' },
     ]);
   });
 
@@ -139,10 +139,7 @@ describe('the no-login links', () => {
     const { h, alice, http } = await server();
     h.classifier.when('The kitchen tap is dripping', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });
     await h.receive(TOM, 'The kitchen tap is dripping');
-    await h.answer(TOM, 'Kitchen sink');
-    await h.answer(TOM, 'Since Monday');
-    await h.answer(TOM, 'No', 'no');
-    await h.answer(TOM, 'Mornings', 'weekday_mornings');
+    await h.answerAll(TOM, { location: 'Kitchen sink', started: 'Since Monday', worsening: 'no', availability: 'weekday_mornings' });
     const { pathname } = new URL(h.messenger.last(TOM)!.data.uploadLink as string);
     const api = `/api${pathname}`;
 
@@ -169,10 +166,7 @@ describe('the no-login links', () => {
     const { h, alice, http } = await server({ blobs });
     h.classifier.when('The kitchen tap is dripping', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });
     await h.receive(TOM, 'The kitchen tap is dripping');
-    await h.answer(TOM, 'Kitchen sink');
-    await h.answer(TOM, 'Since Monday');
-    await h.answer(TOM, 'No', 'no');
-    await h.answer(TOM, 'Mornings', 'weekday_mornings');
+    await h.answerAll(TOM, { location: 'Kitchen sink', started: 'Since Monday', worsening: 'no', availability: 'weekday_mornings' });
     const api = `/api${new URL(h.messenger.last(TOM)!.data.uploadLink as string).pathname}`;
     const post = (path: string, body: unknown) =>
       http.request(`${api}/${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
@@ -234,10 +228,7 @@ describe('the no-login links', () => {
     const { h, http } = await server();
     h.classifier.when('The kitchen tap is dripping', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });
     await h.receive(TOM, 'The kitchen tap is dripping');
-    await h.answer(TOM, 'Kitchen sink');
-    await h.answer(TOM, 'Since Monday');
-    await h.answer(TOM, 'No', 'no');
-    await h.answer(TOM, 'Mornings', 'weekday_mornings');
+    await h.answerAll(TOM, { location: 'Kitchen sink', started: 'Since Monday', worsening: 'no', availability: 'weekday_mornings' });
     const api = `/api${new URL(h.messenger.last(TOM)!.data.uploadLink as string).pathname}`;
     const prepared = await http.request(`${api}/prepare`, { method: 'POST', body: JSON.stringify({ files: [{}] }) });
     expect(await prepared.json()).toEqual({ direct: false });

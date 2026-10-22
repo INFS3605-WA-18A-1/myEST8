@@ -569,7 +569,10 @@ describe('the Summary and comparison prices', () => {
 
 describe('the message log', () => {
   test('shows the latest messages with the older ones folded, and links by what they are', async () => {
-    const { open } = await tapTicket();
+    const { w, job, open } = await tapTicket();
+    // The questions now go in one message, so the log needs a follow-up to run past the latest few.
+    w.h.classifier.when('It is dripping faster now', { messageClass: 'update', relatedItem: `ticket:${job.ticketId}`, updateType: 'general' });
+    await w.h.receive(TOM, 'It is dripping faster now');
 
     const { html, text } = await open();
 
@@ -583,10 +586,7 @@ describe('the message log', () => {
     const w = await webWorld();
     w.h.classifier.when('The kitchen tap is dripping', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });
     await w.h.receive(TOM, 'The kitchen tap is dripping', { channel: 'whatsapp' });
-    await w.h.answer(TOM, 'Kitchen sink', 'answer', { channel: 'whatsapp' });
-    await w.h.answer(TOM, 'Since Monday', 'answer', { channel: 'whatsapp' });
-    await w.h.answer(TOM, 'No', 'no', { channel: 'whatsapp' });
-    await w.h.answer(TOM, 'Mornings', 'weekday_mornings', { channel: 'whatsapp' });
+    await w.h.answerAll(TOM, { location: 'Kitchen sink', started: 'Since Monday', worsening: 'no', availability: 'weekday_mornings' }, { channel: 'whatsapp' });
     await w.h.advance(48 * 3_600_000);
     await w.h.app.recordDeliveryFailure({ to: TOM, code: 131047, title: 'Re-engagement message' });
     const [request] = (await w.alice.dashboard()).maintenanceRequests;

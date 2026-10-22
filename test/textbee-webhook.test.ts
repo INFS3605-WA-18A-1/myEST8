@@ -93,7 +93,9 @@ describe('a text received by the textbee phone', () => {
     });
     expect(await stub.requests[1]!.json()).toEqual({
       recipients: [TOM],
-      message: 'Where in the property is the issue?',
+      // "The kitchen tap is dripping" states none of the four details, so all four are asked in one text.
+      message:
+        'Thanks, Tom. To get this sorted we just need:\n1. Where in the property is the issue?\n2. When did it start?\n3. Is it getting worse? (yes or no)\n4. When are you usually home: weekday mornings, weekday afternoons, Saturdays or any time?',
       deviceId: DEVICE_ID,
     });
   });

@@ -45,6 +45,24 @@ describe('Resend outbound email', () => {
     });
   });
 
+  test('sends the HTML body with the plain text as its alternative', async () => {
+    const { stub, mailer } = resend();
+    await mailer.send(message({ html: '<!doctype html><html lang="en-AU"><body><p>Could you quote for a dripping kitchen tap?</p></body></html>' }));
+    expect(await stub.requests[0]!.json()).toEqual({
+      from: 'inbox@harbour.example',
+      to: ['quotes@quickpipes.example'],
+      subject: 'Quote request: 12 King St, Newtown',
+      text: 'Could you quote for a dripping kitchen tap?',
+      html: '<!doctype html><html lang="en-AU"><body><p>Could you quote for a dripping kitchen tap?</p></body></html>',
+    });
+  });
+
+  test('a message without html has no html field', async () => {
+    const { stub, mailer } = resend();
+    await mailer.send(message());
+    expect(await stub.requests[0]!.json()).not.toHaveProperty('html');
+  });
+
   test('sends an Idempotency-Key when the outbound message has an id', async () => {
     const { stub, mailer } = resend();
     await mailer.send(message({ id: 'out-41' }));

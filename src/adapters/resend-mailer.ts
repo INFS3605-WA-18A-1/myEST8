@@ -1,6 +1,6 @@
 // Outbound email through Resend's Email API:
 //   POST {apiBaseUrl}/emails   authorization: Bearer <apiKey>
-//   { from, to, cc, subject, text, attachments: [{ content, filename }] }
+//   { from, to, cc, subject, text, html, attachments: [{ content, filename }] }
 //   Idempotency-Key: the outbound message id, when the message has one
 //   -> 200 { id }
 // from is the Agency channel address. Errors come back as
@@ -42,6 +42,7 @@ export function createResendMailer({ apiKey, fetch: fetchImpl = fetch, apiBaseUr
         ...(cc.length ? { cc } : {}),
         subject: message.subject,
         text: message.text,
+        ...(message.html ? { html: message.html } : {}),
         ...(message.attachments.length
           ? { attachments: message.attachments.map((a) => ({ content: toBase64(a.content), filename: a.filename })) }
           : {}),

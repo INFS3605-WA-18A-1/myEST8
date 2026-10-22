@@ -162,10 +162,7 @@ describe('Requests view', () => {
     const w = await world();
     w.h.classifier.when('The kitchen tap is dripping', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });
     await w.h.receive('+61400000001', 'The kitchen tap is dripping');
-    await w.h.answer('+61400000001', 'Kitchen sink');
-    await w.h.answer('+61400000001', 'Since Monday');
-    await w.h.answer('+61400000001', 'No', 'no');
-    await w.h.answer('+61400000001', 'Mornings', 'weekday_mornings');
+    await w.h.answerAll('+61400000001', { location: 'Kitchen sink', started: 'Since Monday', worsening: 'no', availability: 'weekday_mornings' });
     await w.h.advance(48 * 3_600_000);
     const [request] = (await w.alice.requests()).filter(() => true);
     expect(request).toMatchObject({ propertyId: w.ids.kingSt, propertyAddress: KING_ST });

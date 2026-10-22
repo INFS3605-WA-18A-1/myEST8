@@ -368,6 +368,32 @@ Business name, Contact name, Mobile, Email, Trades, Starting rating   [Add Tradi
 - **When Google fails** while loading a listing, the page shows "Google search isn't working right now. Try again, or mark the Tradie as not on Google." and the manual link. When Jev fails the form still fills in, with no Trades ticked.
 - **A refused form** comes back to the same choice: the form posts to a URL that carries `google`, `place` or `manual`. The wizard shows the posted values again; Setup and the Tradies page redirect back (`listingParams` builds the address) and fill in from the listing again. Nothing is stored until Add Tradie.
 
+### Emails
+
+`renderEmail({ agencyName, subject, text })` in `src/email-layout.ts` turns any template's plain text into the HTML email, so no template writes HTML. `notifications` sets it as `html` on every email (the Resend and SendGrid mailers send it with `text` as the alternative); SMS and WhatsApp stay plain text.
+
+```
+ Sand ────────────────────────────────────────────────
+ │  ┌────────────────────────────────────────────┐   │ 600px max, fluid below
+ │  │ Harbour Realty        (Night, white 20px)  │   │
+ │  ├────────────────────────────────────────────┤   │
+ │  │ Thanks, Kevin. To get this sorted we need: │   │ paragraphs from blank lines
+ │  │ ▌1. Is it getting worse? (yes or no)       │   │ Wattle edge: needs the Tenant
+ │  │ ▌2. When are you usually home: ...         │   │
+ │  │ ▌[ Upload photos ]                         │   │ Harbour button, address under it
+ │  └────────────────────────────────────────────┘   │
+ │  Reply to this email to answer or ask a question. │ Slate 13px on Sand
+ │  Sent through myEST8                              │
+```
+
+- **Tokens, as hex** (an email can't use `var()`; a test checks they equal `app.css`): Night `#13212E` for text and the header band, white on it; Sand `#F4EFE6` behind; white card with a 1px Line `#D8DEE4` border and 8px radius; Slate `#55636F` for the footer and the address under a button; Harbour `#1F5C8B` for the button (white on it, 6px radius, 44px tall) and inline links; Wattle `#FFC233` for the edge. No other colour.
+- **Type:** the system stack (`-apple-system`, Segoe UI, Roboto, Helvetica Neue, Arial), because the brand fonts won't load in mail clients. The Agency's name 20px 700, body 16px on 24px, footer and addresses 13px. Sentence case.
+- **The Agency heads it.** The Tenant or Tradie hears from their Agency; myEST8 is only "Sent through myEST8" in the footer. No images, no per-Agency colours.
+- **Wattle marks what needs a reply.** The numbered questions and a button each sit on a 4px Wattle edge, as a dashboard row that needs a decision does. An email that asks for nothing has none. Wattle is still never text or a button.
+- **Links.** A web address alone, last, or after a colon or full stop becomes the one Harbour button, labelled by the sentence it finishes ("Upload photos", "Upload receipt", "Give your quote", "Follow progress", otherwise "Open link"), with the address under it. An address inside a sentence stays a link.
+- **Left-aligned on one inset:** the name, paragraphs, list, button and footer share a left edge. Nothing is centred or in columns, so it holds at 375px with no media query.
+- **Markup:** table layout with `role="presentation"`, inline styles only, `lang="en-AU"`, a hidden preheader that is the first sentence, and `color-scheme: light` with a background on every cell so a client that darkens never leaves light text on nothing. All text is escaped.
+
 ## Vocabulary
 
 Each screen uses the same words for the same thing. `src/web/ui.ts` owns these labels; pages import them instead of writing their own.

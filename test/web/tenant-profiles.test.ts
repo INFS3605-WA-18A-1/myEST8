@@ -77,10 +77,7 @@ describe('Tenants', () => {
     const w = await webWorld();
     w.h.classifier.when('The shower is leaking', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });
     await w.h.receive(HANA, 'The shower is leaking');
-    await w.h.answer(HANA, 'Bathroom');
-    await w.h.answer(HANA, 'Yesterday');
-    await w.h.answer(HANA, 'No', 'no');
-    await w.h.answer(HANA, 'Saturdays', 'saturdays');
+    await w.h.answerAll(HANA, { location: 'Bathroom', started: 'Yesterday', worsening: 'no', availability: 'saturdays' });
     await w.h.advance(48 * 3_600_000);
     const issueId = (await w.alice.requests())[0]!.issueId;
     const cookie = await w.signIn();
@@ -133,10 +130,7 @@ describe('links to Tenant profiles', () => {
     const w = await webWorld();
     w.h.classifier.when('The kitchen tap is dripping', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });
     await w.h.receive(TOM, 'The kitchen tap is dripping');
-    await w.h.answer(TOM, 'Kitchen sink');
-    await w.h.answer(TOM, 'Since Monday');
-    await w.h.answer(TOM, 'No', 'no');
-    await w.h.answer(TOM, 'Mornings', 'weekday_mornings');
+    await w.h.answerAll(TOM, { location: 'Kitchen sink', started: 'Since Monday', worsening: 'no', availability: 'weekday_mornings' });
     await w.h.advance(48 * 3_600_000);
     const issueId = (await w.alice.requests())[0]!.issueId;
     const cookie = await w.signIn();

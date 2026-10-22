@@ -74,7 +74,7 @@ describe('two things at once', () => {
     expect(await all(h.db, 'SELECT id FROM inbound_messages')).toHaveLength(1);
     expect(await all(h.db, 'SELECT id FROM files')).toHaveLength(1);
     expect(await all(h.db, `SELECT id FROM tasks WHERE kind = 'intake.process'`)).toHaveLength(1);
-    expect(h.messenger.templatesTo(TOM)).toEqual(['tenant.acknowledgement', 'tenant.guided_question']);
+    expect(h.messenger.templatesTo(TOM)).toEqual(['tenant.acknowledgement', 'tenant.missing_details']);
     expect((await w.alice.dashboard({ filter: 'all' })).inbox).toEqual([]);
   });
 

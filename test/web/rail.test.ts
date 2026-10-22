@@ -32,10 +32,7 @@ function railCount(html: string, href: string) {
 async function report(w: Web, from: string, description: string, urgency: 'routine' | 'high' = 'routine') {
   w.h.classifier.when(description, { messageClass: 'new_issue', relatedItem: 'none', urgency, trade: 'plumbing' });
   await w.h.receive(from, description);
-  await w.h.answer(from, 'In the kitchen');
-  await w.h.answer(from, 'Since Monday');
-  await w.h.answer(from, 'No', 'no');
-  await w.h.answer(from, 'Mornings', 'weekday_mornings');
+  await w.h.answerAll(from, { location: 'In the kitchen', started: 'Since Monday', worsening: 'no', availability: 'weekday_mornings' });
 }
 
 /** Confirms every Maintenance Request waiting, oldest first, and returns the new Tickets' ids in that order. */

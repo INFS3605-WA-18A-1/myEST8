@@ -148,8 +148,8 @@ The mock classifier and quote reader read messages by keywords, much as the real
 
 ### 1. A Tenant reports a dripping tap (about 3 minutes)
 
-1. **Simulator, as Tom Tran (SMS):** "The kitchen tap is dripping". Tom gets an acknowledgement and the first question.
-2. **As Tom,** answer each question as it arrives: "Kitchen sink", "Since Monday", "No" (not getting worse), "1" (weekday mornings). Tom then gets a no-login link to upload photos.
+1. **Simulator, as Tom Tran (SMS):** "The kitchen tap is dripping". Tom gets an acknowledgement and one message asking only what the text didn't say. "Kitchen tap" already says where, so it asks when it started, whether it's getting worse and when he's home.
+2. **As Tom,** answer in one reply: "Since Monday. It isn't getting worse, and I'm home weekday mornings." The demo's mock extractor reads a room, a time like "since Monday", "getting worse" or not, and the words for when he's home. Tom then gets a no-login link to upload photos. If a reply leaves something out, he's asked once more for just that, and then it goes on.
 3. **Open the upload link** from Tom's thread and upload one or two photos. The photo checks read each photo's metadata: a photo taken more than 14 days before the report, before the tenancy began, or more than 1 km from the Property is flagged for the Property Manager. A phone photo with location taken anywhere but Newtown will be flagged, which shows the check working. A photo with no metadata (a screenshot, say) isn't held against the Tenant.
 4. **Dashboard, as Alice:** the Maintenance Request appears with the photos and any flags. Confirm it. Tom gets a link to his progress tracker. Open it: it shows where the Ticket is up to, never prices or Tradies.
 

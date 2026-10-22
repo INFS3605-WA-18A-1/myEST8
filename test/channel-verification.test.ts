@@ -168,10 +168,7 @@ describe('channel verification', () => {
     const w = await world();
     w.h.classifier.when('The kitchen tap is dripping', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });
     await w.h.receive(TOM, 'The kitchen tap is dripping', { channel: 'whatsapp' });
-    await w.h.answer(TOM, 'Kitchen sink', 'answer', { channel: 'whatsapp' });
-    await w.h.answer(TOM, 'Since Monday', 'answer', { channel: 'whatsapp' });
-    await w.h.answer(TOM, 'No', 'no', { channel: 'whatsapp' });
-    await w.h.answer(TOM, 'Mornings', 'weekday_mornings', { channel: 'whatsapp' });
+    await w.h.answerAll(TOM, { location: 'Kitchen sink', started: 'Since Monday', worsening: 'no', availability: 'weekday_mornings' }, { channel: 'whatsapp' });
     await w.h.advance(48 * 3_600_000);
 
     await w.h.app.recordDeliveryFailure({ to: TOM, code: 131047, title: 'Re-engagement message' });

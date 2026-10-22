@@ -4,8 +4,8 @@
 
 import { Hono, type Context } from 'hono';
 import { wallClock, zonedInstant } from '../zoned-time.ts';
-import type { Composer, Summariser } from '../ports.ts';
-import { mockClassify } from './mock-classifier.ts';
+import type { Composer, DetailExtractor, ExtractedDetails, Summariser } from '../ports.ts';
+import { AVAILABILITY_WORDS, mockClassify } from './mock-classifier.ts';
 import { isTrade, mockTradeAnswers } from './mock-trades.ts';
 
 /** A Google listing the demo's mock Places API knows. A listing may lack a phone, website or summary, as real ones do. */
@@ -371,5 +371,35 @@ export const mockComposer: Composer = {
   async compose({ facts, draft, agencyName }) {
     const { tenantName } = facts as { tenantName?: unknown };
     return { text: [typeof tenantName === 'string' ? `Hi ${tenantName},` : null, draft, agencyName].filter((part) => part !== null).join('\n\n') };
+  },
+};
+
+const LOCATION = /\b(?:(?:main|master|upstairs|downstairs|front|back) )?(?:kitchen|bathroom|ensuite|laundry|bedroom|lounge(?: room)?|living room|hallway|balcony|garage|roof|ceiling|toilet|back ?yard|front door|back door)(?: (?:sink|tap|window|door|light|shower|bath|wall|floor))?\b/i;
+const STARTED = /\b(?:since (?:last |the )?\w+|yesterday|last night|this morning|last (?:week|month)|today|(?:\d+|a|an|two|three|a few|a couple of) (?:hours?|days?|weeks?|months?) ago)\b/i;
+const NOT_WORSE = /\b(?:not|isnt|arent|no|never|hasnt|stopped)\b(?: \w+){0,2} worse\b|\bthe same\b/;
+const WORSE = /\b(?:worse|worsening|spreading|bigger|growing)\b/;
+
+/**
+ * The demo's DetailExtractor: keyword rules for a room and fixture, a time like "since Monday" or
+ * "last night", "getting worse" or not, and the words for when the Tenant is home. A bare yes or no
+ * answers "is it getting worse" only when that was the one question asked. Deterministic.
+ */
+export const mockExtractor: DetailExtractor = {
+  async extract({ text, wanted }) {
+    const found: ExtractedDetails = {};
+    const plain = text.toLowerCase().replace(/['’‘`]/g, '').replace(/\s+/g, ' ').trim();
+    const location = LOCATION.exec(text)?.[0];
+    if (wanted.includes('location') && location) found.location = location;
+    const started = STARTED.exec(text)?.[0];
+    if (wanted.includes('started') && started) found.started = started;
+    if (wanted.includes('worsening')) {
+      const bare = wanted.length === 1 ? (/^(?:yes|yeah|yep)\b/.test(plain) ? 'yes' : /^(?:no|nope|nah)\b/.test(plain) ? 'no' : null) : null;
+      if (NOT_WORSE.test(plain)) found.worsening = 'no';
+      else if (WORSE.test(plain)) found.worsening = 'yes';
+      else if (bare) found.worsening = bare;
+    }
+    const availability = AVAILABILITY_WORDS.find(([, pattern]) => pattern.test(plain))?.[0];
+    if (wanted.includes('availability') && availability) found.availability = availability;
+    return found;
   },
 };
