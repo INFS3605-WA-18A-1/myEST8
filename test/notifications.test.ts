@@ -7,10 +7,7 @@ describe('choosing the channel', () => {
     const { h, alice } = await world();
     h.classifier.when('The kitchen tap is dripping', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });
     await h.receive(TOM, 'The kitchen tap is dripping', { channel: 'whatsapp' });
-    await h.answer(TOM, 'Kitchen sink', 'answer', { channel: 'whatsapp' });
-    await h.answer(TOM, 'Since Monday', 'answer', { channel: 'whatsapp' });
-    await h.answer(TOM, 'No', 'no', { channel: 'whatsapp' });
-    await h.answer(TOM, 'Mornings', 'weekday_mornings', { channel: 'whatsapp' });
+    await h.answerAll(TOM, { location: 'Kitchen sink', started: 'Since Monday', worsening: 'no', availability: 'weekday_mornings' }, { channel: 'whatsapp' });
     expect(new Set(h.messenger.to(TOM).map((m) => m.channel))).toEqual(new Set(['whatsapp']));
 
     await h.advance(48 * HOUR);
@@ -24,11 +21,8 @@ describe('choosing the channel', () => {
     const { h, alice } = await world();
     h.classifier.when('The bathroom fan is rattling', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'electrical' });
     await h.receive(HANA_EMAIL, 'The bathroom fan is rattling');
-    await h.answer(HANA_EMAIL, 'Bathroom');
-    await h.answer(HANA_EMAIL, 'Last week');
-    await h.answer(HANA_EMAIL, 'No', 'no');
-    await h.answer(HANA_EMAIL, 'Afternoons', 'weekday_afternoons');
-    expect(h.messenger.to(HANA_EMAIL).map((m) => m.channel)).toEqual(['email', 'email', 'email', 'email', 'email', 'email']);
+    await h.answerAll(HANA_EMAIL, { location: 'Bathroom', started: 'Last week', worsening: 'no', availability: 'weekday_afternoons' });
+    expect(h.messenger.to(HANA_EMAIL).map((m) => m.channel)).toEqual(['email', 'email', 'email']);
 
     await h.advance(48 * HOUR);
     const [request] = (await alice.dashboard()).maintenanceRequests;
@@ -41,10 +35,7 @@ describe('choosing the channel', () => {
     const { h, bob } = await world();
     h.classifier.when('The shower drain is blocked', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });
     await h.receive(BELLA, 'The shower drain is blocked');
-    await h.answer(BELLA, 'Bathroom');
-    await h.answer(BELLA, 'Yesterday');
-    await h.answer(BELLA, 'No', 'no');
-    await h.answer(BELLA, 'Any time', 'any_time');
+    await h.answerAll(BELLA, { location: 'Bathroom', started: 'Yesterday', worsening: 'no', availability: 'any_time' });
     await h.advance(48 * HOUR);
     const [request] = (await bob.dashboard()).maintenanceRequests;
     await bob.confirmMaintenanceRequest(request!.issueId);

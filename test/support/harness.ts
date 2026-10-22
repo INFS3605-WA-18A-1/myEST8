@@ -1,7 +1,9 @@
 import { createApp, type PropertyManagerActions } from '../../src/app.ts';
 import type { Db } from '../../src/db.ts';
-import type { BlobStore, ChannelType, Clock, InboundAttachment } from '../../src/ports.ts';
+import type { BlobStore, ChannelType, Clock, ExtractedDetails, InboundAttachment } from '../../src/ports.ts';
+import type { Availability } from '../../src/shared.ts';
 import type { SmsNumbers } from '../../src/sms-numbers.ts';
+import { AVAILABILITY_LABELS } from '../../src/templates.ts';
 import { testDb } from './db.ts';
 import { FakeClassifier, FakeClock, FakeComposer, FakeDetailExtractor, FakeAddressSuggester, FakeGeocoder, FakeImageMatcher, FakeMessenger, FakePlaces, FakeQuoteReader, FakeSummariser, FakeTradeSuggester } from './fakes.ts';
 
@@ -79,6 +81,20 @@ export async function createHarness(options: { blobs?: BlobStore; smsNumbers?: (
     await drain();
   }
 
+  /** Replies to a question the agent asked, scripting the classifier to read it as `answer` to that question. */
+  async function answer(from: string, text: string, answer = 'answer', options: { channel?: ChannelType } = {}) {
+    const kind = /^[1-5]$/.test(answer) ? 'fix_rating' : answer === 'confirm' || answer === 'reschedule' ? 'visit' : 'guided';
+    classifier.when(text, {
+      messageClass: 'update',
+      updateType: 'general',
+      'answer:guided': 'not_an_answer',
+      'answer:visit': 'not_an_answer',
+      'answer:fix_rating': 'not_an_answer',
+      [`answer:${kind}`]: answer,
+    });
+    await receive(from, text, options);
+  }
+
   return {
     app,
     db,
@@ -98,18 +114,26 @@ export async function createHarness(options: { blobs?: BlobStore; smsNumbers?: (
     drain,
     receive,
 
-    /** Replies to a question the agent asked, scripting the classifier to read it as `answer` to that question. */
-    async answer(from: string, text: string, answer = 'answer', options: { channel?: ChannelType } = {}) {
-      const kind = /^[1-5]$/.test(answer) ? 'fix_rating' : answer === 'confirm' || answer === 'reschedule' ? 'visit' : 'guided';
-      classifier.when(text, {
-        messageClass: 'update',
-        updateType: 'general',
-        'answer:guided': 'not_an_answer',
-        'answer:visit': 'not_an_answer',
-        'answer:fix_rating': 'not_an_answer',
-        [`answer:${kind}`]: answer,
-      });
-      await receive(from, text, options);
+    answer,
+
+    /** Replies with all four answers in one message, as a Tenant answers a message that asks for them all. */
+    async answerAll(
+      from: string,
+      details: { location: string; started: string; worsening: 'yes' | 'no'; availability: Availability },
+      options: { channel?: ChannelType } = {},
+    ) {
+      const text = [details.location, details.started, details.worsening === 'yes' ? 'Getting worse' : 'Not getting worse', `Home ${AVAILABILITY_LABELS[details.availability]}`].join('. ');
+      detailExtractor.when(text, details);
+      await answer(from, text, 'answer', options);
+    },
+
+    /**
+     * Replies to the agent's questions with `text`, scripting the classifier to read it as an answer
+     * and the extractor to find `details` in it. The extractor still returns only the details asked for.
+     */
+    async answerDetails(from: string, text: string, details: ExtractedDetails, options: { channel?: ChannelType } = {}) {
+      detailExtractor.when(text, details);
+      await answer(from, text, 'answer', options);
     },
 
     async upload(link: string, files: { filename: string; contentType: string; content: Uint8Array }[], options: { amountCents?: number } = {}) {

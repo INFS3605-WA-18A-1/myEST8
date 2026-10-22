@@ -11,7 +11,7 @@ test('a Tenant texting from the phone simulator becomes a Maintenance Request th
   await page.getByRole('navigation', { name: 'People' }).getByRole('link', { name: /^Wei Zhang/ }).click();
   const phone = page.getByRole('region', { name: "Wei Zhang's phone" });
   const messages = phone.getByRole('region', { name: 'Messages with Wei Zhang' });
-  for (const text of [report, 'Upstairs bathroom', 'Since Monday', 'No', '1']) {
+  for (const text of [report, "Upstairs bathroom, since Monday. It isn't getting worse. I'm home weekday mornings."]) {
     await phone.getByRole('textbox', { name: 'Message' }).fill(text);
     await phone.getByRole('button', { name: 'Send as Wei Zhang' }).click();
     await expect(messages.getByText(text, { exact: true }).last()).toBeVisible();

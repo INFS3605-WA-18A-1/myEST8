@@ -24,7 +24,7 @@ async function busyTuesday(w: Web) {
   const report = async (from: string, description: string) => {
     w.h.classifier.when(description, { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });
     await w.h.receive(from, description);
-    for (const [answer, value] of [['In the kitchen'], ['Since Monday'], ['No', 'no'], ['Mornings', 'weekday_mornings']] as const) await w.h.answer(from, answer, value);
+    await w.h.answerAll(from, { location: 'In the kitchen', started: 'Since Monday', worsening: 'no', availability: 'weekday_mornings' });
   };
   await report(TOM, 'The kitchen tap is dripping');
   await report(HANA, 'The bathroom fan is rattling');

@@ -107,10 +107,7 @@ describe('Quote Requests', () => {
     const { h, alice, tradies } = w;
     h.classifier.when('The kitchen tap is dripping', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });
     await h.receive(TOM, 'The kitchen tap is dripping');
-    await h.answer(TOM, 'Kitchen sink');
-    await h.answer(TOM, 'Since Monday');
-    await h.answer(TOM, 'No', 'no');
-    await h.answer(TOM, 'Mornings', 'weekday_mornings');
+    await h.answerAll(TOM, { location: 'Kitchen sink', started: 'Since Monday', worsening: 'no', availability: 'weekday_mornings' });
     await h.upload(h.messenger.last(TOM)!.data.uploadLink as string, [upload('tap-1.jpg'), upload('tap-2.jpg')]);
     const [request] = (await alice.dashboard()).maintenanceRequests;
     const ticketId = await alice.confirmMaintenanceRequest(request!.issueId);
@@ -263,10 +260,7 @@ describe("the Tenant's contact details", () => {
     const report = 'Tap dripping, call me on 0400 000 001 or tom@example.com';
     h.classifier.when(report, { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });
     await h.receive(TOM, report);
-    await h.answer(TOM, 'Kitchen');
-    await h.answer(TOM, 'Monday');
-    await h.answer(TOM, 'No', 'no');
-    await h.answer(TOM, 'Mornings', 'weekday_mornings');
+    await h.answerAll(TOM, { location: 'Kitchen', started: 'Monday', worsening: 'no', availability: 'weekday_mornings' });
     await h.advance(48 * HOUR);
     const [request] = (await alice.dashboard()).maintenanceRequests;
     const ticketId = await alice.confirmMaintenanceRequest(request!.issueId);

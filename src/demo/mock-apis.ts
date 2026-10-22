@@ -374,8 +374,8 @@ export const mockComposer: Composer = {
   },
 };
 
-const LOCATION = /\b(?:(?:main|master|upstairs|downstairs|front|back) )?(?:kitchen|bathroom|ensuite|laundry|bedroom|lounge(?: room)?|living room|hallway|balcony|garage|roof|ceiling|toilet)(?: (?:sink|tap|window|door|light|shower|bath|wall|floor))?\b/i;
-const STARTED = /\b(?:since (?:last )?\w+|yesterday|last night|this morning|last (?:week|month)|today|(?:\d+|a|an|two|three|a few) (?:hours?|days?|weeks?|months?) ago)\b/i;
+const LOCATION = /\b(?:(?:main|master|upstairs|downstairs|front|back) )?(?:kitchen|bathroom|ensuite|laundry|bedroom|lounge(?: room)?|living room|hallway|balcony|garage|roof|ceiling|toilet|back ?yard|front door|back door)(?: (?:sink|tap|window|door|light|shower|bath|wall|floor))?\b/i;
+const STARTED = /\b(?:since (?:last |the )?\w+|yesterday|last night|this morning|last (?:week|month)|today|(?:\d+|a|an|two|three|a few|a couple of) (?:hours?|days?|weeks?|months?) ago)\b/i;
 const NOT_WORSE = /\b(?:not|isnt|arent|no|never|hasnt|stopped)\b(?: \w+){0,2} worse\b|\bthe same\b/;
 const WORSE = /\b(?:worse|worsening|spreading|bigger|growing)\b/;
 

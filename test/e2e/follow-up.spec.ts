@@ -16,7 +16,7 @@ test('a Property Manager drafts a follow-up from notes, edits it, sends it, and 
   await page.getByRole('navigation', { name: 'People' }).getByRole('link', { name: /^Liam Lee/ }).click();
   const phone = page.getByRole('region', { name: "Liam Lee's phone" });
   const messages = phone.getByRole('region', { name: 'Messages with Liam Lee' });
-  for (const text of [report, 'Upstairs bathroom', 'Since Monday', 'No', '1']) {
+  for (const text of [report, "Upstairs bathroom, since Monday. It isn't getting worse. I'm home weekday mornings."]) {
     await phone.getByRole('textbox', { name: 'Message' }).fill(text);
     await phone.getByRole('button', { name: 'Send as Liam Lee' }).click();
     await expect(messages.getByText(text, { exact: true }).last()).toBeVisible();

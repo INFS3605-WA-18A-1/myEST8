@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { all, one } from '../src/db.ts';
+import { all, one, run } from '../src/db.ts';
 import { upload } from './support/photos.ts';
 import { HOUR } from './support/harness.ts';
 import { confirmedQuotes, jobView, BARRY, BELLA, HANA, KING_ST, KING_ST_LOCATION, NINA, OCEAN_AVE, OLIVIA_EMAIL, SAM, STRANGER, TOM, tomsTapTicket, world } from './support/world.ts';
@@ -10,10 +10,7 @@ type World = Awaited<ReturnType<typeof world>>;
 async function tomReportsTap({ h }: World) {
   h.classifier.when('The kitchen tap is dripping', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });
   await h.receive(TOM, 'The kitchen tap is dripping');
-  await h.answer(TOM, 'Kitchen sink');
-  await h.answer(TOM, 'Since Monday');
-  await h.answer(TOM, 'No', 'no');
-  await h.answer(TOM, 'Mornings', 'weekday_mornings');
+  await h.answerAll(TOM, { location: 'Kitchen sink', started: 'Since Monday', worsening: 'no', availability: 'weekday_mornings' });
   return h.messenger.last(TOM)!.data.uploadLink as string;
 }
 
@@ -30,16 +27,10 @@ describe('a Routine issue', () => {
     await h.receive(TOM, 'The kitchen tap is dripping');
     expect(h.messenger.to(TOM)).toMatchObject([
       { channel: 'sms', template: 'tenant.acknowledgement' },
-      { channel: 'sms', template: 'tenant.guided_question', data: { question: 'location' } },
+      { channel: 'sms', template: 'tenant.missing_details', data: { questions: ['location', 'started', 'worsening', 'availability'] } },
     ]);
 
-    await h.answer(TOM, 'Kitchen sink');
-    expect(h.messenger.last(TOM)).toMatchObject({ data: { question: 'started' } });
-    await h.answer(TOM, 'Since Monday');
-    expect(h.messenger.last(TOM)).toMatchObject({ data: { question: 'worsening' } });
-    await h.answer(TOM, 'No', 'no');
-    expect(h.messenger.last(TOM)).toMatchObject({ data: { question: 'availability' } });
-    await h.answer(TOM, 'Mornings', 'weekday_mornings');
+    await h.answerAll(TOM, { location: 'Kitchen sink', started: 'Since Monday', worsening: 'no', availability: 'weekday_mornings' });
 
     const uploadLink = h.messenger.last(TOM)!;
     expect(uploadLink.template).toBe('tenant.upload_link');
@@ -85,6 +76,185 @@ describe('a Routine issue', () => {
       ['done', false],
       ['closed', false],
     ]);
+  });
+});
+
+const issueOf = async ({ h }: World) =>
+  (await one<{ id: number; status: string; location: string | null; started: string | null; worsening: string | null; availability: string | null }>(
+    h.db,
+    'SELECT id, status, location, started, worsening, availability FROM issues ORDER BY id DESC LIMIT 1',
+  ))!;
+
+describe('asking only what is missing', () => {
+  const SINK = 'Last night the kitchen sink broke';
+  const SINK_CLASSIFIED = { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' } as const;
+
+  test('a first message that states where and when is asked only about worsening and availability, in one message', async () => {
+    const w = await world();
+    const { h } = w;
+    h.classifier.when(SINK, SINK_CLASSIFIED);
+    h.detailExtractor.when(SINK, { location: 'kitchen sink', started: 'last night' });
+
+    await h.receive(TOM, SINK);
+
+    expect(h.detailExtractor.calls).toEqual([
+      { text: SINK, wanted: ['location', 'started', 'worsening', 'availability'], issue: { description: SINK } },
+    ]);
+    expect(h.messenger.to(TOM)).toMatchObject([
+      { template: 'tenant.acknowledgement' },
+      {
+        template: 'tenant.missing_details',
+        subject: 'A few quick questions',
+        data: { questions: ['worsening', 'availability'] },
+        text:
+          'Thanks, Tom. To get this sorted we just need:\n' +
+          '1. Is it getting worse? (yes or no)\n' +
+          '2. When are you usually home: weekday mornings, weekday afternoons, Saturdays or any time?',
+      },
+    ]);
+    expect(await issueOf(w)).toMatchObject({ location: 'kitchen sink', started: 'last night', worsening: null, availability: null });
+  });
+
+  test('a first message that answers all four goes straight on to the photo request, with the answers saved', async () => {
+    const w = await world();
+    const { h, ids } = w;
+    const text = 'Our bathroom tap has been dripping since Monday and it is not getting worse. I am home weekday mornings.';
+    h.classifier.when(text, SINK_CLASSIFIED);
+    h.detailExtractor.when(text, { location: 'bathroom tap', started: 'since Monday', worsening: 'no', availability: 'weekday_mornings' });
+
+    await h.receive(TOM, text);
+
+    expect(h.messenger.templatesTo(TOM)).toEqual(['tenant.acknowledgement', 'tenant.upload_link']);
+    expect(await issueOf(w)).toMatchObject({
+      status: 'awaiting_photos',
+      location: 'bathroom tap',
+      started: 'since Monday',
+      worsening: 'no',
+      availability: 'weekday_mornings',
+    });
+    expect(await one(h.db, 'SELECT availability FROM people WHERE id = ?', ids.tom)).toEqual({ availability: 'weekday_mornings' });
+  });
+
+  test('an extractor that throws finds nothing, so all four questions go in one message', async () => {
+    const w = await world();
+    const { h } = w;
+    h.classifier.when(SINK, SINK_CLASSIFIED);
+    h.detailExtractor.next = new Error('Claude is down');
+
+    await h.receive(TOM, SINK);
+
+    expect(h.messenger.to(TOM)).toMatchObject([
+      { template: 'tenant.acknowledgement' },
+      {
+        template: 'tenant.missing_details',
+        data: { questions: ['location', 'started', 'worsening', 'availability'] },
+        text:
+          'Thanks, Tom. To get this sorted we just need:\n' +
+          '1. Where in the property is the issue?\n' +
+          '2. When did it start?\n' +
+          '3. Is it getting worse? (yes or no)\n' +
+          '4. When are you usually home: weekday mornings, weekday afternoons, Saturdays or any time?',
+      },
+    ]);
+    expect(await issueOf(w)).toMatchObject({ status: 'gathering', location: null, started: null, worsening: null, availability: null });
+  });
+
+  test('with no extractor configured, all four questions go in one message', async () => {
+    const w = await world({ detailExtractor: null });
+    const { h } = w;
+    h.classifier.when(SINK, SINK_CLASSIFIED);
+
+    await h.receive(TOM, SINK);
+
+    expect(h.messenger.to(TOM)).toMatchObject([
+      { template: 'tenant.acknowledgement' },
+      { template: 'tenant.missing_details', data: { questions: ['location', 'started', 'worsening', 'availability'] } },
+    ]);
+  });
+
+  test('an issue already waiting on one guided question takes the reply through the new logic and is asked once for what is still missing', async () => {
+    const w = await world();
+    const { h } = w;
+    h.classifier.when(SINK, SINK_CLASSIFIED);
+    await h.receive(TOM, SINK);
+    // The row as an earlier release left it: one question at a time, waiting on `location`.
+    const { id: issueId } = await issueOf(w);
+    await run(h.db, `UPDATE pending_answers SET awaiting = ? WHERE kind = 'guided'`, JSON.stringify({ kind: 'guided', issueId, question: 'location' }));
+
+    await h.answerDetails(TOM, 'In the kitchen', { location: 'In the kitchen' });
+
+    expect(h.messenger.last(TOM)).toMatchObject({ template: 'tenant.missing_details', data: { questions: ['started', 'worsening', 'availability'] } });
+    expect(await issueOf(w)).toMatchObject({ status: 'gathering', location: 'In the kitchen', started: null });
+  });
+
+  describe('the reply', () => {
+    /** Tom's first message states where and when, so he is asked about worsening and availability. */
+    async function tomIsAsked() {
+      const w = await world();
+      w.h.classifier.when(SINK, SINK_CLASSIFIED);
+      w.h.detailExtractor.when(SINK, { location: 'kitchen sink', started: 'last night' });
+      await w.h.receive(TOM, SINK);
+      return w;
+    }
+
+    test('"yes, getting worse, I\'m home any time" fills worsening and availability, and intake goes on', async () => {
+      const w = await tomIsAsked();
+      const { h, ids } = w;
+
+      await h.answerDetails(TOM, "Yes, getting worse, I'm home any time", { worsening: 'yes', availability: 'any_time' });
+
+      expect(h.messenger.templatesTo(TOM)).toEqual(['tenant.acknowledgement', 'tenant.missing_details', 'tenant.upload_link']);
+      expect(h.detailExtractor.calls.at(-1)).toEqual({
+        text: "Yes, getting worse, I'm home any time",
+        wanted: ['worsening', 'availability'],
+        issue: { description: SINK },
+      });
+      expect(await issueOf(w)).toMatchObject({ status: 'awaiting_photos', location: 'kitchen sink', started: 'last night', worsening: 'yes', availability: 'any_time' });
+      expect(await one(h.db, 'SELECT availability FROM people WHERE id = ?', ids.tom)).toEqual({ availability: 'any_time' });
+    });
+
+    test('a reply that answers one of two asks again for only the other', async () => {
+      const w = await tomIsAsked();
+      const { h } = w;
+
+      await h.answerDetails(TOM, 'No, it is the same', { worsening: 'no' });
+
+      expect(h.messenger.last(TOM)).toMatchObject({
+        template: 'tenant.missing_details',
+        data: { questions: ['availability'] },
+        text:
+          'Thanks, Tom. To get this sorted we just need:\n' +
+          '1. When are you usually home: weekday mornings, weekday afternoons, Saturdays or any time?',
+      });
+      expect(await issueOf(w)).toMatchObject({ status: 'gathering', worsening: 'no', availability: null });
+
+      await h.answerDetails(TOM, 'Saturdays', { availability: 'saturdays' });
+
+      expect(h.messenger.templatesTo(TOM)).toEqual(['tenant.acknowledgement', 'tenant.missing_details', 'tenant.missing_details', 'tenant.upload_link']);
+      expect(await issueOf(w)).toMatchObject({ status: 'awaiting_photos', availability: 'saturdays' });
+    });
+
+    test('a reply that answers nothing goes on without asking a third time, leaving the blanks', async () => {
+      const w = await tomIsAsked();
+      const { h } = w;
+
+      await h.answerDetails(TOM, 'Not sure, sorry', {});
+
+      expect(h.messenger.templatesTo(TOM)).toEqual(['tenant.acknowledgement', 'tenant.missing_details', 'tenant.upload_link']);
+      expect(await issueOf(w)).toMatchObject({ status: 'awaiting_photos', location: 'kitchen sink', worsening: null, availability: null });
+    });
+
+    test('a message the classifier does not read as an answer is not read for details', async () => {
+      const w = await tomIsAsked();
+      const { h, alice } = w;
+      h.classifier.when('Can I pay rent a week late?', { messageClass: 'other', 'answer:guided': 'not_an_answer' });
+
+      await h.receive(TOM, 'Can I pay rent a week late?');
+
+      expect(h.detailExtractor.calls).toHaveLength(1);
+      expect(h.messenger.templatesTo(TOM)).toEqual(['tenant.acknowledgement', 'tenant.missing_details']);
+      expect((await alice.dashboard()).inbox).toMatchObject([{ reason: 'other' }]);
+    });
   });
 });
 
@@ -181,12 +351,9 @@ describe('an Urgent issue', () => {
     const { h, alice } = w;
     h.classifier.when('The hot water is lukewarm', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'high', trade: 'plumbing' });
     await h.receive(TOM, 'The hot water is lukewarm');
-    await h.answer(TOM, 'Whole flat');
-    await h.answer(TOM, 'This morning');
-    await h.answer(TOM, 'Yes, now there is none', 'yes');
     // With the answers in, the issue is no hot water at all.
     h.classifier.when('The hot water is lukewarm', { urgency: 'urgent', trade: 'plumbing' });
-    await h.answer(TOM, 'Any time', 'any_time');
+    await h.answerAll(TOM, { location: 'Whole flat', started: 'This morning', worsening: 'yes', availability: 'any_time' });
 
     expect(h.messenger.last(TOM)!.template).toBe('tenant.urgent_repair_reminder');
     expect((await alice.dashboard()).urgentRepairs).toHaveLength(1);
@@ -251,7 +418,7 @@ describe('the Agency inbox', () => {
 
     h.classifier.when('The oven is not heating', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'appliances' });
     await h.receive(STRANGER, 'The oven is not heating');
-    expect(h.messenger.templatesTo(STRANGER)).toEqual(['tenant.acknowledgement', 'tenant.guided_question']);
+    expect(h.messenger.templatesTo(STRANGER)).toEqual(['tenant.acknowledgement', 'tenant.missing_details']);
   });
 
   test('a message that is not about maintenance is left in the inbox without a reply', async () => {
@@ -282,7 +449,7 @@ describe('the Agency inbox', () => {
     await alice.routeInboxItem(item!.itemId);
 
     expect((await alice.dashboard()).inbox).toEqual([]);
-    expect(h.messenger.templatesTo(TOM)).toEqual(['tenant.acknowledgement', 'tenant.guided_question']);
+    expect(h.messenger.templatesTo(TOM)).toEqual(['tenant.acknowledgement', 'tenant.missing_details']);
   });
 });
 
@@ -296,10 +463,7 @@ describe('unsure Urgency and Trade', () => {
       trade: ['appliances', 0.6],
     });
     await h.receive(TOM, 'Something smells odd near the heater');
-    await h.answer(TOM, 'Lounge room');
-    await h.answer(TOM, 'Yesterday');
-    await h.answer(TOM, 'No', 'no');
-    await h.answer(TOM, 'Any time', 'any_time');
+    await h.answerAll(TOM, { location: 'Lounge room', started: 'Yesterday', worsening: 'no', availability: 'any_time' });
     await h.advance(48 * HOUR);
 
     const [request] = (await alice.dashboard()).maintenanceRequests;
@@ -364,10 +528,7 @@ describe('the Ticket list', () => {
     const report = async (from: string, text: string, urgency: 'high' | 'routine') => {
       h.classifier.when(text, { messageClass: 'new_issue', relatedItem: 'none', urgency, trade: 'carpentry' });
       await h.receive(from, text);
-      await h.answer(from, `${text}: where`);
-      await h.answer(from, `${text}: when`);
-      await h.answer(from, 'No', 'no');
-      await h.answer(from, 'Any time', 'any_time');
+      await h.answerAll(from, { location: `${text}: where`, started: `${text}: when`, worsening: 'no', availability: 'any_time' });
       await h.advance(HOUR);
     };
     await report(TOM, 'Wardrobe door off its hinge', 'routine');
@@ -389,7 +550,7 @@ describe('nothing stalls', () => {
     const { h, alice } = await world();
     h.classifier.when('The kitchen tap is dripping', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });
     await h.receive(TOM, 'The kitchen tap is dripping');
-    await h.answer(TOM, 'Kitchen sink');
+    await h.answerDetails(TOM, 'Kitchen sink', { location: 'Kitchen sink' });
 
     await h.advance(48 * HOUR);
 
@@ -420,9 +581,9 @@ describe('nothing stalls', () => {
     await h.receive(TOM, 'The oven is not heating');
 
     await alice.sendWorkOrder(job.jobId);
-    await h.answer(TOM, 'In the kitchen');
+    await h.answerDetails(TOM, 'In the kitchen', { location: 'In the kitchen' });
 
-    expect(h.messenger.last(TOM)).toMatchObject({ template: 'tenant.guided_question', data: { question: 'started' } });
+    expect(h.messenger.last(TOM)).toMatchObject({ template: 'tenant.missing_details', data: { questions: ['started', 'worsening', 'availability'] } });
 
     await h.answer(TOM, 'Yes see you Tuesday', 'confirm');
     expect((await jobView(w, job)).workOrder).toMatchObject({ visitConfirmed: true });
@@ -440,10 +601,7 @@ const summaryOf = async ({ h }: World, issueId: number) =>
 async function tomReportsTapWithPhoto({ h }: World) {
   h.classifier.when('The kitchen tap is dripping', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });
   await h.receive(TOM, 'The kitchen tap is dripping', { attachments: [upload('tap.jpg', { takenAt: '2026:10:08 08:30:00' }), { filename: 'note.pdf', contentType: 'application/pdf', content: new Uint8Array([1]) }] });
-  await h.answer(TOM, 'Kitchen sink');
-  await h.answer(TOM, 'Since Monday');
-  await h.answer(TOM, 'No', 'no');
-  await h.answer(TOM, 'Mornings', 'weekday_mornings');
+  await h.answerAll(TOM, { location: 'Kitchen sink', started: 'Since Monday', worsening: 'no', availability: 'weekday_mornings' });
 }
 
 describe('photos on the first message', () => {
@@ -491,10 +649,7 @@ describe('the Summary', () => {
     h.summariser.next = new Error('Claude is down');
     h.classifier.when('The kitchen tap is dripping', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });
     await h.receive(TOM, 'The kitchen tap is dripping');
-    await h.answer(TOM, 'Kitchen sink');
-    await h.answer(TOM, 'Since Monday');
-    await h.answer(TOM, 'No', 'no');
-    await h.answer(TOM, 'Mornings', 'weekday_mornings').catch(() => {});
+    await h.answerAll(TOM, { location: 'Kitchen sink', started: 'Since Monday', worsening: 'no', availability: 'weekday_mornings' }).catch(() => {});
     await h.advance(48 * HOUR).catch(() => {});
     const [request] = (await alice.dashboard()).maintenanceRequests;
     expect(await summaryOf(w, request!.issueId)).toMatchObject({ summary: null, summary_by: null });
