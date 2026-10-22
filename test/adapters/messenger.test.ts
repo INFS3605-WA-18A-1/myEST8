@@ -43,7 +43,7 @@ describe('providers from the environment', () => {
   const twilioEnv = { TWILIO_ACCOUNT_SID: 'AC123', TWILIO_AUTH_TOKEN: 'token', FILE_LINK_SECRET: SECRET, PUBLIC_URL: 'https://myest8.test' };
 
   test('nothing set configures nothing', () => {
-    expect(messengersFromEnv({}, { clock })).toEqual({ channels: {}, fileLinks: null });
+    expect(messengersFromEnv({}, { clock })).toEqual({ channels: {}, fileLinks: null, textbee: null });
   });
 
   test('Twilio covers SMS and WhatsApp, SendGrid covers email, each with its own credentials and sender', async () => {
@@ -110,5 +110,53 @@ describe('providers from the environment', () => {
     ['a short file link secret', { ...twilioEnv, FILE_LINK_SECRET: 'short' }, 'at least 32 characters'],
   ])('a half-configured provider fails at start-up: %s', (_, env, text) => {
     expect(() => messengersFromEnv(env, { clock })).toThrow(text);
+  });
+
+  const textbeeEnv = {
+    TEXTBEE_API_KEY: 'textbee-test-api-key',
+    TEXTBEE_DEVICE_ID: '664a9b8cd0e1f2a3b4c5d6e7',
+    TEXTBEE_NUMBER: '+61412345678',
+    TEXTBEE_WEBHOOK_SECRET: 'textbee-webhook-secret-20',
+  };
+
+  test('textbee takes SMS over from Twilio, and the number is kept with the config', async () => {
+    const lines: string[] = [];
+    const stub = stubFetch(() => json({ data: { success: true, message: 'SMS added to queue for processing', smsBatchId: '66b1f2c3a4d5e6f7a8b9c0d2', recipientCount: 1 } }));
+    const { channels, textbee } = messengersFromEnv(
+      { ...twilioEnv, TWILIO_SMS_FROM: '+61480000000', ...textbeeEnv },
+      { clock, fetch: stub.fetch, log: (line) => lines.push(line) },
+    );
+    expect(textbee).toEqual({
+      apiKey: 'textbee-test-api-key',
+      deviceId: '664a9b8cd0e1f2a3b4c5d6e7',
+      number: '+61412345678',
+      webhookSecret: 'textbee-webhook-secret-20',
+      apiBaseUrl: 'https://api.textbee.dev',
+    });
+    expect(lines.join('\n')).toContain('[messenger] textbee is set, so it sends SMS instead of Twilio.');
+    await routeByChannel(channels).send(message('sms', '+61400000001'));
+    expect(stub.requests).toHaveLength(1);
+    expect(stub.requests[0]!.url).toBe('https://api.textbee.dev/api/v1/gateway/send-sms');
+    expect(stub.requests[0]!.headers.get('x-api-key')).toBe('textbee-test-api-key');
+    expect(await stub.requests[0]!.json()).toMatchObject({ recipients: ['+61400000001'], deviceId: '664a9b8cd0e1f2a3b4c5d6e7' });
+  });
+
+  test('textbee covers SMS, so a strict start does not also demand TWILIO_SMS_FROM', () => {
+    const { channels } = messengersFromEnv({ ...twilioEnv, TWILIO_WHATSAPP_FROM: '+14155238886', ...textbeeEnv }, { clock, log: () => {} });
+    expect(channels.sms).toBeTypeOf('object');
+    expect(channels.whatsapp).toBeTypeOf('object');
+  });
+
+  test('TEXTBEE_API_URL sends the text to that origin', async () => {
+    const stub = stubFetch(() => json({ data: { success: true, smsBatchId: '66b1f2c3a4d5e6f7a8b9c0d2' } }));
+    const { channels } = messengersFromEnv({ ...textbeeEnv, TEXTBEE_API_URL: 'https://textbee.test/' }, { clock, fetch: stub.fetch, log: () => {} });
+    await routeByChannel(channels).send(message('sms', '+61400000001'));
+    expect(stub.requests[0]!.url).toBe('https://textbee.test/api/v1/gateway/send-sms');
+  });
+
+  test('a partial textbee set refuses to start, naming what is missing', () => {
+    expect(() => messengersFromEnv({ TEXTBEE_API_KEY: 'textbee-test-api-key', TEXTBEE_NUMBER: '+61412345678' }, { clock })).toThrow(
+      'Set TEXTBEE_API_KEY, TEXTBEE_DEVICE_ID, TEXTBEE_NUMBER and TEXTBEE_WEBHOOK_SECRET, or none. Missing: TEXTBEE_DEVICE_ID, TEXTBEE_WEBHOOK_SECRET',
+    );
   });
 });
