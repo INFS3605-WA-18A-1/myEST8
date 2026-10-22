@@ -316,6 +316,15 @@ The **Follow up with <first name>** panel is a `section` (`#follow-up`) on the M
 - **Releasing and disconnecting** go through a confirmation page (`/sms-number/release`) that says what happens. Releasing a created number can't be undone, so its text says so, and "Keep it" sits next to the confirm button.
 - Results come back as the page's flash, and the page returns to the anchor `#sms`.
 
+### Server SMS phone
+
+`serverSmsPanel({ from, number, current })` in `src/web/pages/server-sms.ts` is the one component for the server's SMS phone (textbee, ADR 0013). The welcome wizard's Channels step, the Setup page and Settings all render it when `ChannelConnectors.smsPhone` is set, so the three can't drift. The pages don't read the environment. While it is set, the typed number and code and `smsNumberPanel` are not shown.
+
+- **Not connected:** "Tenants text +61 412 345 678. This is the server's SMS phone." The number is bold. **Connect SMS** is a primary small button. There is no code: the phone is the server's.
+- **Connected** (`current` is that number): the number in bold, one line that it is the Agency's SMS number, and **Disconnect**, a secondary small button. Disconnect posts straight away. There is no confirmation page, because the phone stays the server's.
+- A second Agency is told "This server's SMS number is connected to another Agency."
+- Results come back as the page's flash, and the page returns to the anchor `#sms`.
+
 ### Importing from a spreadsheet
 
 Each setup step that creates many records (Property Owners, Building Managers, Tradies, Properties, Tenants) has "Add many from a spreadsheet" on `/setup`, folded like the "Add" forms, and the guide's Tradies and Properties steps have the same uploads (`importPanel()` in `onboarding-forms.ts`). The guide lists them in the order they must happen: Property Owners, then Properties, then Tenants.
@@ -358,6 +367,32 @@ Business name, Contact name, Mobile, Email, Trades, Starting rating   [Add Tradi
 - **Filled in from the listing:** the business name; the Mobile when the phone is an Australian mobile (04… or +614…); the Trades Jev suggests, ticked. Under the Trades: "Suggested from their Google listing. Check them." or, when Jev suggested none or failed, "Choose their Trades." The contact name, the email and the starting rating are always the Property Manager's to give.
 - **When Google fails** while loading a listing, the page shows "Google search isn't working right now. Try again, or mark the Tradie as not on Google." and the manual link. When Jev fails the form still fills in, with no Trades ticked.
 - **A refused form** comes back to the same choice: the form posts to a URL that carries `google`, `place` or `manual`. The wizard shows the posted values again; Setup and the Tradies page redirect back (`listingParams` builds the address) and fill in from the listing again. Nothing is stored until Add Tradie.
+
+### Emails
+
+`renderEmail({ agencyName, subject, text })` in `src/email-layout.ts` turns any template's plain text into the HTML email, so no template writes HTML. `notifications` sets it as `html` on every email (the Resend and SendGrid mailers send it with `text` as the alternative); SMS and WhatsApp stay plain text.
+
+```
+ Sand ────────────────────────────────────────────────
+ │  ┌────────────────────────────────────────────┐   │ 600px max, fluid below
+ │  │ Harbour Realty        (Night, white 20px)  │   │
+ │  ├────────────────────────────────────────────┤   │
+ │  │ Thanks, Kevin. To get this sorted we need: │   │ paragraphs from blank lines
+ │  │ ▌1. Is it getting worse? (yes or no)       │   │ Wattle edge: needs the Tenant
+ │  │ ▌2. When are you usually home: ...         │   │
+ │  │ ▌[ Upload photos ]                         │   │ Harbour button, address under it
+ │  └────────────────────────────────────────────┘   │
+ │  Reply to this email to answer or ask a question. │ Slate 13px on Sand
+ │  Sent through myEST8                              │
+```
+
+- **Tokens, as hex** (an email can't use `var()`; a test checks they equal `app.css`): Night `#13212E` for text and the header band, white on it; Sand `#F4EFE6` behind; white card with a 1px Line `#D8DEE4` border and 8px radius; Slate `#55636F` for the footer and the address under a button; Harbour `#1F5C8B` for the button (white on it, 6px radius, 44px tall) and inline links; Wattle `#FFC233` for the edge. No other colour.
+- **Type:** the system stack (`-apple-system`, Segoe UI, Roboto, Helvetica Neue, Arial), because the brand fonts won't load in mail clients. The Agency's name 20px 700, body 16px on 24px, footer and addresses 13px. Sentence case.
+- **The Agency heads it.** The Tenant or Tradie hears from their Agency; myEST8 is only "Sent through myEST8" in the footer. No images, no per-Agency colours.
+- **Wattle marks what needs a reply.** The numbered questions and a button each sit on a 4px Wattle edge, as a dashboard row that needs a decision does. An email that asks for nothing has none. Wattle is still never text or a button.
+- **Links.** A web address alone, last, or after a colon or full stop becomes the one Harbour button, labelled by the sentence it finishes ("Upload photos", "Upload receipt", "Give your quote", "Follow progress", otherwise "Open link"), with the address under it. An address inside a sentence stays a link.
+- **Left-aligned on one inset:** the name, paragraphs, list, button and footer share a left edge. Nothing is centred or in columns, so it holds at 375px with no media query.
+- **Markup:** table layout with `role="presentation"`, inline styles only, `lang="en-AU"`, a hidden preheader that is the first sentence, and `color-scheme: light` with a background on every cell so a client that darkens never leaves light text on nothing. All text is escaped.
 
 ## Vocabulary
 

@@ -12,7 +12,7 @@ import { createProfiles, type SignUp } from './profiles.ts';
 import { createQuotes, type EstimateInput, type FirmQuoteInput } from './quotes.ts';
 import { createScheduling } from './scheduling.ts';
 import type { SmsNumbers } from './sms-numbers.ts';
-import { DEFAULT_SETTINGS, invalid, notFound, type Role, type Settings, type Trade, type Urgency } from './shared.ts';
+import { ActionError, DEFAULT_SETTINGS, invalid, notFound, type Role, type Settings, type Trade, type Urgency } from './shared.ts';
 import { createTickets } from './tickets.ts';
 import { createViews, type ListOptions } from './views.ts';
 import { createWorker } from './worker.ts';
@@ -51,6 +51,7 @@ export function createApp(
       quoteReader: deps.quoteReader,
       summariser: deps.summariser,
       composer: deps.composer,
+      detailExtractor: deps.detailExtractor,
       places: deps.places,
       geocoder: deps.geocoder,
       addressSuggester: deps.addressSuggester,
@@ -207,6 +208,19 @@ export function createApp(
         addColleague: (input: { name: string; email: string }) => profiles.addColleague(agencyId, input),
         /** Stores an address the caller has already proved: the demo seed, Gmail OAuth, or a confirmed code. */
         connectChannel: (channelType: ChannelType, address: string) => onboarding.connectChannel(agencyId, channelType, address),
+        /** Connects the server's SMS phone as this Agency's SMS channel. The phone is already the server's, so no code is sent. */
+        connectServerSms: async (number: string) => {
+          try {
+            await onboarding.connectChannel(agencyId, 'sms', number, { verified: true });
+          } catch (error) {
+            if (error instanceof ActionError && error.message.endsWith('is connected to another Agency')) {
+              invalid("This server's SMS number is connected to another Agency.");
+            }
+            throw error;
+          }
+        },
+        /** Forgets the Agency's SMS channel when it is still the server's phone. */
+        disconnectServerSms: (number: string) => onboarding.disconnectChannel(agencyId, 'sms', number),
         /** Sends a 6-digit code. The typed address is not stored until confirmChannelVerification. */
         startChannelVerification: (channelType: ChannelType, address: string) => verification.start(agencyId, channelType, address),
         confirmChannelVerification: (channelType: ChannelType, address: string, code: string) => verification.confirm(agencyId, channelType, address, code),

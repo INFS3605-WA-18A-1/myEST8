@@ -15,7 +15,8 @@
 import { readFileSync } from 'node:fs';
 import type { App, PropertyManagerActions, Upload } from '../app.ts';
 import type { ChannelType } from '../ports.ts';
-import type { Trade } from '../shared.ts';
+import { AVAILABILITY, type Trade } from '../shared.ts';
+import { AVAILABILITY_LABELS } from '../templates.ts';
 import { wallClock, zonedInstant } from '../zoned-time.ts';
 import type { OffsetClock } from './clock.ts';
 import type { DemoControls, DemoOutboundMessage } from './controls.ts';
@@ -477,7 +478,7 @@ function noahsLoosePalings(k: Kit) {
   const s = k.story("Noah's loose palings");
   const text = 'Some palings on the back fence have come loose';
   s.on(6, '17:45', 'Noah reports it, and never sends photos', async () => {
-    await k.report(ids.noah, text, ['Back yard', 'After the wind on the weekend', 'No', '3']);
+    await k.report(ids.noah, text, ['Back yard', 'Since Saturday', 'No', '3']);
   });
   s.on(9, '08:00', 'It went ahead as a Maintenance Request without photos', async () => {
     const request = (await alice.dashboard({ filter: 'all' })).maintenanceRequests.find((r) => r.description === text);
@@ -734,20 +735,23 @@ async function createKit({ app, simulator, seed, clock, end }: { app: App; simul
   };
 
   /**
-   * A Tenant reports an issue and answers the four guided questions (where,
-   * since when, getting worse, when they're home) a couple of minutes apart.
+   * A Tenant reports an issue and answers the guided questions it asks (where,
+   * since when, getting worse, when they're home) in one reply a couple of
+   * minutes later, worded so the demo's mock extractor reads every answer.
    * Returns the token of the upload link they're sent.
    */
   async function report(tenantId: number, text: string, answers: readonly [string, string, string, string], firstPhotos: Upload[] = []) {
     const first = await say(tenantId, text, firstPhotos.length ? { attachments: firstPhotos } : {});
     expectSent(first, tenantId, 'tenant.acknowledgement');
-    let sent = first;
-    for (const [i, answer] of answers.entries()) {
-      expectSent(sent, tenantId, 'tenant.guided_question');
-      await wait(2 + i);
-      sent = await say(tenantId, answer);
-    }
-    return tokenIn(expectSent(sent, tenantId, 'tenant.upload_link'));
+    expectSent(first, tenantId, 'tenant.missing_details');
+    const [location, started, worsening, home] = answers;
+    const reply = [
+      `${location}, ${started.toLowerCase()}.`,
+      worsening.startsWith('Yes') ? "It's getting worse." : "It isn't getting worse.",
+      `I'm home ${AVAILABILITY_LABELS[AVAILABILITY[Number(home) - 1]!]}.`,
+    ].join(' ');
+    await wait(2);
+    return tokenIn(expectSent(await say(tenantId, reply), tenantId, 'tenant.upload_link'));
   }
 
   /** Uploads through a no-login link, as the Tenant's phone would. Returns what myEST8 sent as a result. */

@@ -20,12 +20,12 @@ function template<D>(subject: string, text: (data: D, agency: AgencyInfo) => str
   return { subject, text };
 }
 
+/** Each guided question as it is asked, with a hint at how to reply. */
 const GUIDED_QUESTIONS: Record<GuidedQuestion, string> = {
   location: 'Where in the property is the issue?',
   started: 'When did it start?',
-  worsening: 'Is it getting worse? Reply YES or NO.',
-  availability:
-    'When are you usually home? Reply 1 for weekday mornings, 2 for weekday afternoons, 3 for Saturdays or 4 for any time.',
+  worsening: 'Is it getting worse? (yes or no)',
+  availability: 'When are you usually home: weekday mornings, weekday afternoons, Saturdays or any time?',
 };
 
 export const AVAILABILITY_LABELS: Record<Availability, string> = {
@@ -43,7 +43,10 @@ export const templates = {
     'We got your message',
     (d, a) => `Hi ${d.tenantName}, this is ${a.name}. Thanks for letting us know about an issue at ${d.propertyAddress}. We've got your message.`,
   ),
-  'tenant.guided_question': template<{ question: GuidedQuestion }>('A quick question', (d) => GUIDED_QUESTIONS[d.question]),
+  // Only the questions the Tenant hasn't answered yet, in the usual order. Each line starts with its number so an email can lay them out as a list.
+  'tenant.missing_details': template<{ tenantName: string; questions: GuidedQuestion[] }>('A few quick questions', (d) =>
+    [`Thanks, ${d.tenantName}. To get this sorted we just need:`, ...d.questions.map((q, i) => `${i + 1}. ${GUIDED_QUESTIONS[q]}`)].join('\n'),
+  ),
   'tenant.upload_link': template<{ uploadLink: string; alreadyHave?: number }>(
     'Please send photos',
     (d) =>

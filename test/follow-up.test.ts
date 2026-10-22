@@ -12,10 +12,7 @@ const NOTES = 'Is it still dripping? Can you turn the water off at the meter?';
 async function tomsRequest({ h, alice }: World, channel: 'sms' | 'whatsapp' = 'sms') {
   h.classifier.when('The kitchen tap is dripping', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });
   await h.receive(TOM, 'The kitchen tap is dripping', { channel });
-  await h.answer(TOM, 'Kitchen sink', 'answer', { channel });
-  await h.answer(TOM, 'Since Monday', 'answer', { channel });
-  await h.answer(TOM, 'No', 'no', { channel });
-  await h.answer(TOM, 'Mornings', 'weekday_mornings', { channel });
+  await h.answerAll(TOM, { location: 'Kitchen sink', started: 'Since Monday', worsening: 'no', availability: 'weekday_mornings' }, { channel });
   await h.upload(h.messenger.last(TOM)!.data.uploadLink as string, [upload('tap.jpg')]);
   return (await alice.dashboard()).maintenanceRequests[0]!.issueId;
 }
@@ -63,10 +60,7 @@ describe('drafting a follow-up', () => {
     h.summariser.next = new Error('Claude is down');
     h.classifier.when('The kitchen tap is dripping', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });
     await h.receive(TOM, 'The kitchen tap is dripping', { channel: 'whatsapp' });
-    await h.answer(TOM, 'Kitchen sink', 'answer', { channel: 'whatsapp' });
-    await h.answer(TOM, 'Since Monday', 'answer', { channel: 'whatsapp' });
-    await h.answer(TOM, 'No', 'no', { channel: 'whatsapp' });
-    await h.answer(TOM, 'Mornings', 'weekday_mornings', { channel: 'whatsapp' }).catch(() => {});
+    await h.answerAll(TOM, { location: 'Kitchen sink', started: 'Since Monday', worsening: 'no', availability: 'weekday_mornings' }, { channel: 'whatsapp' }).catch(() => {});
     await h.upload(h.messenger.last(TOM)!.data.uploadLink as string, [upload('tap.jpg')]).catch(() => {});
     const [request] = (await alice.dashboard()).maintenanceRequests;
 
@@ -121,10 +115,7 @@ describe('drafting a follow-up', () => {
     await h.advance(HOUR);
     h.classifier.when('The bathroom light is flickering', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'electrical' });
     await h.receive(TOM, 'The bathroom light is flickering');
-    await h.answer(TOM, 'Bathroom');
-    await h.answer(TOM, 'Last week');
-    await h.answer(TOM, 'No', 'no');
-    await h.answer(TOM, 'Mornings', 'weekday_mornings');
+    await h.answerAll(TOM, { location: 'Bathroom', started: 'Last week', worsening: 'no', availability: 'weekday_mornings' });
     await h.upload(h.messenger.last(TOM)!.data.uploadLink as string, [upload('light.jpg')]);
     const [waiting] = (await alice.dashboard()).maintenanceRequests;
     await alice.rejectMaintenanceRequest(waiting!.issueId, 'The fitting is the Tenant\'s own');

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { hostedApp } from '../src/hosted.ts';
 import { demoEnv, testDb } from './support/db.ts';
 import { addPropertyTo, stubFetch } from './support/geocoding.ts';
+import { signUpFields } from './support/web.ts';
 
 // A migrated schema stands in for the hosted database, which `supabase db push` migrates.
 // ALLOW_MOCKS=1: these tests have no provider keys, and the missing ones run on mocks.
@@ -144,6 +145,43 @@ describe('hosted mode and missing provider settings', () => {
 
     expect(requests.filter((r) => r.url.includes('/search')).map((r) => new URL(r.url).origin)).toEqual(['https://nominatim.example']);
     await hosted.close();
+  });
+
+  const textbeeEnv = {
+    TEXTBEE_API_KEY: 'textbee-test-api-key',
+    TEXTBEE_DEVICE_ID: '664a9b8cd0e1f2a3b4c5d6e7',
+    TEXTBEE_NUMBER: '+61412345678',
+    TEXTBEE_WEBHOOK_SECRET: 'textbee-webhook-secret-20',
+  };
+
+  async function channelsHtml(env: Record<string, string>) {
+    const hosted = await hostedApp(env, () => {});
+    const signup = await hosted.web.fetch(new Request('https://myest8.test/signup', { method: 'POST', body: new URLSearchParams(signUpFields()) }));
+    const cookie = signup.headers.get('set-cookie')?.split(';')[0];
+    if (signup.status !== 303 || !cookie) throw new Error(`Sign-up failed: ${signup.status}`);
+    const page = await hosted.web.fetch(new Request('https://myest8.test/welcome/channels', { headers: { cookie } }));
+    const html = await page.text();
+    await hosted.close();
+    return html;
+  }
+
+  test('a partial textbee set refuses to start, naming what is missing', async () => {
+    const env = await hostedEnv({ TEXTBEE_WEBHOOK_SECRET: 'textbee-webhook-secret-20' });
+    await expect(hostedApp(env, () => {})).rejects.toThrow('Missing: TEXTBEE_API_KEY, TEXTBEE_DEVICE_ID, TEXTBEE_NUMBER');
+  });
+
+  test('hosted with textbee does not list SMS as unavailable', async () => {
+    const html = await channelsHtml(await hostedEnv(textbeeEnv));
+    expect(html).not.toContain('data-unavailable="sms"');
+    // The server's phone is offered instead of the typed number and code.
+    expect(html).toContain('Tenants text <strong>+61 412 345 678.</strong> This is the server\'s SMS phone.');
+    expect(html).toContain('Connect SMS');
+    expect(html).not.toContain('id="sms-address"');
+  });
+
+  test('hosted without an SMS provider still lists SMS as unavailable', async () => {
+    const html = await channelsHtml(await hostedEnv());
+    expect(html).toContain('data-unavailable="sms"');
   });
 
   test('Twilio credentials without TWILIO_SMS_FROM refuse to start', async () => {

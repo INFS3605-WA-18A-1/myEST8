@@ -123,7 +123,7 @@ describe('the demo stories', () => {
 
     await d.demo.sendAs(d.seed.ids.aliceId, TOM, 'sms', 'The kitchen tap is dripping');
     const toTom = (await d.demo.outbox(d.seed.ids.aliceId)).filter((m) => m.to === TOM);
-    expect(toTom.map((m) => m.template)).toEqual(['tenant.acknowledgement', 'tenant.guided_question']);
+    expect(toTom.map((m) => m.template)).toEqual(['tenant.acknowledgement', 'tenant.missing_details']);
     expect(errors).toEqual([]);
   });
 });

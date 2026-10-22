@@ -45,11 +45,12 @@ describe('the demo script', () => {
     const TOM = '+61400000001';
 
     await d.say('Tom Tran', 'The kitchen tap is dripping');
-    expect((await d.demo.outbox(d.seed.ids.aliceId)).filter((m) => m.to === TOM).map((m) => m.template)).toEqual(['tenant.acknowledgement', 'tenant.guided_question']);
-    await d.say('Tom Tran', 'Kitchen sink');
-    await d.say('Tom Tran', 'Since Monday');
-    await d.say('Tom Tran', 'No');
-    await d.say('Tom Tran', '1');
+    expect((await d.demo.outbox(d.seed.ids.aliceId)).filter((m) => m.to === TOM).map((m) => m.template)).toEqual(['tenant.acknowledgement', 'tenant.missing_details']);
+    // "The kitchen tap" already says where, so he is asked about the other three, and answers them in one reply.
+    expect((await d.lastTo(TOM)).text).toBe(
+      'Thanks, Tom. To get this sorted we just need:\n1. When did it start?\n2. Is it getting worse? (yes or no)\n3. When are you usually home: weekday mornings, weekday afternoons, Saturdays or any time?',
+    );
+    await d.say('Tom Tran', "Since Monday. It isn't getting worse, and I'm home weekday mornings.");
     expect((await d.lastTo(TOM)).template).toBe('tenant.upload_link');
 
     const form = new FormData();
@@ -60,7 +61,12 @@ describe('the demo script', () => {
 
     expect(await d.page('/')).toContain('The kitchen tap is dripping');
     const [request] = (await d.alice.dashboard()).maintenanceRequests;
-    expect(request).toMatchObject({ urgency: 'routine', trade: 'plumbing', photos: [{ metadata: 'ok' }] });
+    expect(request).toMatchObject({
+      urgency: 'routine',
+      trade: 'plumbing',
+      photos: [{ metadata: 'ok' }],
+      answers: { location: 'kitchen tap', started: 'Since Monday', worsening: 'no', availability: 'weekday_mornings' },
+    });
     const confirmed = await d.post(`/requests/${request!.issueId}/confirm`, {});
     const ticketPath = confirmed.headers.get('location')!.split('?')[0]!;
     const ticketId = Number(ticketPath.split('/').at(-1));

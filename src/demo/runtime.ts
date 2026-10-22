@@ -1,12 +1,13 @@
 // The whole app wired for a demo: a database (a throwaway Postgres schema, or
 // the schema named by DATABASE_SCHEMA so it survives restarts), the in-process mock APIs (or real
 // ones, from env vars), a simulated messenger (that also sends for real through
-// Twilio and SendGrid when their env vars are set), a movable clock, and the
+// Twilio, textbee and SendGrid when their env vars are set), a movable clock, and the
 // seeded Agency.
 
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
 import { createClaudeClassifier } from '../adapters/claude-classifier.ts';
 import { createClaudeComposer } from '../adapters/claude-composer.ts';
+import { createClaudeExtractor } from '../adapters/claude-extractor.ts';
 import { createClaudeSummariser } from '../adapters/claude-summariser.ts';
 import { createGooglePlaces } from '../adapters/google-places.ts';
 import { createImageMatcher } from '../adapters/image-matcher.ts';
@@ -32,7 +33,7 @@ import { createSessions } from '../web/auth.ts';
 import { createWebApp } from '../web/server.ts';
 import { OffsetClock } from './clock.ts';
 import type { DemoContact, DemoControls, DemoInboundMessage, DemoOutboundMessage } from './controls.ts';
-import { mockApis, mockComposer, mockSummariser } from './mock-apis.ts';
+import { mockApis, mockComposer, mockExtractor, mockSummariser } from './mock-apis.ts';
 import { seedDemo, type DemoSeed } from './seed.ts';
 import { SimulatedMessenger } from './simulated-messenger.ts';
 import { seedStories, storiesStart } from './stories.ts';
@@ -259,14 +260,14 @@ export async function createDemo<Seeded extends boolean = true>(
     places: env.GOOGLE_MAPS_API_KEY ? 'real' : 'mock',
     geocoder: nominatimUrl ? 'real' : 'mock',
     addressSuggester: photonUrl ? 'real' : 'mock',
-    messenger: env.TWILIO_ACCOUNT_SID || env.SENDGRID_API_KEY || env.RESEND_API_KEY || env.GOOGLE_CLIENT_ID || env.META_WHATSAPP_PHONE_NUMBER_ID ? 'real' : 'mock',
+    messenger: env.TWILIO_ACCOUNT_SID || env.SENDGRID_API_KEY || env.RESEND_API_KEY || env.GOOGLE_CLIENT_ID || env.META_WHATSAPP_PHONE_NUMBER_ID || env.TEXTBEE_API_KEY ? 'real' : 'mock',
   };
 
   const messenger = new SimulatedMessenger(clock, async (message) => {
     await store.addMessage('out', message);
     options.onOutbound?.(message);
   });
-  // Channels whose provider is configured (TWILIO_*, SENDGRID_*) really send, but
+  // Channels whose provider is configured (TWILIO_*, TEXTBEE_*, SENDGRID_*) really send, but
   // only to the addresses in DEMO_SEND_TO ("*" for anyone): the seeded people's
   // numbers are made up and could belong to someone. The simulator records every
   // message once it's sent. File links run on real time, as Twilio fetches them in
@@ -279,7 +280,8 @@ export async function createDemo<Seeded extends boolean = true>(
     agencyNumbers: encryptionKey !== null,
     ...(options.log ? { log: options.log } : {}),
   });
-  const smsNumbers = encryptionKey ? smsNumbersFromEnv(env, { db, baseUrl, fileLinks: providers.fileLinks, encryptionKey }) : null;
+  // textbee is the one SMS phone for the server (ADR 0013), so the Twilio number-per-Agency panel is not built.
+  const smsNumbers = encryptionKey && !providers.textbee ? smsNumbersFromEnv(env, { db, baseUrl, fileLinks: providers.fileLinks, encryptionKey }) : null;
   // Gmail (ADR 0004): each Agency connects its own mailbox by OAuth, so its
   // Messenger and reader need the database, not just env vars.
   const mailboxes = gmailFromEnv(env, db, baseUrl);
@@ -306,6 +308,8 @@ export async function createDemo<Seeded extends boolean = true>(
     summariser: anthropicKey ? createClaudeSummariser({ apiKey: anthropicKey, fetch }) : mockSummariser,
     // Hosted with no key has no model at all, so a follow-up keeps the notes as written; the demo's mock shows the draft flow.
     composer: anthropicKey ? createClaudeComposer({ apiKey: anthropicKey, fetch }) : hosted ? null : mockComposer,
+    // Hosted with no key reads nothing from a first message, so intake asks all four questions in one message.
+    detailExtractor: anthropicKey ? createClaudeExtractor({ apiKey: anthropicKey, fetch }) : hosted ? null : mockExtractor,
     imageMatcher: createImageMatcher({ ...vision, apiKey: env.VISION_API_KEY ?? 'demo' }),
     quoteReader: createQuoteReader({ ...quotes, apiKey: env.QUOTES_API_KEY ?? 'demo', clock, timeZone }),
     places: createGooglePlaces(google),
@@ -440,9 +444,12 @@ export async function createDemo<Seeded extends boolean = true>(
     demoSignIns: seed !== null,
     whatsapp: env.META_APP_SECRET?.trim() && env.META_WEBHOOK_VERIFY_TOKEN?.trim() ? { appSecret: env.META_APP_SECRET.trim(), verifyToken: env.META_WEBHOOK_VERIFY_TOKEN.trim() } : null,
     resend,
+    textbee: providers.textbee,
     connectors: {
       gmail: mailboxes?.connector ?? null,
       smsInbound: hosted ? 'none' : 'simulator',
+      // The phone's number is read in textbeeFromEnv. The pages only see it here.
+      smsPhone: providers.textbee?.number ?? null,
       unavailable: [
         // The demo simulates SMS; a hosted server needs a real provider, or a code can only fail.
         ...(hosted && !providers.channels.sms && !smsNumbers ? (['sms'] as const) : []),
@@ -452,7 +459,7 @@ export async function createDemo<Seeded extends boolean = true>(
     },
   });
 
-  return { app, web, demo, sessions, clock, messenger, seed, stories, database, baseUrl, apis, runWorker, startWorkerLoop, close };
+  return { app, web, demo, sessions, clock, messenger, seed, stories, database, baseUrl, apis, textbee: providers.textbee, runWorker, startWorkerLoop, close };
 }
 
 const MAIL_POLL_MS = 30_000;

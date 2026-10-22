@@ -1,9 +1,11 @@
 import { createApp, type PropertyManagerActions } from '../../src/app.ts';
 import type { Db } from '../../src/db.ts';
-import type { BlobStore, ChannelType, Clock, InboundAttachment } from '../../src/ports.ts';
+import type { BlobStore, ChannelType, Clock, ExtractedDetails, InboundAttachment, Messenger } from '../../src/ports.ts';
+import type { Availability } from '../../src/shared.ts';
 import type { SmsNumbers } from '../../src/sms-numbers.ts';
+import { AVAILABILITY_LABELS } from '../../src/templates.ts';
 import { testDb } from './db.ts';
-import { FakeClassifier, FakeClock, FakeComposer, FakeAddressSuggester, FakeGeocoder, FakeImageMatcher, FakeMessenger, FakePlaces, FakeQuoteReader, FakeSummariser, FakeTradeSuggester } from './fakes.ts';
+import { FakeClassifier, FakeClock, FakeComposer, FakeDetailExtractor, FakeAddressSuggester, FakeGeocoder, FakeImageMatcher, FakeMessenger, FakePlaces, FakeQuoteReader, FakeSummariser, FakeTradeSuggester } from './fakes.ts';
 
 /** Thursday 8 October 2026, 9:00 am in Sydney. */
 export const START = new Date('2026-10-08T09:00:00+11:00');
@@ -17,14 +19,27 @@ export const AGENCY_INBOX = 'inbox@harbour.example';
 export type Harness = Awaited<ReturnType<typeof createHarness>>;
 
 /** Drives the app through its boundary: inbound messages, uploads, Property Manager actions and the clock. */
-export async function createHarness(options: { blobs?: BlobStore; smsNumbers?: (db: Db, clock: Clock) => SmsNumbers; composer?: null } = {}) {
+export async function createHarness(
+  options: { blobs?: BlobStore; smsNumbers?: (db: Db, clock: Clock) => SmsNumbers; composer?: null; detailExtractor?: null; messenger?: Messenger } = {},
+) {
   const clock = new FakeClock(START);
-  const messenger = new FakeMessenger();
+  const recorded = new FakeMessenger();
+  const provider = options.messenger;
+  // A test can send through a real provider (textbee) and still read what went out.
+  const messenger: Messenger = provider
+    ? {
+        async send(message) {
+          await provider.send(message);
+          await recorded.send(message);
+        },
+      }
+    : recorded;
   const classifier = new FakeClassifier();
   const imageMatcher = new FakeImageMatcher();
   const quoteReader = new FakeQuoteReader();
   const summariser = new FakeSummariser();
   const composer = new FakeComposer();
+  const detailExtractor = new FakeDetailExtractor();
   const places = new FakePlaces();
   const geocoder = new FakeGeocoder();
   const addressSuggester = new FakeAddressSuggester();
@@ -40,6 +55,7 @@ export async function createHarness(options: { blobs?: BlobStore; smsNumbers?: (
     quoteReader,
     summariser,
     composer: options.composer === null ? null : composer,
+    detailExtractor: options.detailExtractor === null ? null : detailExtractor,
     places,
     geocoder,
     addressSuggester,
@@ -77,17 +93,32 @@ export async function createHarness(options: { blobs?: BlobStore; smsNumbers?: (
     await drain();
   }
 
+  /** Replies to a question the agent asked, scripting the classifier to read it as `answer` to that question. */
+  async function answer(from: string, text: string, answer = 'answer', options: { channel?: ChannelType } = {}) {
+    const kind = /^[1-5]$/.test(answer) ? 'fix_rating' : answer === 'confirm' || answer === 'reschedule' ? 'visit' : 'guided';
+    classifier.when(text, {
+      messageClass: 'update',
+      updateType: 'general',
+      'answer:guided': 'not_an_answer',
+      'answer:visit': 'not_an_answer',
+      'answer:fix_rating': 'not_an_answer',
+      [`answer:${kind}`]: answer,
+    });
+    await receive(from, text, options);
+  }
+
   return {
     app,
     db,
     smsNumbers,
     clock,
-    messenger,
+    messenger: recorded,
     classifier,
     imageMatcher,
     quoteReader,
     summariser,
     composer,
+    detailExtractor,
     places,
     geocoder,
     addressSuggester,
@@ -95,18 +126,26 @@ export async function createHarness(options: { blobs?: BlobStore; smsNumbers?: (
     drain,
     receive,
 
-    /** Replies to a question the agent asked, scripting the classifier to read it as `answer` to that question. */
-    async answer(from: string, text: string, answer = 'answer', options: { channel?: ChannelType } = {}) {
-      const kind = /^[1-5]$/.test(answer) ? 'fix_rating' : answer === 'confirm' || answer === 'reschedule' ? 'visit' : 'guided';
-      classifier.when(text, {
-        messageClass: 'update',
-        updateType: 'general',
-        'answer:guided': 'not_an_answer',
-        'answer:visit': 'not_an_answer',
-        'answer:fix_rating': 'not_an_answer',
-        [`answer:${kind}`]: answer,
-      });
-      await receive(from, text, options);
+    answer,
+
+    /** Replies with all four answers in one message, as a Tenant answers a message that asks for them all. */
+    async answerAll(
+      from: string,
+      details: { location: string; started: string; worsening: 'yes' | 'no'; availability: Availability },
+      options: { channel?: ChannelType } = {},
+    ) {
+      const text = [details.location, details.started, details.worsening === 'yes' ? 'Getting worse' : 'Not getting worse', `Home ${AVAILABILITY_LABELS[details.availability]}`].join('. ');
+      detailExtractor.when(text, details);
+      await answer(from, text, 'answer', options);
+    },
+
+    /**
+     * Replies to the agent's questions with `text`, scripting the classifier to read it as an answer
+     * and the extractor to find `details` in it. The extractor still returns only the details asked for.
+     */
+    async answerDetails(from: string, text: string, details: ExtractedDetails, options: { channel?: ChannelType } = {}) {
+      detailExtractor.when(text, details);
+      await answer(from, text, 'answer', options);
     },
 
     async upload(link: string, files: { filename: string; contentType: string; content: Uint8Array }[], options: { amountCents?: number } = {}) {

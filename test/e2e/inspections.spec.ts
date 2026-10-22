@@ -77,7 +77,7 @@ test('two Tradies on their own paths: one inspects first, both give Firm Quotes,
   await page.getByRole('navigation', { name: 'People' }).getByRole('link', { name: /^Tom Tran/ }).click();
   const phone = page.getByRole('region', { name: "Tom Tran's phone" });
   const messages = phone.getByRole('region', { name: 'Messages with Tom Tran' });
-  for (const text of [report, 'Kitchen sink', 'Since Monday', 'No', '1']) {
+  for (const text of [report, "Since Monday. It isn't getting worse. I'm home weekday mornings."]) {
     await phone.getByRole('textbox', { name: 'Message' }).fill(text);
     await phone.getByRole('button', { name: 'Send as Tom Tran' }).click();
     await expect(messages.getByText(text, { exact: true }).last()).toBeVisible();

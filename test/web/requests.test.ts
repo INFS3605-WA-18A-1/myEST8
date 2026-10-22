@@ -59,10 +59,7 @@ describe('the checks on a Maintenance Request', () => {
 async function report({ h }: World, from: string, description: string, urgency: 'routine' | 'high' = 'routine') {
   h.classifier.when(description, { messageClass: 'new_issue', relatedItem: 'none', urgency, trade: 'plumbing' });
   await h.receive(from, description);
-  await h.answer(from, 'Kitchen sink');
-  await h.answer(from, 'Since Monday');
-  await h.answer(from, 'No', 'no');
-  await h.answer(from, 'Mornings', 'weekday_mornings');
+  await h.answerAll(from, { location: 'Kitchen sink', started: 'Since Monday', worsening: 'no', availability: 'weekday_mornings' });
   return h.messenger.last(from)!.data.uploadLink as string;
 }
 

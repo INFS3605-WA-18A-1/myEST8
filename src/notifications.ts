@@ -1,4 +1,5 @@
 import type { Context } from './context.ts';
+import { renderEmail } from './email-layout.ts';
 import type { ChannelType } from './ports.ts';
 import type { Person } from './profiles.ts';
 import { HOUR_MS, invalid } from './shared.ts';
@@ -52,6 +53,7 @@ export function createNotifications({ clock, ports, files, modules }: Context) {
       cc,
       subject: template.subject,
       text,
+      ...(channelType === 'email' ? { html: renderEmail({ agencyName: agency.name, subject: template.subject, text }) } : {}),
       template: name,
       data,
       attachments: await Promise.all(attachmentFileIds.map((id) => files.get(id))),
@@ -125,13 +127,15 @@ export function createNotifications({ clock, ports, files, modules }: Context) {
       const agency = await profiles.agency(agencyId);
       const from = (await profiles.channelAddress(agencyId, channelType)) ?? 'myEST8';
       const template = templates['onboarding.verification_code'];
+      const text = template.text({ code }, agency);
       await ports.messenger.send({
         channelType,
         from,
         to,
         cc: [],
         subject: template.subject,
-        text: template.text({ code }, agency),
+        text,
+        ...(channelType === 'email' ? { html: renderEmail({ agencyName: agency.name, subject: template.subject, text }) } : {}),
         template: 'onboarding.verification_code',
         data: { code },
         attachments: [],

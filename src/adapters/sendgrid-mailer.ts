@@ -2,6 +2,7 @@
 //   POST {apiBaseUrl}/v3/mail/send   authorization: Bearer <apiKey>
 //   { personalizations: [{ to, cc }], from, reply_to, subject, content, attachments }
 //   -> 202 with an empty body
+// content is the plain text, then the HTML when there is one (SendGrid wants text/plain first).
 // reply_to is the Agency's inbox address, the one its Inbound Parse host receives
 // on, so a reply comes back in through /webhooks/sendgrid.
 // Errors come back as { "errors": [{ "message": "...", "field": "...", "help": null }] }.
@@ -42,7 +43,7 @@ export function createSendgridMailer({ apiKey, from, fetch: fetchImpl = fetch, a
         from: { email: from ?? message.from },
         reply_to: { email: message.from },
         subject: message.subject,
-        content: [{ type: 'text/plain', value: message.text }],
+        content: [{ type: 'text/plain', value: message.text }, ...(message.html ? [{ type: 'text/html', value: message.html }] : [])],
         ...(message.attachments.length
           ? {
               attachments: message.attachments.map((a) => ({
