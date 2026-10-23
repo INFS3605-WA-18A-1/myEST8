@@ -3,15 +3,17 @@
 // Google listings. Each renderer takes the values to show again and the errors
 // to show next to each control, keyed by the posted field name.
 
+import type { Context } from 'hono';
 import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
 import { MAX_IMPORT_ROWS, type ImportKind } from '../../imports.ts';
 import type { ChannelType } from '../../ports.ts';
 import { MAX_SHEET_BYTES } from '../../spreadsheet.ts';
 import { ActionError, TRADES, type Trade } from '../../shared.ts';
+import type { WebEnv } from '../env.ts';
 import { int, list, optional, text, type FormValues } from '../forms.ts';
 import { icon } from '../icons.ts';
-import { alert, badge, button, contactLink, dl, emptyState, field, formatWhen, humanise, ratingChip, rowLink, table, type Html, type Option } from '../ui.ts';
+import { alert, badge, button, contactLink, dl, emptyState, field, formatWhen, humanise, ratingChip, rowLink, table, withFlash, type Html, type Option } from '../ui.ts';
 
 type Person = Awaited<ReturnType<PropertyManagerActions['people']>>[number];
 type Listing = Awaited<ReturnType<PropertyManagerActions['findGoogleListings']>>[number];
@@ -42,6 +44,25 @@ export function unavailableNote(type: ChannelType, unavailable: readonly Channel
   const left = working.length ? ` Tenants can still reach you by ${working.join(' and ')}.` : '';
   const what = type === 'email' ? 'Email forwarding' : channel.name;
   return html`<p class="text-sm" data-unavailable="${type}">${what} isn't available on this server yet.${left}</p>`;
+}
+
+/** What a refused edit of a profile's details shows again: what was posted, the reason under each field, and the reason itself for when it names no field. */
+export type DetailsEdit = { values: Values; errors: Errors; message: string };
+
+/**
+ * Saves a profile's edited details (`save` is given the posted form). Saved, it goes back to the profile
+ * with "Details saved." Refused, `show` renders the profile again with the form open, as it was posted
+ * and with the reason; it is also what shows a record that isn't the Agency's, as a 404.
+ */
+export async function saveDetails(c: Context<WebEnv>, o: { profile: string; save: (form: FormValues) => Promise<unknown>; show: (refused: DetailsEdit) => Promise<Response> }) {
+  const form = (await c.req.parseBody({ all: true })) as FormValues;
+  try {
+    await o.save(form);
+    return c.redirect(withFlash(o.profile, 'ok', 'Details saved.'), 303);
+  } catch (error) {
+    if (!(error instanceof ActionError)) throw error;
+    return o.show({ values: valuesOf(form), errors: { ...error.fields }, message: error.message });
+  }
 }
 
 /** The posted form's text values, to show again after a refusal. Passwords are left out. */

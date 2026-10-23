@@ -219,3 +219,97 @@ describe('adding and removing Tenants', () => {
     expect(await (await w.get('/tenants', await w.signIn())).text()).toContain(`href="/tenants/${w.ids.tom}"`);
   });
 });
+
+describe('editing a Tenant from their profile', () => {
+  const PEN = (id: number) => `href="/tenants/${id}?edit=details#details"`;
+  /** The details block of a profile: from its id to the end of its section. */
+  const detailsOf = (page: string) => page.slice(page.indexOf('id="details"'), page.indexOf('</section>', page.indexOf('id="details"')));
+
+  test('the details have a pen named "Edit details" that opens the form with no JavaScript', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    const page = await (await w.get(`/tenants/${w.ids.tom}`, cookie)).text();
+    expect(detailsOf(page)).toContain(`<a ${PEN(w.ids.tom)} class="icon-btn" aria-label="Edit details" title="Edit details">`);
+    expect(page).not.toContain(`action="/tenants/${w.ids.tom}/details"`);
+    expect(visible(detailsOf(page))).toContain('Property Manager');
+  });
+
+  test('?edit=details shows the form filled in, in place of the details, with Save and a Cancel back to the plain profile', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    const page = await (await w.get(`/tenants/${w.ids.hana}?edit=details`, cookie)).text();
+    const form = detailsOf(page);
+    expect(form).toContain(`<form method="post" action="/tenants/${w.ids.hana}/details"`);
+    expect(form).toMatch(/<input[^>]* name="name"[^>]* value="Hana Ho"/);
+    expect(form).toMatch(/<input[^>]* name="mobile"[^>]* value="\+61400000002"/);
+    expect(form).toMatch(/<input[^>]* name="email"[^>]* value="hana@example.com"/);
+    expect(form).toMatch(/<button type="submit"[^>]*>Save<\/button>/);
+    expect(form).toContain(`<a href="/tenants/${w.ids.hana}" class="btn btn-ghost">Cancel</a>`);
+    expect(form).not.toContain('aria-label="Edit details"');
+    expect(visible(form)).not.toContain('Property Manager');
+  });
+
+  test('Save shows the change with "Details saved." and the new mobile is the one linked', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    const res = await w.post(`/tenants/${w.ids.tom}/details`, { name: 'Thomas Tran', mobile: '0412 345 678', email: '' }, cookie);
+    expect(res.status).toBe(303);
+    expect(res.headers.get('location')).toMatch(new RegExp(`^/tenants/${w.ids.tom}\\?ok=`));
+    const page = await (await w.get(res.headers.get('location')!, cookie)).text();
+    expect(visible(page)).toContain('Details saved.');
+    expect(visible(page)).toContain('Thomas Tran');
+    expect(page).toContain('href="tel:+61412345678"');
+    expect(page).not.toContain(`href="tel:${TOM}"`);
+    expect(page).not.toContain(`action="/tenants/${w.ids.tom}/details"`);
+  });
+
+  test('a refused save keeps what was typed and shows the reason under its field', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    const res = await w.post(`/tenants/${w.ids.tom}/details`, { name: 'Thomas Tran', mobile: HANA, email: 'tom@example.com' }, cookie);
+    expect(res.status).toBe(400);
+    const form = detailsOf(await res.text());
+    expect(form).toMatch(/<input[^>]* name="name"[^>]* value="Thomas Tran"/);
+    expect(form).toMatch(/<input[^>]* name="mobile"[^>]* aria-invalid="true"[^>]* value="\+61400000002"/);
+    expect(form).toMatch(/<input[^>]* name="email"[^>]* value="tom@example.com"/);
+    expect(form).toMatch(/<p id="tenant-mobile-error" class="field-error">\+61400000002 already belongs to someone else<\/p>/);
+    expect(await w.alice.tenant(w.ids.tom)).toMatchObject({ name: 'Tom Tran', mobile: TOM });
+  });
+
+  test('with neither a mobile nor an email the reason is under Mobile, the first of the two', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    const res = await w.post(`/tenants/${w.ids.bella}/details`, { name: 'Bella Bui', mobile: '', email: '' }, cookie);
+    expect(res.status).toBe(400);
+    expect(detailsOf(await res.text())).toMatch(/<p id="tenant-mobile-error" class="field-error">Enter a mobile number or email address<\/p>/);
+  });
+
+  test('a Tenant who has left has no pen, ?edit=details is the plain view, and a save is refused with the reason', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+    await w.alice.removeTenant(w.ids.hana);
+
+    const profile = await (await w.get(`/tenants/${w.ids.hana}?edit=details`, cookie)).text();
+    expect(profile).not.toContain('aria-label="Edit details"');
+    expect(profile).not.toContain(`action="/tenants/${w.ids.hana}/details"`);
+
+    const res = await w.post(`/tenants/${w.ids.hana}/details`, { name: 'Hana Ho', mobile: HANA }, cookie);
+    expect(res.status).toBe(400);
+    expect(visible(await res.text())).toContain('Hana Ho has already left their Property');
+  });
+
+  test("another Agency's Tenant can't be edited: the page is a 404 and nothing changes", async () => {
+    const w = await webWorld();
+    const sunrise = await w.signUp();
+
+    const res = await w.post(`/tenants/${w.ids.tom}/details`, { name: 'Not Tom', mobile: '0412 345 678' }, sunrise);
+    expect(res.status).toBe(404);
+    expect((await w.get(`/tenants/${w.ids.tom}?edit=details`, sunrise)).status).toBe(404);
+    expect(await w.alice.tenant(w.ids.tom)).toMatchObject({ name: 'Tom Tran', mobile: TOM });
+  });
+});

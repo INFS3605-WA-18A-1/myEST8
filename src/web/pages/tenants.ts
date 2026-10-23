@@ -5,9 +5,10 @@
 //
 // The list adds a Tenant to a Property (the form posts to /setup/tenants, which comes
 // back here) and removes one: they leave their Property, but their profile and the
-// Tickets they raised stay.
+// Tickets they raised stay. The profile's pen opens the name, mobile and email in a
+// form (?edit=details) that posts to /tenants/:id/details.
 
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
 import { ActionError } from '../../shared.ts';
@@ -18,7 +19,9 @@ import {
   alert,
   button,
   contactLink,
+  detailsForm,
   dl,
+  editPen,
   emptyState,
   entityLink,
   field,
@@ -38,7 +41,7 @@ import {
   urgencyBadge,
   type Html,
 } from '../ui.ts';
-import { contactFields, fieldGrid, propertyOptions } from './onboarding-forms.ts';
+import { contactFields, contactFrom, fieldGrid, propertyOptions, saveDetails, type DetailsEdit } from './onboarding-forms.ts';
 import { formatDate } from './properties.ts';
 
 type TenantList = Awaited<ReturnType<PropertyManagerActions['tenants']>>;
@@ -85,42 +88,53 @@ export function tenantProfilePages() {
     });
   });
 
-  pages.get('/:id{[0-9]+}', async (c) => {
-    const { actions, pm } = c.var;
-    let tenant: TenantView;
-    try {
-      tenant = await actions.tenant(Number(c.req.param('id')));
-    } catch (error) {
-      if (!(error instanceof ActionError) || error.code !== 'not_found') throw error;
-      return c.html(
-        page({
-          title: 'Tenant not found',
-          pm,
-          active: 'tenants',
-          shell: shellInfo(c),
-          body: emptyState("There's no such Tenant in your Agency.", linkButton('Back to Tenants', '/tenants')),
-        }),
-        404,
-      );
-    }
-    const { timeZone } = actions.agency();
-    return c.html(
-      page({
-        title: tenant.name,
-        pm,
-        active: 'tenants',
-        flash: flashFrom(c.req.url),
-        shell: shellInfo(c),
-        subtitle: tenant.property
-          ? html`Tenant at ${entityLink('property', tenant.property.address, `/properties/${tenant.property.propertyId}`)}`
-          : 'Former Tenant: no longer at a Property',
-        actions: html`${tenant.property ? removeButton(tenant.tenantId, tenant.name, tenant.property.address) : ''}${linkButton('Back to Tenants', '/tenants', { variant: 'ghost', size: 'sm' })}`,
-        body: html`${facts(tenant)} ${ticketsSection(tenant, timeZone)} ${requestsSection(tenant, timeZone)} ${reimbursementsSection(tenant, timeZone)}`,
-      }),
-    );
+  pages.post('/:id{[0-9]+}/details', (c) => {
+    const id = Number(c.req.param('id'));
+    return saveDetails(c, { profile: `/tenants/${id}`, save: (form) => c.var.actions.editTenant(id, contactFrom(form)), show: (refused) => profilePage(c, id, refused) });
   });
 
+  pages.get('/:id{[0-9]+}', (c) => profilePage(c, Number(c.req.param('id'))));
+
   return pages;
+}
+
+/** A Tenant's profile; `refused` is a save of their details that was refused, shown with the form open. */
+async function profilePage(c: Context<WebEnv>, id: number, refused?: DetailsEdit) {
+  const { actions, pm } = c.var;
+  let tenant: TenantView;
+  try {
+    tenant = await actions.tenant(id);
+  } catch (error) {
+    if (!(error instanceof ActionError) || error.code !== 'not_found') throw error;
+    return c.html(
+      page({
+        title: 'Tenant not found',
+        pm,
+        active: 'tenants',
+        shell: shellInfo(c),
+        body: emptyState("There's no such Tenant in your Agency.", linkButton('Back to Tenants', '/tenants')),
+      }),
+      404,
+    );
+  }
+  const { timeZone } = actions.agency();
+  // Someone who has left their Property has no details to edit: their addresses are free for others.
+  const editing = tenant.property !== null && (!!refused || c.req.query('edit') === 'details');
+  return c.html(
+    page({
+      title: tenant.name,
+      pm,
+      active: 'tenants',
+      flash: flashFrom(c.req.url),
+      shell: shellInfo(c),
+      subtitle: tenant.property
+        ? html`Tenant at ${entityLink('property', tenant.property.address, `/properties/${tenant.property.propertyId}`)}`
+        : 'Former Tenant: no longer at a Property',
+      actions: html`${tenant.property ? removeButton(tenant.tenantId, tenant.name, tenant.property.address) : ''}${linkButton('Back to Tenants', '/tenants', { variant: 'ghost', size: 'sm' })}`,
+      body: html`${refused && !editing ? alert(refused.message, 'error') : ''}${facts(tenant, editing, refused)} ${ticketsSection(tenant, timeZone)} ${requestsSection(tenant, timeZone)} ${reimbursementsSection(tenant, timeZone)}`,
+    }),
+    refused ? 400 : 200,
+  );
 }
 
 /** A mobile number and an email, each a link on its own line, or a dash for neither. */
@@ -190,17 +204,36 @@ function addForm(properties: Property[], refused: Html): Html {
   });
 }
 
-/** Where they live, who manages it, and how and when to reach them. */
-function facts(t: TenantView): Html {
-  return html`<section class="section" aria-label="Tenant details">
-    ${dl([
-      ['Property', t.property ? entityLink('property', t.property.address, `/properties/${t.property.propertyId}`) : html`<span class="text-muted">No Property</span>`],
-      ['Property Manager', t.propertyManager ?? '—'],
-      ['Tenant since', t.tenancyStart ? formatDate(t.tenancyStart) : '—'],
-      ['Mobile', t.mobile ? contactLink('mobile', t.mobile) : '—'],
-      ['Email', t.email ? contactLink('email', t.email) : '—'],
-      ['Usually home', t.availability ? humanise(t.availability) : html`<span class="text-muted">Not asked yet</span>`],
-    ])}
+/**
+ * Where they live, who manages it, and how and when to reach them, with a pen to edit the name, mobile and
+ * email. Editing, the form takes the facts' place, filled in from the Tenant or from what was posted.
+ */
+function facts(t: TenantView, editing: boolean, refused?: DetailsEdit): Html {
+  if (editing) {
+    const values = refused?.values ?? { name: t.name, mobile: t.mobile ?? '', email: t.email ?? '' };
+    return html`<section class="section" id="details" aria-label="Tenant details">
+      ${detailsForm({
+        action: `/tenants/${t.tenantId}/details`,
+        cancel: `/tenants/${t.tenantId}`,
+        refusal: refused && !Object.keys(refused.errors).length ? refused.message : undefined,
+        fields: fieldGrid(contactFields('tenant', { values, errors: refused?.errors })),
+      })}
+    </section>`;
+  }
+  return html`<section class="section" id="details" aria-label="Tenant details">
+    <div class="details-head">
+      <div class="details-body">
+        ${dl([
+          ['Property', t.property ? entityLink('property', t.property.address, `/properties/${t.property.propertyId}`) : html`<span class="text-muted">No Property</span>`],
+          ['Property Manager', t.propertyManager ?? '—'],
+          ['Tenant since', t.tenancyStart ? formatDate(t.tenancyStart) : '—'],
+          ['Mobile', t.mobile ? contactLink('mobile', t.mobile) : '—'],
+          ['Email', t.email ? contactLink('email', t.email) : '—'],
+          ['Usually home', t.availability ? humanise(t.availability) : html`<span class="text-muted">Not asked yet</span>`],
+        ])}
+      </div>
+      ${t.property ? editPen('Edit details', `/tenants/${t.tenantId}?edit=details#details`) : ''}
+    </div>
   </section>`;
 }
 
