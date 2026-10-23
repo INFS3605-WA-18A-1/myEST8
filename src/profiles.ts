@@ -385,8 +385,8 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
 
     /**
      * The Agency's people, optionally of one role. A Tenant who has left their Property
-     * (endTenancy) and a Tradie who has left the Agency (removeTradie) aren't among them:
-     * every list and picker of Tradies reads this or tradiesWithTrade.
+     * (endTenancy) and anyone removed from the Agency (removePerson, including a Tradie
+     * through removeTradie) aren't among them: every list and picker reads this.
      */
     async people(agencyId: number, role?: Role): Promise<Person[]> {
       return (await all<PersonRow>(
@@ -542,9 +542,20 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
      */
     async removeTradie(tradieId: number) {
       await transaction(db, async () => {
-        await run(db, 'UPDATE people SET removed_at = ? WHERE id = ?', iso(clock.now()), tradieId);
+        await this.removePerson(tradieId);
         await run(db, 'DELETE FROM nominated_tradies WHERE tradie_id = ?', tradieId);
-        await run(db, 'DELETE FROM contact_addresses WHERE person_id = ?', tradieId);
+      });
+    },
+
+    /**
+     * A person leaves the Agency. Their record stays, so past work still names them, but they
+     * drop out of every list and picker (people leaves out removed_at), and their mobile and
+     * email stop reaching the Agency as them and can be given to someone else.
+     */
+    async removePerson(personId: number) {
+      await transaction(db, async () => {
+        await run(db, 'UPDATE people SET removed_at = ? WHERE id = ?', iso(clock.now()), personId);
+        await run(db, 'DELETE FROM contact_addresses WHERE person_id = ?', personId);
       });
     },
 

@@ -258,6 +258,15 @@ export function createApp(
         addTenant: (input: Parameters<typeof onboarding.addTenant>[1]) => onboarding.addTenant(agencyId, input),
         /** Takes a Tenant off their Property, keeping their past Tickets. Refuses while they have an open Ticket or a waiting Maintenance Request. Returns their name. */
         removeTenant: (tenantId: number) => onboarding.removeTenant(agencyId, tenantId),
+        /** Changes a Property Owner's name, mobile and email. Refuses field by field, as adding does; the next message from the new number or email reaches them as the Owner. */
+        editOwner: (ownerId: number, input: Parameters<typeof onboarding.editOwner>[2]) => onboarding.editOwner(agencyId, ownerId, input),
+        /** Changes a Building Manager's name, mobile and email. Refuses field by field, as adding does; the next message from the new address reaches them as the Building Manager. */
+        editBuildingManager: (buildingManagerId: number, input: Parameters<typeof onboarding.editBuildingManager>[2]) =>
+          onboarding.editBuildingManager(agencyId, buildingManagerId, input),
+        /** Takes a Property Owner out of the lists and pickers, keeping their past approvals. Refuses while they own a Property. Returns their name. */
+        removeOwner: (ownerId: number) => onboarding.removeOwner(agencyId, ownerId),
+        /** Takes a Building Manager out of the lists and pickers. Refuses while they look after a Property. Returns their name. */
+        removeBuildingManager: (buildingManagerId: number) => onboarding.removeBuildingManager(agencyId, buildingManagerId),
         /** Changes a Tenant's name, mobile and email. Refuses field by field, as adding does; the next message from the new number or email reaches them as the Tenant. */
         editTenant: (tenantId: number, input: Parameters<typeof onboarding.editTenant>[2]) => onboarding.editTenant(agencyId, tenantId, input),
         /** Changes a Tradie's business name, contact name, mobile, email and Trades. Their Google listing and starting rating stay. Refuses field by field, as adding does. */
