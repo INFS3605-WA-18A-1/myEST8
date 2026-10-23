@@ -368,6 +368,15 @@ Business name, Contact name, Mobile, Email, Trades, Starting rating   [Add Tradi
 - **When Google fails** while loading a listing, the page shows "Google search isn't working right now. Try again, or mark the Tradie as not on Google." and the manual link. When Jev fails the form still fills in, with no Trades ticked.
 - **A refused form** comes back to the same choice: the form posts to a URL that carries `google`, `place` or `manual`. The wizard shows the posted values again; Setup and the Tradies page redirect back (`listingParams` builds the address) and fill in from the listing again. Nothing is stored until Add Tradie.
 
+### Removing a Tradie
+
+A Tradie's profile (`/tradies/:id`, `pages/tradie.ts`) has **Remove Tradie** in the page's actions, before Back to Tradies.
+
+- **The button** is `postButton` in the Danger variant (`--urgent` text on surface, small), with the same `data-confirm` ask as removing a Tenant: "Nina's Plumbing won't be offered for new Jobs. Their past Quotes and ratings stay on the Tickets they belong to." Confirming posts to `/tradies/:id/remove` and lands on `/tradies` with "Nina's Plumbing removed".
+- **Refused** while they have an open Quote Request, a Quote waiting on a Property Owner, or a visit booked today or later. The reason names it ("Nina's Plumbing has a visit booked on Thursday at 9 am. Cancel or finish it first.") and shows as the profile's error flash.
+- **Gone from** the Tradies list, Dispatch's entries and pins, Quote recommendations and the Ask for Quotes list, the Nominated Tradies picker (and every Property's Nominated Tradies), Free today on the Schedule and the spreadsheet import's matching. They all read `people()` and `tradiesWithTrade()` in `profiles.ts`, which leave out a Tradie with `removed_at`.
+- **Their profile** still opens from old links. An info alert says "Removed from the Agency on 8 October 2026." (long month, in the Agency's time zone), the Remove button and the Business address form are left out, and the Quotes, bookings and ratings stay.
+
 ### Emails
 
 `renderEmail({ agencyName, subject, text })` in `src/email-layout.ts` turns any template's plain text into the HTML email, so no template writes HTML. `notifications` sets it as `html` on every email (the Resend and SendGrid mailers send it with `text` as the alternative); SMS and WhatsApp stay plain text.
