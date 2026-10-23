@@ -39,6 +39,8 @@ export interface Person {
   /** Tradies only: where they work from, and the point it geocodes to (null until found). */
   businessAddress: string | null;
   location: { lat: number; lng: number } | null;
+  /** Tradies only: when they were removed from the Agency (removeTradie), or null. */
+  removedAt: string | null;
   lastInbound: { channelType: ChannelType; address: string; at: string } | null;
 }
 
@@ -120,6 +122,7 @@ type PersonRow = {
   business_address: string | null;
   lat: number | null;
   lng: number | null;
+  removed_at: string | null;
   last_inbound_channel: ChannelType | null;
   last_inbound_address: string | null;
   last_inbound_at: string | null;
@@ -192,6 +195,7 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
       googleReviewCount: row.google_review_count,
       businessAddress: row.business_address,
       location: row.lat !== null && row.lng !== null ? { lat: row.lat, lng: row.lng } : null,
+      removedAt: row.removed_at,
       lastInbound:
         row.last_inbound_channel && row.last_inbound_address && row.last_inbound_at
           ? { channelType: row.last_inbound_channel, address: row.last_inbound_address, at: row.last_inbound_at }
@@ -300,6 +304,17 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
     }
   }
 
+  /**
+   * Where a Property's address is on the map. A pin the form already has is kept when it is in
+   * Australia. Anything else, including a pin outside the country, is looked up. A lookup that fails
+   * leaves the Property without a location: geocodeMissing tries it again.
+   * `location: null` was already looked up and found nothing, so it is not tried again here.
+   */
+  async function locate(input: Pick<NewProperty, 'address' | 'location'>) {
+    const given = input.location;
+    return given && inAustralia(given) ? given : given === null ? null : await geocode(input.address);
+  }
+
   return {
     async createAgency(input: { name: string; timeZone: string }) {
       if (!isTimeZone(input.timeZone)) invalid(`Unknown time zone ${input.timeZone}`);
@@ -368,11 +383,15 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
       )).map((r) => ({ id: r.id, agencyId: r.agency_id, name: r.name, email: r.email }));
     },
 
-    /** The Agency's people, optionally of one role. A Tenant who has left their Property (endTenancy) isn't one of them. */
+    /**
+     * The Agency's people, optionally of one role. A Tenant who has left their Property
+     * (endTenancy) and a Tradie who has left the Agency (removeTradie) aren't among them:
+     * every list and picker of Tradies reads this or tradiesWithTrade.
+     */
     async people(agencyId: number, role?: Role): Promise<Person[]> {
       return (await all<PersonRow>(
         db,
-        `SELECT * FROM people WHERE agency_id = ? AND (?::text IS NULL OR role = ?) AND (role <> 'tenant' OR property_id IS NOT NULL)
+        `SELECT * FROM people WHERE agency_id = ? AND (?::text IS NULL OR role = ?) AND (role <> 'tenant' OR property_id IS NOT NULL) AND removed_at IS NULL
          ORDER BY role, name, id`,
         agencyId,
         role ?? null,
@@ -476,6 +495,34 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
     },
 
     /**
+     * Changes a person's name, mobile and email, and moves the addresses messages are matched on with
+     * them: a new mobile or email is theirs from now on, the old one no longer reaches them, and an address
+     * a Property Manager linked from the inbox stays. A Tradie's business name and Trades change too
+     * when given. Refuses an address someone else in the Agency already holds, changing nothing.
+     */
+    async updatePerson(personId: number, input: { name: string; mobile?: string; email?: string; businessName?: string; trades?: Trade[] }) {
+      await transaction(db, async () => {
+        const before = await person(personId);
+        const mobile = input.mobile ? normalizeAddress(input.mobile) : null;
+        const email = input.email ? normalizeAddress(input.email) : null;
+        await run(
+          db,
+          'UPDATE people SET name = ?, business_name = ?, mobile = ?, email = ?, trades = ? WHERE id = ?',
+          input.name,
+          input.businessName ?? before.businessName,
+          mobile,
+          email,
+          JSON.stringify(input.trades ?? before.trades),
+          personId,
+        );
+        for (const [was, now, typed] of [[before.mobile, mobile, input.mobile], [before.email, email, input.email]] as const) {
+          if (typed) await addAddress(before.agencyId, personId, typed);
+          if (was && was !== now) await run(db, 'DELETE FROM contact_addresses WHERE person_id = ? AND address = ?', personId, was);
+        }
+      });
+    },
+
+    /**
      * A Tenant leaves their Property. Their record stays, so the Tickets they raised still
      * name them, but their mobile and email stop reaching the Agency as them and can be
      * given to someone else.
@@ -484,6 +531,20 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
       await transaction(db, async () => {
         await run(db, 'UPDATE people SET property_id = NULL WHERE id = ?', personId);
         await run(db, 'DELETE FROM contact_addresses WHERE person_id = ?', personId);
+      });
+    },
+
+    /**
+     * A Tradie leaves the Agency. Their record stays, so past Quotes, visits and ratings still
+     * name them, but they leave every Property's Nominated Tradies, stop being offered for
+     * Jobs (people and tradiesWithTrade leave them out), and their mobile and email stop
+     * reaching the Agency as them and can be given to someone else.
+     */
+    async removeTradie(tradieId: number) {
+      await transaction(db, async () => {
+        await run(db, 'UPDATE people SET removed_at = ? WHERE id = ?', iso(clock.now()), tradieId);
+        await run(db, 'DELETE FROM nominated_tradies WHERE tradie_id = ?', tradieId);
+        await run(db, 'DELETE FROM contact_addresses WHERE person_id = ?', tradieId);
       });
     },
 
@@ -538,12 +599,7 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
     },
 
     async addProperty(agencyId: number, input: NewProperty) {
-      // A pin the form already has is kept when it is in Australia. Anything else,
-      // including a pin outside the country, is looked up. A lookup that fails
-      // leaves the Property without a location: geocodeMissing tries it again.
-      // `location: null` was already looked up and found nothing, so it is not tried again here.
-      const given = input.location;
-      const location = given && inAustralia(given) ? given : given === null ? null : await geocode(input.address);
+      const location = await locate(input);
       return transaction(db, async () => {
         const id = await run(
           db,
@@ -563,6 +619,36 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
           await run(db, 'INSERT INTO nominated_tradies (property_id, tradie_id) VALUES (?, ?)', id, tradieId);
         }
         return id;
+      });
+    },
+
+    /**
+     * Changes everything about a Property but its Tickets and Tenants. A new address clears the map
+     * location and looks it up again, as adding does; the same address keeps its location.
+     * The Nominated Tradies are replaced by the ones given.
+     */
+    async updateProperty(propertyId: number, input: NewProperty) {
+      const before = await this.property(propertyId);
+      const location = input.address === before.address ? before.location : await locate(input);
+      await transaction(db, async () => {
+        await run(
+          db,
+          `UPDATE properties SET property_manager_id = ?, address = ?, suburb = ?, lat = ?, lng = ?, owner_id = ?, max_repair_cost_cents = ?, building_manager_id = ?
+           WHERE id = ?`,
+          input.propertyManagerId,
+          input.address,
+          input.suburb,
+          location?.lat ?? null,
+          location?.lng ?? null,
+          input.ownerId,
+          input.maxRepairCostCents,
+          input.buildingManagerId ?? null,
+          propertyId,
+        );
+        await run(db, 'DELETE FROM nominated_tradies WHERE property_id = ?', propertyId);
+        for (const tradieId of input.nominatedTradieIds) {
+          await run(db, 'INSERT INTO nominated_tradies (property_id, tradie_id) VALUES (?, ?)', propertyId, tradieId);
+        }
       });
     },
 
@@ -594,7 +680,7 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
       const tradies = await all<{ id: number; address: string }>(
         db,
         `SELECT id, business_address AS address FROM people
-         WHERE agency_id = ? AND role = 'tradie' AND business_address IS NOT NULL AND (lat IS NULL OR lng IS NULL) ORDER BY id LIMIT ?`,
+         WHERE agency_id = ? AND role = 'tradie' AND removed_at IS NULL AND business_address IS NOT NULL AND (lat IS NULL OR lng IS NULL) ORDER BY id LIMIT ?`,
         agencyId,
         MAX_GEOCODES_AT_ONCE,
       );
@@ -628,10 +714,11 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
       return (await all<{ id: number }>(db, 'SELECT id FROM properties WHERE property_manager_id = ?', propertyManagerId)).map((r) => r.id);
     },
 
+    /** The Agency's Tradies who do the Trade, not counting those removed. */
     async tradiesWithTrade(agencyId: number, trade: Trade): Promise<Person[]> {
       return (await all<PersonRow>(
         db,
-        `SELECT * FROM people WHERE agency_id = ? AND role = 'tradie'
+        `SELECT * FROM people WHERE agency_id = ? AND role = 'tradie' AND removed_at IS NULL
          AND EXISTS (SELECT 1 FROM jsonb_array_elements_text(people.trades::jsonb) AS t (value) WHERE t.value = ?) ORDER BY id`,
         agencyId,
         trade,

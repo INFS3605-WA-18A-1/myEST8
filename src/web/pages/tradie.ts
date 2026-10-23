@@ -1,19 +1,23 @@
 // The Agency's Tradies: the directory at /tradies, and a Tradie's profile at
 // /tradies/:id with contact details, Trades, the myEST8 rating next to the Google
 // rating, upcoming bookings, previous Quotes (each with its Ticket and whether it was
-// chosen) and every rating given, Property Managers' and Tenants' apart.
+// chosen) and every rating given, Property Managers' and Tenants' apart. The profile's
+// pen opens the business name, contact name, mobile, email and Trades in a form
+// (?edit=details) that posts to /tradies/:id/details. A Tradie is removed from the Agency
+// from their profile: they leave the lists and pickers, but the profile still opens, with
+// their past Quotes and ratings, and without the pen, Remove or the address form.
 
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
 import { ActionError, TRADES, type Trade } from '../../shared.ts';
 import type { WebEnv } from '../env.ts';
-import { formAction, text } from '../forms.ts';
+import { formAction, list, text } from '../forms.ts';
 import { icon } from '../icons.ts';
 import { shellInfo } from '../shell.ts';
-import { alert, badge, button, contactLink, emptyState, field, flashFrom, formatMoney, formatWhen, humanise, linkButton, page, ratingChip, rowLink, section, sectionHeader, stat, statGroup, table, ticketCell, type Html } from '../ui.ts';
+import { alert, badge, button, contactLink, detailsForm, editPen, emptyState, field, flashFrom, formatMoney, formatWhen, humanise, linkButton, page, postButton, ratingChip, rowLink, section, sectionHeader, stat, statGroup, table, ticketCell, type Html } from '../ui.ts';
 import { timeRange } from './calendar.ts';
-import { addTradieSection, importPanel, listingChoice } from './onboarding-forms.ts';
+import { addTradieSection, contactFrom, importPanel, listingChoice, saveDetails, tradieFields, type DetailsEdit } from './onboarding-forms.ts';
 
 type TradieView = Awaited<ReturnType<PropertyManagerActions['tradie']>>;
 type DirectoryEntry = Awaited<ReturnType<PropertyManagerActions['tradieDirectory']>>[number];
@@ -64,39 +68,25 @@ export function tradiePages() {
     );
   });
 
-  pages.get('/:id{[0-9]+}', async (c) => {
-    const { actions, pm } = c.var;
-    let tradie: TradieView;
-    try {
-      tradie = await actions.tradie(Number(c.req.param('id')));
-    } catch (error) {
-      if (!(error instanceof ActionError) || error.code !== 'not_found') throw error;
-      return c.html(
-        page({
-          title: 'Tradie not found',
-          pm,
-          active: 'tradies',
-          shell: shellInfo(c),
-          body: emptyState("There's no such Tradie in your Agency.", linkButton('Back to Tradies', '/tradies')),
-        }),
-        404,
-      );
-    }
-    const { timeZone } = actions.agency();
-    const flash = flashFrom(c.req.url);
-    return c.html(
-      page({
-        title: tradie.businessName ?? tradie.name,
-        pm,
-        active: 'tradies',
-        shell: shellInfo(c),
-        flash,
-        subtitle: tradie.businessName ? tradie.name : undefined,
-        actions: linkButton('Back to Tradies', '/tradies', { variant: 'ghost', size: 'sm' }),
-        body: html`${header(tradie)} ${quotes(tradie, timeZone)} ${bookings(tradie, timeZone)} ${ratings(tradie, timeZone)} ${addressForm(tradie, flash, c.req.query('form'))}`,
-      }),
-    );
+  pages.post('/:id{[0-9]+}/details', (c) => {
+    const id = Number(c.req.param('id'));
+    return saveDetails(c, {
+      profile: `/tradies/${id}`,
+      save: (form) => c.var.actions.editTradie(id, { ...contactFrom(form), businessName: text(form, 'businessName'), trades: list(form, 'trades') as Trade[] }),
+      show: (refused) => profilePage(c, id, refused),
+    });
   });
+
+  // Refused, the reason shows on the Tradie's profile.
+  pages.post('/:id{[0-9]+}/remove', (c) => {
+    const id = Number(c.req.param('id'));
+    return formAction(c, `/tradies/${id}`, async () => {
+      const name = await c.var.actions.removeTradie(id);
+      return { ok: `${name} removed`, redirect: '/tradies' };
+    });
+  });
+
+  pages.get('/:id{[0-9]+}', (c) => profilePage(c, Number(c.req.param('id'))));
 
   // Sets where the Tradie works from; the map places them when the address is found.
   pages.post('/:id{[0-9]+}/address', (c) => {
@@ -109,6 +99,63 @@ export function tradiePages() {
   });
 
   return pages;
+}
+
+/** A Tradie's profile; `refused` is a save of their details that was refused, shown with the form open. */
+async function profilePage(c: Context<WebEnv>, id: number, refused?: DetailsEdit) {
+  const { actions, pm } = c.var;
+  let tradie: TradieView;
+  try {
+    tradie = await actions.tradie(id);
+  } catch (error) {
+    if (!(error instanceof ActionError) || error.code !== 'not_found') throw error;
+    return c.html(
+      page({
+        title: 'Tradie not found',
+        pm,
+        active: 'tradies',
+        shell: shellInfo(c),
+        body: emptyState("There's no such Tradie in your Agency.", linkButton('Back to Tradies', '/tradies')),
+      }),
+      404,
+    );
+  }
+  const { timeZone } = actions.agency();
+  const flash = flashFrom(c.req.url);
+  const removed = !!tradie.removedAt;
+  // A removed Tradie can't be edited: no form, even if one is asked for or a save is refused.
+  const editing = !removed && (!!refused || c.req.query('edit') === 'details');
+  const notice = removed
+    ? html`${alert(`Removed from the Agency on ${longDate(tradie.removedAt!, timeZone)}.`, 'info')}${refused ? alert(refused.message, 'error') : ''}`
+    : '';
+  return c.html(
+    page({
+      title: tradie.businessName ?? tradie.name,
+      pm,
+      active: 'tradies',
+      shell: shellInfo(c),
+      flash,
+      subtitle: tradie.businessName ? tradie.name : undefined,
+      actions: html`${removed ? '' : removeButton(tradie)}${linkButton('Back to Tradies', '/tradies', { variant: 'ghost', size: 'sm' })}`,
+      body: html`${notice}
+        ${editing ? editForm(tradie, refused) : header(tradie)} ${quotes(tradie, timeZone)} ${bookings(tradie, timeZone)} ${ratings(tradie, timeZone)}
+        ${removed ? '' : addressForm(tradie, flash, c.req.query('form'))}`,
+    }),
+    refused ? 400 : 200,
+  );
+}
+
+function removeButton(t: TradieView): Html {
+  return postButton(`/tradies/${t.tradieId}/remove`, 'Remove Tradie', {
+    variant: 'danger',
+    size: 'sm',
+    confirm: `${t.businessName ?? t.name} won't be offered for new Jobs. Their past Quotes and ratings stay on the Tickets they belong to.`,
+  });
+}
+
+/** "8 October 2026", in the Agency's time zone. */
+function longDate(at: string, timeZone: string): string {
+  return new Intl.DateTimeFormat('en-AU', { timeZone, day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(at));
 }
 
 /** Where the Tradie works from, which puts them on the Dispatch map. */
@@ -173,13 +220,8 @@ function directory(tradies: DirectoryEntry[], trade: Trade | null): Html {
   );
 }
 
-/**
- * What a Property Manager weighs up first: the Trades and how to reach them, then the
- * ratings. The myEST8 rating (the starting rating and every rating since) comes with
- * the Property Managers' and the Tenants' averages on their own, and Google's rating
- * beside them, never combined.
- */
-function header(t: TradieView): Html {
+/** The four ratings side by side: myEST8, the Property Managers' and the Tenants' averages on their own, and Google's. */
+function ratingStats(t: TradieView): Html {
   const { average, count } = t.myEst8Rating;
   const bySource = (label: string, source: TradieView['ratings'][number]['source']) => {
     const scores = t.ratings.filter((r) => r.source === source).map((r) => r.score);
@@ -187,33 +229,62 @@ function header(t: TradieView): Html {
       ? stat({ label, value: (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1), hint: `${scores.length} ${scores.length === 1 ? 'rating' : 'ratings'}` })
       : stat({ label, value: 'No ratings yet' });
   };
-  return html`<section class="section tradie-head" aria-label="Tradie details">
+  return statGroup([
+    stat({
+      label: 'myEST8 rating',
+      value: average.toFixed(1),
+      hint: count === 1 ? 'The starting rating; no Jobs rated yet' : `From ${count} ratings, including the starting rating`,
+    }),
+    bySource('From Property Managers', 'property_manager'),
+    bySource('From Tenants', 'tenant'),
+    t.googleRating
+      ? stat({
+          label: 'Google rating',
+          value: t.googleRating.rating === null ? '—' : t.googleRating.rating.toFixed(1),
+          hint: `${t.googleRating.reviewCount ?? 0} reviews`,
+        })
+      : stat({ label: 'Google rating', value: 'Not on Google' }),
+  ]);
+}
+
+/**
+ * What a Property Manager weighs up first: the Trades and how to reach them, with a pen to
+ * edit them, then the ratings. The myEST8 rating (the starting rating and every rating since)
+ * comes with the Property Managers' and the Tenants' averages on their own, and Google's rating
+ * beside them, never combined.
+ */
+function header(t: TradieView): Html {
+  return html`<section class="section tradie-head" id="details" aria-label="Tradie details">
     <div class="tradie-contact">
-      <div class="flex flex-wrap items-center gap-2">${t.trades.map((trade) => badge(humanise(trade), 'info'))}</div>
+      <div class="details-head">
+        <div class="details-body flex flex-wrap items-center gap-2">${t.trades.map((trade) => badge(humanise(trade), 'info'))}</div>
+        ${t.removedAt ? '' : editPen('Edit details', `/tradies/${t.tradieId}?edit=details#details`)}
+      </div>
       <dl>
         <div><dt>Mobile</dt><dd>${t.mobile ? html`${contactLink('mobile', t.mobile)}` : '—'}</dd></div>
         <div><dt>Email</dt><dd>${t.email ? html`${contactLink('email', t.email)}` : '—'}</dd></div>
       </dl>
     </div>
-    <div class="tradie-ratings">
-      ${statGroup([
-        stat({
-          label: 'myEST8 rating',
-          value: average.toFixed(1),
-          hint: count === 1 ? 'The starting rating; no Jobs rated yet' : `From ${count} ratings, including the starting rating`,
-        }),
-        bySource('From Property Managers', 'property_manager'),
-        bySource('From Tenants', 'tenant'),
-        t.googleRating
-          ? stat({
-              label: 'Google rating',
-              value: t.googleRating.rating === null ? '—' : t.googleRating.rating.toFixed(1),
-              hint: `${t.googleRating.reviewCount ?? 0} reviews`,
-            })
-          : stat({ label: 'Google rating', value: 'Not on Google' }),
-      ])}
-    </div>
+    <div class="tradie-ratings">${ratingStats(t)}</div>
   </section>`;
+}
+
+/**
+ * The form to edit the business name, contact name, mobile, email and Trades, in place of the contact
+ * details, filled in from the Tradie or from what was posted. The ratings stay under it: they aren't
+ * edited here, and neither is the Google listing. The business address keeps its own form below.
+ */
+function editForm(t: TradieView, refused?: DetailsEdit): Html {
+  const values = refused?.values ?? { businessName: t.businessName ?? '', name: t.name, mobile: t.mobile ?? '', email: t.email ?? '', trades: t.trades };
+  return html`<section class="section" id="details" aria-label="Tradie details">
+      ${detailsForm({
+        action: `/tradies/${t.tradieId}/details`,
+        cancel: `/tradies/${t.tradieId}`,
+        refusal: refused && !Object.keys(refused.errors).length ? refused.message : undefined,
+        fields: tradieFields({ values, errors: refused?.errors, startingRating: false }),
+      })}
+    </section>
+    <section class="section" aria-label="Ratings summary">${ratingStats(t)}</section>`;
 }
 
 /** Every rating given, the Property Managers' and the Tenants' in groups of their own. */

@@ -26,6 +26,19 @@ describe('weekly Google rating refresh', () => {
     expect(await googleRating(w, ids.pete)).toEqual({ rating: 4.9, reviewCount: 140 });
   });
 
+  test('a removed Tradie is not looked up again, and keeps the rating they had', async () => {
+    const w = await world();
+    const { h, ids } = w;
+    await w.alice.removeTradie(ids.pete);
+    h.places.listings.set('place-pete', { name: "Pete's Plumbing", address: 'Marrickville', rating: 4.1, reviewCount: 200 });
+    h.places.listings.set('place-sam', { name: 'Sparky Sam', address: 'Glebe', rating: 4.4, reviewCount: 61 });
+
+    await h.advance(7 * DAY + HOUR);
+
+    expect(await googleRating(w, ids.pete)).toEqual({ rating: 4.8, reviewCount: 120 });
+    expect(await googleRating(w, ids.sam)).toEqual({ rating: 4.4, reviewCount: 61 });
+  });
+
   test('a failed lookup retries that Tradie alone, and the next week still runs', async () => {
     const w = await world();
     const { h, ids } = w;

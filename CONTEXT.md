@@ -23,7 +23,7 @@ The owner of a Property. Must approve Quotes when a Ticket's Repair Cost would g
 _Avoid_: landlord, land owner
 
 **Tradie**:
-A tradesperson the Agency engages to do Jobs. Tradies are shared across the Agency's Property Managers.
+A tradesperson the Agency engages to do Jobs. Tradies are shared across the Agency's Property Managers. Removing a Tradie takes them out of every list and picker and every Property's Nominated Tradies, and their mobile and email no longer reach the Agency as them, but their past Quotes, visits and ratings stay on record. A Tradie with work in progress can't be removed: an open Quote Request, a Quote waiting on a decision, or a visit booked today or later.
 _Avoid_: contractor, tradesperson
 
 **Nominated Tradie**:

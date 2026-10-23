@@ -3,15 +3,17 @@
 // Google listings. Each renderer takes the values to show again and the errors
 // to show next to each control, keyed by the posted field name.
 
+import type { Context } from 'hono';
 import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
 import { MAX_IMPORT_ROWS, type ImportKind } from '../../imports.ts';
 import type { ChannelType } from '../../ports.ts';
 import { MAX_SHEET_BYTES } from '../../spreadsheet.ts';
 import { ActionError, TRADES, type Trade } from '../../shared.ts';
+import type { WebEnv } from '../env.ts';
 import { int, list, optional, text, type FormValues } from '../forms.ts';
 import { icon } from '../icons.ts';
-import { alert, badge, button, contactLink, dl, emptyState, field, formatWhen, humanise, ratingChip, rowLink, table, type Html, type Option } from '../ui.ts';
+import { alert, badge, button, contactLink, dl, emptyState, field, formatWhen, humanise, ratingChip, rowLink, table, withFlash, type Html, type Option } from '../ui.ts';
 
 type Person = Awaited<ReturnType<PropertyManagerActions['people']>>[number];
 type Listing = Awaited<ReturnType<PropertyManagerActions['findGoogleListings']>>[number];
@@ -42,6 +44,25 @@ export function unavailableNote(type: ChannelType, unavailable: readonly Channel
   const left = working.length ? ` Tenants can still reach you by ${working.join(' and ')}.` : '';
   const what = type === 'email' ? 'Email forwarding' : channel.name;
   return html`<p class="text-sm" data-unavailable="${type}">${what} isn't available on this server yet.${left}</p>`;
+}
+
+/** What a refused edit of a profile's details shows again: what was posted, the reason under each field, and the reason itself for when it names no field. */
+export type DetailsEdit = { values: Values; errors: Errors; message: string };
+
+/**
+ * Saves a profile's edited details (`save` is given the posted form). Saved, it goes back to the profile
+ * with "Details saved." Refused, `show` renders the profile again with the form open, as it was posted
+ * and with the reason; it is also what shows a record that isn't the Agency's, as a 404.
+ */
+export async function saveDetails(c: Context<WebEnv>, o: { profile: string; save: (form: FormValues) => Promise<unknown>; show: (refused: DetailsEdit) => Promise<Response> }) {
+  const form = (await c.req.parseBody({ all: true })) as FormValues;
+  try {
+    await o.save(form);
+    return c.redirect(withFlash(o.profile, 'ok', 'Details saved.'), 303);
+  } catch (error) {
+    if (!(error instanceof ActionError)) throw error;
+    return o.show({ values: valuesOf(form), errors: { ...error.fields }, message: error.message });
+  }
 }
 
 /** The posted form's text values, to show again after a refusal. Passwords are left out. */
@@ -232,6 +253,77 @@ export function propertyPlaceFields(o: { values?: Values; errors?: Errors } = {}
     ${field({ label: 'Suburb', name: 'suburb', id: 'property-suburb', required: true, value: valueOf(o.values, 'suburb'), error: o.errors?.suburb })}
     <input type="hidden" name="lat" value="${valueOf(o.values, 'lat')}" />
     <input type="hidden" name="lng" value="${valueOf(o.values, 'lng')}" />
+  `;
+}
+
+/**
+ * Everything about a Property but its address: Property Owner, Property Manager, Max Repair Cost, Building
+ * Manager and the Nominated Tradies picker, as the Properties page adds a Property and its profile edits one.
+ * `values` and `errors` are a refused form's, by posted field name; `manager` is who the Property Manager
+ * select starts on when `values` don't say.
+ */
+export function propertyFields(o: {
+  owners: Person[];
+  buildingManagers: Person[];
+  propertyManagers: { id: number; name: string }[];
+  tradies: Person[];
+  manager?: number;
+  values?: Values;
+  errors?: Errors;
+}): Html {
+  const { values, errors } = o;
+  return html`
+    ${fieldGrid(html`
+      ${propertyPlaceFields({ values, errors })}
+      ${field({
+        label: 'Property Owner',
+        name: 'ownerId',
+        id: 'property-owner',
+        type: 'select',
+        required: true,
+        placeholder: 'Choose the Property Owner',
+        value: valueOf(values, 'ownerId'),
+        options: o.owners.map((p) => ({ value: String(p.id), label: p.name })),
+        error: errors?.ownerId,
+      })}
+      ${field({
+        label: 'Property Manager',
+        name: 'propertyManagerId',
+        id: 'property-manager',
+        type: 'select',
+        required: true,
+        value: valueOf(values, 'propertyManagerId') || String(o.manager ?? ''),
+        options: o.propertyManagers.map((m) => ({ value: String(m.id), label: m.name })),
+        error: errors?.propertyManagerId,
+      })}
+      ${field({
+        label: 'Max Repair Cost ($)',
+        name: 'maxRepairCost',
+        id: 'property-max',
+        type: 'number',
+        step: '0.01',
+        min: 0,
+        required: true,
+        placeholder: '500',
+        value: valueOf(values, 'maxRepairCost'),
+        hint: "The most a Ticket's Repair Cost can reach before the Property Owner must approve.",
+        error: errors?.maxRepairCost,
+      })}
+      ${field({
+        label: 'Building Manager (strata only)',
+        name: 'buildingManagerId',
+        id: 'property-building-manager',
+        type: 'select',
+        value: valueOf(values, 'buildingManagerId'),
+        options: [{ value: '', label: 'None' }, ...o.buildingManagers.map((b) => ({ value: String(b.id), label: b.name }))],
+        error: errors?.buildingManagerId,
+      })}
+    `)}
+    <div class="mt-3">
+      ${o.tradies.length
+        ? tradiePicker({ id: 'property', tradies: o.tradies, chosen: list(values ?? {}, 'nominatedTradieIds'), error: errors?.nominatedTradieIds })
+        : html`<p class="text-sm text-muted">Add Tradies on the Tradies page to nominate them for Urgent Repairs.</p>`}
+    </div>
   `;
 }
 
@@ -490,8 +582,8 @@ export async function addTradieSection(o: {
   `;
 }
 
-/** The fields of the Tradie form: business, contact, Trades and starting rating. */
-export function tradieFields(o: { values?: Values; errors?: Errors; tradesHint?: string }): Html {
+/** The fields of the Tradie form: business, contact, Trades and starting rating (left out when editing a Tradie, whose rating is built from the Jobs they do). */
+export function tradieFields(o: { values?: Values; errors?: Errors; tradesHint?: string; startingRating?: boolean }): Html {
   const { values, errors } = o;
   const trades = values?.trades;
   return fieldGrid(html`
@@ -509,18 +601,20 @@ export function tradieFields(o: { values?: Values; errors?: Errors; tradesHint?:
         error: errors?.trades,
       })}
     </div>
-    ${field({
-      label: 'Starting rating',
-      name: 'startingRating',
-      id: 'tradie-rating',
-      type: 'select',
-      required: true,
-      placeholder: 'Choose 1 to 5',
-      value: valueOf(values, 'startingRating'),
-      options: [5, 4, 3, 2, 1].map((n) => ({ value: String(n), label: `${n} / 5` })),
-      hint: 'How good they have been for the Agency so far. Ratings after each Job build on it.',
-      error: errors?.startingRating,
-    })}
+    ${o.startingRating === false
+      ? ''
+      : field({
+          label: 'Starting rating',
+          name: 'startingRating',
+          id: 'tradie-rating',
+          type: 'select',
+          required: true,
+          placeholder: 'Choose 1 to 5',
+          value: valueOf(values, 'startingRating'),
+          options: [5, 4, 3, 2, 1].map((n) => ({ value: String(n), label: `${n} / 5` })),
+          hint: 'How good they have been for the Agency so far. Ratings after each Job build on it.',
+          error: errors?.startingRating,
+        })}
   `);
 }
 

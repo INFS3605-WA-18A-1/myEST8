@@ -1,5 +1,6 @@
 import type { Context } from './context.ts';
 import { all, one, run, transaction } from './db.ts';
+import { UndeliverableError, type ChannelType } from './ports.ts';
 import { addMs, dollars, HOUR_MS, invalid, iso, median, newToken, notFound, withoutContactDetails, type Trade } from './shared.ts';
 import type { OpenItem } from './tickets.ts';
 import { wallClock } from './zoned-time.ts';
@@ -600,22 +601,84 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
       return requestRule(agencyId, job.id, job.trade);
     },
 
-    /** Asks each Tradie for an Estimate, each with their own quote page link. */
+    /**
+     * The Jobs where a Tradie is still in the running, soonest asked first: asked to quote on a
+     * Job nobody has been chosen for yet, or on one held up while the Property Owner decides
+     * (`withOwner` when it is the Tradie's own Quote they decide on).
+     */
+    async undecidedJobsOf(tradieId: number) {
+      const rows = await all<{ job_id: number; with_owner: boolean }>(
+        db,
+        `SELECT r.job_id, EXISTS (SELECT 1 FROM quotes q WHERE q.quote_request_id = r.id AND q.status = 'awaiting_owner') AS with_owner
+         FROM quote_requests r JOIN jobs j ON j.id = r.job_id
+         WHERE r.tradie_id = ? AND r.status IN (${LIVE.map((s) => `'${s}'`).join(', ')}) AND j.status IN ('quoting', 'awaiting_owner')
+         ORDER BY r.id`,
+        tradieId,
+      );
+      return Promise.all(
+        rows.map(async ({ job_id, with_owner }) => {
+          const { job, property } = await jobPlace(job_id);
+          return { jobId: job.id, trade: job.trade, propertyAddress: property.address, withOwner: with_owner };
+        }),
+      );
+    },
+
+    /**
+     * The Jobs a Tradie's approved Quote is for that are Ready to book, with no Work Order sent yet,
+     * soonest approved first.
+     */
+    async unbookedJobsOf(tradieId: number) {
+      const rows = await all<{ job_id: number }>(
+        db,
+        `SELECT q.job_id FROM quotes q JOIN jobs j ON j.id = q.job_id
+         WHERE q.tradie_id = ? AND q.status = 'approved' AND j.status = 'approved'
+         ORDER BY q.id`,
+        tradieId,
+      );
+      return Promise.all(
+        rows.map(async ({ job_id }) => {
+          const { job, property } = await jobPlace(job_id);
+          return { jobId: job.id, trade: job.trade, propertyAddress: property.address };
+        }),
+      );
+    },
+
+    /**
+     * Asks each Tradie for an Estimate, each with their own quote page link. A Tradie none of the
+     * Agency's channels reaches is skipped and named in `unreached`, with why; the others are still
+     * asked. Refuses when none can be reached, recording nothing.
+     */
     async sendQuoteRequests(agencyId: number, jobId: number, tradieIds: number[]) {
       // Checked and recorded in one transaction, so a double submit can't ask a Tradie twice.
-      const { job, ticket, property, tradies, requests } = await transaction(db, async () => {
+      const { job, ticket, property, tradies, channels, unreached, requests } = await transaction(db, async () => {
         const { job, ticket, property } = await jobPlace((await tickets.jobInAgency(agencyId, jobId)).id);
         if (job.status !== 'quoting') invalid('Quote Requests can only be sent while the Job is getting Quotes');
         if (!tradieIds.length) invalid('Choose at least one Tradie');
         const already = new Set((await quoteRequestsOf(jobId)).map((r) => r.tradie_id));
-        const tradies = [];
-        for (const id of new Set(tradieIds)) tradies.push(await profiles.personInAgency(agencyId, id, 'tradie'));
-        for (const tradie of tradies) {
+        const chosen = [];
+        for (const id of new Set(tradieIds)) chosen.push(await profiles.personInAgency(agencyId, id, 'tradie'));
+        for (const tradie of chosen) {
+          if (tradie.removedAt) invalid(`${tradie.businessName ?? tradie.name} has been removed from the Agency`);
           if (!tradie.trades.includes(job.trade)) invalid(`${tradie.businessName ?? tradie.name} doesn't do ${job.trade} work`);
           if (already.has(tradie.id)) invalid(`${tradie.businessName ?? tradie.name} has already been asked to quote`);
         }
         const rule = await requestRule(agencyId, jobId, job.trade);
-        if (tradies.length < rule.minimum) invalid('Send Quote Requests to at least two Tradies');
+        if (chosen.length < rule.minimum) invalid('Send Quote Requests to at least two Tradies');
+        const tradies = [];
+        const channels = new Map<number, ChannelType>();
+        const unreached: { tradie: string; reason: string }[] = [];
+        for (const tradie of chosen) {
+          try {
+            channels.set(tradie.id, await notifications.channelFor(tradie.id));
+            tradies.push(tradie);
+          } catch (error) {
+            if (!(error instanceof UndeliverableError)) throw error;
+            unreached.push({ tradie: tradie.businessName ?? tradie.name, reason: error.userReason });
+          }
+        }
+        if (!tradies.length) {
+          invalid(`No Quote Requests were sent. Couldn't reach ${unreached.map((u) => `${u.tradie}: ${u.reason}`).join('; ')}`);
+        }
         const requests: QuoteRequestRow[] = [];
         for (const tradie of tradies) {
           requests.push(
@@ -632,12 +695,12 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
           );
         }
         await tickets.recordEvent(ticket.id, 'quote_requests_sent', { jobId, tradies: tradies.map((t) => t.businessName ?? t.name) });
-        return { job, ticket, property, tradies, requests };
+        return { job, ticket, property, tradies, channels, unreached, requests };
       });
       const issue = await tickets.issue(ticket.issueId);
       const photoFileIds = (await tickets.photos(issue.id)).map((p) => p.fileId);
       for (const [i, tradie] of tradies.entries()) {
-        const byEmail = (await notifications.channelFor(tradie.id)) === 'email';
+        const byEmail = channels.get(tradie.id) === 'email';
         await notifications.send(
           tradie.id,
           'tradie.quote_request',
@@ -652,6 +715,7 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
         );
         await worker.schedule('quotes.reminder', { quoteRequestId: requests[i]!.id }, addMs(clock.now(), QUOTE_REMINDER_MS));
       }
+      return { sent: tradies.length, unreached };
     },
 
     /**

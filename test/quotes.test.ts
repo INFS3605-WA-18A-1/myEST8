@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { HOUR } from './support/harness.ts';
+import { AGENCY_NUMBER, HOUR } from './support/harness.ts';
 import { upload } from './support/photos.ts';
 import { confirmedEstimates, confirmedQuotes, firmQuote, jobView, KING_ST, quoteRequestFor, TOM, tomsTapTicket, tradieQuotes, world } from './support/world.ts';
 
@@ -100,6 +100,38 @@ describe('Quote Requests', () => {
     expect((await alice.ticket(job.ticketId)).timeline.map((e) => e.kind)).toContain('quote_requests_sent');
     await expect(alice.sendQuoteRequests(job.jobId, [tradies.sam.id])).rejects.toThrow(/plumbing/);
     await expect(alice.sendQuoteRequests(job.jobId, [tradies.pete.id])).rejects.toThrow(/already/);
+  });
+
+  test('with no SMS channel connected, go to the Tradies with email, and the ones that cannot be reached are named', async () => {
+    const w = await world();
+    const { h, alice, tradies } = w;
+    const job = await tomsTapTicket(w);
+    await alice.disconnectServerSms(AGENCY_NUMBER);
+
+    const result = await alice.sendQuoteRequests(job.jobId, [tradies.pete.id, tradies.quick.id]);
+
+    expect(result).toEqual({
+      sent: 1,
+      unreached: [{ tradie: "Pete's Plumbing", reason: 'no SMS channel is connected and they have no email address' }],
+    });
+    expect(h.messenger.to(tradies.quick.address)).toMatchObject([{ channel: 'email', template: 'tradie.quote_request' }]);
+    expect(h.messenger.to(tradies.pete.address)).toEqual([]);
+    expect((await jobView(w, job)).quoteRequests.map((r) => r.tradieId)).toEqual([tradies.quick.id]);
+  });
+
+  test('with no SMS channel connected, are refused when no Tradie can be reached, and nothing is recorded', async () => {
+    const w = await world();
+    const { h, alice, tradies } = w;
+    const job = await tomsTapTicket(w);
+    await alice.disconnectServerSms(AGENCY_NUMBER);
+    const asked = h.messenger.sent.length;
+
+    await expect(alice.sendQuoteRequests(job.jobId, [tradies.pete.id, tradies.dana.id])).rejects.toThrow(
+      "No Quote Requests were sent. Couldn't reach Pete's Plumbing: no SMS channel is connected and they have no email address; Drip Doctors: no SMS channel is connected and they have no email address",
+    );
+
+    expect((await jobView(w, job)).quoteRequests).toEqual([]);
+    expect(h.messenger.sent).toHaveLength(asked);
   });
 
   test('photos are attached to Quote Requests sent by email only', async () => {
