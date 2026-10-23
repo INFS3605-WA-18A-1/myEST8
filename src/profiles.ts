@@ -39,6 +39,8 @@ export interface Person {
   /** Tradies only: where they work from, and the point it geocodes to (null until found). */
   businessAddress: string | null;
   location: { lat: number; lng: number } | null;
+  /** Tradies only: when they were removed from the Agency (removeTradie), or null. */
+  removedAt: string | null;
   lastInbound: { channelType: ChannelType; address: string; at: string } | null;
 }
 
@@ -120,6 +122,7 @@ type PersonRow = {
   business_address: string | null;
   lat: number | null;
   lng: number | null;
+  removed_at: string | null;
   last_inbound_channel: ChannelType | null;
   last_inbound_address: string | null;
   last_inbound_at: string | null;
@@ -192,6 +195,7 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
       googleReviewCount: row.google_review_count,
       businessAddress: row.business_address,
       location: row.lat !== null && row.lng !== null ? { lat: row.lat, lng: row.lng } : null,
+      removedAt: row.removed_at,
       lastInbound:
         row.last_inbound_channel && row.last_inbound_address && row.last_inbound_at
           ? { channelType: row.last_inbound_channel, address: row.last_inbound_address, at: row.last_inbound_at }
@@ -368,11 +372,15 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
       )).map((r) => ({ id: r.id, agencyId: r.agency_id, name: r.name, email: r.email }));
     },
 
-    /** The Agency's people, optionally of one role. A Tenant who has left their Property (endTenancy) isn't one of them. */
+    /**
+     * The Agency's people, optionally of one role. A Tenant who has left their Property
+     * (endTenancy) and a Tradie who has left the Agency (removeTradie) aren't among them:
+     * every list and picker of Tradies reads this or tradiesWithTrade.
+     */
     async people(agencyId: number, role?: Role): Promise<Person[]> {
       return (await all<PersonRow>(
         db,
-        `SELECT * FROM people WHERE agency_id = ? AND (?::text IS NULL OR role = ?) AND (role <> 'tenant' OR property_id IS NOT NULL)
+        `SELECT * FROM people WHERE agency_id = ? AND (?::text IS NULL OR role = ?) AND (role <> 'tenant' OR property_id IS NOT NULL) AND removed_at IS NULL
          ORDER BY role, name, id`,
         agencyId,
         role ?? null,
@@ -487,6 +495,18 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
       });
     },
 
+    /**
+     * A Tradie leaves the Agency. Their record stays, so past Quotes, visits and ratings still
+     * name them, but they leave every Property's Nominated Tradies and stop being offered
+     * for Jobs (people and tradiesWithTrade leave them out).
+     */
+    async removeTradie(tradieId: number) {
+      await transaction(db, async () => {
+        await run(db, 'UPDATE people SET removed_at = ? WHERE id = ?', iso(clock.now()), tradieId);
+        await run(db, 'DELETE FROM nominated_tradies WHERE tradie_id = ?', tradieId);
+      });
+    },
+
     person,
 
     /** A person in the Agency, optionally with a given role, or a not-found error. */
@@ -594,7 +614,7 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
       const tradies = await all<{ id: number; address: string }>(
         db,
         `SELECT id, business_address AS address FROM people
-         WHERE agency_id = ? AND role = 'tradie' AND business_address IS NOT NULL AND (lat IS NULL OR lng IS NULL) ORDER BY id LIMIT ?`,
+         WHERE agency_id = ? AND role = 'tradie' AND removed_at IS NULL AND business_address IS NOT NULL AND (lat IS NULL OR lng IS NULL) ORDER BY id LIMIT ?`,
         agencyId,
         MAX_GEOCODES_AT_ONCE,
       );
@@ -628,10 +648,11 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
       return (await all<{ id: number }>(db, 'SELECT id FROM properties WHERE property_manager_id = ?', propertyManagerId)).map((r) => r.id);
     },
 
+    /** The Agency's Tradies who do the Trade, not counting those removed. */
     async tradiesWithTrade(agencyId: number, trade: Trade): Promise<Person[]> {
       return (await all<PersonRow>(
         db,
-        `SELECT * FROM people WHERE agency_id = ? AND role = 'tradie'
+        `SELECT * FROM people WHERE agency_id = ? AND role = 'tradie' AND removed_at IS NULL
          AND EXISTS (SELECT 1 FROM jsonb_array_elements_text(people.trades::jsonb) AS t (value) WHERE t.value = ?) ORDER BY id`,
         agencyId,
         trade,

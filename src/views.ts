@@ -527,6 +527,8 @@ export function createViews({ clock, modules }: Context) {
         email: tradie.email,
         businessAddress: tradie.businessAddress,
         located: tradie.location !== null,
+        /** When they were removed from the Agency, or null. A removed Tradie's profile still opens. */
+        removedAt: tradie.removedAt,
         myEst8Rating: await profiles.myEst8Rating(tradie.id),
         googleRating: tradie.googlePlaceId ? { rating: tradie.googleRating, reviewCount: tradie.googleReviewCount } : null,
         ratings: await profiles.ratings(tradie.id),

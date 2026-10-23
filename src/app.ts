@@ -259,6 +259,8 @@ export function createApp(
         /** Takes a Tenant off their Property, keeping their past Tickets. Refuses while they have an open Ticket or a waiting Maintenance Request. Returns their name. */
         removeTenant: (tenantId: number) => onboarding.removeTenant(agencyId, tenantId),
         addTradie: (input: Parameters<typeof onboarding.addTradie>[1]) => onboarding.addTradie(agencyId, input),
+        /** Takes a Tradie out of the Agency's lists, pickers and Nominated Tradies, keeping their past Quotes, visits and ratings. Returns their business name. */
+        removeTradie: (tradieId: number) => onboarding.removeTradie(agencyId, tradieId),
         addProperty: (input: Parameters<typeof onboarding.addProperty>[1]) => onboarding.addProperty(agencyId, input),
         findGoogleListings: (query: string) => onboarding.findGoogleListings(query),
         /** A Google listing's details and the Trades Jev suggests for it, to fill in the Tradie form. Stores nothing. */

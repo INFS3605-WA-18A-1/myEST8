@@ -127,6 +127,16 @@ export function createOnboarding({ ports, modules }: Context) {
       return tenant.name;
     },
 
+    /**
+     * Takes a Tradie out of the Agency (Profiles' removeTradie), keeping their Quotes, visits
+     * and ratings. Returns their business name.
+     */
+    async removeTradie(agencyId: number, tradieId: number) {
+      const tradie = await profiles.personInAgency(agencyId, tradieId, 'tradie');
+      await profiles.removeTradie(tradieId);
+      return tradie.businessName ?? tradie.name;
+    },
+
     findGoogleListings(query: string) {
       return ports.places.findListings(query);
     },
