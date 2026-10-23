@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { formatWhen } from '../../src/web/ui.ts';
 import { run } from '../../src/db.ts';
+import { ProviderRefusedError } from '../../src/ports.ts';
 import { AGENCY_NUMBER } from '../support/harness.ts';
 import { webWorld } from '../support/web.ts';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -12,6 +13,7 @@ import {
   firmQuote,
   KING_ST,
   PETE,
+  quoteRequestFor,
   quoteToken,
   TOM,
   tomsTapTicket,
@@ -170,7 +172,7 @@ describe('Quote Requests', () => {
     expect(sent.ok).toBe('Quote Requests sent to 3 Tradies');
     expect(sent.page.text).toContain('Quote Requests sent to 3 Tradies');
     expect(sent.page.text).toContain('3 asked: 0 gave an Estimate, 3 waiting on a reply.');
-    expect(sent.page.text).toMatch(/Pete's Plumbing Asked No reply yet, asked just now Quick Pipes Asked No reply yet, asked just now Drip Doctors Asked No reply yet, asked just now/);
+    expect(sent.page.text).toMatch(/Pete's Plumbing Asked No reply yet, asked just now Resend Quick Pipes Asked No reply yet, asked just now Resend Drip Doctors Asked No reply yet, asked just now Resend/);
     expect(sent.page.text.match(/Already asked/g)).toHaveLength(3);
     expect(sent.page.text).toContain("Pete's Plumbing, Quick Pipes, Drip Doctors");
   });
@@ -202,6 +204,43 @@ describe('Quote Requests', () => {
 
     expect(again.error).toBe("Pete's Plumbing has already been asked to quote");
     expect(again.page.text).toContain("Pete's Plumbing has already been asked to quote");
+  });
+
+  test('a Tradie who has not replied has a Resend button that sends the message again, and one who has replied has none', async () => {
+    const { w, job, open, submit } = await tapTicket();
+    const { pete, quick } = w.tradies;
+    const sent = await submit(formPosting((await open()).html, /\/quote-requests$/), { tradieIds: [pete.id, quick.id] });
+    const resend = (id: number) => new RegExp(`/quote-requests/${id}/resend$`);
+    const quickRequest = await quoteRequestFor(w, job, quick);
+    const quickResend = formPosting(sent.page.html, resend(quickRequest.quoteRequestId));
+    expect(sent.page.html.match(/\/resend"/g)).toHaveLength(2);
+
+    const resent = await submit(formPosting(sent.page.html, resend((await quoteRequestFor(w, job, pete)).quoteRequestId)));
+
+    expect(resent.ok).toBe("Quote Request resent to Pete's Plumbing");
+    expect(resent.page.text).toContain("Quote Request resent to Pete's Plumbing");
+    expect(w.h.messenger.templatesTo(PETE)).toEqual(['tradie.quote_request', 'tradie.quote_request']);
+
+    await tradieQuotes(w, job, quick, '$180 Tuesday', { priceCents: 180_00 });
+    expect((await open()).html.match(/\/resend"/g)).toHaveLength(1);
+    expect((await submit(quickResend)).error).toBe('Quick Pipes has already replied');
+  });
+
+  test('a message that fails to send on Resend is an error naming the reason', async () => {
+    const { w, job, open, submit } = await tapTicket();
+    const { pete, quick } = w.tradies;
+    await submit(formPosting((await open()).html, /\/quote-requests$/), { tradieIds: [pete.id, quick.id] });
+    const action = formPosting((await open()).html, new RegExp(`/quote-requests/${(await quoteRequestFor(w, job, pete)).quoteRequestId}/resend$`));
+    const send = w.h.messenger.send.bind(w.h.messenger);
+    w.h.messenger.send = async (message) => {
+      if (message.to === PETE) throw new ProviderRefusedError('Twilio 21608: trial account', 'a Twilio trial account can only text verified numbers');
+      return send(message);
+    };
+
+    const refused = await submit(action);
+
+    expect(refused.error).toBe("Couldn't send the message: a Twilio trial account can only text verified numbers.");
+    expect(refused.page.text).toContain("Couldn't send the message: a Twilio trial account can only text verified numbers.");
   });
 });
 
