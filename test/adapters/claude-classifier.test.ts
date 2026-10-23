@@ -155,8 +155,83 @@ describe('Claude classifier', () => {
       'answer:visit': { answer: 'not_an_answer', confidence: 0 },
     });
     const schema = ((await stub.requests[0]!.json()) as { tools: { input_schema: { properties: Record<string, unknown> } }[] }).tools[0]!.input_schema.properties;
-    expect(schema['answer:visit']).toEqual({ type: 'string', enum: ['confirm', 'reschedule', 'not_an_answer'] });
-    expect(schema['answer:visit_confidence']).toEqual({ type: 'number', minimum: 0, maximum: 1 });
+    expect(schema['answer_visit']).toEqual({ type: 'string', enum: ['confirm', 'reschedule', 'not_an_answer'] });
+    expect(schema['answer_visit_confidence']).toEqual({ type: 'number', minimum: 0, maximum: 1 });
+  });
+
+  describe('question ids that Claude would reject as property names', () => {
+    const KEY = /^[a-zA-Z0-9_.-]{1,64}$/;
+    const options = ['confirm', 'reschedule', 'not_an_answer'];
+    const longId = `answer:${'x'.repeat(80)}`;
+    const ids = ['urgency', 'answer:guided', 'answer:visit', 'answer_visit', longId];
+
+    const sentKeys = async (stub: ReturnType<typeof stubFetch>) => {
+      const { tools } = (await stub.requests[0]!.json()) as { tools: { input_schema: { properties: Record<string, unknown>; required: string[] } }[] };
+      const { properties, required } = tools[0]!.input_schema;
+      return { properties, required };
+    };
+
+    test('every property key sent in the input_schema is a name Claude accepts', async () => {
+      const stub = stubFetch(() => toolResponse({}));
+      const claude = createClaudeClassifier({ apiKey: API_KEY, fetch: stub.fetch });
+      await claude.classify({ text: 'Yes please', state: {}, questions: ids.map((id) => ({ id, options })) });
+
+      const { properties, required } = await sentKeys(stub);
+      const keys = Object.keys(properties);
+      expect(keys).toHaveLength(ids.length * 2);
+      for (const key of [...keys, ...required]) expect(key).toMatch(KEY);
+      expect(required.toSorted()).toEqual(keys.toSorted());
+    });
+
+    test('answers come back under the original ids, including ids that collide once made safe', async () => {
+      const stub = stubFetch(() =>
+        toolResponse({
+          urgency: 'high',
+          urgency_confidence: 0.9,
+          answer_guided: 'confirm',
+          answer_guided_confidence: 0.8,
+          answer_visit: 'reschedule',
+          answer_visit_confidence: 0.7,
+          answer_visit_2: 'confirm',
+          answer_visit_2_confidence: 0.6,
+        }),
+      );
+      const claude = createClaudeClassifier({ apiKey: API_KEY, fetch: stub.fetch });
+      const result = await claude.classify({
+        text: 'Yes please',
+        state: {},
+        questions: [
+          { id: 'urgency', options: ['urgent', 'high', 'routine'] },
+          { id: 'answer:guided', options },
+          { id: 'answer:visit', options },
+          { id: 'answer_visit', options },
+        ],
+      });
+
+      expect(result).toEqual({
+        urgency: { answer: 'high', confidence: 0.9 },
+        'answer:guided': { answer: 'confirm', confidence: 0.8 },
+        'answer:visit': { answer: 'reschedule', confidence: 0.7 },
+        answer_visit: { answer: 'confirm', confidence: 0.6 },
+      });
+      const { properties } = await sentKeys(stub);
+      expect(Object.keys(properties).toSorted()).toEqual(
+        ['urgency', 'urgency_confidence', 'answer_guided', 'answer_guided_confidence', 'answer_visit', 'answer_visit_confidence', 'answer_visit_2', 'answer_visit_2_confidence'].toSorted(),
+      );
+    });
+
+    test('an id too long to fit with its _confidence companion is shortened, and still answered under its original id', async () => {
+      const stub = stubFetch(() => toolResponse({}));
+      const claude = createClaudeClassifier({ apiKey: API_KEY, fetch: stub.fetch });
+      const probe = await claude.classify({ text: 'Yes', state: {}, questions: [{ id: longId, options }] });
+      const [answerKey] = Object.keys((await sentKeys(stub)).properties);
+
+      const replying = stubFetch(() => toolResponse({ [answerKey!]: 'reschedule', [`${answerKey}_confidence`]: 0.5 }));
+      const result = await createClaudeClassifier({ apiKey: API_KEY, fetch: replying.fetch }).classify({ text: 'Yes', state: {}, questions: [{ id: longId, options }] });
+
+      expect(probe[longId]).toEqual({ answer: 'not_an_answer', confidence: 0 });
+      expect(result).toEqual({ [longId]: { answer: 'reschedule', confidence: 0.5 } });
+    });
   });
 
   test.each([
