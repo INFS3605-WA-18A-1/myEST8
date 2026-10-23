@@ -1,17 +1,19 @@
 // The Agency's Properties: the list at /properties and one Property's profile at
 // /properties/:id: its open Tickets first, then the Max Repair Cost, Property Owner
 // and Property Manager, its Tenants, nominated Tradies, frequent issues and closed
-// Tickets. Adding a Property is the form in Setup.
+// Tickets. Adding a Property is the form in Setup. The profile's pen opens its details
+// in a form (?edit=details) that posts to /properties/:id/details.
 
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
 import { ActionError } from '../../shared.ts';
+import { cents, text } from '../forms.ts';
 import { icon } from '../icons.ts';
 import type { WebEnv } from '../env.ts';
 import { shellInfo } from '../shell.ts';
-import { alert, badge, button, contactLink, emptyState, entityLink, field, flashFrom, formatAge, formatMoney, humanise, linkButton, page, rowLink, section, sectionHeader, statusBadge, table, ticketCell, urgencyBadge, type Html } from '../ui.ts';
-import { fieldGrid, importPanel, propertyPlaceFields, tradiePicker } from './onboarding-forms.ts';
+import { alert, badge, button, contactLink, detailsForm, editPen, emptyState, entityLink, flashFrom, formatAge, formatMoney, humanise, linkButton, page, rowLink, section, sectionHeader, statusBadge, table, ticketCell, urgencyBadge, type Html } from '../ui.ts';
+import { chosenId, importPanel, nominatedFrom, postedLocation, propertyFields, saveDetails, type DetailsEdit, type Values } from './onboarding-forms.ts';
 
 type Overview = Awaited<ReturnType<PropertyManagerActions['propertyOverviews']>>[number];
 type PropertyView = Awaited<ReturnType<PropertyManagerActions['property']>>;
@@ -58,50 +60,7 @@ export function propertyPages() {
               ${owners.length ? '' : html`<p class="mb-3 text-sm text-high">Add a Property Owner on the Setup page first.</p>`}
               <form method="post" action="/setup/properties">
                 ${errorFor('property')}
-                ${fieldGrid(html`
-                  ${propertyPlaceFields()}
-                  ${field({
-                    label: 'Property Owner',
-                    name: 'ownerId',
-                    id: 'property-owner',
-                    type: 'select',
-                    required: true,
-                    placeholder: 'Choose the Property Owner',
-                    options: owners.map((o) => ({ value: String(o.id), label: o.name })),
-                  })}
-                  ${field({
-                    label: 'Property Manager',
-                    name: 'propertyManagerId',
-                    id: 'property-manager',
-                    type: 'select',
-                    required: true,
-                    value: String(pm.id),
-                    options: propertyManagers.map((m) => ({ value: String(m.id), label: m.name })),
-                  })}
-                  ${field({
-                    label: 'Max Repair Cost ($)',
-                    name: 'maxRepairCost',
-                    id: 'property-max',
-                    type: 'number',
-                    step: '0.01',
-                    min: 0,
-                    required: true,
-                    placeholder: '500',
-                    hint: "The most a Ticket's Repair Cost can reach before the Property Owner must approve.",
-                  })}
-                  ${field({
-                    label: 'Building Manager (strata only)',
-                    name: 'buildingManagerId',
-                    id: 'property-building-manager',
-                    type: 'select',
-                    options: [{ value: '', label: 'None' }, ...buildingManagers.map((b) => ({ value: String(b.id), label: b.name }))],
-                  })}
-                `)}
-                <div class="mt-3">
-                  ${tradies.length
-                    ? tradiePicker({ id: 'property', tradies })
-                    : html`<p class="text-sm text-muted">Add Tradies on the Tradies page to nominate them for Urgent Repairs.</p>`}
-                </div>
+                ${propertyFields({ owners, buildingManagers, propertyManagers, tradies, manager: pm.id })}
                 <div class="mt-3">${button('Add Property', { variant: 'primary' })}</div>
               </form>
               <details class="import-details mt-4 border-t border-line pt-3" id="import-properties" ${refused === 'import-properties' ? 'open' : ''}>
@@ -115,43 +74,83 @@ export function propertyPages() {
     );
   });
 
-  pages.get('/:id{[0-9]+}', async (c) => {
-    const { actions, pm } = c.var;
-    let property: PropertyView;
-    try {
-      property = await actions.property(Number(c.req.param('id')));
-    } catch (error) {
-      if (!(error instanceof ActionError) || error.code !== 'not_found') throw error;
-      return c.html(
-        page({
-          title: 'Property not found',
-          pm,
-          active: 'properties',
-          shell: shellInfo(c),
-          body: emptyState('There is no such Property in your Agency.', linkButton('Back to Properties', '/properties')),
-        }),
-        404,
-      );
-    }
-    const now = actions.now();
-    return c.html(
-      page({
-        title: property.address,
-        pm,
-        active: 'properties',
-        flash: flashFrom(c.req.url),
-        shell: shellInfo(c),
-        actions: linkButton('Back to Properties', '/properties', { variant: 'ghost', size: 'sm' }),
-        body: html`
-          ${openTickets(property, now)} ${facts(property)}
-          <div class="grid gap-6 lg:grid-cols-2">${tenants(property)}${nominated(property)}</div>
-          ${frequent(property)} ${closedTickets(property, now)}
-        `,
-      }),
-    );
+  pages.post('/:id{[0-9]+}/details', (c) => {
+    const id = Number(c.req.param('id'));
+    return saveDetails(c, {
+      profile: `/properties/${id}`,
+      save: (form) => {
+        const location = postedLocation(form);
+        return c.var.actions.editProperty(id, {
+          address: text(form, 'address'),
+          suburb: text(form, 'suburb'),
+          ownerId: chosenId(form, 'ownerId', 'the Property Owner'),
+          propertyManagerId: chosenId(form, 'propertyManagerId', 'the Property Manager'),
+          maxRepairCostCents: maxRepairCost(form),
+          nominatedTradieIds: nominatedFrom(form),
+          buildingManagerId: text(form, 'buildingManagerId') ? Number(text(form, 'buildingManagerId')) : undefined,
+          ...(location ? { location } : {}),
+        });
+      },
+      show: (refused) => profilePage(c, id, refused),
+    });
   });
 
+  pages.get('/:id{[0-9]+}', (c) => profilePage(c, Number(c.req.param('id'))));
+
   return pages;
+}
+
+/** The Max Repair Cost typed in the edit form; a refusal comes back against its field, so it shows under it. */
+function maxRepairCost(form: Parameters<typeof text>[0]): number {
+  const refuse = (message: string): never => {
+    throw new ActionError('invalid', message, { maxRepairCost: message });
+  };
+  if (!text(form, 'maxRepairCost')) refuse('Enter the Max Repair Cost');
+  try {
+    return cents(form, 'maxRepairCost', 'the Max Repair Cost');
+  } catch (error) {
+    if (error instanceof ActionError) refuse(error.message);
+    throw error;
+  }
+}
+
+/** A Property's profile; `refused` is a save of its details that was refused, shown with the form open. */
+async function profilePage(c: Context<WebEnv>, id: number, refused?: DetailsEdit) {
+  const { actions, pm } = c.var;
+  let property: PropertyView;
+  try {
+    property = await actions.property(id);
+  } catch (error) {
+    if (!(error instanceof ActionError) || error.code !== 'not_found') throw error;
+    return c.html(
+      page({
+        title: 'Property not found',
+        pm,
+        active: 'properties',
+        shell: shellInfo(c),
+        body: emptyState('There is no such Property in your Agency.', linkButton('Back to Properties', '/properties')),
+      }),
+      404,
+    );
+  }
+  const now = actions.now();
+  const editing = !!refused || c.req.query('edit') === 'details';
+  return c.html(
+    page({
+      title: property.address,
+      pm,
+      active: 'properties',
+      flash: flashFrom(c.req.url),
+      shell: shellInfo(c),
+      actions: linkButton('Back to Properties', '/properties', { variant: 'ghost', size: 'sm' }),
+      body: html`
+        ${openTickets(property, now)} ${editing ? await editForm(c, property, refused) : facts(property)}
+        <div class="grid gap-6 lg:grid-cols-2">${tenants(property)}${nominated(property)}</div>
+        ${frequent(property)} ${closedTickets(property, now)}
+      `,
+    }),
+    refused ? 400 : 200,
+  );
 }
 
 function list(properties: Overview[]): Html {
@@ -181,29 +180,66 @@ function contact(person: { name: string; mobile: string | null; email: string | 
   </span>`;
 }
 
-/** The headline facts: the Max Repair Cost first and large, then who owns and who manages the Property. */
+/** The headline facts: the Max Repair Cost first and large, then who owns and who manages the Property, with a pen to edit them. */
 function facts(p: PropertyView): Html {
-  return html`<section class="section" aria-label="Property details">
-    <dl class="property-facts">
-      <div>
-        <dt>Max Repair Cost</dt>
-        <dd class="property-facts-money num">${formatMoney(p.maxRepairCostCents)}</dd>
-      </div>
-      <div>
-        <dt>Property Owner</dt>
-        <dd>${contact(p.owner)}</dd>
-      </div>
-      <div>
-        <dt>Property Manager</dt>
-        <dd>${p.propertyManager}</dd>
-      </div>
-      ${p.buildingManager
-        ? html`<div>
-            <dt>Building Manager</dt>
-            <dd>${contact(p.buildingManager)}</dd>
-          </div>`
-        : ''}
-    </dl>
+  return html`<section class="section" id="details" aria-label="Property details">
+    <div class="details-head">
+      <dl class="property-facts details-body">
+        <div>
+          <dt>Max Repair Cost</dt>
+          <dd class="property-facts-money num">${formatMoney(p.maxRepairCostCents)}</dd>
+        </div>
+        <div>
+          <dt>Property Owner</dt>
+          <dd>${contact(p.owner)}</dd>
+        </div>
+        <div>
+          <dt>Property Manager</dt>
+          <dd>${p.propertyManager}</dd>
+        </div>
+        ${p.buildingManager
+          ? html`<div>
+              <dt>Building Manager</dt>
+              <dd>${contact(p.buildingManager)}</dd>
+            </div>`
+          : ''}
+      </dl>
+      ${editPen('Edit details', `/properties/${p.propertyId}?edit=details#details`)}
+    </div>
+  </section>`;
+}
+
+/**
+ * The form to edit the address, suburb, Max Repair Cost, Property Owner, Property Manager, Building Manager and
+ * Nominated Tradies, in place of the facts: the fields and the Tradie picker of adding a Property, filled in
+ * from the Property or from what was posted. The pin stays hidden and empty: only a picked suggestion fills it.
+ */
+async function editForm(c: Context<WebEnv>, p: PropertyView, refused?: DetailsEdit): Promise<Html> {
+  const { actions } = c.var;
+  const [properties, owners, buildingManagers, tradies, propertyManagers] = await Promise.all([
+    actions.properties(),
+    actions.people('owner'),
+    actions.people('building_manager'),
+    actions.people('tradie'),
+    actions.propertyManagers(),
+  ]);
+  const now = properties.find((x) => x.id === p.propertyId)!;
+  const values: Values = refused?.values ?? {
+    address: now.address,
+    suburb: now.suburb,
+    ownerId: String(now.ownerId),
+    propertyManagerId: String(now.propertyManagerId),
+    maxRepairCost: String(now.maxRepairCostCents / 100),
+    buildingManagerId: now.buildingManagerId === null ? '' : String(now.buildingManagerId),
+    nominatedTradieIds: now.nominatedTradieIds.map(String),
+  };
+  return html`<section class="section" id="details" aria-label="Property details">
+    ${detailsForm({
+      action: `/properties/${p.propertyId}/details`,
+      cancel: `/properties/${p.propertyId}`,
+      refusal: refused && !Object.keys(refused.errors).length ? refused.message : undefined,
+      fields: propertyFields({ owners, buildingManagers, propertyManagers, tradies, values, errors: refused?.errors }),
+    })}
   </section>`;
 }
 

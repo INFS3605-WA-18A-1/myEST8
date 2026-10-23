@@ -1,6 +1,6 @@
 import type { Context } from './context.ts';
 import type { ChannelType } from './ports.ts';
-import { invalid, TRADES, type Role, type Trade } from './shared.ts';
+import { invalid, isEmail, normalizeAddress, phoneProblem, TRADES, type Role, type Trade } from './shared.ts';
 
 type Contact = { name: string; mobile?: string; email?: string };
 
@@ -53,10 +53,22 @@ export function createOnboarding({ ports, modules }: Context) {
     await profiles.propertyInAgency(agencyId, input.propertyId);
   }
 
-  function checkTradie(input: TradieInput) {
+  /** A mobile and an email as an edit checks them: a number that can be texted and something shaped like an address. */
+  function requireContactFormat(input: Contact) {
+    const problem = input.mobile ? phoneProblem(normalizeAddress(input.mobile)) : null;
+    if (problem) invalid(problem, 'mobile');
+    if (input.email && !isEmail(input.email)) invalid(`${input.email.trim()} isn't an email address`, 'email');
+  }
+
+  /** What a Tradie is in the Agency's eyes: who to contact, the business and what it does. */
+  function checkTradieDetails(input: Contact & { businessName: string; trades: Trade[] }) {
     requireContact(input);
     if (!input.businessName.trim()) invalid('Enter the business name', 'businessName');
     if (!input.trades.length || input.trades.some((t) => !TRADES.includes(t))) invalid(`Choose Trades from: ${TRADES.join(', ')}`, 'trades');
+  }
+
+  function checkTradie(input: TradieInput) {
+    checkTradieDetails(input);
     if (!Number.isInteger(input.startingRating) || input.startingRating < 1 || input.startingRating > 5) {
       invalid('The starting rating is a whole number from 1 to 5', 'startingRating');
     }
@@ -127,6 +139,30 @@ export function createOnboarding({ ports, modules }: Context) {
       return tenant.name;
     },
 
+    /**
+     * Changes a Tenant's name, mobile and email, checked as when adding them, and the addresses their
+     * messages are matched on with them. A Tenant who has left their Property can't be edited: their
+     * addresses are free for someone else.
+     */
+    async editTenant(agencyId: number, tenantId: number, input: Contact) {
+      const tenant = await profiles.personInAgency(agencyId, tenantId, 'tenant');
+      if (tenant.propertyId === null) invalid(`${tenant.name} has already left their Property`);
+      requireContact(input);
+      requireContactFormat(input);
+      await profiles.updatePerson(tenantId, input);
+    },
+
+    /**
+     * Changes a Tradie's business name, contact name, mobile, email and Trades, checked as when adding
+     * them. Their Google listing and starting rating stay as they were.
+     */
+    async editTradie(agencyId: number, tradieId: number, input: Contact & { businessName: string; trades: Trade[] }) {
+      await profiles.personInAgency(agencyId, tradieId, 'tradie');
+      checkTradieDetails(input);
+      requireContactFormat(input);
+      await profiles.updatePerson(tradieId, input);
+    },
+
     findGoogleListings(query: string) {
       return ports.places.findListings(query);
     },
@@ -157,6 +193,16 @@ export function createOnboarding({ ports, modules }: Context) {
     async addProperty(agencyId: number, input: PropertyInput) {
       await checkProperty(agencyId, input);
       return profiles.addProperty(agencyId, input);
+    },
+
+    /**
+     * Changes a Property's address, suburb, Max Repair Cost, Property Owner, Property Manager, Building
+     * Manager and Nominated Tradies, checked as when adding it. A new address is looked up on the map again.
+     */
+    async editProperty(agencyId: number, propertyId: number, input: PropertyInput) {
+      await profiles.propertyInAgency(agencyId, propertyId);
+      await checkProperty(agencyId, input);
+      await profiles.updateProperty(propertyId, input);
     },
 
     // The checks each add action makes, for checking many rows before adding any

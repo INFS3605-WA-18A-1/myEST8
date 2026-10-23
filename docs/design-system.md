@@ -368,6 +368,28 @@ Business name, Contact name, Mobile, Email, Trades, Starting rating   [Add Tradi
 - **When Google fails** while loading a listing, the page shows "Google search isn't working right now. Try again, or mark the Tradie as not on Google." and the manual link. When Jev fails the form still fills in, with no Trades ticked.
 - **A refused form** comes back to the same choice: the form posts to a URL that carries `google`, `place` or `manual`. The wizard shows the posted values again; Setup and the Tradies page redirect back (`listingParams` builds the address) and fill in from the listing again. Nothing is stored until Add Tradie.
 
+### Editing a profile's details
+
+A Tenant, Property or Tradie profile edits its details in place, by the same pen-to-edit pattern as the Summary on a Maintenance Request. `editPen()` and `detailsForm()` in `ui.ts` are the two parts; the three profile pages use them, so don't copy their markup.
+
+```
+┌────────────────────────────────────────────┐
+│ Max Repair Cost   Property Owner       [✎] │  the details, the pen at the side
+│ $500.00           Olivia Owens             │
+└────────────────────────────────────────────┘
+        ── press the pen ──▶  /properties/3?edit=details#details
+┌────────────────────────────────────────────┐
+│ Address          Suburb                    │  the form takes the details' place
+│ Property Owner   Property Manager  ...     │
+│ [Save]  Cancel                             │
+└────────────────────────────────────────────┘
+```
+
+- **The pen** is an `.icon-btn` (36 px, Harbour `pencil-simple`) with the accessible name and tooltip "Edit details". It is a link to `?edit=details#details`, so it works without JavaScript. It sits at the right of the details (`.details-head` beside `.details-body`); on a Tradie it sits beside the Trade badges.
+- **The form** replaces the displayed details in the same `section` (`id="details"`), with the fields and pickers used to add the same record (a Property's `propertyFields()` is shared by both). Save is the primary button and Cancel a ghost link to the plain profile, in `.details-actions`. A Tradie's form leaves out the starting rating, and the Google listing and business address stay where they are. The rest of the page stays below it.
+- **Saving** goes back to the profile with the "Details saved." flash. **A refused save** shows the same form again with the status 400: what was typed stays, and the error sits under its field (`aria-invalid`, `.field-error`). An error the form can't point at (a Tenant who has already left their Property) is a message above the details instead.
+- **Who can't be edited:** a Tenant who has left has no pen. Their history stays as it was.
+
 ### Emails
 
 `renderEmail({ agencyName, subject, text })` in `src/email-layout.ts` turns any template's plain text into the HTML email, so no template writes HTML. `notifications` sets it as `html` on every email (the Resend and SendGrid mailers send it with `text` as the alternative); SMS and WhatsApp stay plain text.
