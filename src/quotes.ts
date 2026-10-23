@@ -1,6 +1,6 @@
 import type { Context } from './context.ts';
 import { all, one, run, transaction } from './db.ts';
-import { UndeliverableError, type ChannelType } from './ports.ts';
+import { ProviderRefusedError, UndeliverableError, type ChannelType } from './ports.ts';
 import { addMs, dollars, HOUR_MS, invalid, iso, median, newToken, notFound, withoutContactDetails, type Trade } from './shared.ts';
 import type { OpenItem } from './tickets.ts';
 import { wallClock } from './zoned-time.ts';
@@ -100,6 +100,11 @@ function datesOf(value: unknown): string[] {
 
 /** What a Quote counts towards the Repair Cost: the Not-to-exceed Cap when proceeding on an Estimate, else its price. */
 const costOf = (q: QuoteRow) => q.not_to_exceed_cents ?? q.price_cents!;
+
+/** Refuses a send of Quote Requests that reached no Tradie, naming each and why. */
+function refuseNoneSent(unreached: { tradie: string; reason: string }[]): never {
+  invalid(`No Quote Requests were sent. Couldn't reach ${unreached.map((u) => `${u.tradie}: ${u.reason}`).join('; ')}`);
+}
 
 /** Whether a whole number of cents above zero. */
 const isCents = (n: unknown): n is number => typeof n === 'number' && Number.isInteger(n) && n > 0;
@@ -645,8 +650,9 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
 
     /**
      * Asks each Tradie for an Estimate, each with their own quote page link. A Tradie none of the
-     * Agency's channels reaches is skipped and named in `unreached`, with why; the others are still
-     * asked. Refuses when none can be reached, recording nothing.
+     * Agency's channels reaches, or whose message fails to send, is named in `unreached` with why,
+     * and has no Quote Request; the others are still asked. Refuses when none can be reached,
+     * recording nothing.
      */
     async sendQuoteRequests(agencyId: number, jobId: number, tradieIds: number[]) {
       // Checked and recorded in one transaction, so a double submit can't ask a Tradie twice.
@@ -676,9 +682,7 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
             unreached.push({ tradie: tradie.businessName ?? tradie.name, reason: error.userReason });
           }
         }
-        if (!tradies.length) {
-          invalid(`No Quote Requests were sent. Couldn't reach ${unreached.map((u) => `${u.tradie}: ${u.reason}`).join('; ')}`);
-        }
+        if (!tradies.length) refuseNoneSent(unreached);
         const requests: QuoteRequestRow[] = [];
         for (const tradie of tradies) {
           requests.push(
@@ -694,28 +698,44 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
             ))!,
           );
         }
-        await tickets.recordEvent(ticket.id, 'quote_requests_sent', { jobId, tradies: tradies.map((t) => t.businessName ?? t.name) });
         return { job, ticket, property, tradies, channels, unreached, requests };
       });
       const issue = await tickets.issue(ticket.issueId);
       const photoFileIds = (await tickets.photos(issue.id)).map((p) => p.fileId);
+      const reached: string[] = [];
       for (const [i, tradie] of tradies.entries()) {
+        const name = tradie.businessName ?? tradie.name;
         const byEmail = channels.get(tradie.id) === 'email';
-        await notifications.send(
-          tradie.id,
-          'tradie.quote_request',
-          {
-            trade: job.trade,
-            urgency: ticket.urgency,
-            description: withoutContactDetails(issue.summary ?? issue.description),
-            suburb: property.suburb,
-            quoteLink: quoteLink(requests[i]!),
-          },
-          { issueId: issue.id, attachmentFileIds: byEmail ? photoFileIds : [] },
-        );
+        try {
+          await notifications.send(
+            tradie.id,
+            'tradie.quote_request',
+            {
+              trade: job.trade,
+              urgency: ticket.urgency,
+              description: withoutContactDetails(issue.summary ?? issue.description),
+              suburb: property.suburb,
+              quoteLink: quoteLink(requests[i]!),
+            },
+            { issueId: issue.id, attachmentFileIds: byEmail ? photoFileIds : [] },
+          );
+        } catch (error) {
+          // No message went out, so the Quote Request (nothing is attached to it yet) goes too, and the Tradie can be asked again.
+          await run(db, 'DELETE FROM quote_requests WHERE id = ?', requests[i]!.id);
+          if (error instanceof UndeliverableError || error instanceof ProviderRefusedError) {
+            unreached.push({ tradie: name, reason: error.userReason });
+          } else {
+            console.error(`Quote Request to ${name} failed to send`, error);
+            unreached.push({ tradie: name, reason: "the message couldn't be sent" });
+          }
+          continue;
+        }
         await worker.schedule('quotes.reminder', { quoteRequestId: requests[i]!.id }, addMs(clock.now(), QUOTE_REMINDER_MS));
+        reached.push(name);
       }
-      return { sent: tradies.length, unreached };
+      if (!reached.length) refuseNoneSent(unreached);
+      await tickets.recordEvent(ticket.id, 'quote_requests_sent', { jobId, tradies: reached });
+      return { sent: reached.length, unreached };
     },
 
     /**

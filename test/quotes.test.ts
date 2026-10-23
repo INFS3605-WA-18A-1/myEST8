@@ -1,7 +1,20 @@
-import { describe, expect, test } from 'vitest';
-import { AGENCY_NUMBER, HOUR } from './support/harness.ts';
+import { format } from 'node:util';
+import { describe, expect, test, vi } from 'vitest';
+import { ProviderRefusedError, UndeliverableError } from '../src/ports.ts';
+import { AGENCY_NUMBER, HOUR, type Harness } from './support/harness.ts';
 import { upload } from './support/photos.ts';
 import { confirmedEstimates, confirmedQuotes, firmQuote, jobView, KING_ST, quoteRequestFor, TOM, tomsTapTicket, tradieQuotes, world } from './support/world.ts';
+
+/** Makes every message to `address` throw `error` until `failing.on` is set to false. */
+function failSendsTo(h: Harness, address: string, error: Error) {
+  const failing = { on: true };
+  const send = h.messenger.send.bind(h.messenger);
+  h.messenger.send = async (message) => {
+    if (failing.on && message.to === address) throw error;
+    return send(message);
+  };
+  return failing;
+}
 
 describe('recommending Tradies', () => {
   test('only Tradies with the Trade are recommended, by myEST8 rating, then Google rating, then median Firm Quote, with both ratings shown', async () => {
@@ -132,6 +145,72 @@ describe('Quote Requests', () => {
 
     expect((await jobView(w, job)).quoteRequests).toEqual([]);
     expect(h.messenger.sent).toHaveLength(asked);
+  });
+
+  test('a Tradie whose message the provider refuses has no Quote Request, and the others are still sent theirs', async () => {
+    const w = await world();
+    const { h, alice, tradies } = w;
+    const job = await tomsTapTicket(w);
+    failSendsTo(h, tradies.pete.address, new ProviderRefusedError('Twilio 21608: trial account', 'a Twilio trial account can only text verified numbers'));
+
+    const result = await alice.sendQuoteRequests(job.jobId, [tradies.pete.id, tradies.quick.id]);
+
+    expect(result).toEqual({
+      sent: 1,
+      unreached: [{ tradie: "Pete's Plumbing", reason: 'a Twilio trial account can only text verified numbers' }],
+    });
+    expect((await jobView(w, job)).quoteRequests.map((r) => r.tradieId)).toEqual([tradies.quick.id]);
+    expect(h.messenger.to(tradies.quick.address)).toMatchObject([{ channel: 'email', template: 'tradie.quote_request' }]);
+    expect(h.messenger.to(tradies.pete.address)).toEqual([]);
+    // The Ticket's timeline says only who was really asked.
+    expect((await alice.ticket(job.ticketId)).timeline).toContainEqual(expect.objectContaining({ kind: 'quote_requests_sent', tradies: ['Quick Pipes'] }));
+  });
+
+  test('are refused when every message fails, and nothing is recorded', async () => {
+    const w = await world();
+    const { h, alice, tradies } = w;
+    const job = await tomsTapTicket(w);
+    failSendsTo(h, tradies.pete.address, new UndeliverableError('sms', tradies.pete.address, 'Twilio 21614: not a mobile'));
+    failSendsTo(h, tradies.quick.address, new ProviderRefusedError('Resend 429', 'the email provider is limiting how many emails go out'));
+
+    await expect(alice.sendQuoteRequests(job.jobId, [tradies.pete.id, tradies.quick.id])).rejects.toThrow(
+      "No Quote Requests were sent. Couldn't reach Pete's Plumbing: that number couldn't be used; Quick Pipes: the email provider is limiting how many emails go out",
+    );
+
+    expect((await jobView(w, job)).quoteRequests).toEqual([]);
+    expect((await alice.ticket(job.ticketId)).timeline.map((e) => e.kind)).not.toContain('quote_requests_sent');
+  });
+
+  test('an unexpected error is logged with its stack and the Tradie is reported, not a failure of the page', async () => {
+    const w = await world();
+    const { h, alice, tradies } = w;
+    const job = await tomsTapTicket(w);
+    const error = new Error('socket hang up');
+    failSendsTo(h, tradies.pete.address, error);
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const result = await alice.sendQuoteRequests(job.jobId, [tradies.pete.id, tradies.quick.id]);
+    const output = logged.mock.calls.map((call) => format(...call));
+    logged.mockRestore();
+
+    expect(result).toEqual({ sent: 1, unreached: [{ tradie: "Pete's Plumbing", reason: "the message couldn't be sent" }] });
+    expect(output).toHaveLength(1);
+    expect(output[0]).toContain(error.stack);
+  });
+
+  test('a Tradie whose message failed can be asked again, without being "already asked"', async () => {
+    const w = await world();
+    const { h, alice, tradies } = w;
+    const job = await tomsTapTicket(w);
+    const pete = failSendsTo(h, tradies.pete.address, new UndeliverableError('sms', tradies.pete.address, 'Twilio 21614: not a mobile'));
+    await alice.sendQuoteRequests(job.jobId, [tradies.pete.id, tradies.quick.id]);
+
+    pete.on = false;
+    const again = await alice.sendQuoteRequests(job.jobId, [tradies.pete.id]);
+
+    expect(again).toEqual({ sent: 1, unreached: [] });
+    expect((await jobView(w, job)).quoteRequests.map((r) => r.tradieId)).toEqual([tradies.quick.id, tradies.pete.id]);
+    expect(h.messenger.templatesTo(tradies.pete.address)).toEqual(['tradie.quote_request']);
   });
 
   test('photos are attached to Quote Requests sent by email only', async () => {
