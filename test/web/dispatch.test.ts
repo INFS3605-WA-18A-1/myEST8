@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { AGENCY_NUMBER } from '../support/harness.ts';
 import { visible, webWorld } from '../support/web.ts';
 import { confirmedQuotes, KING_ST, tomsTapTicket, type World } from '../support/world.ts';
 
@@ -467,6 +468,35 @@ describe('Dispatch: the Jobs to dispatch', () => {
     expect(visible(await dispatch(w, cookie, res.headers.get('location')!.split('#')[0]))).toContain('Send Quote Requests to at least two Tradies');
   });
 
+  test('with no SMS channel connected, Tradies who can be reached are asked and the page names the one who cannot', async () => {
+    const w = await webWorld();
+    const job = await tomsTapTicket(w);
+    await w.alice.disconnectServerSms(AGENCY_NUMBER);
+    const cookie = await w.signIn();
+
+    const res = await w.post(`/dispatch/jobs/${job.jobId}/quote-requests`, { tradieIds: [w.ids.pete, w.ids.quick] }, cookie);
+
+    expect(res.status).toBe(303);
+    expect(res.headers.get('location')).toMatch(/^\/dispatch\?ok=.*#to-dispatch$/);
+    expect((await w.alice.ticket(job.ticketId)).jobs[0]!.quoteRequests.map((r) => r.tradieId)).toEqual([w.ids.quick]);
+    const text = visible(await dispatch(w, cookie, res.headers.get('location')!.split('#')[0]));
+    expect(text).toContain("Quote Request sent to 1 Tradie. Couldn't reach Pete's Plumbing: no SMS channel is connected and they have no email address");
+  });
+
+  test('with no SMS channel connected and no Tradie reachable, nothing is sent and the page says why', async () => {
+    const w = await webWorld();
+    const job = await tomsTapTicket(w);
+    await w.alice.disconnectServerSms(AGENCY_NUMBER);
+    const cookie = await w.signIn();
+
+    const res = await w.post(`/dispatch/jobs/${job.jobId}/quote-requests`, { tradieIds: [w.ids.pete, w.ids.dana] }, cookie);
+
+    expect(res.headers.get('location')).toMatch(/^\/dispatch\?error=.*#to-dispatch$/);
+    expect((await w.alice.ticket(job.ticketId)).jobs[0]!.quoteRequests).toEqual([]);
+    const text = visible(await dispatch(w, cookie, res.headers.get('location')!.split('#')[0]));
+    expect(text).toContain("Couldn't reach Pete's Plumbing: no SMS channel is connected and they have no email address; Drip Doctors: no SMS channel is connected and they have no email address");
+  });
+
   test('a Job with an approved Quote is a card to book its Tradie, with their free times, and sending it books the visit', async () => {
     const w = await webWorld();
     const job = await tomsTapTicket(w);
@@ -490,6 +520,23 @@ describe('Dispatch: the Jobs to dispatch', () => {
     expect(decodeURIComponent(res.headers.get('location')!)).toContain('Work Order sent for Tue 13 Oct, 9:00 am');
     expect((await w.alice.ticket(job.ticketId)).jobs[0]!.workOrder).toMatchObject({ start: TUE_9AM.toISOString() });
     expect(await dispatch(w, cookie)).not.toContain(`id="dispatch-job-${job.jobId}"`);
+  });
+
+  test('booking a visit with no SMS channel connected and a Tradie with only a mobile is a flash, not a 500', async () => {
+    const w = await webWorld();
+    const job = await tomsTapTicket(w);
+    const [quote] = await confirmedQuotes(w, job, [[w.tradies.pete, 150_00, TUE_9AM]]);
+    await w.alice.chooseQuote(quote!.quoteId, 'Usual plumber');
+    await w.alice.disconnectServerSms(AGENCY_NUMBER);
+    const cookie = await w.signIn();
+
+    const res = await w.post(`/dispatch/jobs/${job.jobId}/work-order`, { start: '2026-10-13T09:00', hours: '2' }, cookie);
+
+    expect(res.status).toBe(303);
+    expect(res.headers.get('location')).toMatch(/^\/dispatch\?error=/);
+    expect(decodeURIComponent(res.headers.get('location')!.replace(/\+/g, ' '))).toContain(
+      "Couldn't send the message: no SMS channel is connected and they have no email address.",
+    );
   });
 });
 

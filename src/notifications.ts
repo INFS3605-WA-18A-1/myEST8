@@ -1,6 +1,6 @@
 import type { Context } from './context.ts';
 import { renderEmail } from './email-layout.ts';
-import type { ChannelType } from './ports.ts';
+import { UndeliverableError, type ChannelType } from './ports.ts';
 import type { Person } from './profiles.ts';
 import { HOUR_MS, invalid } from './shared.ts';
 import { templates, type TemplateData, type TemplateName } from './templates.ts';
@@ -20,15 +20,31 @@ export interface SendOptions {
 
 /** The only module that sends messages. Chooses the channel, sends, and logs against the issue or Ticket. */
 export function createNotifications({ clock, ports, files, modules }: Context) {
-  function route(person: Person, preferEmail = false): { channelType: ChannelType; to: string } {
-    if (preferEmail && person.email) return { channelType: 'email', to: person.email };
+  /** Whether the person's Agency has this channel connected: a message can only go out on one it has. */
+  async function connected(person: Person, channelType: ChannelType) {
+    return (await modules.profiles.channelAddress(person.agencyId, channelType)) !== null;
+  }
+
+  async function route(person: Person, preferEmail = false): Promise<{ channelType: ChannelType; to: string }> {
+    if (preferEmail && person.email && (await connected(person, 'email'))) return { channelType: 'email', to: person.email };
     const last = person.lastInbound;
-    if (last && clock.now().getTime() - new Date(last.at).getTime() < REPLY_WINDOW_MS) {
+    if (last && clock.now().getTime() - new Date(last.at).getTime() < REPLY_WINDOW_MS && (await connected(person, last.channelType))) {
       return { channelType: last.channelType, to: last.address };
     }
-    if (person.mobile) return { channelType: 'sms', to: person.mobile };
-    if (person.email) return { channelType: 'email', to: person.email };
-    throw new Error(`${person.name} has no mobile number or email address`);
+    if (person.mobile && (await connected(person, 'sms'))) return { channelType: 'sms', to: person.mobile };
+    if (person.email && (await connected(person, 'email'))) return { channelType: 'email', to: person.email };
+    if (!person.mobile && !person.email) throw new Error(`${person.name} has no mobile number or email address`);
+    // A mobile or email address here is one whose channel the Agency hasn't connected.
+    const why = [
+      person.mobile ? 'no SMS channel is connected' : 'they have no mobile number',
+      person.email ? 'no email channel is connected' : 'they have no email address',
+    ].join(' and ');
+    throw new UndeliverableError(
+      person.mobile ? 'sms' : 'email',
+      (person.mobile ?? person.email)!,
+      `can't reach ${person.businessName ?? person.name}: ${why}`,
+      why,
+    );
   }
 
   async function deliver<K extends TemplateName>(
@@ -83,14 +99,14 @@ export function createNotifications({ clock, ports, files, modules }: Context) {
   }
 
   return {
-    /** The channel the next message to this person would use. */
+    /** The channel the next message to this person would use. Throws an `UndeliverableError` when none of the Agency's channels reaches them. */
     async channelFor(personId: number): Promise<ChannelType> {
-      return route(await modules.profiles.person(personId)).channelType;
+      return (await route(await modules.profiles.person(personId))).channelType;
     },
 
     async send<K extends TemplateName>(personId: number, name: K, data: TemplateData<K>, options: SendOptions = {}) {
       const person = await modules.profiles.person(personId);
-      const { channelType, to } = route(person, options.preferEmail);
+      const { channelType, to } = await route(person, options.preferEmail);
       const pm = options.copyPropertyManagerId ? await modules.profiles.propertyManager(options.copyPropertyManagerId) : null;
       const cc = pm && channelType === 'email' ? [pm.email] : [];
       const fileIds = options.attachmentFileIds ?? [];

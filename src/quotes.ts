@@ -1,5 +1,6 @@
 import type { Context } from './context.ts';
 import { all, one, run, transaction } from './db.ts';
+import { ProviderRefusedError, UndeliverableError } from './ports.ts';
 import { addMs, dollars, HOUR_MS, invalid, iso, median, newToken, notFound, withoutContactDetails, type Trade } from './shared.ts';
 import type { OpenItem } from './tickets.ts';
 import { wallClock } from './zoned-time.ts';
@@ -99,6 +100,11 @@ function datesOf(value: unknown): string[] {
 
 /** What a Quote counts towards the Repair Cost: the Not-to-exceed Cap when proceeding on an Estimate, else its price. */
 const costOf = (q: QuoteRow) => q.not_to_exceed_cents ?? q.price_cents!;
+
+/** Refuses a send of Quote Requests that reached no Tradie, naming each and why. */
+function refuseNoneSent(unreached: { tradie: string; reason: string }[]): never {
+  invalid(`No Quote Requests were sent. Couldn't reach ${unreached.map((u) => `${u.tradie}: ${u.reason}`).join('; ')}`);
+}
 
 /** Whether a whole number of cents above zero. */
 const isCents = (n: unknown): n is number => typeof n === 'number' && Number.isInteger(n) && n > 0;
@@ -372,6 +378,25 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
     );
   }
 
+  /** Sends the Tradie their Quote Request message with their quote page link. The Tenant's photos go with it by email only. */
+  async function sendQuoteRequest(request: QuoteRequestRow) {
+    const { job, ticket, property } = await jobPlace(request.job_id);
+    const issue = await tickets.issue(ticket.issueId);
+    const byEmail = (await notifications.channelFor(request.tradie_id)) === 'email';
+    await notifications.send(
+      request.tradie_id,
+      'tradie.quote_request',
+      {
+        trade: job.trade,
+        urgency: ticket.urgency,
+        description: withoutContactDetails(issue.summary ?? issue.description),
+        suburb: property.suburb,
+        quoteLink: quoteLink(request),
+      },
+      { issueId: issue.id, attachmentFileIds: byEmail ? (await tickets.photos(issue.id)).map((p) => p.fileId) : [] },
+    );
+  }
+
   worker.on<{ quoteRequestId: number }>('quotes.reminder', async ({ quoteRequestId }) => {
     // Only a request still waiting is reminded, even if the Tradie's reply lands at the same moment.
     const request = await one<QuoteRequestRow>(db, `UPDATE quote_requests SET status = 'reminded' WHERE id = ? AND status = 'sent' RETURNING *`, quoteRequestId);
@@ -600,22 +625,82 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
       return requestRule(agencyId, job.id, job.trade);
     },
 
-    /** Asks each Tradie for an Estimate, each with their own quote page link. */
+    /**
+     * The Jobs where a Tradie is still in the running, soonest asked first: asked to quote on a
+     * Job nobody has been chosen for yet, or on one held up while the Property Owner decides
+     * (`withOwner` when it is the Tradie's own Quote they decide on).
+     */
+    async undecidedJobsOf(tradieId: number) {
+      const rows = await all<{ job_id: number; with_owner: boolean }>(
+        db,
+        `SELECT r.job_id, EXISTS (SELECT 1 FROM quotes q WHERE q.quote_request_id = r.id AND q.status = 'awaiting_owner') AS with_owner
+         FROM quote_requests r JOIN jobs j ON j.id = r.job_id
+         WHERE r.tradie_id = ? AND r.status IN (${LIVE.map((s) => `'${s}'`).join(', ')}) AND j.status IN ('quoting', 'awaiting_owner')
+         ORDER BY r.id`,
+        tradieId,
+      );
+      return Promise.all(
+        rows.map(async ({ job_id, with_owner }) => {
+          const { job, property } = await jobPlace(job_id);
+          return { jobId: job.id, trade: job.trade, propertyAddress: property.address, withOwner: with_owner };
+        }),
+      );
+    },
+
+    /**
+     * The Jobs a Tradie's approved Quote is for that are Ready to book, with no Work Order sent yet,
+     * soonest approved first.
+     */
+    async unbookedJobsOf(tradieId: number) {
+      const rows = await all<{ job_id: number }>(
+        db,
+        `SELECT q.job_id FROM quotes q JOIN jobs j ON j.id = q.job_id
+         WHERE q.tradie_id = ? AND q.status = 'approved' AND j.status = 'approved'
+         ORDER BY q.id`,
+        tradieId,
+      );
+      return Promise.all(
+        rows.map(async ({ job_id }) => {
+          const { job, property } = await jobPlace(job_id);
+          return { jobId: job.id, trade: job.trade, propertyAddress: property.address };
+        }),
+      );
+    },
+
+    /**
+     * Asks each Tradie for an Estimate, each with their own quote page link. A Tradie none of the
+     * Agency's channels reaches, or whose message fails to send, is named in `unreached` with why,
+     * and has no Quote Request; the others are still asked. Refuses when none can be reached,
+     * recording nothing.
+     */
     async sendQuoteRequests(agencyId: number, jobId: number, tradieIds: number[]) {
       // Checked and recorded in one transaction, so a double submit can't ask a Tradie twice.
-      const { job, ticket, property, tradies, requests } = await transaction(db, async () => {
-        const { job, ticket, property } = await jobPlace((await tickets.jobInAgency(agencyId, jobId)).id);
+      const { ticket, tradies, unreached, requests } = await transaction(db, async () => {
+        const { job, ticket } = await jobPlace((await tickets.jobInAgency(agencyId, jobId)).id);
         if (job.status !== 'quoting') invalid('Quote Requests can only be sent while the Job is getting Quotes');
         if (!tradieIds.length) invalid('Choose at least one Tradie');
         const already = new Set((await quoteRequestsOf(jobId)).map((r) => r.tradie_id));
-        const tradies = [];
-        for (const id of new Set(tradieIds)) tradies.push(await profiles.personInAgency(agencyId, id, 'tradie'));
-        for (const tradie of tradies) {
+        const chosen = [];
+        for (const id of new Set(tradieIds)) chosen.push(await profiles.personInAgency(agencyId, id, 'tradie'));
+        for (const tradie of chosen) {
+          if (tradie.removedAt) invalid(`${tradie.businessName ?? tradie.name} has been removed from the Agency`);
           if (!tradie.trades.includes(job.trade)) invalid(`${tradie.businessName ?? tradie.name} doesn't do ${job.trade} work`);
           if (already.has(tradie.id)) invalid(`${tradie.businessName ?? tradie.name} has already been asked to quote`);
         }
         const rule = await requestRule(agencyId, jobId, job.trade);
-        if (tradies.length < rule.minimum) invalid('Send Quote Requests to at least two Tradies');
+        if (chosen.length < rule.minimum) invalid('Send Quote Requests to at least two Tradies');
+        const tradies = [];
+        const unreached: { tradie: string; reason: string }[] = [];
+        for (const tradie of chosen) {
+          try {
+            await notifications.channelFor(tradie.id);
+            tradies.push(tradie);
+          } catch (error) {
+            if (!(error instanceof UndeliverableError)) throw error;
+            unreached.push({ tradie: tradie.businessName ?? tradie.name, reason: error.userReason });
+          }
+        }
+        if (!tradies.length) refuseNoneSent(unreached);
         const requests: QuoteRequestRow[] = [];
         for (const tradie of tradies) {
           requests.push(
@@ -631,27 +716,41 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
             ))!,
           );
         }
-        await tickets.recordEvent(ticket.id, 'quote_requests_sent', { jobId, tradies: tradies.map((t) => t.businessName ?? t.name) });
-        return { job, ticket, property, tradies, requests };
+        return { ticket, tradies, unreached, requests };
       });
-      const issue = await tickets.issue(ticket.issueId);
-      const photoFileIds = (await tickets.photos(issue.id)).map((p) => p.fileId);
+      const reached: string[] = [];
       for (const [i, tradie] of tradies.entries()) {
-        const byEmail = (await notifications.channelFor(tradie.id)) === 'email';
-        await notifications.send(
-          tradie.id,
-          'tradie.quote_request',
-          {
-            trade: job.trade,
-            urgency: ticket.urgency,
-            description: withoutContactDetails(issue.summary ?? issue.description),
-            suburb: property.suburb,
-            quoteLink: quoteLink(requests[i]!),
-          },
-          { issueId: issue.id, attachmentFileIds: byEmail ? photoFileIds : [] },
-        );
+        const name = tradie.businessName ?? tradie.name;
+        try {
+          await sendQuoteRequest(requests[i]!);
+        } catch (error) {
+          // No message went out, so the Quote Request (nothing is attached to it yet) goes too, and the Tradie can be asked again.
+          await run(db, 'DELETE FROM quote_requests WHERE id = ?', requests[i]!.id);
+          if (error instanceof UndeliverableError || error instanceof ProviderRefusedError) {
+            unreached.push({ tradie: name, reason: error.userReason });
+          } else {
+            console.error(`Quote Request to ${name} failed to send`, error);
+            unreached.push({ tradie: name, reason: "the message couldn't be sent" });
+          }
+          continue;
+        }
         await worker.schedule('quotes.reminder', { quoteRequestId: requests[i]!.id }, addMs(clock.now(), QUOTE_REMINDER_MS));
+        reached.push(name);
       }
+      if (!reached.length) refuseNoneSent(unreached);
+      await tickets.recordEvent(ticket.id, 'quote_requests_sent', { jobId, tradies: reached });
+      return { sent: reached.length, unreached };
+    },
+
+    /**
+     * Sends a Quote Request's message again, with the same link, when the Tradie says it never
+     * arrived. Only while it still waits on their Estimate; its status and reminder are untouched.
+     * A send that fails is the caller's to report.
+     */
+    async resendQuoteRequest(agencyId: number, quoteRequestId: number) {
+      const request = await requestInAgency(agencyId, quoteRequestId);
+      if (!AWAITING_ESTIMATE.includes(request.status)) invalid(`${await businessName(request.tradie_id)} has already replied`);
+      await sendQuoteRequest(request);
     },
 
     /**

@@ -1,8 +1,10 @@
 // Form handling shared by every page: read the posted fields, run one action,
 // and redirect back with a flash message. A refused action (ActionError) shows
-// its message; anything else is a real error and propagates.
+// its message, and so does a message that can't be delivered (the person can't
+// be reached); anything else is a real error and propagates.
 
 import type { Context } from 'hono';
+import { ProviderRefusedError, UndeliverableError } from '../ports.ts';
 import { ActionError } from '../shared.ts';
 import { zonedInstant } from '../zoned-time.ts';
 import { withFlash } from './ui.ts';
@@ -27,6 +29,9 @@ export async function formAction(
     return c.redirect(withFlash(redirect ?? back, 'ok', ok), 303);
   } catch (error) {
     if (error instanceof ActionError) return c.redirect(withFlash(back, 'error', error.message), 303);
+    if (error instanceof UndeliverableError || error instanceof ProviderRefusedError) {
+      return c.redirect(withFlash(back, 'error', `Couldn't send the message: ${error.userReason}.`), 303);
+    }
     throw error;
   }
 }

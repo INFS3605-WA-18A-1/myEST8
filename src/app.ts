@@ -258,8 +258,16 @@ export function createApp(
         addTenant: (input: Parameters<typeof onboarding.addTenant>[1]) => onboarding.addTenant(agencyId, input),
         /** Takes a Tenant off their Property, keeping their past Tickets. Refuses while they have an open Ticket or a waiting Maintenance Request. Returns their name. */
         removeTenant: (tenantId: number) => onboarding.removeTenant(agencyId, tenantId),
+        /** Changes a Tenant's name, mobile and email. Refuses field by field, as adding does; the next message from the new number or email reaches them as the Tenant. */
+        editTenant: (tenantId: number, input: Parameters<typeof onboarding.editTenant>[2]) => onboarding.editTenant(agencyId, tenantId, input),
+        /** Changes a Tradie's business name, contact name, mobile, email and Trades. Their Google listing and starting rating stay. Refuses field by field, as adding does. */
+        editTradie: (tradieId: number, input: Parameters<typeof onboarding.editTradie>[2]) => onboarding.editTradie(agencyId, tradieId, input),
         addTradie: (input: Parameters<typeof onboarding.addTradie>[1]) => onboarding.addTradie(agencyId, input),
+        /** Takes a Tradie out of the Agency's lists, pickers and Nominated Tradies, keeping their past Quotes, visits and ratings. Returns their business name. */
+        removeTradie: (tradieId: number) => onboarding.removeTradie(agencyId, tradieId),
         addProperty: (input: Parameters<typeof onboarding.addProperty>[1]) => onboarding.addProperty(agencyId, input),
+        /** Changes a Property's address, suburb, Max Repair Cost, Property Owner, Property Manager, Building Manager and Nominated Tradies. A new address is geocoded again (a failing lookup leaves no pin for Look up missing addresses). Refuses field by field, as adding does. */
+        editProperty: (propertyId: number, input: Parameters<typeof onboarding.editProperty>[2]) => onboarding.editProperty(agencyId, propertyId, input),
         findGoogleListings: (query: string) => onboarding.findGoogleListings(query),
         /** A Google listing's details and the Trades Jev suggests for it, to fill in the Tradie form. Stores nothing. */
         googleListing: (placeId: string) => onboarding.googleListing(placeId),
@@ -323,6 +331,8 @@ export function createApp(
 
         // Quotes and approval
         sendQuoteRequests: (jobId: number, tradieIds: number[]) => quotes.sendQuoteRequests(agencyId, jobId, tradieIds),
+        /** Sends a Quote Request's message again, with the same link, while the Tradie hasn't given their Estimate. */
+        resendQuoteRequest: (quoteRequestId: number) => quotes.resendQuoteRequest(agencyId, quoteRequestId),
         confirmQuote: (quoteId: number, edits?: { priceCents?: number; proposedTime?: string | null }) =>
           quotes.confirmQuote(agencyId, quoteId, edits),
         /** Chooses a Firm Quote. An Estimate is refused: proceed on it instead. */

@@ -205,3 +205,133 @@ describe('Properties', () => {
     }
   });
 });
+
+describe('editing a Property from its profile', () => {
+  const PEN = (id: number) => `href="/properties/${id}?edit=details#details"`;
+  /** The details block of a profile: from its id to the end of its section. */
+  const detailsOf = (page: string) => page.slice(page.indexOf('id="details"'), page.indexOf('</section>', page.indexOf('id="details"')));
+  const NEW_ADDRESS = '14 King St, Newtown NSW 2042';
+  const posted = (w: Awaited<ReturnType<typeof webWorld>>) => ({
+    address: NEW_ADDRESS,
+    suburb: 'Newtown',
+    ownerId: w.ids.oscar,
+    propertyManagerId: w.ids.bobId,
+    maxRepairCost: '650',
+    buildingManagerId: w.ids.barry,
+    nominatedTradieIds: [w.ids.pete, w.ids.dana],
+  });
+
+  test('the details have a pen named "Edit details" that opens the form with no JavaScript', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    const page = await (await w.get(`/properties/${w.ids.kingSt}`, cookie)).text();
+    expect(detailsOf(page)).toContain(`<a ${PEN(w.ids.kingSt)} class="icon-btn" aria-label="Edit details" title="Edit details">`);
+    expect(page).not.toContain(`action="/properties/${w.ids.kingSt}/details"`);
+    expect(visible(detailsOf(page))).toContain('$500.00');
+  });
+
+  test('?edit=details shows the form filled in, with the same fields and Nominated Tradies picker as adding, and Save and Cancel', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    const page = await (await w.get(`/properties/${w.ids.kingSt}?edit=details`, cookie)).text();
+    const form = detailsOf(page);
+    expect(form).toContain(`<form method="post" action="/properties/${w.ids.kingSt}/details"`);
+    expect(form).toMatch(/<input[^>]* name="address"[^>]* value="12 King St, Newtown NSW 2042"/);
+    expect(form).toContain('data-address-suggest');
+    expect(form).toMatch(/<input[^>]* name="suburb"[^>]* value="Newtown"/);
+    expect(form).toContain('<input type="hidden" name="lat" value="" />');
+    expect(form).toMatch(new RegExp(`<option value="${w.ids.olivia}" selected>Olivia Owens</option>`));
+    expect(form).toMatch(new RegExp(`<option value="${w.ids.aliceId}" selected>Alice Archer</option>`));
+    expect(form).toMatch(/<input[^>]* name="maxRepairCost"[^>]* value="500"/);
+    expect(form).toMatch(/<option value="" selected>None<\/option>/);
+    expect(form).toMatch(new RegExp(`<option value="${w.ids.nina}" selected `));
+    expect(form).toMatch(new RegExp(`<option value="${w.ids.sam}" selected `));
+    // One select each for Nina and Sam (the template for "Add Tradie" comes after them).
+    expect(form.slice(form.indexOf('data-picker-rows'), form.indexOf('<template')).match(/name="nominatedTradieIds"/g)).toHaveLength(2);
+    expect(form).toMatch(/<button type="submit"[^>]*>Save<\/button>/);
+    expect(form).toContain(`<a href="/properties/${w.ids.kingSt}" class="btn btn-ghost">Cancel</a>`);
+    expect(form).not.toContain('aria-label="Edit details"');
+    // The page's other sections stay.
+    expect(page).toContain('aria-label="Open Tickets"');
+    expect(page).toContain('aria-label="Tenants"');
+  });
+
+  test('Building Manager selected on a Property that has one', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    const form = detailsOf(await (await w.get(`/properties/${w.ids.oceanAve}?edit=details`, cookie)).text());
+    expect(form).toMatch(new RegExp(`<option value="${w.ids.barry}" selected>Barry Strata</option>`));
+  });
+
+  test('Save shows the change with "Details saved.", and the new address is placed on the map', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+    w.h.geocoder.locations.set(NEW_ADDRESS, { lat: -33.8975, lng: 151.1795 });
+
+    const res = await w.post(`/properties/${w.ids.kingSt}/details`, posted(w), cookie);
+    expect(res.status).toBe(303);
+    expect(res.headers.get('location')).toMatch(new RegExp(`^/properties/${w.ids.kingSt}\\?ok=`));
+    const page = await (await w.get(res.headers.get('location')!, cookie)).text();
+    const text = visible(page);
+    expect(text).toContain('Details saved.');
+    expect(page).toContain(`<title>${NEW_ADDRESS} - myEST8</title>`);
+    expect(visible(detailsOf(page))).toContain('$650.00');
+    expect(visible(detailsOf(page))).toContain('Oscar Ortiz');
+    expect(visible(detailsOf(page))).toContain('Bob Baker');
+    expect(visible(detailsOf(page))).toContain('Barry Strata');
+    expect(page).toContain(`href="/tradies/${w.ids.pete}"`);
+    expect(page).not.toContain(`action="/properties/${w.ids.kingSt}/details"`);
+    expect((await w.alice.properties()).find((p) => p.id === w.ids.kingSt)!.location).toEqual({ lat: -33.8975, lng: 151.1795 });
+  });
+
+  test('a pin picked from the address suggestions is kept', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    await w.post(`/properties/${w.ids.kingSt}/details`, { ...posted(w), lat: '-33.9', lng: '151.2' }, cookie);
+    expect((await w.alice.properties()).find((p) => p.id === w.ids.kingSt)!.location).toEqual({ lat: -33.9, lng: 151.2 });
+  });
+
+  test('a refused save keeps what was typed and shows the reason under its field', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    const res = await w.post(`/properties/${w.ids.kingSt}/details`, { ...posted(w), address: ' ', ownerId: '' }, cookie);
+    expect(res.status).toBe(400);
+    const form = detailsOf(await res.text());
+    expect(form).toMatch(/<input[^>]* name="suburb"[^>]* value="Newtown"/);
+    expect(form).toMatch(/<input[^>]* name="maxRepairCost"[^>]* value="650"/);
+    expect(form).toMatch(new RegExp(`<option value="${w.ids.bobId}" selected>Bob Baker</option>`));
+    expect(form).toMatch(new RegExp(`<option value="${w.ids.pete}" selected `));
+    expect(form).toMatch(/<p id="property-owner-error" class="field-error">Choose the Property Owner<\/p>/);
+    expect((await w.alice.properties()).find((p) => p.id === w.ids.kingSt)).toMatchObject({ address: KING_ST, maxRepairCostCents: 500_00 });
+
+    const noAddress = await w.post(`/properties/${w.ids.kingSt}/details`, { ...posted(w), address: ' ' }, cookie);
+    expect(noAddress.status).toBe(400);
+    expect(detailsOf(await noAddress.text())).toMatch(/<p id="property-address-error" class="field-error">Enter the address and suburb<\/p>/);
+  });
+
+  test('a missing or mistyped Max Repair Cost is refused under its field', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    for (const [typed, reason] of [['', 'Enter the Max Repair Cost'], ['lots', 'Enter an amount in dollars for the Max Repair Cost']]) {
+      const res = await w.post(`/properties/${w.ids.kingSt}/details`, { ...posted(w), maxRepairCost: typed }, cookie);
+      expect(res.status).toBe(400);
+      expect(detailsOf(await res.text())).toContain(`<p id="property-max-error" class="field-error">${reason}</p>`);
+    }
+  });
+
+  test("another Agency's Property can't be edited: the page is a 404 and nothing changes", async () => {
+    const w = await webWorld();
+    const sunrise = await w.signUp();
+
+    const res = await w.post(`/properties/${w.ids.kingSt}/details`, posted(w), sunrise);
+    expect(res.status).toBe(404);
+    expect((await w.get(`/properties/${w.ids.kingSt}?edit=details`, sunrise)).status).toBe(404);
+    expect((await w.alice.properties()).find((p) => p.id === w.ids.kingSt)).toMatchObject({ address: KING_ST, maxRepairCostCents: 500_00 });
+  });
+});

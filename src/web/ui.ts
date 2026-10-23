@@ -385,6 +385,20 @@ export function section(o: { title: string; actions?: Html; body: Html; id?: str
   return panel(o);
 }
 
+/** The pen at the side of a details block: a link that opens its edit form in the page (`?edit=details`), with no JavaScript. `label` names it. */
+export function editPen(label: string, href: string): Html {
+  return html`<a href="${href}" class="icon-btn" aria-label="${label}" title="${label}">${icon('pencil-simple', { size: 'size-[18px]' })}</a>`;
+}
+
+/** The form that takes a details block's place: its fields, a refusal that isn't about one field, then Save and a Cancel back to the plain view. */
+export function detailsForm(o: { action: string; cancel: string; fields: Html; refusal?: string }): Html {
+  return html`<form method="post" action="${o.action}" class="details-form">
+    ${o.refusal ? alert(o.refusal, 'error') : ''}
+    ${o.fields}
+    <div class="details-actions">${button('Save')}${linkButton('Cancel', o.cancel, { variant: 'ghost' })}</div>
+  </form>`;
+}
+
 /** A heading for a group of cards or a list, with actions on the right. */
 export function sectionHeader(title: string, actions?: Html): Html {
   return html`<div class="section-head">

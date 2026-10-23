@@ -65,6 +65,16 @@ export function formatVisit(at: Date | string, timeZone: string) {
   }).format(new Date(at));
 }
 
+/** Formats an instant for a sentence: "Tuesday 27 October at 9 am", or "Tuesday 27 October at 9:30 am". */
+export function formatWeekdayDateAndTime(at: Date | string, timeZone: string) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-AU', { timeZone, weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit' })
+      .formatToParts(new Date(at))
+      .map((p) => [p.type, p.value]),
+  );
+  return `${parts.weekday} ${parts.day} ${parts.month} at ${parts.hour}${parts.minute === '00' ? '' : `:${parts.minute}`} ${parts.dayPeriod}`;
+}
+
 // Calendar days in the Agency's time zone. A day is written "2026-10-12": it sorts and
 // compares as text, and the arithmetic on it is plain UTC dates, so it never meets a
 // daylight-saving change. Only the instant a day starts depends on the time zone.

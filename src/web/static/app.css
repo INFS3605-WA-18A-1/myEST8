@@ -4000,7 +4000,8 @@
       flex-wrap: wrap;
       gap: 8px;
     }
-    .request-lead .icon-btn {
+    /* The pen: an icon button that opens a block's edit form in the page (the Summary, a profile's details). */
+    .icon-btn {
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -4010,12 +4011,34 @@
       border-radius: 4px;
       color: var(--action);
     }
-    .request-lead .icon-btn:hover {
+    .icon-btn:hover {
       background: rgb(19 33 46 / 0.06);
     }
-    .request-lead .icon-btn:focus-visible {
+    .icon-btn:focus-visible {
       outline: 2px solid var(--action);
       outline-offset: 2px;
+    }
+    /* A profile's details (pages/tenants.ts, properties.ts, tradie.ts): the facts with their pen at the side,
+       and the form that takes their place. */
+    .details-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .details-body {
+      flex: 1;
+      min-width: 0;
+    }
+    .details-form {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .details-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
     }
     /* Photos: sent with the message first, then uploaded, each group labelled. */
     .request-photos {

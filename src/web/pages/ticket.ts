@@ -152,9 +152,13 @@ export function ticketPages() {
   onPost(pages, '/:id/jobs/:jobId/quote-requests', async ({ actions, ticket, form, params }) => {
     const job = jobIn(ticket, params.jobId);
     const tradieIds = [...new Set(list(form, 'tradieIds').map(Number))];
-    await actions.sendQuoteRequests(job.jobId, tradieIds);
-    const n = tradieIds.length;
-    return `Quote ${plural(n, 'Request')} sent to ${n} ${plural(n, 'Tradie')}`;
+    return quoteRequestsSent(await actions.sendQuoteRequests(job.jobId, tradieIds));
+  });
+
+  onPost(pages, '/:id/quote-requests/:quoteRequestId/resend', async ({ actions, ticket, params }) => {
+    const request = requestIn(ticket, params.quoteRequestId);
+    await actions.resendQuoteRequest(request.quoteRequestId);
+    return `Quote Request resent to ${request.businessName}`;
   });
 
   onPost(pages, '/:id/quotes/:quoteId/confirm', async ({ actions, ticket, form, params, timeZone }) => {
@@ -1060,6 +1064,7 @@ function inspectionLine(t: TicketView, v: NonNullable<RequestView['inspection']>
 function requestActions(t: TicketView, job: JobView, r: RequestView, x: Extras): Html {
   const e = r.estimate;
   const actions: Html[] = [];
+  if (NO_REPLY[r.status]) actions.push(resendButton(t, r));
   if (e && e.status === 'open' && !e.confirmed) actions.push(confirmForm(t, e, x));
   if (r.status === 'estimated') {
     if (r.inspectionNeeded) actions.push(bookingForm(t, job, r, x));
@@ -1071,6 +1076,11 @@ function requestActions(t: TicketView, job: JobView, r: RequestView, x: Extras):
   if (firmNext) actions.push(firmQuoteEntry(t, r, x));
   if (r.firmQuote && r.firmQuote.status === 'open') actions.push(html`<a class="link text-sm" href="#quote-${r.firmQuote.quoteId}">Compare in Firm Quotes</a>`);
   return actions.length ? html`<div class="tradie-row-actions">${actions}</div>` : nothing;
+}
+
+/** Sends the Quote Request message again, for a Tradie with no reply who says it never arrived. */
+function resendButton(t: TicketView, r: RequestView): Html {
+  return postButton(`/tickets/${t.ticketId}/quote-requests/${r.quoteRequestId}/resend`, 'Resend', { variant: 'secondary', size: 'sm' });
 }
 
 /** "Inspection needed" or "Not needed", the Property Manager's say over the Tradie's, until one is booked. */
@@ -1696,6 +1706,12 @@ function formatRange(start: string, end: string, timeZone: string): string {
 
 function plural(n: number, word: string, many = `${word}s`) {
   return n === 1 ? word : many;
+}
+
+/** What sending Quote Requests says: how many went out, and who couldn't be reached and why. Shared with Dispatch. */
+export function quoteRequestsSent({ sent, unreached }: Awaited<ReturnType<PropertyManagerActions['sendQuoteRequests']>>): string {
+  const sentText = `Quote ${plural(sent, 'Request')} sent to ${sent} ${plural(sent, 'Tradie')}`;
+  return unreached.length ? `${sentText}. Couldn't reach ${unreached.map((u) => `${u.tradie}: ${u.reason}`).join('; ')}` : sentText;
 }
 
 /** "A", "A and B", "A, B and C". */

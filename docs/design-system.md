@@ -368,6 +368,37 @@ Business name, Contact name, Mobile, Email, Trades, Starting rating   [Add Tradi
 - **When Google fails** while loading a listing, the page shows "Google search isn't working right now. Try again, or mark the Tradie as not on Google." and the manual link. When Jev fails the form still fills in, with no Trades ticked.
 - **A refused form** comes back to the same choice: the form posts to a URL that carries `google`, `place` or `manual`. The wizard shows the posted values again; Setup and the Tradies page redirect back (`listingParams` builds the address) and fill in from the listing again. Nothing is stored until Add Tradie.
 
+### Editing a profile's details
+
+A Tenant, Property or Tradie profile edits its details in place, by the same pen-to-edit pattern as the Summary on a Maintenance Request. `editPen()` and `detailsForm()` in `ui.ts` are the two parts; the three profile pages use them, so don't copy their markup.
+
+```
+┌────────────────────────────────────────────┐
+│ Max Repair Cost   Property Owner       [✎] │  the details, the pen at the side
+│ $500.00           Olivia Owens             │
+└────────────────────────────────────────────┘
+        ── press the pen ──▶  /properties/3?edit=details#details
+┌────────────────────────────────────────────┐
+│ Address          Suburb                    │  the form takes the details' place
+│ Property Owner   Property Manager  ...     │
+│ [Save]  Cancel                             │
+└────────────────────────────────────────────┘
+```
+
+- **The pen** is an `.icon-btn` (36 px, Harbour `pencil-simple`) with the accessible name and tooltip "Edit details". It is a link to `?edit=details#details`, so it works without JavaScript. It sits at the right of the details (`.details-head` beside `.details-body`); on a Tradie it sits beside the Trade badges.
+- **The form** replaces the displayed details in the same `section` (`id="details"`), with the fields and pickers used to add the same record (a Property's `propertyFields()` is shared by both). Save is the primary button and Cancel a ghost link to the plain profile, in `.details-actions`. A Tradie's form leaves out the starting rating, and the Google listing and business address stay where they are. The rest of the page stays below it.
+- **Saving** goes back to the profile with the "Details saved." flash. **A refused save** shows the same form again with the status 400: what was typed stays, and the error sits under its field (`aria-invalid`, `.field-error`). An error the form can't point at (a Tenant who has already left their Property) is a message above the details instead.
+- **Who can't be edited:** a Tenant who has left has no pen. Their history stays as it was.
+
+### Removing a Tradie
+
+A Tradie's profile (`/tradies/:id`, `pages/tradie.ts`) has **Remove Tradie** in the page's actions, before Back to Tradies.
+
+- **The button** is `postButton` in the Danger variant (`--urgent` text on surface, small), with the same `data-confirm` ask as removing a Tenant: "Nina's Plumbing won't be offered for new Jobs. Their past Quotes and ratings stay on the Tickets they belong to." Confirming posts to `/tradies/:id/remove` and lands on `/tradies` with "Nina's Plumbing removed".
+- **Refused** while they have an open Quote Request, a Quote waiting on a Property Owner, an approved Quote for a Job with no visit booked yet (it would be stranded in Ready to book), or a visit booked today or later. The reason names it ("Nina's Plumbing has a visit booked on Thursday 8 October at 9 am. Cancel or finish it first.") and shows as the profile's error flash.
+- **Gone from** the Tradies list, Dispatch's entries and pins, Quote recommendations and the Ask for Quotes list, the Nominated Tradies picker (and every Property's Nominated Tradies), Free today on the Schedule, the spreadsheet import's matching and the weekly Google ratings refresh. Most read `people()` and `tradiesWithTrade()` in `profiles.ts`, which leave out a Tradie with `removed_at`; the refresh (`google-ratings.ts`) has its own query with the same condition.
+- **Their profile** still opens from old links. An info alert says "Removed from the Agency on 8 October 2026." (long month, in the Agency's time zone), the Remove button and the Business address form are left out, and the Quotes, bookings and ratings stay.
+
 ### Emails
 
 `renderEmail({ agencyName, subject, text })` in `src/email-layout.ts` turns any template's plain text into the HTML email, so no template writes HTML. `notifications` sets it as `html` on every email (the Resend and SendGrid mailers send it with `text` as the alternative); SMS and WhatsApp stay plain text.
@@ -468,7 +499,7 @@ A machine check never stands in for what a person said:
 - **Navigation (2026-10-19).** Requests folds into Tickets (new Maintenance Requests above open Tickets, one filter bar over both), closed Tickets move to Archive, and Properties, Tradies and the new Tenants sit under a Profiles heading. The rail's decision count moves from Requests to Tickets.
 - **Navigation (2026-10-13, replacing the three-item rail of 2026-10-10).** Dashboard, Dispatch, Requests, Tickets, Approvals, Schedule, a gap, Properties, Tradies, a gap, Settings, plus the demo's Phone simulator at the foot of the rail. The user asked for each queue to have its own place, so Calendar is Schedule again rather than moving into Dispatch's Tradie schedule; the Setup pages still move into Settings tabs.
 - **The Tenant's progress tracker.** The Ticket page links to it, so a Property Manager can see what the Tenant sees. A Site visit is Done only once the inspection has happened (before that, "booked for" its time); Booked asks the Tenant to confirm they'll be home or can let the tradie in until they have.
-- **Staged quoting on the Ticket page (ADR 0009).** The stage tracker reads Estimates, Site inspection, Firm Quote, With Property Owner, Ready to book, Booked, Done (`JOB_TRACKER_STAGES`). Site inspection is "Not needed" when no Tradie needed one and left out when the Job proceeded on an Estimate; Firm Quote then reads "Proceeding on Estimate (cap $X)". Booked is ticked only once the Tenant has confirmed the visit ("Waiting on Tenant to confirm" until then). Each Tradie asked is a row of their own with a chip for where they are (Asked, Estimate in, Needs inspection, Inspection booked, Inspected, Firm Quote in, Declined, Closed) and their next action; Firm Quotes and Estimates are two tables that never share a price column, and a superseded Estimate stays listed, muted. Call-out Fees owed are a line of their own, never part of the Repair Cost. Mark inspected appears only once the visit has started.
+- **Staged quoting on the Ticket page (ADR 0009).** The stage tracker reads Estimates, Site inspection, Firm Quote, With Property Owner, Ready to book, Booked, Done (`JOB_TRACKER_STAGES`). Site inspection is "Not needed" when no Tradie needed one and left out when the Job proceeded on an Estimate; Firm Quote then reads "Proceeding on Estimate (cap $X)". Booked is ticked only once the Tenant has confirmed the visit ("Waiting on Tenant to confirm" until then). Each Tradie asked is a row of their own with a chip for where they are (Asked, Estimate in, Needs inspection, Inspection booked, Inspected, Firm Quote in, Declined, Closed) and their next action. A Tradie who hasn't replied ("No reply yet", or "No reply after a reminder") has a small secondary **Resend** button that sends their Quote Request message again with the same link (`POST /tickets/:id/quote-requests/:id/resend`, "Quote Request resent to Pete's Plumbing"); it is gone once they have given an Estimate, and a Quote Request exists only once its message went out. Firm Quotes and Estimates are two tables that never share a price column, and a superseded Estimate stays listed, muted. Call-out Fees owed are a line of their own, never part of the Repair Cost. Mark inspected appears only once the visit has started.
 
 ## Copy
 
