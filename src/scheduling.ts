@@ -2,7 +2,7 @@ import type { Context } from './context.ts';
 import { all, one, run, transaction } from './db.ts';
 import { ActionError, addMs, HOUR_MS, invalid, iso, notFound, withoutContactDetails, type Availability } from './shared.ts';
 import type { OpenItem } from './tickets.ts';
-import { formatVisit, wallClock, zonedInstant } from './zoned-time.ts';
+import { dayOf, formatVisit, startOfDay, wallClock, zonedInstant } from './zoned-time.ts';
 
 const DEFAULT_SLOT_MINUTES = 120;
 const INSPECTION_MINUTES = 60;
@@ -505,6 +505,18 @@ export function createScheduling({ db, clock, worker, modules }: Context) {
         const { start, end, propertyAddress, propertyManager } = await toView(row);
         return { start, end, propertyAddress, propertyManager };
       }));
+    },
+
+    /** When a Tradie's visits still to be done start, soonest first: those from the start of today in the Agency's time zone, so one earlier today that isn't marked done counts. */
+    async visitStartsFromToday(agencyId: number, tradieId: number) {
+      const { timeZone } = await profiles.agency(agencyId);
+      return (await all<{ start: string }>(
+        db,
+        `SELECT start FROM work_orders WHERE agency_id = ? AND tradie_id = ? AND status = 'active' AND start >= ? ORDER BY start, id`,
+        agencyId,
+        tradieId,
+        iso(startOfDay(dayOf(clock.now(), timeZone), timeZone)),
+      )).map((v) => v.start);
     },
 
     /** Done Jobs the Property Manager hasn't rated yet. */
