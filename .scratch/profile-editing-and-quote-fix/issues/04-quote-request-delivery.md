@@ -1,6 +1,6 @@
 # A Quote Request is "sent" only once its message went out, and can be resent
 
-Status: ready-for-agent
+Status: resolved
 Spec: ../spec.md
 
 ## What's wrong
@@ -26,14 +26,18 @@ In production (2026-10-23 11:40:30 UTC), Asking for Quotes for Job 1 recorded Qu
 
 ## Acceptance criteria
 
-- [ ] Quote tests:
+- [x] Quote tests:
   - one Tradie's send throws a provider error: their Quote Request isn't recorded, the other's is recorded and sent, and the result names the failed one with the reason
   - every send throws: nothing recorded, and a refusal
   - an unexpected error is logged and the Tradie reported, not a 500
   - after a failed send, the same Tradie can be asked again without "already been asked"
-- [ ] Resend tests:
+- [x] Resend tests:
   - a `sent` request is sent again with the same link (token) and logged, and its status is unchanged
   - a request that has an Estimate is refused
   - another Agency's request is not found
-- [ ] A page test: Resend on the Ticket page redirects with "Quote Request resent to …", and the message went out.
-- [ ] `npm run check` passes.
+- [x] A page test: Resend on the Ticket page redirects with "Quote Request resent to …", and the message went out.
+- [x] `npm run check` passes.
+
+## Also
+
+The Ticket's timeline now records "Quote Requests sent to …" after the messages go, naming only the Tradies actually sent to, and the Quote Request reminder is scheduled only for those. The Resend button is on each Tradie's row on the Ticket page while the Job is getting Quotes (`NO_REPLY` only exists in `src/web/pages/ticket.ts`, not `src/quotes.ts`). Tests: `test/quotes.test.ts` (failed sends, resending) and `test/web/ticket.test.ts` (the Resend button and its refusals).
