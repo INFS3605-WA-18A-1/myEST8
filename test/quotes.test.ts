@@ -3,7 +3,7 @@ import { describe, expect, test, vi } from 'vitest';
 import { ProviderRefusedError, UndeliverableError } from '../src/ports.ts';
 import { AGENCY_NUMBER, HOUR, type Harness } from './support/harness.ts';
 import { upload } from './support/photos.ts';
-import { confirmedEstimates, confirmedQuotes, firmQuote, jobView, KING_ST, quoteRequestFor, TOM, tomsTapTicket, tradieQuotes, world } from './support/world.ts';
+import { confirmedEstimates, confirmedQuotes, firmQuote, jobView, KING_ST, quoteRequestFor, quoteToken, TOM, tomsTapTicket, tradieQuotes, world } from './support/world.ts';
 
 /** Makes every message to `address` throw `error` until `failing.on` is set to false. */
 function failSendsTo(h: Harness, address: string, error: Error) {
@@ -276,6 +276,88 @@ describe('Quote Requests', () => {
     const unconfirmed = (await jobView(w, job)).quotes.find((q) => !q.confirmed)!;
     await alice.confirmQuote(unconfirmed.quoteId);
     expect((await alice.dashboard()).alerts).toEqual([]);
+  });
+});
+
+describe('resending a Quote Request', () => {
+  test('sends the same message with the same link again, logs it, and leaves the status as it is', async () => {
+    const w = await world();
+    const { h, alice, tradies } = w;
+    const job = await tomsTapTicket(w);
+    await alice.sendQuoteRequests(job.jobId, [tradies.pete.id, tradies.quick.id]);
+    const token = await quoteToken(w, job, tradies.pete);
+    const pete = await quoteRequestFor(w, job, tradies.pete);
+
+    await alice.resendQuoteRequest(pete.quoteRequestId);
+
+    const [first, again] = h.messenger.to(tradies.pete.address);
+    expect(again).toMatchObject({ channel: 'sms', template: 'tradie.quote_request', text: first!.text, data: first!.data });
+    expect(again!.data.quoteLink).toMatch(new RegExp(`/q/${token}$`));
+    expect(h.messenger.templatesTo(tradies.quick.address)).toEqual(['tradie.quote_request']);
+    expect((await quoteRequestFor(w, job, tradies.pete)).status).toBe('sent');
+    const logged = (await alice.ticket(job.ticketId)).messages.filter((m) => m.address === tradies.pete.address);
+    expect(logged.map((m) => m.template)).toEqual(['tradie.quote_request', 'tradie.quote_request']);
+  });
+
+  test('works after the reminder too, and does not send the reminder again', async () => {
+    const w = await world();
+    const { h, alice, tradies } = w;
+    const job = await tomsTapTicket(w);
+    await alice.sendQuoteRequests(job.jobId, [tradies.pete.id, tradies.quick.id]);
+    await h.advance(48 * HOUR);
+    const pete = await quoteRequestFor(w, job, tradies.pete);
+    expect(pete.status).toBe('reminded');
+
+    await alice.resendQuoteRequest(pete.quoteRequestId);
+
+    expect(h.messenger.templatesTo(tradies.pete.address)).toEqual(['tradie.quote_request', 'tradie.quote_reminder', 'tradie.quote_request']);
+    expect((await quoteRequestFor(w, job, tradies.pete)).status).toBe('reminded');
+  });
+
+  test('attaches the photos again to a Tradie reached by email', async () => {
+    const w = await world();
+    const { h, alice, tradies } = w;
+    h.classifier.when('The kitchen tap is dripping', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });
+    await h.receive(TOM, 'The kitchen tap is dripping');
+    await h.answerAll(TOM, { location: 'Kitchen sink', started: 'Since Monday', worsening: 'no', availability: 'weekday_mornings' });
+    await h.upload(h.messenger.last(TOM)!.data.uploadLink as string, [upload('tap-1.jpg'), upload('tap-2.jpg')]);
+    const [issue] = (await alice.dashboard()).maintenanceRequests;
+    const ticketId = await alice.confirmMaintenanceRequest(issue!.issueId);
+    const job = { ticketId, jobId: (await alice.ticket(ticketId)).jobs[0]!.jobId };
+    await alice.sendQuoteRequests(job.jobId, [tradies.pete.id, tradies.quick.id]);
+
+    await alice.resendQuoteRequest((await quoteRequestFor(w, job, tradies.quick)).quoteRequestId);
+
+    expect(h.messenger.to(tradies.quick.address).map((m) => m.attachments)).toEqual([['tap-1.jpg', 'tap-2.jpg'], ['tap-1.jpg', 'tap-2.jpg']]);
+  });
+
+  test('is refused once the Tradie has replied, and sends nothing', async () => {
+    const w = await world();
+    const { h, alice, tradies } = w;
+    const job = await tomsTapTicket(w);
+    await alice.sendQuoteRequests(job.jobId, [tradies.nina.id, tradies.pete.id]);
+    await tradieQuotes(w, job, tradies.nina, '$190 Tuesday', { priceCents: 190_00 });
+    const nina = await quoteRequestFor(w, job, tradies.nina);
+    const asked = h.messenger.sent.length;
+
+    await expect(alice.resendQuoteRequest(nina.quoteRequestId)).rejects.toThrow("Nina's Plumbing has already replied");
+
+    expect(h.messenger.sent).toHaveLength(asked);
+  });
+
+  test("is not found for another Agency's Quote Request", async () => {
+    const w = await world();
+    const { h, alice, tradies } = w;
+    const job = await tomsTapTicket(w);
+    await alice.sendQuoteRequests(job.jobId, [tradies.pete.id, tradies.quick.id]);
+    const pete = await quoteRequestFor(w, job, tradies.pete);
+    const other = await h.app.setup.createAgency({ name: 'Other Realty', timeZone: 'Australia/Sydney' });
+    const olga = h.as(await h.app.setup.addPropertyManager(other, { name: 'Olga Other', email: 'olga@other.example', password: 'other-password' }));
+    const asked = h.messenger.sent.length;
+
+    await expect(olga.resendQuoteRequest(pete.quoteRequestId)).rejects.toThrow(/not found/);
+
+    expect(h.messenger.sent).toHaveLength(asked);
   });
 });
 

@@ -1,6 +1,6 @@
 import type { Context } from './context.ts';
 import { all, one, run, transaction } from './db.ts';
-import { ProviderRefusedError, UndeliverableError, type ChannelType } from './ports.ts';
+import { ProviderRefusedError, UndeliverableError } from './ports.ts';
 import { addMs, dollars, HOUR_MS, invalid, iso, median, newToken, notFound, withoutContactDetails, type Trade } from './shared.ts';
 import type { OpenItem } from './tickets.ts';
 import { wallClock } from './zoned-time.ts';
@@ -378,6 +378,25 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
     );
   }
 
+  /** Sends the Tradie their Quote Request message with their quote page link. The Tenant's photos go with it by email only. */
+  async function sendQuoteRequest(request: QuoteRequestRow) {
+    const { job, ticket, property } = await jobPlace(request.job_id);
+    const issue = await tickets.issue(ticket.issueId);
+    const byEmail = (await notifications.channelFor(request.tradie_id)) === 'email';
+    await notifications.send(
+      request.tradie_id,
+      'tradie.quote_request',
+      {
+        trade: job.trade,
+        urgency: ticket.urgency,
+        description: withoutContactDetails(issue.summary ?? issue.description),
+        suburb: property.suburb,
+        quoteLink: quoteLink(request),
+      },
+      { issueId: issue.id, attachmentFileIds: byEmail ? (await tickets.photos(issue.id)).map((p) => p.fileId) : [] },
+    );
+  }
+
   worker.on<{ quoteRequestId: number }>('quotes.reminder', async ({ quoteRequestId }) => {
     // Only a request still waiting is reminded, even if the Tradie's reply lands at the same moment.
     const request = await one<QuoteRequestRow>(db, `UPDATE quote_requests SET status = 'reminded' WHERE id = ? AND status = 'sent' RETURNING *`, quoteRequestId);
@@ -656,8 +675,8 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
      */
     async sendQuoteRequests(agencyId: number, jobId: number, tradieIds: number[]) {
       // Checked and recorded in one transaction, so a double submit can't ask a Tradie twice.
-      const { job, ticket, property, tradies, channels, unreached, requests } = await transaction(db, async () => {
-        const { job, ticket, property } = await jobPlace((await tickets.jobInAgency(agencyId, jobId)).id);
+      const { ticket, tradies, unreached, requests } = await transaction(db, async () => {
+        const { job, ticket } = await jobPlace((await tickets.jobInAgency(agencyId, jobId)).id);
         if (job.status !== 'quoting') invalid('Quote Requests can only be sent while the Job is getting Quotes');
         if (!tradieIds.length) invalid('Choose at least one Tradie');
         const already = new Set((await quoteRequestsOf(jobId)).map((r) => r.tradie_id));
@@ -671,11 +690,10 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
         const rule = await requestRule(agencyId, jobId, job.trade);
         if (chosen.length < rule.minimum) invalid('Send Quote Requests to at least two Tradies');
         const tradies = [];
-        const channels = new Map<number, ChannelType>();
         const unreached: { tradie: string; reason: string }[] = [];
         for (const tradie of chosen) {
           try {
-            channels.set(tradie.id, await notifications.channelFor(tradie.id));
+            await notifications.channelFor(tradie.id);
             tradies.push(tradie);
           } catch (error) {
             if (!(error instanceof UndeliverableError)) throw error;
@@ -698,27 +716,13 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
             ))!,
           );
         }
-        return { job, ticket, property, tradies, channels, unreached, requests };
+        return { ticket, tradies, unreached, requests };
       });
-      const issue = await tickets.issue(ticket.issueId);
-      const photoFileIds = (await tickets.photos(issue.id)).map((p) => p.fileId);
       const reached: string[] = [];
       for (const [i, tradie] of tradies.entries()) {
         const name = tradie.businessName ?? tradie.name;
-        const byEmail = channels.get(tradie.id) === 'email';
         try {
-          await notifications.send(
-            tradie.id,
-            'tradie.quote_request',
-            {
-              trade: job.trade,
-              urgency: ticket.urgency,
-              description: withoutContactDetails(issue.summary ?? issue.description),
-              suburb: property.suburb,
-              quoteLink: quoteLink(requests[i]!),
-            },
-            { issueId: issue.id, attachmentFileIds: byEmail ? photoFileIds : [] },
-          );
+          await sendQuoteRequest(requests[i]!);
         } catch (error) {
           // No message went out, so the Quote Request (nothing is attached to it yet) goes too, and the Tradie can be asked again.
           await run(db, 'DELETE FROM quote_requests WHERE id = ?', requests[i]!.id);
@@ -736,6 +740,17 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
       if (!reached.length) refuseNoneSent(unreached);
       await tickets.recordEvent(ticket.id, 'quote_requests_sent', { jobId, tradies: reached });
       return { sent: reached.length, unreached };
+    },
+
+    /**
+     * Sends a Quote Request's message again, with the same link, when the Tradie says it never
+     * arrived. Only while it still waits on their Estimate; its status and reminder are untouched.
+     * A send that fails is the caller's to report.
+     */
+    async resendQuoteRequest(agencyId: number, quoteRequestId: number) {
+      const request = await requestInAgency(agencyId, quoteRequestId);
+      if (!AWAITING_ESTIMATE.includes(request.status)) invalid(`${await businessName(request.tradie_id)} has already replied`);
+      await sendQuoteRequest(request);
     },
 
     /**
