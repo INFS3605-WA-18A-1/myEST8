@@ -47,6 +47,8 @@ export default defineConfig({
       PUBLIC_URL: baseURL,
       SUPABASE_DB_URL: process.env.E2E_DATABASE_URL,
       DATABASE_SCHEMA: 'e2e',
+      // One shared address for every worker: the upload and quote cap is 20 a minute.
+      RATE_LIMIT_UPLOADS: '1000',
       // Just the seeded Agency: fast to start, and nothing in flight to trip over.
       DEMO_DATA: 'empty',
     },

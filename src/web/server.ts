@@ -53,7 +53,10 @@ export function createWebApp(deps: {
   web.use('*', (c, next) => (c.req.method === 'GET' || c.req.method === 'HEAD' ? withReadCache(next) : next()));
   // The no-login Tenant links (a tracker, the upload page and its posts) and the Tradie's quote page.
   const links = rateLimit({ max: 60, windowMs: 60_000 });
-  const uploads = rateLimit({ max: 20, windowMs: 60_000 });
+  // The browser suite shares one address, and a run opens more upload and quote
+  // pages than a person would. RATE_LIMIT_UPLOADS raises the cap for that run.
+  const uploadMax = Number(process.env.RATE_LIMIT_UPLOADS);
+  const uploads = rateLimit({ max: uploadMax > 0 ? uploadMax : 20, windowMs: 60_000 });
   for (const path of ['/t/*', '/api/t/*']) web.use(path, links);
   for (const path of ['/u/*', '/api/u/*', '/q/*']) web.use(path, uploads);
   web.route('/', assetRoutes());

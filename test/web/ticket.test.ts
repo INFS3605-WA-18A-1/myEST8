@@ -637,6 +637,17 @@ describe('the message log', () => {
     expect(text).not.toMatch(/https?:\/\/\S+\/u\//);
   });
 
+  test('keeps a link in a message in the same tab, with noopener noreferrer for anyone who opens it in a new one', async () => {
+    const { open } = await tapTicket();
+
+    const { html } = await open();
+
+    const link = html.match(/<a class="link" href="https?:\/\/[^"]+\/u\/[^"]+"[^>]*>upload link<\/a>/)?.[0];
+    expect(link).toBeDefined();
+    expect(link).toContain('rel="noopener noreferrer"');
+    expect(link).not.toContain('target=');
+  });
+
   test('shows when WhatsApp could not deliver a message', async () => {
     const w = await webWorld();
     w.h.classifier.when('The kitchen tap is dripping', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });

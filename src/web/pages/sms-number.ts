@@ -156,8 +156,8 @@ export async function smsNumberPanel(actions: Actions, o: { from: Origin; curren
         <div class="section-body">
           <p class="text-sm">
             For an Agency that already has its own Twilio number. You need a Twilio account first:
-            <a class="link" href="${TWILIO_SIGN_UP}" target="_blank" rel="noopener">sign up for Twilio</a>. Then paste its Account SID and Auth Token from the
-            <a class="link" href="${TWILIO_CONSOLE}" target="_blank" rel="noopener">Twilio Console</a>. myEST8 checks them, lets you pick one of your numbers, and points its incoming
+            <a class="link" href="${TWILIO_SIGN_UP}" rel="noopener noreferrer">sign up for Twilio</a>. Then paste its Account SID and Auth Token from the
+            <a class="link" href="${TWILIO_CONSOLE}" rel="noopener noreferrer">Twilio Console</a>. myEST8 checks them, lets you pick one of your numbers, and points its incoming
             texts at myEST8. Your Auth Token is stored encrypted.
           </p>
           <form method="post" action="/sms-number/account" class="mt-3 grid gap-3" autocomplete="off">
@@ -187,7 +187,7 @@ async function choosing(actions: Actions, accountSid: string, from: Origin): Pro
   if (!numbers.length) {
     return html`<div data-sms-number="choosing">
       <p class="text-sm">Twilio accepted account <strong class="break-all">${accountSid}</strong>, but it has no number that can send and receive texts.
-        <a class="link" href="${TWILIO_BUY_A_NUMBER}" target="_blank" rel="noopener">Buy one in Twilio</a>, then check again.</p>
+        <a class="link" href="${TWILIO_BUY_A_NUMBER}" rel="noopener noreferrer">Buy one in Twilio</a>, then check again.</p>
       <div class="mt-3 flex flex-wrap items-center gap-3">
         ${linkButton('Check again', `${backTo(from)}${anchor}`, { variant: 'secondary', size: 'sm' })}
         ${startOver(from, 'Use a different account')}
