@@ -476,6 +476,34 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
     },
 
     /**
+     * Changes a person's name, mobile and email, and moves the addresses messages are matched on with
+     * them: a new mobile or email is theirs from now on, the old one no longer reaches them, and an address
+     * a Property Manager linked from the inbox stays. A Tradie's business name and Trades change too
+     * when given. Refuses an address someone else in the Agency already holds, changing nothing.
+     */
+    async updatePerson(personId: number, input: { name: string; mobile?: string; email?: string; businessName?: string; trades?: Trade[] }) {
+      await transaction(db, async () => {
+        const before = await person(personId);
+        const mobile = input.mobile ? normalizeAddress(input.mobile) : null;
+        const email = input.email ? normalizeAddress(input.email) : null;
+        await run(
+          db,
+          'UPDATE people SET name = ?, business_name = ?, mobile = ?, email = ?, trades = ? WHERE id = ?',
+          input.name,
+          input.businessName ?? before.businessName,
+          mobile,
+          email,
+          JSON.stringify(input.trades ?? before.trades),
+          personId,
+        );
+        for (const [was, now, typed] of [[before.mobile, mobile, input.mobile], [before.email, email, input.email]] as const) {
+          if (typed) await addAddress(before.agencyId, personId, typed);
+          if (was && was !== now) await run(db, 'DELETE FROM contact_addresses WHERE person_id = ? AND address = ?', personId, was);
+        }
+      });
+    },
+
+    /**
      * A Tenant leaves their Property. Their record stays, so the Tickets they raised still
      * name them, but their mobile and email stop reaching the Agency as them and can be
      * given to someone else.

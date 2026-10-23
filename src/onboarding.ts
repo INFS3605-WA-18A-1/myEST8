@@ -1,6 +1,6 @@
 import type { Context } from './context.ts';
 import type { ChannelType } from './ports.ts';
-import { invalid, TRADES, type Role, type Trade } from './shared.ts';
+import { invalid, isEmail, normalizeAddress, phoneProblem, TRADES, type Role, type Trade } from './shared.ts';
 
 type Contact = { name: string; mobile?: string; email?: string };
 
@@ -51,6 +51,13 @@ export function createOnboarding({ ports, modules }: Context) {
     requireContact(input);
     requireDate(input.tenancyStart, 'tenancyStart');
     await profiles.propertyInAgency(agencyId, input.propertyId);
+  }
+
+  /** A mobile and an email as an edit checks them: a number that can be texted and something shaped like an address. */
+  function requireContactFormat(input: Contact) {
+    const problem = input.mobile ? phoneProblem(normalizeAddress(input.mobile)) : null;
+    if (problem) invalid(problem, 'mobile');
+    if (input.email && !isEmail(input.email)) invalid(`${input.email.trim()} isn't an email address`, 'email');
   }
 
   function checkTradie(input: TradieInput) {
@@ -125,6 +132,19 @@ export function createOnboarding({ ports, modules }: Context) {
       if (waiting.some((i) => i.tenantId === tenantId)) invalid(`Confirm or reject ${tenant.name}'s waiting Maintenance Requests before removing them`);
       await profiles.endTenancy(tenantId);
       return tenant.name;
+    },
+
+    /**
+     * Changes a Tenant's name, mobile and email, checked as when adding them, and the addresses their
+     * messages are matched on with them. A Tenant who has left their Property can't be edited: their
+     * addresses are free for someone else.
+     */
+    async editTenant(agencyId: number, tenantId: number, input: Contact) {
+      const tenant = await profiles.personInAgency(agencyId, tenantId, 'tenant');
+      if (tenant.propertyId === null) invalid(`${tenant.name} has already left their Property`);
+      requireContact(input);
+      requireContactFormat(input);
+      await profiles.updatePerson(tenantId, input);
     },
 
     findGoogleListings(query: string) {

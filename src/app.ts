@@ -258,6 +258,8 @@ export function createApp(
         addTenant: (input: Parameters<typeof onboarding.addTenant>[1]) => onboarding.addTenant(agencyId, input),
         /** Takes a Tenant off their Property, keeping their past Tickets. Refuses while they have an open Ticket or a waiting Maintenance Request. Returns their name. */
         removeTenant: (tenantId: number) => onboarding.removeTenant(agencyId, tenantId),
+        /** Changes a Tenant's name, mobile and email. Refuses field by field, as adding does; the next message from the new number or email reaches them as the Tenant. */
+        editTenant: (tenantId: number, input: Parameters<typeof onboarding.editTenant>[2]) => onboarding.editTenant(agencyId, tenantId, input),
         addTradie: (input: Parameters<typeof onboarding.addTradie>[1]) => onboarding.addTradie(agencyId, input),
         addProperty: (input: Parameters<typeof onboarding.addProperty>[1]) => onboarding.addProperty(agencyId, input),
         findGoogleListings: (query: string) => onboarding.findGoogleListings(query),
