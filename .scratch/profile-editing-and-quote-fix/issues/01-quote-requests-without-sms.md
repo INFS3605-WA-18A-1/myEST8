@@ -1,6 +1,6 @@
 # Asking for Quotes fails with a 500 when the Agency has no SMS channel
 
-Status: ready-for-agent
+Status: resolved
 Spec: ../spec.md
 
 ## What's wrong
@@ -23,12 +23,12 @@ Error: Kevin Estate has no sms channel connected
 
 ## Acceptance criteria
 
-- [ ] Notification tests:
+- [x] Notification tests:
   - SMS isn't connected, and a person with a mobile and an email gets email
   - only a mobile and no SMS gives `UndeliverableError` with the reason
   - `channelFor` agrees with what is sent
-- [ ] Quote tests:
+- [x] Quote tests:
   - with SMS off, Quote Requests reach the Tradies with email, and the page names any Tradie it couldn't reach, without failing the rest
   - none reachable gives a refusal message, not a 500
-- [ ] A page test posting to `/dispatch/jobs/:jobId/quote-requests` with SMS off returns a redirect with the flash, not a 500.
-- [ ] `npm run check` passes.
+- [x] A page test posting to `/dispatch/jobs/:jobId/quote-requests` with SMS off returns a redirect with the flash, not a 500.
+- [x] `npm run check` passes.
