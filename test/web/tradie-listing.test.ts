@@ -105,6 +105,14 @@ describe.each(PAGES)('adding a Tradie from their Google listing on $name', ({ pa
     expect(text).not.toContain('Google listing Not on Google');
   });
 
+  test("the listing's website is a link that stays in this tab, with noopener noreferrer for anyone who opens it in a new one", async () => {
+    const { w, cookie } = await luckyWorld();
+
+    const html = await page(w, `${path}?google=lucky&place=place-lucky`, cookie);
+    expect(html).toContain('<a class="link" href="https://luckylocks.example" rel="noopener noreferrer">https://luckylocks.example</a>');
+    expect(html).not.toContain('target="_blank"');
+  });
+
   test('a landline is shown in the card but not put in Mobile, because myEST8 texts that number', async () => {
     const { w, cookie } = await luckyWorld();
     w.h.places.listings.set('place-lucky', { ...LUCKY, phone: '+61 2 9319 0044' });

@@ -499,7 +499,7 @@ function listingValues(listing: ListingDetails): Values {
 /** What Google and Jev say about the picked listing, above the form it fills in. */
 function listingCard(listing: ListingDetails): Html {
   const mobile = australianMobile(listing.phone);
-  const site = listing.website && /^https?:\/\//i.test(listing.website) ? html`<a class="link" href="${listing.website}" target="_blank" rel="noopener noreferrer">${listing.website}</a>` : null;
+  const site = listing.website && /^https?:\/\//i.test(listing.website) ? html`<a class="link" href="${listing.website}" rel="noopener noreferrer">${listing.website}</a>` : null;
   const trades = listing.tradesSuggested
     ? listing.suggestedTrades.length
       ? html`<span class="flex flex-wrap gap-1">${listing.suggestedTrades.map((trade) => badge(humanise(trade), 'info'))}</span>`
