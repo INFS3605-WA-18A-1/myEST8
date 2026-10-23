@@ -1,6 +1,6 @@
 # Photos open in a viewer, and links stay in the same tab
 
-Status: ready-for-agent
+Status: resolved
 
 ## What's wrong
 

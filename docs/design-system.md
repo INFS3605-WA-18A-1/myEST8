@@ -34,11 +34,14 @@ myEST8 is where a Property Manager at a small Australian Agency sees every repai
 | `--rail-muted` | | `#9AA8B4` | Rail counts, the Phone simulator link, the Agency's name | 6.7:1 on Night |
 | `--rail-hover` / `--rail-current` | | `rgb(255 255 255 / 0.05)` / `0.08` | Rail hover and current band | |
 | `--scrim` | | `rgb(19 33 46 / 0.45)` | Behind the open drawer | |
+| `--viewer-backdrop` | | `rgb(19 33 46 / 0.85)` | The photo viewer: Night at 85% over the page | over Sand it blends to `#35404A` |
+| `--viewer-control` | | `rgb(255 255 255 / 0.16)` | The circle behind the viewer's arrows and Close | white icon 6.4:1 |
+| `--viewer-control-hover` | | `rgb(255 255 255 / 0.28)` | That circle on hover | white icon 4.6:1 (a graphic needs 3:1) |
 | `--shadow-lift` | | `0 8px 24px rgb(19 33 46 / 0.18)` | The one shadow | |
 
 - Routine Urgency is not coloured: `--muted` text on a `--line` hairline. Colour is never the only signal; every badge carries its word.
 - Wattle is never text and never a button. It is 1.6:1 on white, so it only ever marks (a stripe, a bar, a chip behind Night text).
-- The focus ring is Harbour everywhere except on the Night rail, where Harbour is 2.3:1, so rail links ring in `--rail-text`. Links inside a dark chat bubble take the bubble's own text colour, underlined, and so does their ring.
+- The focus ring is Harbour everywhere except on the Night rail and in the photo viewer, where Harbour is too faint (2.3:1 on the rail, 1.4:1 on the viewer's blended backdrop), so those rings are `--rail-text`. Links inside a dark chat bubble take the bubble's own text colour, underlined, and so does their ring.
 
 ## Type
 
@@ -239,6 +242,8 @@ All of these are in `src/web/ui.ts`; pages use them instead of hand-building mar
 - **Tabs** (`tabs`): Bricolage Grotesque, muted until current; the current one is Night 600 with a Harbour underline and `aria-current`. **Side tabs** (`sideTabs`, for Settings' sections): a column of 40 px Bricolage Grotesque 14 px links, the current one a white tab with a hairline and the Wattle bar; a sideways-scrolling row under 768 px.
 - **Timeline:** Harbour dots on a `--line` rule, the time muted above each event, 12 px between events so it reads as a log.
 - **Facts** (`dl`): a 10 rem label column, so a value sits near its label even in a wide column; in a box under 26 rem the label stacks over its value.
+- **Photo grid** (`photoGrid`): thumbnails in 2, then 3, then 4 columns. Each is a square crop in a hairline box, with its caption (when it was taken, a metadata flag) under it in 12 px Slate. Every photo is a link to the full image in the same tab, and the list is marked `data-photo-grid`. With JavaScript a click opens the photo viewer; Ctrl-click, Cmd-click, Shift-click, Alt-click, the middle button and the context menu still do what the browser does. Without JavaScript it is that link, and Back returns.
+- **Photo viewer** (the "photo viewer" block in `app.js`, one `<dialog class="photo-viewer">` reused by every grid): the whole page, Night at 85% (`--viewer-backdrop`), no border, radius or shadow. The photo is as large as the room left by the chrome, kept in proportion, 4 px radius, with the caption under it in 13 px `--rail-text` (8.6:1 on the blended backdrop). With more than one photo, Previous and Next are 48 px circles (`caret-left` and `caret-right`, white on `--viewer-control`) beside the photo, and a counter under the caption reads "2 of 5". The arrows wrap from the last photo to the first. Under 640 px the arrows leave the sides and share a footer row with the counter, so nothing covers the photo. Close (`x`, top right), Esc or a click on the backdrop closes it, and focus returns to the photo that opened it. Arrow keys, and a horizontal swipe of more than 48 px, move between photos. The dialog is named "Photo 2 of 5" and the counter is a polite live region. It does not animate. The page behind does not scroll.
 - **Chat** (simulator and message logs):
   - myEST8's messages on the left on Paper; the person's on the right on Harbour with white text. 8 px radius.
   - Links in a bubble take the bubble's text colour, underlined, so they read on Harbour and on every tone (the global link colour would be Harbour on Harbour); their focus ring is the text colour too.
