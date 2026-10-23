@@ -155,6 +155,12 @@ export function ticketPages() {
     return quoteRequestsSent(await actions.sendQuoteRequests(job.jobId, tradieIds));
   });
 
+  onPost(pages, '/:id/quote-requests/:quoteRequestId/resend', async ({ actions, ticket, params }) => {
+    const request = requestIn(ticket, params.quoteRequestId);
+    await actions.resendQuoteRequest(request.quoteRequestId);
+    return `Quote Request resent to ${request.businessName}`;
+  });
+
   onPost(pages, '/:id/quotes/:quoteId/confirm', async ({ actions, ticket, form, params, timeZone }) => {
     const { quote } = quoteIn(ticket, params.quoteId);
     const time = text(form, 'proposedTime');
@@ -1058,6 +1064,7 @@ function inspectionLine(t: TicketView, v: NonNullable<RequestView['inspection']>
 function requestActions(t: TicketView, job: JobView, r: RequestView, x: Extras): Html {
   const e = r.estimate;
   const actions: Html[] = [];
+  if (NO_REPLY[r.status]) actions.push(resendButton(t, r));
   if (e && e.status === 'open' && !e.confirmed) actions.push(confirmForm(t, e, x));
   if (r.status === 'estimated') {
     if (r.inspectionNeeded) actions.push(bookingForm(t, job, r, x));
@@ -1069,6 +1076,11 @@ function requestActions(t: TicketView, job: JobView, r: RequestView, x: Extras):
   if (firmNext) actions.push(firmQuoteEntry(t, r, x));
   if (r.firmQuote && r.firmQuote.status === 'open') actions.push(html`<a class="link text-sm" href="#quote-${r.firmQuote.quoteId}">Compare in Firm Quotes</a>`);
   return actions.length ? html`<div class="tradie-row-actions">${actions}</div>` : nothing;
+}
+
+/** Sends the Quote Request message again, for a Tradie with no reply who says it never arrived. */
+function resendButton(t: TicketView, r: RequestView): Html {
+  return postButton(`/tickets/${t.ticketId}/quote-requests/${r.quoteRequestId}/resend`, 'Resend', { variant: 'secondary', size: 'sm' });
 }
 
 /** "Inspection needed" or "Not needed", the Property Manager's say over the Tradie's, until one is booked. */
