@@ -257,6 +257,77 @@ export function propertyPlaceFields(o: { values?: Values; errors?: Errors } = {}
 }
 
 /**
+ * Everything about a Property but its address: Property Owner, Property Manager, Max Repair Cost, Building
+ * Manager and the Nominated Tradies picker, as the Properties page adds a Property and its profile edits one.
+ * `values` and `errors` are a refused form's, by posted field name; `manager` is who the Property Manager
+ * select starts on when `values` don't say.
+ */
+export function propertyFields(o: {
+  owners: Person[];
+  buildingManagers: Person[];
+  propertyManagers: { id: number; name: string }[];
+  tradies: Person[];
+  manager?: number;
+  values?: Values;
+  errors?: Errors;
+}): Html {
+  const { values, errors } = o;
+  return html`
+    ${fieldGrid(html`
+      ${propertyPlaceFields({ values, errors })}
+      ${field({
+        label: 'Property Owner',
+        name: 'ownerId',
+        id: 'property-owner',
+        type: 'select',
+        required: true,
+        placeholder: 'Choose the Property Owner',
+        value: valueOf(values, 'ownerId'),
+        options: o.owners.map((p) => ({ value: String(p.id), label: p.name })),
+        error: errors?.ownerId,
+      })}
+      ${field({
+        label: 'Property Manager',
+        name: 'propertyManagerId',
+        id: 'property-manager',
+        type: 'select',
+        required: true,
+        value: valueOf(values, 'propertyManagerId') || String(o.manager ?? ''),
+        options: o.propertyManagers.map((m) => ({ value: String(m.id), label: m.name })),
+        error: errors?.propertyManagerId,
+      })}
+      ${field({
+        label: 'Max Repair Cost ($)',
+        name: 'maxRepairCost',
+        id: 'property-max',
+        type: 'number',
+        step: '0.01',
+        min: 0,
+        required: true,
+        placeholder: '500',
+        value: valueOf(values, 'maxRepairCost'),
+        hint: "The most a Ticket's Repair Cost can reach before the Property Owner must approve.",
+        error: errors?.maxRepairCost,
+      })}
+      ${field({
+        label: 'Building Manager (strata only)',
+        name: 'buildingManagerId',
+        id: 'property-building-manager',
+        type: 'select',
+        value: valueOf(values, 'buildingManagerId'),
+        options: [{ value: '', label: 'None' }, ...o.buildingManagers.map((b) => ({ value: String(b.id), label: b.name }))],
+        error: errors?.buildingManagerId,
+      })}
+    `)}
+    <div class="mt-3">
+      ${o.tradies.length
+        ? tradiePicker({ id: 'property', tradies: o.tradies, chosen: list(values ?? {}, 'nominatedTradieIds'), error: errors?.nominatedTradieIds })
+        : html`<p class="text-sm text-muted">Add Tradies on the Tradies page to nominate them for Urgent Repairs.</p>`}
+    </div>
+  `;
+}
+
+/**
  * Name, mobile and email. Control ids start with `id` ("owner-name"). With
  * `scope`, the posted names do too ("ownerName"), so several people fit in one
  * form. `optional` drops the required mark, for a person the form can do without.
