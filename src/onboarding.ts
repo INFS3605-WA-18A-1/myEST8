@@ -60,10 +60,15 @@ export function createOnboarding({ ports, modules }: Context) {
     if (input.email && !isEmail(input.email)) invalid(`${input.email.trim()} isn't an email address`, 'email');
   }
 
-  function checkTradie(input: TradieInput) {
+  /** What a Tradie is in the Agency's eyes: who to contact, the business and what it does. */
+  function checkTradieDetails(input: Contact & { businessName: string; trades: Trade[] }) {
     requireContact(input);
     if (!input.businessName.trim()) invalid('Enter the business name', 'businessName');
     if (!input.trades.length || input.trades.some((t) => !TRADES.includes(t))) invalid(`Choose Trades from: ${TRADES.join(', ')}`, 'trades');
+  }
+
+  function checkTradie(input: TradieInput) {
+    checkTradieDetails(input);
     if (!Number.isInteger(input.startingRating) || input.startingRating < 1 || input.startingRating > 5) {
       invalid('The starting rating is a whole number from 1 to 5', 'startingRating');
     }
@@ -145,6 +150,17 @@ export function createOnboarding({ ports, modules }: Context) {
       requireContact(input);
       requireContactFormat(input);
       await profiles.updatePerson(tenantId, input);
+    },
+
+    /**
+     * Changes a Tradie's business name, contact name, mobile, email and Trades, checked as when adding
+     * them. Their Google listing and starting rating stay as they were.
+     */
+    async editTradie(agencyId: number, tradieId: number, input: Contact & { businessName: string; trades: Trade[] }) {
+      await profiles.personInAgency(agencyId, tradieId, 'tradie');
+      checkTradieDetails(input);
+      requireContactFormat(input);
+      await profiles.updatePerson(tradieId, input);
     },
 
     findGoogleListings(query: string) {

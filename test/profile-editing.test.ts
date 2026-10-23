@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { ActionError } from '../src/shared.ts';
-import { HANA, PETE, QUICK_PIPES, STRANGER, TOM, world, type World } from './support/world.ts';
+import { HANA, jobView, PETE, QUICK_PIPES, STRANGER, TOM, tomsTapTicket, tradieQuotes, world, type World } from './support/world.ts';
 
 const NEW_MOBILE = '0412 345 678';
 const NEW_MOBILE_E164 = '+61412345678';
@@ -93,5 +93,61 @@ describe('editing a Tenant', () => {
     expect((await refusal(w.alice.editTenant(w.ids.hana, { name: 'Hana Ho', mobile: STRANGER }))).message).toBe('Hana Ho has already left their Property');
     await w.h.receive(STRANGER, 'Hi, this is Hana');
     expect((await w.alice.dashboard()).inbox).toMatchObject([{ reason: 'unknown_sender', from: STRANGER }]);
+  });
+});
+
+describe('editing a Tradie', () => {
+  const edit = { name: 'Peter Park', businessName: 'Park Plumbing & Gas', mobile: NEW_MOBILE, email: 'pete@parkplumbing.example', trades: ['plumbing' as const, 'general_handyman' as const] };
+
+  test('saves the business name, contact name, mobile, email and Trades, leaving the rating and Google listing alone', async () => {
+    const w = await world();
+    await w.alice.editTradie(w.ids.pete, edit);
+
+    expect(await w.alice.tradie(w.ids.pete)).toMatchObject({
+      name: 'Peter Park',
+      businessName: 'Park Plumbing & Gas',
+      mobile: NEW_MOBILE_E164,
+      email: 'pete@parkplumbing.example',
+      trades: ['plumbing', 'general_handyman'],
+      googleRating: { rating: 4.8, reviewCount: 120 },
+      myEst8Rating: { average: 4, count: 1 },
+    });
+  });
+
+  test('Quote Requests go to the new mobile, and a Quote from it is matched to the Tradie', async () => {
+    const w = await world();
+    await w.alice.editTradie(w.ids.pete, edit);
+    const job = await tomsTapTicket(w);
+
+    await w.alice.sendQuoteRequests(job.jobId, [w.ids.pete, w.ids.dana]);
+    expect(w.h.messenger.templatesTo(NEW_MOBILE_E164)).toEqual(['tradie.quote_request']);
+    expect(w.h.messenger.templatesTo(PETE)).toEqual([]);
+    await tradieQuotes(w, job, { id: w.ids.pete, address: NEW_MOBILE_E164 }, '$180 Tuesday', { priceCents: 180_00 });
+    expect((await jobView(w, job)).quotes).toMatchObject([{ tradieId: w.ids.pete, priceCents: 180_00 }]);
+  });
+
+  test('a business name or contact name left blank, and no Trades, are each refused naming the field', async () => {
+    const w = await world();
+
+    expect((await refusal(w.alice.editTradie(w.ids.pete, { ...edit, businessName: ' ' }))).fields).toEqual({ businessName: 'Enter the business name' });
+    expect((await refusal(w.alice.editTradie(w.ids.pete, { ...edit, name: '' }))).fields).toEqual({ name: 'Enter a name' });
+    expect((await refusal(w.alice.editTradie(w.ids.pete, { ...edit, trades: [] }))).fields.trades).toMatch(/^Choose Trades from: plumbing/);
+    expect((await refusal(w.alice.editTradie(w.ids.pete, { ...edit, mobile: undefined, email: undefined }))).fields).toEqual({ mobile: 'Enter a mobile number or email address' });
+    expect((await refusal(w.alice.editTradie(w.ids.pete, { ...edit, email: 'pete@' }))).fields).toEqual({ email: "pete@ isn't an email address" });
+    expect(await w.alice.tradie(w.ids.pete)).toMatchObject({ name: 'Pete Park', businessName: "Pete's Plumbing", mobile: PETE });
+  });
+
+  test('a mobile or email someone else in the Agency holds is refused naming the field', async () => {
+    const w = await world();
+
+    expect((await refusal(w.alice.editTradie(w.ids.pete, { ...edit, mobile: TOM }))).fields).toEqual({ mobile: `${TOM} already belongs to someone else` });
+    expect((await refusal(w.alice.editTradie(w.ids.pete, { ...edit, email: QUICK_PIPES }))).fields).toEqual({ email: `${QUICK_PIPES} already belongs to someone else` });
+    expect(await w.alice.tradie(w.ids.pete)).toMatchObject({ mobile: PETE, email: null });
+  });
+
+  test("another Agency's Tradie and someone who is not a Tradie are not found", async () => {
+    const w = await world();
+    expect((await refusal((await sunrise(w)).sam.editTradie(w.ids.pete, edit))).code).toBe('not_found');
+    expect((await refusal(w.alice.editTradie(w.ids.tom, edit))).code).toBe('not_found');
   });
 });
