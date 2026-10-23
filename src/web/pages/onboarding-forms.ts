@@ -353,6 +353,17 @@ export function contactFields(
   `;
 }
 
+/**
+ * The Add form for a Property Owner or Building Manager: name, mobile and email, posting to `action`.
+ * Setup and the two profile lists share it, so they can't drift.
+ */
+export function addPersonForm(o: { id: string; action: string; submit: string }): Html {
+  return html`<form method="post" action="${o.action}">
+    ${fieldGrid(contactFields(o.id))}
+    <div class="mt-3">${button(o.submit, { size: 'sm' })}</div>
+  </form>`;
+}
+
 /** The contact posted by `contactFields` with the same `scope`. */
 export function contactFrom(form: FormValues, scope?: string) {
   return { name: text(form, scoped(scope, 'name')), mobile: optional(form, scoped(scope, 'mobile')), email: optional(form, scoped(scope, 'email')) };

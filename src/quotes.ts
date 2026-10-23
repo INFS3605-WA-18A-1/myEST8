@@ -1140,6 +1140,17 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
       }));
     },
 
+    /** A Property Owner's approvals, newest first, including those already decided or cancelled. */
+    async approvalsFor(ownerId: number) {
+      const rows = await all<ApprovalRow>(db, 'SELECT * FROM approvals WHERE owner_id = ? ORDER BY requested_at DESC, id DESC', ownerId);
+      return Promise.all(
+        rows.map(async (a) => {
+          const issue = await tickets.issue((await tickets.ticket(a.ticket_id)).issueId);
+          return { ticketId: a.ticket_id, status: a.status, requestedAt: a.requested_at, description: issue.summary ?? issue.description };
+        }),
+      );
+    },
+
     async approvalsWaitingOn(ownerId: number): Promise<OpenItem[]> {
       return Promise.all((await all<ApprovalRow>(
         db,

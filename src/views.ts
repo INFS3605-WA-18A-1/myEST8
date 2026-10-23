@@ -377,6 +377,7 @@ export function createViews({ clock, modules }: Context) {
           propertyId: p.id,
           address: p.address,
           maxRepairCostCents: p.maxRepairCostCents,
+          ownerId: p.ownerId,
           ownerName: (await profiles.person(p.ownerId)).name,
           propertyManager: (await profiles.propertyManager(p.propertyManagerId)).name,
           tenants: tenants.filter((t) => t.propertyId === p.id).map((t) => ({ personId: t.id, name: t.name })),
@@ -398,7 +399,7 @@ export function createViews({ clock, modules }: Context) {
         maxRepairCostCents: property.maxRepairCostCents,
         propertyManager: (await profiles.propertyManager(property.propertyManagerId)).name,
         owner: { personId: owner.id, name: owner.name, mobile: owner.mobile, email: owner.email },
-        buildingManager: buildingManager ? { name: buildingManager.name, mobile: buildingManager.mobile, email: buildingManager.email } : null,
+        buildingManager: buildingManager ? { personId: buildingManager.id, name: buildingManager.name, mobile: buildingManager.mobile, email: buildingManager.email } : null,
         tenants: (await profiles.people(agencyId, 'tenant'))
           .filter((t) => t.propertyId === property.id)
           .map((t) => ({ personId: t.id, name: t.name, mobile: t.mobile, email: t.email, tenancyStart: t.tenancyStart })),
@@ -677,10 +678,31 @@ export function createViews({ clock, modules }: Context) {
       };
     },
 
+    /**
+     * A Property Owner or Building Manager's profile: how to reach them, the Properties
+     * they own or look after, and (for an Owner) their approvals, newest first. Refuses
+     * (not_found) anyone who isn't that role in the Agency. A removed person still opens.
+     */
+    async contactProfile(agencyId: number, personId: number, role: 'owner' | 'building_manager') {
+      const person = await profiles.personInAgency(agencyId, personId, role);
+      const properties = (await profiles.properties(agencyId)).filter((p) => (role === 'owner' ? p.ownerId === personId : p.buildingManagerId === personId));
+      return {
+        personId: person.id,
+        name: person.name,
+        mobile: person.mobile,
+        email: person.email,
+        removedAt: person.removedAt,
+        properties: properties.map((p) => ({ propertyId: p.id, address: p.address })),
+        approvals: role === 'owner' ? await modules.quotes.approvalsFor(personId) : [],
+      };
+    },
+
     async ticket(agencyId: number, ticketId: number) {
       const ticket = await tickets.ticketInAgency(agencyId, ticketId);
       const issue = await tickets.issue(ticket.issueId);
       const property = await profiles.property(ticket.propertyId);
+      const owner = await profiles.person(property.ownerId);
+      const buildingManager = property.buildingManagerId ? await profiles.person(property.buildingManagerId) : null;
       return {
         ...(await ticketSummaries([ticket]))[0]!,
         ...(await issueDetails(issue)),
@@ -689,6 +711,8 @@ export function createViews({ clock, modules }: Context) {
         summaryBy: issue.summaryBy,
         propertyId: property.id,
         maxRepairCostCents: property.maxRepairCostCents,
+        owner: { personId: owner.id, name: owner.name },
+        buildingManager: buildingManager ? { personId: buildingManager.id, name: buildingManager.name } : null,
         frequentIssues: await profiles.frequentIssues(property.id),
         repairCostCents: await modules.quotes.repairCost(ticket.id),
         jobs: await Promise.all(

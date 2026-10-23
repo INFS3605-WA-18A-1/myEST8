@@ -19,7 +19,7 @@ A person living in a Property under its lease. Removing a Tenant ends their tena
 _Avoid_: resident, renter
 
 **Property Owner**:
-The owner of a Property. Must approve Quotes when a Ticket's Repair Cost would go over the Property's Max Repair Cost.
+The owner of a Property. Must approve Quotes when a Ticket's Repair Cost would go over the Property's Max Repair Cost. Removing a Property Owner takes them out of every list and picker, and their mobile and email no longer reach the Agency as them, but their past approvals stay on record. An Owner of a Property can't be removed until that Property has another Owner.
 _Avoid_: landlord, land owner
 
 **Tradie**:
@@ -31,7 +31,7 @@ A Tradie named for a Property to carry out Urgent Repairs.
 _Avoid_: emergency tradie, preferred tradie
 
 **Building Manager**:
-The person who organises repairs to Common Areas together with the strata. Not part of the Agency.
+The person who organises repairs to Common Areas together with the strata. Not part of the Agency. Removing a Building Manager takes them out of every list and picker, and their mobile and email no longer reach the Agency as them. One who looks after a Property can't be removed until that Property names another Building Manager, or none.
 
 ### Places
 

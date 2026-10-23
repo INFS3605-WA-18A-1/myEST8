@@ -161,7 +161,7 @@ function list(properties: Overview[]): Html {
       rowLink(p.address, `/properties/${p.propertyId}`),
       html`<span class="${p.openTickets ? 'property-open' : 'text-muted'}">${p.openTickets}</span>`,
       html`${formatMoney(p.maxRepairCostCents)}`,
-      html`${p.ownerName}`,
+      entityLink('person', p.ownerName, `/owners/${p.ownerId}`),
       p.tenants.length
         ? html`<span class="flex flex-wrap gap-1">${p.tenants.map((t) => entityLink('tenant', t.name, `/tenants/${t.personId}`))}</span>`
         : html`<span class="text-muted">No Tenants</span>`,
@@ -172,9 +172,9 @@ function list(properties: Overview[]): Html {
 }
 
 /** A name, then the mobile number and the email to reach them on, each on its own line. */
-function contact(person: { name: string; mobile: string | null; email: string | null }): Html {
+function contact(person: { name: string; mobile: string | null; email: string | null }, href: string): Html {
   return html`<span class="property-contact">
-    <span class="font-medium">${person.name}</span>
+    ${entityLink('person', person.name, href)}
     ${person.mobile ? contactLink('mobile', person.mobile) : ''}
     ${person.email ? contactLink('email', person.email) : ''}
   </span>`;
@@ -191,7 +191,7 @@ function facts(p: PropertyView): Html {
         </div>
         <div>
           <dt>Property Owner</dt>
-          <dd>${contact(p.owner)}</dd>
+          <dd>${contact(p.owner, `/owners/${p.owner.personId}`)}</dd>
         </div>
         <div>
           <dt>Property Manager</dt>
@@ -200,7 +200,7 @@ function facts(p: PropertyView): Html {
         ${p.buildingManager
           ? html`<div>
               <dt>Building Manager</dt>
-              <dd>${contact(p.buildingManager)}</dd>
+              <dd>${contact(p.buildingManager, `/building-managers/${p.buildingManager.personId}`)}</dd>
             </div>`
           : ''}
       </dl>
