@@ -49,3 +49,79 @@ Test-first, one slice at a time, with expected values from worked examples. Neve
 ## Non-goals
 
 - Zooming or panning inside a photo, downloading, or deleting photos from the viewer.
+
+## Design plan
+
+Checked against `docs/design-system.md`. The viewer is one `<dialog class="photo-viewer">` that `app.js` builds on first use and reuses for every `photoGrid` on every page.
+
+### Tokens
+
+Three new tokens on `:root` (no literal colour outside that block). The rest are existing tokens.
+
+| Token | Value | Use | Measured |
+|---|---|---|---|
+| `--viewer-backdrop` (new) | `rgb(19 33 46 / 0.85)` (Night, 85 %) | the dialog's fill, so the page shows dimly through | over Sand it blends to `#35404A` |
+| `--viewer-control` (new) | `rgb(255 255 255 / 0.16)` | the circle behind the arrows and Close | white icon 6.4:1 on it |
+| `--viewer-control-hover` (new) | `rgb(255 255 255 / 0.28)` | the same, on hover | white icon 4.6:1 (a graphic needs 3:1) |
+| `--surface` | white | the icons (`caret-left`, `caret-right`, `x`, 24 px, regular) | 10.3:1 on the blended backdrop |
+| `--rail-text` | `#E6EBF0` | the caption, the counter, and the focus ring | 8.6:1 on the blended backdrop |
+
+- **Focus ring: `--rail-text`, 2px, offset 2px.** Harbour is 1.4:1 on the blended backdrop (the design system already moves the ring to `--rail-text` on Night for the rail at 2.3:1). `--rail-muted` is 4.2:1 here, under AA for 13 px text, so nothing in the viewer uses it.
+- **Shadow:** none. The dialog is flat and the circles are tinted, not lifted.
+- **Motion: none.** The design system allows no entrance animation, and the spec only allows "at most a short fade", so the viewer opens and changes photo at once. `prefers-reduced-motion` has nothing to remove.
+- **Type:** caption Public Sans 13 px 400 (the thumbnail caption is 12 px; 13 px reads better on a large photo), counter Public Sans 14 px 600 with tabular figures (`num`). Sentence case: "2 of 5".
+
+### Sizes
+
+- **Dialog:** the whole viewport (`100%` of both; `100dvh` so a phone's address bar doesn't hide the footer), `max-width` and `max-height` none, no border, no radius, no shadow. Padding 16 px, 24 px from 1024 px.
+- **Buttons** (Previous photo, Next photo, Close): 48 px circles (the spec's minimum is 44 px, and the design system's touch target is 44 px). Icon 24 px.
+- **Photo:** as large as the room left after the chrome, never cropped, never stretched. The page sets the `--photo-ratio` property (width over height) when the image loads, and the photo is `aspect-ratio: var(--photo-ratio)`, `width: min(100%, (100dvh - 12rem) * ratio)`. So a small photo grows to fit and a big one shrinks. `12rem` is the close row, the caption and the counter row with their gaps.
+- **Radius:** 4 px on the photo (the design system's radius for rows and dockets), 50 % on the buttons.
+- **Counter:** "2 of 5", under the caption on a laptop, between the two arrows on a phone.
+- **Page behind:** no scrolling while it is open (`html:has(dialog.photo-viewer[open])` is `overflow: hidden`), and the dialog has `overscroll-behavior: contain`.
+
+### Layout
+
+The dialog is a grid, so every part is in the flow: nothing floats over the photo.
+
+1366 px: three columns (48 px arrow, photo, 48 px arrow), three rows (Close, photo, counter). The arrows sit either side of the photo, centred on it.
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Night 85 %, the page dimly behind it                                    ( x ) │  Close 48, top right
+│                                                                              │
+│  ( ‹ )     ┌────────────────────────────────────────────────┐     ( › )     │  arrows 48
+│            │                                                │               │
+│            │                     the photo                  │               │  fits 1174 × 632
+│            │                                                │               │
+│            └────────────────────────────────────────────────┘               │
+│                Mon 12 Oct, 9:00 am · Photo taken before the tenancy          │  caption, 13 px, centred
+│                                    2 of 5                                    │  counter, 14 px 600
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+390 px: one column. The arrows leave the photo's sides, which would take 96 px of 358, and share the footer row with the counter, so the photo gets the full width and nothing covers its middle.
+
+```
+┌────────────────────────────┐
+│                      ( x ) │  Close 48
+│ ┌────────────────────────┐ │
+│ │                        │ │
+│ │       the photo        │ │  358 wide
+│ │                        │ │
+│ └────────────────────────┘ │
+│ Mon 12 Oct, 9:00 am        │  caption
+│                            │
+│ ( ‹ )     2 of 5     ( › ) │  footer, 48
+└────────────────────────────┘
+```
+
+With one photo the arrows and the counter are `hidden`; the layout is the same without them. Under 640 px the footer row is the only thing that changes.
+
+### Behaviour and markup
+
+- Built with `createElement`, `textContent` and `createElementNS` (the three Phosphor paths are written out once in `app.js`, as `X_ICON` is). No `innerHTML`.
+- The dialog's `aria-label` is "Photo 2 of 5" and follows the photo. The counter is a polite live region, so a screen reader hears the change. Buttons are named "Previous photo", "Next photo" and "Close". The photo's `alt` is the thumbnail's.
+- One click handler on the document opens the viewer for a click on `[data-photo-grid] a`, unless it is a modified click (Ctrl, Cmd, Shift, Alt, middle button), which the browser handles as a new tab or window.
+- `showModal()` gives the focus trap, Esc and an inert page. A click on the dialog that isn't on a button, the photo or the caption closes it. Focus goes back to the link that opened it.
+- ← and → move (wrapping), and a horizontal swipe of more than 48 px on the photo moves too (pointer events, `touch-action: pan-y` so a vertical swipe still works).
