@@ -27,6 +27,8 @@ export type NavKey =
   | 'properties'
   | 'tradies'
   | 'tenants'
+  | 'owners'
+  | 'building-managers'
   | 'settings'
   | 'simulator';
 export type Variant = 'primary' | 'secondary' | 'danger' | 'ghost';
@@ -70,7 +72,7 @@ export function head(title: string, o: { css?: string[]; runtime?: boolean } = {
 /**
  * The places a Property Manager works, in three groups with a gap between them: the
  * day's work (Dashboard to Schedule), the Profiles of who and what the Agency looks
- * after (Properties, Tradies and Tenants, under a quiet heading), then Settings.
+ * after (Properties, Tradies, Tenants, Property Owners and Building Managers, under a quiet heading), then Settings.
  */
 const NAV: { label?: string; items: { key: NavKey; label: string; href: string }[] }[] = [
   {
@@ -89,6 +91,8 @@ const NAV: { label?: string; items: { key: NavKey; label: string; href: string }
       { key: 'properties', label: 'Properties', href: '/properties' },
       { key: 'tradies', label: 'Tradies', href: '/tradies' },
       { key: 'tenants', label: 'Tenants', href: '/tenants' },
+      { key: 'owners', label: 'Property Owners', href: '/owners' },
+      { key: 'building-managers', label: 'Building Managers', href: '/building-managers' },
     ],
   },
   { items: [{ key: 'settings', label: 'Settings', href: '/settings' }] },
@@ -1231,6 +1235,8 @@ const NAV_ICON: Record<NavKey, Html> = {
   properties: icon('house-line', { size: 'size-[18px]' }),
   tradies: icon('wrench', { size: 'size-[18px]' }),
   tenants: icon('users', { size: 'size-[18px]' }),
+  owners: icon('key', { size: 'size-[18px]' }),
+  'building-managers': icon('buildings', { size: 'size-[18px]' }),
   settings: icon('gear-six', { size: 'size-[18px]' }),
   simulator: icon('device-mobile', { size: 'size-4' }),
 };

@@ -7,7 +7,7 @@ import { createImports, type ImportChanges, type ImportKind } from './imports.ts
 import { createIntake, MAX_UPLOAD_FILES } from './intake.ts';
 import { createNotifications } from './notifications.ts';
 import { createOnboarding } from './onboarding.ts';
-import type { BlobStore, ChannelType, Clock, InboundMessage } from './ports.ts';
+import { UndeliverableError, type BlobStore, type ChannelType, type Clock, type InboundMessage } from './ports.ts';
 import { createProfiles, type SignUp } from './profiles.ts';
 import { createQuotes, type EstimateInput, type FirmQuoteInput } from './quotes.ts';
 import { createScheduling } from './scheduling.ts';
@@ -198,12 +198,29 @@ export function createApp(
         tenants: ({ filter = 'mine' }: { filter?: 'mine' | 'all' } = {}) => views.tenants(agencyId, propertyManagerId, filter),
         /** A Tenant's profile: their Property, contact details, Tickets, Maintenance Requests waiting and Reimbursement Requests. */
         tenant: (tenantId: number) => views.tenant(agencyId, tenantId),
+        /** A Property Owner's profile: how to reach them, the Properties they own, and their approvals. */
+        owner: (ownerId: number) => views.contactProfile(agencyId, ownerId, 'owner'),
+        /** A Building Manager's profile: how to reach them, and the Properties they look after. */
+        buildingManager: (buildingManagerId: number) => views.contactProfile(agencyId, buildingManagerId, 'building_manager'),
         /** The counts beside Requests and Approvals in the rail. */
         navCounts: () => views.navCounts(agencyId, propertyManagerId),
 
         // Onboarding
         /** The Agency's connected channels. `testedAt` is when a code or a first inbound email verified the address. */
         channels: () => profiles.channels(agencyId),
+        /**
+         * Why the next message to this person cannot be sent, or null when a channel reaches them.
+         * Only an `UndeliverableError` (a mobile or email whose channel isn't connected) is this note.
+         */
+        unreachedReason: async (personId: number) => {
+          try {
+            await modules.notifications.channelFor(personId);
+            return null;
+          } catch (error) {
+            if (error instanceof UndeliverableError) return error.userReason;
+            throw error;
+          }
+        },
         /** Adds a colleague as a Property Manager. Returns their id and a temporary password to pass on, shown once. */
         addColleague: (input: { name: string; email: string }) => profiles.addColleague(agencyId, input),
         /** Stores an address the caller has already proved: the demo seed, Gmail OAuth, or a confirmed code. */

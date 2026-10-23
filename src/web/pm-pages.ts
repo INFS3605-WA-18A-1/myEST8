@@ -14,6 +14,7 @@ import { settingsPages } from './pages/settings.ts';
 import { serverSmsPages } from './pages/server-sms.ts';
 import { smsNumberPages } from './pages/sms-number.ts';
 import { setupPages } from './pages/setup.ts';
+import { buildingManagerPages, ownerPages } from './pages/owners.ts';
 import { tenantProfilePages } from './pages/tenants.ts';
 import { ticketListPages } from './pages/ticket-list.ts';
 import { ticketPages } from './pages/ticket.ts';
@@ -39,6 +40,8 @@ export function pmPages(o: { demo: boolean; connectors: ChannelConnectors } = { 
   pages.route('/properties', propertyPages());
   pages.route('/tradies', tradiePages());
   pages.route('/tenants', tenantProfilePages());
+  pages.route('/owners', ownerPages());
+  pages.route('/building-managers', buildingManagerPages());
   pages.route('/setup', setupPages(o));
   if (o.connectors.gmail) pages.route('/oauth/google', googleOAuthPages(o.connectors.gmail));
   pages.route('/sms-number', smsNumberPages());

@@ -8,7 +8,7 @@ import { BELLA, confirmedQuotes, HANA, STRANGER, TOM } from '../support/world.ts
 
 type Web = Awaited<ReturnType<typeof webWorld>>;
 
-const RAIL = ['/', '/dispatch', '/tickets', '/archive', '/approvals', '/calendar', '/properties', '/tradies', '/tenants', '/settings'];
+const RAIL = ['/', '/dispatch', '/tickets', '/archive', '/approvals', '/calendar', '/properties', '/tradies', '/tenants', '/owners', '/building-managers', '/settings'];
 
 /** The page as the Property Manager sees it; signs in afresh, as the scenarios move the clock past a session's life. */
 async function text(w: Web, path: string, cookie?: string) {

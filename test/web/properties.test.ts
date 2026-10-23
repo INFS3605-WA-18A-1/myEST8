@@ -33,7 +33,9 @@ describe('Properties', () => {
     expect(page).toContain('table-frame is-stacked is-labelled');
     expect(row).toMatch(/data-label="Open Tickets"><span class="property-open">1<\/span>/);
     expect(row).toMatch(/data-label="Max Repair Cost">\$500\.00/);
-    expect(row).toMatch(/data-label="Property Owner">Olivia Owens/);
+    expect(row).toMatch(/data-label="Property Owner">/);
+    expect(row).toContain(`href="/owners/${w.ids.olivia}"`);
+    expect(row).toContain('Olivia Owens');
   });
 
   test("a profile shows the open Ticket, the facts, Tenants and Nominated Tradies, with a way back", async () => {
