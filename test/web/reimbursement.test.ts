@@ -94,6 +94,25 @@ describe('the Reimbursement Request page', () => {
     expect(w.h.messenger.last(TOM)!.template).toBe('tenant.reimbursed');
   });
 
+  test('opens a receipt file in the same tab, and its photo in the viewer', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+    const { link, id } = await tomsBurstPipe(w);
+    await w.h.upload(link, [
+      { filename: 'receipt.jpg', contentType: 'image/jpeg', content: new Uint8Array([1]) },
+      { filename: 'invoice.pdf', contentType: 'application/pdf', content: new Uint8Array([1, 2]) },
+    ], { amountCents: 450_00 });
+    const receipts = (await w.alice.reimbursement(id)).receipts;
+
+    const html = await page(w, `/reimbursements/${id}`, cookie);
+
+    expect(html).toContain(`<a class="link" href="/files/${receipts[1]!.fileId}">invoice.pdf</a>`);
+    expect(visible(html)).toContain('invoice.pdf (PDF)');
+    expect(visible(html)).not.toContain('new tab');
+    expect(html).toMatch(new RegExp(`<ul role="list" data-photo-grid [^>]*>\\s*<li>\\s*<figure[^>]*>\\s*<a href="/files/${receipts[0]!.fileId}" class=`));
+    expect(html).not.toContain('target=');
+  });
+
   test('warns, without refusing, about an amount over the limit, and says why a refused action failed', async () => {
     const w = await webWorld();
     const cookie = await w.signIn();

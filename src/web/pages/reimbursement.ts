@@ -263,7 +263,7 @@ function forwardForm(r: Reimbursement): Html {
   </form>`;
 }
 
-/** The receipts: photos as thumbnails, PDFs as links, each opening in a new tab. */
+/** The receipts: photos as thumbnails that open in the viewer, PDFs and other files as links. */
 function receiptsCard(r: Reimbursement): Html {
   if (!r.receipts.length) return card({ title: 'Receipt', body: emptyState('No receipt yet. It appears here when the Tenant sends it.') });
   const images = r.receipts.filter((f) => IMAGE_TYPES.has(f.contentType));
@@ -279,7 +279,7 @@ function receiptsCard(r: Reimbursement): Html {
 
 function fileLink(f: Receipt): Html {
   const kind = f.contentType === 'application/pdf' ? 'PDF' : 'file';
-  return html`<li><a class="link" href="/files/${f.fileId}" target="_blank" rel="noopener">${f.filename}</a> <span class="text-muted">(${kind}, opens in a new tab)</span></li>`;
+  return html`<li><a class="link" href="/files/${f.fileId}">${f.filename}</a> <span class="text-muted">(${kind})</span></li>`;
 }
 
 /** Who is involved and what the Tenant said. */
