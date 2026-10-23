@@ -1,7 +1,7 @@
 import type { Context } from './context.ts';
 import type { ChannelType } from './ports.ts';
 import { invalid, isEmail, normalizeAddress, phoneProblem, TRADES, type Role, type Trade } from './shared.ts';
-import { formatWeekdayAndTime } from './zoned-time.ts';
+import { formatWeekdayDateAndTime } from './zoned-time.ts';
 
 type Contact = { name: string; mobile?: string; email?: string };
 
@@ -192,7 +192,7 @@ export function createOnboarding({ ports, modules }: Context) {
         );
       }
       const [visit] = await modules.scheduling.visitStartsFromToday(agencyId, tradieId);
-      if (visit) invalid(`${name} has a visit booked on ${formatWeekdayAndTime(visit, (await profiles.agency(agencyId)).timeZone)}. Cancel or finish it first.`);
+      if (visit) invalid(`${name} has a visit booked on ${formatWeekdayDateAndTime(visit, (await profiles.agency(agencyId)).timeZone)}. Cancel or finish it first.`);
       await profiles.removeTradie(tradieId);
       return name;
     },

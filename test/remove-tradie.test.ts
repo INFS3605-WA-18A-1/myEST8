@@ -202,7 +202,7 @@ describe('removing a Tradie with work in progress', () => {
     await w.alice.chooseQuote(quote!.quoteId, 'Nominated Tradie');
     await w.alice.sendWorkOrder(job.jobId, { start: TUE_9AM.toISOString() });
 
-    expect(await refusal(w.alice.removeTradie(w.ids.nina))).toBe("Nina's Plumbing has a visit booked on Tuesday at 9 am. Cancel or finish it first.");
+    expect(await refusal(w.alice.removeTradie(w.ids.nina))).toBe("Nina's Plumbing has a visit booked on Tuesday 13 October at 9 am. Cancel or finish it first.");
 
     await w.alice.cancelJob(job.jobId);
     expect(await w.alice.removeTradie(w.ids.nina)).toBe("Nina's Plumbing");
@@ -217,7 +217,7 @@ describe('removing a Tradie with work in progress', () => {
     await w.alice.sendWorkOrder(job.jobId, { start: tuesdayHalfPast9.toISOString() });
     await w.h.advance(new Date('2026-10-13T15:00:00+11:00').getTime() - w.h.clock.now().getTime());
 
-    expect(await refusal(w.alice.removeTradie(w.ids.nina))).toBe("Nina's Plumbing has a visit booked on Tuesday at 9:30 am. Cancel or finish it first.");
+    expect(await refusal(w.alice.removeTradie(w.ids.nina))).toBe("Nina's Plumbing has a visit booked on Tuesday 13 October at 9:30 am. Cancel or finish it first.");
   });
 
   test("is not found for another Agency's Tradie or for someone who isn't a Tradie, and refused for one already removed", async () => {

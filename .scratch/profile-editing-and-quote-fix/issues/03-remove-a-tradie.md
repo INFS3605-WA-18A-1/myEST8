@@ -45,3 +45,4 @@ There's no way to delete a Tradie. Quotes, visits (work orders), ratings and Nom
 ## Also
 
 - **An approved Quote with no visit booked yet refuses the removal too.** A Job that is Ready to book has nobody else to book, so removing its Tradie would strand it. The reason names the Job: "Nina's Plumbing has an approved Quote for plumbing at 12 King St, Newtown NSW 2042 with no visit booked yet. Book the visit or cancel the Job first." (`unbookedJobsOf` in `src/quotes.ts`; test in `test/remove-tradie.test.ts`.)
+- **The refusal for an upcoming visit names the date as well as the day:** "Nina's Plumbing has a visit booked on Tuesday 27 October at 9 am. Cancel or finish it first." A bare weekday could mean this week's or next week's. (`formatWeekdayDateAndTime` in `src/zoned-time.ts`; tests in `test/remove-tradie.test.ts` and `test/zoned-time.test.ts`.)

@@ -1,7 +1,15 @@
 import { describe, expect, test } from 'vitest';
-import { addDays, dayOf, daysFrom, mondayOf, parseDay, startOfDay, weekdayOf } from '../src/zoned-time.ts';
+import { addDays, dayOf, daysFrom, formatWeekdayDateAndTime, mondayOf, parseDay, startOfDay, weekdayOf } from '../src/zoned-time.ts';
 
 const SYDNEY = 'Australia/Sydney';
+
+describe('naming a visit in a sentence', () => {
+  test('the weekday, the date and the time, with the minutes only when there are some', () => {
+    expect(formatWeekdayDateAndTime(new Date('2026-10-26T22:00:00Z'), SYDNEY)).toBe('Tuesday 27 October at 9 am');
+    expect(formatWeekdayDateAndTime('2026-10-27T22:30:00Z', SYDNEY)).toBe('Wednesday 28 October at 9:30 am');
+    expect(formatWeekdayDateAndTime('2026-12-31T14:15:00Z', SYDNEY)).toBe('Friday 1 January at 1:15 am');
+  });
+});
 
 describe('calendar days in the Agency time zone', () => {
   test('an instant falls on the day the Agency clock shows, not the UTC day', () => {
