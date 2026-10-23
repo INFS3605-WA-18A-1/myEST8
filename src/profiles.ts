@@ -497,13 +497,15 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
 
     /**
      * A Tradie leaves the Agency. Their record stays, so past Quotes, visits and ratings still
-     * name them, but they leave every Property's Nominated Tradies and stop being offered
-     * for Jobs (people and tradiesWithTrade leave them out).
+     * name them, but they leave every Property's Nominated Tradies, stop being offered for
+     * Jobs (people and tradiesWithTrade leave them out), and their mobile and email stop
+     * reaching the Agency as them and can be given to someone else.
      */
     async removeTradie(tradieId: number) {
       await transaction(db, async () => {
         await run(db, 'UPDATE people SET removed_at = ? WHERE id = ?', iso(clock.now()), tradieId);
         await run(db, 'DELETE FROM nominated_tradies WHERE tradie_id = ?', tradieId);
+        await run(db, 'DELETE FROM contact_addresses WHERE person_id = ?', tradieId);
       });
     },
 

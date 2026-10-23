@@ -633,6 +633,7 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
         const tradies = [];
         for (const id of new Set(tradieIds)) tradies.push(await profiles.personInAgency(agencyId, id, 'tradie'));
         for (const tradie of tradies) {
+          if (tradie.removedAt) invalid(`${tradie.businessName ?? tradie.name} has been removed from the Agency`);
           if (!tradie.trades.includes(job.trade)) invalid(`${tradie.businessName ?? tradie.name} doesn't do ${job.trade} work`);
           if (already.has(tradie.id)) invalid(`${tradie.businessName ?? tradie.name} has already been asked to quote`);
         }

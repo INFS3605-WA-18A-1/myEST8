@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { confirmedQuotes, jobView, KING_ST, PETE, TOM, tomsTapTicket, visitStarted, world } from './support/world.ts';
+import { confirmedQuotes, jobView, KING_ST, NINA, PETE, QUICK_PIPES, TOM, tomsTapTicket, visitStarted, world } from './support/world.ts';
 
 // Nina's Plumbing is a plumber, and one of the two Nominated Tradies of King St.
 
@@ -53,6 +53,69 @@ describe('removing a Tradie', () => {
     expect(profile.ratings.map((r) => [r.source, r.score])).toEqual([['property_manager', 3], ['tenant', 5]]);
     // Starting rating 4, with the 3 and the 5.
     expect(profile.myEst8Rating).toEqual({ average: 4, count: 3 });
+  });
+});
+
+describe('after a Tradie is removed', () => {
+  test("their mobile and email no longer reach the Agency as them, and can be given to someone else", async () => {
+    const w = await world();
+    await w.alice.removeTradie(w.ids.nina);
+    await w.alice.removeTradie(w.ids.quick);
+
+    await w.h.receive(NINA, 'Can I get paid for last week?');
+    await w.h.receive(QUICK_PIPES, 'Sorry, we cannot take that job');
+
+    const inbox = (await w.alice.dashboard()).inbox;
+    expect(inbox).toMatchObject([
+      { reason: 'unknown_sender', from: NINA, personName: null },
+      { reason: 'unknown_sender', from: QUICK_PIPES, personName: null },
+    ]);
+    expect(w.h.messenger.sent).toEqual([]);
+
+    await w.alice.addTradie({ name: 'Nick Nguyen', businessName: 'Nick Nguyen Plumbing', mobile: NINA, trades: ['plumbing'], startingRating: 3, notOnGoogle: true });
+  });
+});
+
+describe('a removed Tradie is not offered or placed', () => {
+  test('a stale Ask for Quotes form that still ticks them is refused', async () => {
+    const w = await world();
+    const job = await tomsTapTicket(w);
+    await w.alice.removeTradie(w.ids.nina);
+
+    await expect(w.alice.sendQuoteRequests(job.jobId, [w.ids.nina, w.ids.pete])).rejects.toThrow("Nina's Plumbing has been removed from the Agency");
+    expect((await jobView(w, job)).quoteRequests).toEqual([]);
+  });
+
+  test("the map's lookup of missing addresses skips them", async () => {
+    const w = await world();
+    for (const id of [w.ids.nina, w.ids.pete]) await w.alice.setTradieAddress(id, `${id} Depot Rd, Marrickville NSW 2204`);
+    await w.alice.removeTradie(w.ids.nina);
+    for (const id of [w.ids.nina, w.ids.pete]) w.h.geocoder.locations.set(`${id} Depot Rd, Marrickville NSW 2204`, { lat: -33.906, lng: 151.158 });
+
+    expect(await w.alice.geocodeMissing()).toBe(1);
+    expect((await w.alice.tradie(w.ids.pete)).located).toBe(true);
+    expect((await w.alice.tradie(w.ids.nina)).located).toBe(false);
+  });
+});
+
+describe('importing Tradies after one is removed', () => {
+  const sheet = (rows: string) => ({ filename: 'tradies.csv', contentType: 'text/csv', content: new TextEncoder().encode(`Company,Contact,Mobile,Services\n${rows}`) });
+
+  test('a sheet row for a removed Tradie is a new Tradie, while one for a current Tradie is a duplicate', async () => {
+    const w = await world();
+    await w.alice.removeTradie(w.ids.nina);
+    const { token } = await w.alice.importSheet(
+      'tradies',
+      sheet(`Nina's Plumbing,Nina Nguyen,${NINA},Plumber\nPete's Plumbing,Pete Park,0412 000 009,Plumber\n`),
+    );
+
+    const [nina, pete] = (await w.alice.importPreview(token)).rows;
+    expect(nina).toMatchObject({ status: 'ready', included: true });
+    expect(pete).toMatchObject({ status: 'duplicate', duplicateOf: "Pete's Plumbing" });
+    expect(await w.alice.confirmImport(token, {})).toMatchObject({ added: 1 });
+    const ninas = (await w.alice.people('tradie')).filter((t) => t.businessName === "Nina's Plumbing");
+    expect(ninas).toMatchObject([{ mobile: NINA }]);
+    expect(ninas[0]!.id).not.toBe(w.ids.nina);
   });
 });
 
