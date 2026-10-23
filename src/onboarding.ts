@@ -195,6 +195,16 @@ export function createOnboarding({ ports, modules }: Context) {
       return profiles.addProperty(agencyId, input);
     },
 
+    /**
+     * Changes a Property's address, suburb, Max Repair Cost, Property Owner, Property Manager, Building
+     * Manager and Nominated Tradies, checked as when adding it. A new address is looked up on the map again.
+     */
+    async editProperty(agencyId: number, propertyId: number, input: PropertyInput) {
+      await profiles.propertyInAgency(agencyId, propertyId);
+      await checkProperty(agencyId, input);
+      await profiles.updateProperty(propertyId, input);
+    },
+
     // The checks each add action makes, for checking many rows before adding any
     // (a spreadsheet import). Each refuses the way its add action would.
     checkContact,
