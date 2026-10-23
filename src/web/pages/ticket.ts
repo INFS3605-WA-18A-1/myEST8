@@ -68,6 +68,8 @@ type Extras = {
   freeSlots: Map<number, Slot[]>;
   /** Now, in the Agency's clock, for how long ago the Ticket was reported. */
   now: Date;
+  /** Why the Property Owner cannot be asked to approve, or null when a channel reaches them. */
+  ownerUnreached: string | null;
 };
 
 /** Shown to explain the rule; the core enforces it. */
@@ -90,8 +92,12 @@ export function ticketPages() {
       return c.html(page({ title: 'Ticket not found', pm, active: 'tickets', flash, body, shell: await shellInfo(c) }), 404);
     }
     const { timeZone } = actions.agency();
-    const [suggest, freeSlots] = await Promise.all([suggestionsFor(actions, ticket, c.req.query('suggest')), freeSlotsFor(actions, ticket)]);
-    const extras: Extras = { timeZone, suggest, freeSlots, now: actions.now() };
+    const [suggest, freeSlots, ownerUnreached] = await Promise.all([
+      suggestionsFor(actions, ticket, c.req.query('suggest')),
+      freeSlotsFor(actions, ticket),
+      actions.unreachedReason(ticket.owner.personId),
+    ]);
+    const extras: Extras = { timeZone, suggest, freeSlots, now: actions.now(), ownerUnreached };
     return c.html(
       page({
         title: `Ticket #${ticket.ticketId}`,
@@ -667,6 +673,10 @@ function detailsCard(t: TicketView): Html {
     title: 'Ticket details',
     body: facts([
       ['Property Manager', t.propertyManager],
+      ['Property Owner', entityLink('person', t.owner.name, `/owners/${t.owner.personId}`)],
+      ...(t.buildingManager
+        ? [['Building Manager', entityLink('person', t.buildingManager.name, `/building-managers/${t.buildingManager.personId}`)] as [string, Html]]
+        : []),
       ['Frequent issues here', frequentIssues(t)],
       ...(t.imageMatch
         ? [['Photo check', html`${badge(humanise(t.imageMatch.result), t.imageMatch.result === 'matches' ? 'success' : 'warning')} <span class="text-muted">${t.imageMatch.reason}</span>`] as [string, Html]]
@@ -1070,7 +1080,7 @@ function requestActions(t: TicketView, job: JobView, r: RequestView, x: Extras):
     if (r.inspectionNeeded) actions.push(bookingForm(t, job, r, x));
     actions.push(inspectionToggle(t, r));
   }
-  if (r.canProceedOnEstimate && e) actions.push(proceedForm(t, job, e, r));
+  if (r.canProceedOnEstimate && e) actions.push(proceedForm(t, job, e, r, x));
   const firmNext = r.status === 'inspected' || (r.status === 'estimated' && !r.inspectionNeeded && !!e?.confirmed);
   if (r.status === 'inspected') actions.push(html`<p class="text-sm text-muted">Waiting on their Firm Quote, asked for after the Site Inspection.</p>`);
   if (firmNext) actions.push(firmQuoteEntry(t, r, x));
@@ -1193,7 +1203,7 @@ function quotesSection(t: TicketView, job: JobView, x: Extras): Html {
             html`${q.availableDates.length ? q.availableDates.map(formatDate).join(', ') : 'Not given'}${q.proposedTime ? html`<br /><span class="text-xs text-muted">Proposed ${formatWhen(q.proposedTime, x.timeZone)}</span>` : nothing}`,
             q.pdfFileId !== null ? html`<a class="link" href="/files/${q.pdfFileId}">PDF</a>` : html`<span class="text-muted">None</span>`,
             ratingsCell(q),
-            firmAction(t, job, q, firmIn),
+            firmAction(t, job, q, firmIn, x),
           ]),
           {
             caption: `Firm Quotes for the ${humanise(job.trade)} Job`,
@@ -1264,8 +1274,8 @@ function estimateStanding(job: JobView, q: QuoteView): Html {
 }
 
 /** What can be done to a Firm Quote: choose it while the Job is getting Quotes, else where it stands. */
-function firmAction(t: TicketView, job: JobView, q: QuoteView, firmIn: number): Html {
-  if (q.status === 'open' && job.status === 'quoting' && q.confirmed) return chooseForm(t, q, firmIn);
+function firmAction(t: TicketView, job: JobView, q: QuoteView, firmIn: number, x: Extras): Html {
+  if (q.status === 'open' && job.status === 'quoting' && q.confirmed) return chooseForm(t, q, firmIn, x);
   return q.status === 'open' ? badge('Confirmed', 'success') : statusBadge(q.status);
 }
 
@@ -1275,7 +1285,7 @@ function firmAction(t: TicketView, job: JobView, q: QuoteView, firmIn: number): 
  * starts at the Estimate, the reason is asked for while the Job has fewer than two
  * Tradies' Estimates, and the Ticket's Urgency must be confirmed when it isn't Routine.
  */
-function proceedForm(t: TicketView, job: JobView, e: EstimateView, request: RequestView): Html {
+function proceedForm(t: TicketView, job: JobView, e: EstimateView, request: RequestView, x: Extras): Html {
   const estimates = job.quoteRequests.filter((r) => r.estimate?.confirmed || r.firmQuote?.confirmed).length;
   return html`<details class="quote-check">
     <summary class="btn btn-outline btn-sm">Proceed on Estimate</summary>
@@ -1284,6 +1294,7 @@ function proceedForm(t: TicketView, job: JobView, e: EstimateView, request: Requ
         For a cheap routine Job, go ahead now instead of waiting for a Firm Quote. The Not-to-exceed Cap is the most ${request.businessName} may
         charge; it counts towards the Repair Cost, and the Property Owner is asked if it takes the Repair Cost over the Max Repair Cost.
       </p>
+      ${asksOwner(t, e.priceCents) ? unreachedNote(t, x) : nothing}
       ${field({
         id: `quote-${e.quoteId}-cap`,
         label: 'Not-to-exceed Cap ($)',
@@ -1334,9 +1345,24 @@ function confirmForm(t: TicketView, q: EstimateView, x: Extras): Html {
   </details>`;
 }
 
-function chooseForm(t: TicketView, q: QuoteView, confirmed: number): Html {
+/** Choosing this price would take the Repair Cost over the Max Repair Cost, so the Property Owner is asked. */
+function asksOwner(t: TicketView, cents: number | null): boolean {
+  return t.repairCostCents + (cents ?? 0) > t.maxRepairCostCents;
+}
+
+/** The warning on an approval step when no channel reaches the Owner, with a link to add an email. */
+function unreachedNote(t: TicketView, x: Extras): Html {
+  if (!x.ownerUnreached) return nothing;
+  return alert(
+    html`${t.owner.name} can't be reached: ${x.ownerUnreached}. <a href="/owners/${t.owner.personId}?edit=details#details">Add an email</a>`,
+    'warning',
+  );
+}
+
+function chooseForm(t: TicketView, q: QuoteView, confirmed: number, x: Extras): Html {
   const question = `Choose ${q.businessName}'s Firm Quote of ${formatMoney(q.priceCents)}?`;
   return html`<form method="post" action="/tickets/${t.ticketId}/quotes/${q.quoteId}/choose" class="space-y-2" data-confirm="${question}">
+    ${asksOwner(t, q.priceCents) ? unreachedNote(t, x) : nothing}
     ${confirmed < MIN_QUOTES
       ? field({
           id: `quote-${q.quoteId}-reason`,
@@ -1358,6 +1384,7 @@ function approvalSection(t: TicketView, job: JobView, approval: NonNullable<JobV
   const waiting = approval.status === 'requested' || approval.status === 'reminded';
   return html`<section class="space-y-3" id="job-${job.jobId}-approval">
     ${sectionHeader('Property Owner approval', statusBadge(approval.status))}
+    ${unreachedNote(t, x)}
     <p>
       Asked ${formatWhen(approval.requestedAt, x.timeZone)} to approve ${quote ? `${quote.businessName}'s` : 'the'} Quote of
       ${formatMoney(quote?.priceCents ?? null)}, which takes the Repair Cost to ${formatMoney(repairCost)}, over the Max Repair Cost of

@@ -79,7 +79,7 @@ function shortLinks(text: string): Html {
   let last = 0;
   for (const match of text.matchAll(URL_IN_TEXT)) {
     parts.push(text.slice(last, match.index));
-    parts.push(html`<a class="link" href="${match[0]}" title="${match[0]}" target="_blank" rel="noopener noreferrer">${linkName(match[0])}</a>`);
+    parts.push(html`<a class="link" href="${match[0]}" title="${match[0]}" rel="noopener noreferrer">${linkName(match[0])}</a>`);
     last = match.index + match[0].length;
   }
   parts.push(text.slice(last));

@@ -56,6 +56,9 @@
   --rail-width: 220px; /* the rail, and the drawer on phones */
   --rail-collapsed-width: 64px; /* the rail folded to its icons */
   --scrim: rgb(19 33 46 / 0.45); /* Night over the page, behind the open drawer */
+  --viewer-backdrop: rgb(19 33 46 / 0.85); /* Night at 85% over the page, behind the photo viewer */
+  --viewer-control: rgb(255 255 255 / 0.16); /* the circle behind the viewer's arrows and Close (white icon 6.4:1) */
+  --viewer-control-hover: rgb(255 255 255 / 0.28); /* the same on hover (white icon 4.6:1) */
   --shadow-soft: 0 2px 10px rgb(19 33 46 / 0.07); /* sections and the count strip: a faint lift off Sand */
   --shadow-lift: 0 8px 24px rgb(19 33 46 / 0.18); /* the one shadow: menus, dialogs, the phone frame */
   --font-body: 'Public Sans', system-ui, sans-serif;
@@ -6133,6 +6136,153 @@
       font-size: 14px;
       background: var(--page);
       border-radius: 4px;
+    }
+  }
+}
+
+/* === photo viewer === */
+@layer utilities {
+  @layer app {
+    /* The photo viewer (app.js): one <dialog> over the whole page, in Night at 85%.
+       A grid, so the arrows sit beside the photo and nothing floats over it; under
+       640px the arrows move to a footer row with the counter. The focus ring is rail
+       text, as on the rail: Harbour is 1.4:1 here. No motion. */
+    .photo-viewer {
+      box-sizing: border-box;
+      container-type: inline-size;
+      inset: 0;
+      width: 100%;
+      max-width: none;
+      height: 100dvh;
+      max-height: none;
+      margin: 0;
+      padding: 16px;
+      overflow: hidden;
+      overscroll-behavior: contain;
+      color: var(--rail-text);
+      background: var(--viewer-backdrop);
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+    }
+    /* The tint is the dialog's own fill. The top layer's backdrop stays clear, so the page is dimmed once. */
+    .photo-viewer::backdrop {
+      background: transparent;
+    }
+    .photo-viewer[open] {
+      display: grid;
+      /* The spare width sits outside the arrows, so they stay beside the photo
+         rather than at the edges of the screen. The rows pack together, so the
+         counter sits under the caption. */
+      grid-template-columns: 1fr auto 1fr;
+      grid-template-rows: auto auto auto;
+      grid-template-areas:
+        '. . close'
+        'previous figure next'
+        '. count .';
+      align-content: center;
+      align-items: center;
+      column-gap: 16px;
+    }
+    .photo-viewer [hidden] {
+      display: none;
+    }
+    html:has(dialog.photo-viewer[open]) {
+      overflow: hidden;
+    }
+    .photo-viewer-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 48px;
+      height: 48px;
+      padding: 0;
+      color: var(--surface);
+      cursor: pointer;
+      background: var(--viewer-control);
+      border: 0;
+      border-radius: 50%;
+    }
+    .photo-viewer-button:hover {
+      background: var(--viewer-control-hover);
+    }
+    .photo-viewer-button:focus-visible {
+      outline: 2px solid var(--rail-text);
+      outline-offset: 2px;
+    }
+    .photo-viewer-button.is-close {
+      grid-area: close;
+      justify-self: end;
+    }
+    .photo-viewer-button.is-previous {
+      grid-area: previous;
+      justify-self: end;
+    }
+    .photo-viewer-button.is-next {
+      grid-area: next;
+      justify-self: start;
+    }
+    .photo-viewer-figure {
+      grid-area: figure;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+      margin: 0;
+    }
+    /* As large as the room allows, in proportion: app.js sets --photo-ratio (width over height) when the image loads. 12rem is the close row, the caption and the counter with their gaps. 8rem is the two arrows and the gaps beside the photo. 100cqw is the dialog's content box, so the padding is already out. */
+    .photo-viewer-photo {
+      display: block;
+      width: min(calc(100cqw - 8rem), calc((100dvh - 12rem) * var(--photo-ratio, 1.3333)));
+      height: auto;
+      aspect-ratio: var(--photo-ratio, 1.3333);
+      border-radius: 4px;
+      object-fit: contain;
+      touch-action: pan-y;
+      user-select: none;
+      -webkit-user-drag: none;
+    }
+    .photo-viewer-caption {
+      max-width: 40rem;
+      margin: 0;
+      font-size: 13px;
+      font-weight: 400;
+      text-align: center;
+    }
+    .photo-viewer-count {
+      grid-area: count;
+      margin: 0;
+      padding-top: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      text-align: center;
+    }
+    @media (min-width: 64rem) {
+      .photo-viewer {
+        padding: 24px;
+      }
+    }
+    @media (max-width: 39.99rem) {
+      .photo-viewer[open] {
+        grid-template-columns: auto 1fr auto;
+        grid-template-rows: auto minmax(0, 1fr) auto;
+        grid-template-areas:
+          'close close close'
+          'figure figure figure'
+          'previous count next';
+        align-content: stretch;
+      }
+      /* The photo uses the full width, and the spare height sits above the footer. */
+      .photo-viewer-figure {
+        align-self: start;
+      }
+      .photo-viewer-photo {
+        width: 100%;
+      }
+      .photo-viewer-count {
+        padding-top: 0;
+      }
     }
   }
 }

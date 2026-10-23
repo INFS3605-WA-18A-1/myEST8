@@ -32,8 +32,8 @@ export function visible(page: string) {
 }
 
 /** The standard world behind the web app, with helpers to sign in and click through pages. */
-export async function webWorld(options: { demo?: DemoControls; connectors?: ChannelConnectors; composer?: null } = {}) {
-  const w = await world(options.composer === null ? { composer: null } : {});
+export async function webWorld(options: { demo?: DemoControls; connectors?: ChannelConnectors; composer?: null; smsNumbers?: NonNullable<Parameters<typeof world>[0]>['smsNumbers'] } = {}) {
+  const w = await world({ ...(options.composer === null ? { composer: null } : {}), ...(options.smsNumbers ? { smsNumbers: options.smsNumbers } : {}) });
   const web = createWebApp({
     app: w.h.app,
     sessions: createSessions(w.h.db, w.h.clock),

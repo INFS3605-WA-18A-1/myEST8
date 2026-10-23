@@ -35,6 +35,11 @@ function requireDate(value: string, field: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(value))) invalid(`${value} is not a date (YYYY-MM-DD)`, field);
 }
 
+/** "A", "A and B", "A, B and C". */
+function andList(items: string[]): string {
+  return items.length < 2 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
+}
+
 /** Connecting the Agency's channels, test messages, and the forms for Properties, people and Tradies. */
 export function createOnboarding({ ports, modules }: Context) {
   const { profiles } = modules;
@@ -138,6 +143,58 @@ export function createOnboarding({ ports, modules }: Context) {
       if (waiting.some((i) => i.tenantId === tenantId)) invalid(`Confirm or reject ${tenant.name}'s waiting Maintenance Requests before removing them`);
       await profiles.endTenancy(tenantId);
       return tenant.name;
+    },
+
+    /**
+     * Changes a Property Owner's name, mobile and email, checked as when adding them, and the addresses
+     * their messages are matched on with them.
+     */
+    async editOwner(agencyId: number, ownerId: number, input: Contact) {
+      const owner = await profiles.personInAgency(agencyId, ownerId, 'owner');
+      if (owner.removedAt) invalid(`${owner.name} has been removed from the Agency`);
+      requireContact(input);
+      requireContactFormat(input);
+      await profiles.updatePerson(ownerId, input);
+    },
+
+    /**
+     * Changes a Building Manager's name, mobile and email, checked as when adding them, and the addresses
+     * their messages are matched on with them.
+     */
+    async editBuildingManager(agencyId: number, buildingManagerId: number, input: Contact) {
+      const manager = await profiles.personInAgency(agencyId, buildingManagerId, 'building_manager');
+      if (manager.removedAt) invalid(`${manager.name} has been removed from the Agency`);
+      requireContact(input);
+      requireContactFormat(input);
+      await profiles.updatePerson(buildingManagerId, input);
+    },
+
+    /**
+     * Takes a Property Owner out of the Agency (Profiles' removePerson), keeping their past
+     * approvals. Refuses while they own a Property, naming it. Returns their name.
+     */
+    async removeOwner(agencyId: number, ownerId: number) {
+      const owner = await profiles.personInAgency(agencyId, ownerId, 'owner');
+      if (owner.removedAt) invalid(`${owner.name} has already been removed`);
+      const owned = (await profiles.properties(agencyId)).filter((p) => p.ownerId === ownerId);
+      if (owned.length) invalid(`${owner.name} owns ${andList(owned.map((p) => p.address))}. Give ${owned.length === 1 ? 'it' : 'them'} another Property Owner first.`);
+      await profiles.removePerson(ownerId);
+      return owner.name;
+    },
+
+    /**
+     * Takes a Building Manager out of the Agency (Profiles' removePerson). Refuses while they
+     * look after a Property, naming it. Returns their name.
+     */
+    async removeBuildingManager(agencyId: number, buildingManagerId: number) {
+      const manager = await profiles.personInAgency(agencyId, buildingManagerId, 'building_manager');
+      if (manager.removedAt) invalid(`${manager.name} has already been removed`);
+      const lookedAfter = (await profiles.properties(agencyId)).filter((p) => p.buildingManagerId === buildingManagerId);
+      if (lookedAfter.length) {
+        invalid(`${manager.name} looks after ${andList(lookedAfter.map((p) => p.address))}. Give ${lookedAfter.length === 1 ? 'it' : 'them'} another Building Manager first.`);
+      }
+      await profiles.removePerson(buildingManagerId);
+      return manager.name;
     },
 
     /**

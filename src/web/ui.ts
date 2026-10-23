@@ -27,6 +27,8 @@ export type NavKey =
   | 'properties'
   | 'tradies'
   | 'tenants'
+  | 'owners'
+  | 'building-managers'
   | 'settings'
   | 'simulator';
 export type Variant = 'primary' | 'secondary' | 'danger' | 'ghost';
@@ -70,7 +72,7 @@ export function head(title: string, o: { css?: string[]; runtime?: boolean } = {
 /**
  * The places a Property Manager works, in three groups with a gap between them: the
  * day's work (Dashboard to Schedule), the Profiles of who and what the Agency looks
- * after (Properties, Tradies and Tenants, under a quiet heading), then Settings.
+ * after (Properties, Tradies, Tenants, Property Owners and Building Managers, under a quiet heading), then Settings.
  */
 const NAV: { label?: string; items: { key: NavKey; label: string; href: string }[] }[] = [
   {
@@ -89,6 +91,8 @@ const NAV: { label?: string; items: { key: NavKey; label: string; href: string }
       { key: 'properties', label: 'Properties', href: '/properties' },
       { key: 'tradies', label: 'Tradies', href: '/tradies' },
       { key: 'tenants', label: 'Tenants', href: '/tenants' },
+      { key: 'owners', label: 'Property Owners', href: '/owners' },
+      { key: 'building-managers', label: 'Building Managers', href: '/building-managers' },
     ],
   },
   { items: [{ key: 'settings', label: 'Settings', href: '/settings' }] },
@@ -803,7 +807,7 @@ function linkified(text: string): (Html | string)[] {
   let last = 0;
   for (const match of text.matchAll(URL_IN_TEXT)) {
     parts.push(text.slice(last, match.index));
-    parts.push(html`<a class="link" href="${match[0]}" target="_blank" rel="noopener noreferrer">${match[0]}</a>`);
+    parts.push(html`<a class="link" href="${match[0]}" rel="noopener noreferrer">${match[0]}</a>`);
     last = match.index + match[0].length;
   }
   parts.push(text.slice(last));
@@ -881,16 +885,18 @@ export function timeline(items: { at: string; title: string; detail?: string }[]
   </ol>`;
 }
 
-/** Photo thumbnails, each opening the full image in a new tab. `alt` defaults to "Photo n of m". */
+/**
+ * Photo thumbnails, each a link to the full image in the same tab. With JavaScript,
+ * app.js opens them in the photo viewer instead (data-photo-grid). `alt` defaults to "Photo n of m".
+ */
 export function photoGrid(items: { src: string; caption?: Html | string; alt?: string }[]): Html {
-  return html`<ul role="list" class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+  return html`<ul role="list" data-photo-grid class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
     ${items.map(
       (item, i) =>
         html`<li>
           <figure class="flex flex-col items-stretch gap-2">
-            <a href="${item.src}" target="_blank" rel="noopener" class="block overflow-hidden rounded-box border border-line bg-page">
+            <a href="${item.src}" class="block overflow-hidden rounded-box border border-line bg-page">
               <img src="${item.src}" alt="${item.alt ?? `Photo ${i + 1} of ${items.length}`}" loading="lazy" decoding="async" class="aspect-square w-full object-cover" />
-              <span class="sr-only">(opens full size in a new tab)</span>
             </a>
             ${item.caption ? html`<figcaption class="text-xs text-muted">${item.caption}</figcaption>` : ''}
           </figure>
@@ -1231,6 +1237,8 @@ const NAV_ICON: Record<NavKey, Html> = {
   properties: icon('house-line', { size: 'size-[18px]' }),
   tradies: icon('wrench', { size: 'size-[18px]' }),
   tenants: icon('users', { size: 'size-[18px]' }),
+  owners: icon('key', { size: 'size-[18px]' }),
+  'building-managers': icon('buildings', { size: 'size-[18px]' }),
   settings: icon('gear-six', { size: 'size-[18px]' }),
   simulator: icon('device-mobile', { size: 'size-4' }),
 };

@@ -17,6 +17,7 @@ import {
   linkButton,
   logo,
   page,
+  photoGrid,
   publicPage,
   queueRow,
   segmented,
@@ -123,7 +124,7 @@ describe('ui', () => {
   it('lists every place in the rail in three groups, Profiles under its heading, with the Phone simulator at its foot only in the demo', async () => {
     const out = await render(page({ title: 'Dashboard', pm: { name: 'Alice' }, active: 'dashboard', body: html`<p>x</p>`, demo: true }));
     const links = [...out.matchAll(/<a href="([^"]+)" class="rail-link[^"]*"/g)].map((m) => m[1]);
-    expect(links).toEqual(['/', '/dispatch', '/tickets', '/archive', '/approvals', '/calendar', '/properties', '/tradies', '/tenants', '/settings', '/demo']);
+    expect(links).toEqual(['/', '/dispatch', '/tickets', '/archive', '/approvals', '/calendar', '/properties', '/tradies', '/tenants', '/owners', '/building-managers', '/settings', '/demo']);
     expect(out.match(/<ul class="rail-nav[ "]/g)).toHaveLength(4);
     expect(out).toMatch(/<p class="rail-group" id="rail-group-1">Profiles<\/p><ul class="rail-nav" aria-labelledby="rail-group-1">\s*<li><a href="\/properties"/);
     expect(out.match(/<ul class="rail-nav rail-gap"/g)).toHaveLength(1);
@@ -204,11 +205,31 @@ describe('ui', () => {
     expect(out).toContain('whitespace-pre-wrap');
   });
 
+  it('keeps a link in a chat bubble in the same tab, with noopener noreferrer for anyone who opens it in a new one', async () => {
+    const out = await render(chatBubble({ side: 'start', header: 'myEST8', text: 'Upload: https://myest8.test/u/abc' }));
+    expect(out).toContain('<a class="link" href="https://myest8.test/u/abc" rel="noopener noreferrer">https://myest8.test/u/abc</a>');
+    expect(out).not.toContain('target=');
+  });
+
   it('gives links in a chat bubble the bubble’s own text colour, so they read on Harbour', async () => {
     const out = await render(chatBubble({ side: 'end', header: 'Alice', text: 'See https://myest8.test/t/abc' }));
     expect(out).toContain('chat-bubble-primary');
     const css = await (await assetRoutes().request('/assets/app.css')).text();
     expect(css).toMatch(/\.chat-bubble a:not\(\.btn\) \{\s*color: inherit;\s*text-decoration: underline;/);
+  });
+
+  it('links each photo to its full image in the same tab, with no hint about a new one', async () => {
+    const out = await render(photoGrid([{ src: '/files/1', caption: 'Mon 12 Oct, 9:00 am' }, { src: '/files/2' }]));
+    expect(out).toMatch(/<a href="\/files\/1" [^>]*>\s*<img src="\/files\/1" alt="Photo 1 of 2"/);
+    expect(out).toMatch(/<a href="\/files\/2" [^>]*>\s*<img src="\/files\/2" alt="Photo 2 of 2"/);
+    expect(out).not.toContain('target=');
+    expect(out).not.toContain('new tab');
+    expect(out).toContain('<figcaption class="text-xs text-muted">Mon 12 Oct, 9:00 am</figcaption>');
+  });
+
+  it('marks the photo grid for the viewer, so app.js can open its photos over the page', async () => {
+    const out = await render(photoGrid([{ src: '/files/1' }, { src: '/files/2' }]));
+    expect(out).toMatch(/^<ul role="list" data-photo-grid /);
   });
 
   it('renders a docket as one escaped link with its number, urgency and unread dot', async () => {
@@ -543,8 +564,8 @@ describe('ui', () => {
   it('draws the rail, menu and message icons from Phosphor', async () => {
     const out = await render(page({ title: 'Dashboard', pm: { name: 'Alice' }, active: 'dashboard', body: alert('Check the photo', 'warning'), demo: true }));
     const phosphor = /<svg (?![^>]*logo-mark)[^>]*viewBox="0 0 256 256"/g;
-    // eleven rail links (ten places and the Phone simulator), Collapse menu, the menu button, the user menu caret, the alert (the logo's key tag is our own)
-    expect(out.match(phosphor)).toHaveLength(15);
+    // thirteen rail links (twelve places and the Phone simulator), Collapse menu, the menu button, the user menu caret, the alert (the logo's key tag is our own)
+    expect(out.match(phosphor)).toHaveLength(17);
     expect(out).not.toContain('viewBox="0 0 24 24"');
     expect(out).toMatch(/class="rail-link" aria-current="page"><svg [^>]*class="size-\[18px\] shrink-0"/);
     expect(await render(flashMessage({ kind: 'ok', message: 'Saved' }))).toMatch(/<svg [^>]*viewBox="0 0 256 256"/);

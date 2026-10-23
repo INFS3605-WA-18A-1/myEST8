@@ -25,6 +25,7 @@ import { serverSmsPanel } from './server-sms.ts';
 import { smsNumberPanel, smsNumbersOffered } from './sms-number.ts';
 import { alert, button, emptyState, field, flashFrom, formatMoney, linkButton, page, section, table, type Flash, type Html } from '../ui.ts';
 import {
+  addPersonForm,
   addTradieFrom,
   addTradieSection,
   CHANNELS,
@@ -152,21 +153,26 @@ export function setupPages(o: { connectors?: ChannelConnectors } = {}) {
     }),
   );
 
-  pages.post('/owners', (c) =>
-    formAction(c, '/setup?form=owner', async (form) => {
+  // The Property Owners and Building Managers pages post here too (`from=list`) and come back to themselves.
+  const listHome = (c: Context<WebEnv>, list: '/owners' | '/building-managers') => (c.req.query('from') === 'list' ? list : '/setup');
+
+  pages.post('/owners', (c) => {
+    const here = listHome(c, '/owners');
+    return formAction(c, `${here}?form=owner`, async (form) => {
       const contact = contactFrom(form);
       await c.var.actions.addOwner(contact);
-      return { ok: `${contact.name} added as a Property Owner` };
-    }),
-  );
+      return { ok: `${contact.name} added as a Property Owner`, ...(here === '/owners' ? { redirect: here } : {}) };
+    });
+  });
 
-  pages.post('/building-managers', (c) =>
-    formAction(c, '/setup?form=building-manager', async (form) => {
+  pages.post('/building-managers', (c) => {
+    const here = listHome(c, '/building-managers');
+    return formAction(c, `${here}?form=building-manager`, async (form) => {
       const contact = contactFrom(form);
       await c.var.actions.addBuildingManager(contact);
-      return { ok: `${contact.name} added as a Building Manager` };
-    }),
-  );
+      return { ok: `${contact.name} added as a Building Manager`, ...(here === '/building-managers' ? { redirect: here } : {}) };
+    });
+  });
 
   // The Tradies, Properties and Tenants pages post here too and come back to themselves; this page's forms add `from=setup`.
   const home = (c: Context<WebEnv>, page: '/tradies' | '/properties' | '/tenants') => (c.req.query('from') === 'setup' ? '/setup' : page);
@@ -353,10 +359,7 @@ function peopleArea(agency: Agency, shownFor: (key: FormKey) => Shown): Html {
           'Add a Property Owner',
           owner.open,
           html`${owner.error}
-            <form method="post" action="/setup/owners">
-              ${fieldGrid(contactFields('owner'))}
-              <div class="mt-3">${button('Add Property Owner', { size: 'sm' })}</div>
-            </form>`,
+            ${addPersonForm({ id: 'owner', action: '/setup/owners', submit: 'Add Property Owner' })}`,
         )}
         ${importForm('owners', shownFor('import-owners'))}`,
     })}
@@ -368,10 +371,7 @@ function peopleArea(agency: Agency, shownFor: (key: FormKey) => Shown): Html {
           'Add a Building Manager',
           buildingManager.open,
           html`${buildingManager.error}
-            <form method="post" action="/setup/building-managers">
-              ${fieldGrid(contactFields('building-manager'))}
-              <div class="mt-3">${button('Add Building Manager', { size: 'sm' })}</div>
-            </form>`,
+            ${addPersonForm({ id: 'building-manager', action: '/setup/building-managers', submit: 'Add Building Manager' })}`,
         )}
         ${importForm('building-managers', shownFor('import-building-managers'))}`,
     })}

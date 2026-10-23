@@ -34,11 +34,14 @@ myEST8 is where a Property Manager at a small Australian Agency sees every repai
 | `--rail-muted` | | `#9AA8B4` | Rail counts, the Phone simulator link, the Agency's name | 6.7:1 on Night |
 | `--rail-hover` / `--rail-current` | | `rgb(255 255 255 / 0.05)` / `0.08` | Rail hover and current band | |
 | `--scrim` | | `rgb(19 33 46 / 0.45)` | Behind the open drawer | |
+| `--viewer-backdrop` | | `rgb(19 33 46 / 0.85)` | The photo viewer: Night at 85% over the page | over Sand it blends to `#35404A` |
+| `--viewer-control` | | `rgb(255 255 255 / 0.16)` | The circle behind the viewer's arrows and Close | white icon 6.4:1 |
+| `--viewer-control-hover` | | `rgb(255 255 255 / 0.28)` | That circle on hover | white icon 4.6:1 (a graphic needs 3:1) |
 | `--shadow-lift` | | `0 8px 24px rgb(19 33 46 / 0.18)` | The one shadow | |
 
 - Routine Urgency is not coloured: `--muted` text on a `--line` hairline. Colour is never the only signal; every badge carries its word.
 - Wattle is never text and never a button. It is 1.6:1 on white, so it only ever marks (a stripe, a bar, a chip behind Night text).
-- The focus ring is Harbour everywhere except on the Night rail, where Harbour is 2.3:1, so rail links ring in `--rail-text`. Links inside a dark chat bubble take the bubble's own text colour, underlined, and so does their ring.
+- The focus ring is Harbour everywhere except on the Night rail and in the photo viewer, where Harbour is too faint (2.3:1 on the rail, 1.4:1 on the viewer's blended backdrop), so those rings are `--rail-text`. Links inside a dark chat bubble take the bubble's own text colour, underlined, and so does their ring.
 
 ## Type
 
@@ -77,7 +80,7 @@ myEST8 is where a Property Manager at a small Australian Agency sees every repai
  220px rail, 1px Line on its right
 ```
 
-- **Rail.** Night background with `--rail-text`, no border. The logo (key tag in Wattle, wordmark in Bricolage) links home. Ten places in three groups: Dashboard (`/`), Dispatch, Tickets, Archive, Approvals, Schedule (`/calendar`); then Properties, Tradies and Tenants under a quiet uppercase "Profiles" heading (`.rail-group`, hidden when the rail is collapsed, and naming the list with `aria-labelledby`); then Settings after a 12px gap. Public Sans 500 15px, 40px tall, with a Phosphor icon (18px). The current item has a 4px Wattle bar on its left (inset shadow, following the 6px radius), weight 600, white text and `aria-current="page"`; hover is `--rail-hover`; focus rings in `--rail-text`. Counts are plain `--rail-muted` numerals; only Tickets (new Maintenance Requests) and Approvals (Quotes waiting on a Property Owner and Reimbursement Requests to review; counts that mean "needs you", worked out by `loadNavCounts`) are a small Wattle chip with Night text. Zero is not shown. A page under a place keeps it current.
+- **Rail.** Night background with `--rail-text`, no border. The logo (key tag in Wattle, wordmark in Bricolage) links home. Twelve places in three groups: Dashboard (`/`), Dispatch, Tickets, Archive, Approvals, Schedule (`/calendar`); then Properties, Tradies, Tenants, Property Owners (`/owners`) and Building Managers (`/building-managers`) under a quiet uppercase "Profiles" heading (`.rail-group`, hidden when the rail is collapsed, and naming the list with `aria-labelledby`); then Settings after a 12px gap. Public Sans 500 15px, 40px tall, with a Phosphor icon (18px). The current item has a 4px Wattle bar on its left (inset shadow, following the 6px radius), weight 600, white text and `aria-current="page"`; hover is `--rail-hover`; focus rings in `--rail-text`. Counts are plain `--rail-muted` numerals; only Tickets (new Maintenance Requests) and Approvals (Quotes waiting on a Property Owner and Reimbursement Requests to review; counts that mean "needs you", worked out by `loadNavCounts`) are a small Wattle chip with Night text. Zero is not shown. A page under a place keeps it current.
 - At the foot, quieter: the demo's Phone simulator link and the Agency's name.
 - **Page header.** There is no separate top bar. The first row of the content column holds the `<h1>` (`.page-title`, Bricolage 28px/700, 24px on phones) on the left and, on the right of the same row, the page's controls (the Mine/All segmented control), today's date in the Agency's time zone, and the user menu (name, Sign out). On phones the row wraps: menu button and title, then the controls and the user menu. `page()`'s signature is unchanged; `controls`, `subtitle` and `actions` render in the same places.
 - **Flash** messages appear under the page header as one line (`role="status"` or `role="alert"`).
@@ -239,6 +242,8 @@ All of these are in `src/web/ui.ts`; pages use them instead of hand-building mar
 - **Tabs** (`tabs`): Bricolage Grotesque, muted until current; the current one is Night 600 with a Harbour underline and `aria-current`. **Side tabs** (`sideTabs`, for Settings' sections): a column of 40 px Bricolage Grotesque 14 px links, the current one a white tab with a hairline and the Wattle bar; a sideways-scrolling row under 768 px.
 - **Timeline:** Harbour dots on a `--line` rule, the time muted above each event, 12 px between events so it reads as a log.
 - **Facts** (`dl`): a 10 rem label column, so a value sits near its label even in a wide column; in a box under 26 rem the label stacks over its value.
+- **Photo grid** (`photoGrid`): thumbnails in 2, then 3, then 4 columns. Each is a square crop in a hairline box, with its caption (when it was taken, a metadata flag) under it in 12 px Slate. Every photo is a link to the full image in the same tab, and the list is marked `data-photo-grid`. With JavaScript a click opens the photo viewer; Ctrl-click, Cmd-click, Shift-click, Alt-click, the middle button and the context menu still do what the browser does. Without JavaScript it is that link, and Back returns.
+- **Photo viewer** (the "photo viewer" block in `app.js`, one `<dialog class="photo-viewer">` reused by every grid): the whole page, Night at 85% (`--viewer-backdrop`), no border, radius or shadow. The photo is as large as the room left by the chrome, kept in proportion, 4 px radius, with the caption under it in 13 px `--rail-text` (8.6:1 on the blended backdrop). With more than one photo, Previous and Next are 48 px circles (`caret-left` and `caret-right`, white on `--viewer-control`) beside the photo, and a counter under the caption reads "2 of 5". The arrows wrap from the last photo to the first. Under 640 px the arrows leave the sides and share a footer row with the counter, so nothing covers the photo. Close (`x`, top right), Esc or a click on the backdrop closes it, and focus returns to the photo that opened it. Arrow keys, and a horizontal swipe of more than 48 px, move between photos. The dialog is named "Photo 2 of 5" and the counter is a polite live region. It does not animate. The page behind does not scroll.
 - **Chat** (simulator and message logs):
   - myEST8's messages on the left on Paper; the person's on the right on Harbour with white text. 8 px radius.
   - Links in a bubble take the bubble's text colour, underlined, so they read on Harbour and on every tone (the global link colour would be Harbour on Harbour); their focus ring is the text colour too.
@@ -252,7 +257,7 @@ All of these are in `src/web/ui.ts`; pages use them instead of hand-building mar
 - **Icons** come from [Phosphor](https://phosphoricons.com) (MIT) through `icon(name, { weight?, size? })` in `src/web/icons.ts`, rendered inline in `currentColor` and always `aria-hidden`. The word beside an icon carries the meaning. Don't add another icon set or hand-draw icons.
 - **One weight: regular.** The only exception is the 14 px tick inside a done step circle, which uses bold so it doesn't thin out at that size.
 - Sizes: 18 px in the rail (`size-[18px]`), 16 px for the Phone simulator link, 20 px in alerts and flash messages (the default), 24 px for the menu button, 16 px for the user menu caret and timeline dots.
-- The app's icons: Dashboard `squares-four`, Dispatch `map-pin`, Tickets `ticket`, Archive `archive`, Approvals `seal-check`, Schedule `calendar-blank`, Properties `house-line`, Tradies `wrench`, Tenants `users`, Settings `gear-six`, Phone simulator `device-mobile`, menu `list`, user menu `caret-down`, AI mark and Draft with AI `sparkle`, done `check-circle`, warning and error `warning-circle`, note `info`, timeline dot `circle` (fill).
+- The app's icons: Dashboard `squares-four`, Dispatch `map-pin`, Tickets `ticket`, Archive `archive`, Approvals `seal-check`, Schedule `calendar-blank`, Properties `house-line`, Tradies `wrench`, Tenants `users`, Property Owners `key`, Building Managers `buildings`, Settings `gear-six`, Phone simulator `device-mobile`, menu `list`, user menu `caret-down`, AI mark and Draft with AI `sparkle`, done `check-circle`, warning and error `warning-circle`, note `info`, timeline dot `circle` (fill).
 - **The logo** is `logo({ size })` in `src/web/ui.ts`: the key tag beside the wordmark. The rail and the public bar both use it; nothing else hand-builds it.
   - **The key tag:** a house-shaped tag with the key ring's hole at the top and an 8 cut out, the tag every Agency hangs on its key board. One solid shape (an even-odd path on a 256 grid, `currentColor`), so it holds at 16 px and works as an app icon as it is. It is only ever Night, White or Wattle: Night on the Paper rail and the white public bar, White or Wattle on Night bands; Night on Wattle for an app tile.
   - **The wordmark:** "myEST8" in Bricolage Grotesque, "my" at 400 and "EST8" at 700, so the pun reads without decoration. Night on light surfaces, White on Night.
@@ -370,7 +375,7 @@ Business name, Contact name, Mobile, Email, Trades, Starting rating   [Add Tradi
 
 ### Editing a profile's details
 
-A Tenant, Property or Tradie profile edits its details in place, by the same pen-to-edit pattern as the Summary on a Maintenance Request. `editPen()` and `detailsForm()` in `ui.ts` are the two parts; the three profile pages use them, so don't copy their markup.
+A Tenant, Property, Tradie, Property Owner or Building Manager profile edits its details in place, by the same pen-to-edit pattern as the Summary on a Maintenance Request. `editPen()` and `detailsForm()` in `ui.ts` are the two parts; the profile pages use them, so don't copy their markup.
 
 ```
 ┌────────────────────────────────────────────┐
@@ -388,7 +393,7 @@ A Tenant, Property or Tradie profile edits its details in place, by the same pen
 - **The pen** is an `.icon-btn` (36 px, Harbour `pencil-simple`) with the accessible name and tooltip "Edit details". It is a link to `?edit=details#details`, so it works without JavaScript. It sits at the right of the details (`.details-head` beside `.details-body`); on a Tradie it sits beside the Trade badges.
 - **The form** replaces the displayed details in the same `section` (`id="details"`), with the fields and pickers used to add the same record (a Property's `propertyFields()` is shared by both). Save is the primary button and Cancel a ghost link to the plain profile, in `.details-actions`. A Tradie's form leaves out the starting rating, and the Google listing and business address stay where they are. The rest of the page stays below it.
 - **Saving** goes back to the profile with the "Details saved." flash. **A refused save** shows the same form again with the status 400: what was typed stays, and the error sits under its field (`aria-invalid`, `.field-error`). An error the form can't point at (a Tenant who has already left their Property) is a message above the details instead.
-- **Who can't be edited:** a Tenant who has left has no pen. Their history stays as it was.
+- **Who can't be edited:** a Tenant who has left has no pen, and neither does a Property Owner or Building Manager who has been removed. Their history stays as it was.
 
 ### Removing a Tradie
 
@@ -398,6 +403,16 @@ A Tradie's profile (`/tradies/:id`, `pages/tradie.ts`) has **Remove Tradie** in 
 - **Refused** while they have an open Quote Request, a Quote waiting on a Property Owner, an approved Quote for a Job with no visit booked yet (it would be stranded in Ready to book), or a visit booked today or later. The reason names it ("Nina's Plumbing has a visit booked on Thursday 8 October at 9 am. Cancel or finish it first.") and shows as the profile's error flash.
 - **Gone from** the Tradies list, Dispatch's entries and pins, Quote recommendations and the Ask for Quotes list, the Nominated Tradies picker (and every Property's Nominated Tradies), Free today on the Schedule, the spreadsheet import's matching and the weekly Google ratings refresh. Most read `people()` and `tradiesWithTrade()` in `profiles.ts`, which leave out a Tradie with `removed_at`; the refresh (`google-ratings.ts`) has its own query with the same condition.
 - **Their profile** still opens from old links. An info alert says "Removed from the Agency on 8 October 2026." (long month, in the Agency's time zone), the Remove button and the Business address form are left out, and the Quotes, bookings and ratings stay.
+
+### Property Owners and Building Managers
+
+The lists are `/owners` and `/building-managers` (`pages/owners.ts`), in the Profiles group after Tenants. Each is the Tradies table: name (a row link to the profile), mobile, email, and Properties (the ones they own, or the ones they look after), stacking with labels on a phone. A person with neither a mobile the Agency can text nor an email gets a warning badge, "No way to reach", under their name. An email is enough; a mobile counts only while SMS is connected.
+
+- **Add** is the same form Setup uses (`addPersonForm` in `onboarding-forms.ts`), posting to `/setup/owners?from=list` or `/setup/building-managers?from=list`. Saved, it comes back to the list. Setup, without `from=list`, is unchanged.
+- **The profile** shows mobile and email with the pen, then the Properties as links, and for an Owner their approvals (newest first, each linking to its Ticket). Remove sits in the page actions before Back, Danger, and asks first: an Owner "won't be asked to approve repairs" and a Building Manager "won't be listed for Common Area issues."
+- **Refused** while they still own or look after a Property. The flash names them ("Olivia Owens owns 12 King St, Newtown NSW 2042. Give it another Property Owner first.") and the profile stays.
+- **Removed**, they drop out of the lists and pickers and their mobile and email stop matching inbound messages. The profile still opens, with the same "Removed from the Agency on …" alert as a Tradie, and no pen or Remove.
+- **Can't be reached.** When choosing a Quote (or proceeding on an Estimate) would take the Repair Cost over the Max Repair Cost, and `channelFor` throws `UndeliverableError` for the Owner, the form says so before the button: "Oscar Ortiz can't be reached: no SMS channel is connected and they have no email address." **Add an email** links to their profile at `?edit=details#details`. The same note stays on the approval after it has been asked. The flash after a failed send stays one line of text.
 
 ### Emails
 
@@ -496,6 +511,7 @@ A machine check never stands in for what a person said:
 - **One-Quote rule.** The rule is visible on the Ticket page next to Choose: "Choose once two Quotes are confirmed, or give a reason to go ahead with one." Choose stays enabled. Without a reason, the server's message explains what's missing.
 - **Phone gutters.** 16 px below 1024 px.
 - **Literal colours.** No literal colour values outside the token block in `app.css`, including white. Use `var(--surface)`.
+- **Navigation (2026-10-24).** Property Owners (`/owners`, icon `key`) and Building Managers (`/building-managers`, icon `buildings`) join Profiles, after Tenants. Each has the list, the pen and Remove that Tenants and Tradies already have.
 - **Navigation (2026-10-19).** Requests folds into Tickets (new Maintenance Requests above open Tickets, one filter bar over both), closed Tickets move to Archive, and Properties, Tradies and the new Tenants sit under a Profiles heading. The rail's decision count moves from Requests to Tickets.
 - **Navigation (2026-10-13, replacing the three-item rail of 2026-10-10).** Dashboard, Dispatch, Requests, Tickets, Approvals, Schedule, a gap, Properties, Tradies, a gap, Settings, plus the demo's Phone simulator at the foot of the rail. The user asked for each queue to have its own place, so Calendar is Schedule again rather than moving into Dispatch's Tradie schedule; the Setup pages still move into Settings tabs.
 - **The Tenant's progress tracker.** The Ticket page links to it, so a Property Manager can see what the Tenant sees. A Site visit is Done only once the inspection has happened (before that, "booked for" its time); Booked asks the Tenant to confirm they'll be home or can let the tradie in until they have.
