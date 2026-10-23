@@ -3,7 +3,9 @@
 // rating, upcoming bookings, previous Quotes (each with its Ticket and whether it was
 // chosen) and every rating given, Property Managers' and Tenants' apart. The profile's
 // pen opens the business name, contact name, mobile, email and Trades in a form
-// (?edit=details) that posts to /tradies/:id/details.
+// (?edit=details) that posts to /tradies/:id/details. A Tradie is removed from the Agency
+// from their profile: they leave the lists and pickers, but the profile still opens, with
+// their past Quotes and ratings, and without the pen, Remove or the address form.
 
 import { Hono, type Context } from 'hono';
 import { html } from 'hono/html';
@@ -13,7 +15,7 @@ import type { WebEnv } from '../env.ts';
 import { formAction, list, text } from '../forms.ts';
 import { icon } from '../icons.ts';
 import { shellInfo } from '../shell.ts';
-import { alert, badge, button, contactLink, detailsForm, editPen, emptyState, field, flashFrom, formatMoney, formatWhen, humanise, linkButton, page, ratingChip, rowLink, section, sectionHeader, stat, statGroup, table, ticketCell, type Html } from '../ui.ts';
+import { alert, badge, button, contactLink, detailsForm, editPen, emptyState, field, flashFrom, formatMoney, formatWhen, humanise, linkButton, page, postButton, ratingChip, rowLink, section, sectionHeader, stat, statGroup, table, ticketCell, type Html } from '../ui.ts';
 import { timeRange } from './calendar.ts';
 import { addTradieSection, contactFrom, importPanel, listingChoice, saveDetails, tradieFields, type DetailsEdit } from './onboarding-forms.ts';
 
@@ -75,6 +77,15 @@ export function tradiePages() {
     });
   });
 
+  // Refused, the reason shows on the Tradie's profile.
+  pages.post('/:id{[0-9]+}/remove', (c) => {
+    const id = Number(c.req.param('id'));
+    return formAction(c, `/tradies/${id}`, async () => {
+      const name = await c.var.actions.removeTradie(id);
+      return { ok: `${name} removed`, redirect: '/tradies' };
+    });
+  });
+
   pages.get('/:id{[0-9]+}', (c) => profilePage(c, Number(c.req.param('id'))));
 
   // Sets where the Tradie works from; the map places them when the address is found.
@@ -111,7 +122,12 @@ async function profilePage(c: Context<WebEnv>, id: number, refused?: DetailsEdit
   }
   const { timeZone } = actions.agency();
   const flash = flashFrom(c.req.url);
-  const editing = !!refused || c.req.query('edit') === 'details';
+  const removed = !!tradie.removedAt;
+  // A removed Tradie can't be edited: no form, even if one is asked for or a save is refused.
+  const editing = !removed && (!!refused || c.req.query('edit') === 'details');
+  const notice = removed
+    ? html`${alert(`Removed from the Agency on ${longDate(tradie.removedAt!, timeZone)}.`, 'info')}${refused ? alert(refused.message, 'error') : ''}`
+    : '';
   return c.html(
     page({
       title: tradie.businessName ?? tradie.name,
@@ -120,11 +136,26 @@ async function profilePage(c: Context<WebEnv>, id: number, refused?: DetailsEdit
       shell: shellInfo(c),
       flash,
       subtitle: tradie.businessName ? tradie.name : undefined,
-      actions: linkButton('Back to Tradies', '/tradies', { variant: 'ghost', size: 'sm' }),
-      body: html`${editing ? editForm(tradie, refused) : header(tradie)} ${quotes(tradie, timeZone)} ${bookings(tradie, timeZone)} ${ratings(tradie, timeZone)} ${addressForm(tradie, flash, c.req.query('form'))}`,
+      actions: html`${removed ? '' : removeButton(tradie)}${linkButton('Back to Tradies', '/tradies', { variant: 'ghost', size: 'sm' })}`,
+      body: html`${notice}
+        ${editing ? editForm(tradie, refused) : header(tradie)} ${quotes(tradie, timeZone)} ${bookings(tradie, timeZone)} ${ratings(tradie, timeZone)}
+        ${removed ? '' : addressForm(tradie, flash, c.req.query('form'))}`,
     }),
     refused ? 400 : 200,
   );
+}
+
+function removeButton(t: TradieView): Html {
+  return postButton(`/tradies/${t.tradieId}/remove`, 'Remove Tradie', {
+    variant: 'danger',
+    size: 'sm',
+    confirm: `${t.businessName ?? t.name} won't be offered for new Jobs. Their past Quotes and ratings stay on the Tickets they belong to.`,
+  });
+}
+
+/** "8 October 2026", in the Agency's time zone. */
+function longDate(at: string, timeZone: string): string {
+  return new Intl.DateTimeFormat('en-AU', { timeZone, day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(at));
 }
 
 /** Where the Tradie works from, which puts them on the Dispatch map. */
@@ -227,7 +258,7 @@ function header(t: TradieView): Html {
     <div class="tradie-contact">
       <div class="details-head">
         <div class="details-body flex flex-wrap items-center gap-2">${t.trades.map((trade) => badge(humanise(trade), 'info'))}</div>
-        ${editPen('Edit details', `/tradies/${t.tradieId}?edit=details#details`)}
+        ${t.removedAt ? '' : editPen('Edit details', `/tradies/${t.tradieId}?edit=details#details`)}
       </div>
       <dl>
         <div><dt>Mobile</dt><dd>${t.mobile ? html`${contactLink('mobile', t.mobile)}` : '—'}</dd></div>

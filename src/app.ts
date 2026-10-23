@@ -263,6 +263,8 @@ export function createApp(
         /** Changes a Tradie's business name, contact name, mobile, email and Trades. Their Google listing and starting rating stay. Refuses field by field, as adding does. */
         editTradie: (tradieId: number, input: Parameters<typeof onboarding.editTradie>[2]) => onboarding.editTradie(agencyId, tradieId, input),
         addTradie: (input: Parameters<typeof onboarding.addTradie>[1]) => onboarding.addTradie(agencyId, input),
+        /** Takes a Tradie out of the Agency's lists, pickers and Nominated Tradies, keeping their past Quotes, visits and ratings. Returns their business name. */
+        removeTradie: (tradieId: number) => onboarding.removeTradie(agencyId, tradieId),
         addProperty: (input: Parameters<typeof onboarding.addProperty>[1]) => onboarding.addProperty(agencyId, input),
         /** Changes a Property's address, suburb, Max Repair Cost, Property Owner, Property Manager, Building Manager and Nominated Tradies. A new address is geocoded again (a failing lookup leaves no pin for Look up missing addresses). Refuses field by field, as adding does. */
         editProperty: (propertyId: number, input: Parameters<typeof onboarding.editProperty>[2]) => onboarding.editProperty(agencyId, propertyId, input),

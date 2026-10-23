@@ -150,6 +150,14 @@ describe('editing a Tradie', () => {
     expect((await refusal((await sunrise(w)).sam.editTradie(w.ids.pete, edit))).code).toBe('not_found');
     expect((await refusal(w.alice.editTradie(w.ids.tom, edit))).code).toBe('not_found');
   });
+
+  test('a removed Tradie is refused, and nothing changes', async () => {
+    const w = await world();
+    await w.alice.removeTradie(w.ids.nina);
+
+    expect((await refusal(w.alice.editTradie(w.ids.nina, edit))).message).toBe("Nina's Plumbing has been removed from the Agency");
+    expect(await w.alice.tradie(w.ids.nina)).toMatchObject({ businessName: "Nina's Plumbing" });
+  });
 });
 
 describe('editing a Property', () => {

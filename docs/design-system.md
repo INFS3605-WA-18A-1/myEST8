@@ -390,6 +390,15 @@ A Tenant, Property or Tradie profile edits its details in place, by the same pen
 - **Saving** goes back to the profile with the "Details saved." flash. **A refused save** shows the same form again with the status 400: what was typed stays, and the error sits under its field (`aria-invalid`, `.field-error`). An error the form can't point at (a Tenant who has already left their Property) is a message above the details instead.
 - **Who can't be edited:** a Tenant who has left has no pen. Their history stays as it was.
 
+### Removing a Tradie
+
+A Tradie's profile (`/tradies/:id`, `pages/tradie.ts`) has **Remove Tradie** in the page's actions, before Back to Tradies.
+
+- **The button** is `postButton` in the Danger variant (`--urgent` text on surface, small), with the same `data-confirm` ask as removing a Tenant: "Nina's Plumbing won't be offered for new Jobs. Their past Quotes and ratings stay on the Tickets they belong to." Confirming posts to `/tradies/:id/remove` and lands on `/tradies` with "Nina's Plumbing removed".
+- **Refused** while they have an open Quote Request, a Quote waiting on a Property Owner, or a visit booked today or later. The reason names it ("Nina's Plumbing has a visit booked on Thursday at 9 am. Cancel or finish it first.") and shows as the profile's error flash.
+- **Gone from** the Tradies list, Dispatch's entries and pins, Quote recommendations and the Ask for Quotes list, the Nominated Tradies picker (and every Property's Nominated Tradies), Free today on the Schedule and the spreadsheet import's matching. They all read `people()` and `tradiesWithTrade()` in `profiles.ts`, which leave out a Tradie with `removed_at`.
+- **Their profile** still opens from old links. An info alert says "Removed from the Agency on 8 October 2026." (long month, in the Agency's time zone), the Remove button and the Business address form are left out, and the Quotes, bookings and ratings stay.
+
 ### Emails
 
 `renderEmail({ agencyName, subject, text })` in `src/email-layout.ts` turns any template's plain text into the HTML email, so no template writes HTML. `notifications` sets it as `html` on every email (the Resend and SendGrid mailers send it with `text` as the alternative); SMS and WhatsApp stay plain text.

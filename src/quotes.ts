@@ -602,6 +602,28 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
     },
 
     /**
+     * The Jobs where a Tradie is still in the running, soonest asked first: asked to quote on a
+     * Job nobody has been chosen for yet, or on one held up while the Property Owner decides
+     * (`withOwner` when it is the Tradie's own Quote they decide on).
+     */
+    async undecidedJobsOf(tradieId: number) {
+      const rows = await all<{ job_id: number; with_owner: boolean }>(
+        db,
+        `SELECT r.job_id, EXISTS (SELECT 1 FROM quotes q WHERE q.quote_request_id = r.id AND q.status = 'awaiting_owner') AS with_owner
+         FROM quote_requests r JOIN jobs j ON j.id = r.job_id
+         WHERE r.tradie_id = ? AND r.status IN (${LIVE.map((s) => `'${s}'`).join(', ')}) AND j.status IN ('quoting', 'awaiting_owner')
+         ORDER BY r.id`,
+        tradieId,
+      );
+      return Promise.all(
+        rows.map(async ({ job_id, with_owner }) => {
+          const { job, property } = await jobPlace(job_id);
+          return { jobId: job.id, trade: job.trade, propertyAddress: property.address, withOwner: with_owner };
+        }),
+      );
+    },
+
+    /**
      * Asks each Tradie for an Estimate, each with their own quote page link. A Tradie none of the
      * Agency's channels reaches is skipped and named in `unreached`, with why; the others are still
      * asked. Refuses when none can be reached, recording nothing.
@@ -616,6 +638,7 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
         const chosen = [];
         for (const id of new Set(tradieIds)) chosen.push(await profiles.personInAgency(agencyId, id, 'tradie'));
         for (const tradie of chosen) {
+          if (tradie.removedAt) invalid(`${tradie.businessName ?? tradie.name} has been removed from the Agency`);
           if (!tradie.trades.includes(job.trade)) invalid(`${tradie.businessName ?? tradie.name} doesn't do ${job.trade} work`);
           if (already.has(tradie.id)) invalid(`${tradie.businessName ?? tradie.name} has already been asked to quote`);
         }

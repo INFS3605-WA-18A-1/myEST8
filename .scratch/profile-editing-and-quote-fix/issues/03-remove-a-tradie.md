@@ -1,6 +1,6 @@
 # Remove a Tradie from the Agency
 
-Status: ready-for-agent
+Status: resolved
 Spec: ../spec.md
 
 ## What's wrong
@@ -27,17 +27,17 @@ There's no way to delete a Tradie. Quotes, visits (work orders), ratings and Nom
 
 ## Acceptance criteria
 
-- [ ] Action tests:
+- [x] Action tests:
   - removing sets `removed_at`, and the Tradie disappears from the lists, recommendations, Dispatch and Nominated Tradies
   - past Quotes and ratings still show them
   - refused with an open Quote Request, and refused with an upcoming visit, each with the reason
   - another Agency's Tradie is not found
   - an inbound message from a removed Tradie's mobile isn't matched to them
-- [ ] Page tests:
+- [x] Page tests:
   - the Remove button and the confirmation step
   - confirming redirects with the flash
   - a refusal shows the reason on the profile
   - a removed Tradie's profile shows "Removed from the Agency on …" and no Remove button
-- [ ] The migration only adds a column, and `npm run check`'s migration tests pass.
-- [ ] `docs/design-system.md` and `CONTEXT.md` (if it defines Tradie lifecycle words) are updated.
-- [ ] `npm run check` passes.
+- [x] The migration only adds a column, and `npm run check`'s migration tests pass.
+- [x] `docs/design-system.md` and `CONTEXT.md` (if it defines Tradie lifecycle words) are updated.
+- [x] `npm run check` passes.

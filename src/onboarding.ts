@@ -1,6 +1,7 @@
 import type { Context } from './context.ts';
 import type { ChannelType } from './ports.ts';
 import { invalid, isEmail, normalizeAddress, phoneProblem, TRADES, type Role, type Trade } from './shared.ts';
+import { formatWeekdayAndTime } from './zoned-time.ts';
 
 type Contact = { name: string; mobile?: string; email?: string };
 
@@ -157,10 +158,36 @@ export function createOnboarding({ ports, modules }: Context) {
      * them. Their Google listing and starting rating stay as they were.
      */
     async editTradie(agencyId: number, tradieId: number, input: Contact & { businessName: string; trades: Trade[] }) {
-      await profiles.personInAgency(agencyId, tradieId, 'tradie');
+      const tradie = await profiles.personInAgency(agencyId, tradieId, 'tradie');
+      if (tradie.removedAt) invalid(`${tradie.businessName ?? tradie.name} has been removed from the Agency`);
       checkTradieDetails(input);
       requireContactFormat(input);
       await profiles.updatePerson(tradieId, input);
+    },
+
+    /**
+     * Takes a Tradie out of the Agency (Profiles' removeTradie), keeping their Quotes, visits
+     * and ratings. Refuses while they are asked to quote on a Job nobody has been chosen for,
+     * have a Quote waiting on a Property Owner, or have a visit booked today or later.
+     * Returns their business name.
+     */
+    async removeTradie(agencyId: number, tradieId: number) {
+      const tradie = await profiles.personInAgency(agencyId, tradieId, 'tradie');
+      const name = tradie.businessName ?? tradie.name;
+      if (tradie.removedAt) invalid(`${name} has already been removed`);
+      const [undecided] = await modules.quotes.undecidedJobsOf(tradieId);
+      if (undecided) {
+        const job = `${undecided.trade.replaceAll('_', ' ')} at ${undecided.propertyAddress}`;
+        invalid(
+          undecided.withOwner
+            ? `${name} has a Quote waiting on the Property Owner for ${job}. Wait for their decision first.`
+            : `${name} has an open Quote Request for ${job}. Choose a Quote or cancel the Job first.`,
+        );
+      }
+      const [visit] = await modules.scheduling.visitStartsFromToday(agencyId, tradieId);
+      if (visit) invalid(`${name} has a visit booked on ${formatWeekdayAndTime(visit, (await profiles.agency(agencyId)).timeZone)}. Cancel or finish it first.`);
+      await profiles.removeTradie(tradieId);
+      return name;
     },
 
     findGoogleListings(query: string) {
