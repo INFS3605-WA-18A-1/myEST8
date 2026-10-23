@@ -511,8 +511,8 @@ export async function addTradieSection(o: {
   `;
 }
 
-/** The fields of the Tradie form: business, contact, Trades and starting rating. */
-export function tradieFields(o: { values?: Values; errors?: Errors; tradesHint?: string }): Html {
+/** The fields of the Tradie form: business, contact, Trades and starting rating (left out when editing a Tradie, whose rating is built from the Jobs they do). */
+export function tradieFields(o: { values?: Values; errors?: Errors; tradesHint?: string; startingRating?: boolean }): Html {
   const { values, errors } = o;
   const trades = values?.trades;
   return fieldGrid(html`
@@ -530,18 +530,20 @@ export function tradieFields(o: { values?: Values; errors?: Errors; tradesHint?:
         error: errors?.trades,
       })}
     </div>
-    ${field({
-      label: 'Starting rating',
-      name: 'startingRating',
-      id: 'tradie-rating',
-      type: 'select',
-      required: true,
-      placeholder: 'Choose 1 to 5',
-      value: valueOf(values, 'startingRating'),
-      options: [5, 4, 3, 2, 1].map((n) => ({ value: String(n), label: `${n} / 5` })),
-      hint: 'How good they have been for the Agency so far. Ratings after each Job build on it.',
-      error: errors?.startingRating,
-    })}
+    ${o.startingRating === false
+      ? ''
+      : field({
+          label: 'Starting rating',
+          name: 'startingRating',
+          id: 'tradie-rating',
+          type: 'select',
+          required: true,
+          placeholder: 'Choose 1 to 5',
+          value: valueOf(values, 'startingRating'),
+          options: [5, 4, 3, 2, 1].map((n) => ({ value: String(n), label: `${n} / 5` })),
+          hint: 'How good they have been for the Agency so far. Ratings after each Job build on it.',
+          error: errors?.startingRating,
+        })}
   `);
 }
 

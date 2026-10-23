@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { visible, webWorld } from '../support/web.ts';
-import { confirmedQuotes, jobView, TOM, tomsTapTicket, visitStarted } from '../support/world.ts';
+import { confirmedQuotes, DANA, jobView, PETE, TOM, tomsTapTicket, visitStarted } from '../support/world.ts';
 
 describe('Tradies', () => {
   test('the directory is sorted by myEST8 rating, shows both ratings and Previous Quotes, and filters by Trade', async () => {
@@ -124,5 +124,95 @@ describe('Tradies', () => {
     const w = await webWorld();
     const cookie = await w.signIn();
     expect((await w.get('/tradies/99999', cookie)).status).toBe(404);
+  });
+});
+
+describe('editing a Tradie from their profile', () => {
+  const PEN = (id: number) => `href="/tradies/${id}?edit=details#details"`;
+  /** The details block of a profile: from its id to the end of its section. */
+  const detailsOf = (page: string) => page.slice(page.indexOf('id="details"'), page.indexOf('</section>', page.indexOf('id="details"')));
+  const posted = { businessName: 'Park Plumbing & Gas', name: 'Peter Park', mobile: '0412 345 678', email: 'pete@parkplumbing.example', trades: ['plumbing', 'general_handyman'] };
+
+  test('the contact details have a pen named "Edit details" that opens the form with no JavaScript', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    const page = await (await w.get(`/tradies/${w.ids.pete}`, cookie)).text();
+    expect(detailsOf(page)).toContain(`<a ${PEN(w.ids.pete)} class="icon-btn" aria-label="Edit details" title="Edit details">`);
+    expect(page).not.toContain(`action="/tradies/${w.ids.pete}/details"`);
+    expect(visible(detailsOf(page))).toContain('Mobile');
+  });
+
+  test('?edit=details shows the form filled in, with the Trades ticked and no starting rating, and Save and Cancel', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    const page = await (await w.get(`/tradies/${w.ids.sam}?edit=details`, cookie)).text();
+    const form = detailsOf(page);
+    expect(form).toContain(`<form method="post" action="/tradies/${w.ids.sam}/details"`);
+    expect(form).toMatch(/<input[^>]* name="businessName"[^>]* value="Sparky Sam"/);
+    expect(form).toMatch(/<input[^>]* name="name"[^>]* value="Sam Spark"/);
+    expect(form).toMatch(/<input[^>]* name="mobile"[^>]* value="\+61400000205"/);
+    expect(form).toMatch(/<input[^>]* name="email"[^>]* value=""/);
+    expect(form).toMatch(/<input\s+type="checkbox"[^>]*name="trades"\s+value="electrical"[^>]*\schecked/);
+    expect(form).not.toMatch(/value="plumbing"[^>]*\schecked/);
+    expect(form).not.toContain('name="startingRating"');
+    expect(form).not.toContain('placeId');
+    expect(form).toMatch(/<button type="submit"[^>]*>Save<\/button>/);
+    expect(form).toContain(`<a href="/tradies/${w.ids.sam}" class="btn btn-ghost">Cancel</a>`);
+    // The ratings and the business address form stay on the page.
+    expect(visible(page)).toContain('myEST8 rating');
+    expect(page).toContain(`action="/tradies/${w.ids.sam}/address"`);
+  });
+
+  test('Save shows the change with "Details saved."', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    const res = await w.post(`/tradies/${w.ids.pete}/details`, posted, cookie);
+    expect(res.status).toBe(303);
+    expect(res.headers.get('location')).toMatch(new RegExp(`^/tradies/${w.ids.pete}\\?ok=`));
+    const page = await (await w.get(res.headers.get('location')!, cookie)).text();
+    const text = visible(page);
+    expect(text).toContain('Details saved.');
+    expect(text).toContain('Park Plumbing & Gas');
+    expect(text).toContain('Peter Park');
+    expect(detailsOf(page)).toContain('href="tel:+61412345678"');
+    expect(detailsOf(page)).toContain('href="mailto:pete@parkplumbing.example"');
+    expect(visible(detailsOf(page))).toContain('General handyman');
+    expect(page).not.toContain(`action="/tradies/${w.ids.pete}/details"`);
+  });
+
+  test('a refused save keeps what was typed and shows the reason under its field', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    const clash = await w.post(`/tradies/${w.ids.pete}/details`, { ...posted, mobile: DANA }, cookie);
+    expect(clash.status).toBe(400);
+    let form = detailsOf(await clash.text());
+    expect(form).toMatch(/<input[^>]* name="businessName"[^>]* value="Park Plumbing &amp; Gas"/);
+    expect(form).toMatch(/<input[^>]* name="mobile"[^>]* aria-invalid="true"[^>]* value="\+61400000202"/);
+    expect(form).toMatch(/<p id="tradie-mobile-error" class="field-error">\+61400000202 already belongs to someone else<\/p>/);
+    expect(form).toMatch(/<input\s+type="checkbox"[^>]*name="trades"\s+value="general_handyman"[^>]*\schecked/);
+
+    const noTrades = await w.post(`/tradies/${w.ids.pete}/details`, { ...posted, trades: [] }, cookie);
+    expect(noTrades.status).toBe(400);
+    form = detailsOf(await noTrades.text());
+    expect(form).toMatch(/<p class="field-error">Choose Trades from: plumbing, electrical/);
+    expect(form).toMatch(/<input[^>]* name="name"[^>]* value="Peter Park"/);
+
+    const noBusiness = await w.post(`/tradies/${w.ids.pete}/details`, { ...posted, businessName: '' }, cookie);
+    expect(detailsOf(await noBusiness.text())).toMatch(/<p id="tradie-business-error" class="field-error">Enter the business name<\/p>/);
+    expect(await w.alice.tradie(w.ids.pete)).toMatchObject({ businessName: "Pete's Plumbing", mobile: PETE });
+  });
+
+  test("another Agency's Tradie can't be edited: the page is a 404 and nothing changes", async () => {
+    const w = await webWorld();
+    const sunrise = await w.signUp();
+
+    const res = await w.post(`/tradies/${w.ids.pete}/details`, posted, sunrise);
+    expect(res.status).toBe(404);
+    expect((await w.get(`/tradies/${w.ids.pete}?edit=details`, sunrise)).status).toBe(404);
+    expect(await w.alice.tradie(w.ids.pete)).toMatchObject({ businessName: "Pete's Plumbing", mobile: PETE });
   });
 });
