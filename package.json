@@ -45,7 +45,7 @@
     "@tailwindcss/cli": "^4.3.3",
     "@types/node": "^22.20.5",
     "playwright": "^1.64.0",
-    "supabase": "^2.120.0",
+    "supabase": "^2.121.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vercel": "64.2.0",
