@@ -521,6 +521,23 @@ describe('Dispatch: the Jobs to dispatch', () => {
     expect((await w.alice.ticket(job.ticketId)).jobs[0]!.workOrder).toMatchObject({ start: TUE_9AM.toISOString() });
     expect(await dispatch(w, cookie)).not.toContain(`id="dispatch-job-${job.jobId}"`);
   });
+
+  test('booking a visit with no SMS channel connected and a Tradie with only a mobile is a flash, not a 500', async () => {
+    const w = await webWorld();
+    const job = await tomsTapTicket(w);
+    const [quote] = await confirmedQuotes(w, job, [[w.tradies.pete, 150_00, TUE_9AM]]);
+    await w.alice.chooseQuote(quote!.quoteId, 'Usual plumber');
+    await w.alice.disconnectServerSms(AGENCY_NUMBER);
+    const cookie = await w.signIn();
+
+    const res = await w.post(`/dispatch/jobs/${job.jobId}/work-order`, { start: '2026-10-13T09:00', hours: '2' }, cookie);
+
+    expect(res.status).toBe(303);
+    expect(res.headers.get('location')).toMatch(/^\/dispatch\?error=/);
+    expect(decodeURIComponent(res.headers.get('location')!.replace(/\+/g, ' '))).toContain(
+      "Couldn't send the message: no SMS channel is connected and they have no email address.",
+    );
+  });
 });
 
 describe('Dispatch: what the page needs to run', () => {

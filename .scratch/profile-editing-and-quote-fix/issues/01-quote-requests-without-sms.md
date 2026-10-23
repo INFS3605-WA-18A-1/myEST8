@@ -32,3 +32,7 @@ Error: Kevin Estate has no sms channel connected
   - none reachable gives a refusal message, not a 500
 - [x] A page test posting to `/dispatch/jobs/:jobId/quote-requests` with SMS off returns a redirect with the flash, not a 500.
 - [x] `npm run check` passes.
+
+## Also
+
+`formAction` (`src/web/forms.ts`) now treats `UndeliverableError` and `ProviderRefusedError` as refusals, not only `ActionError`. Any action that sends a message and can't reach the person redirects back with an error flash, "Couldn't send the message: <userReason>.", instead of a 500. Any other error still throws. Tests: `test/web/forms.test.ts`, and booking a visit from `/dispatch` with SMS off in `test/web/dispatch.test.ts`.
