@@ -1,6 +1,6 @@
 # Property Owner and Building Manager profiles
 
-Status: ready-for-agent
+Status: resolved
 
 ## What's wrong
 
