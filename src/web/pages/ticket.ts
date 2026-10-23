@@ -152,9 +152,7 @@ export function ticketPages() {
   onPost(pages, '/:id/jobs/:jobId/quote-requests', async ({ actions, ticket, form, params }) => {
     const job = jobIn(ticket, params.jobId);
     const tradieIds = [...new Set(list(form, 'tradieIds').map(Number))];
-    await actions.sendQuoteRequests(job.jobId, tradieIds);
-    const n = tradieIds.length;
-    return `Quote ${plural(n, 'Request')} sent to ${n} ${plural(n, 'Tradie')}`;
+    return quoteRequestsSent(await actions.sendQuoteRequests(job.jobId, tradieIds));
   });
 
   onPost(pages, '/:id/quotes/:quoteId/confirm', async ({ actions, ticket, form, params, timeZone }) => {
@@ -1696,6 +1694,12 @@ function formatRange(start: string, end: string, timeZone: string): string {
 
 function plural(n: number, word: string, many = `${word}s`) {
   return n === 1 ? word : many;
+}
+
+/** What sending Quote Requests says: how many went out, and who couldn't be reached and why. Shared with Dispatch. */
+export function quoteRequestsSent({ sent, unreached }: Awaited<ReturnType<PropertyManagerActions['sendQuoteRequests']>>): string {
+  const sentText = `Quote ${plural(sent, 'Request')} sent to ${sent} ${plural(sent, 'Tradie')}`;
+  return unreached.length ? `${sentText}. Couldn't reach ${unreached.map((u) => `${u.tradie}: ${u.reason}`).join('; ')}` : sentText;
 }
 
 /** "A", "A and B", "A, B and C". */

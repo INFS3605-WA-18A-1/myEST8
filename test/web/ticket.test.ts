@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { formatWhen } from '../../src/web/ui.ts';
 import { run } from '../../src/db.ts';
+import { AGENCY_NUMBER } from '../support/harness.ts';
 import { webWorld } from '../support/web.ts';
 import { readdirSync, readFileSync } from 'node:fs';
 import {
@@ -172,6 +173,21 @@ describe('Quote Requests', () => {
     expect(sent.page.text).toMatch(/Pete's Plumbing Asked No reply yet, asked just now Quick Pipes Asked No reply yet, asked just now Drip Doctors Asked No reply yet, asked just now/);
     expect(sent.page.text.match(/Already asked/g)).toHaveLength(3);
     expect(sent.page.text).toContain("Pete's Plumbing, Quick Pipes, Drip Doctors");
+  });
+
+  test('with no SMS channel connected, go to the Tradies who can be reached and the page names the one who cannot', async () => {
+    const { w, open, submit } = await tapTicket();
+    await w.alice.disconnectServerSms(AGENCY_NUMBER);
+    const action = formPosting((await open()).html, /\/quote-requests$/);
+
+    const sent = await submit(action, { tradieIds: [w.tradies.pete.id, w.tradies.quick.id] });
+
+    expect(sent.ok).toBe("Quote Request sent to 1 Tradie. Couldn't reach Pete's Plumbing: no SMS channel is connected and they have no email address");
+    expect(sent.page.text).toContain("Couldn't reach Pete's Plumbing");
+    const refused = await submit(action, { tradieIds: [w.tradies.dana.id, w.tradies.finn.id] });
+    expect(refused.error).toBe(
+      "No Quote Requests were sent. Couldn't reach Drip Doctors: no SMS channel is connected and they have no email address; Flow Bros: no SMS channel is connected and they have no email address",
+    );
   });
 
   test('are refused with no Tradie ticked, or for a Tradie already asked', async () => {

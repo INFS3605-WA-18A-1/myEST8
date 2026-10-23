@@ -47,7 +47,7 @@ import {
   urgencyBadge,
   type Html,
 } from '../ui.ts';
-import { DEFAULT_VISIT_HOURS, visitMinutes } from './ticket.ts';
+import { DEFAULT_VISIT_HOURS, quoteRequestsSent, visitMinutes } from './ticket.ts';
 
 type Overview = Awaited<ReturnType<PropertyManagerActions['dispatch']>>;
 type PropertyView = Overview['properties'][number];
@@ -160,9 +160,8 @@ export function dispatchPages() {
   pages.post('/jobs/:jobId{[0-9]+}/quote-requests', (c) =>
     formAction(c, '/dispatch#to-dispatch', async (form) => {
       const tradieIds = [...new Set(list(form, 'tradieIds').map(Number))];
-      await c.var.actions.sendQuoteRequests(Number(c.req.param('jobId')), tradieIds);
-      const n = tradieIds.length;
-      return { ok: `Quote ${n === 1 ? 'Request' : 'Requests'} sent to ${n} ${n === 1 ? 'Tradie' : 'Tradies'}`, redirect: '/dispatch#to-dispatch' };
+      const result = await c.var.actions.sendQuoteRequests(Number(c.req.param('jobId')), tradieIds);
+      return { ok: quoteRequestsSent(result), redirect: '/dispatch#to-dispatch' };
     }),
   );
 
