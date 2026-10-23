@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import { renderEmail } from '../src/email-layout.ts';
-import { HOUR } from './support/harness.ts';
+import { UndeliverableError } from '../src/ports.ts';
+import { AGENCY_NUMBER, HOUR } from './support/harness.ts';
+import { upload } from './support/photos.ts';
 import { BELLA, HANA, HANA_EMAIL, OSCAR, TOM, world } from './support/world.ts';
 
 describe('choosing the channel', () => {
@@ -59,6 +61,57 @@ describe('choosing the channel', () => {
     expect(h.messenger.to(OSCAR)).toMatchObject([{ channel: 'sms', template: 'owner.urgent_repair_receipt', attachments: ['receipt.jpg'], cc: [] }]);
     expect(h.messenger.to('bob@harbour.example')).toMatchObject([{ channel: 'email', template: 'owner.urgent_repair_receipt', attachments: ['receipt.jpg'] }]);
     expect((await bob.dashboard()).urgentRepairs).toMatchObject([{ status: 'receipt_forwarded' }]);
+  });
+});
+
+describe('choosing the channel when the Agency has no SMS channel', () => {
+  test('a Tenant with a mobile and an email gets email', async () => {
+    const { h, alice } = await world();
+    h.classifier.when('The bathroom fan is rattling', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'electrical' });
+    await h.receive(HANA_EMAIL, 'The bathroom fan is rattling');
+    await h.answerAll(HANA_EMAIL, { location: 'Bathroom', started: 'Last week', worsening: 'no', availability: 'weekday_afternoons' });
+    await h.advance(48 * HOUR);
+    const [request] = (await alice.dashboard()).maintenanceRequests;
+    await alice.disconnectServerSms(AGENCY_NUMBER);
+
+    await alice.confirmMaintenanceRequest(request!.issueId);
+
+    expect(h.messenger.last(HANA_EMAIL)).toMatchObject({ channel: 'email', template: 'tenant.confirmed' });
+    expect(h.messenger.to(HANA)).toEqual([]);
+  });
+
+  test('a Tenant with only a mobile can not be reached, and the error says why', async () => {
+    const { h, alice } = await world();
+    h.classifier.when('The kitchen tap is dripping', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });
+    await h.receive(TOM, 'The kitchen tap is dripping');
+    await h.answerAll(TOM, { location: 'Kitchen sink', started: 'Since Monday', worsening: 'no', availability: 'weekday_mornings' });
+    await h.advance(48 * HOUR);
+    const [request] = (await alice.dashboard()).maintenanceRequests;
+    await alice.disconnectServerSms(AGENCY_NUMBER);
+
+    const error = await alice.confirmMaintenanceRequest(request!.issueId).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(UndeliverableError);
+    expect((error as UndeliverableError).message).toContain("can't reach Tom Tran: no SMS channel is connected and they have no email address");
+    expect((error as UndeliverableError).userReason).toBe('no SMS channel is connected and they have no email address');
+  });
+
+  test('the channel a Tradie is asked on is the one the photos are attached for', async () => {
+    const { h, alice, tradies } = await world();
+    h.classifier.when('The kitchen tap is dripping', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });
+    await h.receive(TOM, 'The kitchen tap is dripping');
+    await h.answerAll(TOM, { location: 'Kitchen sink', started: 'Since Monday', worsening: 'no', availability: 'weekday_mornings' });
+    await h.upload(h.messenger.last(TOM)!.data.uploadLink as string, [upload('tap-1.jpg')]);
+    const [request] = (await alice.dashboard()).maintenanceRequests;
+    const ticketId = await alice.confirmMaintenanceRequest(request!.issueId);
+    const [job] = (await alice.ticket(ticketId)).jobs;
+    const penny = await alice.addTradie({ name: 'Penny Pipe', businessName: 'Pipe Dreams', mobile: '+61400000300', email: 'penny@pipedreams.example', trades: ['plumbing'], startingRating: 4, notOnGoogle: true });
+    await alice.disconnectServerSms(AGENCY_NUMBER);
+
+    await alice.sendQuoteRequests(job!.jobId, [penny, tradies.quick.id]);
+
+    expect(h.messenger.to('penny@pipedreams.example')).toMatchObject([{ channel: 'email', template: 'tradie.quote_request', attachments: ['tap-1.jpg'] }]);
+    expect(h.messenger.to('+61400000300')).toEqual([]);
   });
 });
 
