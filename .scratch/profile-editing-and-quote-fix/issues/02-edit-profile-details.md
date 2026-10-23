@@ -1,6 +1,6 @@
 # A pen button to edit a Tenant's, Property's or Tradie's details
 
-Status: ready-for-agent
+Status: resolved
 Spec: ../spec.md
 
 ## What's wrong
@@ -22,18 +22,18 @@ The profile pages (`/tenants/:id`, `/properties/:id`, `/tradies/:id`) show a per
 
 ## Acceptance criteria
 
-- [ ] Action tests for each of the three:
+- [x] Action tests for each of the three:
   - an edit is saved
   - a bad phone, a missing contact or a clashing address is refused naming the field
   - another Agency's record is not found
   - a changed mobile is what intake now matches
   - a changed Property address is geocoded again
-- [ ] Page tests:
+- [x] Page tests:
   - each profile shows the pen with "Edit details"
   - `?edit=details` shows the form filled in
   - Save shows the change with "Details saved."
   - a refused save keeps the values and shows the field error
   - Cancel returns to the plain view
-- [ ] A browser test at 390 px: open a Tradie, press the pen, change the mobile, save, and see it. No sideways scroll.
-- [ ] `docs/design-system.md` describes the pen-to-edit pattern on profiles.
-- [ ] `npm run check` passes.
+- [x] A browser test at 390 px: open a Tradie, press the pen, change the mobile, save, and see it. No sideways scroll.
+- [x] `docs/design-system.md` describes the pen-to-edit pattern on profiles.
+- [x] `npm run check` passes.
