@@ -575,6 +575,141 @@
   }
 })();
 
+// === photo viewer ===
+// A photoGrid ([data-photo-grid]) is a list of links to full images, which open in
+// the same tab without this file. Here a click on one opens that grid's photos in
+// a <dialog> over the page, built once with DOM calls and reused by every grid.
+(() => {
+  // Phosphor's caret-left, caret-right and x, written out as the flash message's x is above.
+  const PATHS = {
+    previous: 'M165.66,202.34a8,8,0,0,1-11.32,11.32l-80-80a8,8,0,0,1,0-11.32l80-80a8,8,0,0,1,11.32,11.32L91.31,128Z',
+    next: 'M181.66,133.66l-80,80a8,8,0,0,1-11.32-11.32L164.69,128,90.34,53.66a8,8,0,0,1,11.32-11.32l80,80A8,8,0,0,1,181.66,133.66Z',
+    close: 'M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z',
+  };
+
+  let viewer;
+  let photos = [];
+  let index = 0;
+  let opener;
+
+  function iconButton(name, label, onClick) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `photo-viewer-button is-${name}`;
+    button.setAttribute('aria-label', label);
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 256 256');
+    svg.setAttribute('width', '24');
+    svg.setAttribute('height', '24');
+    svg.setAttribute('fill', 'currentColor');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('focusable', 'false');
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', PATHS[name]);
+    svg.append(path);
+    button.append(svg);
+    button.addEventListener('click', onClick);
+    return button;
+  }
+
+  function build() {
+    const dialog = document.createElement('dialog');
+    dialog.className = 'photo-viewer';
+    const figure = document.createElement('figure');
+    figure.className = 'photo-viewer-figure';
+    const image = document.createElement('img');
+    image.className = 'photo-viewer-photo';
+    image.draggable = false;
+    image.addEventListener('load', () => dialog.style.setProperty('--photo-ratio', String(image.naturalWidth / image.naturalHeight)));
+    const caption = document.createElement('figcaption');
+    caption.className = 'photo-viewer-caption';
+    figure.append(image, caption);
+    const count = document.createElement('p');
+    count.className = 'photo-viewer-count num';
+    count.setAttribute('aria-live', 'polite');
+    const previous = iconButton('previous', 'Previous photo', () => move(-1));
+    const next = iconButton('next', 'Next photo', () => move(1));
+    dialog.append(iconButton('close', 'Close', () => dialog.close()), previous, figure, next, count);
+    dialog.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowLeft') move(-1);
+      else if (event.key === 'ArrowRight') move(1);
+    });
+    // A drag across the photo. More than 48 px horizontally, and further across than
+    // down, steps on: a finger moving left brings the next photo, moving right the
+    // previous. The click that follows that drag is swallowed, so releasing over the
+    // backdrop does not close the viewer.
+    let origin = null;
+    let swallowClick = false;
+    image.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0) return;
+      origin = { x: event.clientX, y: event.clientY };
+      image.setPointerCapture(event.pointerId);
+    });
+    const endDrag = (event) => {
+      if (!origin) return;
+      const dx = event.clientX - origin.x;
+      const dy = event.clientY - origin.y;
+      origin = null;
+      if (Math.abs(dx) <= 48 || Math.abs(dx) < Math.abs(dy)) return;
+      swallowClick = true;
+      move(dx < 0 ? 1 : -1);
+    };
+    image.addEventListener('pointerup', endDrag);
+    image.addEventListener('pointercancel', () => {
+      origin = null;
+    });
+    // The backdrop is the dialog's own empty space: anything but a control, the photo or its words.
+    dialog.addEventListener('click', (event) => {
+      if (swallowClick) {
+        swallowClick = false;
+        return;
+      }
+      if (!event.target.closest('button, img, figcaption, .photo-viewer-count')) dialog.close();
+    });
+    // Esc, Close and the backdrop all end here. Focus goes back to the photo that opened the viewer.
+    dialog.addEventListener('close', () => opener?.focus());
+    document.body.append(dialog);
+    return { dialog, image, caption, count, steps: [previous, next, count] };
+  }
+
+  function show(i) {
+    index = i;
+    const photo = photos[i];
+    viewer.image.src = photo.src;
+    viewer.image.alt = photo.alt;
+    viewer.caption.textContent = photo.caption;
+    // One photo has nothing to step to or count.
+    const several = photos.length > 1;
+    for (const part of viewer.steps) part.hidden = !several;
+    viewer.count.textContent = `${i + 1} of ${photos.length}`;
+    viewer.dialog.setAttribute('aria-label', several ? `Photo ${i + 1} of ${photos.length}` : 'Photo');
+  }
+
+  // Past the last photo is the first, and before the first is the last.
+  function move(step) {
+    if (photos.length < 2) return;
+    show((index + step + photos.length) % photos.length);
+  }
+
+  document.addEventListener('click', (event) => {
+    const link = event.target instanceof Element ? event.target.closest('[data-photo-grid] a[href]') : null;
+    // Ctrl, Cmd, Shift, Alt and the middle button stay with the browser, which opens a new tab or window.
+    if (!link || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    const grid = link.closest('[data-photo-grid]');
+    const links = [...grid.querySelectorAll('a[href]')];
+    photos = links.map((a) => ({
+      src: a.href,
+      alt: a.querySelector('img')?.alt ?? '',
+      caption: a.closest('figure')?.querySelector('figcaption')?.textContent.trim() ?? '',
+    }));
+    viewer ??= build();
+    opener = link;
+    show(links.indexOf(link));
+    viewer.dialog.showModal();
+  });
+})();
+
 // === address suggestions ===
 // A Property's Address (input[data-address-suggest]) offers matching addresses as
 // you type, from /properties/address-suggestions. Choosing one fills Address,
