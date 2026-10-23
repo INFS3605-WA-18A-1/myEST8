@@ -624,6 +624,26 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
     },
 
     /**
+     * The Jobs a Tradie's approved Quote is for that are Ready to book, with no Work Order sent yet,
+     * soonest approved first.
+     */
+    async unbookedJobsOf(tradieId: number) {
+      const rows = await all<{ job_id: number }>(
+        db,
+        `SELECT q.job_id FROM quotes q JOIN jobs j ON j.id = q.job_id
+         WHERE q.tradie_id = ? AND q.status = 'approved' AND j.status = 'approved'
+         ORDER BY q.id`,
+        tradieId,
+      );
+      return Promise.all(
+        rows.map(async ({ job_id }) => {
+          const { job, property } = await jobPlace(job_id);
+          return { jobId: job.id, trade: job.trade, propertyAddress: property.address };
+        }),
+      );
+    },
+
+    /**
      * Asks each Tradie for an Estimate, each with their own quote page link. A Tradie none of the
      * Agency's channels reaches is skipped and named in `unreached`, with why; the others are still
      * asked. Refuses when none can be reached, recording nothing.

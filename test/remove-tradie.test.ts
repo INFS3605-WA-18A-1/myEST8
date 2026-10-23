@@ -179,6 +179,22 @@ describe('removing a Tradie with work in progress', () => {
     );
   });
 
+  test('is refused while their approved Quote has no visit booked yet, naming the Job, and allowed once the Job is cancelled', async () => {
+    const w = await world();
+    const job = await tomsTapTicket(w);
+    const [quote] = await confirmedQuotes(w, job, [[w.tradies.nina, 150_00, TUE_9AM]]);
+    await w.alice.chooseQuote(quote!.quoteId, 'Nominated Tradie');
+
+    // The Job is Ready to book: removing Nina would leave it with nobody to book.
+    expect(await refusal(w.alice.removeTradie(w.ids.nina))).toBe(
+      `Nina's Plumbing has an approved Quote for plumbing at ${KING_ST} with no visit booked yet. Book the visit or cancel the Job first.`,
+    );
+    expect((await w.alice.tradie(w.ids.nina)).removedAt).toBeNull();
+
+    await w.alice.cancelJob(job.jobId);
+    expect(await w.alice.removeTradie(w.ids.nina)).toBe("Nina's Plumbing");
+  });
+
   test('is refused while they have a visit booked, and allowed once the Job is cancelled', async () => {
     const w = await world();
     const job = await tomsTapTicket(w);

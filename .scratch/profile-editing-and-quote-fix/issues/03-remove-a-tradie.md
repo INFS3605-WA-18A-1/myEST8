@@ -41,3 +41,7 @@ There's no way to delete a Tradie. Quotes, visits (work orders), ratings and Nom
 - [x] The migration only adds a column, and `npm run check`'s migration tests pass.
 - [x] `docs/design-system.md` and `CONTEXT.md` (if it defines Tradie lifecycle words) are updated.
 - [x] `npm run check` passes.
+
+## Also
+
+- **An approved Quote with no visit booked yet refuses the removal too.** A Job that is Ready to book has nobody else to book, so removing its Tradie would strand it. The reason names the Job: "Nina's Plumbing has an approved Quote for plumbing at 12 King St, Newtown NSW 2042 with no visit booked yet. Book the visit or cancel the Job first." (`unbookedJobsOf` in `src/quotes.ts`; test in `test/remove-tradie.test.ts`.)

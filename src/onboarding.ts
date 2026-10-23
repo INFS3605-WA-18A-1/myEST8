@@ -168,7 +168,8 @@ export function createOnboarding({ ports, modules }: Context) {
     /**
      * Takes a Tradie out of the Agency (Profiles' removeTradie), keeping their Quotes, visits
      * and ratings. Refuses while they are asked to quote on a Job nobody has been chosen for,
-     * have a Quote waiting on a Property Owner, or have a visit booked today or later.
+     * have a Quote waiting on a Property Owner, have an approved Quote for a Job with no visit booked
+     * yet (it would be stranded in Ready to book), or have a visit booked today or later.
      * Returns their business name.
      */
     async removeTradie(agencyId: number, tradieId: number) {
@@ -182,6 +183,12 @@ export function createOnboarding({ ports, modules }: Context) {
           undecided.withOwner
             ? `${name} has a Quote waiting on the Property Owner for ${job}. Wait for their decision first.`
             : `${name} has an open Quote Request for ${job}. Choose a Quote or cancel the Job first.`,
+        );
+      }
+      const [unbooked] = await modules.quotes.unbookedJobsOf(tradieId);
+      if (unbooked) {
+        invalid(
+          `${name} has an approved Quote for ${unbooked.trade.replaceAll('_', ' ')} at ${unbooked.propertyAddress} with no visit booked yet. Book the visit or cancel the Job first.`,
         );
       }
       const [visit] = await modules.scheduling.visitStartsFromToday(agencyId, tradieId);
