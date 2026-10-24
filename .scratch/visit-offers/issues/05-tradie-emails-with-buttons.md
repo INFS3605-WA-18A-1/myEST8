@@ -1,6 +1,6 @@
 # Buttons and a clearer layout on every email to a Tradie
 
-Status: ready-for-agent
+Status: resolved
 Blocked by: 04
 Spec: ../spec.md
 
@@ -39,17 +39,17 @@ Each uses a short opening sentence, then a details block, then buttons. Primary 
 
 ## Acceptance criteria
 
-- [ ] Renderer tests:
+- [x] Renderer tests:
   - a details block from `Label: value` lines
   - a URL value still a button
   - "Can't take this job" and "Need another time?" outlined
-- [ ] Template and action tests:
+- [x] Template and action tests:
   - each `tradie.*` template's text has the details lines and links listed above
   - the decline POST does what replying NO does
   - Mark done does what replying DONE does
   - Need another time starts an offer round
   - GETs change nothing
   - an already-done job shows its state
-- [ ] One browser test: a Work Order email's View job, Mark job done and Need another time? reach their pages, and Mark job done records completion.
-- [ ] Screenshots of the quote request, Work Order and inspection emails at 600 px and 375 px, reviewed.
-- [ ] `npm run check` passes.
+- [x] One browser test: a Work Order email's View job, Mark job done and Need another time? reach their pages, and Mark job done records completion.
+- [x] Screenshots of the quote request, Work Order and inspection emails at 600 px and 375 px, reviewed.
+- [x] `npm run check` passes.
