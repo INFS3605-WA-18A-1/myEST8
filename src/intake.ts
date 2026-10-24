@@ -1,10 +1,11 @@
+import { option, question, TRADE_OPTIONS } from './classifier-questions.ts';
 import type { Context } from './context.ts';
 import { all, one, run, transaction } from './db.ts';
 import { checkPhotoMetadata } from './photo-checks.ts';
-import type { ChannelType, ClassifierAnswer, ClassifierQuestion, InboundMessage } from './ports.ts';
+import type { ChannelType, ClassifierAnswer, ClassifierOption, ClassifierQuestion, InboundMessage } from './ports.ts';
 import type { Person, Property } from './profiles.ts';
-import { requireClaim, type ReceiptVia } from './tickets.ts';
-import { addMs, HOUR_MS, invalid, iso, notFound, TRADES, URGENCIES, type Trade, type Urgency } from './shared.ts';
+import { requireClaim, type OpenItem, type ReceiptVia } from './tickets.ts';
+import { addMs, HOUR_MS, invalid, iso, notFound, type Trade, type Urgency } from './shared.ts';
 import type { GuidedQuestion } from './templates.ts';
 
 export const URGENT_REPAIR_LIMIT_CENTS = 1000_00;
@@ -46,15 +47,83 @@ interface Received {
 
 type StoredAttachment = { filename: string; contentType: string; fileId?: number; url?: string };
 
-const question = (id: string, options: readonly string[]): ClassifierQuestion => ({ id, options });
-const URGENCY_QUESTION = question('urgency', URGENCIES);
-const TRADE_QUESTION = question('trade', TRADES);
+// --- What the classifier is asked ---
+//
+// Each question says what to judge and what to look at (`message` is the text,
+// the other backticked names are keys of the state sent with it), and each
+// option says when it applies. Option names are what the code below reads.
 
-function answerOptions(awaiting: Awaiting): string[] {
-  if (awaiting.kind === 'fix_rating') return ['1', '2', '3', '4', '5', 'not_an_answer'];
-  if (awaiting.kind === 'visit') return ['confirm', 'reschedule', 'not_an_answer'];
-  return ['answer', 'not_an_answer'];
+const URGENCY_QUESTION = question(
+  'urgency',
+  "How soon must the issue that `message` reports be dealt with? When the state has `answers`, they are the Tenant's replies to our follow-up questions (where the issue is, when it started, whether it is getting worse): use them too.",
+  [
+    option('urgent', 'Something threatens safety, the structure, security or an essential service: a gas smell, flooding or a burst pipe, sparks or smoke, no power, no water or no hot water, or a lock that will not secure the Property'),
+    option('high', 'Not a threat yet, but it gets worse or does damage if it waits: a leak, mould, a growing crack, or an issue the Tenant says is getting worse'),
+    option('routine', 'Anything else: a fault or a nuisance that can wait for a normal repair visit and is not getting worse'),
+  ],
+);
+
+const TRADE_QUESTION = question(
+  'trade',
+  "Which Trade does the issue that `message` reports need? When the state has `answers`, they are the Tenant's replies to our follow-up questions, including where in the Property the issue is: use them too.",
+  TRADE_OPTIONS,
+);
+
+/**
+ * Confidence at which a `risk` answer takes the Urgent path whatever Urgency
+ * said. Tuned for missing a real risk being the worst outcome: a clear risk
+ * is never left as a routine repair.
+ */
+const SAFETY_RISK_CONFIDENCE = 0.9;
+
+const SAFETY_QUESTION = question(
+  'safety',
+  "Does `message` describe a risk to people's safety? Judge the danger to people, not how soon the repair is needed and not whether an essential service is merely out. When the state has `answers`, they are the Tenant's replies: use them too.",
+  [
+    option('no_risk', 'Nothing here threatens people: a fault or a nuisance, a leak that is not near electrics, no power, no water or no hot water, or a lock that still secures the Property'),
+    option('risk', 'A risk to people: a gas smell or leak, sparking or exposed wiring, flooding near electrics, structural collapse, no lock on an entry door, or carbon monoxide'),
+  ],
+);
+
+const NOT_AN_ANSWER = option('not_an_answer', 'The message is not a reply to that question: it is about something else, or says nothing that answers it');
+
+/**
+ * The question for the one we are waiting on this Tenant to answer. A guided
+ * reply is only "is this the answer": Haiku reads the details out of the text
+ * (ADR 0014). A rating and a visit confirmation are the option itself.
+ */
+function answerQuestion(awaiting: Awaiting): ClassifierQuestion {
+  const id = `answer:${awaiting.kind}`;
+  const waiting = (what: string) => `We asked the Tenant ${what} (it is the entry of \`waitingForAnswers\` with kind "${awaiting.kind}"). Is \`message\` their reply to it?`;
+  if (awaiting.kind === 'fix_rating') {
+    return question(id, `${waiting('how well a Tradie fixed their issue, and to reply with a number from 1 (not at all) to 5 (perfectly)')} Pick the rating \`message\` gives, as a digit or in words.`, [
+      option('1', 'Rates it 1: not fixed at all'),
+      option('2', 'Rates it 2: mostly not fixed'),
+      option('3', 'Rates it 3: partly fixed, or just acceptable'),
+      option('4', 'Rates it 4: fixed, with a small problem left'),
+      option('5', 'Rates it 5: fixed perfectly'),
+      NOT_AN_ANSWER,
+    ]);
+  }
+  if (awaiting.kind === 'visit') {
+    return question(id, `${waiting("to confirm the time of a Tradie's visit, by replying YES, or to tell us if they need another time")} Pick what \`message\` says about the visit.`, [
+      option('confirm', 'Confirms the visit: yes, the time works, or they will be home'),
+      option('reschedule', 'Does not confirm: says no, asks for another time, or cannot be there'),
+      NOT_AN_ANSWER,
+    ]);
+  }
+  return question(
+    id,
+    `${waiting('for the details still missing from their maintenance issue: where it is, when it started, whether it is getting worse, and when they are home')} A reply that gives any of those is an answer. What the words say is read separately.`,
+    [option('answer', 'Replies to the missing-details questions, even in part'), NOT_AN_ANSWER],
+  );
 }
+
+/** The open items a message might be about: each option is an item's ref, described by its summary, and `none` is the way out. */
+const itemOptions = (items: OpenItem[], none: string): ClassifierOption[] => [
+  ...items.map((i) => option(i.ref, `The message is about this: ${i.summary}`)),
+  option('none', none),
+];
 
 const firstName = (person: Person) => person.name.split(' ')[0]!;
 
@@ -175,11 +244,17 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
     return (await modules.tickets.resolveRef(ref))?.issueId ?? null;
   }
 
-  // --- Urgency and Trade ---
+  // --- Urgency, safety and Trade ---
 
   function readUrgency(answers: Answers): { urgency: Urgency; checkUrgency: boolean } {
     // An unsure Urgency is treated as High and flagged, never as Urgent.
     return sure(answers, 'urgency') ? { urgency: pick(answers, 'urgency') as Urgency, checkUrgency: false } : { urgency: 'high', checkUrgency: true };
+  }
+
+  /** A safety risk this sure overrides Urgency. Anything less sure, or no answer, leaves Urgency to decide. */
+  function safetyRisk(answers: Answers): { risk: boolean; confidence: number } {
+    const confidence = answers.safety?.confidence ?? 0;
+    return { risk: answers.safety?.answer === 'risk' && confidence >= SAFETY_RISK_CONFIDENCE, confidence };
   }
 
   function readTrade(answers: Answers): { trade: Trade; checkTrade: boolean } {
@@ -193,12 +268,35 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
     const openItems = await modules.tickets.openItemsForProperty(property.id);
     const pending = await awaitingFrom(tenant.id);
     const questions = [
-      question('messageClass', ['new_issue', 'update', 'common_area', 'other']),
-      question('relatedItem', [...openItems.map((i) => i.ref), 'none']),
+      question(
+        'messageClass',
+        'What kind of message is `message`, sent by a Tenant? `openItems` are the issues, Tickets, Jobs and Urgent Repairs already open on their Property.',
+        [
+          option('new_issue', 'Reports a maintenance problem at their Property, including one that `openItems` already has (then it is a repeat report). Not a reply about work already open'),
+          option('update', 'A follow-up on something in `openItems`: asking for news, confirming a visit or asking for another time, or sending a receipt. Needs an open item to be about'),
+          option('common_area', 'About a Common Area shared by everyone in a strata building (a lift, foyer, stairwell, car park, shared pool or intercom), not their own Property'),
+          option('other', 'Not about maintenance: rent, the lease, bond, inspections, payments, or anything else for the Property Manager'),
+        ],
+      ),
+      question(
+        'relatedItem',
+        "Which of the open items in `openItems` is `message` about, as a follow-up or as a repeat report? The option is the item's `ref`. Pick none when `message` reports a different problem or is about no open item.",
+        itemOptions(openItems, 'It is not about any open item: it reports a different problem, or nothing in `openItems` fits'),
+      ),
       URGENCY_QUESTION,
+      SAFETY_QUESTION,
       TRADE_QUESTION,
-      question('updateType', ['general', 'reschedule_request', 'visit_confirmed', 'receipt']),
-      ...pending.map((awaiting) => question(`answer:${awaiting.kind}`, answerOptions(awaiting))),
+      question(
+        'updateType',
+        'When `message` is a follow-up on an open item, what kind of follow-up is it? `hasAttachments` says whether a photo or file came with it.',
+        [
+          option('general', 'A chaser, question or comment with no scheduling or receipt in it'),
+          option('reschedule_request', 'Asks for a repair visit to be at another time, or says they cannot make it'),
+          option('visit_confirmed', 'Confirms they will be home for the repair visit, or that the time works'),
+          option('receipt', 'Sends or mentions the receipt for an Urgent Repair they arranged and paid for, usually as a photo or PDF'),
+        ],
+      ),
+      ...pending.map(answerQuestion),
     ];
     const answers =
       forced ??
@@ -230,16 +328,19 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
   }
 
   async function startIssue(msg: Received, tenant: Person, property: Property, answers: Answers) {
+    const safety = safetyRisk(answers);
     const issueId = await modules.tickets.createIssue({
       agencyId: tenant.agencyId,
       propertyId: property.id,
       tenantId: tenant.id,
       description: msg.text,
-      ...readUrgency(answers),
+      ...(safety.risk ? { urgency: 'urgent' as const, checkUrgency: false } : readUrgency(answers)),
       ...readTrade(answers),
     });
     await logInbound(msg, tenant.id, issueId);
-    if ((await modules.tickets.issue(issueId)).urgency === 'urgent') return startUrgentRepair(issueId);
+    if ((await modules.tickets.issue(issueId)).urgency === 'urgent') {
+      return startUrgentRepair(issueId, safety.risk ? { answer: 'risk', confidence: safety.confidence } : undefined);
+    }
     // Photos sent with the first message are the issue's photos; other attachments are ignored here.
     const arrived = await savePhotos(issueId, msg.fileIds);
     if (arrived) await modules.tickets.updateIssue(issueId, { photosOnArrival: arrived });
@@ -358,11 +459,12 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
     await worker.schedule('intake.no_photos', { issueId, stage: 'awaiting_photos' }, addMs(clock.now(), NO_PHOTOS_TIMEOUT_MS));
   }
 
-  async function startUrgentRepair(issueId: number) {
+  async function startUrgentRepair(issueId: number, safety?: { answer: 'risk'; confidence: number }) {
     const issue = await modules.tickets.issue(issueId);
-    const { receiptToken } = await modules.tickets.createUrgentRepair(issueId);
+    const repair = await modules.tickets.createUrgentRepair(issueId, safety);
     if ((await awaitingFrom(issue.tenantId)).some((a) => a.kind === 'guided' && a.issueId === issueId)) await stopWaiting(issue.tenantId, 'guided');
-    await sendReceiptReminder(issueId, receiptToken);
+    await sendReceiptReminder(issueId, repair.receiptToken);
+    return repair;
   }
 
   /** What to do now, the Property's Nominated Tradies, and the link for the receipt the Reimbursement Request needs. */
@@ -512,8 +614,22 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
         text: msg.text,
         state: { senderRole: 'tradie', hasAttachments: msg.fileIds.length > 0, waitingItems: waiting },
         questions: [
-          question('replyType', ['quote', 'decline', 'reschedule_request', 'done', 'other']),
-          question('relatedItem', [...waiting.map((i) => i.ref), 'none']),
+          question(
+            'replyType',
+            'What is the Tradie replying with in `message`? `waitingItems` are the Quote Requests, Site Inspections and Work Orders we are waiting on them for, and `hasAttachments` says whether a file came with it, such as a PDF quote.',
+            [
+              option('quote', 'Gives a price for a job, an Estimate or a Firm Quote, in the message or an attached quote. A price with "can do it Tuesday" or "fixed price" is a quote, not done'),
+              option('decline', 'Says they will not or cannot quote or do the job: too busy, unavailable, not interested'),
+              option('reschedule_request', 'Asks to move a visit, a Site Inspection or a Work Order, to another time'),
+              option('done', 'Says the work, or the visit, is finished'),
+              option('other', 'Anything else: a question, thanks, or a message that is none of the above'),
+            ],
+          ),
+          question(
+            'relatedItem',
+            "Which of the items in `waitingItems` is `message` a reply about? The option is the item's `ref`. Pick none when it is about none of them.",
+            itemOptions(waiting, 'It is not about any waiting item, or nothing in `waitingItems` fits'),
+          ),
         ],
       }));
     await claim(msg);
@@ -565,9 +681,23 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
         text: msg.text,
         state: { senderRole: 'property_owner', waitingItems: waiting },
         questions: [
-          question('replyType', ['approval_answer', 'other']),
-          question('answer', ['yes', 'no']),
-          question('relatedItem', [...waiting.map((i) => i.ref), 'none']),
+          question(
+            'replyType',
+            "Is `message`, from a Property Owner, a yes or no answer to one of the approval requests in `waitingItems`? We ask when a Ticket's Repair Cost would go over the Property's Max Repair Cost.",
+            [
+              option('approval_answer', 'Says yes or no to an approval request: approves it, or declines it'),
+              option('other', 'Anything else: a question, a request to call, or a message that is not an answer to an approval request'),
+            ],
+          ),
+          question('answer', 'Does the Property Owner approve what `message` replies to? Judge whether they agree to the cost, not their tone.', [
+            option('yes', 'Approves: yes, go ahead, approved'),
+            option('no', 'Does not approve: no, declines, too expensive'),
+          ]),
+          question(
+            'relatedItem',
+            "Which of the approval requests in `waitingItems` is `message` answering? The option is the item's `ref`. Pick none when it is about none of them.",
+            itemOptions(waiting, 'It answers none of the waiting approval requests, or nothing in `waitingItems` fits'),
+          ),
         ],
       }));
     await claim(msg);

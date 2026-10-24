@@ -617,7 +617,7 @@ export function createTickets({ db, clock, settings, ports, modules }: Context) 
       });
     },
 
-    async createUrgentRepair(issueId: number) {
+    async createUrgentRepair(issueId: number, safety?: { answer: 'risk'; confidence: number }) {
       const urgent = await issue(issueId);
       return await transaction(db, async () => {
         await run(db, `UPDATE issues SET status = 'urgent', urgency = 'urgent', check_urgency = 0 WHERE id = ?`, issueId);
@@ -633,6 +633,9 @@ export function createTickets({ db, clock, settings, ports, modules }: Context) 
           receiptToken,
           iso(clock.now()),
         );
+        // Before the reminder, so the timeline says why it went Urgent and then what the Tenant was told.
+        // A Ticket timeline belongs to a Ticket, which an Urgent Repair never becomes.
+        if (safety) await recordUrgentRepairEvent(id, 'safety', safety);
         await recordUrgentRepairEvent(id, 'reminder_sent');
         return { id, receiptToken };
       });
@@ -977,6 +980,37 @@ export function createTickets({ db, clock, settings, ports, modules }: Context) 
         agencyId,
         ...params,
       )).map(toTicket);
+    },
+
+    /**
+     * Safety risks that sent a new report down the Urgent path. The Tenant's words
+     * name the risk; the answer and confidence are what the classifier recorded.
+     */
+    async alerts(agencyId: number, propertyIds: number[] | null) {
+      const events = await all<{ urgent_repair_id: number; data: string }>(
+        db,
+        `SELECT e.urgent_repair_id, e.data FROM urgent_repair_events e
+         JOIN urgent_repairs u ON u.id = e.urgent_repair_id
+         WHERE e.kind = 'safety' AND u.agency_id = ?
+         ORDER BY e.at, e.id`,
+        agencyId,
+      );
+      const found = await Promise.all(
+        events.map(async (e) => {
+          const repair = await urgentRepair(e.urgent_repair_id);
+          if (propertyIds !== null && !propertyIds.includes(repair.propertyId)) return null;
+          const data = JSON.parse(e.data) as { answer?: string; confidence?: number };
+          return {
+            kind: 'safety_risk' as const,
+            urgentRepairId: repair.id,
+            propertyAddress: (await modules.profiles.property(repair.propertyId)).address,
+            description: (await issue(repair.issueId)).description,
+            answer: data.answer ?? 'risk',
+            confidence: typeof data.confidence === 'number' ? data.confidence : 0,
+          };
+        }),
+      );
+      return found.filter((a) => a !== null);
     },
 
     async urgentRepairs(agencyId: number, propertyIds: number[] | null) {

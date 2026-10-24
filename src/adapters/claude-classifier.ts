@@ -85,13 +85,13 @@ function safeNames(ids: string[]): Map<string, string> {
   return names;
 }
 
-/** One enum per question, and a 0..1 confidence beside it, under the safe names. */
+/** One enum per question, and a 0..1 confidence beside it, under the safe names. Instructions and criteria are Jev's; the option names are what this schema sends. */
 function inputSchema(questions: ClassifierQuestion[], names: Map<string, string>) {
   const properties: Record<string, unknown> = {};
   const required: string[] = [];
   for (const { id, options } of questions) {
     const name = names.get(id)!;
-    properties[name] = { type: 'string', enum: [...options] };
+    properties[name] = { type: 'string', enum: options.map((option) => option.name) };
     properties[confidenceKey(name)] = { type: 'number', minimum: 0, maximum: 1 };
     required.push(name, confidenceKey(name));
   }
@@ -100,8 +100,9 @@ function inputSchema(questions: ClassifierQuestion[], names: Map<string, string>
 
 /** The answer reported for a question Claude couldn't answer: an option meaning "neither", when the question has one. */
 const UNSURE_OPTIONS = ['not_an_answer', 'none', 'other'];
-const unsure = (options: readonly string[]): ClassifierAnswer => ({
-  answer: UNSURE_OPTIONS.find((option) => options.includes(option)) ?? options[0] ?? '',
+const namesOf = (options: ClassifierQuestion['options']) => options.map((option) => option.name);
+const unsure = (options: ClassifierQuestion['options']): ClassifierAnswer => ({
+  answer: namesOf(options).find((name) => UNSURE_OPTIONS.includes(name)) ?? namesOf(options)[0] ?? '',
   confidence: 0,
 });
 
@@ -127,7 +128,7 @@ function readAnswers(input: Record<string, unknown>, questions: ClassifierQuesti
       const name = names.get(id)!;
       const answer = input[name];
       const confidence = input[confidenceKey(name)];
-      if (typeof answer !== 'string' || !options.includes(answer) || confidence === undefined) return [id, unsure(options)];
+      if (typeof answer !== 'string' || !namesOf(options).includes(answer) || confidence === undefined) return [id, unsure(options)];
       if (typeof confidence !== 'number' || !(confidence >= 0 && confidence <= 1)) malformed(SERVICE, `confidence ${confidence} for ${id}`, input);
       return [id, { answer, confidence }];
     }),

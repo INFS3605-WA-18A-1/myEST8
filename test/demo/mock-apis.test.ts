@@ -8,7 +8,7 @@ import { createJevTradeSuggester } from '../../src/adapters/jev-trades.ts';
 import { createNominatimGeocoder } from '../../src/adapters/nominatim.ts';
 import { createQuoteReader } from '../../src/adapters/quote-reader.ts';
 import { DEMO_PLACES, mockApis, mockFetch } from '../../src/demo/mock-apis.ts';
-import type { ClassifierQuestion, ListingDetails } from '../../src/ports.ts';
+import type { ListingDetails } from '../../src/ports.ts';
 import { AVAILABILITY, TRADES, URGENCIES, type Trade } from '../../src/shared.ts';
 
 const fetch = mockFetch();
@@ -28,9 +28,13 @@ const places = createGooglePlaces({ apiKey: 'demo', fetch, placesBaseUrl: 'http:
 
 type Item = { ref: string; summary: string };
 
+/** A question as these tests write it: its id and option names. The mock answers by keywords, so the wording does not matter. */
+type Asked = { id: string; options: readonly string[] };
+const asking = ({ id, options }: Asked) => ({ id, instructions: `Answer ${id}`, options: options.map((name) => ({ name, when: `When it is ${name}` })) });
+
 /** One question's answer, as the app would ask it. */
-async function ask(text: string, state: object, question: ClassifierQuestion) {
-  const answers = await classifier.classify({ text, state, questions: [question] });
+async function ask(text: string, state: object, question: Asked) {
+  const answers = await classifier.classify({ text, state, questions: [asking(question)] });
   return answers[question.id];
 }
 
@@ -52,6 +56,15 @@ describe('mock classifier', () => {
     ['The power point is buzzing and warm to touch', 'urgent', 0.5],
   ])('urgency: %s -> %s', async (text, answer, confidence) => {
     expect(await ask(text, tenant(), { id: 'urgency', options: URGENCIES })).toEqual({ answer, confidence });
+  });
+
+  test.each([
+    ['I can smell gas in the kitchen', 'risk', 0.9],
+    ['The powerpoint is throwing sparks', 'risk', 0.9],
+    ['The bathroom is flooding', 'risk', 0.9],
+    ['The kitchen tap is dripping', 'no_risk', 0.9],
+  ])('safety: %s -> %s', async (text, answer, confidence) => {
+    expect(await ask(text, tenant(), { id: 'safety', options: ['no_risk', 'risk'] })).toEqual({ answer, confidence });
   });
 
   test('urgency: a "yes, it is getting worse" answer makes it High', async () => {
@@ -159,10 +172,7 @@ describe('mock classifier', () => {
     const answers = await classifier.classify({
       text,
       state: { senderRole: 'property_owner', waitingItems: [] },
-      questions: [
-        { id: 'replyType', options: ['approval_answer', 'other'] },
-        { id: 'answer', options: ['yes', 'no'] },
-      ],
+      questions: [asking({ id: 'replyType', options: ['approval_answer', 'other'] }), asking({ id: 'answer', options: ['yes', 'no'] })],
     });
     expect([answers.replyType?.answer, answers.answer?.answer]).toEqual([replyType, answer]);
   });
@@ -246,7 +256,7 @@ describe('mock trade suggestions', () => {
   test.each([
     ['no questions', { state: {}, questions: {} }],
     ['no state', { questions: { plumbing: { type: 'noul' } } }],
-    ['a question that is not a noul', { state: {}, questions: { plumbing: { type: 'choice' } } }],
+    ['a question that is neither a choice nor a trade noul', { state: {}, questions: { plumbing: { type: 'score', criteria: ['low'] } } }],
     ['a question that is not about a Trade', { state: {}, questions: { painting: { type: 'noul' } } }],
     ['a body that is not JSON', 'nope'],
   ])('refuses %s with a 422, as TypeSafe does for a bad request', async (_, body) => {
@@ -258,9 +268,18 @@ describe('mock trade suggestions', () => {
     expect(response.status).toBe(422);
   });
 
-  test('the classifier route is still served', async () => {
-    const response = await mockApis().request('http://mock.local/jev/v1/classify', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ state: {}, questions: [] }) });
+  test('a choice question is answered on /v1/systemone, which is where the classifier posts', async () => {
+    const response = await mockApis().request('http://mock.local/jev/v1/systemone', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: 'jev-latest',
+        state: { message: 'The kitchen tap is dripping', senderRole: 'tenant' },
+        questions: { urgency: { type: 'choice', instructions: 'How soon?', criteria: { urgent: 'Now', high: 'Soon', routine: 'Later' } } },
+      }),
+    });
     expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ answers: { urgency: { type: 'choice', choice: 'routine', confidence: 0.8 } } });
   });
 });
 
