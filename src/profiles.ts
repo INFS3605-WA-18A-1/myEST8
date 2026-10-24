@@ -572,26 +572,29 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
       return toPerson(row);
     },
 
-    /** Finds who sent a message: their role, Agency and Properties. */
-    async findByAddress(agencyId: number, address: string) {
-      const row = await one<PersonRow>(
+    /**
+     * Every active person an address belongs to: their own email or mobile, and any address
+     * linked from the inbox (`contact_addresses` keeps one row per address). A removed person,
+     * and a Tenant who has left their Property, no longer match.
+     */
+    async findByAddress(agencyId: number, address: string): Promise<Person[]> {
+      const normalized = normalizeAddress(address);
+      const active = `people.removed_at IS NULL AND (people.role <> 'tenant' OR people.property_id IS NOT NULL)`;
+      const rows = await all<PersonRow>(
         db,
-        `SELECT people.* FROM contact_addresses JOIN people ON people.id = contact_addresses.person_id
-         WHERE contact_addresses.agency_id = ? AND contact_addresses.address = ?`,
+        `SELECT people.* FROM people
+         WHERE people.agency_id = ? AND ${active} AND (people.mobile = ? OR people.email = ?)
+         UNION
+         SELECT people.* FROM contact_addresses JOIN people ON people.id = contact_addresses.person_id
+         WHERE contact_addresses.agency_id = ? AND contact_addresses.address = ? AND ${active}
+         ORDER BY id`,
         agencyId,
-        normalizeAddress(address),
+        normalized,
+        normalized,
+        agencyId,
+        normalized,
       );
-      if (!row) return null;
-      const propertyIds =
-        row.role === 'tenant'
-          ? [row.property_id!]
-          : (await all<{ id: number }>(
-              db,
-              'SELECT id FROM properties WHERE owner_id = ? OR building_manager_id = ? ORDER BY id',
-              row.id,
-              row.id,
-            )).map((p) => p.id);
-      return { personId: row.id, role: row.role, agencyId: row.agency_id, propertyIds };
+      return rows.map(toPerson);
     },
 
     async linkAddress(agencyId: number, personId: number, address: string) {
