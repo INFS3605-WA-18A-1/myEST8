@@ -141,6 +141,9 @@ export function createApp(
       await quotes.submitFirmQuote(id, input);
     },
 
+    /** The chosen Tradie offers 2 or 3 visit times from their quote page. The Tenant is asked to pick one. */
+    offerVisitTimes: (token: string, starts: string[]) => scheduling.offerVisitTimes(token, starts),
+
     /** The Tenant's progress tracker, reached by its no-login link. */
     tracker: (token: string) => tickets.tracker(token),
 

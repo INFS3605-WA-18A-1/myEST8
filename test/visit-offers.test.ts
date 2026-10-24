@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'vitest';
-import { confirmedQuotes, jobView, KING_ST, OLIVIA, quoteToken, tomsTapTicket, world, type JobRef, type World } from './support/world.ts';
+import { confirmedQuotes, jobView, KING_ST, OLIVIA, quoteToken, TOM, tomsTapTicket, world, type JobRef, type World } from './support/world.ts';
+
+const TUE_27_9AM = new Date('2026-10-27T09:00:00+11:00');
 
 /** Olivia replies to the approval request waiting on her. */
 async function oliviaReplies(w: World, job: JobRef, text: string, answer: 'yes' | 'no') {
@@ -48,5 +50,25 @@ describe('asking the Tradie to offer visit times', () => {
     });
     expect(h.messenger.last(tradies.pete.address)!.template).toBe('tradie.not_chosen');
     expect(await jobView(w, job)).toMatchObject({ status: 'approved', workOrder: null });
+  });
+
+  test('refuses a visit time the Tradie is already booked for, and fewer than two times', async () => {
+    const w = await world();
+    const { alice, tradies } = w;
+    const job = await tomsTapTicket(w);
+    const [quote] = await confirmedQuotes(w, job, [[tradies.pete, 150_00, TUE_27_9AM]]);
+    await alice.chooseQuote(quote!.quoteId, 'Usual plumber');
+    const token = await quoteToken(w, job, tradies.pete);
+    const wed = new Date('2026-10-28T13:00:00+11:00');
+
+    await expect(w.h.app.offerVisitTimes(token, [TUE_27_9AM.toISOString()])).rejects.toThrow(/2 or 3/);
+
+    const other = { ticketId: job.ticketId, jobId: await alice.addJob(job.ticketId, 'plumbing') };
+    const [otherQuote] = await confirmedQuotes(w, other, [[tradies.pete, 80_00, TUE_27_9AM]]);
+    await alice.chooseQuote(otherQuote!.quoteId, 'Same visit, listed apart');
+    await alice.sendWorkOrder(other.jobId, { start: TUE_27_9AM.toISOString() });
+
+    await expect(w.h.app.offerVisitTimes(token, [TUE_27_9AM.toISOString(), wed.toISOString()])).rejects.toThrow(/already booked at Tue 27 Oct, 9:00 am/);
+    expect(w.h.messenger.last(TOM)?.template).not.toBe('tenant.choose_visit_time');
   });
 });

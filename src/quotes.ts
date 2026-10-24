@@ -3,7 +3,8 @@ import { all, one, run, transaction } from './db.ts';
 import { ProviderRefusedError, UndeliverableError } from './ports.ts';
 import { addMs, dollars, HOUR_MS, invalid, iso, median, newToken, notFound, withoutContactDetails, type Trade } from './shared.ts';
 import type { OpenItem } from './tickets.ts';
-import { wallClock } from './zoned-time.ts';
+import { AVAILABILITY_LABELS } from './templates.ts';
+import { dayOf, wallClock, zonedInstant } from './zoned-time.ts';
 
 const QUOTE_REMINDER_MS = 48 * HOUR_MS;
 const FIRM_QUOTE_REMINDER_MS = 48 * HOUR_MS;
@@ -489,7 +490,27 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
     return null;
   }
 
-  /** The no-login quote page's view of one Quote Request: no Tenant, no address until a Site Inspection is booked. */
+  /** How long the visit is: the Firm Quote's days, or 2 hours when the Job went ahead on an Estimate. */
+function visitLength(durationDays: number | null): { durationMinutes: number; durationLabel: string } {
+  if (durationDays) return { durationMinutes: durationDays * 24 * 60, durationLabel: durationDays === 1 ? '1 day' : `${durationDays} days` };
+  return { durationMinutes: 120, durationLabel: '2 hours' };
+}
+
+/** Up to three starts: the proposed time, then each other available date at 9:00 am. */
+function prefillStarts(timeZone: string, proposedTime: string | null, dates: string[]): string[] {
+  const starts: string[] = [];
+  if (proposedTime) starts.push(proposedTime);
+  const proposedDay = proposedTime ? dayOf(proposedTime, timeZone) : null;
+  for (const date of dates) {
+    if (starts.length >= 3 || date === proposedDay) continue;
+    const [year, month, day] = date.split('-').map(Number);
+    if (!year || !month || !day) continue;
+    starts.push(zonedInstant(timeZone, year, month, day, 9, 0).toISOString());
+  }
+  return starts;
+}
+
+/** The no-login quote page's view of one Quote Request: no Tenant, no address until a Site Inspection is booked or their Quote is chosen. */
   async function quotePage(request: QuoteRequestRow) {
     const { job, ticket, property } = await jobPlace(request.job_id);
     const issue = await tickets.issue(ticket.issueId);
@@ -516,6 +537,9 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
                   ? 'on_hold'
                   : 'closed';
     const needed = inspectionNeeded(request, estimate);
+    const tenant = await profiles.person(ticket.tenantId);
+    const quoted = firm ?? estimate;
+    const offeredVisit = outcome === 'chosen' ? await modules.scheduling.offeredVisit(job.id) : null;
     const next: 'estimate' | 'wait_for_booking' | 'wait_for_inspection' | 'firm_quote' | 'done' =
       outcome !== 'open'
         ? 'done'
@@ -570,6 +594,21 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
             receivedAt: firm.received_at,
           }
         : null,
+      /**
+       * Set once their Quote is approved and the visit is not booked yet: the address, when the
+       * Tenant is usually home, how long the visit is, and up to three starts to offer.
+       */
+      /** The times already offered, while the Tenant is choosing. */
+      offeredVisit,
+      offerTimes:
+        outcome === 'chosen' && job.status === 'approved' && !offeredVisit
+          ? {
+              address: property.address,
+              availability: AVAILABILITY_LABELS[tenant.availability ?? 'any_time'],
+              ...visitLength(firm?.duration_days ?? null),
+              starts: prefillStarts(agency.timeZone, quoted?.proposed_time ?? null, firm ? datesOf(firm.available_dates) : []),
+            }
+          : null,
     };
   }
 

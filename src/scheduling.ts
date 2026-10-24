@@ -1,6 +1,6 @@
 import type { Context } from './context.ts';
 import { all, one, run, transaction } from './db.ts';
-import { ActionError, addMs, HOUR_MS, invalid, iso, notFound, withoutContactDetails, type Availability } from './shared.ts';
+import { ActionError, addMs, HOUR_MS, invalid, iso, newToken, notFound, withoutContactDetails, type Availability } from './shared.ts';
 import type { OpenItem } from './tickets.ts';
 import { dayOf, formatVisit, startOfDay, wallClock, zonedInstant } from './zoned-time.ts';
 
@@ -287,6 +287,101 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
     if (done?.quote_request_id) await modules.quotes.inspected(done.quote_request_id);
   }
 
+  type VisitOfferRow = {
+    id: number;
+    agency_id: number;
+    job_id: number;
+    ticket_id: number;
+    tradie_id: number;
+    round: number;
+    starts: unknown;
+    duration_minutes: number;
+    status: 'offered' | 'picked' | 'none_fit' | 'superseded';
+    picked_start: string | null;
+    tenant_note: string | null;
+    token: string;
+    created_at: string;
+    answered_at: string | null;
+  };
+
+  const startsOf = (value: unknown): string[] => {
+    const parsed = typeof value === 'string' ? (JSON.parse(value) as unknown) : value;
+    return Array.isArray(parsed) ? parsed.filter((start): start is string => typeof start === 'string') : [];
+  };
+
+  /** The open offer of visit times for a Job, or null when the Tenant is not choosing. */
+  async function offeredVisit(jobId: number) {
+    const row = await one<VisitOfferRow>(db, `SELECT * FROM visit_offers WHERE job_id = ? AND status = 'offered' ORDER BY round DESC LIMIT 1`, jobId);
+    return row ? { starts: startsOf(row.starts), durationMinutes: row.duration_minutes, token: row.token } : null;
+  }
+
+  /** The Tradie offers 2 or 3 starts. Each must be free. The Tenant is asked to pick one. */
+  async function offerVisitTimes(token: string, starts: string[]) {
+    const request = await one<{ id: number; agency_id: number; job_id: number; ticket_id: number; tradie_id: number }>(
+      db,
+      'SELECT id, agency_id, job_id, ticket_id, tradie_id FROM quote_requests WHERE token = ?',
+      token,
+    );
+    if (!request) notFound('Quote Request');
+    const quote = await modules.quotes.approvedQuote(request.job_id);
+    if (!quote || quote.tradieId !== request.tradie_id) invalid('Offer times once your quote is approved');
+    if ((await tickets.job(request.job_id)).status !== 'approved') invalid('This visit is already booked');
+    if (await offeredVisit(request.job_id)) invalid('You have already offered times');
+    if (starts.length < 2 || starts.length > 3) invalid('Offer 2 or 3 times', 'starts');
+    const when = starts.map((start) => {
+      const at = new Date(start);
+      if (Number.isNaN(at.getTime())) invalid('Enter a date and time', 'starts');
+      if (at < clock.now()) invalid('Pick a time in the future', 'starts');
+      return at;
+    });
+    if (new Set(when.map((at) => at.toISOString())).size !== when.length) invalid('Offer different times', 'starts');
+
+    const approved = await one<{ stage: string; duration_days: number | null }>(
+      db,
+      `SELECT stage, duration_days FROM quotes WHERE job_id = ? AND status = 'approved'`,
+      request.job_id,
+    );
+    const durationMinutes = approved?.stage === 'firm' && approved.duration_days ? approved.duration_days * 24 * 60 : DEFAULT_SLOT_MINUTES;
+    const { timeZone } = await profiles.agency(request.agency_id);
+    const tradie = await profiles.person(request.tradie_id);
+    const name = tradie.businessName ?? tradie.name;
+    for (const at of when) {
+      const end = addMs(at, durationMinutes * MINUTE_MS);
+      if (!(await isFree(request.agency_id, request.tradie_id, at, end))) invalid(`You're already booked at ${formatVisit(at, timeZone)}`, 'starts');
+    }
+
+    const offerToken = newToken();
+    const round = ((await one<{ round: number }>(db, 'SELECT round FROM visit_offers WHERE job_id = ? ORDER BY round DESC LIMIT 1', request.job_id))?.round ?? 0) + 1;
+    await run(
+      db,
+      `INSERT INTO visit_offers (agency_id, job_id, ticket_id, tradie_id, round, starts, duration_minutes, status, token, created_at)
+       VALUES (?, ?, ?, ?, ?, ?::jsonb, ?, 'offered', ?, ?)`,
+      request.agency_id,
+      request.job_id,
+      request.ticket_id,
+      request.tradie_id,
+      round,
+      JSON.stringify(when.map((at) => at.toISOString())),
+      durationMinutes,
+      offerToken,
+      iso(clock.now()),
+    );
+
+    const ticket = await tickets.ticket(request.ticket_id);
+    const job = await tickets.job(request.job_id);
+    const base = `${settings.baseUrl}/v/${offerToken}`;
+    const choices = [
+      ...when.map((at, i) => ({ label: formatVisit(at, timeZone), url: `${base}?pick=${i + 1}` })),
+      { label: 'None of these work', url: `${base}?pick=none` },
+    ];
+    await notifications.send(
+      ticket.tenantId,
+      'tenant.choose_visit_time',
+      { tradieBusinessName: name, trade: job.trade, choices },
+      { issueId: ticket.issueId },
+    );
+  }
+
   /**
    * The Quote is approved, so the chosen Tradie is asked to offer visit times on their
    * quote page. Nothing is booked: the Tenant picks a time, or the Property Manager still can.
@@ -311,6 +406,8 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
   return {
     isFree,
     askForVisitTimes,
+    offeredVisit,
+    offerVisitTimes,
 
     /** A Tradie's free slots over the coming days, on the hour, inside working hours. */
     async freeSlots(agencyId: number, tradieId: number, options: { days?: number; durationMinutes?: number } = {}) {

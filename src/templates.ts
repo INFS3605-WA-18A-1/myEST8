@@ -82,6 +82,10 @@ export const templates = {
     'About your maintenance request',
     (d) => `We won't be going ahead with your maintenance request. Reason: ${d.reason}`,
   ),
+  'tenant.choose_visit_time': template<{ tradieBusinessName: string; trade: Trade; choices: { label: string; url: string }[] }>(
+    'Choose a visit time',
+    (d) => [`${d.tradieBusinessName} (${trade(d.trade)}) can visit. Pick a time.`, ...d.choices.map((c) => `${c.label}: ${c.url}`)].join('\n\n'),
+  ),
   'tenant.visit_time': template<{ visitStart: string; trade: Trade; tradieBusinessName: string }>(
     'Repair visit booked',
     (d, a) => `${d.tradieBusinessName} (${trade(d.trade)}) will visit on ${visit(d.visitStart, a)}. Reply YES to confirm or tell us if you need another time.`,

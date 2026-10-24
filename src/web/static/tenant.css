@@ -95,6 +95,18 @@ body {
   border: 1px solid var(--done);
   border-radius: 8px;
 }
+.tenant-times {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tenant-times li {
+  font-weight: 600;
+}
+
 .tenant-tips {
   display: flex;
   flex-direction: column;
