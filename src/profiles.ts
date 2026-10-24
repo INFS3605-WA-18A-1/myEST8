@@ -246,6 +246,11 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
     return toPerson(row);
   }
 
+  /**
+   * Remembers an address as this person's, so a message from it can be matched to them.
+   * Several people may share one: `contact_addresses` keeps a single row (its key is the
+   * Agency and the address), and the others are found from their own email or mobile.
+   */
   async function addAddress(agencyId: number, personId: number, address: string) {
     const normalized = normalizeAddress(address);
     const existing = await one<{ person_id: number }>(
@@ -254,7 +259,6 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
       agencyId,
       normalized,
     );
-    if (existing && existing.person_id !== personId) invalid(`${address} already belongs to someone else`, address.includes('@') ? 'email' : 'mobile');
     if (!existing) await run(db, 'INSERT INTO contact_addresses (agency_id, address, person_id) VALUES (?, ?, ?)', agencyId, normalized, personId);
   }
 
@@ -497,8 +501,8 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
     /**
      * Changes a person's name, mobile and email, and moves the addresses messages are matched on with
      * them: a new mobile or email is theirs from now on, the old one no longer reaches them, and an address
-     * a Property Manager linked from the inbox stays. A Tradie's business name and Trades change too
-     * when given. Refuses an address someone else in the Agency already holds, changing nothing.
+     * a Property Manager linked from the inbox stays. Someone else in the Agency may already use the new
+     * one; both keep it. A Tradie's business name and Trades change too when given.
      */
     async updatePerson(personId: number, input: { name: string; mobile?: string; email?: string; businessName?: string; trades?: Trade[] }) {
       await transaction(db, async () => {
