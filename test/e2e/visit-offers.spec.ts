@@ -133,18 +133,19 @@ test('the Tradie offers visit times and the Tenant books one', async ({ page, br
   await tenant.close();
 });
 
+// Maya Morris, whom no other spec texts, so this can run beside the Tom Tran flow.
 test('none of the times work, so the Tenant says when they are home and the Tradie offers again', async ({ page, browser }) => {
   test.setTimeout(180_000);
   const report = `The bathroom tap is dripping ${unique()}`;
   await signIn(page);
 
   await page.goto('/demo');
-  await page.getByRole('navigation', { name: 'People' }).getByRole('link', { name: /^Tom Tran/ }).click();
-  const phone = page.getByRole('region', { name: "Tom Tran's phone" });
-  const messages = phone.getByRole('region', { name: 'Messages with Tom Tran' });
+  await page.getByRole('navigation', { name: 'People' }).getByRole('link', { name: /^Maya Morris/ }).click();
+  const phone = page.getByRole('region', { name: "Maya Morris's phone" });
+  const messages = phone.getByRole('region', { name: 'Messages with Maya Morris' });
   for (const text of [report, "Since Monday. It isn't getting worse. I'm home weekday mornings."]) {
     await phone.getByRole('textbox', { name: 'Message' }).fill(text);
-    await phone.getByRole('button', { name: 'Send as Tom Tran' }).click();
+    await phone.getByRole('button', { name: 'Send as Maya Morris' }).click();
     await expect(messages.getByText(text, { exact: true }).last()).toBeVisible();
   }
   const uploadLink = messages.getByRole('link', { name: /\/u\// }).last();
@@ -208,11 +209,11 @@ test('none of the times work, so the Tenant says when they are home and the Trad
   await expect(tradie.getByText('will ask the Tenant to pick a time')).toBeVisible();
 
   await page.goto('/demo');
-  await page.getByRole('navigation', { name: 'People' }).getByRole('link', { name: /^Tom Tran/ }).click();
+  await page.getByRole('navigation', { name: 'People' }).getByRole('link', { name: /^Maya Morris/ }).click();
   const none = messages.getByRole('link', { name: /pick=none/ }).last();
   await expect(async () => {
     await page.reload();
-    await page.getByRole('navigation', { name: 'People' }).getByRole('link', { name: /^Tom Tran/ }).click();
+    await page.getByRole('navigation', { name: 'People' }).getByRole('link', { name: /^Maya Morris/ }).click();
     await expect(none).toBeVisible({ timeout: 1_000 });
   }).toPass({ timeout: 15_000 });
   const tenant = await browser.newPage();
