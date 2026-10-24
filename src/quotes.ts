@@ -283,6 +283,20 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
   }
 
   /**
+   * Refuses, before anything is saved, when `costCents` would take the Repair Cost over the
+   * Max Repair Cost and no channel reaches the Property Owner.
+   */
+  async function requireOwnerReachable(ticketId: number, ownerId: number, costCents: number, maxRepairCostCents: number) {
+    if ((await repairCost(ticketId)) + costCents <= maxRepairCostCents) return;
+    try {
+      await notifications.channelFor(ownerId);
+    } catch (error) {
+      if (!(error instanceof UndeliverableError)) throw error;
+      invalid(`${(await profiles.person(ownerId)).name} can't be reached: ${error.userReason}.`);
+    }
+  }
+
+  /**
    * Approves `quote` when `costCents` keeps the Ticket's Repair Cost within the Max Repair
    * Cost, else asks the Property Owner. Runs inside the caller's transaction; returns what
    * to send once it commits.
@@ -308,23 +322,52 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
     return { approved: false as const, quote, job, ticket, property, repairCostCents, approvalId, costCents };
   }
 
-  async function afterDecision(outcome: Awaited<ReturnType<typeof approveOrAskOwner>>) {
-    if (outcome.approved) return tellPassedOver(outcome.quote, outcome.closed);
-    const { quote, job, ticket, property, repairCostCents, approvalId, costCents } = outcome;
-    await notifications.send(
-      property.ownerId,
-      'owner.approval_request',
-      {
+  /** The `owner.approval_request`: who it goes to, which Ticket to log it on, and the figures it names. */
+  async function approvalRequest(quote: QuoteRow, costCents: number) {
+    const { job, ticket, property } = await jobPlace(quote.job_id);
+    return {
+      ownerId: property.ownerId,
+      issueId: ticket.issueId,
+      data: {
         propertyAddress: property.address,
         trade: job.trade,
         tradieBusinessName: await businessName(quote.tradie_id),
         quotePriceCents: costCents,
-        repairCostCents,
+        repairCostCents: (await repairCost(ticket.id)) + costCents,
         maxRepairCostCents: property.maxRepairCostCents,
       },
-      { issueId: ticket.issueId },
-    );
+    };
+  }
+
+  /** Sends `owner.approval_request` for this Quote. The caller reports a send that fails. */
+  async function sendApprovalRequest(quote: QuoteRow, costCents: number) {
+    const request = await approvalRequest(quote, costCents);
+    await notifications.send(request.ownerId, 'owner.approval_request', request.data, { issueId: request.issueId });
+  }
+
+  async function afterDecision(outcome: Awaited<ReturnType<typeof approveOrAskOwner>>): Promise<string | null> {
+    if (outcome.approved) {
+      await tellPassedOver(outcome.quote, outcome.closed);
+      return null;
+    }
+    const { quote, property, approvalId, costCents } = outcome;
+    let failed: string | null = null;
+    let ownerName: string | null = null;
+    try {
+      await sendApprovalRequest(quote, costCents);
+    } catch (error) {
+      const name = (await profiles.person(property.ownerId)).name;
+      if (error instanceof UndeliverableError || error instanceof ProviderRefusedError) {
+        failed = error.userReason;
+      } else {
+        console.error(`Approval request to ${name} failed to send`, error);
+        failed = "the message couldn't be sent";
+      }
+      ownerName = name;
+    }
     await worker.schedule('quotes.owner_reminder', { approvalId }, addMs(clock.now(), OWNER_REMINDER_MS));
+    if (failed === null || ownerName === null) return null;
+    return `Sent to the Property Owner for approval, but the email to ${ownerName} didn't go: ${failed}. Use Resend approval request.`;
   }
 
   /** Inserts an Estimate for a request still waiting on one, and moves the request on. Inside a transaction. */
@@ -1041,7 +1084,9 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dates: str
 
     /**
      * Chooses a Firm Quote, then approves it or asks the Property Owner if it takes the Repair
-     * Cost over the Max Repair Cost. An Estimate is never chosen: see `proceedOnEstimate`.
+     * Cost over the Max Repair Cost. Refuses before saving when that Owner cannot be reached.
+     * An Estimate is never chosen: see `proceedOnEstimate`. Returns a warning when the approval
+     * was saved but the request email did not go out.
      */
     async chooseQuote(agencyId: number, quoteId: number, reason?: string) {
       // Decided in one transaction: two Quotes chosen for a Job at once can't both be approved.
@@ -1052,13 +1097,14 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dates: str
         }
         if (!quote.confirmed) invalid('Confirm the Quote before choosing it');
         if (quote.status !== 'open') invalid('This Quote can no longer be chosen');
-        const { job, ticket } = await jobPlace(quote.job_id);
+        const { job, ticket, property } = await jobPlace(quote.job_id);
         if (job.status !== 'quoting') invalid('This Job is not choosing a Quote');
         const why = reason?.trim() || null;
         const onlyOne = (await firmCount(job.id)) < MIN_QUOTES;
         if (onlyOne && !why) {
           invalid('Choose a Firm Quote once the Job has at least two, or record why you are going ahead with one');
         }
+        await requireOwnerReachable(ticket.id, property.ownerId, quote.price_cents!, property.maxRepairCostCents);
         await run(db, 'UPDATE quotes SET single_quote_reason = ? WHERE id = ?', onlyOne ? why : null, quote.id);
         await tickets.recordEvent(ticket.id, 'quote_chosen', {
           jobId: job.id,
@@ -1068,7 +1114,7 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dates: str
         });
         return approveOrAskOwner(quote, quote.price_cents!);
       });
-      await afterDecision(outcome);
+      return afterDecision(outcome);
     },
 
     /**
@@ -1076,7 +1122,9 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dates: str
      * Job: the Tradie may charge at most `capCents`, the Not-to-exceed Cap, which counts towards
      * the Repair Cost. Refused when the Tradie needs a Site Inspection, when the cap is below the
      * Estimate, and on a Ticket that isn't Routine unless `confirm` is set. A reason is needed
-     * while the Job has fewer than two Tradies' confirmed Quotes.
+     * while the Job has fewer than two Tradies' confirmed Quotes. Refuses before saving when the
+     * cost would ask the Property Owner and no channel reaches them. Returns a warning when the
+     * approval was saved but the request email did not go out.
      */
     async proceedOnEstimate(agencyId: number, quoteId: number, options: { capCents: number; reason?: string; confirm?: boolean }) {
       const outcome = await transaction(db, async () => {
@@ -1084,7 +1132,7 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dates: str
         const request = (await quoteRequestRow(estimate.quote_request_id))!;
         const refusal = proceedRefusal(request, estimate);
         if (refusal) invalid(refusal);
-        const { job, ticket } = await jobPlace(estimate.job_id);
+        const { job, ticket, property } = await jobPlace(estimate.job_id);
         if (job.status !== 'quoting') invalid('This Job is not choosing a Quote');
         requireAmount(options.capCents, 'Enter the Not-to-exceed Cap in dollars', 'cap');
         if (options.capCents < estimate.price_cents!) {
@@ -1096,6 +1144,7 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dates: str
         const why = options.reason?.trim() || null;
         const onlyOne = (await pricedCount(job.id)) < MIN_QUOTES;
         if (onlyOne && !why) invalid('Proceed on an Estimate once the Job has at least two, or record why you are going ahead with one');
+        await requireOwnerReachable(ticket.id, property.ownerId, options.capCents, property.maxRepairCostCents);
         await run(db, 'UPDATE quotes SET not_to_exceed_cents = ?, single_quote_reason = ? WHERE id = ?', options.capCents, why, estimate.id);
         await tickets.recordEvent(ticket.id, 'proceeded_on_estimate', {
           jobId: job.id,
@@ -1107,7 +1156,26 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dates: str
         });
         return approveOrAskOwner({ ...estimate, not_to_exceed_cents: options.capCents }, options.capCents);
       });
-      await afterDecision(outcome);
+      return afterDecision(outcome);
+    },
+
+    /**
+     * Sends the Property Owner's approval request again, as it was first asked, when they say it
+     * never arrived. Only while it is still open; the status stays as it is. A reminder is
+     * scheduled when none is already waiting. A send that fails is the caller's to report.
+     */
+    async resendApprovalRequest(agencyId: number, approvalId: number) {
+      const approval = await one<ApprovalRow>(db, 'SELECT * FROM approvals WHERE id = ? AND agency_id = ?', approvalId, agencyId);
+      if (!approval) notFound('Approval');
+      if (!OPEN_APPROVAL.includes(approval.status)) invalid('This approval has already been answered');
+      const quote = (await one<QuoteRow>(db, 'SELECT * FROM quotes WHERE id = ?', approval.quote_id))!;
+      await sendApprovalRequest(quote, costOf(quote));
+      const pending = await one(
+        db,
+        `SELECT 1 AS found FROM tasks WHERE kind = 'quotes.owner_reminder' AND status = 'pending' AND payload = ?`,
+        JSON.stringify({ approvalId }),
+      );
+      if (!pending) await worker.schedule('quotes.owner_reminder', { approvalId }, addMs(clock.now(), OWNER_REMINDER_MS));
     },
 
     /**

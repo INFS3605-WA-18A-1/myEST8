@@ -7,8 +7,8 @@
 //
 // https://docs.typesafe.ai/api.md. A Noul answers with the probability that its
 // question's answer is true. Only this file knows TypeSafe's format, and it
-// doesn't share code with the classifier adapter (src/adapters/jev.ts), which is
-// being rewritten for System One on its own branch.
+// doesn't share code with the classifier adapter (src/adapters/jev.ts): that one
+// asks choice questions, and this one asks a noul per Trade.
 
 import type { ListingDetails, TradeSuggester } from '../ports.ts';
 import { TRADES, type Trade } from '../shared.ts';

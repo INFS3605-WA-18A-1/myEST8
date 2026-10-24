@@ -167,6 +167,12 @@ export function ticketPages() {
     return `Quote Request resent to ${request.businessName}`;
   });
 
+  onPost(pages, '/:id/approvals/:approvalId/resend', async ({ actions, ticket, params }) => {
+    const approval = approvalIn(ticket, params.approvalId);
+    await actions.resendApprovalRequest(approval.approvalId);
+    return `Approval request resent to ${ticket.owner.name}`;
+  });
+
   onPost(pages, '/:id/quotes/:quoteId/confirm', async ({ actions, ticket, form, params, timeZone }) => {
     const { quote } = quoteIn(ticket, params.quoteId);
     const time = text(form, 'proposedTime');
@@ -180,7 +186,8 @@ export function ticketPages() {
 
   onPost(pages, '/:id/quotes/:quoteId/choose', async ({ actions, ticket, form, params }) => {
     const { quote } = quoteIn(ticket, params.quoteId);
-    await actions.chooseQuote(quote.quoteId, text(form, 'reason') || undefined);
+    const warning = await actions.chooseQuote(quote.quoteId, text(form, 'reason') || undefined);
+    if (warning) return warning;
     const chosen = quoteIn(await actions.ticket(ticket.ticketId), params.quoteId).quote;
     return chosen.status === 'awaiting_owner'
       ? `Firm Quote from ${chosen.businessName} chosen. It takes the Repair Cost over the Max Repair Cost, so the Property Owner has been asked to approve it.`
@@ -230,11 +237,12 @@ export function ticketPages() {
 
   onPost(pages, '/:id/quotes/:quoteId/proceed', async ({ actions, ticket, form, params }) => {
     const { quote } = quoteIn(ticket, params.quoteId);
-    await actions.proceedOnEstimate(quote.quoteId, {
+    const warning = await actions.proceedOnEstimate(quote.quoteId, {
       capCents: cents(form, 'cap', 'the Not-to-exceed Cap'),
       ...(text(form, 'reason') ? { reason: text(form, 'reason') } : {}),
       confirm: text(form, 'confirm') === 'yes',
     });
+    if (warning) return warning;
     const chosen = quoteIn(await actions.ticket(ticket.ticketId), params.quoteId).quote;
     return chosen.status === 'awaiting_owner'
       ? `Proceeding on ${chosen.businessName}'s Estimate. Its Not-to-exceed Cap takes the Repair Cost over the Max Repair Cost, so the Property Owner has been asked to approve it.`
@@ -365,6 +373,13 @@ function visitOnTicket(ticket: TicketView, raw: string | undefined): number {
     if (job.quoteRequests.some((request) => request.inspection?.workOrderId === id)) return id;
   }
   return notFound('Work Order');
+}
+
+function approvalIn(ticket: TicketView, raw: string | undefined): NonNullable<JobView['approval']> {
+  for (const job of ticket.jobs) {
+    if (job.approval?.approvalId === Number(raw)) return job.approval;
+  }
+  return notFound('Approval');
 }
 
 function workOrderIn(ticket: TicketView, raw: string | undefined): WorkOrderView {
@@ -1427,7 +1442,8 @@ function approvalSection(t: TicketView, job: JobView, approval: NonNullable<JobV
       ? html`<p class="text-muted">
           ${approval.status === 'reminded' ? 'Reminded after 24 hours.' : 'A reminder goes after 24 hours.'}
           You'll get an alert if there's no reply after 48 hours.
-        </p>`
+        </p>
+        ${postButton(`/tickets/${t.ticketId}/approvals/${approval.approvalId}/resend`, 'Resend approval request', { variant: 'secondary', size: 'sm' })}`
       : nothing}
   </section>`;
 }

@@ -28,6 +28,19 @@ describe('the demo', () => {
   test('a Jev URL still counts the classifier as real when no Anthropic key is set', async () => {
     const { apis } = await demoWorldWith({ JEV_API_URL: 'https://jev.example/api' });
     expect(apis.classifier).toBe('real');
+    expect(apis.tradeSuggester).toBe('real');
+  });
+
+  test('JEV_API_URL plus an Anthropic key counts the classifier and the Trade suggester as real', async () => {
+    const { apis } = await demoWorldWith({ JEV_API_URL: 'https://jev.example/api', ANTHROPIC_API_KEY: 'test-anthropic-key' });
+    expect(apis.classifier).toBe('real');
+    expect(apis.tradeSuggester).toBe('real');
+  });
+
+  test('without a Jev URL the Trade suggester stays on the mock', async () => {
+    const { apis } = await demoWorldWith({ ANTHROPIC_API_KEY: 'test-anthropic-key' });
+    expect(apis.classifier).toBe('real');
+    expect(apis.tradeSuggester).toBe('mock');
   });
 
   test('a blank Anthropic key stays on the mock classifier', async () => {
@@ -123,7 +136,16 @@ describe('the demo', () => {
 
   test('starts with Harbour Realty seeded and every external API mocked', async () => {
     const { demo, app, seed, apis, errors } = await demoWorld();
-    expect(apis).toEqual({ classifier: 'mock', imageMatcher: 'mock', quoteReader: 'mock', places: 'mock', geocoder: 'mock', addressSuggester: 'mock', messenger: 'mock' });
+    expect(apis).toEqual({
+      classifier: 'mock',
+      tradeSuggester: 'mock',
+      imageMatcher: 'mock',
+      quoteReader: 'mock',
+      places: 'mock',
+      geocoder: 'mock',
+      addressSuggester: 'mock',
+      messenger: 'mock',
+    });
     expect(await app.login('alice@harbour.example', 'demo1234')).toBe(seed.ids.aliceId);
     expect(await app.login('bob@harbour.example', 'demo1234')).toBe(seed.ids.bobId);
 

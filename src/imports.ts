@@ -15,6 +15,7 @@
 // never applied. The upload waits in the imports table under a random token,
 // visible only to the Property Manager who made it, until it is used or expires.
 
+import { option, question, TRADE_OPTIONS } from './classifier-questions.ts';
 import type { Context } from './context.ts';
 import { one, run } from './db.ts';
 import type { Onboarding } from './onboarding.ts';
@@ -444,7 +445,16 @@ export function createImports({ db, clock, settings, ports, modules }: Context, 
         const answers = await ports.classifier.classify({
           text: label,
           state: { sheet: kind, samples, fields: Object.fromEntries(fields.map((f) => [f.key, f.label])) },
-          questions: [{ id: IMPORT_QUESTIONS.column, options: [...fields.map((f) => f.key), IGNORE] }],
+          questions: [
+            question(
+              IMPORT_QUESTIONS.column,
+              "Which field does one column of the spreadsheet hold? `sheet` names the list the spreadsheet is (owners, building-managers, tradies, properties or tenants), `message` is the column's heading, and `samples` are the first values in the column: judge by the values first, then by the heading. `fields` gives each field's label.",
+              [
+                ...fields.map((f) => option(f.key, `The column holds each row's ${f.label}${f.example ? `, for example ${f.example}` : ''}`)),
+                option(IGNORE, 'The column holds none of those fields: a code, a reference number, or anything else we do not keep'),
+              ],
+            ),
+          ],
         });
         answer = answers[IMPORT_QUESTIONS.column];
       } catch {
@@ -490,7 +500,13 @@ export function createImports({ db, clock, settings, ports, modules }: Context, 
         const answers = await ports.classifier.classify({
           text: v.businessName || v.name || `Row ${stored.rows[i]!.line}`,
           state: { sheet: 'tradies', businessName: v.businessName ?? '', contactName: v.name ?? '', trades: v.trades ?? '', notes: v.notes ?? '' },
-          questions: [{ id: IMPORT_QUESTIONS.trade, options: [...TRADES] }],
+          questions: [
+            question(
+              IMPORT_QUESTIONS.trade,
+              "Which Trade does this Tradie do? `message` is their business name, `trades` and `notes` are what the spreadsheet says about their work, and `contactName` is who to contact: judge by what the work is, not by the contact's name.",
+              TRADE_OPTIONS,
+            ),
+          ],
         });
         stored.trades[i] = answers[IMPORT_QUESTIONS.trade] ?? null;
       } catch {

@@ -398,6 +398,8 @@ export function createApp(
         sendQuoteRequests: (jobId: number, tradieIds: number[]) => quotes.sendQuoteRequests(agencyId, jobId, tradieIds),
         /** Sends a Quote Request's message again, with the same link, while the Tradie hasn't given their Estimate. */
         resendQuoteRequest: (quoteRequestId: number) => quotes.resendQuoteRequest(agencyId, quoteRequestId),
+        /** Sends an open approval's request again. Refuses one that has already been answered. */
+        resendApprovalRequest: (approvalId: number) => quotes.resendApprovalRequest(agencyId, approvalId),
         confirmQuote: (quoteId: number, edits?: { priceCents?: number; proposedTime?: string | null }) =>
           quotes.confirmQuote(agencyId, quoteId, edits),
         /** Chooses a Firm Quote. An Estimate is refused: proceed on it instead. */

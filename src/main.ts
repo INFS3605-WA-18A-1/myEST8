@@ -11,7 +11,7 @@
 // ALLOW_MOCKS=1 says that is intended.
 
 import { serve } from '@hono/node-server';
-import { createDemo } from './demo/runtime.ts';
+import { createDemo, providerLogName } from './demo/runtime.ts';
 
 function refuse(problem: string): never {
   console.error(`myEST8 won't start: ${problem}`);
@@ -30,7 +30,8 @@ env.DEMO_SEND_TO ||= '*';
 const port = Number(env.PORT ?? 3000);
 const { web, apis, database, startWorkerLoop, close } = await createDemo({ env, seedAgency: false, live: true });
 
-const mocked = Object.entries(apis).filter(([, choice]) => choice === 'mock').map(([name]) => name);
+const label = (name: string) => providerLogName(name, env);
+const mocked = Object.entries(apis).filter(([, choice]) => choice === 'mock').map(([name]) => label(name));
 if (mocked.length && env.ALLOW_MOCKS !== '1') {
   await close();
   refuse(`these run on in-process mocks: ${mocked.join(', ')}. Set their keys (see .env.example), or ALLOW_MOCKS=1 to start anyway.`);
@@ -40,7 +41,7 @@ const stopWorker = startWorkerLoop(2_000);
 const server = serve({ fetch: web.fetch, port }, () => {
   console.log(`myEST8 listening on port ${port}, public at ${publicUrl}`);
   console.log(`Data in Postgres schema ${database.schema}${database.reused ? ` (since ${database.seededAt})` : ' (new)'}.`);
-  console.log(`Real: ${Object.entries(apis).filter(([, c]) => c === 'real').map(([n]) => n).join(', ') || 'nothing'}. Mocked: ${mocked.join(', ') || 'nothing'}.`);
+  console.log(`Real: ${Object.entries(apis).filter(([, c]) => c === 'real').map(([n]) => label(n)).join(', ') || 'nothing'}. Mocked: ${mocked.join(', ') || 'nothing'}.`);
 });
 
 server.on('error', (error: NodeJS.ErrnoException) => {

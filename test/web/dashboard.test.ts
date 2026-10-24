@@ -535,3 +535,29 @@ describe('the Next 7 days and Tradie profiles', () => {
     expect((await w.get('/tradies/99999', cookie)).status).toBe(404);
   });
 });
+
+describe('a safety risk on the dashboard', () => {
+  test('names the risk and opens the Urgent Repair, whose timeline says why it went Urgent', async () => {
+    const w = await webWorld();
+    const text = 'I can smell gas in the kitchen';
+    w.h.classifier.when(text, {
+      messageClass: 'new_issue',
+      relatedItem: 'none',
+      urgency: 'routine',
+      trade: 'plumbing',
+      safety: ['risk', 0.95],
+    });
+    await w.h.receive(TOM, text);
+    const cookie = await w.signIn();
+    const id = (await w.alice.dashboard()).urgentRepairs[0]!.urgentRepairId;
+
+    const dashboard = await page(w, '/', cookie);
+    expect(dashboard).toContain(`Safety risk: ${text}`);
+    expect(dashboard).toContain(`href="/reimbursements/${id}"`);
+    expect(dashboard).toContain('Review the Urgent Repair');
+
+    const reimbursement = await page(w, `/reimbursements/${id}`, cookie);
+    expect(reimbursement).toContain('Classified as a safety risk');
+    expect(reimbursement).toContain('95% sure');
+  });
+});

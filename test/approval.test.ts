@@ -1,6 +1,20 @@
-import { describe, expect, test } from 'vitest';
-import { HOUR } from './support/harness.ts';
-import { confirmedQuotes, jobView, KING_ST, OLIVIA, OLIVIA_EMAIL, tomsTapTicket, world, type JobRef, type World } from './support/world.ts';
+import { format } from 'node:util';
+import { describe, expect, test, vi } from 'vitest';
+import { all, one } from '../src/db.ts';
+import { ProviderRefusedError } from '../src/ports.ts';
+import { AGENCY_NUMBER, HOUR, type Harness } from './support/harness.ts';
+import { confirmedEstimates, confirmedQuotes, jobView, KING_ST, OLIVIA, OLIVIA_EMAIL, tomsTapTicket, world, type JobRef, type World } from './support/world.ts';
+
+/** Makes every message to `address` throw `error` until `failing.on` is set to false. */
+function failSendsTo(h: Harness, address: string, error: Error) {
+  const failing = { on: true };
+  const send = h.messenger.send.bind(h.messenger);
+  h.messenger.send = async (message) => {
+    if (failing.on && message.to === address) throw error;
+    return send(message);
+  };
+  return failing;
+}
 
 /** Olivia, the Property Owner, replies to the approval request waiting on her. */
 async function oliviaReplies(w: World, job: JobRef, text: string, answer: 'yes' | 'no') {
@@ -139,5 +153,200 @@ describe('Property Owner approval', () => {
     ]);
     expect(ticket.repairCostCents).toBe(300_00);
     expect(h.messenger.to(OLIVIA_EMAIL)).toEqual([]);
+  });
+
+  test('an Owner who cannot be reached is refused, and the Quote, the Job and the approval are left unsaved', async () => {
+    const w = await world();
+    const { h, alice, tradies } = w;
+    const job = await tomsTapTicket(w);
+    const [quote] = await confirmedQuotes(w, job, [
+      [tradies.dana, 650_00],
+      [tradies.pete, 700_00],
+    ]);
+    await alice.disconnectServerSms(AGENCY_NUMBER);
+    await alice.editOwner(w.ids.olivia, { name: 'Olivia Owens', mobile: OLIVIA });
+    const asked = h.messenger.sent.length;
+
+    await expect(alice.chooseQuote(quote!.quoteId)).rejects.toThrow(
+      "Olivia Owens can't be reached: no SMS channel is connected and they have no email address.",
+    );
+
+    expect(await jobView(w, job)).toMatchObject({
+      status: 'quoting',
+      approval: null,
+      quotes: expect.arrayContaining([expect.objectContaining({ quoteId: quote!.quoteId, status: 'open' })]),
+    });
+    expect(await all(h.db, 'SELECT id FROM approvals')).toEqual([]);
+    expect(h.messenger.sent).toHaveLength(asked);
+    expect((await alice.ticket(job.ticketId)).timeline.map((e) => e.kind)).not.toContain('approval_requested');
+  });
+
+  test('proceeding on an Estimate is refused the same way when the Owner cannot be reached', async () => {
+    const w = await world();
+    const { h, alice, tradies } = w;
+    const job = await tomsTapTicket(w);
+    const [estimate] = await confirmedEstimates(w, job, [
+      [tradies.pete, 600_00],
+      [tradies.dana, 650_00],
+    ]);
+    await alice.disconnectServerSms(AGENCY_NUMBER);
+    await alice.editOwner(w.ids.olivia, { name: 'Olivia Owens', mobile: OLIVIA });
+    const asked = h.messenger.sent.length;
+
+    await expect(alice.proceedOnEstimate(estimate!.quoteId, { capCents: 600_00 })).rejects.toThrow(
+      "Olivia Owens can't be reached: no SMS channel is connected and they have no email address.",
+    );
+
+    expect(await jobView(w, job)).toMatchObject({ status: 'quoting', approval: null });
+    expect((await jobView(w, job)).quotes.find((q) => q.quoteId === estimate!.quoteId)).toMatchObject({ status: 'open', notToExceedCents: null });
+    expect(await all(h.db, 'SELECT id FROM approvals')).toEqual([]);
+    expect(h.messenger.sent).toHaveLength(asked);
+  });
+
+  test('a refused email keeps the approval, schedules the reminder, and warns the Property Manager', async () => {
+    const w = await world();
+    const { h, alice, tradies } = w;
+    const job = await tomsTapTicket(w);
+    const [quote] = await confirmedQuotes(w, job, [
+      [tradies.dana, 650_00],
+      [tradies.pete, 700_00],
+    ]);
+    await alice.disconnectServerSms(AGENCY_NUMBER);
+    failSendsTo(h, OLIVIA_EMAIL, new ProviderRefusedError('Resend 429', 'the email provider is limiting how many emails go out'));
+
+    const warning = await alice.chooseQuote(quote!.quoteId);
+
+    expect(warning).toBe(
+      "Sent to the Property Owner for approval, but the email to Olivia Owens didn't go: the email provider is limiting how many emails go out. Use Resend approval request.",
+    );
+    const view = await jobView(w, job);
+    expect(view).toMatchObject({ status: 'awaiting_owner', approval: { status: 'requested' } });
+    expect(h.messenger.to(OLIVIA_EMAIL)).toEqual([]);
+    expect(await one<{ status: string; payload: string }>(h.db, `SELECT status, payload FROM tasks WHERE kind = 'quotes.owner_reminder'`)).toEqual({
+      status: 'pending',
+      payload: JSON.stringify({ approvalId: view.approval!.approvalId }),
+    });
+  });
+
+  test('an outage sending the approval request is logged, and the approval and its reminder still stand', async () => {
+    const w = await world();
+    const { h, alice, tradies } = w;
+    const job = await tomsTapTicket(w);
+    const [quote] = await confirmedQuotes(w, job, [
+      [tradies.dana, 650_00],
+      [tradies.pete, 700_00],
+    ]);
+    await alice.disconnectServerSms(AGENCY_NUMBER);
+    const error = new Error('socket hang up');
+    failSendsTo(h, OLIVIA_EMAIL, error);
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const warning = await alice.chooseQuote(quote!.quoteId);
+    const output = logged.mock.calls.map((call) => format(...call));
+    logged.mockRestore();
+
+    expect(warning).toBe(
+      "Sent to the Property Owner for approval, but the email to Olivia Owens didn't go: the message couldn't be sent. Use Resend approval request.",
+    );
+    expect(await jobView(w, job)).toMatchObject({ status: 'awaiting_owner', approval: { status: 'requested' } });
+    expect(output).toHaveLength(1);
+    expect(output[0]).toContain(error.stack);
+    expect(await one<{ status: string }>(h.db, `SELECT status FROM tasks WHERE kind = 'quotes.owner_reminder'`)).toEqual({ status: 'pending' });
+  });
+
+  test('resending sends the same approval request again, logs it, and leaves the status', async () => {
+    const w = await world();
+    const { h, alice, tradies } = w;
+    const job = await tomsTapTicket(w);
+    const [quote] = await confirmedQuotes(w, job, [
+      [tradies.dana, 650_00],
+      [tradies.pete, 700_00],
+    ]);
+    await alice.chooseQuote(quote!.quoteId);
+    const approval = (await jobView(w, job)).approval!;
+    const pending = await all<{ id: number }>(h.db, `SELECT id FROM tasks WHERE kind = 'quotes.owner_reminder' AND status = 'pending'`);
+
+    await alice.resendApprovalRequest(approval.approvalId);
+
+    const [first, again] = h.messenger.to(OLIVIA);
+    expect(again).toMatchObject({
+      channel: 'sms',
+      template: 'owner.approval_request',
+      text: first!.text,
+      data: {
+        propertyAddress: KING_ST,
+        trade: 'plumbing',
+        tradieBusinessName: 'Drip Doctors',
+        quotePriceCents: 650_00,
+        repairCostCents: 650_00,
+        maxRepairCostCents: 500_00,
+      },
+    });
+    expect(await jobView(w, job)).toMatchObject({ status: 'awaiting_owner', approval: { status: 'requested' } });
+    expect((await alice.ticket(job.ticketId)).messages.filter((m) => m.address === OLIVIA).map((m) => m.template)).toEqual([
+      'owner.approval_request',
+      'owner.approval_request',
+    ]);
+    expect(await all<{ id: number }>(h.db, `SELECT id FROM tasks WHERE kind = 'quotes.owner_reminder' AND status = 'pending'`)).toEqual(pending);
+  });
+
+  test('resending after the reminder schedules another, and the reminded status stays', async () => {
+    const w = await world();
+    const { h, alice, tradies } = w;
+    const job = await tomsTapTicket(w);
+    const [quote] = await confirmedQuotes(w, job, [
+      [tradies.dana, 650_00],
+      [tradies.pete, 700_00],
+    ]);
+    await alice.chooseQuote(quote!.quoteId);
+    await h.advance(24 * HOUR);
+    const approval = (await jobView(w, job)).approval!;
+    expect(approval.status).toBe('reminded');
+    expect(await all(h.db, `SELECT id FROM tasks WHERE kind = 'quotes.owner_reminder' AND status = 'pending'`)).toEqual([]);
+
+    await alice.resendApprovalRequest(approval.approvalId);
+
+    expect(await jobView(w, job)).toMatchObject({ approval: { status: 'reminded' } });
+    expect(h.messenger.templatesTo(OLIVIA)).toEqual(['owner.approval_request', 'owner.approval_reminder', 'owner.approval_request']);
+    const scheduled = await one<{ payload: string }>(h.db, `SELECT payload FROM tasks WHERE kind = 'quotes.owner_reminder' AND status = 'pending'`);
+    expect(scheduled).toEqual({ payload: JSON.stringify({ approvalId: approval.approvalId }) });
+  });
+
+  test('resending is refused once the Property Owner has answered, and sends nothing', async () => {
+    const w = await world();
+    const { h, alice, tradies } = w;
+    const job = await tomsTapTicket(w);
+    const [quote] = await confirmedQuotes(w, job, [
+      [tradies.dana, 650_00],
+      [tradies.pete, 700_00],
+    ]);
+    await alice.chooseQuote(quote!.quoteId);
+    await oliviaReplies(w, job, 'YES go ahead', 'yes');
+    const approvalId = (await jobView(w, job)).approval!.approvalId;
+    const asked = h.messenger.sent.length;
+
+    await expect(alice.resendApprovalRequest(approvalId)).rejects.toThrow('This approval has already been answered');
+
+    expect(h.messenger.sent).toHaveLength(asked);
+    expect(await jobView(w, job)).toMatchObject({ approval: { status: 'approved' } });
+  });
+
+  test("resending is not found for another Agency's approval", async () => {
+    const w = await world();
+    const { h, alice, tradies } = w;
+    const job = await tomsTapTicket(w);
+    const [quote] = await confirmedQuotes(w, job, [
+      [tradies.dana, 650_00],
+      [tradies.pete, 700_00],
+    ]);
+    await alice.chooseQuote(quote!.quoteId);
+    const approvalId = (await jobView(w, job)).approval!.approvalId;
+    const other = await h.app.setup.createAgency({ name: 'Other Realty', timeZone: 'Australia/Sydney' });
+    const olga = h.as(await h.app.setup.addPropertyManager(other, { name: 'Olga Other', email: 'olga@other.example', password: 'other-password' }));
+    const asked = h.messenger.sent.length;
+
+    await expect(olga.resendApprovalRequest(approvalId)).rejects.toThrow(/not found/);
+
+    expect(h.messenger.sent).toHaveLength(asked);
   });
 });

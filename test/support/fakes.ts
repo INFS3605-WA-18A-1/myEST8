@@ -92,19 +92,23 @@ export type ScriptedAnswers = Record<string, string | [answer: string, confidenc
  */
 export class FakeClassifier implements Classifier {
   #rules = new Map<string, ScriptedAnswers>();
+  /** Each classify call, so a test can see which questions went out together. */
+  calls: Parameters<Classifier['classify']>[0][] = [];
   when(text: string, answers: ScriptedAnswers) {
     this.#rules.set(text, answers);
   }
   async classify(input: Parameters<Classifier['classify']>[0]) {
+    this.calls.push(input);
     const script = this.#rules.get(input.text);
     if (!script) throw new Error(`FakeClassifier: no script for ${JSON.stringify(input.text)}`);
     const result: Record<string, ClassifierAnswer> = {};
     for (const q of input.questions) {
       const scripted = script[q.id];
+      const names = q.options.map((option) => option.name);
       const [answer, confidence] =
-        scripted === undefined ? [q.options[0]!, 0.95] : typeof scripted === 'string' ? [scripted, 0.95] : scripted;
-      if (!q.options.includes(answer)) {
-        throw new Error(`FakeClassifier: ${answer} is not an option for ${q.id} (${q.options.join(', ')})`);
+        scripted === undefined ? [names[0]!, 0.95] : typeof scripted === 'string' ? [scripted, 0.95] : scripted;
+      if (!names.includes(answer)) {
+        throw new Error(`FakeClassifier: ${answer} is not an option for ${q.id} (${names.join(', ')})`);
       }
       result[q.id] = { answer, confidence };
     }
