@@ -7,7 +7,7 @@
 // (`npm run dev` uses the schema `dev`).
 
 import { serve } from '@hono/node-server';
-import { createDemo } from './runtime.ts';
+import { createDemo, providerLogName } from './runtime.ts';
 import { describeStories } from './stories.ts';
 
 const port = Number(process.env.PORT ?? 3000);
@@ -35,13 +35,15 @@ const dataLine = database.kept
   : `Data is in a throwaway Postgres schema (${database.schema}), dropped when you stop the demo. Set DATABASE_SCHEMA to keep it.`;
 
 const server = serve({ fetch: web.fetch, port }, () => {
-  const real = Object.entries(apis).filter(([, choice]) => choice === 'real').map(([name]) => name);
+  const named = (choice: 'real' | 'mock') => Object.entries(apis).filter(([, c]) => c === choice).map(([name]) => providerLogName(name, process.env));
+  const real = named('real');
+  const mocked = named('mock');
   console.log(`
 myEST8 demo running at ${baseUrl}
 Sign in as:
 ${seed.logins.map((l) => `  ${l.name.padEnd(13)} ${l.email.padEnd(22)} password ${l.password}`).join('\n')}
 The phone simulator is at ${baseUrl}/demo
-External APIs: ${real.length ? `real ${real.join(', ')}; the rest mocked` : 'all mocked'}
+External APIs: real ${real.join(', ') || 'nothing'}; mocked ${mocked.join(', ') || 'nothing'}
 ${storiesLine}
 ${dataLine} Ctrl+C to stop.
 `);
