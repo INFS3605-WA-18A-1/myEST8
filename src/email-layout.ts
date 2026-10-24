@@ -90,23 +90,33 @@ function buttonLabel(before: string) {
 }
 
 /**
- * "None of these work" declines the choices, so the renderer draws it quieter than them:
- * outlined Harbour on a white fill. Every other button stays the Harbour fill. The label
- * decides it; a template does not pass a style.
+ * "None of these work" declines the choices, and "Need another time?" asks to leave a
+ * booked time. The renderer draws both quieter than a visit time: outlined Harbour on
+ * a white fill. Every other button stays the Harbour fill. The label decides it; a
+ * template does not pass a style.
  */
-const QUIET_BUTTON = 'None of these work';
+const QUIET_BUTTONS = new Set(['None of these work', 'Need another time?']);
+
+/** The plain-text mark on a Tradie's preferred time. The button drops it and says so underneath. */
+const PREFERRED_MARK = ' (preferred)';
 
 /** The button for a link, with its address as text under it. */
 const button = (url: string, label: string) => {
-  const quiet = label === QUIET_BUTTON;
+  const preferred = label.endsWith(PREFERRED_MARK);
+  const shown = preferred ? label.slice(0, -PREFERRED_MARK.length) : label;
+  const quiet = QUIET_BUTTONS.has(shown);
   const cell = quiet
     ? `bgcolor="${SURFACE}" style="background-color:${SURFACE};border:1px solid ${HARBOUR};border-radius:6px;"`
     : `bgcolor="${HARBOUR}" style="background-color:${HARBOUR};border-radius:6px;"`;
   const text = quiet ? HARBOUR : SURFACE;
+  const note = preferred
+    ? `<p style="margin:8px 0 0;font-family:${FONT};font-size:13px;line-height:20px;color:${SLATE};">${escapeHtml("Tradie's preferred time")}</p>`
+    : '';
   return (
     `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td ${cell}>` +
-    `<a href="${escapeHtml(url)}" style="display:inline-block;padding:12px 24px;font-family:${FONT};font-size:16px;line-height:20px;font-weight:600;color:${text};text-decoration:none;">${escapeHtml(label)}</a>` +
+    `<a href="${escapeHtml(url)}" style="display:inline-block;padding:12px 24px;font-family:${FONT};font-size:16px;line-height:20px;font-weight:600;color:${text};text-decoration:none;">${escapeHtml(shown)}</a>` +
     '</td></tr></table>' +
+    note +
     `<p style="margin:8px 0 0;font-family:${FONT};font-size:13px;line-height:20px;color:${SLATE};word-break:break-all;"><a href="${escapeHtml(url)}" style="color:${SLATE};text-decoration:underline;">${escapeHtml(url)}</a></p>`
   );
 };

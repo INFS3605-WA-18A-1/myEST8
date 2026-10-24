@@ -54,7 +54,7 @@ describe('asking the Tradie to offer visit times', () => {
     expect(await jobView(w, job)).toMatchObject({ status: 'approved', workOrder: null });
   });
 
-  test('refuses a visit time the Tradie is already booked for, and fewer than two times', async () => {
+  test('refuses a visit time the Tradie is already booked for, and no time or more than three', async () => {
     const w = await world();
     const { alice, tradies } = w;
     const job = await tomsTapTicket(w);
@@ -63,7 +63,15 @@ describe('asking the Tradie to offer visit times', () => {
     const token = await quoteToken(w, job, tradies.pete);
     const wed = new Date('2026-10-28T13:00:00+11:00');
 
-    await expect(w.h.app.offerVisitTimes(token, [TUE_27_9AM.toISOString()])).rejects.toThrow(/2 or 3/);
+    await expect(w.h.app.offerVisitTimes(token, [])).rejects.toThrow(/preferred time/);
+    await expect(
+      w.h.app.offerVisitTimes(token, [
+        TUE_27_9AM.toISOString(),
+        wed.toISOString(),
+        new Date('2026-10-29T09:00:00+11:00').toISOString(),
+        new Date('2026-10-30T09:00:00+11:00').toISOString(),
+      ]),
+    ).rejects.toThrow(/preferred time/);
 
     const other = { ticketId: job.ticketId, jobId: await alice.addJob(job.ticketId, 'plumbing') };
     const [otherQuote] = await confirmedQuotes(w, other, [[tradies.pete, 80_00, TUE_27_9AM]]);
@@ -72,6 +80,42 @@ describe('asking the Tradie to offer visit times', () => {
 
     await expect(w.h.app.offerVisitTimes(token, [TUE_27_9AM.toISOString(), wed.toISOString()])).rejects.toThrow(/already booked at Tue 27 Oct, 9:00 am/);
     expect(w.h.messenger.last(TOM)?.template).not.toBe('tenant.choose_visit_time');
+  });
+
+  test('an offer stores the preferred time first, and a preferred time on its own is enough', async () => {
+    const w = await world();
+    const { alice, tradies } = w;
+    const job = await tomsTapTicket(w);
+    const [quote] = await confirmedQuotes(w, job, [[tradies.pete, 150_00, TUE_27_9AM]]);
+    await alice.chooseQuote(quote!.quoteId, 'Usual plumber');
+    const preferred = TUE_27_9AM.toISOString();
+    const later = new Date('2026-10-28T13:00:00+11:00').toISOString();
+
+    await w.h.app.offerVisitTimes(await quoteToken(w, job, tradies.pete), [preferred, later]);
+
+    const row = await one<{ starts: unknown }>(w.h.db, 'SELECT starts FROM visit_offers WHERE job_id = ?', job.jobId);
+    const starts = typeof row?.starts === 'string' ? (JSON.parse(row.starts) as string[]) : (row?.starts as string[]);
+    // The first instant is the Tradie's preferred time.
+    expect(starts).toEqual([preferred, later]);
+
+    const alone = { ticketId: job.ticketId, jobId: await alice.addJob(job.ticketId, 'plumbing') };
+    const [second] = await confirmedQuotes(w, alone, [[tradies.pete, 90_00]]);
+    await alice.chooseQuote(second!.quoteId, 'Same plumber, another job');
+    await w.h.app.offerVisitTimes(await quoteToken(w, alone, tradies.pete), [later]);
+    const aloneRow = await one<{ starts: unknown }>(w.h.db, 'SELECT starts FROM visit_offers WHERE job_id = ?', alone.jobId);
+    const aloneStarts = typeof aloneRow?.starts === 'string' ? (JSON.parse(aloneRow.starts) as string[]) : (aloneRow?.starts as string[]);
+    expect(aloneStarts).toEqual([later]);
+  });
+
+  test("the Tenant's choose-time message lists the preferred time first, marked preferred", async () => {
+    const { w } = await timesOffered();
+    const text = w.h.messenger.last(TOM)!.text;
+    const preferredAt = text.indexOf('Tue 27 Oct, 9:00 am (preferred):');
+    const otherAt = text.indexOf('Wed 28 Oct, 1:00 pm:');
+    expect(preferredAt).toBeGreaterThanOrEqual(0);
+    expect(otherAt).toBeGreaterThan(preferredAt);
+    expect(text).toContain('None of these work:');
+    expect(text).not.toContain('Wed 28 Oct, 1:00 pm (preferred)');
   });
 });
 

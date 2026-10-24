@@ -205,6 +205,14 @@ export function ticketPages() {
     return `Work Order sent to ${booked.businessName} for ${formatWhen(booked.start, timeZone)}`;
   });
 
+  onPost(pages, '/:id/work-orders/:workOrderId/resend', async ({ actions, ticket, form, params }) => {
+    const workOrderId = visitOnTicket(ticket, params.workOrderId);
+    const to = text(form, 'to');
+    if (to !== 'tenant' && to !== 'tradie') throw new ActionError('invalid', 'Choose who to resend to');
+    const name = await actions.resendVisitEmail(workOrderId, to);
+    return `Visit email queued for ${name}`;
+  });
+
   onPost(
     pages,
     '/:id/work-orders/:workOrderId/accept',
@@ -347,6 +355,16 @@ function quoteIn(ticket: TicketView, raw: string | undefined): { job: JobView; q
 
 function requestIn(ticket: TicketView, raw: string | undefined): RequestView {
   return ticket.jobs.flatMap((j) => j.quoteRequests).find((r) => r.quoteRequestId === Number(raw)) ?? notFound('Quote Request');
+}
+
+/** A repair or a Site Inspection on this Ticket, so a resend can't name some other visit. */
+function visitOnTicket(ticket: TicketView, raw: string | undefined): number {
+  const id = Number(raw);
+  for (const job of ticket.jobs) {
+    if (job.workOrder?.workOrderId === id) return id;
+    if (job.quoteRequests.some((request) => request.inspection?.workOrderId === id)) return id;
+  }
+  return notFound('Work Order');
 }
 
 function workOrderIn(ticket: TicketView, raw: string | undefined): WorkOrderView {
@@ -1074,6 +1092,7 @@ function inspectionLine(t: TicketView, v: NonNullable<RequestView['inspection']>
   return html`<div class="tradie-row-visit">
     <span>${badge('Site inspection', 'neutral', { outline: true })} <span class="num">${formatRange(v.start, v.end, x.timeZone)}</span></span>
     ${tenant} ${mark}
+    ${done ? nothing : resendVisitButtons(t, v.workOrderId)}
   </div>`;
 }
 
@@ -1093,6 +1112,13 @@ function requestActions(t: TicketView, job: JobView, r: RequestView, x: Extras):
   if (firmNext) actions.push(firmQuoteEntry(t, r, x));
   if (r.firmQuote && r.firmQuote.status === 'open') actions.push(html`<a class="link text-sm" href="#quote-${r.firmQuote.quoteId}">Compare in Firm Quotes</a>`);
   return actions.length ? html`<div class="tradie-row-actions">${actions}</div>` : nothing;
+}
+
+/** Sends the visit's current email again, to the Tenant or the Tradie. The worker does the sending. */
+function resendVisitButtons(t: TicketView, workOrderId: number): Html {
+  const action = `/tickets/${t.ticketId}/work-orders/${workOrderId}/resend`;
+  return html`${postButton(action, 'Resend to Tenant', { variant: 'secondary', size: 'sm', fields: { to: 'tenant' } })}
+    ${postButton(action, 'Resend to Tradie', { variant: 'secondary', size: 'sm', fields: { to: 'tradie' } })}`;
 }
 
 /** Sends the Quote Request message again, for a Tradie with no reply who says it never arrived. */
@@ -1462,7 +1488,10 @@ function workOrderDetails(t: TicketView, wo: WorkOrderView, x: Extras): Html {
     ${sectionHeader('Work Order', active && !suggesting ? suggest : undefined)}
     ${active && wo.rescheduleRequestedBy ? alert(`The ${asker} asked for another time.`, 'warning') : nothing}
     ${active
-      ? postButton(`/tickets/${t.ticketId}/jobs/${wo.jobId}/ask-times`, `Ask ${wo.businessName} to offer times`, { variant: 'secondary', size: 'sm' })
+      ? html`<div class="flex flex-wrap gap-2">
+          ${postButton(`/tickets/${t.ticketId}/jobs/${wo.jobId}/ask-times`, `Ask ${wo.businessName} to offer times`, { variant: 'secondary', size: 'sm' })}
+          ${resendVisitButtons(t, wo.workOrderId)}
+        </div>`
       : nothing}
     ${dl([
       ['Visit', formatRange(wo.start, wo.end, x.timeZone)],

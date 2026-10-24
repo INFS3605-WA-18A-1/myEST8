@@ -64,13 +64,30 @@ describe("the Tradie's offer visit times form", () => {
     const sent = w.h.messenger.last(TOM)!;
     const token = sent.text.match(/https:\/\/myest8\.test\/v\/([^?\s]+)\?pick=1/)?.[1];
     expect(sent).toMatchObject({ template: 'tenant.choose_visit_time' });
-    expect(sent.text).toContain(`Tue 27 Oct, 9:00 am: https://myest8.test/v/${token}?pick=1`);
+    expect(sent.text).toContain(`Tue 27 Oct, 9:00 am (preferred): https://myest8.test/v/${token}?pick=1`);
     expect(sent.text).toContain(`Wed 28 Oct, 1:00 pm: https://myest8.test/v/${token}?pick=2`);
     expect(sent.text).toContain(`None of these work: https://myest8.test/v/${token}?pick=none`);
     const after = visible(await (await w.get(path)).text());
     expect(after).toContain('Tue 27 Oct, 9:00 am');
     expect(after).toContain('Wed 28 Oct, 1:00 pm');
-    expect(after).not.toContain('Visit time 1');
+    expect(after).not.toContain('Preferred time');
+  });
+
+  test("the preferred time is required, and the other two times are optional", async () => {
+    const { w, path } = await petesOfferPage();
+    const html = await (await w.get(path)).text();
+    const input = (id: string) => html.match(new RegExp(`<input[^>]*id="${id}"[^>]*>`))?.[0] ?? '';
+    expect(visible(html)).toContain('Preferred time');
+    expect(input('field-start-1')).toContain('required');
+    expect(input('field-start-2')).not.toContain('required');
+    expect(input('field-start-3')).not.toContain('required');
+
+    const body = new FormData();
+    body.append('starts', '');
+    body.append('starts', '2026-10-28T13:00');
+    const refused = await w.web.request(`${path}/times`, { method: 'POST', body });
+    expect(refused.status).toBe(400);
+    expect(visible(await refused.text())).toContain('Enter a preferred time');
   });
 });
 
@@ -91,8 +108,14 @@ describe('confirming a visit time', () => {
     const { w, job, token } = await offeredTimes();
     const opened = await w.get(`/v/${token}?pick=1`);
     expect(opened.status).toBe(200);
-    expect(visible(await opened.text())).toContain('Book Tuesday 27 Oct, 9:00 am');
+    const page = visible(await opened.text());
+    expect(page).toContain('Book Tuesday 27 Oct, 9:00 am');
+    expect(page).toContain("the Tradie's preferred time");
     expect(await jobView(w, job)).toMatchObject({ status: 'approved', workOrder: null });
+
+    const other = visible(await (await w.get(`/v/${token}?pick=2`)).text());
+    expect(other).toContain('Book Wednesday 28 Oct, 1:00 pm');
+    expect(other).not.toContain("the Tradie's preferred time");
 
     const posted = await w.web.request(`/v/${token}`, { method: 'POST', body: new URLSearchParams({ pick: '1' }) });
     await w.h.drain();

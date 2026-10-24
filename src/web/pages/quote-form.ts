@@ -112,7 +112,10 @@ export function quoteFormPages(app: App) {
     if (!page) return c.html(unknownLinkPage(), 404);
     const form = (await c.req.parseBody({ all: true }).catch(() => ({}))) as FormValues;
     try {
-      const starts = list(form, 'starts').filter(Boolean).map((value) => localTime(value, page.timeZone, 'starts'));
+      const raw = form.starts;
+      const posted = (Array.isArray(raw) ? raw : raw === undefined ? [] : [raw]).filter((value): value is string => typeof value === 'string');
+      if (!posted[0]?.trim()) throw new ActionError('invalid', 'Enter a preferred time', { starts: 'Enter a preferred time' });
+      const starts = [posted[0], ...posted.slice(1).filter((value) => value.trim())].map((value) => localTime(value, page.timeZone, 'starts'));
       await app.offerVisitTimes(token, starts);
     } catch (error) {
       return refused(c, token, page, error, form, ['starts']);
@@ -218,8 +221,8 @@ function outcomeNote(p: QuotePage): Html | string {
       return alert(
         p.offerTimes
           ? p.offerTimes.reschedule
-            ? 'The visit needs a new time. Offer 2 or 3 times you can visit. The current visit stays booked until the Tenant picks one.'
-            : `${p.agencyName} has gone with your quote. Offer 2 or 3 times you can visit.`
+            ? 'The visit needs a new time. Offer a preferred time, and up to 2 more. The current visit stays booked until the Tenant picks one.'
+            : `${p.agencyName} has gone with your quote. Offer a preferred time, and up to 2 more.`
           : p.offeredVisit
             ? `${p.agencyName} has your times. The Tenant is choosing one.`
             : `${p.agencyName} has gone with your quote. A Work Order with the visit time will follow.`,
@@ -398,11 +401,16 @@ function offeredTimes(p: QuotePage): Html {
   });
 }
 
-/** The chosen Tradie offers 2 or 3 visit times. The length comes from the Quote; the times start from it. */
+/** The chosen Tradie offers a preferred time and up to two more. The length comes from the Quote; the times start from it. */
 function offerTimesForm(token: string, p: QuotePage, r: Refusal | undefined): Html {
   const offer = p.offerTimes!;
   const posted = r?.posted.starts;
   const typed = Array.isArray(posted) ? posted : [];
+  const times = [
+    { label: 'Preferred time', required: true, hint: undefined },
+    { label: 'Another time', required: false, hint: 'Optional.' },
+    { label: 'A third time', required: false, hint: 'Optional.' },
+  ];
   return card({
     title: 'Offer visit times',
     body: html`${refusalAlert(r)}
@@ -411,15 +419,15 @@ function offerTimesForm(token: string, p: QuotePage, r: Refusal | undefined): Ht
         <p>The Tenant is usually home ${offer.availability}.</p>
         ${offer.note ? html`<p>The Tenant said: ${offer.note}.</p>` : ''}
         <p>The visit takes ${offer.durationLabel}.</p>
-        ${[0, 1, 2].map((i) =>
+        ${times.map((time, i) =>
           field({
-            label: `Visit time ${i + 1}`,
+            label: time.label,
             name: 'starts',
             id: `field-start-${i + 1}`,
             type: 'datetime-local',
             value: typed.length ? (typed[i] ?? '') : offer.starts[i] ? isoToLocal(offer.starts[i]!, p.timeZone) : '',
-            required: i < 2,
-            hint: i === 2 ? 'Optional.' : undefined,
+            required: time.required,
+            hint: time.hint,
             error: i === 0 ? r?.fields.starts : undefined,
           }),
         )}

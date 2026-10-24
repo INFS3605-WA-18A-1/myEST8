@@ -13,6 +13,7 @@ import { NO_CONNECTORS, type ChannelConnectors } from './connectors.ts';
 import type { WebEnv } from './env.ts';
 import { landingRoutes } from './pages/landing.ts';
 import { quoteFormPages } from './pages/quote-form.ts';
+import { visitConfirmPages } from './pages/visit-confirm.ts';
 import { visitOfferPages } from './pages/visit-offer.ts';
 import { signupRoutes } from './pages/signup.ts';
 import { pmPages } from './pm-pages.ts';
@@ -64,6 +65,8 @@ export function createWebApp(deps: {
   web.route('/', tenantPages(deps.app));
   // The no-login Tradie quote page (Estimate, then Firm Quote).
   web.route('/', quoteFormPages(deps.app));
+  // The Tenant confirms a booked visit, or asks for another time. A GET only shows the page.
+  web.route('/', visitConfirmPages(deps.app));
   // The Tenant picks a visit time. A GET only shows the button.
   web.route('/', visitOfferPages(deps.app));
   web.route('/', createHttpApp(deps.app, deps));

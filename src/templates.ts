@@ -100,23 +100,25 @@ export const templates = {
     'Other visit times',
     (d) => `Thanks. We'll ask the tradie for other times.\n\nSay when you're home: ${d.whenHomeLink}`,
   ),
-  'tenant.visit_time': template<{ visitStart: string; trade: Trade; tradieBusinessName: string }>(
+  'tenant.visit_time': template<{ visitStart: string; trade: Trade; tradieBusinessName: string; confirmLink: string; anotherTimeLink: string }>(
     'Repair visit booked',
-    (d, a) => `${d.tradieBusinessName} (${trade(d.trade)}) will visit on ${visit(d.visitStart, a)}. Reply YES to confirm or tell us if you need another time.`,
+    (d, a) =>
+      `${d.tradieBusinessName} (${trade(d.trade)}) will visit on ${visit(d.visitStart, a)}.\n\nConfirm this time: ${d.confirmLink}\n\nNeed another time?: ${d.anotherTimeLink}`,
   ),
   'tenant.visit_booked': template<{ visitStart: string; anotherTimeLink: string }>(
     'Repair visit booked',
     (d, a) => `Booked for ${visit(d.visitStart, a)}.\n\nNeed another time?: ${d.anotherTimeLink}`,
   ),
-  'tenant.visit_moved': template<{ visitStart: string; tradieBusinessName: string }>(
+  'tenant.visit_moved': template<{ visitStart: string; tradieBusinessName: string; confirmLink: string; anotherTimeLink: string }>(
     'Repair visit moved',
-    (d, a) => `Your visit from ${d.tradieBusinessName} has moved to ${visit(d.visitStart, a)}. Reply YES to confirm or tell us if you need another time.`,
+    (d, a) =>
+      `Your visit from ${d.tradieBusinessName} has moved to ${visit(d.visitStart, a)}.\n\nConfirm this time: ${d.confirmLink}\n\nNeed another time?: ${d.anotherTimeLink}`,
   ),
-  'tenant.inspection': template<{ tradieBusinessName: string; trade: Trade; visitStart: string }>(
+  'tenant.inspection': template<{ tradieBusinessName: string; trade: Trade; visitStart: string; confirmLink: string; anotherTimeLink: string }>(
     'A tradie is coming to inspect',
     (d, a) =>
-      `Before we fix it, ${d.tradieBusinessName} (${trade(d.trade)}) will come to inspect the issue so they can give a firm price: ${visit(d.visitStart, a)}. ` +
-      'Reply YES if that time works, or tell us if you need another time.',
+      `Before we fix it, ${d.tradieBusinessName} (${trade(d.trade)}) will come to inspect the issue so they can give a firm price: ${visit(d.visitStart, a)}.\n\n` +
+      `Confirm this time: ${d.confirmLink}\n\nNeed another time?: ${d.anotherTimeLink}`,
   ),
   'tenant.inspection_cancelled': template<{ tradieBusinessName: string; visitStart: string }>(
     'Inspection cancelled',

@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { one, run } from '../src/db.ts';
 import {
   BELLA,
   confirmedEstimates,
@@ -9,6 +10,7 @@ import {
   OLIVIA,
   TOM,
   tomsTapTicket,
+  visitStarted,
   world,
   type JobRef,
   type TradieRef,
@@ -16,6 +18,16 @@ import {
 } from './support/world.ts';
 
 const sydney = (local: string) => new Date(`${local}+11:00`);
+
+/** The visit confirmation still waiting on Tom, if any. */
+async function pendingVisit(w: World) {
+  const row = await one<{ awaiting: string }>(
+    w.h.db,
+    `SELECT awaiting FROM pending_answers WHERE person_id = (SELECT id FROM people WHERE mobile = ?) AND kind = 'visit'`,
+    TOM,
+  );
+  return row ? (JSON.parse(row.awaiting) as { kind: string }) : null;
+}
 const MON_9AM = sydney('2026-10-12T09:00:00');
 const TUE_9AM = sydney('2026-10-13T09:00:00');
 
@@ -219,6 +231,77 @@ describe('rescheduling', () => {
     expect((await jobView(w, job)).workOrder).toMatchObject({ start: wednesday2pm, visitConfirmed: true, rescheduleRequestedBy: null });
   });
 
+  test('a Property Manager booking emails the Tenant confirm and need-another-time links, and YES still confirms', async () => {
+    const w = await world();
+    const { h, alice, tradies } = w;
+    const job = await approvedTapJob(w, tradies.pete, TUE_9AM);
+    await alice.sendWorkOrder(job.jobId);
+
+    const text = h.messenger.last(TOM)!.text;
+    const token = text.match(/\/v\/confirm\/([^?\s]+)/)?.[1];
+    expect(text).toContain(`Confirm this time: https://myest8.test/v/confirm/${token}`);
+    expect(text).toContain(`Need another time?: https://myest8.test/v/confirm/${token}?another=1`);
+    expect(text).not.toMatch(/Reply YES/);
+    expect(text).toContain('Tue 13 Oct, 9:00 am');
+    expect(await pendingVisit(w)).toMatchObject({ kind: 'visit' });
+
+    await h.answer(TOM, 'Yes that works', 'confirm');
+    expect((await jobView(w, job)).workOrder).toMatchObject({ visitConfirmed: true });
+    expect(await pendingVisit(w)).toBeNull();
+  });
+
+  test('moving a visit emails the Tenant the same two links for the new time', async () => {
+    const w = await world();
+    const { h, alice, tradies } = w;
+    const job = await approvedTapJob(w, tradies.pete, TUE_9AM);
+    await alice.sendWorkOrder(job.jobId);
+    const { workOrder } = await jobView(w, job);
+    const wednesday2pm = sydney('2026-10-14T14:00:00').toISOString();
+    h.messenger.clear();
+
+    await alice.acceptTime(workOrder!.workOrderId, wednesday2pm);
+
+    const text = h.messenger.last(TOM)!.text;
+    const token = text.match(/\/v\/confirm\/([^?\s]+)/)?.[1];
+    expect(h.messenger.last(TOM)).toMatchObject({ template: 'tenant.visit_moved', data: { visitStart: wednesday2pm } });
+    expect(text).toContain('Wed 14 Oct, 2:00 pm');
+    expect(text).toContain(`Confirm this time: https://myest8.test/v/confirm/${token}`);
+    expect(text).toContain(`Need another time?: https://myest8.test/v/confirm/${token}?another=1`);
+    expect(text).not.toMatch(/Reply YES/);
+  });
+
+  test('confirming through the page records the confirmation and stops the YES wait', async () => {
+    const w = await world();
+    const { h, alice, tradies } = w;
+    const job = await approvedTapJob(w, tradies.pete, TUE_9AM);
+    await alice.sendWorkOrder(job.jobId);
+    const token = h.messenger.last(TOM)!.text.match(/\/v\/confirm\/([^?\s]+)/)![1]!;
+
+    await h.app.confirmBookedVisit(token);
+
+    expect((await jobView(w, job)).workOrder).toMatchObject({ visitConfirmed: true, start: TUE_9AM.toISOString() });
+    expect(await pendingVisit(w)).toBeNull();
+    expect((await alice.ticket(job.ticketId)).timeline.filter((e) => e.kind === 'visit_confirmed')).toHaveLength(1);
+  });
+
+  test('need another time starts a new offer round and leaves the visit booked', async () => {
+    const w = await world();
+    const { h, alice, tradies } = w;
+    const job = await approvedTapJob(w, tradies.pete, TUE_9AM);
+    await alice.sendWorkOrder(job.jobId);
+    const token = h.messenger.last(TOM)!.text.match(/\/v\/confirm\/([^?\s]+)/)![1]!;
+    h.messenger.clear();
+
+    await h.app.askToMoveVisit(token);
+
+    expect((await jobView(w, job)).workOrder).toMatchObject({
+      start: TUE_9AM.toISOString(),
+      visitConfirmed: false,
+      rescheduleRequestedBy: 'tenant',
+    });
+    expect(h.messenger.last(tradies.pete.address)).toMatchObject({ template: 'tradie.offer_new_times' });
+  });
+
   test('a new time must be free for the Tradie', async () => {
     const w = await world();
     const { alice, tradies } = w;
@@ -230,6 +313,89 @@ describe('rescheduling', () => {
     const { workOrder } = await jobView(w, job);
 
     await expect(alice.acceptTime(workOrder!.workOrderId, sydney('2026-10-12T10:00:00').toISOString())).rejects.toThrow(/booked/);
+  });
+});
+
+/** Queues a resend the way a tasks row would, with no Property Manager session, and runs it. */
+async function queueResend(w: World, workOrderId: number, to: 'tenant' | 'tradie') {
+  await run(w.h.db, `INSERT INTO tasks (kind, payload, run_at) VALUES ('scheduling.resend_visit_emails', ?, ?)`, JSON.stringify({ workOrderId, to }), w.h.clock.now().toISOString());
+  await w.h.drain();
+}
+
+async function logged(w: World, template: string) {
+  return Number((await one<{ n: number }>(w.h.db, 'SELECT count(*) AS n FROM messages WHERE template = ?', template))?.n ?? 0);
+}
+
+describe('resending a visit email', () => {
+  test("the task re-sends the Tenant's current visit email, with the confirm links, and logs it", async () => {
+    const w = await world();
+    const { h, alice, tradies } = w;
+    const job = await approvedTapJob(w, tradies.pete, TUE_9AM);
+    await alice.sendWorkOrder(job.jobId);
+    const { workOrder } = await jobView(w, job);
+    const before = await logged(w, 'tenant.visit_time');
+    h.messenger.clear();
+
+    await queueResend(w, workOrder!.workOrderId, 'tenant');
+
+    const sent = h.messenger.last(TOM)!;
+    expect(sent.template).toBe('tenant.visit_time');
+    expect(sent.text).toContain('Confirm this time:');
+    expect(sent.text).toContain('Need another time?:');
+    expect(await logged(w, 'tenant.visit_time')).toBe(before + 1);
+  });
+
+  test("after a move, the task re-sends the moved visit, and the Tradie's Work Order at the new time", async () => {
+    const w = await world();
+    const { h, alice, tradies } = w;
+    const job = await approvedTapJob(w, tradies.pete, TUE_9AM);
+    await alice.sendWorkOrder(job.jobId);
+    const { workOrder } = await jobView(w, job);
+    const wednesday2pm = sydney('2026-10-14T14:00:00').toISOString();
+    await alice.acceptTime(workOrder!.workOrderId, wednesday2pm);
+    h.messenger.clear();
+
+    await queueResend(w, workOrder!.workOrderId, 'tenant');
+    const tenant = h.messenger.last(TOM)!;
+    expect(tenant.template).toBe('tenant.visit_moved');
+    expect(tenant.text).toContain('Wed 14 Oct, 2:00 pm');
+    expect(tenant.text).toContain('Confirm this time:');
+    expect(tenant.text).toContain('Need another time?:');
+
+    h.messenger.clear();
+    await queueResend(w, workOrder!.workOrderId, 'tradie');
+    expect(h.messenger.last(tradies.pete.address)).toMatchObject({
+      template: 'tradie.work_order',
+      data: { visitStart: wednesday2pm, propertyAddress: KING_ST },
+    });
+    expect(await logged(w, 'tradie.work_order')).toBeGreaterThan(1);
+  });
+
+  test('it does nothing for a cancelled visit or a completed one', async () => {
+    const w = await world();
+    const { h, alice, tradies } = w;
+    const job = await approvedTapJob(w, tradies.pete, TUE_9AM);
+    await alice.sendWorkOrder(job.jobId);
+    const { workOrder } = await jobView(w, job);
+    await alice.cancelJob(job.jobId);
+    h.messenger.clear();
+
+    await queueResend(w, workOrder!.workOrderId, 'tenant');
+    await queueResend(w, workOrder!.workOrderId, 'tradie');
+    expect(h.messenger.last(TOM)).toBeUndefined();
+    expect(h.messenger.last(tradies.pete.address)).toBeUndefined();
+
+    const doneWorld = await world();
+    const doneJob = await approvedTapJob(doneWorld, doneWorld.tradies.pete, TUE_9AM);
+    await doneWorld.alice.sendWorkOrder(doneJob.jobId);
+    const doneOrder = (await jobView(doneWorld, doneJob)).workOrder!;
+    doneWorld.h.classifier.when('All done', { replyType: 'done', relatedItem: `work_order:${doneOrder.workOrderId}` });
+    visitStarted(doneWorld, doneOrder.start);
+    await doneWorld.h.receive(doneWorld.tradies.pete.address, 'All done');
+    doneWorld.h.messenger.clear();
+
+    await queueResend(doneWorld, doneOrder.workOrderId, 'tenant');
+    expect(doneWorld.h.messenger.last(TOM)).toBeUndefined();
   });
 });
 

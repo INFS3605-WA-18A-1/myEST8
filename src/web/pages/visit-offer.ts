@@ -75,7 +75,7 @@ function confirmPage(token: string, page: Offer, booked: boolean, error?: string
     body: html`${error ? alert(error, 'error') : ''}
       ${page.bookable && page.start
         ? card({
-            body: html`<p>${page.tradieBusinessName} can visit ${page.address}.</p>
+            body: html`<p>${page.tradieBusinessName} can visit ${page.address}.${page.preferred ? " This is the Tradie's preferred time." : ''}</p>
               <form method="post" action="/v/${encodeURIComponent(token)}" class="tenant-form">
                 <input type="hidden" name="pick" value="${page.pick}" />
                 ${button(`Book ${formatVisitDay(page.start, page.timeZone)}`, { block: true })}

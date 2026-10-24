@@ -39,6 +39,8 @@ type WorkOrderRow = {
   reschedule_requested_by: 'tenant' | 'tradie' | null;
   kind: WorkOrderKind;
   quote_request_id: number | null;
+  /** No-login link for confirming the visit or asking for another time. */
+  token: string;
 };
 
 /** A repair visit, or a Tradie's Site Inspection before their Firm Quote. */
@@ -171,19 +173,86 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
     };
   }
 
+  /** Confirm, and ask for another time. The same links a reminder or a resend uses. */
+  function visitActionLinks(token: string) {
+    const base = `${settings.baseUrl}/v/confirm/${token}`;
+    return { confirmLink: base, anotherTimeLink: `${base}?another=1` };
+  }
+
+  /** The Tradie's Work Order for this visit, at its current time. */
+  async function tellTradieWorkOrder(row: WorkOrderRow) {
+    const quote = await modules.quotes.approvedQuote(row.job_id);
+    if (!quote) return;
+    const { job, property, ticket } = await place(row);
+    const issue = await tickets.issue(ticket.issueId);
+    await notifications.send(
+      row.tradie_id,
+      'tradie.work_order',
+      {
+        propertyAddress: property.address,
+        description: withoutContactDetails(issue.description),
+        trade: job.trade,
+        visitStart: row.start,
+        visitEnd: row.end,
+        approvedCents: quote.priceCents,
+        stage: quote.stage,
+      },
+      { issueId: issue.id },
+    );
+  }
+
+  /** The Tradie's Site Inspection email, at its current time, with the issue's photos when it goes by email. */
+  async function tellTradieInspection(row: WorkOrderRow) {
+    const { job, property, ticket } = await place(row);
+    const issue = await tickets.issue(ticket.issueId);
+    const photoFileIds = (await tickets.photos(issue.id)).map((x) => x.fileId);
+    const byEmail = (await notifications.channelFor(row.tradie_id)) === 'email';
+    await notifications.send(
+      row.tradie_id,
+      'tradie.inspection',
+      {
+        propertyAddress: property.address,
+        trade: job.trade,
+        summary: withoutContactDetails(issue.summary ?? issue.description),
+        visitStart: row.start,
+        visitEnd: row.end,
+      },
+      { issueId: issue.id, attachmentFileIds: byEmail ? photoFileIds : [] },
+    );
+  }
+
+  /** A visit_moved event for this Work Order, not one for the other kind of visit on the same Job. */
+  async function visitWasMoved(row: WorkOrderRow) {
+    const events = await tickets.timeline(row.ticket_id);
+    return events.some((event) => {
+      if (event.kind !== 'visit_moved') return false;
+      const data = event as { jobId?: number; inspection?: boolean };
+      return data.jobId === row.job_id && !!data.inspection === (row.kind === 'inspection');
+    });
+  }
+
+  /** Tells the Tenant the visit time, with a button to confirm it and one to ask for another. A confirmed visit is not waiting on YES. */
   async function tellTenantVisitTime(row: WorkOrderRow, moved: boolean) {
     const { job, ticket, tradieBusinessName } = await place(row);
+    const links = visitActionLinks(row.token);
     if (moved) {
-      await notifications.send(ticket.tenantId, 'tenant.visit_moved', { visitStart: row.start, tradieBusinessName }, { issueId: ticket.issueId });
+      await notifications.send(ticket.tenantId, 'tenant.visit_moved', { visitStart: row.start, tradieBusinessName, ...links }, { issueId: ticket.issueId });
+    } else if (row.kind === 'inspection') {
+      await notifications.send(
+        ticket.tenantId,
+        'tenant.inspection',
+        { tradieBusinessName, trade: job.trade, visitStart: row.start, ...links },
+        { issueId: ticket.issueId },
+      );
     } else {
       await notifications.send(
         ticket.tenantId,
         'tenant.visit_time',
-        { visitStart: row.start, trade: job.trade, tradieBusinessName },
+        { visitStart: row.start, trade: job.trade, tradieBusinessName, ...links },
         { issueId: ticket.issueId },
       );
     }
-    await modules.intake.expectAnswer(ticket.tenantId, { kind: 'visit', workOrderId: row.id });
+    if (!row.visit_confirmed) await modules.intake.expectAnswer(ticket.tenantId, { kind: 'visit', workOrderId: row.id });
   }
 
   /** Free one-hour slots over the next 14 days inside the Tenant's availability. */
@@ -221,8 +290,8 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
       if (!(await isFree(agencyId, tradie.id, start, end))) throw new ActionError('conflict', `${name} is already booked then`);
       const id = await run(
         db,
-        `INSERT INTO work_orders (agency_id, job_id, ticket_id, tradie_id, start, "end", status, kind, quote_request_id)
-         VALUES (?, ?, ?, ?, ?, ?, 'active', 'inspection', ?) RETURNING id`,
+        `INSERT INTO work_orders (agency_id, job_id, ticket_id, tradie_id, start, "end", status, kind, quote_request_id, token)
+         VALUES (?, ?, ?, ?, ?, ?, 'active', 'inspection', ?, ?) RETURNING id`,
         agencyId,
         request.jobId,
         request.ticketId,
@@ -230,6 +299,7 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
         iso(start),
         iso(end),
         quoteRequestId,
+        newToken(),
       );
       await modules.quotes.inspectionBooked(quoteRequestId);
       await tickets.recordEvent(request.ticketId, 'inspection_booked', { jobId: request.jobId, tradie: name, visitStart: iso(start), visitEnd: iso(end) });
@@ -237,24 +307,8 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
     });
 
     const row = (await workOrderRow(id))!;
-    const { job, ticket, property } = await place(row);
-    const issue = await tickets.issue(ticket.issueId);
-    const photoFileIds = (await tickets.photos(issue.id)).map((x) => x.fileId);
-    const byEmail = (await notifications.channelFor(tradie.id)) === 'email';
-    await notifications.send(
-      tradie.id,
-      'tradie.inspection',
-      {
-        propertyAddress: property.address,
-        trade: job.trade,
-        summary: withoutContactDetails(issue.summary ?? issue.description),
-        visitStart: row.start,
-        visitEnd: row.end,
-      },
-      { issueId: issue.id, attachmentFileIds: byEmail ? photoFileIds : [] },
-    );
-    await notifications.send(ticket.tenantId, 'tenant.inspection', { tradieBusinessName: name, trade: job.trade, visitStart: row.start }, { issueId: issue.id });
-    await modules.intake.expectAnswer(ticket.tenantId, { kind: 'visit', workOrderId: id });
+    await tellTradieInspection(row);
+    await tellTenantVisitTime(row, false);
     return id;
   }
 
@@ -317,7 +371,10 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
     return row ? { starts: startsOf(row.starts), durationMinutes: row.duration_minutes, token: row.token } : null;
   }
 
-  /** The Tradie offers 2 or 3 starts. Each must be free. The Tenant is asked to pick one. */
+  /**
+   * The Tradie offers a preferred time and up to two more. The first of `starts` is the
+   * preferred time. Each must be free. The Tenant is asked to pick one.
+   */
   async function offerVisitTimes(token: string, starts: string[]) {
     const request = await one<{ id: number; agency_id: number; job_id: number; ticket_id: number; tradie_id: number }>(
       db,
@@ -332,7 +389,7 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
     const rescheduling = jobStatus === 'scheduled' && !!repair?.reschedule_requested_by;
     if (jobStatus !== 'approved' && !rescheduling) invalid('This visit is already booked');
     if (await offeredVisit(request.job_id)) invalid('You have already offered times');
-    if (starts.length < 2 || starts.length > 3) invalid('Offer 2 or 3 times', 'starts');
+    if (starts.length < 1 || starts.length > 3) invalid('Offer a preferred time, and up to 2 more', 'starts');
     const when = starts.map((start) => {
       const at = new Date(start);
       if (Number.isNaN(at.getTime())) invalid('Enter a date and time', 'starts');
@@ -378,11 +435,7 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
 
     const ticket = await tickets.ticket(request.ticket_id);
     const job = await tickets.job(request.job_id);
-    const base = `${settings.baseUrl}/v/${offerToken}`;
-    const choices = [
-      ...when.map((at, i) => ({ label: formatVisit(at, timeZone), url: `${base}?pick=${i + 1}` })),
-      { label: 'None of these work', url: `${base}?pick=none` },
-    ];
+    const choices = choiceLinksFor(when, timeZone, offerToken);
     await notifications.send(
       ticket.tenantId,
       'tenant.choose_visit_time',
@@ -393,14 +446,24 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
     await worker.schedule('scheduling.remind_tenant_pick', { offerId }, addMs(clock.now(), OFFER_REMINDER_MS));
   }
 
-  /** The choices on the Tenant's message, rebuilt from the offer so a reminder reads the same. */
-  async function choiceLinks(row: VisitOfferRow) {
-    const { timeZone } = await profiles.agency(row.agency_id);
-    const base = `${settings.baseUrl}/v/${row.token}`;
+  /**
+   * The choices on the Tenant's message. The first time is the Tradie's preferred one,
+   * marked so the plain text (and SMS) says "(preferred)". A reminder reads the same.
+   */
+  function choiceLinksFor(starts: (Date | string)[], timeZone: string, token: string) {
+    const base = `${settings.baseUrl}/v/${token}`;
     return [
-      ...startsOf(row.starts).map((start, i) => ({ label: formatVisit(start, timeZone), url: `${base}?pick=${i + 1}` })),
+      ...starts.map((start, i) => ({
+        label: `${formatVisit(start, timeZone)}${i === 0 ? ' (preferred)' : ''}`,
+        url: `${base}?pick=${i + 1}`,
+      })),
       { label: 'None of these work', url: `${base}?pick=none` },
     ];
+  }
+
+  async function choiceLinks(row: VisitOfferRow) {
+    const { timeZone } = await profiles.agency(row.agency_id);
+    return choiceLinksFor(startsOf(row.starts), timeZone, row.token);
   }
 
   /** Notes that the Tradie was asked, and reminds them in 24 hours if they still haven't offered. */
@@ -467,6 +530,10 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
     return one<VisitOfferRow>(db, 'SELECT * FROM visit_offers WHERE token = ?', token);
   }
 
+  async function workOrderByToken(token: string) {
+    return one<WorkOrderRow>(db, 'SELECT * FROM work_orders WHERE token = ?', token);
+  }
+
   /**
    * The Tenant's confirm page. `pick` names a time ("1") or "none"; it is only shown.
    * An unknown token or an unknown number is null. Booking is pickVisitTime.
@@ -492,7 +559,30 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
       pick: pick ?? null,
       start: index >= 0 ? starts[index]! : null,
       pickedStart: row.picked_start,
+      /** The first offered time is the one the Tradie prefers. */
+      preferred: index === 0,
       bookable: row.status === 'offered' && index >= 0,
+    };
+  }
+
+  /**
+   * The Tenant's page for a visit the Property Manager booked or moved. Reading it
+   * never confirms and never starts a new round. An unknown token is null.
+   */
+  async function visitConfirmation(token: string) {
+    const row = await workOrderByToken(token);
+    if (!row) return null;
+    const { property, tradieBusinessName } = await place(row);
+    const { timeZone, name } = await profiles.agency(row.agency_id);
+    return {
+      agencyName: name,
+      timeZone,
+      address: property.address,
+      tradieBusinessName,
+      start: row.start,
+      status: row.status,
+      visitConfirmed: !!row.visit_confirmed,
+      kind: row.kind,
     };
   }
 
@@ -569,6 +659,22 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
     );
   });
 
+  /**
+   * Sends the visit's current email again. Queued as a task so it can run without a
+   * Property Manager session. A cancelled or completed visit is left alone.
+   */
+  worker.on<{ workOrderId: number; to: 'tenant' | 'tradie' }>('scheduling.resend_visit_emails', async ({ workOrderId, to }) => {
+    const row = await workOrderRow(workOrderId);
+    if (!row || row.status !== 'active') return;
+    if (to === 'tenant') {
+      await tellTenantVisitTime(row, await visitWasMoved(row));
+      return;
+    }
+    if (to !== 'tradie') return;
+    if (row.kind === 'inspection') await tellTradieInspection(row);
+    else await tellTradieWorkOrder(row);
+  });
+
   worker.on<{ offerId: number }>('scheduling.remind_tenant_pick', async ({ offerId }) => {
     const row = await one<VisitOfferRow>(db, 'SELECT * FROM visit_offers WHERE id = ?', offerId);
     if (row?.status !== 'offered') return;
@@ -583,6 +689,7 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
     declinedNote,
     offerVisitTimes,
     visitOffer,
+    visitConfirmation,
     visitOfferIssue,
 
     /** A Tradie's free slots over the coming days, on the hour, inside working hours. */
@@ -633,7 +740,7 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
         }
         const id = await run(
           db,
-          `INSERT INTO work_orders (agency_id, job_id, ticket_id, tradie_id, start, "end", status, visit_confirmed) VALUES (?, ?, ?, ?, ?, ?, 'active', ?) RETURNING id`,
+          `INSERT INTO work_orders (agency_id, job_id, ticket_id, tradie_id, start, "end", status, visit_confirmed, token) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?) RETURNING id`,
           agencyId,
           jobId,
           ticket.id,
@@ -641,6 +748,7 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
           iso(start),
           iso(end),
           options.visitConfirmed ? 1 : 0,
+          newToken(),
         );
         await tickets.setJobStatus(jobId, 'scheduled');
         await tickets.recordEvent(ticket.id, 'work_order_sent', { jobId, tradie: name, visitStart: iso(start), visitEnd: iso(end) });
@@ -672,20 +780,7 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
       const row = (await workOrderRow(id))!;
       const { property } = await place(row);
       const issue = await tickets.issue(ticket.issueId);
-      await notifications.send(
-        tradie.id,
-        'tradie.work_order',
-        {
-          propertyAddress: property.address,
-          description: withoutContactDetails(issue.description),
-          trade: job.trade,
-          visitStart: row.start,
-          visitEnd: row.end,
-          approvedCents: quote.priceCents,
-          stage: quote.stage,
-        },
-        { issueId: issue.id },
-      );
+      await tellTradieWorkOrder(row);
       if (options.visitConfirmed) {
         // The Tenant chose this time, so the visit is already confirmed: no YES to reply.
         await notifications.send(
@@ -842,12 +937,15 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
     },
 
     async recordVisitConfirmation(workOrderId: number) {
-      return transaction(db, async () => {
+      const row = await transaction(db, async () => {
         const row = await workOrderRow(workOrderId);
-        if (row?.status !== 'active') return;
+        if (row?.status !== 'active' || row.visit_confirmed) return null;
         await run(db, 'UPDATE work_orders SET visit_confirmed = 1 WHERE id = ?', workOrderId);
         await tickets.recordEvent(row.ticket_id, 'visit_confirmed', { jobId: row.job_id, ...(row.kind === 'inspection' ? { inspection: true } : {}) });
+        return row;
       });
+      if (!row) return;
+      await modules.intake.stopWaitingOnVisit((await tickets.ticket(row.ticket_id)).tenantId, workOrderId);
     },
 
     /** Up to three slots in the next 14 days, as long as the current one, free for the Tradie and inside the Tenant's availability. */
@@ -865,6 +963,38 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
         ignoreWorkOrderId: row.id,
         skipStart: row.start,
       });
+    },
+
+    /** Queues the current visit email again. The worker sends it; this only schedules the task. */
+    async queueVisitEmailResend(agencyId: number, workOrderId: number, to: 'tenant' | 'tradie') {
+      if (to !== 'tenant' && to !== 'tradie') invalid('Choose who to resend to');
+      const row = await one<WorkOrderRow>(db, 'SELECT * FROM work_orders WHERE id = ? AND agency_id = ?', workOrderId, agencyId);
+      if (!row) notFound('Work Order');
+      await worker.schedule('scheduling.resend_visit_emails', { workOrderId: row.id, to });
+      if (to === 'tradie') {
+        const tradie = await profiles.person(row.tradie_id);
+        return tradie.businessName ?? tradie.name;
+      }
+      return (await profiles.person((await tickets.ticket(row.ticket_id)).tenantId)).name;
+    },
+
+    /** The Tenant confirms a visit from its link. Already confirmed, or no longer booked, stays as it is. */
+    async confirmBookedVisit(token: string) {
+      const row = await workOrderByToken(token);
+      if (!row) notFound('Visit');
+      await this.recordVisitConfirmation(row.id);
+    },
+
+    /**
+     * The Tenant asks for another time from the visit's link. A repair starts a new
+     * round of offers; a Site Inspection is the existing reschedule. The visit stays booked.
+     */
+    async askToMoveVisit(token: string) {
+      const row = await workOrderByToken(token);
+      if (!row) notFound('Visit');
+      if (row.status !== 'active') invalid('This visit is no longer booked');
+      await this.recordRescheduleRequest(row.id, 'tenant');
+      await modules.intake.stopWaitingOnVisit((await tickets.ticket(row.ticket_id)).tenantId, row.id);
     },
 
     /** The Tenant, from the booked visit's page, asks for another time. The visit stays booked until they pick a new one. */

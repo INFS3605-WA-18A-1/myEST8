@@ -200,6 +200,21 @@ describe('links', () => {
     expect(html).not.toContain('None of these work:');
   });
 
+  test("a preferred time is a Harbour button, with Tradie's preferred time under it and not in the label", () => {
+    const html = render('Tue 27 Oct, 9:00 am (preferred): https://myest8.test/v/abc?pick=1');
+    expect(linksOf(html)[0]).toEqual({ href: 'https://myest8.test/v/abc?pick=1', text: 'Tue 27 Oct, 9:00 am' });
+    expect(html).toContain('Tradie&#39;s preferred time');
+    expect(html).toMatch(/<td bgcolor="#1F5C8B"[^>]*>\s*<a [^>]*color:#FFFFFF[^>]*>Tue 27 Oct, 9:00 am<\/a>/);
+    expect(html).not.toContain('>(preferred)<');
+  });
+
+  test('Need another time? is an outlined Harbour button on white, decided from the label', () => {
+    const html = render('Need another time?: https://myest8.test/v/confirm/abc?another=1');
+    expect(linksOf(html)[0]).toEqual({ href: 'https://myest8.test/v/confirm/abc?another=1', text: 'Need another time?' });
+    expect(html).toMatch(/<td bgcolor="#FFFFFF"[^>]*border:1px solid #1F5C8B[^>]*>\s*<a [^>]*color:#1F5C8B[^>]*>Need another time\?<\/a>/);
+    expect(html).not.toMatch(/<td bgcolor="#1F5C8B"[^>]*>\s*<a [^>]*>Need another time\?<\/a>/);
+  });
+
   test('a time is a Harbour button, and None of these work is an outlined Harbour button on white', () => {
     const html = render(
       'Tue 27 Oct, 9:00 am: https://myest8.test/v/abc?pick=1\n\n' +

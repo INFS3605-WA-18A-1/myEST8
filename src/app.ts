@@ -141,11 +141,20 @@ export function createApp(
       await quotes.submitFirmQuote(id, input);
     },
 
-    /** The chosen Tradie offers 2 or 3 visit times from their quote page. The Tenant is asked to pick one. */
+    /** The chosen Tradie offers a preferred visit time, and up to two more, from their quote page. The Tenant is asked to pick one. */
     offerVisitTimes: (token: string, starts: string[]) => scheduling.offerVisitTimes(token, starts),
 
     /** The Tenant's confirm page for one offered time. Reading it never books. */
     visitOffer: (token: string, pick?: string) => scheduling.visitOffer(token, pick),
+
+    /** The page for a booked visit's confirm link. Reading it never confirms. */
+    visitConfirmation: (token: string) => scheduling.visitConfirmation(token),
+
+    /** Records the Tenant's confirmation of a booked visit, and stops waiting for YES. */
+    confirmBookedVisit: (token: string) => scheduling.confirmBookedVisit(token),
+
+    /** The Tenant asks for another time. A repair starts a new offer round; a Site Inspection is rescheduled as before. */
+    askToMoveVisit: (token: string) => scheduling.askToMoveVisit(token),
 
     /** Books the time the Tenant picked. The visit is confirmed, because they chose it. A booked visit moves instead. */
     pickVisitTime: (token: string, pick: string) => scheduling.pickVisitTime(token, pick),
@@ -394,6 +403,7 @@ export function createApp(
         askTradieToOfferTimes: (jobId: number) => scheduling.askTradieToOfferTimes(agencyId, jobId),
         suggestTimes: (workOrderId: number) => scheduling.suggestTimes(agencyId, workOrderId),
         acceptTime: (workOrderId: number, start: string) => scheduling.acceptTime(agencyId, workOrderId, start),
+        resendVisitEmail: (workOrderId: number, to: 'tenant' | 'tradie') => scheduling.queueVisitEmailResend(agencyId, workOrderId, to),
         rateTradie: (jobId: number, score: number) => scheduling.rateTradie(agencyId, jobId, score),
 
         // Site Inspections, one Tradie at a time
