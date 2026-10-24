@@ -214,8 +214,6 @@ export function importTemplate(kind: ImportKind): string {
 
 // --- Reading values ---
 
-const ROLE_LABEL: Record<Role, string> = { tenant: 'Tenant', owner: 'Property Owner', tradie: 'Tradie', building_manager: 'Building Manager' };
-
 const TRADE_LABEL: Record<Trade, string> = {
   plumbing: 'Plumbing',
   electrical: 'Electrical',
@@ -555,12 +553,11 @@ export function createImports({ db, clock, settings, ports, modules }: Context, 
       };
 
       /** Marks the row a duplicate when someone with `role` already has its mobile or email, or an earlier row does. */
-      const checkHolders = (role: Role, contactInfo: { mobile?: string; email?: string }, fields: { mobile: string; email: string }) => {
-        for (const [kind, address] of [['mobile', contactInfo.mobile], ['email', contactInfo.email]] as const) {
+      const checkHolders = (role: Role, contactInfo: { mobile?: string; email?: string }) => {
+        for (const address of [contactInfo.mobile, contactInfo.email]) {
           if (!address) continue;
           const holder = holders.get(address);
           if (holder && holder.role === role) duplicateOf ??= holder.businessName ?? holder.name;
-          else if (holder) problem(fields[kind], `${address} already belongs to ${holder.name}, a ${ROLE_LABEL[holder.role]}`);
           const earlier = seen.get(address);
           if (earlier !== undefined && earlier !== sheetRow.line) duplicateOf ??= `Row ${earlier} of this sheet`;
           else seen.set(address, sheetRow.line);
@@ -575,7 +572,7 @@ export function createImports({ db, clock, settings, ports, modules }: Context, 
           const role: Role = stored.kind === 'owners' ? 'owner' : 'building_manager';
           copy('name');
           const person = { name: v.name ?? '', ...tidyContact('mobile', 'email') };
-          checkHolders(role, person, { mobile: 'mobile', email: 'email' });
+          checkHolders(role, person);
           await check(() => onboarding.checkContact(person));
           add = async () => (role === 'owner' ? onboarding.addOwner(agencyId, person) : onboarding.addBuildingManager(agencyId, person));
           break;
@@ -612,7 +609,7 @@ export function createImports({ db, clock, settings, ports, modules }: Context, 
           values.startingRating = String(startingRating);
           const existing = people.find((p) => p.role === 'tradie' && businessName && sameName(p.businessName ?? '', businessName));
           if (existing) duplicateOf = existing.businessName ?? existing.name;
-          checkHolders('tradie', contactInfo, { mobile: 'mobile', email: 'email' });
+          checkHolders('tradie', contactInfo);
           const tradie = { name, businessName, ...contactInfo, trades, startingRating, notOnGoogle: true as const };
           await check(() => onboarding.checkTradie(tradie));
           add = () => onboarding.addTradie(agencyId, tradie);
@@ -653,10 +650,9 @@ export function createImports({ db, clock, settings, ports, modules }: Context, 
           const ownerName = v.ownerName ?? '';
           const ownerContact = tidyContact('ownerMobile', 'ownerEmail');
           let owner: Person | undefined;
-          for (const [field, address] of [['ownerMobile', ownerContact.mobile], ['ownerEmail', ownerContact.email]] as const) {
+          for (const address of [ownerContact.mobile, ownerContact.email]) {
             const holder = address ? holders.get(address) : undefined;
             if (holder?.role === 'owner') owner ??= holder;
-            else if (holder) problem(field, `${address} already belongs to ${holder.name}, a ${ROLE_LABEL[holder.role]}`);
           }
           if (!owner && ownerName) {
             const named = people.filter((p) => p.role === 'owner' && sameName(p.name, ownerName));
@@ -733,7 +729,7 @@ export function createImports({ db, clock, settings, ports, modules }: Context, 
             property = findProperty(properties, wanted, problem);
             if (property) values.property = property.address;
           }
-          checkHolders('tenant', contactInfo, { mobile: 'mobile', email: 'email' });
+          checkHolders('tenant', contactInfo);
           const tenant = { name, ...contactInfo, propertyId: property?.id ?? 0, tenancyStart };
           if (property && tenancyStart) await check(() => onboarding.checkTenant(agencyId, tenant));
           else await check(() => onboarding.checkContact(tenant));

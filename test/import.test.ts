@@ -70,6 +70,19 @@ describe('importing Property Owners from a spreadsheet', () => {
     expect(left.added).toBe(1);
   });
 
+  test("imports an Owner whose email a Tenant already has", async () => {
+    const w = await world();
+    const { token } = await w.alice.importSheet('owners', csv('Name,Email\nKevin He,hana@example.com\n'));
+
+    const preview = await w.alice.importPreview(token);
+    expect(rowAt(preview, 2)).toMatchObject({ status: 'ready', included: true, values: { name: 'Kevin He', email: 'hana@example.com' }, problems: {} });
+
+    const result = await w.alice.confirmImport(token, {});
+    expect(result).toMatchObject({ added: 1, failed: [], finished: true });
+    expect((await w.alice.people('owner')).find((p) => p.name === 'Kevin He')).toMatchObject({ email: 'hana@example.com' });
+    expect(await w.alice.tenant(w.ids.hana)).toMatchObject({ name: 'Hana Ho', email: 'hana@example.com' });
+  });
+
   test('asks the AI about a header it does not know, and never applies an answer it is unsure of', async () => {
     const w = await world();
     w.h.classifier.when('Contact No.', { importColumn: ['mobile', 0.92] });
