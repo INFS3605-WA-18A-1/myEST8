@@ -159,6 +159,33 @@ describe('confirming a visit time', () => {
     expect(ticket).toContain('The Tenant asked for other times');
   });
 
+  test('the link from a none reply lets the Tenant say when they are home, and opening it changes nothing', async () => {
+    const { w, token } = await offeredTimes();
+    w.h.classifier.when('none', { messageClass: 'other', 'answer:visit_offer': 'none' });
+    await w.h.receive(TOM, 'none');
+    w.h.messenger.clear();
+
+    const opened = await w.get(`/v/${token}?home=1`);
+    expect(opened.status).toBe(200);
+    const text = visible(await opened.text());
+    expect(text).toContain('When are you usually home?');
+    expect(text).toContain('Weekday mornings');
+    expect((await one<{ availability: string }>(w.h.db, 'SELECT availability FROM people WHERE mobile = ?', TOM))?.availability).toBe('weekday_mornings');
+    expect((await one<{ status: string }>(w.h.db, 'SELECT status FROM visit_offers WHERE token = ?', token))?.status).toBe('none_fit');
+    expect(w.h.messenger.last(w.tradies.pete.address)).toBeUndefined();
+
+    const posted = await w.web.request(`/v/${token}`, {
+      method: 'POST',
+      body: new URLSearchParams({ pick: 'none', availability: 'saturdays', note: '' }),
+    });
+    expect(posted.status).toBe(303);
+    await w.h.drain();
+    expect((await one<{ availability: string }>(w.h.db, 'SELECT availability FROM people WHERE mobile = ?', TOM))?.availability).toBe('saturdays');
+    const again = w.h.messenger.last(w.tradies.pete.address)!;
+    expect(again).toMatchObject({ template: 'tradie.offer_times_again', data: { availability: 'saturdays', note: null } });
+    expect(again.text).toContain("They're usually home Saturdays.");
+  });
+
   test('leaving when they are home blank keeps the times on offer', async () => {
     const { w, token } = await offeredTimes();
     const posted = await w.web.request(`/v/${token}`, {

@@ -92,6 +92,10 @@ export const templates = {
     'Choose a visit time',
     (d) => [`${d.tradieBusinessName} (${trade(d.trade)}) can visit. Pick a time.`, ...d.choices.map((c) => `${c.label}: ${c.url}`)].join('\n\n'),
   ),
+  'tenant.say_when_home': template<{ whenHomeLink: string }>(
+    'Other visit times',
+    (d) => `Thanks. We'll ask the tradie for other times.\n\nSay when you're home: ${d.whenHomeLink}`,
+  ),
   'tenant.visit_time': template<{ visitStart: string; trade: Trade; tradieBusinessName: string }>(
     'Repair visit booked',
     (d, a) => `${d.tradieBusinessName} (${trade(d.trade)}) will visit on ${visit(d.visitStart, a)}. Reply YES to confirm or tell us if you need another time.`,

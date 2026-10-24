@@ -331,7 +331,7 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
     }
     if (awaiting.kind === 'visit_offer') {
       await logInbound(msg, tenant.id, await modules.scheduling.visitOfferIssue(awaiting.offerId));
-      return modules.scheduling.answerVisitOffer(awaiting.offerId, answer);
+      return modules.scheduling.answerVisitOffer(awaiting.offerId, answer, msg.text);
     }
     const reschedule = answer === 'reschedule';
     await logInbound(msg, tenant.id, await issueIdOf(`work_order:${awaiting.workOrderId}`), reschedule);

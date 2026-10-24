@@ -122,13 +122,42 @@ describe('the Tenant replies to choose a time', () => {
     expect(w.h.messenger.last(TOM)!.text).toContain('Booked for Wed 28 Oct, 1:00 pm');
   });
 
-  test('replying none does not book a visit', async () => {
+  test('replying none does not book a visit, asks the Tradie again, and points the Tenant at the page', async () => {
     const { w, job } = await timesOffered();
+    const token = w.h.messenger.last(TOM)!.text.match(/\/v\/([^?\s]+)\?pick=1/)![1]!;
     w.h.classifier.when('none', { messageClass: 'other', 'answer:visit_offer': 'none' });
     await w.h.receive(TOM, 'none');
+
     expect(await jobView(w, job)).toMatchObject({ status: 'approved', workOrder: null });
-    expect(w.h.messenger.last(w.tradies.pete.address)!.template).toBe('tradie.offer_times');
-    expect(w.h.messenger.last(TOM)!.template).toBe('tenant.choose_visit_time');
+    expect((await one<{ status: string; tenant_note: string | null }>(w.h.db, 'SELECT status, tenant_note FROM visit_offers WHERE token = ?', token))).toMatchObject({
+      status: 'none_fit',
+      tenant_note: null,
+    });
+    expect((await one<{ availability: string }>(w.h.db, 'SELECT availability FROM people WHERE mobile = ?', TOM))?.availability).toBe('weekday_mornings');
+    const again = w.h.messenger.last(w.tradies.pete.address)!;
+    expect(again).toMatchObject({
+      template: 'tradie.offer_times_again',
+      data: { availability: 'weekday_mornings', note: null, propertyAddress: KING_ST },
+    });
+    expect(again.text).toContain("They're usually home weekday mornings.");
+    expect(again.text).not.toContain('They said:');
+    expect((await w.alice.ticket(job.ticketId)).timeline.at(-1)).toMatchObject({ kind: 'other_times_requested', jobId: job.jobId });
+    const reply = w.h.messenger.last(TOM)!;
+    expect(reply.template).toBe('tenant.say_when_home');
+    expect(reply.text).toContain(`Say when you're home: https://myest8.test/v/${token}?home=1`);
+  });
+
+  test("replying none keeps the rest of the reply as the Tenant's note", async () => {
+    const { w, job } = await timesOffered();
+    const token = w.h.messenger.last(TOM)!.text.match(/\/v\/([^?\s]+)\?pick=1/)![1]!;
+    w.h.classifier.when('none. Sunday 10 am works', { messageClass: 'other', 'answer:visit_offer': 'none' });
+    await w.h.receive(TOM, 'none. Sunday 10 am works');
+
+    expect((await one<{ tenant_note: string | null }>(w.h.db, 'SELECT tenant_note FROM visit_offers WHERE token = ?', token))?.tenant_note).toBe('Sunday 10 am works');
+    const again = w.h.messenger.last(w.tradies.pete.address)!;
+    expect(again).toMatchObject({ template: 'tradie.offer_times_again', data: { note: 'Sunday 10 am works', availability: 'weekday_mornings' } });
+    expect(again.text).toContain('They said: Sunday 10 am works.');
+    expect((await w.alice.ticket(job.ticketId)).timeline.at(-1)).toMatchObject({ kind: 'other_times_requested', note: 'Sunday 10 am works' });
   });
 });
 

@@ -23,7 +23,7 @@ export function visitOfferPages(app: App) {
   pages.get('/v/:token', async (c) => {
     const page = await app.visitOffer(c.req.param('token'), c.req.query('pick'));
     if (!page) return c.html(missingLink(), 404);
-    return c.html(confirmPage(c.req.param('token'), page, c.req.query('booked') === '1'));
+    return c.html(confirmPage(c.req.param('token'), page, c.req.query('booked') === '1', undefined, c.req.query('home') === '1'));
   });
 
   pages.post('/v/:token', async (c) => {
@@ -38,7 +38,7 @@ export function visitOfferPages(app: App) {
       if (error.code === 'not_found') return c.html(missingLink(), 404);
       const page = await app.visitOffer(token, pick);
       if (!page) return c.html(missingLink(), 404);
-      return c.html(confirmPage(token, page, false, error.message), STATUS[error.code]);
+      return c.html(confirmPage(token, page, false, error.message, text(form, 'home') === '1'), STATUS[error.code]);
     }
     const next = pick === 'none' ? `/v/${encodeURIComponent(token)}?pick=none` : `/v/${encodeURIComponent(token)}?booked=1`;
     return c.redirect(next, 303);
@@ -57,16 +57,18 @@ function missingLink(): Html {
   });
 }
 
-function confirmPage(token: string, page: Offer, booked: boolean, error?: string): Html {
+function confirmPage(token: string, page: Offer, booked: boolean, error?: string, home = false): Html {
   const when = page.pickedStart ?? page.start;
   const bookedFor = when ? `This visit is booked for ${formatVisit(when, page.timeZone)}.` : 'This visit is booked.';
   const none = page.pick === 'none';
+  // The email's "say when you're home" link is a GET. It shows the form again after none already fit.
+  const asking = (none && page.status === 'offered') || (home && (page.status === 'offered' || page.status === 'none_fit'));
   return publicPage({
     css: ['tenant.css'],
     runtime: false,
     width: 'narrow',
     brand: page.agencyName,
-    title: none ? (page.status === 'offered' ? 'None of these work' : 'Other times') : page.bookable ? 'Book this visit' : 'Visit time',
+    title: asking ? (none && page.status === 'offered' ? 'None of these work' : 'When are you usually home?') : none ? 'Other times' : page.bookable ? 'Book this visit' : 'Visit time',
     footer: `Questions? Reply to any message from ${page.agencyName}.`,
     body: html`${error ? alert(error, 'error') : ''}
       ${page.bookable && page.start
@@ -77,10 +79,10 @@ function confirmPage(token: string, page: Offer, booked: boolean, error?: string
                 ${button(`Book ${formatVisitDay(page.start, page.timeZone)}`, { block: true })}
               </form>`,
           })
-        : none
-          ? page.status === 'offered'
-            ? noneForm(token, page)
-            : html`<p>Thanks. We'll ask ${page.tradieBusinessName} for other times.</p>`
+        : asking
+          ? noneForm(token, page)
+          : none
+            ? html`<p>Thanks. We'll ask ${page.tradieBusinessName} for other times.</p>`
           : booked || page.status === 'picked'
             ? html`<p>${bookedFor}</p>`
             : html`<p>Open one of the times in the message we sent you.</p>`}`,
@@ -93,6 +95,7 @@ function noneForm(token: string, page: Offer): Html {
     body: html`<p>${page.tradieBusinessName} can visit ${page.address}, and none of the times work.</p>
       <form method="post" action="/v/${encodeURIComponent(token)}" class="tenant-form">
         <input type="hidden" name="pick" value="none" />
+        ${page.status === 'none_fit' ? html`<input type="hidden" name="home" value="1" />` : ''}
         <fieldset class="tenant-choices">
           <legend>When are you usually home?</legend>
           ${AVAILABILITY.map(

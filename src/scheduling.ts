@@ -394,6 +394,11 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
     return new Intl.DateTimeFormat('en-AU', { timeZone, weekday: 'long' }).format(new Date(at));
   }
 
+  /** Everything after a leading "none" (or "none of these work"): the Tenant's note, or nothing. */
+  function noteFromNoneReply(text: string) {
+    return text.replace(/^\s*none(?:\s+of\s+these(?:\s+work)?)?\b[\s,.:;!-]*/i, '').trim();
+  }
+
   /** Which offered time a reply names: "1" or a weekday. -1 when it names none, or more than one. */
   function choiceIndex(starts: string[], answer: string, timeZone: string) {
     if (/^\d+$/.test(answer)) {
@@ -588,21 +593,23 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
     async declineVisitTimes(token: string, input: { availability: string; note: string }) {
       const row = await offerByToken(token);
       if (!row) notFound('Visit time');
-      if (row.status !== 'offered') invalid('These times are no longer on offer');
+      if (row.status !== 'offered' && row.status !== 'none_fit') invalid('These times are no longer on offer');
       const availability = AVAILABILITY.find((option) => option === input.availability);
       if (!availability) invalid('Choose when you are usually home', 'availability');
-      const note = input.note.trim();
+      const written = input.note.trim();
+      const note = written || (row.status === 'none_fit' ? (row.tenant_note ?? '') : '');
+      const firstTime = row.status === 'offered';
 
       const ticket = await tickets.ticket(row.ticket_id);
       await modules.profiles.setAvailability(ticket.tenantId, availability);
       await run(
         db,
-        `UPDATE visit_offers SET status = 'none_fit', tenant_note = ?, answered_at = ? WHERE id = ? AND status = 'offered'`,
+        `UPDATE visit_offers SET status = 'none_fit', tenant_note = ?, answered_at = ? WHERE id = ? AND status IN ('offered', 'none_fit')`,
         note || null,
         iso(clock.now()),
         row.id,
       );
-      await tickets.recordEvent(row.ticket_id, 'other_times_requested', { jobId: row.job_id, ...(note ? { note } : {}) });
+      if (firstTime) await tickets.recordEvent(row.ticket_id, 'other_times_requested', { jobId: row.job_id, ...(note ? { note } : {}) });
 
       const job = await tickets.job(row.job_id);
       const property = await profiles.property(ticket.propertyId);
@@ -646,12 +653,24 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
       );
     },
 
-    /** A reply of "1", a weekday, or "none". "none" records that none fit and does not book. Saying when they are home is the page. */
-    async answerVisitOffer(offerId: number, answer: string) {
+    /**
+   * A reply of "1", a weekday, or "none". "none" does what the page does: the rest of the
+   * reply is the Tenant's note, the Tradie is asked to offer again, and the Tenant is sent
+   * the page in case they want to say when they are home. Nothing is booked.
+   */
+    async answerVisitOffer(offerId: number, answer: string, text: string) {
       const row = await one<VisitOfferRow>(db, 'SELECT * FROM visit_offers WHERE id = ?', offerId);
       if (!row || row.status !== 'offered') return;
       if (answer === 'none') {
-        await run(db, `UPDATE visit_offers SET status = 'none_fit', answered_at = ? WHERE id = ? AND status = 'offered'`, iso(clock.now()), row.id);
+        const ticket = await tickets.ticket(row.ticket_id);
+        const tenant = await profiles.person(ticket.tenantId);
+        await this.declineVisitTimes(row.token, { availability: tenant.availability ?? 'any_time', note: noteFromNoneReply(text) });
+        await notifications.send(
+          ticket.tenantId,
+          'tenant.say_when_home',
+          { whenHomeLink: `${settings.baseUrl}/v/${row.token}?home=1` },
+          { issueId: ticket.issueId },
+        );
         return;
       }
       const starts = startsOf(row.starts);
