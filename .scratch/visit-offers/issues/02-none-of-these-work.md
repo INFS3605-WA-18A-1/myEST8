@@ -1,6 +1,6 @@
 # B2. When none of the times work
 
-Status: ready-for-agent
+Status: resolved
 Blocked by: 01
 Spec: ../spec.md
 
@@ -12,6 +12,6 @@ Spec: ../spec.md
 
 ## Acceptance criteria
 
-- [ ] Each behaviour above has a test at an agreed seam that failed first.
-- [ ] The spec's verification steps for this issue pass.
-- [ ] `npm run check` passes.
+- [x] Each behaviour above has a test at an agreed seam that failed first.
+- [x] The spec's verification steps for this issue pass.
+- [x] `npm run check` passes.
