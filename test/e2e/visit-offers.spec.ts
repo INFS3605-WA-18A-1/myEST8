@@ -287,7 +287,8 @@ test('none of the times work, so the Tenant says when they are home and the Trad
 test('a booked visit can ask for another time, and the Ticket can ask the Tradie to offer times', async ({ page, browser }) => {
   test.setTimeout(240_000);
   mkdirSync('.screenshots/visit-offers', { recursive: true });
-  const report = `The laundry tap is dripping ${unique()}`;
+  // Kai Kelly, who shares this Property, reports a dripping tap in a parallel test: no shared words, so this is not read as their duplicate.
+  const report = `The laundry sink drains slowly ${unique()}`;
   await signIn(page);
 
   await page.goto('/demo');
