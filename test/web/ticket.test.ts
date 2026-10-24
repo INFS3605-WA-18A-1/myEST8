@@ -12,6 +12,8 @@ import {
   dateAhead,
   firmQuote,
   KING_ST,
+  OLIVIA,
+  OLIVIA_EMAIL,
   PETE,
   quoteRequestFor,
   quoteToken,
@@ -307,6 +309,59 @@ describe('Quotes', () => {
     expect(chosen.page.text).toContain('Property Owner approval Requested');
     expect(chosen.page.text).toContain(
       "to approve Pete's Plumbing's Quote of $600.00, which takes the Repair Cost to $600.00, over the Max Repair Cost of $500.00.",
+    );
+  });
+
+  test('a refused approval email says to resend it, and the page offers that', async () => {
+    const { w, open, submit, quoteFrom, firmFrom } = await tapTicket();
+    await quoteFrom(w.tradies.pete, 'Pete quotes 600', { priceCents: 600_00 });
+    await submit(formPosting((await open()).html, /\/confirm$/), { price: '600' });
+    await firmFrom(w.tradies.pete, { price: '600' });
+    await w.alice.disconnectServerSms(AGENCY_NUMBER);
+    const send = w.h.messenger.send.bind(w.h.messenger);
+    w.h.messenger.send = async (message) => {
+      if (message.to === OLIVIA_EMAIL) throw new ProviderRefusedError('Resend 429', 'the email provider is limiting how many emails go out');
+      return send(message);
+    };
+
+    const chosen = await submit(formPosting((await open()).html, /\/choose$/), { reason: 'Our usual plumber' });
+
+    const warning =
+      "Sent to the Property Owner for approval, but the email to Olivia Owens didn't go: the email provider is limiting how many emails go out. Use Resend approval request.";
+    expect(chosen.ok).toBe(warning);
+    expect(chosen.page.text).toContain(warning);
+    expect(chosen.page.text).toContain('Resend approval request');
+    expect(chosen.page.html).toMatch(/\/approvals\/\d+\/resend"/);
+  });
+
+  test('Resend approval request tells the Property Manager it was sent again', async () => {
+    const { w, approvePete, submit } = await tapTicket();
+    const chosen = await approvePete(600_00);
+
+    const resent = await submit(formPosting(chosen.page.html, /\/approvals\/\d+\/resend$/));
+
+    expect(resent.ok).toBe('Approval request resent to Olivia Owens');
+    expect(resent.page.text).toContain('Approval request resent to Olivia Owens');
+    expect(w.h.messenger.templatesTo(OLIVIA)).toEqual(['owner.approval_request', 'owner.approval_request']);
+  });
+
+  test('proceeding on an Estimate whose email is refused says to resend the approval request', async () => {
+    const { w, job, open, submit } = await tapTicket();
+    await confirmedEstimates(w, job, [
+      [w.tradies.pete, 600_00],
+      [w.tradies.dana, 650_00],
+    ]);
+    await w.alice.disconnectServerSms(AGENCY_NUMBER);
+    const send = w.h.messenger.send.bind(w.h.messenger);
+    w.h.messenger.send = async (message) => {
+      if (message.to === OLIVIA_EMAIL) throw new ProviderRefusedError('Resend 429', 'the email provider is limiting how many emails go out');
+      return send(message);
+    };
+
+    const done = await submit(formPosting((await open()).html, /\/proceed$/), { cap: '600' });
+
+    expect(done.ok).toBe(
+      "Sent to the Property Owner for approval, but the email to Olivia Owens didn't go: the email provider is limiting how many emails go out. Use Resend approval request.",
     );
   });
 });
