@@ -1,6 +1,6 @@
 # A preferred time, and buttons on every visit email
 
-Status: ready-for-agent
+Status: resolved
 Blocked by: 03
 Spec: ../spec.md
 
@@ -31,23 +31,23 @@ Testing in production (2026-10-24) the Tenant got `tenant.visit_moved` after the
 
 ## Acceptance criteria
 
-- [ ] Action tests:
+- [x] Action tests:
   - an offer stores the preferred time
   - the Tenant's choose-time email lists the preferred first with its note
   - a Property Manager-booked visit and a Property Manager-moved visit each email the Tenant with the Confirm and Need another time links
   - confirming through the page records the confirmation and stops the YES wait
   - Need another time starts a new offer round
   - replying YES still confirms
-- [ ] Resend tests:
+- [x] Resend tests:
   - the `scheduling.resend_visit_emails` task re-sends the current Tenant or Tradie email with the new templates and logs it
   - it does nothing for a cancelled or completed visit
   - the Ticket's Resend buttons queue it with the flash
-- [ ] Page tests:
+- [x] Page tests:
   - the Tradie form's preferred field is required
   - the confirm page's GET changes nothing
   - its POST confirms
   - a stale link shows the current state
-- [ ] Renderer tests: the preferred note, and "Need another time?" outlined.
-- [ ] A browser test: the Property Manager moves a visit from the Ticket, the Tenant's email has both buttons, Confirm leads to the confirm page, and pressing it shows Confirmed on the Ticket.
-- [ ] Screenshots of the choose-time email with the preferred time, and of the moved-visit email, at 600 px and 375 px, reviewed.
-- [ ] `npm run check` passes.
+- [x] Renderer tests: the preferred note, and "Need another time?" outlined.
+- [x] A browser test: the Property Manager moves a visit from the Ticket, the Tenant's email has both buttons, Confirm leads to the confirm page, and pressing it shows Confirmed on the Ticket.
+- [x] Screenshots of the choose-time email with the preferred time, and of the moved-visit email, at 600 px and 375 px, reviewed.
+- [x] `npm run check` passes.

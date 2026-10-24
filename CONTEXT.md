@@ -102,7 +102,7 @@ The most a Tradie may charge when the Property Manager proceeds on an Estimate f
 _Avoid_: limit, ceiling
 
 **Work Order**:
-The confirmation sent to the chosen Tradie that authorises them to do a Job. For a repair, the Tradie offers two or three visit times and the Tenant picks one; the Property Manager can still book a time, which supersedes an open offer. A Site Inspection stays booked by the Property Manager.
+The confirmation sent to the chosen Tradie that authorises them to do a Job. For a repair, the Tradie offers a preferred time and up to two more, and the Tenant picks one; the Property Manager can still book or move a time, which supersedes an open offer. Every Tenant visit message has a link to confirm the time and a link to ask for another. A Site Inspection stays booked by the Property Manager.
 _Avoid_: notice of work confirmation, job confirmation
 
 **Repair Cost**:
