@@ -39,8 +39,8 @@ type WorkOrderRow = {
   reschedule_requested_by: 'tenant' | 'tradie' | null;
   kind: WorkOrderKind;
   quote_request_id: number | null;
-  /** No-login link for confirming the visit or asking for another time. */
-  token: string;
+  /** No-login link for confirming the visit or asking for another time. Null until one is needed: older code inserts a Work Order without one. */
+  token: string | null;
 };
 
 /** A repair visit, or a Tradie's Site Inspection before their Firm Quote. */
@@ -179,6 +179,20 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
     return { confirmLink: base, anotherTimeLink: `${base}?another=1` };
   }
 
+  /**
+   * The visit's no-login token. A Work Order inserted without one (the column is
+   * nullable, so older code still can) gets a token here, the first time a link
+   * needs it, and keeps that token after.
+   */
+  async function ensureToken(row: WorkOrderRow): Promise<string> {
+    if (row.token) return row.token;
+    const token = newToken();
+    const saved = await one<{ token: string | null }>(db, 'UPDATE work_orders SET token = ? WHERE id = ? AND token IS NULL RETURNING token', token, row.id);
+    const kept = saved?.token ?? (await one<{ token: string }>(db, 'SELECT token FROM work_orders WHERE id = ?', row.id))!.token;
+    row.token = kept;
+    return kept;
+  }
+
   /** The Tradie's Work Order for this visit, at its current time. */
   async function tellTradieWorkOrder(row: WorkOrderRow) {
     const quote = await modules.quotes.approvedQuote(row.job_id);
@@ -234,7 +248,7 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
   /** Tells the Tenant the visit time, with a button to confirm it and one to ask for another. A confirmed visit is not waiting on YES. */
   async function tellTenantVisitTime(row: WorkOrderRow, moved: boolean) {
     const { job, ticket, tradieBusinessName } = await place(row);
-    const links = visitActionLinks(row.token);
+    const links = visitActionLinks(await ensureToken(row));
     if (moved) {
       await notifications.send(ticket.tenantId, 'tenant.visit_moved', { visitStart: row.start, tradieBusinessName, ...links }, { issueId: ticket.issueId });
     } else if (row.kind === 'inspection') {

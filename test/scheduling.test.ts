@@ -327,6 +327,25 @@ async function logged(w: World, template: string) {
 }
 
 describe('resending a visit email', () => {
+  test('a Work Order with no token gets one the first time the Tenant is sent the visit link, and keeps it', async () => {
+    const w = await world();
+    const { h, alice, tradies } = w;
+    const job = await approvedTapJob(w, tradies.pete, TUE_9AM);
+    await alice.sendWorkOrder(job.jobId);
+    const { workOrder } = await jobView(w, job);
+    await run(h.db, 'UPDATE work_orders SET token = NULL WHERE id = ?', workOrder!.workOrderId);
+    h.messenger.clear();
+
+    await queueResend(w, workOrder!.workOrderId, 'tenant');
+
+    const saved = await one<{ token: string | null }>(h.db, 'SELECT token FROM work_orders WHERE id = ?', workOrder!.workOrderId);
+    expect(saved?.token).toMatch(/^[\w-]{32}$/);
+    expect(h.messenger.last(TOM)!.text).toContain(`/v/confirm/${saved!.token}`);
+    h.messenger.clear();
+    await queueResend(w, workOrder!.workOrderId, 'tenant');
+    expect((await one<{ token: string | null }>(h.db, 'SELECT token FROM work_orders WHERE id = ?', workOrder!.workOrderId))?.token).toBe(saved!.token);
+  });
+
   test("the task re-sends the Tenant's current visit email, with the confirm links, and logs it", async () => {
     const w = await world();
     const { h, alice, tradies } = w;
