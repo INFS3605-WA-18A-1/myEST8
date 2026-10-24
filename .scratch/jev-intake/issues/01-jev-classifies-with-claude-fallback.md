@@ -1,6 +1,6 @@
 # Jev classifies, with Claude as the fallback
 
-Status: ready-for-agent
+Status: resolved
 Spec: ../spec.md
 
 ## What to build
@@ -22,16 +22,16 @@ Spec: ../spec.md
 
 ## Acceptance criteria
 
-- [ ] Adapter tests:
+- [x] Adapter tests:
   - the System One request (model, state, choice questions with criteria, bearer key, a safe name for `answer:guided`)
   - answers mapped back to the original ids with confidence
   - an unknown option or a missing answer gives confidence 0
   - a malformed answer throws
   - the key never appears in an error
-- [ ] Wrapper tests: Jev answers are used, and Jev throwing falls back to Claude's answers and logs.
-- [ ] Runtime and hosted tests:
+- [x] Wrapper tests: Jev answers are used, and Jev throwing falls back to Claude's answers and logs.
+- [x] Runtime and hosted tests:
   - `JEV_API_URL` plus an Anthropic key gives the Jev-with-fallback classifier, named so in the startup log
   - the Trade suggester is listed as real with `JEV_API_URL`, and as mock without it
   - `JEV_API_URL` without `JEV_API_KEY` is reported missing
-- [ ] Every existing intake scenario passes against the mock.
-- [ ] `npm run check` passes.
+- [x] Every existing intake scenario passes against the mock.
+- [x] `npm run check` passes.
