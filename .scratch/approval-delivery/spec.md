@@ -1,6 +1,6 @@
 # An approval is only asked for when the Owner can be reached, and can be resent
 
-Status: ready-for-agent
+Status: resolved
 
 ## Context
 
