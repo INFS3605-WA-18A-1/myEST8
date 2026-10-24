@@ -35,6 +35,20 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-width: 0;
+}
+/* These pages don't load Tailwind, so a control's w-full would otherwise not apply. */
+.tenant-form .input,
+.tenant-form .textarea,
+.tenant-form .btn {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.tenant-form .btn {
+  white-space: normal;
+  height: auto;
+  min-height: 44px;
 }
 .tenant-issue-label {
   font-size: 14px;

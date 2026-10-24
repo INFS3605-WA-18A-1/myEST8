@@ -24,7 +24,8 @@ type Awaiting =
   // `asks` counts the missing-details messages sent for the issue (a row without it is the first ask).
   | { kind: 'guided'; issueId: number; question?: GuidedQuestion; asks?: number }
   | { kind: 'fix_rating'; jobId: number }
-  | { kind: 'visit'; workOrderId: number };
+  | { kind: 'visit'; workOrderId: number }
+  | { kind: 'visit_offer'; offerId: number; options: string[] };
 
 /** The guided questions in the order they are asked. */
 const GUIDED_ORDER: GuidedQuestion[] = ['location', 'started', 'worsening', 'availability'];
@@ -53,6 +54,7 @@ const TRADE_QUESTION = question('trade', TRADES);
 function answerOptions(awaiting: Awaiting): string[] {
   if (awaiting.kind === 'fix_rating') return ['1', '2', '3', '4', '5', 'not_an_answer'];
   if (awaiting.kind === 'visit') return ['confirm', 'reschedule', 'not_an_answer'];
+  if (awaiting.kind === 'visit_offer') return [...awaiting.options, 'not_an_answer'];
   return ['answer', 'not_an_answer'];
 }
 
@@ -326,6 +328,10 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
     if (awaiting.kind === 'fix_rating') {
       await logInbound(msg, tenant.id, await issueIdOf(`job:${awaiting.jobId}`));
       return modules.scheduling.recordTenantRating(awaiting.jobId, Number(answer));
+    }
+    if (awaiting.kind === 'visit_offer') {
+      await logInbound(msg, tenant.id, await modules.scheduling.visitOfferIssue(awaiting.offerId));
+      return modules.scheduling.answerVisitOffer(awaiting.offerId, answer);
     }
     const reschedule = answer === 'reschedule';
     await logInbound(msg, tenant.id, await issueIdOf(`work_order:${awaiting.workOrderId}`), reschedule);

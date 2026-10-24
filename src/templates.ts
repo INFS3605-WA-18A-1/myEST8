@@ -90,6 +90,10 @@ export const templates = {
     'Repair visit booked',
     (d, a) => `${d.tradieBusinessName} (${trade(d.trade)}) will visit on ${visit(d.visitStart, a)}. Reply YES to confirm or tell us if you need another time.`,
   ),
+  'tenant.visit_booked': template<{ visitStart: string; anotherTimeLink: string }>(
+    'Repair visit booked',
+    (d, a) => `Booked for ${visit(d.visitStart, a)}.\n\nNeed another time?: ${d.anotherTimeLink}`,
+  ),
   'tenant.visit_moved': template<{ visitStart: string; tradieBusinessName: string }>(
     'Repair visit moved',
     (d, a) => `Your visit from ${d.tradieBusinessName} has moved to ${visit(d.visitStart, a)}. Reply YES to confirm or tell us if you need another time.`,

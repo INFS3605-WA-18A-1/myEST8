@@ -352,10 +352,10 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
 
     const offerToken = newToken();
     const round = ((await one<{ round: number }>(db, 'SELECT round FROM visit_offers WHERE job_id = ? ORDER BY round DESC LIMIT 1', request.job_id))?.round ?? 0) + 1;
-    await run(
+    const offerId = await run(
       db,
       `INSERT INTO visit_offers (agency_id, job_id, ticket_id, tradie_id, round, starts, duration_minutes, status, token, created_at)
-       VALUES (?, ?, ?, ?, ?, ?::jsonb, ?, 'offered', ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?::jsonb, ?, 'offered', ?, ?) RETURNING id`,
       request.agency_id,
       request.job_id,
       request.ticket_id,
@@ -380,6 +380,64 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
       { tradieBusinessName: name, trade: job.trade, choices },
       { issueId: ticket.issueId },
     );
+    await modules.intake.expectAnswer(ticket.tenantId, { kind: 'visit_offer', offerId, options: choiceOptions(when, timeZone) });
+  }
+
+  /** "1", each weekday that names only one time, and "none". A shared weekday is left out. */
+  function choiceOptions(starts: Date[], timeZone: string) {
+    const days = starts.map((at) => longWeekday(at, timeZone));
+    const unique = days.filter((day) => days.filter((other) => other === day).length === 1);
+    return [...starts.map((_, i) => String(i + 1)), ...unique, 'none'];
+  }
+
+  function longWeekday(at: Date | string, timeZone: string) {
+    return new Intl.DateTimeFormat('en-AU', { timeZone, weekday: 'long' }).format(new Date(at));
+  }
+
+  /** Which offered time a reply names: "1" or a weekday. -1 when it names none, or more than one. */
+  function choiceIndex(starts: string[], answer: string, timeZone: string) {
+    if (/^\d+$/.test(answer)) {
+      const index = Number(answer) - 1;
+      return index >= 0 && index < starts.length ? index : -1;
+    }
+    const days = starts.map((start) => longWeekday(start, timeZone));
+    return days.filter((day) => day === answer).length === 1 ? days.indexOf(answer) : -1;
+  }
+
+  async function visitOfferIssue(offerId: number) {
+    const row = await one<{ ticket_id: number }>(db, 'SELECT ticket_id FROM visit_offers WHERE id = ?', offerId);
+    return row ? (await tickets.ticket(row.ticket_id)).issueId : null;
+  }
+
+  async function offerByToken(token: string) {
+    return one<VisitOfferRow>(db, 'SELECT * FROM visit_offers WHERE token = ?', token);
+  }
+
+  /**
+   * The Tenant's confirm page. `pick` names a time ("1") or "none"; it is only shown.
+   * An unknown token or an unknown number is null. Booking is pickVisitTime.
+   */
+  async function visitOffer(token: string, pick?: string) {
+    const row = await offerByToken(token);
+    if (!row) return null;
+    const starts = startsOf(row.starts);
+    const index = pick && pick !== 'none' ? Number(pick) - 1 : -1;
+    if (pick && pick !== 'none' && (!Number.isInteger(index) || index < 0 || index >= starts.length)) return null;
+    const { timeZone, name } = await profiles.agency(row.agency_id);
+    const ticket = await tickets.ticket(row.ticket_id);
+    const property = await profiles.property(ticket.propertyId);
+    const tradie = await profiles.person(row.tradie_id);
+    return {
+      agencyName: name,
+      timeZone,
+      address: property.address,
+      tradieBusinessName: tradie.businessName ?? tradie.name,
+      status: row.status,
+      pick: pick ?? null,
+      start: index >= 0 ? starts[index]! : null,
+      pickedStart: row.picked_start,
+      bookable: row.status === 'offered' && index >= 0,
+    };
   }
 
   /**
@@ -408,6 +466,8 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
     askForVisitTimes,
     offeredVisit,
     offerVisitTimes,
+    visitOffer,
+    visitOfferIssue,
 
     /** A Tradie's free slots over the coming days, on the hour, inside working hours. */
     async freeSlots(agencyId: number, tradieId: number, options: { days?: number; durationMinutes?: number } = {}) {
@@ -424,7 +484,11 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
     },
 
     /** Books the Job's chosen Tradie, at the Quote's proposed time unless the Property Manager picks one. */
-    async sendWorkOrder(agencyId: number, jobId: number, options: { start?: string; durationMinutes?: number } = {}) {
+    async sendWorkOrder(
+      agencyId: number,
+      jobId: number,
+      options: { start?: string; durationMinutes?: number; visitConfirmed?: boolean; anotherTimeLink?: string } = {},
+    ) {
       const job = await tickets.jobInAgency(agencyId, jobId);
       if (job.status !== 'approved') invalid('Send a Work Order once the Job has an approved Quote');
       const quote = (await modules.quotes.approvedQuote(jobId))!;
@@ -453,13 +517,14 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
         }
         const id = await run(
           db,
-          `INSERT INTO work_orders (agency_id, job_id, ticket_id, tradie_id, start, "end", status) VALUES (?, ?, ?, ?, ?, ?, 'active') RETURNING id`,
+          `INSERT INTO work_orders (agency_id, job_id, ticket_id, tradie_id, start, "end", status, visit_confirmed) VALUES (?, ?, ?, ?, ?, ?, 'active', ?) RETURNING id`,
           agencyId,
           jobId,
           ticket.id,
           tradie.id,
           iso(start),
           iso(end),
+          options.visitConfirmed ? 1 : 0,
         );
         await tickets.setJobStatus(jobId, 'scheduled');
         await tickets.recordEvent(ticket.id, 'work_order_sent', { jobId, tradie: name, visitStart: iso(start), visitEnd: iso(end) });
@@ -483,13 +548,63 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
         },
         { issueId: issue.id },
       );
-      await tellTenantVisitTime(row, false);
+      if (options.visitConfirmed) {
+        // The Tenant chose this time, so the visit is already confirmed: no YES to reply.
+        await notifications.send(
+          ticket.tenantId,
+          'tenant.visit_booked',
+          { visitStart: row.start, anotherTimeLink: options.anotherTimeLink ?? `${settings.baseUrl}/v/` },
+          { issueId: issue.id },
+        );
+        await tickets.recordEvent(ticket.id, 'visit_confirmed', { jobId });
+      } else {
+        await tellTenantVisitTime(row, false);
+      }
       await notifications.send(
         property.ownerId,
         'owner.work_booked',
         { propertyAddress: property.address, trade: job.trade, visitStart: row.start },
         { issueId: issue.id },
       );
+    },
+
+    /** The Tenant picks one offered time. The link only named it; this books it, already confirmed. */
+    async pickVisitTime(token: string, pick: string) {
+      const row = await offerByToken(token);
+      if (!row) notFound('Visit time');
+      if (row.status !== 'offered') invalid('These times are no longer on offer');
+      const starts = startsOf(row.starts);
+      const index = Number(pick) - 1;
+      if (!Number.isInteger(index) || index < 0 || index >= starts.length) notFound('Visit time');
+      const start = starts[index]!;
+      await this.sendWorkOrder(row.agency_id, row.job_id, {
+        start,
+        durationMinutes: row.duration_minutes,
+        visitConfirmed: true,
+        anotherTimeLink: `${settings.baseUrl}/v/${row.token}`,
+      });
+      await run(
+        db,
+        `UPDATE visit_offers SET status = 'picked', picked_start = ?, answered_at = ? WHERE id = ? AND status = 'offered'`,
+        start,
+        iso(clock.now()),
+        row.id,
+      );
+    },
+
+    /** A reply of "1", a weekday, or "none". "none" records that none fit and does not book. */
+    async answerVisitOffer(offerId: number, answer: string) {
+      const row = await one<VisitOfferRow>(db, 'SELECT * FROM visit_offers WHERE id = ?', offerId);
+      if (!row || row.status !== 'offered') return;
+      if (answer === 'none') {
+        await run(db, `UPDATE visit_offers SET status = 'none_fit', answered_at = ? WHERE id = ? AND status = 'offered'`, iso(clock.now()), row.id);
+        return;
+      }
+      const starts = startsOf(row.starts);
+      const { timeZone } = await profiles.agency(row.agency_id);
+      const index = choiceIndex(starts, answer, timeZone);
+      if (index < 0) return;
+      await this.pickVisitTime(row.token, String(index + 1));
     },
 
     async recordRescheduleRequest(workOrderId: number, by: 'tenant' | 'tradie') {

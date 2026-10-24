@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { visible, webWorld } from '../support/web.ts';
-import { confirmedEstimates, firmQuote, KING_ST, quoteToken, TOM, tomsTapTicket } from '../support/world.ts';
+import { confirmedEstimates, firmQuote, jobView, KING_ST, OLIVIA, quoteToken, TOM, tomsTapTicket } from '../support/world.ts';
 
 const TUE_27_9AM = new Date('2026-10-27T09:00:00+11:00');
 
@@ -70,5 +70,59 @@ describe("the Tradie's offer visit times form", () => {
     expect(after).toContain('Tue 27 Oct, 9:00 am');
     expect(after).toContain('Wed 28 Oct, 1:00 pm');
     expect(after).not.toContain('Visit time 1');
+  });
+});
+
+/** Offers Tuesday 9:00 am and Wednesday 1:00 pm, and returns the offer's token. */
+async function offeredTimes() {
+  const { w, job, path } = await petesOfferPage();
+  const body = new FormData();
+  body.append('starts', '2026-10-27T09:00');
+  body.append('starts', '2026-10-28T13:00');
+  await w.web.request(`${path}/times`, { method: 'POST', body });
+  await w.h.drain();
+  const token = w.h.messenger.last(TOM)!.text.match(/\/v\/([^?\s]+)\?pick=1/)![1]!;
+  return { w, job, token };
+}
+
+describe('confirming a visit time', () => {
+  test('opening the link does not book it, and pressing Book does, with no YES needed', async () => {
+    const { w, job, token } = await offeredTimes();
+    const opened = await w.get(`/v/${token}?pick=1`);
+    expect(opened.status).toBe(200);
+    expect(visible(await opened.text())).toContain('Book Tuesday 27 Oct, 9:00 am');
+    expect(await jobView(w, job)).toMatchObject({ status: 'approved', workOrder: null });
+
+    const posted = await w.web.request(`/v/${token}`, { method: 'POST', body: new URLSearchParams({ pick: '1' }) });
+    await w.h.drain();
+    expect(posted.status).toBe(303);
+
+    expect(await jobView(w, job)).toMatchObject({
+      status: 'scheduled',
+      workOrder: {
+        start: TUE_27_9AM.toISOString(),
+        end: new Date('2026-10-28T09:00:00+11:00').toISOString(),
+        visitConfirmed: true,
+      },
+    });
+    expect(w.h.messenger.last(w.tradies.pete.address)!.template).toBe('tradie.work_order');
+    expect(w.h.messenger.last(OLIVIA)!.template).toBe('owner.work_booked');
+    const booked = w.h.messenger.to(TOM).findLast((m) => m.template === 'tenant.visit_booked')!;
+    expect(booked.text).toContain('Booked for Tue 27 Oct, 9:00 am');
+    expect(booked.text).not.toMatch(/\bYES\b/);
+    expect(booked.text).toContain('Need another time?:');
+
+    const cookie = await w.signIn();
+    const ticket = visible(await (await w.get(`/tickets/${job.ticketId}`, cookie)).text());
+    expect(ticket).toContain('Tue 27 Oct, 9:00 am');
+    expect(ticket).toContain('Tenant confirmed');
+  });
+
+  test('opening none of these work does not book a visit', async () => {
+    const { w, job, token } = await offeredTimes();
+    const opened = await w.get(`/v/${token}?pick=none`);
+    expect(opened.status).toBe(200);
+    expect(visible(await opened.text())).toContain('None of these times work');
+    expect(await jobView(w, job)).toMatchObject({ status: 'approved', workOrder: null });
   });
 });

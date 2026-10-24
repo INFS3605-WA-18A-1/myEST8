@@ -72,3 +72,61 @@ describe('asking the Tradie to offer visit times', () => {
     expect(w.h.messenger.last(TOM)?.template).not.toBe('tenant.choose_visit_time');
   });
 });
+
+/** Pete's quote is approved and he has offered Tuesday 9:00 am and Wednesday 1:00 pm. */
+async function timesOffered() {
+  const w = await world();
+  const job = await tomsTapTicket(w);
+  const [quote] = await confirmedQuotes(w, job, [[w.tradies.pete, 150_00, TUE_27_9AM]]);
+  await w.alice.chooseQuote(quote!.quoteId, 'Usual plumber');
+  await w.h.app.offerVisitTimes(await quoteToken(w, job, w.tradies.pete), [TUE_27_9AM.toISOString(), new Date('2026-10-28T13:00:00+11:00').toISOString()]);
+  return { w, job };
+}
+
+describe('the Tenant replies to choose a time', () => {
+  test('replying 1 books that time, already confirmed, with no YES to send', async () => {
+    const { w, job } = await timesOffered();
+    w.h.classifier.when('1', { messageClass: 'other', 'answer:visit_offer': '1' });
+    await w.h.receive(TOM, '1');
+    expect(await jobView(w, job)).toMatchObject({
+      status: 'scheduled',
+      workOrder: { start: TUE_27_9AM.toISOString(), visitConfirmed: true },
+    });
+    const booked = w.h.messenger.last(TOM)!;
+    expect(booked.template).toBe('tenant.visit_booked');
+    expect(booked.text).toContain('Booked for Tue 27 Oct, 9:00 am');
+    expect(booked.text).not.toMatch(/\bYES\b/);
+    expect(w.h.messenger.last(w.tradies.pete.address)!.template).toBe('tradie.work_order');
+    expect(w.h.messenger.last(OLIVIA)!.template).toBe('owner.work_booked');
+  });
+
+  test('replying Tuesday books that day', async () => {
+    const { w, job } = await timesOffered();
+    w.h.classifier.when('Tuesday works', { messageClass: 'other', 'answer:visit_offer': 'Tuesday' });
+    await w.h.receive(TOM, 'Tuesday works');
+    expect(await jobView(w, job)).toMatchObject({
+      status: 'scheduled',
+      workOrder: { start: TUE_27_9AM.toISOString(), visitConfirmed: true },
+    });
+  });
+
+  test('replying 2 books the Wednesday time', async () => {
+    const { w, job } = await timesOffered();
+    w.h.classifier.when('2', { messageClass: 'other', 'answer:visit_offer': '2' });
+    await w.h.receive(TOM, '2');
+    expect(await jobView(w, job)).toMatchObject({
+      status: 'scheduled',
+      workOrder: { start: new Date('2026-10-28T13:00:00+11:00').toISOString(), visitConfirmed: true },
+    });
+    expect(w.h.messenger.last(TOM)!.text).toContain('Booked for Wed 28 Oct, 1:00 pm');
+  });
+
+  test('replying none does not book a visit', async () => {
+    const { w, job } = await timesOffered();
+    w.h.classifier.when('none', { messageClass: 'other', 'answer:visit_offer': 'none' });
+    await w.h.receive(TOM, 'none');
+    expect(await jobView(w, job)).toMatchObject({ status: 'approved', workOrder: null });
+    expect(w.h.messenger.last(w.tradies.pete.address)!.template).toBe('tradie.offer_times');
+    expect(w.h.messenger.last(TOM)!.template).toBe('tenant.choose_visit_time');
+  });
+});
