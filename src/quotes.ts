@@ -540,6 +540,7 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dates: str
     const tenant = await profiles.person(ticket.tenantId);
     const quoted = firm ?? estimate;
     const offeredVisit = outcome === 'chosen' ? await modules.scheduling.offeredVisit(job.id) : null;
+    const declinedNote = outcome === 'chosen' && !offeredVisit ? await modules.scheduling.declinedNote(job.id) : null;
     const next: 'estimate' | 'wait_for_booking' | 'wait_for_inspection' | 'firm_quote' | 'done' =
       outcome !== 'open'
         ? 'done'
@@ -605,6 +606,7 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dates: str
           ? {
               address: property.address,
               availability: AVAILABILITY_LABELS[tenant.availability ?? 'any_time'],
+              note: declinedNote,
               ...visitLength(firm?.duration_days ?? null),
               starts: prefillStarts(agency.timeZone, quoted?.proposed_time ?? null, firm ? datesOf(firm.available_dates) : []),
             }

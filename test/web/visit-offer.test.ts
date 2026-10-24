@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { one } from '../../src/db.ts';
 import { visible, webWorld } from '../support/web.ts';
 import { confirmedEstimates, firmQuote, jobView, KING_ST, OLIVIA, quoteToken, TOM, tomsTapTicket } from '../support/world.ts';
 
@@ -118,11 +119,53 @@ describe('confirming a visit time', () => {
     expect(ticket).toContain('Tenant confirmed');
   });
 
-  test('opening none of these work does not book a visit', async () => {
+  test('opening none of these work asks when the Tenant is home, and changes nothing', async () => {
     const { w, job, token } = await offeredTimes();
     const opened = await w.get(`/v/${token}?pick=none`);
     expect(opened.status).toBe(200);
-    expect(visible(await opened.text())).toContain('None of these times work');
+    const text = visible(await opened.text());
+    expect(text).toContain('When are you usually home?');
+    expect(text).toContain('weekday mornings');
+    expect(text).toContain('weekday afternoons');
+    expect(text).toContain('Saturdays');
+    expect(text).toContain('any time');
+    expect(text).toContain('A time that works');
     expect(await jobView(w, job)).toMatchObject({ status: 'approved', workOrder: null });
+    expect((await one<{ availability: string }>(w.h.db, 'SELECT availability FROM people WHERE mobile = ?', TOM))?.availability).toBe('weekday_mornings');
+    expect((await one<{ status: string }>(w.h.db, 'SELECT status FROM visit_offers WHERE token = ?', token))?.status).toBe('offered');
+  });
+
+  test('saying when they are home asks the Tradie again, and the Ticket says the Tenant asked for other times', async () => {
+    const { w, job, token } = await offeredTimes();
+    const posted = await w.web.request(`/v/${token}`, {
+      method: 'POST',
+      body: new URLSearchParams({ pick: 'none', availability: 'saturdays', note: 'Sunday 10 am works' }),
+    });
+    expect(posted.status).toBe(303);
+    await w.h.drain();
+
+    const thanks = visible(await (await w.get(`/v/${token}?pick=none`)).text());
+    expect(thanks).toContain("We'll ask Pete's Plumbing for other times.");
+    expect(thanks).not.toContain('When are you usually home?');
+
+    const quote = visible(await (await w.get(`/q/${await quoteToken(w, job, w.tradies.pete)}`)).text());
+    expect(quote).toContain('usually home Saturdays');
+    expect(quote).toContain('Sunday 10 am works');
+    expect(quote).toContain('Offer visit times');
+
+    const cookie = await w.signIn();
+    const ticket = visible(await (await w.get(`/tickets/${job.ticketId}`, cookie)).text());
+    expect(ticket).toContain('The Tenant asked for other times');
+  });
+
+  test('leaving when they are home blank keeps the times on offer', async () => {
+    const { w, token } = await offeredTimes();
+    const posted = await w.web.request(`/v/${token}`, {
+      method: 'POST',
+      body: new URLSearchParams({ pick: 'none', note: 'Sunday 10 am works' }),
+    });
+    expect(posted.status).toBe(400);
+    expect(visible(await posted.text())).toContain('Choose when you are usually home');
+    expect((await one<{ status: string }>(w.h.db, 'SELECT status FROM visit_offers WHERE token = ?', token))?.status).toBe('offered');
   });
 });

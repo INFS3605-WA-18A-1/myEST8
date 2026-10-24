@@ -407,6 +407,7 @@ function offerTimesForm(token: string, p: QuotePage, r: Refusal | undefined): Ht
       <form method="post" action="/q/${encodeURIComponent(token)}/times" class="tenant-form" novalidate>
         <p>The visit is at ${offer.address}.</p>
         <p>The Tenant is usually home ${offer.availability}.</p>
+        ${offer.note ? html`<p>The Tenant said: ${offer.note}.</p>` : ''}
         <p>The visit takes ${offer.durationLabel}.</p>
         ${[0, 1, 2].map((i) =>
           field({

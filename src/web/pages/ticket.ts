@@ -1656,6 +1656,8 @@ function describeEvent(t: TicketView, event: TimelineEvent, x: Extras): { title:
       return { title: `Work Order sent to ${tradie}`, detail: details(job, visit) };
     case 'reschedule_requested':
       return { title: `${d.by === 'tenant' ? 'Tenant' : 'Tradie'} asked for another time${d.inspection ? ' for the Site Inspection' : ''}`, detail: job };
+    case 'other_times_requested':
+      return { title: 'The Tenant asked for other times', detail: details(job, typeof d.note === 'string' ? d.note : undefined) };
     case 'visit_confirmed':
       return { title: d.inspection ? 'Tenant confirmed the Site Inspection' : 'Tenant confirmed the visit', detail: details(job, "They'll be home or can let the Tradie in") };
     case 'visit_moved':
