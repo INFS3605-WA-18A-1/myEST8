@@ -150,6 +150,9 @@ export function createApp(
     /** Books the time the Tenant picked. The visit is confirmed, because they chose it. */
     pickVisitTime: (token: string, pick: string) => scheduling.pickVisitTime(token, pick),
 
+    /** None of the times work. Saves when the Tenant is home and asks the Tradie to offer again. */
+    declineVisitTimes: (token: string, input: { availability: string; note: string }) => scheduling.declineVisitTimes(token, input),
+
     /** The Tenant's progress tracker, reached by its no-login link. */
     tracker: (token: string) => tickets.tracker(token),
 

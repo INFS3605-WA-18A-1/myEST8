@@ -149,6 +149,13 @@ export const templates = {
     (d, a) =>
       `${a.name} has approved your quote for the ${trade(d.trade)} job at ${d.propertyAddress}.\n\nOffer visit times: ${d.quoteLink}`,
   ),
+  'tradie.offer_times_again': template<{ trade: Trade; propertyAddress: string; quoteLink: string; availability: Availability; note: string | null }>(
+    'Offer visit times again',
+    (d) =>
+      `The Tenant can't make the times you offered for the ${trade(d.trade)} job at ${d.propertyAddress}. They're usually home ${AVAILABILITY_LABELS[d.availability]}.` +
+      (d.note ? ` They said: ${d.note}.` : '') +
+      `\n\nOffer visit times: ${d.quoteLink}`,
+  ),
   'tradie.work_order': template<{
     propertyAddress: string;
     description: string;

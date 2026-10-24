@@ -1,6 +1,6 @@
 import type { Context } from './context.ts';
 import { all, one, run, transaction } from './db.ts';
-import { ActionError, addMs, HOUR_MS, invalid, iso, newToken, notFound, withoutContactDetails, type Availability } from './shared.ts';
+import { ActionError, addMs, AVAILABILITY, HOUR_MS, invalid, iso, newToken, notFound, withoutContactDetails, type Availability } from './shared.ts';
 import type { OpenItem } from './tickets.ts';
 import { dayOf, formatVisit, startOfDay, wallClock, zonedInstant } from './zoned-time.ts';
 
@@ -427,17 +427,29 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
     const ticket = await tickets.ticket(row.ticket_id);
     const property = await profiles.property(ticket.propertyId);
     const tradie = await profiles.person(row.tradie_id);
+    const tenant = await profiles.person(ticket.tenantId);
     return {
       agencyName: name,
       timeZone,
       address: property.address,
       tradieBusinessName: tradie.businessName ?? tradie.name,
+      availability: tenant.availability,
       status: row.status,
       pick: pick ?? null,
       start: index >= 0 ? starts[index]! : null,
       pickedStart: row.picked_start,
       bookable: row.status === 'offered' && index >= 0,
     };
+  }
+
+  /** The note from the latest round the Tenant turned down, for the Tradie's next offer. */
+  async function declinedNote(jobId: number) {
+    const row = await one<{ tenant_note: string | null }>(
+      db,
+      `SELECT tenant_note FROM visit_offers WHERE job_id = ? AND status = 'none_fit' ORDER BY round DESC LIMIT 1`,
+      jobId,
+    );
+    return row?.tenant_note ?? null;
   }
 
   /**
@@ -465,6 +477,7 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
     isFree,
     askForVisitTimes,
     offeredVisit,
+    declinedNote,
     offerVisitTimes,
     visitOffer,
     visitOfferIssue,
@@ -568,6 +581,47 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
       );
     },
 
+    /**
+     * None of the offered times work. Saves when the Tenant is usually home and an optional
+     * note, closes this offer, and asks the Tradie to offer another round. Nothing is booked.
+     */
+    async declineVisitTimes(token: string, input: { availability: string; note: string }) {
+      const row = await offerByToken(token);
+      if (!row) notFound('Visit time');
+      if (row.status !== 'offered') invalid('These times are no longer on offer');
+      const availability = AVAILABILITY.find((option) => option === input.availability);
+      if (!availability) invalid('Choose when you are usually home', 'availability');
+      const note = input.note.trim();
+
+      const ticket = await tickets.ticket(row.ticket_id);
+      await modules.profiles.setAvailability(ticket.tenantId, availability);
+      await run(
+        db,
+        `UPDATE visit_offers SET status = 'none_fit', tenant_note = ?, answered_at = ? WHERE id = ? AND status = 'offered'`,
+        note || null,
+        iso(clock.now()),
+        row.id,
+      );
+      await tickets.recordEvent(row.ticket_id, 'other_times_requested', { jobId: row.job_id, ...(note ? { note } : {}) });
+
+      const job = await tickets.job(row.job_id);
+      const property = await profiles.property(ticket.propertyId);
+      const request = await one<{ token: string }>(db, 'SELECT token FROM quote_requests WHERE job_id = ? AND tradie_id = ?', row.job_id, row.tradie_id);
+      if (!request) notFound('Quote Request');
+      await notifications.send(
+        row.tradie_id,
+        'tradie.offer_times_again',
+        {
+          trade: job.trade,
+          propertyAddress: property.address,
+          quoteLink: `${settings.baseUrl}/q/${request.token}`,
+          availability,
+          note: note || null,
+        },
+        { issueId: ticket.issueId },
+      );
+    },
+
     /** The Tenant picks one offered time. The link only named it; this books it, already confirmed. */
     async pickVisitTime(token: string, pick: string) {
       const row = await offerByToken(token);
@@ -592,7 +646,7 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
       );
     },
 
-    /** A reply of "1", a weekday, or "none". "none" records that none fit and does not book. */
+    /** A reply of "1", a weekday, or "none". "none" records that none fit and does not book. Saying when they are home is the page. */
     async answerVisitOffer(offerId: number, answer: string) {
       const row = await one<VisitOfferRow>(db, 'SELECT * FROM visit_offers WHERE id = ?', offerId);
       if (!row || row.status !== 'offered') return;

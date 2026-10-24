@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { all, one } from '../src/db.ts';
 import { confirmedQuotes, jobView, KING_ST, OLIVIA, quoteToken, TOM, tomsTapTicket, world, type JobRef, type World } from './support/world.ts';
 
 const TUE_27_9AM = new Date('2026-10-27T09:00:00+11:00');
@@ -128,5 +129,48 @@ describe('the Tenant replies to choose a time', () => {
     expect(await jobView(w, job)).toMatchObject({ status: 'approved', workOrder: null });
     expect(w.h.messenger.last(w.tradies.pete.address)!.template).toBe('tradie.offer_times');
     expect(w.h.messenger.last(TOM)!.template).toBe('tenant.choose_visit_time');
+  });
+});
+
+describe('when none of the times work', () => {
+  test('the Tenant says when they are home, and the Tradie is asked to offer another round', async () => {
+    const { w, job } = await timesOffered();
+    const token = w.h.messenger.last(TOM)!.text.match(/\/v\/([^?\s]+)\?pick=1/)![1]!;
+    const link = `https://myest8.test/q/${await quoteToken(w, job, w.tradies.pete)}`;
+
+    await w.h.app.declineVisitTimes(token, { availability: 'saturdays', note: 'Sunday 10 am works' });
+
+    const offer = await one<{ status: string; tenant_note: string | null; round: number }>(
+      w.h.db,
+      'SELECT status, tenant_note, round FROM visit_offers WHERE token = ?',
+      token,
+    );
+    expect(offer).toMatchObject({ status: 'none_fit', tenant_note: 'Sunday 10 am works' });
+    expect(Number(offer?.round)).toBe(1);
+    expect((await one<{ availability: string }>(w.h.db, 'SELECT availability FROM people WHERE mobile = ?', TOM))?.availability).toBe('saturdays');
+
+    const again = w.h.messenger.last(w.tradies.pete.address)!;
+    expect(again).toMatchObject({
+      template: 'tradie.offer_times_again',
+      subject: 'Offer visit times again',
+      data: { trade: 'plumbing', propertyAddress: KING_ST, availability: 'saturdays', note: 'Sunday 10 am works', quoteLink: link },
+    });
+    expect(again.text).toContain("They're usually home Saturdays.");
+    expect(again.text).toContain('They said: Sunday 10 am works.');
+    expect(again.text).toContain(`Offer visit times: ${link}`);
+    expect(await jobView(w, job)).toMatchObject({ status: 'approved', workOrder: null });
+    expect((await w.alice.ticket(job.ticketId)).timeline.at(-1)).toMatchObject({ kind: 'other_times_requested', jobId: job.jobId });
+
+    await w.h.app.offerVisitTimes(link.slice(link.lastIndexOf('/') + 1), [
+      new Date('2026-10-29T09:00:00+11:00').toISOString(),
+      new Date('2026-10-30T13:00:00+11:00').toISOString(),
+    ]);
+    const rounds = await all<{ round: number; status: string }>(w.h.db, 'SELECT round, status FROM visit_offers WHERE job_id = ? ORDER BY round', job.jobId);
+    expect(rounds.map((r) => ({ round: Number(r.round), status: r.status }))).toEqual([
+      { round: 1, status: 'none_fit' },
+      { round: 2, status: 'offered' },
+    ]);
+    expect(w.h.messenger.last(TOM)!.text).toContain('Thu 29 Oct, 9:00 am');
+    expect(w.h.messenger.last(TOM)!.text).toContain('Fri 30 Oct, 1:00 pm');
   });
 });
