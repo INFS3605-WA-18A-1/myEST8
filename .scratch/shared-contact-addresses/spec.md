@@ -36,3 +36,7 @@ That blocks demos and real life alike. One person often plays several parts with
   - the Inbox card for `shared_address`
 
 Existing tests that asserted "already belongs to someone else" for people change to assert the new behaviour. Say which in the report: the rule itself has changed, so this isn't weakening a test. Everything else must pass unchanged. Test-first, one slice at a time, with expected values from worked examples. Update `CONTEXT.md` if it defines how a sender is identified, and `docs/design-system.md` for the note and the Inbox card.
+
+## Also
+
+The welcome wizard and the spreadsheet import (including Setup's import) refused a mobile or email another person in the Agency already had, with "… already belongs to …". They now accept it, the same way adding and editing from a profile does. Format and at least one of mobile or email are still checked. A Property Owner or Building Manager already in the Agency is still reused, and a spreadsheet row that repeats someone of the same role is still a duplicate. The Property Manager sign-in rule (`emailTaken`) is unchanged.
