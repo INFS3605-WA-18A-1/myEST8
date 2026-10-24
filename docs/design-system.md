@@ -197,6 +197,8 @@ myEST8 is where a Property Manager at a small Australian Agency sees every repai
 - **Landing** (`landing.css`): bands alternate Paper and White; the closing band is Night with the logo in Wattle. The hero is a Bricolage headline (56 to 72px) on the left and the Tenant's thread becoming a Maintenance Request on the right. Only claims the app actually makes appear on the page.
 - **Sign-in and sign-up** (`auth.css`): a split panel, Night with `--rail-text` type and the key tag in Wattle on the left, and the form on White on the right. Errors are specific sentences beside the field, announced with `aria-describedby`. No onboarding panel on sign-in.
 - **Tenant pages** (`tenant.css`): a white column on Paper; the bar names the Agency and the page names the Property's street; the tracker's current stage carries the Wattle bar.
+- **Offer visit times** is the chosen Tradie's step on their quote page (`/q/:token`), in that same column. It names the street, when the Tenant is usually home, and how long the visit takes, then up to three start times. The button is "Offer visit times".
+- **Book this visit** (`/v/:token`) is the Tenant's confirm page, the same column and bar. It names the Tradie and the street, and has one button, "Book Tuesday 27 Oct, 9:00 am". Opening the link does not book the visit.
 
 ## Components
 

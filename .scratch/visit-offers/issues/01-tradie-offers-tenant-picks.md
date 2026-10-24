@@ -1,6 +1,6 @@
 # B1. The Tradie offers times, and the Tenant picks (core)
 
-Status: ready-for-agent
+Status: resolved
 Spec: ../spec.md
 
 ## What to build
@@ -30,6 +30,6 @@ Spec: ../spec.md
 
 ## Acceptance criteria
 
-- [ ] Each behaviour above has a test at an agreed seam that failed first.
-- [ ] The spec's verification steps for this issue pass.
-- [ ] `npm run check` passes.
+- [x] Each behaviour above has a test at an agreed seam that failed first.
+- [x] The spec's verification steps for this issue pass.
+- [x] `npm run check` passes.
