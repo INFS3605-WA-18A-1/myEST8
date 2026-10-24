@@ -13,7 +13,7 @@ import { parseArgs } from 'node:util';
 import { createJevClassifier } from '../src/adapters/jev.ts';
 import { createNominatimGeocoder, PUBLIC_NOMINATIM_URL } from '../src/adapters/nominatim.ts';
 import { createTwilioMessenger } from '../src/adapters/twilio-messenger.ts';
-import { TRADES, URGENCIES } from '../src/shared.ts';
+import { option, question, TRADE_OPTIONS } from '../src/classifier-questions.ts';
 
 const USAGE = 'Usage: npm run smoke:live -- --to +61412345678 [--from +61480000000] [--address "12 King St, Newtown NSW 2042"]';
 const E164 = /^\+[1-9]\d{6,14}$/;
@@ -81,9 +81,18 @@ await step('Jev classify', () =>
     text: 'Water is pouring through the ceiling of the bathroom',
     state: { senderRole: 'tenant', hasAttachments: false },
     questions: [
-      { id: 'messageClass', options: ['new_issue', 'update', 'common_area', 'other'] },
-      { id: 'urgency', options: URGENCIES },
-      { id: 'trade', options: TRADES },
+      question('messageClass', 'What kind of message is `message`?', [
+        option('new_issue', 'Reports a maintenance problem'),
+        option('update', 'A follow-up on work already open'),
+        option('common_area', 'About a Common Area, not their own Property'),
+        option('other', 'Not about maintenance'),
+      ]),
+      question('urgency', 'How soon must the issue that `message` reports be dealt with?', [
+        option('urgent', 'Threatens safety, the structure, security or an essential service'),
+        option('high', 'Gets worse or does damage if it waits'),
+        option('routine', 'Can wait for a normal repair visit'),
+      ]),
+      question('trade', 'Which Trade does the issue that `message` reports need?', TRADE_OPTIONS),
     ],
   }),
 );

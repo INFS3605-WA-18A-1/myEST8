@@ -1,6 +1,8 @@
 // The demo's stand-in for Jev: keyword rules that answer whatever questions the
-// app asks, reading the same state the app sends to the real classifier. It is
-// deterministic so a demo script plays out the same way every time.
+// app asks, reading the same state the app sends to the real classifier. It
+// speaks TypeSafe's System One format (src/adapters/jev.ts) but ignores the
+// instructions and criteria wording: it reads the option names and the state's
+// `message`. It is deterministic so a demo script plays out the same way every time.
 
 import type { ClassifierAnswer } from '../ports.ts';
 import { AVAILABILITY, type Availability } from '../shared.ts';
@@ -278,8 +280,9 @@ const waitingAnswer: Rule = (r, options) => {
 
 const RULES: Record<string, Rule> = { messageClass, relatedItem, urgency, trade, updateType, replyType, answer: waitingAnswer };
 
-function ruleFor(questionId: string): Rule | undefined {
-  return questionId.startsWith('answer:') ? waitingAnswer : RULES[questionId];
+/** The Jev adapter sends `answer:guided` as `answer_guided`: colons aren't safe in a question name. */
+function ruleFor(name: string): Rule | undefined {
+  return name.startsWith('answer_') || name.startsWith('answer:') ? waitingAnswer : RULES[name];
 }
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -301,20 +304,29 @@ function reading(state: Record<string, unknown>): Reading {
   };
 }
 
+/** Probabilities that give the answer `confidence` the way TypeSafe computes it: (n x largest - 1) / (n - 1). */
+function probabilities(options: string[], chosen: string, confidence: number) {
+  const n = options.length;
+  const largest = n === 1 ? 1 : (confidence * (n - 1) + 1) / n;
+  const round = (p: number) => Math.round(p * 10_000) / 10_000;
+  return Object.fromEntries(options.map((o) => [o, round(o === chosen ? largest : (1 - largest) / (n - 1))]));
+}
+
 /**
- * Answers a classify request in Jev's assumed wire format. A question with no rule,
- * or a rule whose answer isn't among the options, gets the first option, unsure.
+ * Answers a System One request: one `choice` answer per question, named as the
+ * question is. A question with no rule, or a rule whose answer isn't among the
+ * options (the keys of `criteria`), gets the first option, unsure.
  */
 export function mockClassify(body: unknown) {
   const state = isObject(body) && isObject(body.state) ? body.state : {};
-  const questions = isObject(body) && Array.isArray(body.questions) ? body.questions : [];
+  const questions = isObject(body) && isObject(body.questions) ? Object.entries(body.questions) : [];
   const r = reading(state);
-  const answers = questions
-    .filter((q): q is { id: string; options: string[] } => isObject(q) && typeof q.id === 'string' && Array.isArray(q.options) && q.options.length > 0)
-    .map(({ id, options }) => {
-      const given = mockImportAnswer(id, state, options) ?? ruleFor(id)?.(r, options);
-      const { answer: value, confidence } = given && options.includes(given.answer) ? given : answer(options[0]!, UNSURE);
-      return { questionId: id, answer: value, confidence };
-    });
-  return { answers };
+  const answers = questions.flatMap(([name, question]) => {
+    const options = isObject(question) && isObject(question.criteria) ? Object.keys(question.criteria) : [];
+    if (!options.length) return [];
+    const given = mockImportAnswer(name, state, options) ?? ruleFor(name)?.(r, options);
+    const { answer: choice, confidence } = given && options.includes(given.answer) ? given : answer(options[0]!, UNSURE);
+    return [[name, { type: 'choice', choice, confidence, probabilities: probabilities(options, choice, confidence) }] as const];
+  });
+  return { model: 'jev-mock', answers: Object.fromEntries(answers), usage: { input_tokens: 0, output_tokens: 0 } };
 }

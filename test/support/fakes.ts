@@ -101,10 +101,11 @@ export class FakeClassifier implements Classifier {
     const result: Record<string, ClassifierAnswer> = {};
     for (const q of input.questions) {
       const scripted = script[q.id];
+      const names = q.options.map((option) => option.name);
       const [answer, confidence] =
-        scripted === undefined ? [q.options[0]!, 0.95] : typeof scripted === 'string' ? [scripted, 0.95] : scripted;
-      if (!q.options.includes(answer)) {
-        throw new Error(`FakeClassifier: ${answer} is not an option for ${q.id} (${q.options.join(', ')})`);
+        scripted === undefined ? [names[0]!, 0.95] : typeof scripted === 'string' ? [scripted, 0.95] : scripted;
+      if (!names.includes(answer)) {
+        throw new Error(`FakeClassifier: ${answer} is not an option for ${q.id} (${names.join(', ')})`);
       }
       result[q.id] = { answer, confidence };
     }
