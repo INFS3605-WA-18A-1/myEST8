@@ -1,6 +1,6 @@
 # A safety check on every new report
 
-Status: ready-for-agent
+Status: resolved
 Blocked by: 01
 Spec: ../spec.md
 
@@ -14,10 +14,10 @@ When a Tenant reports a new issue, intake also asks whether the message describe
 
 ## Acceptance criteria
 
-- [ ] Intake scenarios with a fake classifier:
+- [x] Intake scenarios with a fake classifier:
   - "I can smell gas in the kitchen" with `risk` at 0.95 goes Urgent, with the alert, even when Urgency says routine
   - `risk` at 0.6 doesn't override
   - `no_risk` changes nothing
   - the question is sent in the same request as the others (one classify call)
-- [ ] The mock classifier answers `risk` for the gas, sparks and flooding keywords.
-- [ ] `npm run check` passes.
+- [x] The mock classifier answers `risk` for the gas, sparks and flooding keywords.
+- [x] `npm run check` passes.
