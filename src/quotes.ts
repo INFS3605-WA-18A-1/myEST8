@@ -372,10 +372,23 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
   /** Sends the Tradie their quote page for the Firm Quote, when a price arrives by message after their Estimate. */
   async function sendFirmQuoteLink(request: QuoteRequestRow, template: 'tradie.firm_quote_link' | 'tradie.firm_quote_request' | 'tradie.firm_quote_reminder') {
     const { job, ticket, property } = await jobPlace(request.job_id);
+    const issue = await tickets.issue(ticket.issueId);
+    const inspection = await one<{ start: string }>(
+      db,
+      `SELECT start FROM work_orders WHERE quote_request_id = ? AND kind = 'inspection' AND status != 'cancelled' ORDER BY id DESC LIMIT 1`,
+      request.id,
+    );
     await notifications.send(
       request.tradie_id,
       template,
-      { trade: job.trade, suburb: property.suburb, propertyAddress: property.address, quoteLink: quoteLink(request) },
+      {
+        trade: job.trade,
+        suburb: property.suburb,
+        propertyAddress: property.address,
+        quoteLink: quoteLink(request),
+        issue: withoutContactDetails(issue.summary ?? issue.description),
+        inspectedOn: inspection?.start ?? null,
+      },
       { issueId: ticket.issueId },
     );
   }
@@ -404,10 +417,17 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
     const request = await one<QuoteRequestRow>(db, `UPDATE quote_requests SET status = 'reminded' WHERE id = ? AND status = 'sent' RETURNING *`, quoteRequestId);
     if (!request) return;
     const { job, ticket, property } = await jobPlace(request.job_id);
+    const issue = await tickets.issue(ticket.issueId);
     await notifications.send(
       request.tradie_id,
       'tradie.quote_reminder',
-      { trade: job.trade, suburb: property.suburb, quoteLink: quoteLink(request) },
+      {
+        trade: job.trade,
+        suburb: property.suburb,
+        urgency: ticket.urgency,
+        description: withoutContactDetails(issue.summary ?? issue.description),
+        quoteLink: quoteLink(request),
+      },
       { issueId: ticket.issueId },
     );
   });

@@ -43,6 +43,71 @@ export function availabilityChoice(value: Availability): string {
 
 const trade = (t: Trade) => t.replace('_', ' ');
 const visit = (at: string, agency: AgencyInfo) => formatVisit(at, agency.timeZone);
+const titled = (value: string) => {
+  const text = value.replaceAll('_', ' ');
+  return text.charAt(0).toUpperCase() + text.slice(1);
+};
+
+/** How long a booked visit is, in the words a Tradie's email uses. */
+export function visitLengthLabel(start: string, end: string): string {
+  const minutes = Math.round((Date.parse(end) - Date.parse(start)) / 60_000);
+  if (minutes > 0 && minutes % (24 * 60) === 0) {
+    const days = minutes / (24 * 60);
+    return days === 1 ? '1 day' : `${days} days`;
+  }
+  if (minutes > 0 && minutes % 60 === 0) {
+    const hours = minutes / 60;
+    return hours === 1 ? '1 hour' : `${hours} hours`;
+  }
+  return minutes === 1 ? '1 minute' : `${minutes} minutes`;
+}
+
+/** The Firm Quote's days, or 2 hours when the Job went ahead on an Estimate. */
+export function quotedLengthLabel(durationDays: number | null): string {
+  if (durationDays) return durationDays === 1 ? '1 day' : `${durationDays} days`;
+  return '2 hours';
+}
+
+const kept = (rows: (string | false | null | undefined)[]) => rows.filter((row): row is string => !!row);
+const blocks = (parts: (string | false | null | undefined)[]) => kept(parts).join('\n\n');
+
+function offerDetails(d: { propertyAddress: string; length: string; availability: Availability; note?: string | null }) {
+  return kept([
+    `Address: ${d.propertyAddress}`,
+    `Length: ${d.length}`,
+    `Tenant usually home: ${availabilityChoice(d.availability)}`,
+    d.note ? `Tenant's note: ${d.note}` : null,
+  ]).join('\n');
+}
+
+function quoteRequestBody(
+  d: { trade: Trade; urgency: Urgency; description: string; suburb: string; quoteLink: string },
+  opening: string,
+) {
+  return blocks([
+    opening,
+    kept([`Trade: ${titled(d.trade)}`, `Suburb: ${d.suburb}`, `Urgency: ${titled(d.urgency)}`, `Issue: ${d.description}`]).join('\n'),
+    `Give your quote: ${d.quoteLink}`,
+    `Can't take this job: ${d.quoteLink}/decline`,
+    'Or reply with a ballpark price and earliest time, or NO to decline.',
+  ]);
+}
+
+function firmQuoteBody(
+  d: { propertyAddress: string; issue: string; inspectedOn: string | null; quoteLink: string },
+  agency: AgencyInfo,
+  opening: string,
+) {
+  return blocks([
+    opening,
+    kept([
+      `Address: ${d.propertyAddress}`,
+      d.inspectedOn ? `Inspected on: ${visit(d.inspectedOn, agency)}` : null,
+      `What's needed: ${d.issue}`,
+    ]).join('\n'),
+    `Give your Firm Quote: ${d.quoteLink}`,
+  ]);
+}
 
 export const templates = {
   'tenant.acknowledgement': template<{ tenantName: string; propertyAddress: string }>(
@@ -144,15 +209,14 @@ export const templates = {
   'tradie.quote_request': template<{ trade: Trade; urgency: Urgency; description: string; suburb: string; quoteLink: string }>(
     'Quote request',
     (d, a) =>
-      `${a.name} is asking for a quote: ${trade(d.trade)} job in ${d.suburb} (${d.urgency}). Issue: ${d.description}. ` +
-      `Give your Estimate (a ballpark from the description and photos) here, and say if you need to inspect before your Firm Quote (your fixed price): ${d.quoteLink} ` +
-      'Or reply with a ballpark price and earliest time, or NO to decline.',
+      quoteRequestBody(
+        d,
+        `${a.name} is asking for a quote. Give your Estimate (a ballpark from the description and photos), and say if you need to inspect before your Firm Quote.`,
+      ),
   ),
-  'tradie.quote_reminder': template<{ trade: Trade; suburb: string; quoteLink: string }>(
+  'tradie.quote_reminder': template<{ trade: Trade; urgency: Urgency; description: string; suburb: string; quoteLink: string }>(
     'Reminder: quote request',
-    (d, a) =>
-      `Reminder from ${a.name}: can you give an Estimate for the ${trade(d.trade)} job in ${d.suburb}? ${d.quoteLink} ` +
-      'Or reply with a ballpark price and earliest time, or NO to decline.',
+    (d, a) => quoteRequestBody(d, `Reminder from ${a.name}: please give an Estimate for this job.`),
   ),
   'tradie.not_chosen': template<{ trade: Trade; suburb: string; inspectionStart?: string }>(
     'Quote not chosen',
@@ -160,27 +224,33 @@ export const templates = {
       `Thanks for quoting for the ${trade(d.trade)} job in ${d.suburb}. ${a.name} has gone with another quote this time.` +
       (d.inspectionStart ? ` Your Site Inspection on ${visit(d.inspectionStart, a)} is cancelled, so please don't go.` : ''),
   ),
-  'tradie.offer_times': template<{ trade: Trade; propertyAddress: string; quoteLink: string }>(
+  'tradie.offer_times': template<{ trade: Trade; propertyAddress: string; quoteLink: string; length: string; availability: Availability }>(
     'Offer visit times',
-    (d, a) =>
-      `${a.name} has approved your quote for the ${trade(d.trade)} job at ${d.propertyAddress}.\n\nOffer visit times: ${d.quoteLink}`,
+    (d, a) => blocks([`${a.name} has approved your quote for the ${trade(d.trade)} job.`, offerDetails(d), `Offer visit times: ${d.quoteLink}`]),
   ),
-  'tradie.offer_times_reminder': template<{ trade: Trade; propertyAddress: string; quoteLink: string }>(
+  'tradie.offer_times_reminder': template<{ trade: Trade; propertyAddress: string; quoteLink: string; length: string; availability: Availability }>(
     'Reminder: offer visit times',
-    (d, a) =>
-      `Reminder from ${a.name}: please offer visit times for the ${trade(d.trade)} job at ${d.propertyAddress}.\n\nOffer visit times: ${d.quoteLink}`,
+    (d, a) => blocks([`Reminder from ${a.name}: please offer visit times for the ${trade(d.trade)} job.`, offerDetails(d), `Offer visit times: ${d.quoteLink}`]),
   ),
-  'tradie.offer_new_times': template<{ trade: Trade; propertyAddress: string; quoteLink: string; availability: Availability }>(
+  'tradie.offer_new_times': template<{ trade: Trade; propertyAddress: string; quoteLink: string; length: string; availability: Availability }>(
     'Offer new visit times',
     (d) =>
-      `The visit for the ${trade(d.trade)} job at ${d.propertyAddress} needs a new time. They're usually home ${AVAILABILITY_LABELS[d.availability]}. The current visit stays booked until they pick one.\n\nOffer visit times: ${d.quoteLink}`,
+      blocks([
+        `The visit for the ${trade(d.trade)} job needs a new time. The current visit stays booked until they pick one.`,
+        offerDetails(d),
+        `Offer visit times: ${d.quoteLink}`,
+      ]),
   ),
-  'tradie.offer_times_again': template<{ trade: Trade; propertyAddress: string; quoteLink: string; availability: Availability; note: string | null }>(
+  'tradie.offer_times_again': template<{
+    trade: Trade;
+    propertyAddress: string;
+    quoteLink: string;
+    length: string;
+    availability: Availability;
+    note: string | null;
+  }>(
     'Offer visit times again',
-    (d) =>
-      `The Tenant can't make the times you offered for the ${trade(d.trade)} job at ${d.propertyAddress}. They're usually home ${AVAILABILITY_LABELS[d.availability]}.` +
-      (d.note ? ` They said: ${d.note}.` : '') +
-      `\n\nOffer visit times: ${d.quoteLink}`,
+    (d) => blocks([`The Tenant can't make the times you offered for the ${trade(d.trade)} job.`, offerDetails(d), `Offer visit times: ${d.quoteLink}`]),
   ),
   'tradie.work_order': template<{
     propertyAddress: string;
@@ -191,12 +261,30 @@ export const templates = {
     /** What was approved: the Firm Quote's price, or the Not-to-exceed Cap on an Estimate proceeded on. */
     approvedCents: number;
     stage: 'estimate' | 'firm';
+    tenantName: string;
+    tenantContact: string;
+    quoteLink: string;
   }>(
     'Work order',
-    (d, a) =>
-      `Work order from ${a.name}: ${trade(d.trade)} at ${d.propertyAddress}, ${visit(d.visitStart, a)}. Issue: ${d.description}. ` +
-      (d.stage === 'estimate' ? `Approved on your Estimate: not to exceed ${dollars(d.approvedCents)}. ` : `Approved: your Firm Quote of ${dollars(d.approvedCents)}. `) +
-      'Reply DONE when finished, or tell us if you need another time.',
+    (d, a) => {
+      const approved =
+        d.stage === 'estimate'
+          ? `Approved on your Estimate: not to exceed ${dollars(d.approvedCents)}.`
+          : `Approved: your Firm Quote of ${dollars(d.approvedCents)}.`;
+      return blocks([
+        `Work order from ${a.name}. ${d.description}. ${approved}`,
+        kept([
+          `Address: ${d.propertyAddress}`,
+          `When: ${visit(d.visitStart, a)}`,
+          `Length: ${visitLengthLabel(d.visitStart, d.visitEnd)}`,
+          `Tenant: ${d.tenantName}`,
+          `Tenant contact: ${d.tenantContact}`,
+        ]).join('\n'),
+        d.quoteLink ? `View job: ${d.quoteLink}` : null,
+        d.quoteLink ? `Mark job done: ${d.quoteLink}/done` : null,
+        d.quoteLink ? `Need another time?: ${d.quoteLink}/another` : null,
+      ]);
+    },
   ),
   'tradie.done_too_early': template<{ propertyAddress: string; visitStart: string; inspection: boolean }>(
     'Not done yet',
@@ -204,32 +292,57 @@ export const templates = {
       `Thanks. Your ${d.inspection ? 'Site Inspection' : 'visit'} at ${d.propertyAddress} is booked for ${visit(d.visitStart, a)}, so ${a.name} can't mark it done yet. ` +
       `Reply DONE after the visit${d.inspection ? ' and we will ask for your Firm Quote' : ''}, or tell us if you need another time.`,
   ),
-  'tradie.visit_moved': template<{ propertyAddress: string; visitStart: string }>(
+  'tradie.visit_moved': template<{ propertyAddress: string; visitStart: string; wasStart: string; quoteLink: string }>(
     'Visit moved',
-    (d, a) => `Your visit to ${d.propertyAddress} has moved to ${visit(d.visitStart, a)}.`,
+    (d, a) =>
+      blocks([
+        'Your visit has moved.',
+        kept([`Address: ${d.propertyAddress}`, `Was: ${visit(d.wasStart, a)}`, `Now: ${visit(d.visitStart, a)}`]).join('\n'),
+        d.quoteLink ? `View job: ${d.quoteLink}` : null,
+        d.quoteLink ? `Need another time?: ${d.quoteLink}/another` : null,
+      ]),
   ),
 
-  'tradie.inspection': template<{ propertyAddress: string; trade: Trade; summary: string; visitStart: string; visitEnd: string }>(
+  'tradie.inspection': template<{
+    propertyAddress: string;
+    trade: Trade;
+    summary: string;
+    visitStart: string;
+    visitEnd: string;
+    tenantContact: string;
+    quoteLink: string;
+  }>(
     'Site Inspection booked',
     (d, a) =>
-      `Site Inspection for ${a.name}: ${trade(d.trade)} at ${d.propertyAddress}, ${visit(d.visitStart, a)}. Issue: ${d.summary}. ` +
-      'Reply DONE after your visit and we will ask for your Firm Quote, or tell us if you need another time.',
+      blocks([
+        `Site Inspection for ${a.name}: ${d.summary}.`,
+        kept([`Address: ${d.propertyAddress}`, `When: ${visit(d.visitStart, a)}`, `Tenant contact: ${d.tenantContact}`]).join('\n'),
+        d.quoteLink ? `View inspection: ${d.quoteLink}` : null,
+        d.quoteLink ? `Mark inspection done: ${d.quoteLink}/inspection-done` : null,
+        d.quoteLink ? `Need another time?: ${d.quoteLink}/inspection-another` : null,
+      ]),
   ),
-  'tradie.firm_quote_request': template<{ trade: Trade; suburb: string; propertyAddress: string; quoteLink: string }>(
+  'tradie.firm_quote_request': template<{ trade: Trade; suburb: string; propertyAddress: string; quoteLink: string; issue: string; inspectedOn: string | null }>(
     'Your Firm Quote',
     (d, a) =>
-      `Thanks for inspecting the ${trade(d.trade)} job at ${d.propertyAddress}. Please give ${a.name} your Firm Quote: ` +
-      `your fixed price, the scope of work, how long it takes and the dates you can start: ${d.quoteLink}`,
+      firmQuoteBody(
+        d,
+        a,
+        `Thanks for inspecting the ${trade(d.trade)} job. Please give ${a.name} your Firm Quote: your fixed price, the scope of work, how long it takes and the dates you can start.`,
+      ),
   ),
-  'tradie.firm_quote_reminder': template<{ trade: Trade; suburb: string; propertyAddress: string; quoteLink: string }>(
+  'tradie.firm_quote_reminder': template<{ trade: Trade; suburb: string; propertyAddress: string; quoteLink: string; issue: string; inspectedOn: string | null }>(
     'Reminder: your Firm Quote',
-    (d, a) => `Reminder from ${a.name}: after your Site Inspection at ${d.propertyAddress}, please give your Firm Quote for the ${trade(d.trade)} job: ${d.quoteLink}`,
+    (d, a) => firmQuoteBody(d, a, `Reminder from ${a.name}: please give your Firm Quote for the ${trade(d.trade)} job.`),
   ),
-  'tradie.firm_quote_link': template<{ trade: Trade; suburb: string; propertyAddress: string; quoteLink: string }>(
+  'tradie.firm_quote_link': template<{ trade: Trade; suburb: string; propertyAddress: string; quoteLink: string; issue: string; inspectedOn: string | null }>(
     'Give your Firm Quote',
     (d, a) =>
-      `Thanks. ${a.name} already has your Estimate for the ${trade(d.trade)} job in ${d.suburb}. ` +
-      `A Firm Quote needs your fixed price, the scope of work, how long it takes and the dates you can start, so please give it here: ${d.quoteLink}`,
+      firmQuoteBody(
+        d,
+        a,
+        `Thanks. ${a.name} already has your Estimate for the ${trade(d.trade)} job in ${d.suburb}. A Firm Quote needs your fixed price, the scope of work, how long it takes and the dates you can start.`,
+      ),
   ),
 
   'owner.approval_request': template<{

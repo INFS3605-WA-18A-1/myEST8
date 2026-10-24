@@ -206,7 +206,7 @@ describe('confirming a visit time', () => {
     expect((await one<{ availability: string }>(w.h.db, 'SELECT availability FROM people WHERE mobile = ?', TOM))?.availability).toBe('saturdays');
     const again = w.h.messenger.last(w.tradies.pete.address)!;
     expect(again).toMatchObject({ template: 'tradie.offer_times_again', data: { availability: 'saturdays', note: null } });
-    expect(again.text).toContain("They're usually home Saturdays.");
+    expect(again.text).toContain('Tenant usually home: Saturdays');
   });
 
   test('Need another time shows the booked visit, and only the button starts a new round', async () => {

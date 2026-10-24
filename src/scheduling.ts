@@ -2,6 +2,7 @@ import type { Context } from './context.ts';
 import { all, one, run, transaction } from './db.ts';
 import { ActionError, addMs, AVAILABILITY, HOUR_MS, invalid, iso, newToken, notFound, withoutContactDetails, type Availability } from './shared.ts';
 import type { OpenItem } from './tickets.ts';
+import { quotedLengthLabel, visitLengthLabel } from './templates.ts';
 import { dayOf, formatVisit, startOfDay, wallClock, zonedInstant } from './zoned-time.ts';
 
 const DEFAULT_SLOT_MINUTES = 120;
@@ -193,12 +194,29 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
     return kept;
   }
 
+  const contactOf = (person: { mobile: string | null; email: string | null }) => person.mobile ?? person.email ?? 'Not given';
+
+  /** The Quote Request's page for this Job and Tradie, or '' when there isn't one. */
+  async function quotePageLink(jobId: number, tradieId: number) {
+    const request = await one<{ token: string }>(db, 'SELECT token FROM quote_requests WHERE job_id = ? AND tradie_id = ? ORDER BY id DESC LIMIT 1', jobId, tradieId);
+    return request ? `${settings.baseUrl}/q/${request.token}` : '';
+  }
+
+  /** How long the approved visit is: the Firm Quote's days, or 2 hours on an Estimate. */
+  async function approvedVisitLength(jobId: number) {
+    const quote = await modules.quotes.approvedQuote(jobId);
+    if (!quote || quote.stage !== 'firm') return quotedLengthLabel(null);
+    const row = await one<{ duration_days: number | null }>(db, `SELECT duration_days FROM quotes WHERE job_id = ? AND status = 'approved'`, jobId);
+    return quotedLengthLabel(row?.duration_days ?? null);
+  }
+
   /** The Tradie's Work Order for this visit, at its current time. */
   async function tellTradieWorkOrder(row: WorkOrderRow) {
     const quote = await modules.quotes.approvedQuote(row.job_id);
     if (!quote) return;
     const { job, property, ticket } = await place(row);
     const issue = await tickets.issue(ticket.issueId);
+    const tenant = await profiles.person(ticket.tenantId);
     await notifications.send(
       row.tradie_id,
       'tradie.work_order',
@@ -210,6 +228,9 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
         visitEnd: row.end,
         approvedCents: quote.priceCents,
         stage: quote.stage,
+        tenantName: tenant.name,
+        tenantContact: contactOf(tenant),
+        quoteLink: await quotePageLink(row.job_id, row.tradie_id),
       },
       { issueId: issue.id },
     );
@@ -219,6 +240,7 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
   async function tellTradieInspection(row: WorkOrderRow) {
     const { job, property, ticket } = await place(row);
     const issue = await tickets.issue(ticket.issueId);
+    const tenant = await profiles.person(ticket.tenantId);
     const photoFileIds = (await tickets.photos(issue.id)).map((x) => x.fileId);
     const byEmail = (await notifications.channelFor(row.tradie_id)) === 'email';
     await notifications.send(
@@ -230,6 +252,8 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
         summary: withoutContactDetails(issue.summary ?? issue.description),
         visitStart: row.start,
         visitEnd: row.end,
+        tenantContact: contactOf(tenant),
+        quoteLink: await quotePageLink(row.job_id, row.tradie_id),
       },
       { issueId: issue.id, attachmentFileIds: byEmail ? photoFileIds : [] },
     );
@@ -340,6 +364,21 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
 
   /** Whether a visit's start time has come, by the injected clock: a visit is never done before it starts. */
   const started = (row: WorkOrderRow) => clock.now() >= new Date(row.start);
+
+  /** The Quote Request behind a Tradie's email link, and the visit that link is about (the latest of its kind). */
+  async function visitForQuoteToken(token: string, kind: 'repair' | 'inspection') {
+    const request = await one<{ id: number; job_id: number; tradie_id: number; agency_id: number; ticket_id: number }>(
+      db,
+      'SELECT id, job_id, tradie_id, agency_id, ticket_id FROM quote_requests WHERE token = ?',
+      token,
+    );
+    if (!request) return null;
+    const row =
+      kind === 'inspection'
+        ? await one<WorkOrderRow>(db, `SELECT * FROM work_orders WHERE quote_request_id = ? AND kind = 'inspection' ORDER BY id DESC LIMIT 1`, request.id)
+        : await one<WorkOrderRow>(db, `SELECT * FROM work_orders WHERE job_id = ? AND tradie_id = ? AND kind = 'repair' ORDER BY id DESC LIMIT 1`, request.job_id, request.tradie_id);
+    return { request, row };
+  }
 
   /**
    * A Site Inspection is over (the Tradie replied DONE, or the Property Manager marked it):
@@ -627,6 +666,7 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
         trade: job.trade,
         propertyAddress: property.address,
         quoteLink: `${settings.baseUrl}/q/${request.token}`,
+        length: visitLengthLabel(row.start, row.end),
         availability: tenant.availability ?? 'any_time',
       },
       { issueId: ticket.issueId },
@@ -647,10 +687,17 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
     if (!request) return;
     const ticket = await tickets.ticket(job.ticketId);
     const property = await profiles.property(ticket.propertyId);
+    const tenant = await profiles.person(ticket.tenantId);
     await notifications.send(
       quote.tradieId,
       'tradie.offer_times',
-      { trade: job.trade, propertyAddress: property.address, quoteLink: `${settings.baseUrl}/q/${request.token}` },
+      {
+        trade: job.trade,
+        propertyAddress: property.address,
+        quoteLink: `${settings.baseUrl}/q/${request.token}`,
+        length: await approvedVisitLength(jobId),
+        availability: tenant.availability ?? 'any_time',
+      },
       { issueId: ticket.issueId },
     );
     await rememberOfferAsked(jobId, ticket.id);
@@ -665,10 +712,17 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
     if (!request) return;
     const ticket = await tickets.ticket(job.ticketId);
     const property = await profiles.property(ticket.propertyId);
+    const tenant = await profiles.person(ticket.tenantId);
     await notifications.send(
       quote.tradieId,
       'tradie.offer_times_reminder',
-      { trade: job.trade, propertyAddress: property.address, quoteLink: `${settings.baseUrl}/q/${request.token}` },
+      {
+        trade: job.trade,
+        propertyAddress: property.address,
+        quoteLink: `${settings.baseUrl}/q/${request.token}`,
+        length: await approvedVisitLength(jobId),
+        availability: tenant.availability ?? 'any_time',
+      },
       { issueId: ticket.issueId },
     );
   });
@@ -851,6 +905,7 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
           trade: job.trade,
           propertyAddress: property.address,
           quoteLink: `${settings.baseUrl}/q/${request.token}`,
+          length: await approvedVisitLength(row.job_id),
           availability,
           note: note || null,
         },
@@ -1045,7 +1100,7 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
       await notifications.send(
         row.tradie_id,
         'tradie.visit_moved',
-        { propertyAddress: property.address, visitStart: moved.start },
+        { propertyAddress: property.address, visitStart: moved.start, wasStart: row.start, quoteLink: await quotePageLink(row.job_id, row.tradie_id) },
         { issueId: ticket.issueId },
       );
       if (options.visitConfirmed) {
@@ -1083,6 +1138,50 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
       const { job, ticket, tradieBusinessName } = done;
       await notifications.send(ticket.tenantId, 'tenant.fixed_properly', { trade: job.trade, tradieBusinessName }, { issueId: ticket.issueId });
       await modules.intake.expectAnswer(ticket.tenantId, { kind: 'fix_rating', jobId: job.id });
+    },
+
+    /**
+     * The visit a Tradie's email link is about, for the confirm page. Reading it changes
+     * nothing. Null for an unknown Quote Request token. `visit` is null until one is booked.
+     */
+    async tradieVisit(token: string, kind: 'repair' | 'inspection') {
+      const found = await visitForQuoteToken(token, kind);
+      if (!found) return null;
+      const agency = await profiles.agency(found.request.agency_id);
+      const ticket = await tickets.ticket(found.request.ticket_id);
+      const property = await profiles.property(ticket.propertyId);
+      const row = found.row;
+      return {
+        agencyName: agency.name,
+        timeZone: agency.timeZone,
+        address: property.address,
+        visit: row
+          ? { start: row.start, status: row.status, started: started(row), rescheduleRequestedBy: row.reschedule_requested_by }
+          : null,
+      };
+    },
+
+    /** The Mark done button. Before the visit starts this is the same answer as a DONE reply; after it, the same as marking the visit done. */
+    async markTradieVisitDone(token: string, kind: 'repair' | 'inspection') {
+      const found = await visitForQuoteToken(token, kind);
+      if (!found?.row) notFound(kind === 'inspection' ? 'Site Inspection' : 'Visit');
+      const row = found.row;
+      if (row.status !== 'active') return;
+      if (!started(row)) {
+        await this.tellDoneTooEarly(row.id);
+        return;
+      }
+      await this.markDone(row.id);
+    },
+
+    /** Need another time. A repair starts a new offer round; a Site Inspection is the existing reschedule. Asking twice does not send another email. */
+    async tradieNeedsAnotherTime(token: string, kind: 'repair' | 'inspection') {
+      const found = await visitForQuoteToken(token, kind);
+      if (!found?.row) notFound(kind === 'inspection' ? 'Site Inspection' : 'Visit');
+      const row = found.row;
+      if (row.status !== 'active') invalid('This visit is no longer booked');
+      if (row.reschedule_requested_by) return;
+      await this.recordRescheduleRequest(row.id, 'tradie');
     },
 
     async recordTenantRating(jobId: number, score: number) {

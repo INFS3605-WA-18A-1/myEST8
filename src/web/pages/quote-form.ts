@@ -23,6 +23,7 @@ import type { App } from '../../app.ts';
 import type { FirmQuoteInput } from '../../quotes.ts';
 import { ActionError } from '../../shared.ts';
 import { files, isoToLocal, list, localToIso, text, type FormValues } from '../forms.ts';
+import { formatVisit } from '../../zoned-time.ts';
 import { alert, button, card, dl, field, formatMoney, formatWhen, humanise, publicPage, type Html } from '../ui.ts';
 
 const KB = 1024;
@@ -123,7 +124,80 @@ export function quoteFormPages(app: App) {
     return c.redirect(`/q/${encodeURIComponent(token)}?sent=times`, 303);
   });
 
+  // Confirm pages linked from the Tradie's emails. Opening one, including a mail
+  // scanner's GET, only shows the page. The button's POST is what changes anything.
+  pages.get('/q/:token/decline', async (c) => {
+    const token = c.req.param('token');
+    const page = await app.quotePage(token);
+    if (!page) return c.html(unknownLinkPage(), 404);
+    return c.html(declinePage(token, page));
+  });
+
+  pages.post('/q/:token/decline', async (c) => {
+    const token = c.req.param('token');
+    try {
+      await app.declineQuoteRequest(token);
+    } catch (error) {
+      return actionFailed(c, error, async (message) => {
+        const page = await app.quotePage(token);
+        return page ? declinePage(token, page, message) : null;
+      });
+    }
+    return c.redirect(`/q/${encodeURIComponent(token)}/decline`, 303);
+  });
+
+  pages.get('/q/:token/done', (c) => showVisit(c, app, 'repair', 'done'));
+  pages.post('/q/:token/done', (c) => postVisit(c, app, 'repair', 'done'));
+  pages.get('/q/:token/another', (c) => showVisit(c, app, 'repair', 'another'));
+  pages.post('/q/:token/another', (c) => postVisit(c, app, 'repair', 'another'));
+  pages.get('/q/:token/inspection-done', (c) => showVisit(c, app, 'inspection', 'done'));
+  pages.post('/q/:token/inspection-done', (c) => postVisit(c, app, 'inspection', 'done'));
+  pages.get('/q/:token/inspection-another', (c) => showVisit(c, app, 'inspection', 'another'));
+  pages.post('/q/:token/inspection-another', (c) => postVisit(c, app, 'inspection', 'another'));
+
   return pages;
+}
+
+type VisitKind = 'repair' | 'inspection';
+type VisitStep = 'done' | 'another';
+type TradieVisit = NonNullable<Awaited<ReturnType<App['tradieVisit']>>>;
+
+const CAN_DECLINE = new Set(['sent', 'reminded', 'estimated', 'inspection_booked', 'inspected']);
+
+function visitPath(kind: VisitKind, step: VisitStep) {
+  if (kind === 'inspection') return step === 'done' ? 'inspection-done' : 'inspection-another';
+  return step === 'done' ? 'done' : 'another';
+}
+
+async function showVisit(c: Context, app: App, kind: VisitKind, step: VisitStep) {
+  const token = c.req.param('token') ?? '';
+  const page = await app.tradieVisit(token, kind);
+  if (!page) return c.html(unknownLinkPage(), 404);
+  return c.html(step === 'done' ? donePage(token, kind, page) : anotherPage(token, kind, page));
+}
+
+async function postVisit(c: Context, app: App, kind: VisitKind, step: VisitStep) {
+  const token = c.req.param('token') ?? '';
+  const path = visitPath(kind, step);
+  try {
+    if (step === 'done') await app.markTradieVisitDone(token, kind);
+    else await app.tradieNeedsAnotherTime(token, kind);
+  } catch (error) {
+    return actionFailed(c, error, async (message) => {
+      const page = await app.tradieVisit(token, kind);
+      if (!page) return null;
+      return step === 'done' ? donePage(token, kind, page, message) : anotherPage(token, kind, page, message);
+    });
+  }
+  return c.redirect(`/q/${encodeURIComponent(token)}/${path}`, 303);
+}
+
+async function actionFailed(c: Context, error: unknown, again: (message: string) => Promise<Html | null>) {
+  if (!(error instanceof ActionError)) throw error;
+  if (error.code === 'not_found') return c.html(unknownLinkPage(), 404);
+  const page = await again(error.message);
+  if (!page) return c.html(unknownLinkPage(), 404);
+  return c.html(page, STATUS[error.code]);
 }
 
 /**
@@ -174,6 +248,78 @@ function unknownLinkPage(): Html {
     body: html`<p>Check you opened the whole link from the Quote Request we sent you.</p>
       <p>If it still doesn't work, reply to that message and ask for a new link.</p>`,
   });
+}
+
+function actionPage(title: string, brand: string, body: Html): Html {
+  return publicPage({
+    css: ['tenant.css'],
+    runtime: false,
+    width: 'narrow',
+    brand,
+    title,
+    footer: replyTo(brand),
+    body: card({ body }),
+  });
+}
+
+/** Statuses where replying NO still declines. A Firm Quote, or a closed request, does not. */
+function declinePage(token: string, page: QuotePage, error?: string): Html {
+  const open = CAN_DECLINE.has(page.status) && page.outcome !== 'declined';
+  const title = page.outcome === 'declined' ? 'Quote Request' : open ? "Can't take this job" : 'Quote Request';
+  const body =
+    page.outcome === 'declined'
+      ? html`<p>You declined this Quote Request.</p>`
+      : open
+        ? html`<p>${page.agencyName} asked you to quote for the ${humanise(page.trade).toLowerCase()} job in ${page.suburb}.</p>
+            <form method="post" action="/q/${encodeURIComponent(token)}/decline" class="tenant-form">
+              ${button('Decline this job', { block: true })}
+            </form>`
+        : html`<p>This Quote Request no longer takes a decline.</p>`;
+  return actionPage(title, page.agencyName, html`${error ? alert(error, 'error') : ''}${body}`);
+}
+
+function donePage(token: string, kind: VisitKind, page: TradieVisit, error?: string): Html {
+  const visit = page.visit;
+  const when = visit ? formatVisit(visit.start, page.timeZone) : '';
+  const mark = kind === 'inspection' ? 'Mark inspection done' : 'Mark job done';
+  const ready = visit?.status === 'active' && visit.started;
+  const title = visit?.status === 'done' ? (kind === 'inspection' ? 'Inspection done' : 'Job done') : ready ? mark : 'Not done yet';
+  const path = visitPath(kind, 'done');
+  const body = !visit
+    ? html`<p>This visit isn't booked.</p>`
+    : visit.status === 'cancelled'
+      ? html`<p>This visit is cancelled.</p>`
+      : visit.status === 'done'
+        ? html`<p>Already marked done on ${when}.</p>`
+        : !visit.started
+          ? html`<p>This visit is booked for ${when}, so it can't be marked done yet.</p>`
+          : html`<p>${kind === 'inspection' ? 'The Site Inspection' : 'The job'} at ${page.address} is booked for ${when}.</p>
+              <form method="post" action="/q/${encodeURIComponent(token)}/${path}" class="tenant-form">
+                ${button(mark, { block: true })}
+              </form>`;
+  return actionPage(title, page.agencyName, html`${error ? alert(error, 'error') : ''}${body}`);
+}
+
+function anotherPage(token: string, kind: VisitKind, page: TradieVisit, error?: string): Html {
+  const visit = page.visit;
+  const when = visit ? formatVisit(visit.start, page.timeZone) : '';
+  const asked = !!visit?.rescheduleRequestedBy;
+  const open = visit?.status === 'active' && !asked;
+  const stays = kind === 'inspection' ? `until it moves` : `until the Tenant picks a new one`;
+  const title = open ? 'Need another time?' : 'Another time';
+  const body = !visit
+    ? html`<p>This visit isn't booked.</p>`
+    : visit.status === 'cancelled'
+      ? html`<p>This visit is cancelled.</p>`
+      : visit.status === 'done'
+        ? html`<p>Already marked done on ${when}.</p>`
+        : asked
+          ? html`<p>You already asked for another time. This visit stays booked for ${when} ${stays}.</p>`
+          : html`<p>This visit stays booked for ${when} ${stays}.</p>
+              <form method="post" action="/q/${encodeURIComponent(token)}/${visitPath(kind, 'another')}" class="tenant-form">
+                ${button('Need another time?', { block: true, variant: 'secondary' })}
+              </form>`;
+  return actionPage(title, page.agencyName, html`${error ? alert(error, 'error') : ''}${body}`);
 }
 
 const replyTo = (agencyName: string) => `Questions? Reply to any message from ${agencyName}.`;

@@ -144,6 +144,21 @@ export function createApp(
     /** The chosen Tradie offers a preferred visit time, and up to two more, from their quote page. The Tenant is asked to pick one. */
     offerVisitTimes: (token: string, starts: string[]) => scheduling.offerVisitTimes(token, starts),
 
+    /** Can't take this job. The same as replying NO: the Quote Request is declined while it still can be. */
+    async declineQuoteRequest(token: string) {
+      const id = (await quotes.requestIdByToken(token)) ?? notFound('Quote Request');
+      await quotes.recordTradieReply(id, { kind: 'decline', text: 'NO', pdfFileId: null });
+    },
+
+    /** The visit a Tradie's Mark done or Need another time link is about. Reading it changes nothing. */
+    tradieVisit: (token: string, kind: 'repair' | 'inspection') => scheduling.tradieVisit(token, kind),
+
+    /** Mark job done, or mark a Site Inspection done. The same as replying DONE. */
+    markTradieVisitDone: (token: string, kind: 'repair' | 'inspection') => scheduling.markTradieVisitDone(token, kind),
+
+    /** Need another time. A repair starts a new offer round; a Site Inspection is rescheduled as before. */
+    tradieNeedsAnotherTime: (token: string, kind: 'repair' | 'inspection') => scheduling.tradieNeedsAnotherTime(token, kind),
+
     /** The Tenant's confirm page for one offered time. Reading it never books. */
     visitOffer: (token: string, pick?: string) => scheduling.visitOffer(token, pick),
 

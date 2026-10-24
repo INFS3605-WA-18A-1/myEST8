@@ -184,8 +184,8 @@ describe('the Tenant replies to choose a time', () => {
       template: 'tradie.offer_times_again',
       data: { availability: 'weekday_mornings', note: null, propertyAddress: KING_ST },
     });
-    expect(again.text).toContain("They're usually home weekday mornings.");
-    expect(again.text).not.toContain('They said:');
+    expect(again.text).toContain('Tenant usually home: Weekday mornings');
+    expect(again.text).not.toContain("Tenant's note");
     expect((await w.alice.ticket(job.ticketId)).timeline.at(-1)).toMatchObject({ kind: 'other_times_requested', jobId: job.jobId });
     const reply = w.h.messenger.last(TOM)!;
     expect(reply.template).toBe('tenant.say_when_home');
@@ -201,7 +201,7 @@ describe('the Tenant replies to choose a time', () => {
     expect((await one<{ tenant_note: string | null }>(w.h.db, 'SELECT tenant_note FROM visit_offers WHERE token = ?', token))?.tenant_note).toBe('Sunday 10 am works');
     const again = w.h.messenger.last(w.tradies.pete.address)!;
     expect(again).toMatchObject({ template: 'tradie.offer_times_again', data: { note: 'Sunday 10 am works', availability: 'weekday_mornings' } });
-    expect(again.text).toContain('They said: Sunday 10 am works.');
+    expect(again.text).toContain("Tenant's note: Sunday 10 am works");
     expect((await w.alice.ticket(job.ticketId)).timeline.at(-1)).toMatchObject({ kind: 'other_times_requested', note: 'Sunday 10 am works' });
   });
 });
@@ -254,7 +254,7 @@ describe('rescheduling a booked visit', () => {
       data: { trade: 'plumbing', propertyAddress: KING_ST, quoteLink: link, availability: 'weekday_mornings' },
     });
     expect(asked.text).toContain('The current visit stays booked until they pick one.');
-    expect(asked.text).toContain("They're usually home weekday mornings.");
+    expect(asked.text).toContain('Tenant usually home: Weekday mornings');
     expect(asked.text).toContain(`Offer visit times: ${link}`);
   });
 
@@ -387,8 +387,8 @@ describe('when none of the times work', () => {
       subject: 'Offer visit times again',
       data: { trade: 'plumbing', propertyAddress: KING_ST, availability: 'saturdays', note: 'Sunday 10 am works', quoteLink: link },
     });
-    expect(again.text).toContain("They're usually home Saturdays.");
-    expect(again.text).toContain('They said: Sunday 10 am works.');
+    expect(again.text).toContain('Tenant usually home: Saturdays');
+    expect(again.text).toContain("Tenant's note: Sunday 10 am works");
     expect(again.text).toContain(`Offer visit times: ${link}`);
     expect(await jobView(w, job)).toMatchObject({ status: 'approved', workOrder: null });
     expect((await w.alice.ticket(job.ticketId)).timeline.at(-1)).toMatchObject({ kind: 'other_times_requested', jobId: job.jobId });
