@@ -89,6 +89,16 @@ const urgency: Rule = (r) => {
   return answer('routine', LIKELY);
 };
 
+// --- Safety ---
+
+/** A risk to people. An essential service being out is Urgent, and is not this. */
+const SAFETY_WORDS = ['gas', 'sparks', 'sparking', 'flooding'];
+
+const safety: Rule = (r) => {
+  const text = [r.text, normalise(r.guidedAnswers.location ?? ''), normalise(r.guidedAnswers.started ?? '')].join(' ');
+  return mentions(text, SAFETY_WORDS) ? answer('risk') : answer('no_risk');
+};
+
 // --- Trade ---
 
 /** Checked in this order, so "dishwasher leaking" is appliances and "leak in the roof" is roofing. */
@@ -278,7 +288,7 @@ const waitingAnswer: Rule = (r, options) => {
 
 // --- Answering the questions ---
 
-const RULES: Record<string, Rule> = { messageClass, relatedItem, urgency, trade, updateType, replyType, answer: waitingAnswer };
+const RULES: Record<string, Rule> = { messageClass, relatedItem, urgency, safety, trade, updateType, replyType, answer: waitingAnswer };
 
 /** The Jev adapter sends `answer:guided` as `answer_guided`: colons aren't safe in a question name. */
 function ruleFor(name: string): Rule | undefined {

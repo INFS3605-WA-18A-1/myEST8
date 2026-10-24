@@ -58,6 +58,15 @@ describe('mock classifier', () => {
     expect(await ask(text, tenant(), { id: 'urgency', options: URGENCIES })).toEqual({ answer, confidence });
   });
 
+  test.each([
+    ['I can smell gas in the kitchen', 'risk', 0.9],
+    ['The powerpoint is throwing sparks', 'risk', 0.9],
+    ['The bathroom is flooding', 'risk', 0.9],
+    ['The kitchen tap is dripping', 'no_risk', 0.9],
+  ])('safety: %s -> %s', async (text, answer, confidence) => {
+    expect(await ask(text, tenant(), { id: 'safety', options: ['no_risk', 'risk'] })).toEqual({ answer, confidence });
+  });
+
   test('urgency: a "yes, it is getting worse" answer makes it High', async () => {
     const state = { senderRole: 'tenant', answers: { location: 'laundry', started: 'last week', worsening: 'yes', availability: null } };
     expect(await ask('The dryer makes a noise', state, { id: 'urgency', options: URGENCIES })).toEqual({ answer: 'high', confidence: 0.9 });
