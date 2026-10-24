@@ -88,7 +88,11 @@ function sydneyLocal(at: Date) {
   return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`;
 }
 
-/** Books the visit a few seconds after the demo clock. Another test may move that clock, so a past time is tried again. */
+/**
+ * Books the visit at the first whole minute at least 20 seconds after the demo clock. The
+ * Start field takes whole minutes, so a time a few seconds ahead would be cut back into the
+ * past. Another test may move that clock, so a past time is tried again.
+ */
 async function bookWorkOrder(page: Page, ticketUrl: string) {
   const sent = page.getByText(/Work Order sent to Pete's Plumbing for/);
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -96,7 +100,9 @@ async function bookWorkOrder(page: Page, ticketUrl: string) {
     const iso = await page.locator('time.num').getAttribute('datetime');
     if (!iso) throw new Error('The demo clock is not on the page');
     await page.goto(ticketUrl);
-    await page.getByLabel('Start').fill(sydneyLocal(new Date(new Date(iso).getTime() + 20 * 1000)));
+    const minute = 60 * 1000;
+    const start = Math.ceil((new Date(iso).getTime() + 20 * 1000) / minute) * minute;
+    await page.getByLabel('Start').fill(sydneyLocal(new Date(start)));
     await page.getByRole('button', { name: 'Send Work Order' }).click();
     const refused = page.getByText('Pick a start time in the future');
     await expect(sent.or(refused)).toBeVisible();
@@ -208,12 +214,12 @@ test("a Work Order email's buttons open their pages, and Mark job done records i
   await expect(page.getByText("Pete's Plumbing finished the Job")).toHaveCount(0);
   await expect(page.getByText('asked for another')).toHaveCount(0);
 
-  // The visit was booked a few seconds ahead of the demo clock, which keeps running.
+  // The visit was booked up to 80 seconds ahead of the demo clock, which keeps running.
   // Opening the page did not finish the job; the button does, once the visit has started.
   await expect(async () => {
     await tradie.goto(doneHref);
     await expect(tradie.getByRole('button', { name: 'Mark job done' })).toBeVisible({ timeout: 1_000 });
-  }).toPass({ timeout: 30_000 });
+  }).toPass({ timeout: 90_000 });
   await tradie.getByRole('button', { name: 'Mark job done' }).click();
   await expect(tradie.getByText(/Already marked done on/)).toBeVisible();
 
