@@ -1,6 +1,6 @@
 # Let one email or mobile belong to several people
 
-Status: ready-for-agent
+Status: resolved
 
 ## What's wrong
 

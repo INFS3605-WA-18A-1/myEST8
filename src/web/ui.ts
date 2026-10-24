@@ -467,6 +467,50 @@ export function contactLink(kind: 'mobile' | 'email', value: string): Html {
     : html`<a class="contact-link is-email" href="mailto:${value}">${icon('envelope-simple', { size: 'size-4' })}<span>${value}</span></a>`;
 }
 
+const PROFILE_PATH: Record<Role, string> = {
+  tenant: '/tenants',
+  owner: '/owners',
+  tradie: '/tradies',
+  building_manager: '/building-managers',
+};
+
+/** Where a person's profile lives. */
+export function profileHref(role: Role, id: number): string {
+  return `${PROFILE_PATH[role]}/${id}`;
+}
+
+/** "A", "A and B", "A, B and C". `or` stands in for `and`. */
+function englishList(items: Html[], conjunction: 'and' | 'or'): Html {
+  if (items.length <= 1) return items[0] ?? html``;
+  if (items.length === 2) return html`${items[0]} ${conjunction} ${items[1]}`;
+  const head = items.slice(0, -1);
+  return html`${head.map((item, i) => (i === 0 ? item : html`, ${item}`))} ${conjunction} ${items.at(-1)}`;
+}
+
+/**
+ * A quiet note under a shared mobile or email. "Also" on a profile, "Could be" on an
+ * Inbox card. Each person is a link to their profile.
+ */
+export function sharedAddressNote(lead: 'Also' | 'Could be', others: { label: string; href: string }[]): Html {
+  if (!others.length) return html``;
+  const links = others.map((o) => html`<a href="${o.href}">${o.label}</a>`);
+  const line = lead === 'Could be' ? html`${lead} ${englishList(links, 'or')}.` : html`${lead} ${englishList(links, 'and')}`;
+  return html`<p class="shared-with text-sm text-muted">${line}</p>`;
+}
+
+/** Who else already uses `address`, as the quiet note names them. */
+export function othersUsing(
+  people: { id: number; role: Role; name: string; mobile: string | null; email: string | null }[],
+  address: string | null,
+  selfId: number,
+): { label: string; href: string }[] {
+  if (!address) return [];
+  return people
+    .filter((p) => p.id !== selfId && (p.mobile === address || p.email === address))
+    .map((p) => ({ label: `${p.name} (${ROLE_LABEL[p.role]})`, href: profileHref(p.role, p.id) }))
+    .sort((a, b) => a.label.localeCompare(b.label) || a.href.localeCompare(b.href));
+}
+
 /**
  * A rating as a chip: who gave it, a star, the score to one decimal and how many it is
  * from: "myEST8 ★ 4.7 (3)". `rating` null is a listing with no rating yet; `source` Google

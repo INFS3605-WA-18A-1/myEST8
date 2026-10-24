@@ -15,7 +15,7 @@ import type { WebEnv } from '../env.ts';
 import { formAction, list, text } from '../forms.ts';
 import { icon } from '../icons.ts';
 import { shellInfo } from '../shell.ts';
-import { alert, badge, button, contactLink, detailsForm, editPen, emptyState, field, flashFrom, formatMoney, formatWhen, humanise, linkButton, page, postButton, ratingChip, rowLink, section, sectionHeader, stat, statGroup, table, ticketCell, type Html } from '../ui.ts';
+import { alert, badge, button, contactLink, detailsForm, editPen, emptyState, field, flashFrom, formatMoney, formatWhen, humanise, linkButton, othersUsing, page, postButton, ratingChip, rowLink, section, sectionHeader, sharedAddressNote, stat, statGroup, table, ticketCell, type Html } from '../ui.ts';
 import { timeRange } from './calendar.ts';
 import { addTradieSection, contactFrom, importPanel, listingChoice, saveDetails, tradieFields, type DetailsEdit } from './onboarding-forms.ts';
 
@@ -125,6 +125,7 @@ async function profilePage(c: Context<WebEnv>, id: number, refused?: DetailsEdit
   const removed = !!tradie.removedAt;
   // A removed Tradie can't be edited: no form, even if one is asked for or a save is refused.
   const editing = !removed && (!!refused || c.req.query('edit') === 'details');
+  const people = editing ? [] : await actions.people();
   const notice = removed
     ? html`${alert(`Removed from the Agency on ${longDate(tradie.removedAt!, timeZone)}.`, 'info')}${refused ? alert(refused.message, 'error') : ''}`
     : '';
@@ -138,7 +139,7 @@ async function profilePage(c: Context<WebEnv>, id: number, refused?: DetailsEdit
       subtitle: tradie.businessName ? tradie.name : undefined,
       actions: html`${removed ? '' : removeButton(tradie)}${linkButton('Back to Tradies', '/tradies', { variant: 'ghost', size: 'sm' })}`,
       body: html`${notice}
-        ${editing ? editForm(tradie, refused) : header(tradie)} ${quotes(tradie, timeZone)} ${bookings(tradie, timeZone)} ${ratings(tradie, timeZone)}
+        ${editing ? editForm(tradie, refused) : header(tradie, people)} ${quotes(tradie, timeZone)} ${bookings(tradie, timeZone)} ${ratings(tradie, timeZone)}
         ${removed ? '' : addressForm(tradie, flash, c.req.query('form'))}`,
     }),
     refused ? 400 : 200,
@@ -253,7 +254,7 @@ function ratingStats(t: TradieView): Html {
  * comes with the Property Managers' and the Tenants' averages on their own, and Google's rating
  * beside them, never combined.
  */
-function header(t: TradieView): Html {
+function header(t: TradieView, people: Parameters<typeof othersUsing>[0]): Html {
   return html`<section class="section tradie-head" id="details" aria-label="Tradie details">
     <div class="tradie-contact">
       <div class="details-head">
@@ -261,8 +262,8 @@ function header(t: TradieView): Html {
         ${t.removedAt ? '' : editPen('Edit details', `/tradies/${t.tradieId}?edit=details#details`)}
       </div>
       <dl>
-        <div><dt>Mobile</dt><dd>${t.mobile ? html`${contactLink('mobile', t.mobile)}` : '—'}</dd></div>
-        <div><dt>Email</dt><dd>${t.email ? html`${contactLink('email', t.email)}` : '—'}</dd></div>
+        <div><dt>Mobile</dt><dd>${t.mobile ? html`${contactLink('mobile', t.mobile)}${sharedAddressNote('Also', othersUsing(people, t.mobile, t.tradieId))}` : '—'}</dd></div>
+        <div><dt>Email</dt><dd>${t.email ? html`${contactLink('email', t.email)}${sharedAddressNote('Also', othersUsing(people, t.email, t.tradieId))}` : '—'}</dd></div>
       </dl>
     </div>
     <div class="tradie-ratings">${ratingStats(t)}</div>

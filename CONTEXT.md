@@ -125,6 +125,10 @@ _Avoid_: tenant rating
 A way people reach the Agency, and the Agency reaches them: an SMS number, an email address or WhatsApp. An Agency connects its Channels in the welcome wizard and in Settings.
 _Avoid_: integration, inbox (on its own)
 
+**Contact address**:
+A mobile number or email on a person's profile. Several people in an Agency may share one. A message from it is read as the person the Agency asked most recently (a reply it is waiting on, such as an Owner's approval or a Tenant's missing details), or as the Tenant when exactly one of them has a Property and nobody was asked. Otherwise it waits in the Inbox for the Property Manager to say who sent it. A removed person's address, and a Tenant who has left, no longer match.
+_Avoid_: unique email, one inbox per person
+
 **Agency SMS number**:
 The Agency's SMS Channel when its number is managed through Twilio. Tenants, Tradies and Property Owners text it, and myEST8 replies from it. It is either created by myEST8 or registered by the Agency, and an Agency has one at a time. It differs from a Channel the Agency types in, which is any address plus a verification code.
 _Avoid_: Twilio number (to the Agency), virtual number, shared number
