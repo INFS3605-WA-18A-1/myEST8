@@ -35,6 +35,12 @@ export const AVAILABILITY_LABELS: Record<Availability, string> = {
   any_time: 'any time',
 };
 
+/** The same labels at the start of a line or on a choice: "Weekday mornings". */
+export function availabilityChoice(value: Availability): string {
+  const label = AVAILABILITY_LABELS[value];
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
 const trade = (t: Trade) => t.replace('_', ' ');
 const visit = (at: string, agency: AgencyInfo) => formatVisit(at, agency.timeZone);
 

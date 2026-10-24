@@ -7,7 +7,7 @@ import { Hono } from 'hono';
 import { html } from 'hono/html';
 import type { App } from '../../app.ts';
 import { ActionError, AVAILABILITY } from '../../shared.ts';
-import { AVAILABILITY_LABELS } from '../../templates.ts';
+import { availabilityChoice } from '../../templates.ts';
 import { text } from '../forms.ts';
 import { alert, button, card, field, publicPage, type Html } from '../ui.ts';
 import { formatVisit, formatVisitDay } from '../../zoned-time.ts';
@@ -98,7 +98,7 @@ function noneForm(token: string, page: Offer): Html {
           ${AVAILABILITY.map(
             (value) => html`<label>
               <input type="radio" name="availability" value="${value}" ${page.availability === value ? 'checked' : ''} required />
-              <span>${AVAILABILITY_LABELS[value]}</span>
+              <span>${availabilityChoice(value)}</span>
             </label>`,
           )}
         </fieldset>

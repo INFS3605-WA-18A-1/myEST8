@@ -125,10 +125,11 @@ describe('confirming a visit time', () => {
     expect(opened.status).toBe(200);
     const text = visible(await opened.text());
     expect(text).toContain('When are you usually home?');
-    expect(text).toContain('weekday mornings');
-    expect(text).toContain('weekday afternoons');
+    expect(text).toContain('Weekday mornings');
+    expect(text).toContain('Weekday afternoons');
     expect(text).toContain('Saturdays');
-    expect(text).toContain('any time');
+    expect(text).toContain('Any time');
+    expect(text).not.toContain('weekday mornings');
     expect(text).toContain('A time that works');
     expect(await jobView(w, job)).toMatchObject({ status: 'approved', workOrder: null });
     expect((await one<{ availability: string }>(w.h.db, 'SELECT availability FROM people WHERE mobile = ?', TOM))?.availability).toBe('weekday_mornings');

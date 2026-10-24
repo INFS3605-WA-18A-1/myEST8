@@ -198,7 +198,7 @@ myEST8 is where a Property Manager at a small Australian Agency sees every repai
 - **Sign-in and sign-up** (`auth.css`): a split panel, Night with `--rail-text` type and the key tag in Wattle on the left, and the form on White on the right. Errors are specific sentences beside the field, announced with `aria-describedby`. No onboarding panel on sign-in.
 - **Tenant pages** (`tenant.css`): a white column on Paper; the bar names the Agency and the page names the Property's street; the tracker's current stage carries the Wattle bar.
 - **Offer visit times** is the chosen Tradie's step on their quote page (`/q/:token`), in that same column. It names the street, when the Tenant is usually home, and how long the visit takes, then up to three start times. The button is "Offer visit times". When the Tenant has asked for other times, the form also shows what they said.
-- **Book this visit** (`/v/:token`) is the Tenant's confirm page, the same column and bar. It names the Tradie and the street, and has one button, "Book Tuesday 27 Oct, 9:00 am". Opening the link does not book the visit. **None of these work** asks "When are you usually home?" (weekday mornings, weekday afternoons, Saturdays, any time) and an optional note, then "Ask for other times". Opening that link does not save anything.
+- **Book this visit** (`/v/:token`) is the Tenant's confirm page, the same column and bar. It names the Tradie and the street, and has one button, "Book Tuesday 27 Oct, 9:00 am". Opening the link does not book the visit. **None of these work** asks "When are you usually home?" (Weekday mornings, Weekday afternoons, Saturdays, Any time) and an optional note, then "Ask for other times". Opening that link does not save anything.
 
 ## Components
 
