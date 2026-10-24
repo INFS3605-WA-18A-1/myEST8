@@ -94,8 +94,6 @@ type StepKey = (typeof STEPS)[number]['key'];
 /** What a new Agency needs before Tenants' messages can be handled, in guide order. Adding colleagues is optional. */
 const NEEDED = ['channels', 'tradies', 'property'] as const;
 
-const ROLE_LABEL: Record<Role, string> = { tenant: 'Tenant', owner: 'Property Owner', tradie: 'Tradie', building_manager: 'Building Manager' };
-
 /** How far the Agency's setup has got, read from what it has. */
 async function setupProgress(actions: Actions, unavailable: readonly ChannelType[] = []) {
   const channels = await actions.channels();
@@ -523,7 +521,8 @@ type PropertyInput = {
 /**
  * Checks the whole form before anything is created, so a refusal never leaves a
  * Property Owner or Property half added. A Property Owner or Building Manager
- * whose mobile or email the Agency already has is reused, not added twice.
+ * the Agency already has, matched by mobile or email, is reused, not added twice.
+ * An address another person already has is kept by both.
  */
 async function readPropertyForm(actions: Actions, form: FormValues, myId: number): Promise<{ ok: true; input: PropertyInput } | { ok: false; errors: Errors }> {
   const errors: Errors = {};
@@ -550,14 +549,13 @@ async function readPropertyForm(actions: Actions, form: FormValues, myId: number
   const nominatedTradieIds = nominatedFrom(form);
   if (nominatedTradieIds.some((id) => !tradies.some((t) => t.id === id))) errors.nominatedTradieIds = 'Choose Tradies from the list';
 
-  // Who already has each mobile and email, so nobody is added twice.
+  // Who already has each mobile and email, so an existing Property Owner or Building Manager is reused.
   const holders = new Map<string, Person>();
   for (const person of (await actions.people())) {
     for (const a of [person.mobile, person.email]) if (a) holders.set(normalizeAddress(a), person);
   }
-  const usedInForm = new Map<string, string>();
 
-  /** Checks one person's contact; returns the existing person to reuse, if any. */
+  /** Checks one person's contact; returns the existing person to reuse, if any. People on this form may share a mobile or email. */
   function checkContact(scope: string, label: string, role: Role, reuse: boolean): Person | null {
     const contact = contactFrom(form, scope);
     const at = (f: string) => scoped(scope, f);
@@ -568,17 +566,8 @@ async function readPropertyForm(actions: Actions, form: FormValues, myId: number
     let existing: Person | null = null;
     for (const [f, value] of [['mobile', contact.mobile], ['email', contact.email]] as const) {
       if (!value || errors[at(f)]) continue;
-      const key = normalizeAddress(value);
-      const other = usedInForm.get(key);
-      if (other) {
-        errors[at(f)] = `${value} is also the ${other}'s. Each person needs their own.`;
-        continue;
-      }
-      usedInForm.set(key, label);
-      const holder = holders.get(key);
-      if (!holder) continue;
-      if (reuse && holder.role === role && (!existing || existing.id === holder.id)) existing = holder;
-      else errors[at(f)] = `${value} already belongs to ${holder.name}, a ${ROLE_LABEL[holder.role]}`;
+      const holder = holders.get(normalizeAddress(value));
+      if (holder && reuse && holder.role === role && (!existing || existing.id === holder.id)) existing = holder;
     }
     return existing;
   }

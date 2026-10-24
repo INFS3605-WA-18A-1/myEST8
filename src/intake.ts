@@ -29,7 +29,7 @@ type Awaiting =
 /** The guided questions in the order they are asked. */
 const GUIDED_ORDER: GuidedQuestion[] = ['location', 'started', 'worsening', 'availability'];
 
-type InboxReason = 'unknown_sender' | 'other' | 'low_confidence' | 'common_area_no_building_manager';
+type InboxReason = 'unknown_sender' | 'other' | 'low_confidence' | 'common_area_no_building_manager' | 'shared_address';
 type Answers = Record<string, ClassifierAnswer>;
 
 /** An inbound message once stored, with its attachments saved as files. */
@@ -588,6 +588,40 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
     return toInbox(msg, person.id, 'other', null);
   }
 
+  /**
+   * When an address belongs to several people: the one the Agency asked most recently
+   * (a pending answer, or an approval waiting on an Owner), or the Tenant when exactly
+   * one of them has a Property. Otherwise the Property Manager has to pick.
+   */
+  async function chooseSender(people: Person[]): Promise<Person | null> {
+    const waiting: { person: Person; at: string }[] = [];
+    for (const person of people) {
+      const at = await askedAt(person.id);
+      if (at) waiting.push({ person, at });
+    }
+    if (waiting.length) {
+      waiting.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : a.person.id - b.person.id));
+      return waiting[0]!.person;
+    }
+    const tenants = people.filter((p) => p.role === 'tenant' && p.propertyId !== null);
+    return tenants.length === 1 ? tenants[0]! : null;
+  }
+
+  /** When this person was last asked for a reply, if they have one waiting. */
+  async function askedAt(personId: number): Promise<string | null> {
+    const pending = await one<{ asked_at: string }>(
+      db,
+      'SELECT asked_at FROM pending_answers WHERE person_id = ? ORDER BY asked_at DESC, seq DESC LIMIT 1',
+      personId,
+    );
+    const approval = await one<{ requested_at: string }>(
+      db,
+      `SELECT requested_at FROM approvals WHERE owner_id = ? AND status IN ('requested', 'reminded') ORDER BY requested_at DESC, id DESC LIMIT 1`,
+      personId,
+    );
+    return [pending?.asked_at, approval?.requested_at].filter((at): at is string => !!at).sort().at(-1) ?? null;
+  }
+
   // --- Background tasks ---
 
   worker.on<{ inboundId: number }>('intake.process', async ({ inboundId }) => {
@@ -602,14 +636,19 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
     await run(db, 'UPDATE inbound_messages SET attachments = ? WHERE id = ?', JSON.stringify(attachments), inboundId);
     msg.fileIds = attachments.map((a) => a.fileId!);
 
-    const sender = await modules.profiles.findByAddress(msg.agencyId, msg.from);
-    if (!sender) {
+    const matches = await modules.profiles.findByAddress(msg.agencyId, msg.from);
+    if (!matches.length) {
       await claim(msg);
       return toInbox(msg, null, 'unknown_sender', null);
     }
-    await modules.profiles.recordInbound(sender.personId, msg.channelType, msg.from, clock.now());
+    const sender = matches.length === 1 ? matches[0]! : await chooseSender(matches);
+    if (!sender) {
+      await claim(msg);
+      return toInbox(msg, null, 'shared_address', null);
+    }
+    await modules.profiles.recordInbound(sender.id, msg.channelType, msg.from, clock.now());
     // Each handler claims the message once the classifier has answered; that step alone is safe to retry.
-    await route(msg, await modules.profiles.person(sender.personId));
+    await route(msg, sender);
     await claim(msg);
   });
 
@@ -760,6 +799,12 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
       );
       return Promise.all(items.map(async (item) => {
         const msg = await received(item.inbound_id);
+        const candidates =
+          item.reason === 'shared_address'
+            ? (await modules.profiles.findByAddress(msg.agencyId, msg.from))
+                .map((p) => ({ personId: p.id, name: p.name, role: p.role }))
+                .sort((a, b) => a.name.localeCompare(b.name) || a.personId - b.personId)
+            : [];
         return {
           itemId: item.id,
           reason: item.reason,
@@ -769,6 +814,7 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
           text: msg.text,
           receivedAt: item.at,
           bestGuess: item.best_guess ? (JSON.parse(item.best_guess) as Record<string, string>) : null,
+          candidates,
         };
       }));
     },

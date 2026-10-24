@@ -32,8 +32,10 @@ import {
   linkButton,
   page,
   postButton,
+  profileHref,
   queueRow,
   ROLE_LABEL,
+  sharedAddressNote,
   rowLink,
   section,
   segmented,
@@ -63,6 +65,7 @@ const INBOX_REASON: Record<InboxItem['reason'], [string, Tone]> = {
   other: ['Not maintenance', 'neutral'],
   low_confidence: ['Agent unsure', 'info'],
   common_area_no_building_manager: ['Common Area with no Building Manager', 'warning'],
+  shared_address: ['Shared address', 'warning'],
 };
 
 const GUESS_LABEL: Record<string, string> = {
@@ -590,6 +593,12 @@ function inboxItem(item: InboxItem, people: Person[], timeZone: string, q: strin
       ${badge(reason, tone)}
     </div>
     <blockquote class="inbox-item-text">${item.text}</blockquote>
+    ${item.reason === 'shared_address'
+      ? sharedAddressNote(
+          'Could be',
+          item.candidates.map((c) => ({ label: `${c.name} (${ROLE_LABEL[c.role]})`, href: profileHref(c.role, c.personId) })),
+        )
+      : ''}
     ${guesses
       ? html`<details class="inbox-item-guess">
           <summary>Looks like: ${guessSummary(guesses)}</summary>
@@ -610,7 +619,10 @@ function inboxItem(item: InboxItem, people: Person[], timeZone: string, q: strin
               placeholder: 'Search people by name',
               search: true,
               options: people.map((p) => ({ value: String(p.id), label: personLabel(p) })),
-              hint: 'Their next message from this address will be recognised.',
+              hint:
+                item.reason === 'shared_address'
+                  ? 'This message is recorded as theirs. A later message from this address is still shared.'
+                  : 'Their next message from this address will be recognised.',
             })}
             ${button('Link sender')}
             </form>

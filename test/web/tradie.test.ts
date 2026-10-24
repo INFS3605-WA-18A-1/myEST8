@@ -187,23 +187,21 @@ describe('editing a Tradie from their profile', () => {
     const w = await webWorld();
     const cookie = await w.signIn();
 
-    const clash = await w.post(`/tradies/${w.ids.pete}/details`, { ...posted, mobile: DANA }, cookie);
-    expect(clash.status).toBe(400);
-    let form = detailsOf(await clash.text());
-    expect(form).toMatch(/<input[^>]* name="businessName"[^>]* value="Park Plumbing &amp; Gas"/);
-    expect(form).toMatch(/<input[^>]* name="mobile"[^>]* aria-invalid="true"[^>]* value="\+61400000202"/);
-    expect(form).toMatch(/<p id="tradie-mobile-error" class="field-error">\+61400000202 already belongs to someone else<\/p>/);
-    expect(form).toMatch(/<input\s+type="checkbox"[^>]*name="trades"\s+value="general_handyman"[^>]*\schecked/);
-
     const noTrades = await w.post(`/tradies/${w.ids.pete}/details`, { ...posted, trades: [] }, cookie);
     expect(noTrades.status).toBe(400);
-    form = detailsOf(await noTrades.text());
+    let form = detailsOf(await noTrades.text());
     expect(form).toMatch(/<p class="field-error">Choose Trades from: plumbing, electrical/);
     expect(form).toMatch(/<input[^>]* name="name"[^>]* value="Peter Park"/);
 
     const noBusiness = await w.post(`/tradies/${w.ids.pete}/details`, { ...posted, businessName: '' }, cookie);
     expect(detailsOf(await noBusiness.text())).toMatch(/<p id="tradie-business-error" class="field-error">Enter the business name<\/p>/);
     expect(await w.alice.tradie(w.ids.pete)).toMatchObject({ businessName: "Pete's Plumbing", mobile: PETE });
+
+    const shared = await w.post(`/tradies/${w.ids.pete}/details`, { ...posted, mobile: DANA }, cookie);
+    expect(shared.status).toBe(303);
+    expect(await (await w.get(shared.headers.get('location')!, cookie)).text()).toContain(`href="tel:${DANA}"`);
+    expect(await w.alice.tradie(w.ids.pete)).toMatchObject({ mobile: DANA });
+    expect(await w.alice.tradie(w.ids.dana)).toMatchObject({ mobile: DANA });
   });
 
   test("another Agency's Tradie can't be edited: the page is a 404 and nothing changes", async () => {

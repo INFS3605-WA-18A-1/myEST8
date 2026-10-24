@@ -62,15 +62,20 @@ describe('editing a Property Owner', () => {
     expect((await w.alice.people('owner')).find((p) => p.id === w.ids.olivia)).toMatchObject({ name: 'Olivia Owens', mobile: OLIVIA, email: OLIVIA_EMAIL });
   });
 
-  test('a mobile or email someone else in the Agency holds is refused naming the field, and nothing changes', async () => {
+  test('a mobile or email someone else in the Agency holds is kept by both', async () => {
     const w = await world();
 
-    expect((await refusal(w.alice.editOwner(w.ids.olivia, { name: 'Olivia Owens', mobile: HANA }))).fields).toEqual({ mobile: `${HANA} already belongs to someone else` });
-    expect((await refusal(w.alice.editOwner(w.ids.olivia, { name: 'Olivia Owens', mobile: PETE }))).fields.mobile).toBe(`${PETE} already belongs to someone else`);
-    expect((await refusal(w.alice.editOwner(w.ids.olivia, { name: 'Olivia Owens', email: 'hana@example.com' }))).fields).toEqual({
-      email: 'hana@example.com already belongs to someone else',
-    });
-    expect((await w.alice.people('owner')).find((p) => p.id === w.ids.olivia)).toMatchObject({ mobile: OLIVIA, email: OLIVIA_EMAIL });
+    await w.alice.editOwner(w.ids.olivia, { name: 'Olivia Owens', mobile: HANA });
+    expect((await w.alice.people('owner')).find((p) => p.id === w.ids.olivia)).toMatchObject({ name: 'Olivia Owens', mobile: HANA, email: null });
+    expect(await w.alice.tenant(w.ids.hana)).toMatchObject({ mobile: HANA });
+
+    await w.alice.editOwner(w.ids.olivia, { name: 'Olivia Owens', mobile: PETE });
+    expect((await w.alice.people('owner')).find((p) => p.id === w.ids.olivia)).toMatchObject({ mobile: PETE, email: null });
+    expect(await w.alice.tradie(w.ids.pete)).toMatchObject({ mobile: PETE });
+
+    await w.alice.editOwner(w.ids.olivia, { name: 'Olivia Owens', email: 'hana@example.com' });
+    expect((await w.alice.people('owner')).find((p) => p.id === w.ids.olivia)).toMatchObject({ name: 'Olivia Owens', mobile: null, email: 'hana@example.com' });
+    expect(await w.alice.tenant(w.ids.hana)).toMatchObject({ email: 'hana@example.com' });
   });
 
   test("another Agency's Property Owner, and someone who is not a Property Owner, are not found", async () => {
@@ -112,10 +117,11 @@ describe('editing a Building Manager', () => {
 
     expect((await refusal(w.alice.editBuildingManager(w.ids.barry, { name: 'Barry Strata' }))).fields).toEqual({ mobile: 'Enter a mobile number or email address' });
     expect((await refusal(w.alice.editBuildingManager(w.ids.barry, { name: 'Barry Strata', email: 'barry@' }))).fields).toEqual({ email: "barry@ isn't an email address" });
-    expect((await refusal(w.alice.editBuildingManager(w.ids.barry, { name: 'Barry Strata', email: OLIVIA_EMAIL }))).fields).toEqual({
-      email: `${OLIVIA_EMAIL} already belongs to someone else`,
-    });
     expect((await w.alice.people('building_manager')).find((p) => p.id === w.ids.barry)).toMatchObject({ name: 'Barry Strata', mobile: null, email: BARRY });
+
+    await w.alice.editBuildingManager(w.ids.barry, { name: 'Barry Strata', email: OLIVIA_EMAIL });
+    expect((await w.alice.people('building_manager')).find((p) => p.id === w.ids.barry)).toMatchObject({ name: 'Barry Strata', email: OLIVIA_EMAIL });
+    expect((await w.alice.people('owner')).find((p) => p.id === w.ids.olivia)).toMatchObject({ email: OLIVIA_EMAIL });
   });
 
   test("another Agency's Building Manager, and someone who is not a Building Manager, are not found", async () => {

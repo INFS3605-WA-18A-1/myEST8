@@ -19,6 +19,8 @@ import {
   emptyState,
   entityLink,
   flashFrom,
+  othersUsing,
+  sharedAddressNote,
   formatWhen,
   linkButton,
   page,
@@ -211,6 +213,7 @@ async function profilePage(c: Context<WebEnv>, kind: Kind, id: number, refused?:
   const removed = !!person.removedAt;
   // A removed person can't be edited: no form, even if one is asked for or a save is refused.
   const editing = !removed && (!!refused || c.req.query('edit') === 'details');
+  const people = editing ? [] : await actions.people();
   const notice = removed
     ? html`${alert(`Removed from the Agency on ${longDate(person.removedAt!, timeZone)}.`, 'info')}${refused ? alert(refused.message, 'error') : ''}`
     : '';
@@ -222,7 +225,7 @@ async function profilePage(c: Context<WebEnv>, kind: Kind, id: number, refused?:
       flash: flashFrom(c.req.url),
       shell: shellInfo(c),
       actions: html`${removed ? '' : removeButton(kind, person)}${linkButton(`Back to ${kind.title}`, kind.path, { variant: 'ghost', size: 'sm' })}`,
-      body: html`${notice}${facts(kind, person, editing, refused)} ${propertiesSection(kind, person)} ${kind.role === 'owner' ? approvalsSection(person, timeZone) : ''}`,
+      body: html`${notice}${facts(kind, person, editing, refused, people)} ${propertiesSection(kind, person)} ${kind.role === 'owner' ? approvalsSection(person, timeZone) : ''}`,
     }),
     refused ? 400 : 200,
   );
@@ -241,8 +244,14 @@ function longDate(at: string, timeZone: string): string {
   return new Intl.DateTimeFormat('en-AU', { timeZone, day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(at));
 }
 
+/** The address, and a quiet note of who else in the Agency uses it. */
+function contactDetail(kind: 'mobile' | 'email', value: string | null, people: Parameters<typeof othersUsing>[0], selfId: number): Html | string {
+  if (!value) return '—';
+  return html`${contactLink(kind, value)}${sharedAddressNote('Also', othersUsing(people, value, selfId))}`;
+}
+
 /** Name, mobile and email, with a pen. Editing, the form takes their place. */
-function facts(kind: Kind, person: Profile, editing: boolean, refused?: DetailsEdit): Html {
+function facts(kind: Kind, person: Profile, editing: boolean, refused: DetailsEdit | undefined, people: Parameters<typeof othersUsing>[0]): Html {
   if (editing) {
     const values = refused?.values ?? { name: person.name, mobile: person.mobile ?? '', email: person.email ?? '' };
     return html`<section class="section" id="details" aria-label="${kind.singular} details">
@@ -258,8 +267,8 @@ function facts(kind: Kind, person: Profile, editing: boolean, refused?: DetailsE
     <div class="details-head">
       <div class="details-body">
         ${dl([
-          ['Mobile', person.mobile ? contactLink('mobile', person.mobile) : '—'],
-          ['Email', person.email ? contactLink('email', person.email) : '—'],
+          ['Mobile', contactDetail('mobile', person.mobile, people, person.personId)],
+          ['Email', contactDetail('email', person.email, people, person.personId)],
         ])}
       </div>
       ${person.removedAt ? '' : editPen('Edit details', `${kind.path}/${person.personId}?edit=details#details`)}

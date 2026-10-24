@@ -266,18 +266,18 @@ describe('editing a Tenant from their profile', () => {
     expect(page).not.toContain(`action="/tenants/${w.ids.tom}/details"`);
   });
 
-  test('a refused save keeps what was typed and shows the reason under its field', async () => {
+  test("saving another Tenant's mobile keeps it for both", async () => {
     const w = await webWorld();
     const cookie = await w.signIn();
 
     const res = await w.post(`/tenants/${w.ids.tom}/details`, { name: 'Thomas Tran', mobile: HANA, email: 'tom@example.com' }, cookie);
-    expect(res.status).toBe(400);
-    const form = detailsOf(await res.text());
-    expect(form).toMatch(/<input[^>]* name="name"[^>]* value="Thomas Tran"/);
-    expect(form).toMatch(/<input[^>]* name="mobile"[^>]* aria-invalid="true"[^>]* value="\+61400000002"/);
-    expect(form).toMatch(/<input[^>]* name="email"[^>]* value="tom@example.com"/);
-    expect(form).toMatch(/<p id="tenant-mobile-error" class="field-error">\+61400000002 already belongs to someone else<\/p>/);
-    expect(await w.alice.tenant(w.ids.tom)).toMatchObject({ name: 'Tom Tran', mobile: TOM });
+    expect(res.status).toBe(303);
+    const page = await (await w.get(res.headers.get('location')!, cookie)).text();
+    expect(visible(page)).toContain('Details saved.');
+    expect(page).toContain(`href="tel:${HANA}"`);
+    expect(page).toContain('href="mailto:tom@example.com"');
+    expect(await w.alice.tenant(w.ids.tom)).toMatchObject({ name: 'Thomas Tran', mobile: HANA, email: 'tom@example.com' });
+    expect(await w.alice.tenant(w.ids.hana)).toMatchObject({ mobile: HANA, email: HANA_EMAIL });
   });
 
   test('with neither a mobile nor an email the reason is under Mobile, the first of the two', async () => {
