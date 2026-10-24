@@ -381,6 +381,32 @@ describe('the onboarding wizard', () => {
     expect((await sunrise.people('tenant')).find((p) => p.name === 'Tina Tan')).toMatchObject({ email: 'tina@sunrise.example', mobile: '+61400000999' });
   });
 
+  test('a new Property Owner and a new Tenant on the same Property can share an email, and both keep it', async () => {
+    const w = await webWorld();
+    const cookie = await w.signUp();
+
+    const saved = await submit(
+      w,
+      '/welcome/property',
+      propertyFields({
+        ownerMobile: '',
+        ownerEmail: 'shared@sunrise.example',
+        tenantMobile: '',
+        tenantEmail: 'shared@sunrise.example',
+      }),
+      cookie,
+    );
+
+    const shown = visible(saved.page);
+    expect(shown).toContain('Property added');
+    expect(shown).toContain('3 Sun St, Newtown NSW 2042 is set up with Property Owner Omar Owen and Tenant Tina Tan');
+
+    const sam = await one<{ id: number }>(w.h.db, 'SELECT id FROM property_managers WHERE email = ?', 'sam@sunrise.example');
+    const sunrise = w.h.as(sam!.id);
+    expect((await sunrise.people('owner')).find((p) => p.name === 'Omar Owen')).toMatchObject({ email: 'shared@sunrise.example' });
+    expect((await sunrise.people('tenant')).find((p) => p.name === 'Tina Tan')).toMatchObject({ email: 'shared@sunrise.example' });
+  });
+
   test('a colleague with an email that already has an account, or a Tradie with no Trades, is refused with the form kept', async () => {
     const w = await webWorld();
     const sam = await w.signUp();

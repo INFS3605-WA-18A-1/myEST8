@@ -554,9 +554,8 @@ async function readPropertyForm(actions: Actions, form: FormValues, myId: number
   for (const person of (await actions.people())) {
     for (const a of [person.mobile, person.email]) if (a) holders.set(normalizeAddress(a), person);
   }
-  const usedInForm = new Map<string, string>();
 
-  /** Checks one person's contact; returns the existing person to reuse, if any. */
+  /** Checks one person's contact; returns the existing person to reuse, if any. People on this form may share a mobile or email. */
   function checkContact(scope: string, label: string, role: Role, reuse: boolean): Person | null {
     const contact = contactFrom(form, scope);
     const at = (f: string) => scoped(scope, f);
@@ -567,14 +566,7 @@ async function readPropertyForm(actions: Actions, form: FormValues, myId: number
     let existing: Person | null = null;
     for (const [f, value] of [['mobile', contact.mobile], ['email', contact.email]] as const) {
       if (!value || errors[at(f)]) continue;
-      const key = normalizeAddress(value);
-      const other = usedInForm.get(key);
-      if (other) {
-        errors[at(f)] = `${value} is also the ${other}'s. Each person needs their own.`;
-        continue;
-      }
-      usedInForm.set(key, label);
-      const holder = holders.get(key);
+      const holder = holders.get(normalizeAddress(value));
       if (holder && reuse && holder.role === role && (!existing || existing.id === holder.id)) existing = holder;
     }
     return existing;
