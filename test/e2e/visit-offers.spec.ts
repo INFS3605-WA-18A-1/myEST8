@@ -1,3 +1,4 @@
+import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { fixtureJpeg } from '../../src/demo/photo-exif.ts';
 import { signIn, unique } from './support/actions.ts';
@@ -235,6 +236,134 @@ test('none of the times work, so the Tenant says when they are home and the Trad
   await tradie.getByLabel('Visit time 2').fill('2026-11-02T13:00');
   await tradie.getByRole('button', { name: 'Offer visit times' }).click();
   await expect(tradie.getByText('will ask the Tenant to pick a time')).toBeVisible();
+  await tradie.close();
+  await tenant.close();
+});
+
+// Noah Nair, whom no other spec texts. Screenshots of the open offer and the tracker are for review, not assertions.
+test('a booked visit can ask for another time, and the Ticket can ask the Tradie to offer times', async ({ page, browser }) => {
+  test.setTimeout(240_000);
+  mkdirSync('.screenshots/visit-offers', { recursive: true });
+  const report = `The laundry tap is dripping ${unique()}`;
+  await signIn(page);
+
+  await page.goto('/demo');
+  await page.getByRole('navigation', { name: 'People' }).getByRole('link', { name: /^Noah Nair/ }).click();
+  const phone = page.getByRole('region', { name: "Noah Nair's phone" });
+  const messages = phone.getByRole('region', { name: 'Messages with Noah Nair' });
+  for (const text of [report, "Since Monday. It isn't getting worse. I'm home weekday mornings."]) {
+    await phone.getByRole('textbox', { name: 'Message' }).fill(text);
+    await phone.getByRole('button', { name: 'Send as Noah Nair' }).click();
+    await expect(messages.getByText(text, { exact: true }).last()).toBeVisible();
+  }
+  const uploadLink = messages.getByRole('link', { name: /\/u\// }).last();
+  await expect(uploadLink).toBeVisible();
+  const uploader = await browser.newPage();
+  await uploader.goto((await uploadLink.getAttribute('href'))!);
+  await uploader.getByLabel('Photos of the issue').setInputFiles({
+    name: 'tap.jpg',
+    mimeType: 'image/jpeg',
+    buffer: Buffer.from(fixtureJpeg({ takenAt: '2026:10:08 08:30:00' })),
+  });
+  await uploader.getByRole('button', { name: 'Upload' }).click();
+  await expect(uploader.getByRole('status')).toContainText(/has your photo/i);
+  await uploader.close();
+
+  await page.goto('/tickets');
+  await eventually(page, () => expect(page.getByText(report).first()).toBeVisible({ timeout: 1_000 }));
+  await page.getByRole('link', { name: new RegExp(report) }).first().click();
+  const confirm = page.getByRole('button', { name: /^Confirm( anyway)?$/ });
+  if (!(await confirm.isVisible())) await page.getByText('Confirm', { exact: true }).click();
+  await confirm.click();
+  await expect(page).toHaveURL(/\/tickets\/\d+/);
+  const ticketUrl = page.url().split('?')[0]!;
+
+  const boxes = page.getByRole('checkbox', { name: /^\d+\. / });
+  for (const box of await boxes.all()) if (await box.isEnabled()) await box.uncheck();
+  await page.getByRole('checkbox', { name: /Pete's Plumbing/ }).check();
+  await page.getByRole('checkbox', { name: /Drip Doctors/ }).check();
+  await page.getByRole('button', { name: 'Send Quote Requests' }).click();
+  await expect(page.getByText(/Quote Requests? sent/i).first()).toBeVisible();
+
+  const tradie = await browser.newPage();
+  for (const [person, price, scope] of [
+    ['Pete Park', '150', 'Replace the tap washer'],
+    ['Dana Drip', '400', 'Replace the mixer tap'],
+  ] as const) {
+    await tradie.goto(await quoteLink(page, person, report));
+    await tradie.getByLabel('Estimate ($)').fill(price);
+    await tradie.getByRole('button', { name: 'Send Estimate' }).click();
+    await expect(tradie.getByRole('heading', { name: 'Give your Firm Quote' })).toBeVisible();
+    await tradie.getByLabel('Firm price ($)').fill(price);
+    await tradie.getByLabel('Scope of work').fill(scope);
+    await tradie.getByLabel('How many days it takes').fill('1');
+    await tradie.getByLabel('Start date 1').fill('2026-10-27');
+    await tradie.getByRole('button', { name: 'Send Firm Quote' }).click();
+    await expect(tradie.getByRole('status')).toContainText('has your Firm Quote');
+  }
+
+  await page.goto(ticketUrl);
+  await eventually(page, () => expect(page.getByRole('button', { name: 'Choose this Firm Quote' }).first()).toBeVisible({ timeout: 1_000 }));
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('row', { name: /Pete's Plumbing.*Replace the tap washer/ }).getByRole('button', { name: 'Choose this Firm Quote' }).click();
+  await expect(page.getByText("Firm Quote from Pete's Plumbing chosen and approved", { exact: true })).toBeVisible();
+
+  await tradie.goto(await quoteLink(page, 'Pete Park', report));
+  await expect(tradie.getByRole('heading', { name: 'Offer visit times' })).toBeVisible();
+  // A different morning from the other specs, which book Pete for Tuesday 27 October.
+  await tradie.getByLabel('Visit time 1').fill('2026-10-29T10:00');
+  await tradie.getByLabel('Visit time 2').fill('2026-10-30T11:00');
+  await tradie.getByRole('button', { name: 'Offer visit times' }).click();
+  await expect(tradie.getByText('will ask the Tenant to pick a time')).toBeVisible();
+
+  await page.goto(ticketUrl);
+  const offer = page.locator('[id$="-work-order"]');
+  await expect(offer.getByText('The Tenant is choosing.')).toBeVisible();
+  await expect(offer.getByRole('button', { name: "Ask Pete's Plumbing to offer times" })).toBeVisible();
+  await expect(offer.getByRole('button', { name: 'Send Work Order' })).toBeVisible();
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await offer.screenshot({ path: '.screenshots/visit-offers/ticket-open-offer-1366.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload();
+  await expect(offer.getByRole('button', { name: "Ask Pete's Plumbing to offer times" })).toBeVisible();
+  await offer.screenshot({ path: '.screenshots/visit-offers/ticket-open-offer-390.png' });
+  await page.setViewportSize({ width: 1280, height: 720 });
+
+  await page.goto('/demo');
+  await page.getByRole('navigation', { name: 'People' }).getByRole('link', { name: /^Noah Nair/ }).click();
+  const pick = messages.getByRole('link', { name: /pick=1/ }).last();
+  await expect(async () => {
+    await page.reload();
+    await page.getByRole('navigation', { name: 'People' }).getByRole('link', { name: /^Noah Nair/ }).click();
+    await expect(pick).toBeVisible({ timeout: 1_000 });
+  }).toPass({ timeout: 15_000 });
+  const progress = messages.getByRole('link', { name: /\/t\// }).last();
+  const tenant = await browser.newPage();
+  await tenant.goto((await pick.getAttribute('href'))!);
+  await tenant.getByRole('button', { name: 'Book Thursday 29 Oct, 10:00 am' }).click();
+  await expect(tenant.getByText('This visit is booked for Thu 29 Oct, 10:00 am.')).toBeVisible();
+
+  await tenant.goto((await progress.getAttribute('href'))!);
+  const another = tenant.getByRole('link', { name: 'Need another time?' });
+  await expect(another).toBeVisible();
+  for (const [width, height] of [
+    [1366, 768],
+    [390, 844],
+  ] as const) {
+    await tenant.setViewportSize({ width, height });
+    await tenant.screenshot({ path: `.screenshots/visit-offers/tracker-need-another-time-${width}.png`, fullPage: true });
+  }
+
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto(ticketUrl);
+  await expect(page.getByText('Tenant asked for another time')).toHaveCount(0);
+
+  await another.click();
+  await tenant.getByRole('button', { name: 'Need another time?' }).click();
+  await expect(tenant.getByText('This visit stays booked until you pick a new one.')).toBeVisible();
+
+  await page.goto(ticketUrl);
+  await expect(page.getByText('Tenant asked for another time').first()).toBeVisible();
   await tradie.close();
   await tenant.close();
 });
