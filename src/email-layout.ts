@@ -74,7 +74,13 @@ const BUTTON_LABELS: [RegExp, string][] = [
   [/progress/i, 'Follow progress'],
 ];
 
+/** A line that is only "<label>: ", with a label of 40 characters or fewer, names its own button. */
+const LABELLED_LINE = /^(.{1,40}):\s*$/;
+
 function buttonLabel(before: string) {
+  const line = before.slice(before.lastIndexOf('\n') + 1).trim();
+  const labelled = LABELLED_LINE.exec(line);
+  if (labelled) return labelled[1]!;
   const lastSentence = before.split(/(?<=[.!?])\s+/).at(-1)!;
   for (const text of [lastSentence, before]) {
     const label = BUTTON_LABELS.find(([pattern]) => pattern.test(text));
@@ -86,7 +92,7 @@ function buttonLabel(before: string) {
 /** The button for a link, with its address as text under it. */
 const button = (url: string, label: string) =>
   `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td bgcolor="${HARBOUR}" style="background-color:${HARBOUR};border-radius:6px;">` +
-  `<a href="${escapeHtml(url)}" style="display:inline-block;padding:12px 24px;font-family:${FONT};font-size:16px;line-height:20px;font-weight:600;color:${SURFACE};text-decoration:none;">${label}</a>` +
+  `<a href="${escapeHtml(url)}" style="display:inline-block;padding:12px 24px;font-family:${FONT};font-size:16px;line-height:20px;font-weight:600;color:${SURFACE};text-decoration:none;">${escapeHtml(label)}</a>` +
   '</td></tr></table>' +
   `<p style="margin:8px 0 0;font-family:${FONT};font-size:13px;line-height:20px;color:${SLATE};word-break:break-all;"><a href="${escapeHtml(url)}" style="color:${SLATE};text-decoration:underline;">${escapeHtml(url)}</a></p>`;
 

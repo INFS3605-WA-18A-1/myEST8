@@ -155,7 +155,7 @@ describe('links', () => {
     ['a Firm Quote request', 'Give your quote', `Please give Harbour Realty your Firm Quote: your fixed price, the scope of work: ${UPLOAD}`],
     ['a reminder to quote', 'Give your quote', `Reminder from Harbour Realty: can you give an Estimate for the plumbing job in Newtown? ${UPLOAD}`],
     ['the progress tracker', 'Follow progress', `Your maintenance request is confirmed. Follow its progress here: ${UPLOAD}`],
-    ['wording that says nothing about it', 'Open link', `More details are here: ${UPLOAD}`],
+    ['wording that says nothing about it', 'Open link', `Details are in the document we sent you yesterday afternoon: ${UPLOAD}`],
   ])('%s: the button says "%s"', (_, label, text) => {
     expect(linksOf(render(text))[0]).toEqual({ href: UPLOAD, text: label });
   });
@@ -181,6 +181,34 @@ describe('links', () => {
     expect(linksOf(html)[0]).toEqual({ href: UPLOAD, text: 'Open link' });
   });
 
+  test('a line that is only a short label, a colon and an address is a button labelled with that text', () => {
+    const html = render(
+      'Pick a time.\n\n' +
+        'Tue 27 Oct, 9:00 am: https://myest8.test/v/abc?pick=1\n' +
+        'Wed 28 Oct, 1:00 pm: https://myest8.test/v/abc?pick=2\n' +
+        'None of these work: https://myest8.test/v/abc?pick=none',
+    );
+    const buttons = linksOf(html).filter((_, i) => i % 2 === 0);
+    expect(buttons).toEqual([
+      { href: 'https://myest8.test/v/abc?pick=1', text: 'Tue 27 Oct, 9:00 am' },
+      { href: 'https://myest8.test/v/abc?pick=2', text: 'Wed 28 Oct, 1:00 pm' },
+      { href: 'https://myest8.test/v/abc?pick=none', text: 'None of these work' },
+    ]);
+  });
+
+  test('a label of 40 characters names the button, and one of 41 falls back to Open link', () => {
+    const forty = 'a'.repeat(40);
+    const fortyOne = 'a'.repeat(41);
+    expect(linksOf(render(`${forty}: ${UPLOAD}`))[0]).toEqual({ href: UPLOAD, text: forty });
+    expect(linksOf(render(`${fortyOne}: ${UPLOAD}`))[0]).toEqual({ href: UPLOAD, text: 'Open link' });
+  });
+
+  test('a short label is escaped, so a name with an ampersand stays text', () => {
+    const html = render('Tom & Co: https://example.com/x');
+    expect(linksOf(html)[0]).toEqual({ href: 'https://example.com/x', text: 'Tom &amp; Co' });
+    expect(html).not.toContain('>Tom & Co<');
+  });
+
   test('an address inside a sentence stays a link in that sentence', () => {
     const html = render('The warranty terms are at https://example.com/warranty if you need them.');
     expect(paragraphsOf(html)).toEqual([expect.stringMatching(/^The warranty terms are at <a href="https:\/\/example\.com\/warranty"[^>]*>https:\/\/example\.com\/warranty<\/a> if you need them\.$/)]);
@@ -196,7 +224,7 @@ describe('links', () => {
   test('an ampersand in an address is escaped in the link and in the text', () => {
     const html = render('Open it here: https://example.com/a?b=1&c=2');
     expect(linksOf(html)).toEqual([
-      { href: 'https://example.com/a?b=1&amp;c=2', text: 'Open link' },
+      { href: 'https://example.com/a?b=1&amp;c=2', text: 'Open it here' },
       { href: 'https://example.com/a?b=1&amp;c=2', text: 'https://example.com/a?b=1&amp;c=2' },
     ]);
   });
