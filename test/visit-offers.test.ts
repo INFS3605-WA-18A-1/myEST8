@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { all, one } from '../src/db.ts';
+import { HOUR } from './support/harness.ts';
 import { confirmedQuotes, jobView, KING_ST, OLIVIA, quoteToken, TOM, tomsTapTicket, world, type JobRef, type World } from './support/world.ts';
 
 const TUE_27_9AM = new Date('2026-10-27T09:00:00+11:00');
@@ -158,6 +159,164 @@ describe('the Tenant replies to choose a time', () => {
     expect(again).toMatchObject({ template: 'tradie.offer_times_again', data: { note: 'Sunday 10 am works', availability: 'weekday_mornings' } });
     expect(again.text).toContain('They said: Sunday 10 am works.');
     expect((await w.alice.ticket(job.ticketId)).timeline.at(-1)).toMatchObject({ kind: 'other_times_requested', note: 'Sunday 10 am works' });
+  });
+});
+
+/** Tom has booked Tuesday 9:00 am. The offer token is the visit's page. */
+async function visitBooked() {
+  const offered = await timesOffered();
+  const token = offered.w.h.messenger.last(TOM)!.text.match(/\/v\/([^?\s]+)\?pick=1/)![1]!;
+  await offered.w.h.app.pickVisitTime(token, '1');
+  offered.w.h.messenger.clear();
+  return { ...offered, token };
+}
+
+describe('rescheduling a booked visit', () => {
+  test('the Property Manager can ask the Tradie to offer times for a booked visit', async () => {
+    const { w, job } = await visitBooked();
+    const booked = (await jobView(w, job)).workOrder!;
+    w.h.messenger.clear();
+
+    await w.alice.askTradieToOfferTimes(job.jobId);
+
+    expect((await jobView(w, job)).workOrder).toMatchObject({
+      workOrderId: booked.workOrderId,
+      start: TUE_27_9AM.toISOString(),
+      rescheduleRequestedBy: 'property_manager',
+    });
+    expect(w.h.messenger.last(w.tradies.pete.address)).toMatchObject({
+      template: 'tradie.offer_new_times',
+      subject: 'Offer new visit times',
+    });
+  });
+
+  test('a Tradie asking for another time leaves the visit booked and is asked to offer new times', async () => {
+    const { w, job } = await visitBooked();
+    const { workOrder } = await jobView(w, job);
+    const link = `https://myest8.test/q/${await quoteToken(w, job, w.tradies.pete)}`;
+    w.h.classifier.when("Can't make Tuesday sorry", { replyType: 'reschedule_request', relatedItem: `work_order:${workOrder!.workOrderId}` });
+
+    await w.h.receive(w.tradies.pete.address, "Can't make Tuesday sorry");
+
+    expect((await jobView(w, job)).workOrder).toMatchObject({
+      workOrderId: workOrder!.workOrderId,
+      start: TUE_27_9AM.toISOString(),
+      rescheduleRequestedBy: 'tradie',
+    });
+    const asked = w.h.messenger.last(w.tradies.pete.address)!;
+    expect(asked).toMatchObject({
+      template: 'tradie.offer_new_times',
+      subject: 'Offer new visit times',
+      data: { trade: 'plumbing', propertyAddress: KING_ST, quoteLink: link, availability: 'weekday_mornings' },
+    });
+    expect(asked.text).toContain('The current visit stays booked until they pick one.');
+    expect(asked.text).toContain("They're usually home weekday mornings.");
+    expect(asked.text).toContain(`Offer visit times: ${link}`);
+  });
+
+  test('the Tenant asking for another time starts a round, and picking a new time moves the visit', async () => {
+    const { w, job, token } = await visitBooked();
+    const booked = (await jobView(w, job)).workOrder!;
+    const link = `https://myest8.test/q/${await quoteToken(w, job, w.tradies.pete)}`;
+
+    await w.h.app.requestAnotherTime(token);
+
+    expect((await jobView(w, job)).workOrder).toMatchObject({
+      workOrderId: booked.workOrderId,
+      start: TUE_27_9AM.toISOString(),
+      rescheduleRequestedBy: 'tenant',
+    });
+    expect(w.h.messenger.last(w.tradies.pete.address)).toMatchObject({ template: 'tradie.offer_new_times', data: { quoteLink: link } });
+
+    const thursday = new Date('2026-10-29T09:00:00+11:00');
+    const friday = new Date('2026-10-30T13:00:00+11:00');
+    await w.h.app.offerVisitTimes(await quoteToken(w, job, w.tradies.pete), [thursday.toISOString(), friday.toISOString()]);
+    expect((await jobView(w, job)).workOrder!.start).toBe(TUE_27_9AM.toISOString());
+
+    const next = w.h.messenger.last(TOM)!.text.match(/\/v\/([^?\s]+)\?pick=1/)![1]!;
+    w.h.messenger.clear();
+    await w.h.app.pickVisitTime(next, '1');
+
+    const moved = (await jobView(w, job)).workOrder!;
+    expect(moved).toMatchObject({
+      workOrderId: booked.workOrderId,
+      start: thursday.toISOString(),
+      visitConfirmed: true,
+      rescheduleRequestedBy: null,
+    });
+    expect(w.h.messenger.last(w.tradies.pete.address)).toMatchObject({ template: 'tradie.visit_moved', data: { visitStart: thursday.toISOString(), propertyAddress: KING_ST } });
+    expect(w.h.messenger.last(OLIVIA)).toMatchObject({
+      template: 'owner.work_moved',
+      subject: 'Repair visit moved',
+      data: { propertyAddress: KING_ST, trade: 'plumbing', visitStart: thursday.toISOString() },
+    });
+    expect(w.h.messenger.last(OLIVIA)!.text).toContain('has moved to Thu 29 Oct, 9:00 am');
+    const tenant = w.h.messenger.last(TOM)!;
+    expect(tenant.template).toBe('tenant.visit_booked');
+    expect(tenant.text).toContain('Booked for Thu 29 Oct, 9:00 am');
+    expect(tenant.text).not.toMatch(/\bYES\b/);
+    expect(tenant.text).toContain(`Need another time?: https://myest8.test/v/${next}`);
+  });
+
+  test("the Property Manager booking supersedes an open offer", async () => {
+    const { w, job } = await timesOffered();
+    const token = w.h.messenger.last(TOM)!.text.match(/\/v\/([^?\s]+)\?pick=1/)![1]!;
+
+    await w.alice.sendWorkOrder(job.jobId, { start: TUE_27_9AM.toISOString() });
+
+    expect((await one<{ status: string }>(w.h.db, 'SELECT status FROM visit_offers WHERE token = ?', token))?.status).toBe('superseded');
+    await expect(w.h.app.pickVisitTime(token, '1')).rejects.toThrow(/no longer/);
+    expect(await jobView(w, job)).toMatchObject({ status: 'scheduled', workOrder: { start: TUE_27_9AM.toISOString() } });
+  });
+});
+
+describe('nudges when a visit time is waiting', () => {
+  test('the Tradie is reminded after 24 hours and the Property Manager alerted after 48', async () => {
+    const w = await world();
+    const { h, alice, tradies } = w;
+    const job = await tomsTapTicket(w);
+    const [quote] = await confirmedQuotes(w, job, [[tradies.pete, 150_00, TUE_27_9AM]]);
+    await alice.chooseQuote(quote!.quoteId, 'Usual plumber');
+    h.messenger.clear();
+
+    await h.advance(24 * HOUR);
+    const reminder = h.messenger.last(tradies.pete.address)!;
+    expect(reminder).toMatchObject({
+      template: 'tradie.offer_times_reminder',
+      subject: 'Reminder: offer visit times',
+      data: { trade: 'plumbing', propertyAddress: KING_ST },
+    });
+    expect(reminder.text).toContain('Offer visit times:');
+    expect((await alice.dashboard()).alerts.filter((a) => a.kind === 'tradie_no_visit_times')).toEqual([]);
+
+    await h.advance(24 * HOUR);
+    expect((await alice.dashboard()).alerts).toMatchObject([
+      { kind: 'tradie_no_visit_times', ticketId: job.ticketId, jobId: job.jobId, propertyAddress: KING_ST, businessName: "Pete's Plumbing" },
+    ]);
+
+    await h.app.offerVisitTimes(await quoteToken(w, job, tradies.pete), [TUE_27_9AM.toISOString(), new Date('2026-10-28T13:00:00+11:00').toISOString()]);
+    expect((await alice.dashboard()).alerts.filter((a) => a.kind === 'tradie_no_visit_times')).toEqual([]);
+  });
+
+  test('the Tenant is reminded after 24 hours and the Property Manager alerted after 48', async () => {
+    const { w, job } = await timesOffered();
+    w.h.messenger.clear();
+
+    await w.h.advance(24 * HOUR);
+    const reminder = w.h.messenger.last(TOM)!;
+    expect(reminder.template).toBe('tenant.pick_visit_time_reminder');
+    expect(reminder.text).toContain('Tue 27 Oct, 9:00 am');
+    expect(reminder.text).toContain('None of these work');
+    expect((await w.alice.dashboard()).alerts.filter((a) => a.kind === 'tenant_no_visit_pick')).toEqual([]);
+
+    await w.h.advance(24 * HOUR);
+    expect((await w.alice.dashboard()).alerts).toMatchObject([
+      { kind: 'tenant_no_visit_pick', ticketId: job.ticketId, jobId: job.jobId, propertyAddress: KING_ST },
+    ]);
+
+    const token = reminder.text.match(/\/v\/([^?\s]+)\?pick=1/)![1]!;
+    await w.h.app.pickVisitTime(token, '1');
+    expect((await w.alice.dashboard()).alerts.filter((a) => a.kind === 'tenant_no_visit_pick')).toEqual([]);
   });
 });
 

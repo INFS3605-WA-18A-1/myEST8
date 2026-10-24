@@ -147,8 +147,11 @@ export function createApp(
     /** The Tenant's confirm page for one offered time. Reading it never books. */
     visitOffer: (token: string, pick?: string) => scheduling.visitOffer(token, pick),
 
-    /** Books the time the Tenant picked. The visit is confirmed, because they chose it. */
+    /** Books the time the Tenant picked. The visit is confirmed, because they chose it. A booked visit moves instead. */
     pickVisitTime: (token: string, pick: string) => scheduling.pickVisitTime(token, pick),
+
+    /** The Tenant asks for another time. The visit stays booked until they pick a new one. */
+    requestAnotherTime: (token: string) => scheduling.requestAnotherTime(token),
 
     /** None of the times work. Saves when the Tenant is home and asks the Tradie to offer again. */
     declineVisitTimes: (token: string, input: { availability: string; note: string }) => scheduling.declineVisitTimes(token, input),
@@ -387,6 +390,8 @@ export function createApp(
           scheduling.freeSlots(agencyId, tradieId, options),
         sendWorkOrder: (jobId: number, options?: { start?: string; durationMinutes?: number }) =>
           scheduling.sendWorkOrder(agencyId, jobId, options),
+        /** Asks the Tradie to offer visit times, including when a visit is already booked. */
+        askTradieToOfferTimes: (jobId: number) => scheduling.askTradieToOfferTimes(agencyId, jobId),
         suggestTimes: (workOrderId: number) => scheduling.suggestTimes(agencyId, workOrderId),
         acceptTime: (workOrderId: number, start: string) => scheduling.acceptTime(agencyId, workOrderId, start),
         rateTradie: (jobId: number, score: number) => scheduling.rateTradie(agencyId, jobId, score),

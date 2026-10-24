@@ -92,6 +92,10 @@ export const templates = {
     'Choose a visit time',
     (d) => [`${d.tradieBusinessName} (${trade(d.trade)}) can visit. Pick a time.`, ...d.choices.map((c) => `${c.label}: ${c.url}`)].join('\n\n'),
   ),
+  'tenant.pick_visit_time_reminder': template<{ choices: { label: string; url: string }[] }>(
+    'Reminder: choose a visit time',
+    (d) => [`Reminder: please pick a visit time.`, ...d.choices.map((c) => `${c.label}: ${c.url}`)].join('\n\n'),
+  ),
   'tenant.say_when_home': template<{ whenHomeLink: string }>(
     'Other visit times',
     (d) => `Thanks. We'll ask the tradie for other times.\n\nSay when you're home: ${d.whenHomeLink}`,
@@ -158,6 +162,16 @@ export const templates = {
     'Offer visit times',
     (d, a) =>
       `${a.name} has approved your quote for the ${trade(d.trade)} job at ${d.propertyAddress}.\n\nOffer visit times: ${d.quoteLink}`,
+  ),
+  'tradie.offer_times_reminder': template<{ trade: Trade; propertyAddress: string; quoteLink: string }>(
+    'Reminder: offer visit times',
+    (d, a) =>
+      `Reminder from ${a.name}: please offer visit times for the ${trade(d.trade)} job at ${d.propertyAddress}.\n\nOffer visit times: ${d.quoteLink}`,
+  ),
+  'tradie.offer_new_times': template<{ trade: Trade; propertyAddress: string; quoteLink: string; availability: Availability }>(
+    'Offer new visit times',
+    (d) =>
+      `The visit for the ${trade(d.trade)} job at ${d.propertyAddress} needs a new time. They're usually home ${AVAILABILITY_LABELS[d.availability]}. The current visit stays booked until they pick one.\n\nOffer visit times: ${d.quoteLink}`,
   ),
   'tradie.offer_times_again': template<{ trade: Trade; propertyAddress: string; quoteLink: string; availability: Availability; note: string | null }>(
     'Offer visit times again',
@@ -236,6 +250,10 @@ export const templates = {
   'owner.work_booked': template<{ propertyAddress: string; trade: Trade; visitStart: string }>(
     'Repair booked',
     (d, a) => `A ${trade(d.trade)} repair at ${d.propertyAddress} is booked for ${visit(d.visitStart, a)}.`,
+  ),
+  'owner.work_moved': template<{ propertyAddress: string; trade: Trade; visitStart: string }>(
+    'Repair visit moved',
+    (d, a) => `The ${trade(d.trade)} repair at ${d.propertyAddress} has moved to ${visit(d.visitStart, a)}.`,
   ),
   'owner.ticket_closed': template<{ propertyAddress: string; description: string }>(
     'Repair complete',

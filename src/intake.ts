@@ -797,6 +797,11 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
       if ((await awaitingFrom(personId)).some((a) => a.kind === 'visit' && a.workOrderId === workOrderId)) await stopWaiting(personId, 'visit');
     },
 
+    /** Stops waiting for a pick once the offer is no longer open (the Property Manager booked, or it was superseded). */
+    async stopWaitingOnVisitOffer(personId: number) {
+      if ((await awaitingFrom(personId)).some((a) => a.kind === 'visit_offer')) await stopWaiting(personId, 'visit_offer');
+    },
+
     async inbox(agencyId: number) {
       const items = await all<{ id: number; inbound_id: number; person_id: number | null; reason: InboxReason; best_guess: string | null; at: string }>(
         db,

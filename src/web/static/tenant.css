@@ -251,6 +251,12 @@ body {
   font-size: 14px;
   color: var(--muted);
 }
+.tracker-detail a {
+  color: var(--action);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 
 .tracker-now {
   max-width: 60ch;

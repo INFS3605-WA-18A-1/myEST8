@@ -496,6 +496,17 @@ function visitLength(durationDays: number | null): { durationMinutes: number; du
   return { durationMinutes: 120, durationLabel: '2 hours' };
 }
 
+/** The booked visit's length, in the same words as a Quote's. */
+function lengthOfVisit(start: string, end: string): { durationMinutes: number; durationLabel: string } {
+  const minutes = Math.round((Date.parse(end) - Date.parse(start)) / 60_000);
+  if (minutes >= 24 * 60 && minutes % (24 * 60) === 0) {
+    const days = minutes / (24 * 60);
+    return { durationMinutes: minutes, durationLabel: days === 1 ? '1 day' : `${days} days` };
+  }
+  const hours = minutes / 60;
+  return { durationMinutes: minutes, durationLabel: hours === 1 ? '1 hour' : Number.isInteger(hours) ? `${hours} hours` : `${minutes} minutes` };
+}
+
 /** Up to three starts: the proposed time, then each other available date at 9:00 am. */
 function prefillStarts(timeZone: string, proposedTime: string | null, dates: string[]): string[] {
   const starts: string[] = [];
@@ -541,6 +552,8 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dates: str
     const quoted = firm ?? estimate;
     const offeredVisit = outcome === 'chosen' ? await modules.scheduling.offeredVisit(job.id) : null;
     const declinedNote = outcome === 'chosen' && !offeredVisit ? await modules.scheduling.declinedNote(job.id) : null;
+    const repair = outcome === 'chosen' ? await modules.scheduling.workOrderForJob(job.id) : null;
+    const rescheduling = repair?.status === 'active' && repair.rescheduleRequestedBy !== null;
     const next: 'estimate' | 'wait_for_booking' | 'wait_for_inspection' | 'firm_quote' | 'done' =
       outcome !== 'open'
         ? 'done'
@@ -602,12 +615,13 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dates: str
       /** The times already offered, while the Tenant is choosing. */
       offeredVisit,
       offerTimes:
-        outcome === 'chosen' && job.status === 'approved' && !offeredVisit
+        outcome === 'chosen' && !offeredVisit && (job.status === 'approved' || rescheduling)
           ? {
               address: property.address,
               availability: AVAILABILITY_LABELS[tenant.availability ?? 'any_time'],
               note: declinedNote,
-              ...visitLength(firm?.duration_days ?? null),
+              reschedule: rescheduling,
+              ...(rescheduling && repair ? lengthOfVisit(repair.start, repair.end) : visitLength(firm?.duration_days ?? null)),
               starts: prefillStarts(agency.timeZone, quoted?.proposed_time ?? null, firm ? datesOf(firm.available_dates) : []),
             }
           : null,

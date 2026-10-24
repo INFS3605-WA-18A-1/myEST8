@@ -384,6 +384,24 @@ function alertRow(alert: Alert, timeZone: string): Html {
         decision: true,
         actions: linkButton('Rate the Tradie', `${ticket}#job-${alert.jobId}`, { size: 'sm' }),
       });
+    case 'tradie_no_visit_times':
+      return queueRow({
+        href: ticket,
+        title: `${alert.businessName} hasn't offered visit times`,
+        detail: streetOf(alert.propertyAddress),
+        badges: [badge('Visit', 'warning')],
+        decision: true,
+        actions: linkButton('Open the Ticket', `${ticket}#job-${alert.jobId}`, { size: 'sm' }),
+      });
+    case 'tenant_no_visit_pick':
+      return queueRow({
+        href: ticket,
+        title: "The Tenant hasn't picked a visit time",
+        detail: streetOf(alert.propertyAddress),
+        badges: [badge('Visit', 'warning')],
+        decision: true,
+        actions: linkButton('Open the Ticket', `${ticket}#job-${alert.jobId}`, { size: 'sm' }),
+      });
   }
 }
 

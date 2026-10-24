@@ -186,6 +186,51 @@ describe('confirming a visit time', () => {
     expect(again.text).toContain("They're usually home Saturdays.");
   });
 
+  test('Need another time shows the booked visit, and only the button starts a new round', async () => {
+    const { w, job, token } = await offeredTimes();
+    const booked = await w.web.request(`/v/${token}`, { method: 'POST', body: new URLSearchParams({ pick: '1' }) });
+    expect(booked.status).toBe(303);
+    await w.h.drain();
+    w.h.messenger.clear();
+
+    const opened = await w.get(`/v/${token}`);
+    expect(opened.status).toBe(200);
+    const text = visible(await opened.text());
+    expect(text).toContain('This visit is booked for Tue 27 Oct, 9:00 am.');
+    expect(text).toContain('Need another time?');
+    expect((await jobView(w, job)).workOrder).toMatchObject({ start: TUE_27_9AM.toISOString(), rescheduleRequestedBy: null });
+    expect(w.h.messenger.last(w.tradies.pete.address)).toBeUndefined();
+
+    const posted = await w.web.request(`/v/${token}`, { method: 'POST', body: new URLSearchParams({ pick: 'another' }) });
+    expect(posted.status).toBe(303);
+    await w.h.drain();
+    expect((await jobView(w, job)).workOrder).toMatchObject({ start: TUE_27_9AM.toISOString(), rescheduleRequestedBy: 'tenant' });
+    expect(w.h.messenger.last(w.tradies.pete.address)!.template).toBe('tradie.offer_new_times');
+
+    const quote = visible(await (await w.get(`/q/${await quoteToken(w, job, w.tradies.pete)}`)).text());
+    expect(quote).toContain('Offer visit times');
+    expect(quote).toContain('The visit needs a new time.');
+  });
+
+  test('the Ticket shows an open offer and Ask the Tradie to offer times', async () => {
+    const { w, job } = await offeredTimes();
+    const cookie = await w.signIn();
+    const text = visible(await (await w.get(`/tickets/${job.ticketId}`, cookie)).text());
+    expect(text).toContain('Tue 27 Oct, 9:00 am');
+    expect(text).toContain('Wed 28 Oct, 1:00 pm');
+    expect(text).toContain('The Tenant is choosing.');
+    expect(text).toContain('Send Work Order');
+    expect(text).toContain("Ask Pete's Plumbing to offer times");
+
+    w.h.messenger.clear();
+    const posted = await w.post(`/tickets/${job.ticketId}/jobs/${job.jobId}/ask-times`, {}, cookie);
+    expect(posted.status).toBe(303);
+    expect(w.h.messenger.last(w.tradies.pete.address)).toMatchObject({
+      template: 'tradie.offer_times',
+      data: { propertyAddress: KING_ST, trade: 'plumbing' },
+    });
+  });
+
   test('leaving when they are home blank keeps the times on offer', async () => {
     const { w, token } = await offeredTimes();
     const posted = await w.web.request(`/v/${token}`, {

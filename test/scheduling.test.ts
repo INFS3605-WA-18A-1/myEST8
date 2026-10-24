@@ -196,6 +196,7 @@ describe('rescheduling', () => {
 
     expect(h.messenger.to(tradies.pete.address)).toMatchObject([{ template: 'tradie.visit_moved', data: { visitStart: suggestions[2]!.start } }]);
     expect(h.messenger.to(TOM)).toMatchObject([{ template: 'tenant.visit_moved', data: { visitStart: suggestions[2]!.start, tradieBusinessName: "Pete's Plumbing" } }]);
+    expect(h.messenger.last(OLIVIA)).toMatchObject({ template: 'owner.work_moved', data: { propertyAddress: KING_ST, trade: 'plumbing', visitStart: suggestions[2]!.start } });
     expect((await jobView(w, job)).workOrder).toMatchObject({ start: suggestions[2]!.start, rescheduleRequestedBy: null });
   });
 

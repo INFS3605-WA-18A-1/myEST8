@@ -217,7 +217,9 @@ function outcomeNote(p: QuotePage): Html | string {
     case 'chosen':
       return alert(
         p.offerTimes
-          ? `${p.agencyName} has gone with your quote. Offer 2 or 3 times you can visit.`
+          ? p.offerTimes.reschedule
+            ? 'The visit needs a new time. Offer 2 or 3 times you can visit. The current visit stays booked until the Tenant picks one.'
+            : `${p.agencyName} has gone with your quote. Offer 2 or 3 times you can visit.`
           : p.offeredVisit
             ? `${p.agencyName} has your times. The Tenant is choosing one.`
             : `${p.agencyName} has gone with your quote. A Work Order with the visit time will follow.`,

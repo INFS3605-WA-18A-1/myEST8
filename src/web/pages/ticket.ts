@@ -187,6 +187,13 @@ export function ticketPages() {
       : `Firm Quote from ${chosen.businessName} chosen and approved`;
   });
 
+  onPost(pages, '/:id/jobs/:jobId/ask-times', async ({ actions, ticket, params }) => {
+    const job = jobIn(ticket, params.jobId);
+    await actions.askTradieToOfferTimes(job.jobId);
+    const name = job.quotes.find((q) => q.status === 'approved')?.businessName ?? job.workOrder?.businessName ?? 'the Tradie';
+    return `Asked ${name} to offer visit times`;
+  });
+
   onPost(pages, '/:id/jobs/:jobId/work-order', async ({ actions, ticket, form, params, timeZone }) => {
     const job = jobIn(ticket, params.jobId);
     const start = text(form, 'start');
@@ -555,7 +562,7 @@ function jobStep(t: TicketView, job: JobView, x: Extras): NextStep | null {
       const wo = job.workOrder;
       if (!wo) return null;
       if (wo.status === 'active' && wo.rescheduleRequestedBy) {
-        return decide(`Find a new time: the ${wo.rescheduleRequestedBy === 'tenant' ? 'Tenant' : 'Tradie'} asked for another`, 'work-order');
+        return decide(`Find a new time: the ${whoAsked(wo.rescheduleRequestedBy)} asked for another`, 'work-order');
       }
       const confirmed = wo.visitConfirmed ? '' : ', waiting on the Tenant to confirm';
       return wait(`Visit ${formatWhen(wo.start, x.timeZone)} with ${wo.businessName}${confirmed}`, 'work-order');
@@ -645,7 +652,7 @@ function jobStages(job: JobView, x: Extras): Stage[] {
   const wo = job.workOrder;
   if (job.status === 'done') stages.push({ label: BOOKED, state: 'done', ...(wo?.visitConfirmed ? { detail: 'Tenant confirmed' } : {}) });
   else if (job.status === 'scheduled' && wo?.rescheduleRequestedBy) {
-    stages.push({ label: BOOKED, state: 'current', detail: `${wo.rescheduleRequestedBy === 'tenant' ? 'Tenant' : 'Tradie'} asked to move it` });
+    stages.push({ label: BOOKED, state: 'current', detail: `${whoAsked(wo.rescheduleRequestedBy)} asked to move it` });
   } else if (job.status === 'scheduled' && wo?.visitConfirmed) stages.push({ label: BOOKED, state: 'done', detail: 'Tenant confirmed' });
   else if (job.status === 'scheduled') stages.push({ label: BOOKED, state: 'current', detail: 'Waiting on Tenant to confirm' });
   else stages.push({ label: BOOKED, state: 'upcoming' });
@@ -1054,7 +1061,7 @@ function inspectionLine(t: TicketView, v: NonNullable<RequestView['inspection']>
   const tenant = done
     ? badge('Inspected', 'success')
     : v.rescheduleRequestedBy
-      ? badge(`${v.rescheduleRequestedBy === 'tenant' ? 'Tenant' : 'Tradie'} asked for another time`, 'warning')
+      ? badge(`${whoAsked(v.rescheduleRequestedBy)} asked for another time`, 'warning')
       : v.visitConfirmed
         ? badge('Tenant confirmed', 'success')
         : badge('Tenant not confirmed yet', 'warning');
@@ -1424,6 +1431,12 @@ function workOrderForm(t: TicketView, job: JobView, x: Extras): Html {
       </div>
       ${button('Send Work Order')}
     </form>
+    ${job.offeredVisit
+      ? html`<p>
+          ${approved?.businessName ?? 'The Tradie'} offered ${andList(job.offeredVisit.starts.map((start) => formatWhen(start, x.timeZone)))}. The Tenant is choosing.
+        </p>`
+      : nothing}
+    ${approved ? postButton(`/tickets/${t.ticketId}/jobs/${job.jobId}/ask-times`, `Ask ${approved.businessName} to offer times`, { variant: 'secondary' }) : nothing}
     ${free.length && approved
       ? html`<p class="flex flex-wrap items-center gap-1">
           ${approved.businessName} is free from ${free.map((s) => badge(formatWhen(s.start, x.timeZone)))}
@@ -1444,10 +1457,13 @@ function workOrderDetails(t: TicketView, wo: WorkOrderView, x: Extras): Html {
     : active
       ? badge('Not confirmed yet', 'warning')
       : html`—`;
-  const asker = wo.rescheduleRequestedBy === 'tenant' ? 'Tenant' : 'Tradie';
+  const asker = whoAsked(wo.rescheduleRequestedBy);
   return html`<section class="space-y-3" id="job-${wo.jobId}-work-order">
     ${sectionHeader('Work Order', active && !suggesting ? suggest : undefined)}
     ${active && wo.rescheduleRequestedBy ? alert(`The ${asker} asked for another time.`, 'warning') : nothing}
+    ${active
+      ? postButton(`/tickets/${t.ticketId}/jobs/${wo.jobId}/ask-times`, `Ask ${wo.businessName} to offer times`, { variant: 'secondary', size: 'sm' })
+      : nothing}
     ${dl([
       ['Visit', formatRange(wo.start, wo.end, x.timeZone)],
       ['Tradie', tradieLink(wo.tradieId, wo.businessName)],
@@ -1654,8 +1670,10 @@ function describeEvent(t: TicketView, event: TimelineEvent, x: Extras): { title:
       return { title: 'Property Owner declined the Quote', detail: details(job, price) };
     case 'work_order_sent':
       return { title: `Work Order sent to ${tradie}`, detail: details(job, visit) };
+    case 'visit_times_asked':
+      return { title: 'Asked the Tradie to offer visit times', detail: job };
     case 'reschedule_requested':
-      return { title: `${d.by === 'tenant' ? 'Tenant' : 'Tradie'} asked for another time${d.inspection ? ' for the Site Inspection' : ''}`, detail: job };
+      return { title: `${whoAsked(typeof d.by === 'string' ? d.by : null)} asked for another time${d.inspection ? ' for the Site Inspection' : ''}`, detail: job };
     case 'other_times_requested':
       return { title: 'The Tenant asked for other times', detail: details(job, typeof d.note === 'string' ? d.note : undefined) };
     case 'visit_confirmed':
@@ -1741,6 +1759,13 @@ function plural(n: number, word: string, many = `${word}s`) {
 export function quoteRequestsSent({ sent, unreached }: Awaited<ReturnType<PropertyManagerActions['sendQuoteRequests']>>): string {
   const sentText = `Quote ${plural(sent, 'Request')} sent to ${sent} ${plural(sent, 'Tradie')}`;
   return unreached.length ? `${sentText}. Couldn't reach ${unreached.map((u) => `${u.tradie}: ${u.reason}`).join('; ')}` : sentText;
+}
+
+/** Who asked to move a visit, for the Ticket's sentences. */
+function whoAsked(by: string | null | undefined): string {
+  if (by === 'tenant') return 'Tenant';
+  if (by === 'tradie') return 'Tradie';
+  return 'Property Manager';
 }
 
 /** "A", "A and B", "A, B and C". */

@@ -742,6 +742,8 @@ export function createViews({ clock, modules }: Context) {
               /** What the Property Manager decides next while the Job is getting Quotes; null otherwise. */
               decision: quoting ? quotingDecision(counts) : null,
               workOrder: await modules.scheduling.workOrderForJob(job.id),
+              /** Times the Tradie has offered that the Tenant has not picked yet. */
+              offeredVisit: await modules.scheduling.offeredVisit(job.id),
               /** Site Inspections (not cancelled), and free slots to prefill booking the ones Tradies need. */
               inspections: {
                 visits: await modules.scheduling.inspectionVisits(job.id),

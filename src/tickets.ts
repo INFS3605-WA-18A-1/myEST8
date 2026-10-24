@@ -364,6 +364,12 @@ export function createTickets({ db, clock, settings, ports, modules }: Context) 
     return row ? toTicket(row) : null;
   }
 
+  /** The booked visit's page, where the Tenant can ask for another time. */
+  async function anotherTimeLink(jobId: number) {
+    const row = await one<{ token: string }>(db, `SELECT token FROM visit_offers WHERE job_id = ? AND status = 'picked' ORDER BY round DESC LIMIT 1`, jobId);
+    return row ? `${settings.baseUrl}/v/${row.token}` : undefined;
+  }
+
   return {
     async createIssue(input: {
       agencyId: number;
@@ -1024,6 +1030,12 @@ export function createTickets({ db, clock, settings, ports, modules }: Context) 
             ...(trade ? { trade } : {}),
             visitConfirmed: !!repair?.visitConfirmed,
             rescheduleRequested: repair?.status === 'active' && repair.rescheduleRequestedBy !== null,
+            ...(repair?.status === 'active' && repair.rescheduleRequestedBy ? { rescheduleRequestedBy: repair.rescheduleRequestedBy } : {}),
+            ...(repair?.status === 'active'
+              ? {
+                  anotherTimeLink: await anotherTimeLink(visit.jobId!),
+                }
+              : {}),
           }
         : {};
       const bookedDone = !!visit && jobs.some((j) => j.id === visit.jobId && j.status === 'done');
@@ -1043,6 +1055,8 @@ export function createTickets({ db, clock, settings, ports, modules }: Context) 
         trade?: Trade;
         visitConfirmed?: boolean;
         rescheduleRequested?: boolean;
+        rescheduleRequestedBy?: string;
+        anotherTimeLink?: string;
         visits?: { tradie: string; visitStart: string; done: boolean }[];
       };
       const stages: Stage[] = [

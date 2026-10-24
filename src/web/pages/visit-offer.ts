@@ -23,7 +23,7 @@ export function visitOfferPages(app: App) {
   pages.get('/v/:token', async (c) => {
     const page = await app.visitOffer(c.req.param('token'), c.req.query('pick'));
     if (!page) return c.html(missingLink(), 404);
-    return c.html(confirmPage(c.req.param('token'), page, c.req.query('booked') === '1', undefined, c.req.query('home') === '1'));
+    return c.html(confirmPage(c.req.param('token'), page, c.req.query('booked') === '1', undefined, c.req.query('home') === '1', c.req.query('asked') === '1'));
   });
 
   pages.post('/v/:token', async (c) => {
@@ -31,7 +31,8 @@ export function visitOfferPages(app: App) {
     const form = await c.req.parseBody();
     const pick = text(form, 'pick');
     try {
-      if (pick === 'none') await app.declineVisitTimes(token, { availability: text(form, 'availability'), note: text(form, 'note') });
+      if (pick === 'another') await app.requestAnotherTime(token);
+      else if (pick === 'none') await app.declineVisitTimes(token, { availability: text(form, 'availability'), note: text(form, 'note') });
       else await app.pickVisitTime(token, pick);
     } catch (error) {
       if (!(error instanceof ActionError)) throw error;
@@ -40,7 +41,8 @@ export function visitOfferPages(app: App) {
       if (!page) return c.html(missingLink(), 404);
       return c.html(confirmPage(token, page, false, error.message, text(form, 'home') === '1'), STATUS[error.code]);
     }
-    const next = pick === 'none' ? `/v/${encodeURIComponent(token)}?pick=none` : `/v/${encodeURIComponent(token)}?booked=1`;
+    const next =
+      pick === 'none' ? `/v/${encodeURIComponent(token)}?pick=none` : pick === 'another' ? `/v/${encodeURIComponent(token)}?asked=1` : `/v/${encodeURIComponent(token)}?booked=1`;
     return c.redirect(next, 303);
   });
 
@@ -57,7 +59,7 @@ function missingLink(): Html {
   });
 }
 
-function confirmPage(token: string, page: Offer, booked: boolean, error?: string, home = false): Html {
+function confirmPage(token: string, page: Offer, booked: boolean, error?: string, home = false, asked = false): Html {
   const when = page.pickedStart ?? page.start;
   const bookedFor = when ? `This visit is booked for ${formatVisit(when, page.timeZone)}.` : 'This visit is booked.';
   const none = page.pick === 'none';
@@ -84,9 +86,18 @@ function confirmPage(token: string, page: Offer, booked: boolean, error?: string
           : none
             ? html`<p>Thanks. We'll ask ${page.tradieBusinessName} for other times.</p>`
           : booked || page.status === 'picked'
-            ? html`<p>${bookedFor}</p>`
+            ? html`<p>${bookedFor}</p>
+                ${asked ? html`<p>We'll ask ${page.tradieBusinessName} for other times. This visit stays booked until you pick a new one.</p>` : anotherTimeForm(token)}`
             : html`<p>Open one of the times in the message we sent you.</p>`}`,
   });
+}
+
+/** Asks for a new round. The visit stays booked until a new time is picked. */
+function anotherTimeForm(token: string): Html {
+  return html`<form method="post" action="/v/${encodeURIComponent(token)}" class="tenant-form">
+    <input type="hidden" name="pick" value="another" />
+    ${button('Need another time?', { block: true, variant: 'secondary' })}
+  </form>`;
 }
 
 /** The Tenant says when they are usually home, and may name a time that does work. */
