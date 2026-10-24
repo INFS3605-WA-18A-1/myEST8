@@ -155,7 +155,7 @@ describe('links', () => {
     ['a Firm Quote request', 'Give your quote', `Please give Harbour Realty your Firm Quote: your fixed price, the scope of work: ${UPLOAD}`],
     ['a reminder to quote', 'Give your quote', `Reminder from Harbour Realty: can you give an Estimate for the plumbing job in Newtown? ${UPLOAD}`],
     ['the progress tracker', 'Follow progress', `Your maintenance request is confirmed. Follow its progress here: ${UPLOAD}`],
-    ['wording that says nothing about it', 'Open link', `More details are here: ${UPLOAD}`],
+    ['wording that says nothing about it', 'Open link', `Details are in the document we sent you yesterday afternoon: ${UPLOAD}`],
   ])('%s: the button says "%s"', (_, label, text) => {
     expect(linksOf(render(text))[0]).toEqual({ href: UPLOAD, text: label });
   });
@@ -181,6 +181,62 @@ describe('links', () => {
     expect(linksOf(html)[0]).toEqual({ href: UPLOAD, text: 'Open link' });
   });
 
+  test('a line that is only a short label, a colon and an address is a button labelled with that text, and the label is not also a paragraph', () => {
+    const html = render(
+      "Pete's Plumbing (plumbing) can visit. Pick a time.\n\n" +
+        'Tue 27 Oct, 9:00 am: https://myest8.test/v/abc?pick=1\n\n' +
+        'Wed 28 Oct, 1:00 pm: https://myest8.test/v/abc?pick=2\n\n' +
+        'None of these work: https://myest8.test/v/abc?pick=none',
+    );
+    const buttons = linksOf(html).filter((_, i) => i % 2 === 0);
+    expect(buttons).toEqual([
+      { href: 'https://myest8.test/v/abc?pick=1', text: 'Tue 27 Oct, 9:00 am' },
+      { href: 'https://myest8.test/v/abc?pick=2', text: 'Wed 28 Oct, 1:00 pm' },
+      { href: 'https://myest8.test/v/abc?pick=none', text: 'None of these work' },
+    ]);
+    // The label became the button, so it is not printed again above it.
+    expect(paragraphsOf(html).filter((p) => !p.startsWith('<a '))).toEqual(["Pete&#39;s Plumbing (plumbing) can visit. Pick a time."]);
+    expect(html).not.toContain('Tue 27 Oct, 9:00 am:');
+    expect(html).not.toContain('None of these work:');
+  });
+
+  test("a preferred time is a Harbour button, with Tradie's preferred time under it and not in the label", () => {
+    const html = render('Tue 27 Oct, 9:00 am (preferred): https://myest8.test/v/abc?pick=1');
+    expect(linksOf(html)[0]).toEqual({ href: 'https://myest8.test/v/abc?pick=1', text: 'Tue 27 Oct, 9:00 am' });
+    expect(html).toContain('Tradie&#39;s preferred time');
+    expect(html).toMatch(/<td bgcolor="#1F5C8B"[^>]*>\s*<a [^>]*color:#FFFFFF[^>]*>Tue 27 Oct, 9:00 am<\/a>/);
+    expect(html).not.toContain('>(preferred)<');
+  });
+
+  test('Need another time? is an outlined Harbour button on white, decided from the label', () => {
+    const html = render('Need another time?: https://myest8.test/v/confirm/abc?another=1');
+    expect(linksOf(html)[0]).toEqual({ href: 'https://myest8.test/v/confirm/abc?another=1', text: 'Need another time?' });
+    expect(html).toMatch(/<td bgcolor="#FFFFFF"[^>]*border:1px solid #1F5C8B[^>]*>\s*<a [^>]*color:#1F5C8B[^>]*>Need another time\?<\/a>/);
+    expect(html).not.toMatch(/<td bgcolor="#1F5C8B"[^>]*>\s*<a [^>]*>Need another time\?<\/a>/);
+  });
+
+  test('a time is a Harbour button, and None of these work is an outlined Harbour button on white', () => {
+    const html = render(
+      'Tue 27 Oct, 9:00 am: https://myest8.test/v/abc?pick=1\n\n' +
+        'None of these work: https://myest8.test/v/abc?pick=none',
+    );
+    expect(html).toMatch(/<td bgcolor="#1F5C8B"[^>]*>\s*<a [^>]*color:#FFFFFF[^>]*>Tue 27 Oct, 9:00 am<\/a>/);
+    expect(html).toMatch(/<td bgcolor="#FFFFFF"[^>]*border:1px solid #1F5C8B[^>]*>\s*<a [^>]*color:#1F5C8B[^>]*>None of these work<\/a>/);
+  });
+
+  test('a label of 40 characters names the button, and one of 41 falls back to Open link', () => {
+    const forty = 'a'.repeat(40);
+    const fortyOne = 'a'.repeat(41);
+    expect(linksOf(render(`${forty}: ${UPLOAD}`))[0]).toEqual({ href: UPLOAD, text: forty });
+    expect(linksOf(render(`${fortyOne}: ${UPLOAD}`))[0]).toEqual({ href: UPLOAD, text: 'Open link' });
+  });
+
+  test('a short label is escaped, so a name with an ampersand stays text', () => {
+    const html = render('Tom & Co: https://example.com/x');
+    expect(linksOf(html)[0]).toEqual({ href: 'https://example.com/x', text: 'Tom &amp; Co' });
+    expect(html).not.toContain('>Tom & Co<');
+  });
+
   test('an address inside a sentence stays a link in that sentence', () => {
     const html = render('The warranty terms are at https://example.com/warranty if you need them.');
     expect(paragraphsOf(html)).toEqual([expect.stringMatching(/^The warranty terms are at <a href="https:\/\/example\.com\/warranty"[^>]*>https:\/\/example\.com\/warranty<\/a> if you need them\.$/)]);
@@ -196,7 +252,7 @@ describe('links', () => {
   test('an ampersand in an address is escaped in the link and in the text', () => {
     const html = render('Open it here: https://example.com/a?b=1&c=2');
     expect(linksOf(html)).toEqual([
-      { href: 'https://example.com/a?b=1&amp;c=2', text: 'Open link' },
+      { href: 'https://example.com/a?b=1&amp;c=2', text: 'Open it here' },
       { href: 'https://example.com/a?b=1&amp;c=2', text: 'https://example.com/a?b=1&amp;c=2' },
     ]);
   });
@@ -206,6 +262,75 @@ describe('links', () => {
     expect(html).not.toContain('<a ');
   });
 });
+
+describe('details', () => {
+  const QUOTE =
+    'Harbour Realty is asking for a quote.\n\n' +
+    'Trade: Plumbing\n' +
+    'Suburb: Newtown\n' +
+    'Urgency: Routine\n' +
+    'Issue: The kitchen tap is dripping\n\n' +
+    'Give your quote: https://myest8.test/q/abc\n\n' +
+    "Can't take this job: https://myest8.test/q/abc/decline";
+
+  const cellsOf = (html: string) =>
+    [...html.matchAll(/<td[^>]*font-size:14px[^>]*>(.*?)<\/td>\s*<td[^>]*>(.*?)<\/td>/gs)].map((m) => ({ label: m[1], value: m[2] }));
+
+  test('two or more Label: value lines are a details table, labels in Slate and values in Night', () => {
+    const html = render(QUOTE);
+    expect(cellsOf(html)).toEqual([
+      { label: 'Trade', value: 'Plumbing' },
+      { label: 'Suburb', value: 'Newtown' },
+      { label: 'Urgency', value: 'Routine' },
+      { label: 'Issue', value: 'The kitchen tap is dripping' },
+    ]);
+    expect(html).toMatch(/color:#55636F[^>]*>Trade</);
+    expect(html).toMatch(/color:#13212E[^>]*>Plumbing</);
+    // The lines became the table, so they are not also printed as paragraphs.
+    expect(html).not.toContain('Trade: Plumbing');
+    expect(html).not.toContain('Issue: The kitchen tap');
+    expect(paragraphsOf(html).filter((p) => !p.startsWith('<a '))).toEqual(['Harbour Realty is asking for a quote.']);
+    // Details are not a decision, so they take no Wattle edge.
+    expect(html.match(/<td width="4" bgcolor="#FFC233"/g)).toHaveLength(2);
+  });
+
+  test('a URL value stays a button, and a single Label: value line stays a paragraph', () => {
+    const html = render('Trade: Plumbing\n\nGive your quote: https://myest8.test/q/abc');
+    expect(html).not.toMatch(/font-size:14px/);
+    expect(paragraphsOf(html).filter((p) => !p.startsWith('<a '))).toEqual(['Trade: Plumbing']);
+    expect(linksOf(html)[0]).toEqual({ href: 'https://myest8.test/q/abc', text: 'Give your quote' });
+  });
+
+  test('a value with a colon stays whole, and a label longer than 24 characters is not a detail', () => {
+    const html = render("Issue: The tap: it's dripping\nSuburb: Newtown\n\nabcdefghijklmnopqrstuvwxy: kept as text\nUrgency: Routine");
+    expect(cellsOf(html)).toEqual([
+      { label: 'Issue', value: 'The tap: it&#39;s dripping' },
+      { label: 'Suburb', value: 'Newtown' },
+    ]);
+    expect(paragraphsOf(html)).toEqual(['abcdefghijklmnopqrstuvwxy: kept as text<br>Urgency: Routine']);
+  });
+
+  test('a label and a value are escaped', () => {
+    const html = render('Trade: Tom & Co\nIssue: <b>tap</b>');
+    expect(cellsOf(html)).toEqual([
+      { label: 'Trade', value: 'Tom &amp; Co' },
+      { label: 'Issue', value: '&lt;b&gt;tap&lt;/b&gt;' },
+    ]);
+    expect(html).not.toContain('<b>tap');
+  });
+
+  test('"Can\'t take this job" is an outlined Harbour button, decided from the label', () => {
+    const html = render(QUOTE);
+    expect(linksOf(html).filter((_, i) => i % 2 === 0)).toEqual([
+      { href: 'https://myest8.test/q/abc', text: 'Give your quote' },
+      { href: 'https://myest8.test/q/abc/decline', text: 'Can&#39;t take this job' },
+    ]);
+    expect(html).toMatch(/<td bgcolor="#1F5C8B"[^>]*>\s*<a [^>]*color:#FFFFFF[^>]*>Give your quote<\/a>/);
+    expect(html).toMatch(/<td bgcolor="#FFFFFF"[^>]*border:1px solid #1F5C8B[^>]*>\s*<a [^>]*color:#1F5C8B[^>]*>Can&#39;t take this job<\/a>/);
+  });
+});
+
+const linksOf = (html: string) => [...html.matchAll(/<a href="([^"]*)"[^>]*>(.*?)<\/a>/gs)].map((m) => ({ href: m[1], text: m[2] }));
 
 describe('the design tokens', () => {
   // An email can't use var(), so the renderer holds the tokens' hex values: the app's CSS is the source.

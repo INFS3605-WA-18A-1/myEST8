@@ -418,17 +418,17 @@ function liamsLightSwitch(k: Kit) {
   const s = k.story("Liam's light switch");
   const text = "The bedroom light switch is broken and the light won't turn on";
   let job: JobRef;
-  s.on(7, '08:00', 'Liam reports it with a photo', async () => {
+  s.on(7, '08:40', 'Liam reports it with a photo', async () => {
     const token = await k.report(ids.liam, text, ['Main bedroom', 'Two days ago', 'No', '4']);
     await k.upload(token, [k.photo('light-switch', await k.takenAt(ids.australiaSt, 7))]);
   });
-  s.on(7, '12:00', 'Alice confirms it and asks Sam and Erin to quote', async () => {
+  s.on(7, '09:00', 'Alice confirms it and asks Sam and Erin to quote', async () => {
     job = k.job(alice, await k.confirm(alice, text), 'electrical');
     await k.requestQuotes(job, [ids.sam, ids.erin]);
   });
-  s.on(7, '16:00', 'Sam quotes', () => k.quote(ids.sam, job, '$180 for the Camperdown job, Thursday 9am', 180_00));
-  s.on(8, '08:30', 'Erin quotes', () => k.quote(ids.erin, job, '$165 incl GST, Friday 1pm', 165_00));
-  s.on(8, '11:00', "Alice confirms both and proceeds on Erin's Estimate, capped at $180", async () => {
+  s.on(7, '09:30', 'Sam quotes', () => k.quote(ids.sam, job, '$180 for the Camperdown job, Thursday 9am', 180_00));
+  s.on(7, '10:00', 'Erin quotes', () => k.quote(ids.erin, job, '$165 incl GST, Friday 1pm', 165_00));
+  s.on(7, '11:00', "Alice confirms both and proceeds on Erin's Estimate, capped at $180", async () => {
     await k.proceed(job, ids.erin, 180_00);
   });
   s.on(9, '19:30', "Liam reports the building's intercom, a Common Area with no Building Manager on file", () =>
@@ -526,17 +526,17 @@ function omarsStiffLock(k: Kit) {
   s.on(5, '18:30', 'Omar reports it, and never sends photos', async () => {
     await k.report(ids.omar, text, ['Front door', 'A couple of weeks ago', 'No', '2']);
   });
-  s.on(8, '09:15', 'Bob confirms it and asks Lucy and Kev to quote', async () => {
+  s.on(7, '19:00', 'Bob confirms it and asks Lucy and Kev to quote', async () => {
     job = k.job(bob, await k.confirm(bob, text), 'locksmith');
     await k.requestQuotes(job, [ids.lucy, ids.kev]);
   });
-  s.on(8, '11:10', 'Lucy quotes', () => k.quote(ids.lucy, job, '$165 to service the lock, Tuesday 2pm', 165_00));
-  s.on(8, '12:30', 'Kev quotes', () => k.quote(ids.kev, job, '$210 incl GST, tomorrow 3pm', 210_00));
-  s.on(8, '14:00', "Bob proceeds on Lucy's Estimate and books her", async () => {
+  s.on(7, '19:20', 'Lucy quotes', () => k.quote(ids.lucy, job, '$165 to service the lock, Tuesday 2pm', 165_00));
+  s.on(7, '19:40', 'Kev quotes', () => k.quote(ids.kev, job, '$210 incl GST, tomorrow 3pm', 210_00));
+  s.on(7, '20:00', "Bob proceeds on Lucy's Estimate and books her", async () => {
     await k.proceed(job, ids.lucy, 180_00);
     await k.book(job, k.upcoming(2, '13:00'), 60);
   });
-  s.on(8, '19:10', 'Omar asks for another day', async () => {
+  s.on(7, '21:00', 'Omar asks for another day', async () => {
     await k.say(ids.omar, "Sorry, I can't make that day, can we do another day?");
     if ((await k.view(job)).workOrder?.rescheduleRequestedBy !== 'tenant') throw new Error("Omar's reply should have asked to reschedule the visit");
   });

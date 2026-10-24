@@ -342,12 +342,31 @@ describe('the Tenant', () => {
     const trackerLink = h.messenger.to(TOM).find((m) => m.template === 'tenant.confirmed')!.data.trackerLink as string;
     await estimate(w, job, w.tradies.dana, { priceCents: 160_00, needsInspection: true });
     await w.alice.bookInspection((await quoteRequestFor(w, job, w.tradies.dana)).quoteRequestId, { start: TUE_10AM.toISOString() });
-    expect(h.messenger.last(TOM)!.text).toMatch(/Drip Doctors \(plumbing\) will come to inspect/);
+    const text = h.messenger.last(TOM)!.text;
+    expect(text).toMatch(/Drip Doctors \(plumbing\) will come to inspect/);
+    const token = text.match(/\/v\/confirm\/([^?\s]+)/)?.[1];
+    expect(text).toContain(`Confirm this time: https://myest8.test/v/confirm/${token}`);
+    expect(text).toContain(`Need another time?: https://myest8.test/v/confirm/${token}?another=1`);
+    expect(text).not.toMatch(/Reply YES/);
 
     await h.answer(TOM, 'Yes that works', 'confirm');
     expect((await quoteRequestFor(w, job, w.tradies.dana)).inspection).toMatchObject({ visitConfirmed: true });
     const tracker = await h.tracker(trackerLink);
     expect(tracker.stages.find((s) => s.stage === 'site_visit')).toMatchObject({ reached: true, visits: [{ tradie: 'Drip Doctors' }] });
+  });
+
+  test('need another time on a Site Inspection records a reschedule and does not ask the Tradie to offer times', async () => {
+    const w = await world();
+    const job = await askPeteAndDana(w);
+    await estimate(w, job, w.tradies.dana, { priceCents: 160_00, needsInspection: true });
+    await w.alice.bookInspection((await quoteRequestFor(w, job, w.tradies.dana)).quoteRequestId, { start: TUE_10AM.toISOString() });
+    const token = w.h.messenger.last(TOM)!.text.match(/\/v\/confirm\/([^?\s]+)/)![1]!;
+    w.h.messenger.clear();
+
+    await w.h.app.askToMoveVisit(token);
+
+    expect((await quoteRequestFor(w, job, w.tradies.dana)).inspection).toMatchObject({ rescheduleRequestedBy: 'tenant', visitConfirmed: false, start: TUE_10AM.toISOString() });
+    expect(w.h.messenger.last(w.tradies.dana.address)).toBeUndefined();
   });
 });
 
@@ -444,7 +463,7 @@ describe('a cancelled Site Inspection is told to the people expecting it', () =>
     // One message to Dana: not chosen, and her visit is off.
     expect(w.h.messenger.templatesTo(w.tradies.dana.address)).toEqual(['tradie.not_chosen']);
     expect(w.h.messenger.last(w.tradies.dana.address)!.text).toMatch(/Your Site Inspection on .* is cancelled/);
-    expect(w.h.messenger.templatesTo(w.tradies.pete.address)).toEqual([]);
+    expect(w.h.messenger.templatesTo(w.tradies.pete.address)).toEqual(['tradie.offer_times']);
   });
 
   test('when the Job is cancelled, the Tenant is told the Site Inspection is off and stops being asked to confirm it', async () => {

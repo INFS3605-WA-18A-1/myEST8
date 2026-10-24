@@ -309,6 +309,11 @@ function describe(event: TimelineEvent): { title: string; detail?: string } {
   switch (event.kind) {
     case 'reported':
       return { title: 'Reported by the Tenant' };
+    case 'safety':
+      return {
+        title: 'Classified as a safety risk',
+        ...(typeof d.confidence === 'number' ? { detail: `${Math.round(d.confidence * 100)}% sure` } : {}),
+      };
     case 'reminder_sent':
       return { title: 'Tenant told to arrange the Urgent Repair and send the receipt' };
     case 'link_resent':

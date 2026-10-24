@@ -194,6 +194,13 @@ export function ticketPages() {
       : `Firm Quote from ${chosen.businessName} chosen and approved`;
   });
 
+  onPost(pages, '/:id/jobs/:jobId/ask-times', async ({ actions, ticket, params }) => {
+    const job = jobIn(ticket, params.jobId);
+    await actions.askTradieToOfferTimes(job.jobId);
+    const name = job.quotes.find((q) => q.status === 'approved')?.businessName ?? job.workOrder?.businessName ?? 'the Tradie';
+    return `Asked ${name} to offer visit times`;
+  });
+
   onPost(pages, '/:id/jobs/:jobId/work-order', async ({ actions, ticket, form, params, timeZone }) => {
     const job = jobIn(ticket, params.jobId);
     const start = text(form, 'start');
@@ -203,6 +210,14 @@ export function ticketPages() {
     });
     const booked = jobIn(await actions.ticket(ticket.ticketId), params.jobId).workOrder!;
     return `Work Order sent to ${booked.businessName} for ${formatWhen(booked.start, timeZone)}`;
+  });
+
+  onPost(pages, '/:id/work-orders/:workOrderId/resend', async ({ actions, ticket, form, params }) => {
+    const workOrderId = visitOnTicket(ticket, params.workOrderId);
+    const to = text(form, 'to');
+    if (to !== 'tenant' && to !== 'tradie') throw new ActionError('invalid', 'Choose who to resend to');
+    const name = await actions.resendVisitEmail(workOrderId, to);
+    return `Visit email queued for ${name}`;
   });
 
   onPost(
@@ -348,6 +363,16 @@ function quoteIn(ticket: TicketView, raw: string | undefined): { job: JobView; q
 
 function requestIn(ticket: TicketView, raw: string | undefined): RequestView {
   return ticket.jobs.flatMap((j) => j.quoteRequests).find((r) => r.quoteRequestId === Number(raw)) ?? notFound('Quote Request');
+}
+
+/** A repair or a Site Inspection on this Ticket, so a resend can't name some other visit. */
+function visitOnTicket(ticket: TicketView, raw: string | undefined): number {
+  const id = Number(raw);
+  for (const job of ticket.jobs) {
+    if (job.workOrder?.workOrderId === id) return id;
+    if (job.quoteRequests.some((request) => request.inspection?.workOrderId === id)) return id;
+  }
+  return notFound('Work Order');
 }
 
 function approvalIn(ticket: TicketView, raw: string | undefined): NonNullable<JobView['approval']> {
@@ -570,7 +595,7 @@ function jobStep(t: TicketView, job: JobView, x: Extras): NextStep | null {
       const wo = job.workOrder;
       if (!wo) return null;
       if (wo.status === 'active' && wo.rescheduleRequestedBy) {
-        return decide(`Find a new time: the ${wo.rescheduleRequestedBy === 'tenant' ? 'Tenant' : 'Tradie'} asked for another`, 'work-order');
+        return decide(`Find a new time: the ${whoAsked(wo.rescheduleRequestedBy)} asked for another`, 'work-order');
       }
       const confirmed = wo.visitConfirmed ? '' : ', waiting on the Tenant to confirm';
       return wait(`Visit ${formatWhen(wo.start, x.timeZone)} with ${wo.businessName}${confirmed}`, 'work-order');
@@ -660,7 +685,7 @@ function jobStages(job: JobView, x: Extras): Stage[] {
   const wo = job.workOrder;
   if (job.status === 'done') stages.push({ label: BOOKED, state: 'done', ...(wo?.visitConfirmed ? { detail: 'Tenant confirmed' } : {}) });
   else if (job.status === 'scheduled' && wo?.rescheduleRequestedBy) {
-    stages.push({ label: BOOKED, state: 'current', detail: `${wo.rescheduleRequestedBy === 'tenant' ? 'Tenant' : 'Tradie'} asked to move it` });
+    stages.push({ label: BOOKED, state: 'current', detail: `${whoAsked(wo.rescheduleRequestedBy)} asked to move it` });
   } else if (job.status === 'scheduled' && wo?.visitConfirmed) stages.push({ label: BOOKED, state: 'done', detail: 'Tenant confirmed' });
   else if (job.status === 'scheduled') stages.push({ label: BOOKED, state: 'current', detail: 'Waiting on Tenant to confirm' });
   else stages.push({ label: BOOKED, state: 'upcoming' });
@@ -1069,7 +1094,7 @@ function inspectionLine(t: TicketView, v: NonNullable<RequestView['inspection']>
   const tenant = done
     ? badge('Inspected', 'success')
     : v.rescheduleRequestedBy
-      ? badge(`${v.rescheduleRequestedBy === 'tenant' ? 'Tenant' : 'Tradie'} asked for another time`, 'warning')
+      ? badge(`${whoAsked(v.rescheduleRequestedBy)} asked for another time`, 'warning')
       : v.visitConfirmed
         ? badge('Tenant confirmed', 'success')
         : badge('Tenant not confirmed yet', 'warning');
@@ -1082,6 +1107,7 @@ function inspectionLine(t: TicketView, v: NonNullable<RequestView['inspection']>
   return html`<div class="tradie-row-visit">
     <span>${badge('Site inspection', 'neutral', { outline: true })} <span class="num">${formatRange(v.start, v.end, x.timeZone)}</span></span>
     ${tenant} ${mark}
+    ${done ? nothing : resendVisitButtons(t, v.workOrderId)}
   </div>`;
 }
 
@@ -1101,6 +1127,13 @@ function requestActions(t: TicketView, job: JobView, r: RequestView, x: Extras):
   if (firmNext) actions.push(firmQuoteEntry(t, r, x));
   if (r.firmQuote && r.firmQuote.status === 'open') actions.push(html`<a class="link text-sm" href="#quote-${r.firmQuote.quoteId}">Compare in Firm Quotes</a>`);
   return actions.length ? html`<div class="tradie-row-actions">${actions}</div>` : nothing;
+}
+
+/** Sends the visit's current email again, to the Tenant or the Tradie. The worker does the sending. */
+function resendVisitButtons(t: TicketView, workOrderId: number): Html {
+  const action = `/tickets/${t.ticketId}/work-orders/${workOrderId}/resend`;
+  return html`${postButton(action, 'Resend to Tenant', { variant: 'secondary', size: 'sm', fields: { to: 'tenant' } })}
+    ${postButton(action, 'Resend to Tradie', { variant: 'secondary', size: 'sm', fields: { to: 'tradie' } })}`;
 }
 
 /** Sends the Quote Request message again, for a Tradie with no reply who says it never arrived. */
@@ -1440,6 +1473,12 @@ function workOrderForm(t: TicketView, job: JobView, x: Extras): Html {
       </div>
       ${button('Send Work Order')}
     </form>
+    ${job.offeredVisit
+      ? html`<p>
+          ${approved?.businessName ?? 'The Tradie'} offered ${andList(job.offeredVisit.starts.map((start) => formatWhen(start, x.timeZone)))}. The Tenant is choosing.
+        </p>`
+      : nothing}
+    ${approved ? postButton(`/tickets/${t.ticketId}/jobs/${job.jobId}/ask-times`, `Ask ${approved.businessName} to offer times`, { variant: 'secondary' }) : nothing}
     ${free.length && approved
       ? html`<p class="flex flex-wrap items-center gap-1">
           ${approved.businessName} is free from ${free.map((s) => badge(formatWhen(s.start, x.timeZone)))}
@@ -1460,10 +1499,16 @@ function workOrderDetails(t: TicketView, wo: WorkOrderView, x: Extras): Html {
     : active
       ? badge('Not confirmed yet', 'warning')
       : html`—`;
-  const asker = wo.rescheduleRequestedBy === 'tenant' ? 'Tenant' : 'Tradie';
+  const asker = whoAsked(wo.rescheduleRequestedBy);
   return html`<section class="space-y-3" id="job-${wo.jobId}-work-order">
     ${sectionHeader('Work Order', active && !suggesting ? suggest : undefined)}
     ${active && wo.rescheduleRequestedBy ? alert(`The ${asker} asked for another time.`, 'warning') : nothing}
+    ${active
+      ? html`<div class="flex flex-wrap gap-2">
+          ${postButton(`/tickets/${t.ticketId}/jobs/${wo.jobId}/ask-times`, `Ask ${wo.businessName} to offer times`, { variant: 'secondary', size: 'sm' })}
+          ${resendVisitButtons(t, wo.workOrderId)}
+        </div>`
+      : nothing}
     ${dl([
       ['Visit', formatRange(wo.start, wo.end, x.timeZone)],
       ['Tradie', tradieLink(wo.tradieId, wo.businessName)],
@@ -1670,8 +1715,12 @@ function describeEvent(t: TicketView, event: TimelineEvent, x: Extras): { title:
       return { title: 'Property Owner declined the Quote', detail: details(job, price) };
     case 'work_order_sent':
       return { title: `Work Order sent to ${tradie}`, detail: details(job, visit) };
+    case 'visit_times_asked':
+      return { title: 'Asked the Tradie to offer visit times', detail: job };
     case 'reschedule_requested':
-      return { title: `${d.by === 'tenant' ? 'Tenant' : 'Tradie'} asked for another time${d.inspection ? ' for the Site Inspection' : ''}`, detail: job };
+      return { title: `${whoAsked(typeof d.by === 'string' ? d.by : null)} asked for another time${d.inspection ? ' for the Site Inspection' : ''}`, detail: job };
+    case 'other_times_requested':
+      return { title: 'The Tenant asked for other times', detail: details(job, typeof d.note === 'string' ? d.note : undefined) };
     case 'visit_confirmed':
       return { title: d.inspection ? 'Tenant confirmed the Site Inspection' : 'Tenant confirmed the visit', detail: details(job, "They'll be home or can let the Tradie in") };
     case 'visit_moved':
@@ -1755,6 +1804,13 @@ function plural(n: number, word: string, many = `${word}s`) {
 export function quoteRequestsSent({ sent, unreached }: Awaited<ReturnType<PropertyManagerActions['sendQuoteRequests']>>): string {
   const sentText = `Quote ${plural(sent, 'Request')} sent to ${sent} ${plural(sent, 'Tradie')}`;
   return unreached.length ? `${sentText}. Couldn't reach ${unreached.map((u) => `${u.tradie}: ${u.reason}`).join('; ')}` : sentText;
+}
+
+/** Who asked to move a visit, for the Ticket's sentences. */
+function whoAsked(by: string | null | undefined): string {
+  if (by === 'tenant') return 'Tenant';
+  if (by === 'tradie') return 'Tradie';
+  return 'Property Manager';
 }
 
 /** "A", "A and B", "A, B and C". */

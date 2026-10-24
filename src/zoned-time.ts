@@ -53,16 +53,26 @@ function offset(at: Date, timeZone: string) {
   return asUtc - Math.floor(at.getTime() / 60_000) * 60_000;
 }
 
-/** Formats an instant for a message: "Tue 13 Oct, 9:00 am". */
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const WEEKDAYS_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+function clockWords(at: Date | string, timeZone: string) {
+  const w = wallClock(new Date(at), timeZone);
+  const hour = w.hour % 12 || 12;
+  const minute = String(w.minute).padStart(2, '0');
+  return { w, time: `${hour}:${minute} ${w.hour < 12 ? 'am' : 'pm'}` };
+}
+
+/** Formats an instant for a message: "Tue 13 Oct, 9:00 am". Written out so ICU can't add a comma or "Sept". */
 export function formatVisit(at: Date | string, timeZone: string) {
-  return new Intl.DateTimeFormat('en-AU', {
-    timeZone,
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(new Date(at));
+  const { w, time } = clockWords(at, timeZone);
+  return `${WEEKDAYS[w.weekday]} ${w.day} ${MONTHS[w.month - 1]}, ${time}`;
+}
+
+/** The confirm-page button: "Tuesday 27 Oct, 9:00 am". The short form is formatVisit. */
+export function formatVisitDay(at: Date | string, timeZone: string) {
+  const { w, time } = clockWords(at, timeZone);
+  return `${WEEKDAYS_LONG[w.weekday]} ${w.day} ${MONTHS[w.month - 1]}, ${time}`;
 }
 
 /** Formats an instant for a sentence: "Tuesday 27 October at 9 am", or "Tuesday 27 October at 9:30 am". */

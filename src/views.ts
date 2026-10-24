@@ -218,13 +218,14 @@ export function createViews({ clock, modules }: Context) {
       // From the start of today, so a visit that has already ended still marks the day and is listed.
       const { timeZone } = await profiles.agency(agencyId);
       const propertyIds = filter === 'mine' ? await profiles.propertyIdsOf(propertyManagerId) : null;
-      const [maintenanceRequests, openTickets, urgentRepairs, inbox, quoteAlerts, schedulingAlerts, calendar] = await Promise.all([
+      const [maintenanceRequests, openTickets, urgentRepairs, inbox, quoteAlerts, schedulingAlerts, safetyAlerts, calendar] = await Promise.all([
         tickets.maintenanceRequests(agencyId, propertyIds).then(maintenanceRequestViews),
         tickets.openTickets(agencyId, propertyIds),
         tickets.urgentRepairs(agencyId, propertyIds),
         intake.inbox(agencyId),
         modules.quotes.alerts(agencyId, propertyIds),
         modules.scheduling.alerts(agencyId, propertyIds),
+        tickets.alerts(agencyId, propertyIds),
         modules.scheduling.calendar(agencyId, { from: iso(startOfDay(dayOf(now, timeZone), timeZone)), to: iso(addMs(now, CALENDAR_DAYS * 24 * HOUR_MS)) }),
       ]);
       const [boardTickets, repairs] = await Promise.all([
@@ -241,7 +242,7 @@ export function createViews({ clock, modules }: Context) {
           })),
         ),
       ]);
-      return { maintenanceRequests, tickets: boardTickets, urgentRepairs: repairs, inbox, alerts: [...quoteAlerts, ...schedulingAlerts], calendar };
+      return { maintenanceRequests, tickets: boardTickets, urgentRepairs: repairs, inbox, alerts: [...safetyAlerts, ...quoteAlerts, ...schedulingAlerts], calendar };
     },
 
     /**
@@ -742,6 +743,8 @@ export function createViews({ clock, modules }: Context) {
               /** What the Property Manager decides next while the Job is getting Quotes; null otherwise. */
               decision: quoting ? quotingDecision(counts) : null,
               workOrder: await modules.scheduling.workOrderForJob(job.id),
+              /** Times the Tradie has offered that the Tenant has not picked yet. */
+              offeredVisit: await modules.scheduling.offeredVisit(job.id),
               /** Site Inspections (not cancelled), and free slots to prefill booking the ones Tradies need. */
               inspections: {
                 visits: await modules.scheduling.inspectionVisits(job.id),

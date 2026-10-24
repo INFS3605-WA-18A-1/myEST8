@@ -1,10 +1,10 @@
 # Jev classifies what comes in; Claude Haiku composes what goes out
 
-**Not built yet.** The code still works the old way, in three places:
+**Gaps 1 and 2 are done.** Gap 3 is not built yet.
 
-- Classification uses Claude Haiku whenever `ANTHROPIC_API_KEY` is set. Jev runs only without that key, when `JEV_API_URL` is set (`src/demo/runtime.ts`).
-- `src/adapters/jev.ts` speaks a contract guessed before TypeSafe published its API: `POST /v1/classify`, an `options` list per question, and a list of answers. The real API (checked 2026-10-21, https://docs.typesafe.ai/api.md) is `POST https://api.typesafe.ai/v1/systemone`. It takes a `model` such as `jev-latest` and a `questions` map. A `choice` question takes a `criteria` map, and answers come back keyed by question name with `choice`, `confidence` and `probabilities`. The demo's mock Jev speaks the guessed contract too.
-- No model writes outbound messages. Everything sent to a Tenant, Tradie or Property Owner is a fixed template ([ADR 0008](0008-ai-summary-templates-own-prose.md)).
+1. **Done.** Jev classifies when `JEV_API_URL` is set. If Jev throws, Claude Haiku classifies instead. With no `JEV_API_URL`, Claude classifies when `ANTHROPIC_API_KEY` is set, and the in-process mock otherwise (`src/demo/runtime.ts`).
+2. **Done.** `src/adapters/jev.ts` posts to `{JEV_API_URL}/v1/systemone` (checked 2026-10-24, https://docs.typesafe.ai/api.md): model `jev-latest`, a `choice` question per judgment with `instructions` and `criteria`, and answers keyed by question name with `choice` and `confidence`. The demo's mock Jev speaks the same path, and still answers the Trade suggester's noul questions there.
+3. No model writes outbound messages. Everything sent to a Tenant, Tradie or Property Owner is a fixed template ([ADR 0008](0008-ai-summary-templates-own-prose.md)).
 
 The decision below is what the code should do.
 

@@ -114,7 +114,7 @@ describe('hosted mode and missing provider settings', () => {
     const lines: string[] = [];
     const hosted = await hostedApp(await hostedEnv({ ALLOW_MOCKS: '', ...ALL_SETTINGS }), (line) => lines.push(line));
     expect(lines[0]).toMatch(/Real: classifier, places, geocoder, address suggestions, file storage, email, inbound email, file links, worker cron/);
-    expect(lines[0]).toMatch(/Mocked or off: imageMatcher, quoteReader\./);
+    expect(lines[0]).toMatch(/Mocked or off: Trade suggester, imageMatcher, quoteReader\./);
     await hosted.close();
   });
 
@@ -123,6 +123,17 @@ describe('hosted mode and missing provider settings', () => {
     await expect(hostedApp({ ...env, VISION_API_URL: 'https://vision.test' }, () => {})).rejects.toThrow(/VISION_API_KEY/);
     await expect(hostedApp({ ...env, QUOTES_API_URL: 'https://quotes.test' }, () => {})).rejects.toThrow(/QUOTES_API_KEY/);
     await expect(hostedApp({ ...env, JEV_API_URL: 'https://jev.test' }, () => {})).rejects.toThrow(/JEV_API_KEY/);
+    // Jev is used whenever the URL is set, so an Anthropic key does not stand in for JEV_API_KEY.
+    await expect(hostedApp({ ...env, JEV_API_URL: 'https://jev.test', ANTHROPIC_API_KEY: 'test-anthropic' }, () => {})).rejects.toThrow(/JEV_API_KEY/);
+  });
+
+  test('JEV_API_URL plus an Anthropic key names the classifier as Jev with Claude as the fallback, and the Trade suggester as real', async () => {
+    const lines: string[] = [];
+    const hosted = await hostedApp(await hostedEnv({ ALLOW_MOCKS: '', ...ALL_SETTINGS, JEV_API_URL: 'https://jev.test', JEV_API_KEY: 'test-jev' }), (line) => lines.push(line));
+    expect(lines[0]).toContain('classifier (Jev, Claude fallback)');
+    expect(lines[0]).toMatch(/Real:.*Trade suggester/);
+    expect(lines[0]).not.toMatch(/Mocked or off:.*Trade suggester/);
+    await hosted.close();
   });
 
   test('geocodes through the public Nominatim with no NOMINATIM_URL, naming the app and its address, and never calls it missing', async () => {

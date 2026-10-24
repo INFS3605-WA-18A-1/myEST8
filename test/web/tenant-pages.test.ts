@@ -307,7 +307,9 @@ describe('the tracker: the booked visit', () => {
     const { w, path } = await bookedTap();
 
     const asking = await readable(await w.get(path));
-    expect(asking).toContain(`<p class="tracker-detail">Please confirm you'll be home or can let the tradie in: reply YES to our message.</p>`);
+    expect(asking).toContain('>Need another time?</a>');
+    expect(asking).toMatch(/href="https:\/\/myest8\.test\/v\/[^"]+"/);
+    expect(asking).not.toContain('reply YES');
     expect(asking).toContain('Booked<span class="sr-only"> (Now)</span>');
     // Repair approved happened; it is done.
     expect(asking).toContain('Repair approved<span class="sr-only"> (Done)</span>');

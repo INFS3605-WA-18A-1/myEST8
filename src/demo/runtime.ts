@@ -6,6 +6,7 @@
 
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
 import { createClaudeClassifier } from '../adapters/claude-classifier.ts';
+import { createFallbackClassifier } from '../fallback-classifier.ts';
 import { createClaudeComposer } from '../adapters/claude-composer.ts';
 import { createClaudeExtractor } from '../adapters/claude-extractor.ts';
 import { createClaudeSummariser } from '../adapters/claude-summariser.ts';
@@ -44,14 +45,27 @@ const MOCK = 'http://mock.local';
 export type Env = Record<string, string | undefined>;
 
 /** Which external APIs are real (set by env vars) and which are the in-process mocks. */
-export type ApiChoice = Record<'classifier' | 'imageMatcher' | 'quoteReader' | 'places' | 'geocoder' | 'addressSuggester' | 'messenger', 'mock' | 'real'>;
+export type ApiChoice = Record<'classifier' | 'tradeSuggester' | 'imageMatcher' | 'quoteReader' | 'places' | 'geocoder' | 'addressSuggester' | 'messenger', 'mock' | 'real'>;
+
+/** The name a startup log uses. The classifier says which model answers when both are configured. */
+export function providerLogName(name: string, env: Env): string {
+  if (name === 'classifier') {
+    const jev = !!env.JEV_API_URL?.trim();
+    const claude = !!env.ANTHROPIC_API_KEY?.trim();
+    if (jev && claude) return 'classifier (Jev, Claude fallback)';
+    if (jev) return 'classifier (Jev)';
+    return 'classifier';
+  }
+  if (name === 'tradeSuggester') return 'Trade suggester';
+  return name;
+}
 
 /** One thing the hosted app needs: the settings it reads, and which are unset. `required` ones stop a hosted start. */
 export type HostedProvider = { provider: string; required: boolean; missing: string[] };
 
 /**
  * What the hosted app needs from its environment, by the fallback that fills the
- * gap when a setting is absent: a mock (classifier, Google Places, photo matcher,
+ * gap when a setting is absent: a mock (classifier, Trade suggester, Google Places, photo matcher,
  * quote reader), a made-up value (the `mail.example.test` inbound domain), or a
  * feature left off (file storage in the database, Resend inbound, signed file
  * links, the cron route). The photo matcher and quote reader are listed but not
@@ -63,8 +77,11 @@ function hostedProviders(env: Env): HostedProvider[] {
   const set = (name: string) => !!env[name]?.trim();
   const unset = (...names: string[]) => names.filter((name) => !set(name));
   return [
-    // Claude, or Jev when JEV_API_URL is set, is the real classifier. Only a missing pair of both is a mock.
-    { provider: 'classifier', required: true, missing: set('ANTHROPIC_API_KEY') || set('JEV_API_URL') ? [] : ['ANTHROPIC_API_KEY'] },
+    // Jev classifies when JEV_API_URL is set, with Claude as the fallback when that key is set too.
+    // With no Jev URL, Claude classifies, and with neither the mock does. Only a missing pair is a mock.
+    { provider: providerLogName('classifier', env), required: true, missing: set('ANTHROPIC_API_KEY') || set('JEV_API_URL') ? [] : ['ANTHROPIC_API_KEY'] },
+    // The Trade suggester asks Jev. Without JEV_API_URL it runs on the mock.
+    { provider: providerLogName('tradeSuggester', env), required: false, missing: unset('JEV_API_URL') },
     { provider: 'places', required: true, missing: unset('GOOGLE_MAPS_API_KEY') },
     { provider: 'geocoder', required: false, missing: [] },
     { provider: 'address suggestions', required: false, missing: [] },
@@ -88,7 +105,7 @@ function checkHosted(env: Env, log: (line: string) => void) {
   const set = (name: string) => !!env[name]?.trim();
   const missing = providers.filter((p) => p.required).flatMap((p) => p.missing);
   const noKey = [
-    ...(set('JEV_API_URL') && !set('ANTHROPIC_API_KEY') && !set('JEV_API_KEY') ? ['JEV_API_KEY'] : []),
+    ...(set('JEV_API_URL') && !set('JEV_API_KEY') ? ['JEV_API_KEY'] : []),
     ...(set('VISION_API_URL') && !set('VISION_API_KEY') ? ['VISION_API_KEY'] : []),
     ...(set('QUOTES_API_URL') && !set('QUOTES_API_KEY') ? ['QUOTES_API_KEY'] : []),
   ];
@@ -179,6 +196,22 @@ async function openDemoDb(env: Env, hosted: boolean) {
 }
 
 /**
+ * Jev when `JEV_API_URL` is set, and Claude as well when that key is set: Claude
+ * is asked only if Jev throws. With no Jev URL, Claude classifies as before, and
+ * with neither the in-process mock does.
+ */
+function classifierFromEnv(env: Env, anthropicKey: string | undefined, mockJev: { baseUrl: string; fetch: typeof fetch }, fetchImpl: typeof fetch) {
+  const claude = anthropicKey ? createClaudeClassifier({ apiKey: anthropicKey, fetch: fetchImpl }) : null;
+  const jevUrl = env.JEV_API_URL?.trim();
+  if (jevUrl) {
+    const primary = createJevClassifier({ baseUrl: jevUrl, apiKey: env.JEV_API_KEY ?? 'demo', fetch: fetchImpl });
+    const key = env.JEV_API_KEY?.trim();
+    return claude ? createFallbackClassifier(primary, claude, key ? { redact: key } : {}) : primary;
+  }
+  return claude ?? createJevClassifier({ ...mockJev, apiKey: env.JEV_API_KEY ?? 'demo' });
+}
+
+/**
  * Builds the demo: app, web app, simulator controls and seeded data. Nothing
  * listens on a port; `main.ts` serves `web` and starts the worker loop.
  */
@@ -255,6 +288,7 @@ export async function createDemo<Seeded extends boolean = true>(
   const google = env.GOOGLE_MAPS_API_KEY ? { apiKey: env.GOOGLE_MAPS_API_KEY, fetch } : { apiKey: 'demo', fetch: mockFetch, placesBaseUrl: `${MOCK}/google/places` };
   const apis: ApiChoice = {
     classifier: anthropicKey || env.JEV_API_URL ? 'real' : 'mock',
+    tradeSuggester: env.JEV_API_URL?.trim() ? 'real' : 'mock',
     imageMatcher: env.VISION_API_URL ? 'real' : 'mock',
     quoteReader: env.QUOTES_API_URL ? 'real' : 'mock',
     places: env.GOOGLE_MAPS_API_KEY ? 'real' : 'mock',
@@ -304,7 +338,7 @@ export async function createDemo<Seeded extends boolean = true>(
     db,
     clock,
     messenger: outbound,
-    classifier: anthropicKey ? createClaudeClassifier({ apiKey: anthropicKey, fetch }) : createJevClassifier({ ...jev, apiKey: env.JEV_API_KEY ?? 'demo' }),
+    classifier: classifierFromEnv(env, anthropicKey, jev, fetch),
     summariser: anthropicKey ? createClaudeSummariser({ apiKey: anthropicKey, fetch }) : mockSummariser,
     // Hosted with no key has no model at all, so a follow-up keeps the notes as written; the demo's mock shows the draft flow.
     composer: anthropicKey ? createClaudeComposer({ apiKey: anthropicKey, fetch }) : hosted ? null : mockComposer,

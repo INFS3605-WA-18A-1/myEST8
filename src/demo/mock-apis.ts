@@ -75,7 +75,7 @@ export const DEMO_PLACES: readonly DemoListing[] = [
 
 /**
  * Dummy versions of every external API the app calls, at these paths:
- * /jev/v1/classify, /jev/v1/systemone (Trades for a Google listing), /vision/v1/image-match, /quotes/v1/quote-read (also /quotes/v1/read),
+ * /jev/v1/systemone (classifier choice questions, and noul questions for a listing's Trades), /vision/v1/image-match, /quotes/v1/quote-read (also /quotes/v1/read),
  * /google/places/v1/places:searchText, /google/places/v1/places/:id,
  * /nominatim/search, /photon/api/.
  * Wire the real adapters to it with `mockFetch()` and baseUrls under http://mock.local.
@@ -83,19 +83,21 @@ export const DEMO_PLACES: readonly DemoListing[] = [
 export function mockApis() {
   const app = new Hono();
 
-  app.post('/jev/v1/classify', async (c) => c.json(mockClassify(await jsonBody(c))));
-
-  // The Noul questions about a Trade that a Google listing is asked. The classifier's choice questions
-  // are served at /jev/v1/classify.
+  // Choice questions are the classifier. Noul questions named for a Trade are the Trade suggester.
+  // Both are TypeSafe's /v1/systemone; a request is one or the other.
   app.post('/jev/v1/systemone', async (c) => {
     const body = await jsonBody(c);
     const questions = isObject(body) ? body.questions : null;
     // TypeSafe's validation error for a request it can't answer.
     const refused = (problem: string) => c.json({ detail: [{ loc: ['body'], msg: problem, type: 'value_error' }] }, 422);
+    if (!isObject(questions) || Object.keys(questions).length === 0) {
+      return c.json({ detail: [{ loc: ['body', 'questions'], msg: 'Field required', type: 'missing' }] }, 422);
+    }
+    const values = Object.values(questions);
+    if (values.every((q) => isObject(q) && q.type === 'choice')) return c.json(mockClassify(body));
     if (!isObject(body) || !isObject(body.state)) return refused('state is required');
-    if (!isObject(questions) || Object.keys(questions).length === 0) return refused('questions is required');
     if (!Object.entries(questions).every(([name, q]) => isTrade(name) && isObject(q) && q.type === 'noul')) {
-      return refused('the demo only answers noul questions named for a Trade');
+      return refused('questions must be choice questions, or noul questions named for a Trade');
     }
     return c.json(mockTradeAnswers(body.state, questions));
   });

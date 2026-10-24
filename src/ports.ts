@@ -101,9 +101,23 @@ export class ProviderRefusedError extends Error {
   }
 }
 
+/** One answer a question can have, and when it applies. */
+export interface ClassifierOption {
+  name: string;
+  /** A short plain-English description of when this option is the right one, so options that sound alike can be told apart. */
+  when: string;
+}
+
 export interface ClassifierQuestion {
   id: string;
-  options: readonly string[];
+  /**
+   * What to judge, in plain English. It can point at what to look at by a
+   * backticked path: `message` is the text being classified, and the keys of
+   * the `state` passed to `classify` follow it (`openItems`, `waitingItems`).
+   */
+  instructions: string;
+  /** The answers, in order. An answer is always one of their names. */
+  options: readonly ClassifierOption[];
 }
 
 export interface ClassifierAnswer {
