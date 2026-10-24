@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { one } from '../../src/db.ts';
 import { UndeliverableError } from '../../src/ports.ts';
 import type { DemoControls } from '../../src/demo/controls.ts';
 import { visible, webWorld } from '../support/web.ts';
@@ -325,7 +326,7 @@ describe('the onboarding wizard', () => {
     expect(data.properties.find((property) => property.address === address)).toMatchObject({ lat: -33.8983619, lng: 151.1205914 });
   });
 
-  test('a Property Owner already added is reused for another Property, but a Tenant\'s number cannot be the Property Owner\'s', async () => {
+  test("a Property Owner already added is reused for another Property, and a Tenant's number can be a new Property Owner's", async () => {
     const w = await webWorld();
     const sam = await w.signUp();
     await submit(w, '/welcome/property', propertyFields(), sam);
@@ -335,9 +336,49 @@ describe('the onboarding wizard', () => {
     await submit(w, '/welcome/property', propertyFields({ address: '5 Sun St, Newtown NSW 2042', ownerName: 'Omar', tenantName: 'Uma Ung', tenantMobile: '0400 000 996' }), sam);
     expect((await page(w, '/properties', sam)).match(/>Omar Owen<\/option>/g)).toHaveLength(1);
 
-    const clash = await w.post('/welcome/property', propertyFields({ address: '7 Sun St, Newtown NSW 2042', ownerMobile: '0400 000 999', tenantName: 'Vic Vo', tenantMobile: '0400 000 995' }), sam);
-    expect(clash.status).toBe(400);
-    expect(visible(await clash.text())).toContain('0400 000 999 already belongs to Tina Tan, a Tenant');
+    const shared = await submit(
+      w,
+      '/welcome/property',
+      propertyFields({ address: '7 Sun St, Newtown NSW 2042', ownerName: 'Uma Ung', ownerMobile: '0400 000 999', tenantName: 'Vic Vo', tenantMobile: '0400 000 995' }),
+      sam,
+    );
+    expect(visible(shared.page)).toContain('7 Sun St, Newtown NSW 2042 is set up with Property Owner Uma Ung and Tenant Vic Vo');
+    expect(visible(shared.page)).not.toContain('already belongs');
+    const pm = await one<{ id: number }>(w.h.db, 'SELECT id FROM property_managers WHERE email = ?', 'sam@sunrise.example');
+    const sunrise = w.h.as(pm!.id);
+    expect((await sunrise.people('owner')).find((p) => p.name === 'Uma Ung')).toMatchObject({ mobile: '+61400000999' });
+    expect((await sunrise.people('tenant')).find((p) => p.name === 'Tina Tan')).toMatchObject({ mobile: '+61400000999' });
+  });
+
+  test("adding a Property Owner with a Tenant's email saves, with no refusal", async () => {
+    const w = await webWorld();
+    const cookie = await w.signUp();
+    await submit(w, '/welcome/property', propertyFields({ tenantEmail: 'tina@sunrise.example' }), cookie);
+
+    const saved = await submit(
+      w,
+      '/welcome/property',
+      propertyFields({
+        address: '7 Sun St, Newtown NSW 2042',
+        ownerName: 'Uma Ung',
+        ownerMobile: '',
+        ownerEmail: 'tina@sunrise.example',
+        tenantName: 'Vic Vo',
+        tenantMobile: '0400 000 995',
+        tenantEmail: '',
+      }),
+      cookie,
+    );
+
+    const shown = visible(saved.page);
+    expect(shown).toContain('Property added');
+    expect(shown).toContain('7 Sun St, Newtown NSW 2042 is set up with Property Owner Uma Ung and Tenant Vic Vo');
+    expect(shown).not.toContain('already belongs');
+
+    const sam = await one<{ id: number }>(w.h.db, 'SELECT id FROM property_managers WHERE email = ?', 'sam@sunrise.example');
+    const sunrise = w.h.as(sam!.id);
+    expect((await sunrise.people('owner')).find((p) => p.name === 'Uma Ung')).toMatchObject({ email: 'tina@sunrise.example' });
+    expect((await sunrise.people('tenant')).find((p) => p.name === 'Tina Tan')).toMatchObject({ email: 'tina@sunrise.example', mobile: '+61400000999' });
   });
 
   test('a colleague with an email that already has an account, or a Tradie with no Trades, is refused with the form kept', async () => {
