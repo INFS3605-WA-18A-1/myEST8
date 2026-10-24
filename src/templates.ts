@@ -136,6 +136,11 @@ export const templates = {
       `Thanks for quoting for the ${trade(d.trade)} job in ${d.suburb}. ${a.name} has gone with another quote this time.` +
       (d.inspectionStart ? ` Your Site Inspection on ${visit(d.inspectionStart, a)} is cancelled, so please don't go.` : ''),
   ),
+  'tradie.offer_times': template<{ trade: Trade; propertyAddress: string; quoteLink: string }>(
+    'Offer visit times',
+    (d, a) =>
+      `${a.name} has approved your quote for the ${trade(d.trade)} job at ${d.propertyAddress}.\n\nOffer visit times: ${d.quoteLink}`,
+  ),
   'tradie.work_order': template<{
     propertyAddress: string;
     description: string;

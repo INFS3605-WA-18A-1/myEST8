@@ -55,7 +55,7 @@ function visitOf(row: WorkOrderRow): VisitStatus {
 }
 
 /** The shared calendar, Work Orders, reschedule suggestions and Job completion. */
-export function createScheduling({ db, clock, worker, modules }: Context) {
+export function createScheduling({ db, clock, settings, worker, modules }: Context) {
 
   const { profiles, tickets, notifications } = modules;
 
@@ -287,8 +287,30 @@ export function createScheduling({ db, clock, worker, modules }: Context) {
     if (done?.quote_request_id) await modules.quotes.inspected(done.quote_request_id);
   }
 
+  /**
+   * The Quote is approved, so the chosen Tradie is asked to offer visit times on their
+   * quote page. Nothing is booked: the Tenant picks a time, or the Property Manager still can.
+   */
+  async function askForVisitTimes(jobId: number) {
+    const job = await tickets.job(jobId);
+    if (job.status !== 'approved') return;
+    const quote = await modules.quotes.approvedQuote(jobId);
+    if (!quote) return;
+    const request = await one<{ token: string }>(db, 'SELECT token FROM quote_requests WHERE job_id = ? AND tradie_id = ?', jobId, quote.tradieId);
+    if (!request) return;
+    const ticket = await tickets.ticket(job.ticketId);
+    const property = await profiles.property(ticket.propertyId);
+    await notifications.send(
+      quote.tradieId,
+      'tradie.offer_times',
+      { trade: job.trade, propertyAddress: property.address, quoteLink: `${settings.baseUrl}/q/${request.token}` },
+      { issueId: ticket.issueId },
+    );
+  }
+
   return {
     isFree,
+    askForVisitTimes,
 
     /** A Tradie's free slots over the coming days, on the hour, inside working hours. */
     async freeSlots(agencyId: number, tradieId: number, options: { days?: number; durationMinutes?: number } = {}) {

@@ -264,7 +264,7 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
   /**
    * Tells the Tradies whose Quote Requests closed when another Quote was approved, each in one
    * message that also calls off their Site Inspection if one was booked, and the Tenant of each
-   * Site Inspection cancelled.
+   * Site Inspection cancelled. The chosen Tradie is asked to offer visit times.
    */
   async function tellPassedOver(quote: QuoteRow, { passedOver, cancelled }: Awaited<ReturnType<typeof approveQuote>>) {
     const { job, ticket, property } = await jobPlace(quote.job_id);
@@ -278,6 +278,7 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
       );
     }
     await tellTenantsCancelled(cancelled);
+    await modules.scheduling.askForVisitTimes(quote.job_id);
   }
 
   /**

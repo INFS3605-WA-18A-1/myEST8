@@ -444,7 +444,7 @@ describe('a cancelled Site Inspection is told to the people expecting it', () =>
     // One message to Dana: not chosen, and her visit is off.
     expect(w.h.messenger.templatesTo(w.tradies.dana.address)).toEqual(['tradie.not_chosen']);
     expect(w.h.messenger.last(w.tradies.dana.address)!.text).toMatch(/Your Site Inspection on .* is cancelled/);
-    expect(w.h.messenger.templatesTo(w.tradies.pete.address)).toEqual([]);
+    expect(w.h.messenger.templatesTo(w.tradies.pete.address)).toEqual(['tradie.offer_times']);
   });
 
   test('when the Job is cancelled, the Tenant is told the Site Inspection is off and stops being asked to confirm it', async () => {
