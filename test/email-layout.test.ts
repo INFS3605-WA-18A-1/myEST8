@@ -263,6 +263,75 @@ describe('links', () => {
   });
 });
 
+describe('details', () => {
+  const QUOTE =
+    'Harbour Realty is asking for a quote.\n\n' +
+    'Trade: Plumbing\n' +
+    'Suburb: Newtown\n' +
+    'Urgency: Routine\n' +
+    'Issue: The kitchen tap is dripping\n\n' +
+    'Give your quote: https://myest8.test/q/abc\n\n' +
+    "Can't take this job: https://myest8.test/q/abc/decline";
+
+  const cellsOf = (html: string) =>
+    [...html.matchAll(/<td[^>]*font-size:14px[^>]*>(.*?)<\/td>\s*<td[^>]*>(.*?)<\/td>/gs)].map((m) => ({ label: m[1], value: m[2] }));
+
+  test('two or more Label: value lines are a details table, labels in Slate and values in Night', () => {
+    const html = render(QUOTE);
+    expect(cellsOf(html)).toEqual([
+      { label: 'Trade', value: 'Plumbing' },
+      { label: 'Suburb', value: 'Newtown' },
+      { label: 'Urgency', value: 'Routine' },
+      { label: 'Issue', value: 'The kitchen tap is dripping' },
+    ]);
+    expect(html).toMatch(/color:#55636F[^>]*>Trade</);
+    expect(html).toMatch(/color:#13212E[^>]*>Plumbing</);
+    // The lines became the table, so they are not also printed as paragraphs.
+    expect(html).not.toContain('Trade: Plumbing');
+    expect(html).not.toContain('Issue: The kitchen tap');
+    expect(paragraphsOf(html).filter((p) => !p.startsWith('<a '))).toEqual(['Harbour Realty is asking for a quote.']);
+    // Details are not a decision, so they take no Wattle edge.
+    expect(html.match(/<td width="4" bgcolor="#FFC233"/g)).toHaveLength(2);
+  });
+
+  test('a URL value stays a button, and a single Label: value line stays a paragraph', () => {
+    const html = render('Trade: Plumbing\n\nGive your quote: https://myest8.test/q/abc');
+    expect(html).not.toMatch(/font-size:14px/);
+    expect(paragraphsOf(html).filter((p) => !p.startsWith('<a '))).toEqual(['Trade: Plumbing']);
+    expect(linksOf(html)[0]).toEqual({ href: 'https://myest8.test/q/abc', text: 'Give your quote' });
+  });
+
+  test('a value with a colon stays whole, and a label longer than 24 characters is not a detail', () => {
+    const html = render("Issue: The tap: it's dripping\nSuburb: Newtown\n\nabcdefghijklmnopqrstuvwxy: kept as text\nUrgency: Routine");
+    expect(cellsOf(html)).toEqual([
+      { label: 'Issue', value: 'The tap: it&#39;s dripping' },
+      { label: 'Suburb', value: 'Newtown' },
+    ]);
+    expect(paragraphsOf(html)).toEqual(['abcdefghijklmnopqrstuvwxy: kept as text<br>Urgency: Routine']);
+  });
+
+  test('a label and a value are escaped', () => {
+    const html = render('Trade: Tom & Co\nIssue: <b>tap</b>');
+    expect(cellsOf(html)).toEqual([
+      { label: 'Trade', value: 'Tom &amp; Co' },
+      { label: 'Issue', value: '&lt;b&gt;tap&lt;/b&gt;' },
+    ]);
+    expect(html).not.toContain('<b>tap');
+  });
+
+  test('"Can\'t take this job" is an outlined Harbour button, decided from the label', () => {
+    const html = render(QUOTE);
+    expect(linksOf(html).filter((_, i) => i % 2 === 0)).toEqual([
+      { href: 'https://myest8.test/q/abc', text: 'Give your quote' },
+      { href: 'https://myest8.test/q/abc/decline', text: 'Can&#39;t take this job' },
+    ]);
+    expect(html).toMatch(/<td bgcolor="#1F5C8B"[^>]*>\s*<a [^>]*color:#FFFFFF[^>]*>Give your quote<\/a>/);
+    expect(html).toMatch(/<td bgcolor="#FFFFFF"[^>]*border:1px solid #1F5C8B[^>]*>\s*<a [^>]*color:#1F5C8B[^>]*>Can&#39;t take this job<\/a>/);
+  });
+});
+
+const linksOf = (html: string) => [...html.matchAll(/<a href="([^"]*)"[^>]*>(.*?)<\/a>/gs)].map((m) => ({ href: m[1], text: m[2] }));
+
 describe('the design tokens', () => {
   // An email can't use var(), so the renderer holds the tokens' hex values: the app's CSS is the source.
   const css = readFileSync(new URL('../src/web/static/app.css', import.meta.url), 'utf8');
