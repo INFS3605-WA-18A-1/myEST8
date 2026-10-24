@@ -9,7 +9,8 @@
 //      then its time and the address;
 //   3. the Firm Quote: a fixed price, the scope of work, how many days it takes, up to
 //      three dates they can start, and optionally a PDF;
-//   4. after it: what they gave, read only.
+//   4. after it: what they gave, read only;
+//   5. once their Quote is chosen: Offer visit times, then the times they offered.
 //
 // A closed, declined or passed-over request says so, as does one waiting on the
 // Property Owner (theirs, or another Tradie's quote). Every field is checked again by
@@ -21,7 +22,8 @@ import { html, raw } from 'hono/html';
 import type { App } from '../../app.ts';
 import type { FirmQuoteInput } from '../../quotes.ts';
 import { ActionError } from '../../shared.ts';
-import { files, list, localToIso, text, type FormValues } from '../forms.ts';
+import { files, isoToLocal, list, localToIso, text, type FormValues } from '../forms.ts';
+import { formatVisit } from '../../zoned-time.ts';
 import { alert, button, card, dl, field, formatMoney, formatWhen, humanise, publicPage, type Html } from '../ui.ts';
 
 const KB = 1024;
@@ -43,7 +45,7 @@ export function quoteFormPages(app: App) {
     const page = await app.quotePage(c.req.param('token'));
     if (!page) return c.html(unknownLinkPage(), 404);
     const sent = c.req.query('sent');
-    return c.html(quotePage(c.req.param('token'), page, { thanks: sent === 'estimate' || sent === 'firm' ? sent : undefined }));
+    return c.html(quotePage(c.req.param('token'), page, { thanks: sent === 'estimate' || sent === 'firm' || sent === 'times' ? sent : undefined }));
   });
 
   pages.post(
@@ -105,7 +107,97 @@ export function quoteFormPages(app: App) {
     },
   );
 
+  pages.post('/q/:token/times', async (c) => {
+    const token = c.req.param('token');
+    const page = await app.quotePage(token);
+    if (!page) return c.html(unknownLinkPage(), 404);
+    const form = (await c.req.parseBody({ all: true }).catch(() => ({}))) as FormValues;
+    try {
+      const raw = form.starts;
+      const posted = (Array.isArray(raw) ? raw : raw === undefined ? [] : [raw]).filter((value): value is string => typeof value === 'string');
+      if (!posted[0]?.trim()) throw new ActionError('invalid', 'Enter a preferred time', { starts: 'Enter a preferred time' });
+      const starts = [posted[0], ...posted.slice(1).filter((value) => value.trim())].map((value) => localTime(value, page.timeZone, 'starts'));
+      await app.offerVisitTimes(token, starts);
+    } catch (error) {
+      return refused(c, token, page, error, form, ['starts']);
+    }
+    return c.redirect(`/q/${encodeURIComponent(token)}?sent=times`, 303);
+  });
+
+  // Confirm pages linked from the Tradie's emails. Opening one, including a mail
+  // scanner's GET, only shows the page. The button's POST is what changes anything.
+  pages.get('/q/:token/decline', async (c) => {
+    const token = c.req.param('token');
+    const page = await app.quotePage(token);
+    if (!page) return c.html(unknownLinkPage(), 404);
+    return c.html(declinePage(token, page));
+  });
+
+  pages.post('/q/:token/decline', async (c) => {
+    const token = c.req.param('token');
+    try {
+      await app.declineQuoteRequest(token);
+    } catch (error) {
+      return actionFailed(c, error, async (message) => {
+        const page = await app.quotePage(token);
+        return page ? declinePage(token, page, message) : null;
+      });
+    }
+    return c.redirect(`/q/${encodeURIComponent(token)}/decline`, 303);
+  });
+
+  pages.get('/q/:token/done', (c) => showVisit(c, app, 'repair', 'done'));
+  pages.post('/q/:token/done', (c) => postVisit(c, app, 'repair', 'done'));
+  pages.get('/q/:token/another', (c) => showVisit(c, app, 'repair', 'another'));
+  pages.post('/q/:token/another', (c) => postVisit(c, app, 'repair', 'another'));
+  pages.get('/q/:token/inspection-done', (c) => showVisit(c, app, 'inspection', 'done'));
+  pages.post('/q/:token/inspection-done', (c) => postVisit(c, app, 'inspection', 'done'));
+  pages.get('/q/:token/inspection-another', (c) => showVisit(c, app, 'inspection', 'another'));
+  pages.post('/q/:token/inspection-another', (c) => postVisit(c, app, 'inspection', 'another'));
+
   return pages;
+}
+
+type VisitKind = 'repair' | 'inspection';
+type VisitStep = 'done' | 'another';
+type TradieVisit = NonNullable<Awaited<ReturnType<App['tradieVisit']>>>;
+
+const CAN_DECLINE = new Set(['sent', 'reminded', 'estimated', 'inspection_booked', 'inspected']);
+
+function visitPath(kind: VisitKind, step: VisitStep) {
+  if (kind === 'inspection') return step === 'done' ? 'inspection-done' : 'inspection-another';
+  return step === 'done' ? 'done' : 'another';
+}
+
+async function showVisit(c: Context, app: App, kind: VisitKind, step: VisitStep) {
+  const token = c.req.param('token') ?? '';
+  const page = await app.tradieVisit(token, kind);
+  if (!page) return c.html(unknownLinkPage(), 404);
+  return c.html(step === 'done' ? donePage(token, kind, page) : anotherPage(token, kind, page));
+}
+
+async function postVisit(c: Context, app: App, kind: VisitKind, step: VisitStep) {
+  const token = c.req.param('token') ?? '';
+  const path = visitPath(kind, step);
+  try {
+    if (step === 'done') await app.markTradieVisitDone(token, kind);
+    else await app.tradieNeedsAnotherTime(token, kind);
+  } catch (error) {
+    return actionFailed(c, error, async (message) => {
+      const page = await app.tradieVisit(token, kind);
+      if (!page) return null;
+      return step === 'done' ? donePage(token, kind, page, message) : anotherPage(token, kind, page, message);
+    });
+  }
+  return c.redirect(`/q/${encodeURIComponent(token)}/${path}`, 303);
+}
+
+async function actionFailed(c: Context, error: unknown, again: (message: string) => Promise<Html | null>) {
+  if (!(error instanceof ActionError)) throw error;
+  if (error.code === 'not_found') return c.html(unknownLinkPage(), 404);
+  const page = await again(error.message);
+  if (!page) return c.html(unknownLinkPage(), 404);
+  return c.html(page, STATUS[error.code]);
 }
 
 /**
@@ -144,7 +236,7 @@ function localTime(value: string, timeZone: string, field: string): string {
 function refused(c: Context, token: string, page: QuotePage, error: unknown, form: FormValues, names: string[]) {
   if (!(error instanceof ActionError)) throw error;
   if (error.code === 'not_found') return c.html(unknownLinkPage(), 404);
-  const posted: Posted = Object.fromEntries(names.map((n) => [n, n === 'availableDates' ? list(form, n) : text(form, n)]));
+  const posted: Posted = Object.fromEntries(names.map((n) => [n, n === 'availableDates' || n === 'starts' ? list(form, n) : text(form, n)]));
   return c.html(quotePage(token, page, { refusal: { message: error.message, fields: error.fields, posted } }), STATUS[error.code]);
 }
 
@@ -158,10 +250,82 @@ function unknownLinkPage(): Html {
   });
 }
 
+function actionPage(title: string, brand: string, body: Html): Html {
+  return publicPage({
+    css: ['tenant.css'],
+    runtime: false,
+    width: 'narrow',
+    brand,
+    title,
+    footer: replyTo(brand),
+    body: card({ body }),
+  });
+}
+
+/** Statuses where replying NO still declines. A Firm Quote, or a closed request, does not. */
+function declinePage(token: string, page: QuotePage, error?: string): Html {
+  const open = CAN_DECLINE.has(page.status) && page.outcome !== 'declined';
+  const title = page.outcome === 'declined' ? 'Quote Request' : open ? "Can't take this job" : 'Quote Request';
+  const body =
+    page.outcome === 'declined'
+      ? html`<p>You declined this Quote Request.</p>`
+      : open
+        ? html`<p>${page.agencyName} asked you to quote for the ${humanise(page.trade).toLowerCase()} job in ${page.suburb}.</p>
+            <form method="post" action="/q/${encodeURIComponent(token)}/decline" class="tenant-form">
+              ${button('Decline this job', { block: true })}
+            </form>`
+        : html`<p>This Quote Request no longer takes a decline.</p>`;
+  return actionPage(title, page.agencyName, html`${error ? alert(error, 'error') : ''}${body}`);
+}
+
+function donePage(token: string, kind: VisitKind, page: TradieVisit, error?: string): Html {
+  const visit = page.visit;
+  const when = visit ? formatVisit(visit.start, page.timeZone) : '';
+  const mark = kind === 'inspection' ? 'Mark inspection done' : 'Mark job done';
+  const ready = visit?.status === 'active' && visit.started;
+  const title = visit?.status === 'done' ? (kind === 'inspection' ? 'Inspection done' : 'Job done') : ready ? mark : 'Not done yet';
+  const path = visitPath(kind, 'done');
+  const body = !visit
+    ? html`<p>This visit isn't booked.</p>`
+    : visit.status === 'cancelled'
+      ? html`<p>This visit is cancelled.</p>`
+      : visit.status === 'done'
+        ? html`<p>Already marked done on ${when}.</p>`
+        : !visit.started
+          ? html`<p>This visit is booked for ${when}, so it can't be marked done yet.</p>`
+          : html`<p>${kind === 'inspection' ? 'The Site Inspection' : 'The job'} at ${page.address} is booked for ${when}.</p>
+              <form method="post" action="/q/${encodeURIComponent(token)}/${path}" class="tenant-form">
+                ${button(mark, { block: true })}
+              </form>`;
+  return actionPage(title, page.agencyName, html`${error ? alert(error, 'error') : ''}${body}`);
+}
+
+function anotherPage(token: string, kind: VisitKind, page: TradieVisit, error?: string): Html {
+  const visit = page.visit;
+  const when = visit ? formatVisit(visit.start, page.timeZone) : '';
+  const asked = !!visit?.rescheduleRequestedBy;
+  const open = visit?.status === 'active' && !asked;
+  const stays = kind === 'inspection' ? `until it moves` : `until the Tenant picks a new one`;
+  const title = open ? 'Need another time?' : 'Another time';
+  const body = !visit
+    ? html`<p>This visit isn't booked.</p>`
+    : visit.status === 'cancelled'
+      ? html`<p>This visit is cancelled.</p>`
+      : visit.status === 'done'
+        ? html`<p>Already marked done on ${when}.</p>`
+        : asked
+          ? html`<p>You already asked for another time. This visit stays booked for ${when} ${stays}.</p>`
+          : html`<p>This visit stays booked for ${when} ${stays}.</p>
+              <form method="post" action="/q/${encodeURIComponent(token)}/${visitPath(kind, 'another')}" class="tenant-form">
+                ${button('Need another time?', { block: true, variant: 'secondary' })}
+              </form>`;
+  return actionPage(title, page.agencyName, html`${error ? alert(error, 'error') : ''}${body}`);
+}
+
 const replyTo = (agencyName: string) => `Questions? Reply to any message from ${agencyName}.`;
 
 /** The page at the step the Tradie is at. `thanks` follows a successful post; `refusal` shows a refused one. */
-function quotePage(token: string, p: QuotePage, o: { thanks?: 'estimate' | 'firm'; refusal?: Refusal } = {}): Html {
+function quotePage(token: string, p: QuotePage, o: { thanks?: 'estimate' | 'firm' | 'times'; refusal?: Refusal } = {}): Html {
   const job = `${humanise(p.trade)} job in ${p.suburb}`;
   return publicPage({
     css: ['tenant.css'],
@@ -171,7 +335,7 @@ function quotePage(token: string, p: QuotePage, o: { thanks?: 'estimate' | 'firm
     subtitle: `${job}, for ${p.tradieName}`,
     footer: replyTo(p.agencyName),
     body: html`
-      ${o.thanks ? html`<div role="status" class="tenant-done">${o.thanks === 'estimate' ? `Thanks, ${p.agencyName} has your Estimate.` : `Thanks, ${p.agencyName} has your Firm Quote.`}</div>` : ''}
+      ${o.thanks ? html`<div role="status" class="tenant-done">${thanksLine(o.thanks, p.agencyName)}</div>` : ''}
       ${card({
         title: 'The job',
         body: html`<div class="tenant-issue">
@@ -190,6 +354,8 @@ function quotePage(token: string, p: QuotePage, o: { thanks?: 'estimate' | 'firm
       ${p.next === 'estimate' ? estimateForm(token, o.refusal) : ''}
       ${p.next === 'firm_quote' ? firmQuoteForm(token, p, o.refusal) : ''}
       ${p.firmQuote ? firmQuoteSummary(p) : ''}
+      ${p.offeredVisit ? offeredTimes(p) : ''}
+      ${p.offerTimes ? offerTimesForm(token, p, o.refusal) : ''}
     `,
   });
 }
@@ -198,7 +364,16 @@ function quotePage(token: string, p: QuotePage, o: { thanks?: 'estimate' | 'firm
 function outcomeNote(p: QuotePage): Html | string {
   switch (p.outcome) {
     case 'chosen':
-      return alert(`${p.agencyName} has gone with your quote. A Work Order with the visit time will follow.`, 'success');
+      return alert(
+        p.offerTimes
+          ? p.offerTimes.reschedule
+            ? 'The visit needs a new time. Offer a preferred time, and up to 2 more. The current visit stays booked until the Tenant picks one.'
+            : `${p.agencyName} has gone with your quote. Offer a preferred time, and up to 2 more.`
+          : p.offeredVisit
+            ? `${p.agencyName} has your times. The Tenant is choosing one.`
+            : `${p.agencyName} has gone with your quote. A Work Order with the visit time will follow.`,
+        'success',
+      );
     case 'with_owner':
       return alert(`${p.agencyName} would like to go with your quote and has asked the Property Owner to approve it. If they do, a Work Order with the visit time will follow.`, 'info');
     case 'on_hold':
@@ -355,6 +530,54 @@ function firmQuoteForm(token: string, p: QuotePage, r: Refusal | undefined): Htm
         })}
         ${field({ label: 'Your quote as a PDF', name: 'pdf', type: 'file', accept: 'application/pdf', hint: 'Optional, under 10 MB.', error: r?.fields.pdf })}
         ${button('Send Firm Quote', { block: true })}
+      </form>`,
+  });
+}
+
+const thanksLine = (thanks: 'estimate' | 'firm' | 'times', agencyName: string) =>
+  thanks === 'times' ? `Thanks. ${agencyName} will ask the Tenant to pick a time.` : thanks === 'estimate' ? `Thanks, ${agencyName} has your Estimate.` : `Thanks, ${agencyName} has your Firm Quote.`;
+
+/** The times the Tradie offered, while the Tenant chooses. */
+function offeredTimes(p: QuotePage): Html {
+  return card({
+    title: 'Times you offered',
+    body: html`<ul class="tenant-times">
+      ${p.offeredVisit!.starts.map((start) => html`<li>${formatWhen(start, p.timeZone)}</li>`)}
+    </ul>`,
+  });
+}
+
+/** The chosen Tradie offers a preferred time and up to two more. The length comes from the Quote; the times start from it. */
+function offerTimesForm(token: string, p: QuotePage, r: Refusal | undefined): Html {
+  const offer = p.offerTimes!;
+  const posted = r?.posted.starts;
+  const typed = Array.isArray(posted) ? posted : [];
+  const times = [
+    { label: 'Preferred time', required: true, hint: undefined },
+    { label: 'Another time', required: false, hint: 'Optional.' },
+    { label: 'A third time', required: false, hint: 'Optional.' },
+  ];
+  return card({
+    title: 'Offer visit times',
+    body: html`${refusalAlert(r)}
+      <form method="post" action="/q/${encodeURIComponent(token)}/times" class="tenant-form" novalidate>
+        <p>The visit is at ${offer.address}.</p>
+        <p>The Tenant is usually home ${offer.availability}.</p>
+        ${offer.note ? html`<p>The Tenant said: ${offer.note}.</p>` : ''}
+        <p>The visit takes ${offer.durationLabel}.</p>
+        ${times.map((time, i) =>
+          field({
+            label: time.label,
+            name: 'starts',
+            id: `field-start-${i + 1}`,
+            type: 'datetime-local',
+            value: typed.length ? (typed[i] ?? '') : offer.starts[i] ? isoToLocal(offer.starts[i]!, p.timeZone) : '',
+            required: time.required,
+            hint: time.hint,
+            error: i === 0 ? r?.fields.starts : undefined,
+          }),
+        )}
+        ${button('Offer visit times', { block: true })}
       </form>`,
   });
 }

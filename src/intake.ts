@@ -25,7 +25,8 @@ type Awaiting =
   // `asks` counts the missing-details messages sent for the issue (a row without it is the first ask).
   | { kind: 'guided'; issueId: number; question?: GuidedQuestion; asks?: number }
   | { kind: 'fix_rating'; jobId: number }
-  | { kind: 'visit'; workOrderId: number };
+  | { kind: 'visit'; workOrderId: number }
+  | { kind: 'visit_offer'; offerId: number; options: string[] };
 
 /** The guided questions in the order they are asked. */
 const GUIDED_ORDER: GuidedQuestion[] = ['location', 'started', 'worsening', 'availability'];
@@ -109,6 +110,21 @@ function answerQuestion(awaiting: Awaiting): ClassifierQuestion {
     return question(id, `${waiting("to confirm the time of a Tradie's visit, by replying YES, or to tell us if they need another time")} Pick what \`message\` says about the visit.`, [
       option('confirm', 'Confirms the visit: yes, the time works, or they will be home'),
       option('reschedule', 'Does not confirm: says no, asks for another time, or cannot be there'),
+      NOT_AN_ANSWER,
+    ]);
+  }
+  if (awaiting.kind === 'visit_offer') {
+    return question(id, `${waiting('to pick one of the visit times a Tradie offered, by its number or its day, or to say none of them work')} Pick what \`message\` chooses.`, [
+      ...awaiting.options.map((name) =>
+        option(
+          name,
+          name === 'none'
+            ? 'None of the offered times work: asks for other times, or says when they are home instead'
+            : /^\d+$/.test(name)
+              ? `Picks offered time number ${name}`
+              : `Picks the offered time on ${name}`,
+        ),
+      ),
       NOT_AN_ANSWER,
     ]);
   }
@@ -427,6 +443,10 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
     if (awaiting.kind === 'fix_rating') {
       await logInbound(msg, tenant.id, await issueIdOf(`job:${awaiting.jobId}`));
       return modules.scheduling.recordTenantRating(awaiting.jobId, Number(answer));
+    }
+    if (awaiting.kind === 'visit_offer') {
+      await logInbound(msg, tenant.id, await modules.scheduling.visitOfferIssue(awaiting.offerId));
+      return modules.scheduling.answerVisitOffer(awaiting.offerId, answer, msg.text);
     }
     const reschedule = answer === 'reschedule';
     await logInbound(msg, tenant.id, await issueIdOf(`work_order:${awaiting.workOrderId}`), reschedule);
@@ -919,6 +939,11 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
     /** Stops waiting for the Tenant to confirm a visit that is no longer happening (a Site Inspection cancelled). */
     async stopWaitingOnVisit(personId: number, workOrderId: number) {
       if ((await awaitingFrom(personId)).some((a) => a.kind === 'visit' && a.workOrderId === workOrderId)) await stopWaiting(personId, 'visit');
+    },
+
+    /** Stops waiting for a pick once the offer is no longer open (the Property Manager booked, or it was superseded). */
+    async stopWaitingOnVisitOffer(personId: number) {
+      if ((await awaitingFrom(personId)).some((a) => a.kind === 'visit_offer')) await stopWaiting(personId, 'visit_offer');
     },
 
     async inbox(agencyId: number) {

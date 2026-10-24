@@ -439,7 +439,7 @@ describe('reading Estimates and choosing Firm Quotes', () => {
     expect(h.messenger.last(tradies.finn.address)).toMatchObject({ template: 'tradie.not_chosen', data: { trade: 'plumbing', suburb: 'Newtown' } });
     expect(h.messenger.last(tradies.pete.address)!.template).toBe('tradie.not_chosen');
     expect(h.messenger.templatesTo(tradies.dana.address)).toEqual(['tradie.quote_request']);
-    expect(h.messenger.templatesTo(tradies.nina.address)).toEqual(['tradie.quote_request']);
+    expect(h.messenger.templatesTo(tradies.nina.address)).toEqual(['tradie.quote_request', 'tradie.offer_times']);
     expect((await quoteRequestFor(w, job, tradies.pete)).status).toBe('closed');
     expect((await quoteRequestFor(w, job, tradies.nina)).status).toBe('firm_quoted');
     expect((await alice.ticket(job.ticketId)).repairCostCents).toBe(195_00);

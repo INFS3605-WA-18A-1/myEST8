@@ -3,7 +3,8 @@ import { all, one, run, transaction } from './db.ts';
 import { ProviderRefusedError, UndeliverableError } from './ports.ts';
 import { addMs, dollars, HOUR_MS, invalid, iso, median, newToken, notFound, withoutContactDetails, type Trade } from './shared.ts';
 import type { OpenItem } from './tickets.ts';
-import { wallClock } from './zoned-time.ts';
+import { AVAILABILITY_LABELS } from './templates.ts';
+import { dayOf, wallClock, zonedInstant } from './zoned-time.ts';
 
 const QUOTE_REMINDER_MS = 48 * HOUR_MS;
 const FIRM_QUOTE_REMINDER_MS = 48 * HOUR_MS;
@@ -264,7 +265,7 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
   /**
    * Tells the Tradies whose Quote Requests closed when another Quote was approved, each in one
    * message that also calls off their Site Inspection if one was booked, and the Tenant of each
-   * Site Inspection cancelled.
+   * Site Inspection cancelled. The chosen Tradie is asked to offer visit times.
    */
   async function tellPassedOver(quote: QuoteRow, { passedOver, cancelled }: Awaited<ReturnType<typeof approveQuote>>) {
     const { job, ticket, property } = await jobPlace(quote.job_id);
@@ -278,6 +279,7 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
       );
     }
     await tellTenantsCancelled(cancelled);
+    await modules.scheduling.askForVisitTimes(quote.job_id);
   }
 
   /**
@@ -413,10 +415,23 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
   /** Sends the Tradie their quote page for the Firm Quote, when a price arrives by message after their Estimate. */
   async function sendFirmQuoteLink(request: QuoteRequestRow, template: 'tradie.firm_quote_link' | 'tradie.firm_quote_request' | 'tradie.firm_quote_reminder') {
     const { job, ticket, property } = await jobPlace(request.job_id);
+    const issue = await tickets.issue(ticket.issueId);
+    const inspection = await one<{ start: string }>(
+      db,
+      `SELECT start FROM work_orders WHERE quote_request_id = ? AND kind = 'inspection' AND status != 'cancelled' ORDER BY id DESC LIMIT 1`,
+      request.id,
+    );
     await notifications.send(
       request.tradie_id,
       template,
-      { trade: job.trade, suburb: property.suburb, propertyAddress: property.address, quoteLink: quoteLink(request) },
+      {
+        trade: job.trade,
+        suburb: property.suburb,
+        propertyAddress: property.address,
+        quoteLink: quoteLink(request),
+        issue: withoutContactDetails(issue.summary ?? issue.description),
+        inspectedOn: inspection?.start ?? null,
+      },
       { issueId: ticket.issueId },
     );
   }
@@ -445,10 +460,17 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
     const request = await one<QuoteRequestRow>(db, `UPDATE quote_requests SET status = 'reminded' WHERE id = ? AND status = 'sent' RETURNING *`, quoteRequestId);
     if (!request) return;
     const { job, ticket, property } = await jobPlace(request.job_id);
+    const issue = await tickets.issue(ticket.issueId);
     await notifications.send(
       request.tradie_id,
       'tradie.quote_reminder',
-      { trade: job.trade, suburb: property.suburb, quoteLink: quoteLink(request) },
+      {
+        trade: job.trade,
+        suburb: property.suburb,
+        urgency: ticket.urgency,
+        description: withoutContactDetails(issue.summary ?? issue.description),
+        quoteLink: quoteLink(request),
+      },
       { issueId: ticket.issueId },
     );
   });
@@ -531,7 +553,38 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
     return null;
   }
 
-  /** The no-login quote page's view of one Quote Request: no Tenant, no address until a Site Inspection is booked. */
+  /** How long the visit is: the Firm Quote's days, or 2 hours when the Job went ahead on an Estimate. */
+function visitLength(durationDays: number | null): { durationMinutes: number; durationLabel: string } {
+  if (durationDays) return { durationMinutes: durationDays * 24 * 60, durationLabel: durationDays === 1 ? '1 day' : `${durationDays} days` };
+  return { durationMinutes: 120, durationLabel: '2 hours' };
+}
+
+/** The booked visit's length, in the same words as a Quote's. */
+function lengthOfVisit(start: string, end: string): { durationMinutes: number; durationLabel: string } {
+  const minutes = Math.round((Date.parse(end) - Date.parse(start)) / 60_000);
+  if (minutes >= 24 * 60 && minutes % (24 * 60) === 0) {
+    const days = minutes / (24 * 60);
+    return { durationMinutes: minutes, durationLabel: days === 1 ? '1 day' : `${days} days` };
+  }
+  const hours = minutes / 60;
+  return { durationMinutes: minutes, durationLabel: hours === 1 ? '1 hour' : Number.isInteger(hours) ? `${hours} hours` : `${minutes} minutes` };
+}
+
+/** Up to three starts: the proposed time, then each other available date at 9:00 am. */
+function prefillStarts(timeZone: string, proposedTime: string | null, dates: string[]): string[] {
+  const starts: string[] = [];
+  if (proposedTime) starts.push(proposedTime);
+  const proposedDay = proposedTime ? dayOf(proposedTime, timeZone) : null;
+  for (const date of dates) {
+    if (starts.length >= 3 || date === proposedDay) continue;
+    const [year, month, day] = date.split('-').map(Number);
+    if (!year || !month || !day) continue;
+    starts.push(zonedInstant(timeZone, year, month, day, 9, 0).toISOString());
+  }
+  return starts;
+}
+
+/** The no-login quote page's view of one Quote Request: no Tenant, no address until a Site Inspection is booked or their Quote is chosen. */
   async function quotePage(request: QuoteRequestRow) {
     const { job, ticket, property } = await jobPlace(request.job_id);
     const issue = await tickets.issue(ticket.issueId);
@@ -558,6 +611,12 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
                   ? 'on_hold'
                   : 'closed';
     const needed = inspectionNeeded(request, estimate);
+    const tenant = await profiles.person(ticket.tenantId);
+    const quoted = firm ?? estimate;
+    const offeredVisit = outcome === 'chosen' ? await modules.scheduling.offeredVisit(job.id) : null;
+    const declinedNote = outcome === 'chosen' && !offeredVisit ? await modules.scheduling.declinedNote(job.id) : null;
+    const repair = outcome === 'chosen' ? await modules.scheduling.workOrderForJob(job.id) : null;
+    const rescheduling = repair?.status === 'active' && repair.rescheduleRequestedBy !== null;
     const next: 'estimate' | 'wait_for_booking' | 'wait_for_inspection' | 'firm_quote' | 'done' =
       outcome !== 'open'
         ? 'done'
@@ -612,6 +671,23 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
             receivedAt: firm.received_at,
           }
         : null,
+      /**
+       * Set once their Quote is approved and the visit is not booked yet: the address, when the
+       * Tenant is usually home, how long the visit is, and up to three starts to offer.
+       */
+      /** The times already offered, while the Tenant is choosing. */
+      offeredVisit,
+      offerTimes:
+        outcome === 'chosen' && !offeredVisit && (job.status === 'approved' || rescheduling)
+          ? {
+              address: property.address,
+              availability: AVAILABILITY_LABELS[tenant.availability ?? 'any_time'],
+              note: declinedNote,
+              reschedule: rescheduling,
+              ...(rescheduling && repair ? lengthOfVisit(repair.start, repair.end) : visitLength(firm?.duration_days ?? null)),
+              starts: prefillStarts(agency.timeZone, quoted?.proposed_time ?? null, firm ? datesOf(firm.available_dates) : []),
+            }
+          : null,
     };
   }
 

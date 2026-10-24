@@ -141,6 +141,45 @@ export function createApp(
       await quotes.submitFirmQuote(id, input);
     },
 
+    /** The chosen Tradie offers a preferred visit time, and up to two more, from their quote page. The Tenant is asked to pick one. */
+    offerVisitTimes: (token: string, starts: string[]) => scheduling.offerVisitTimes(token, starts),
+
+    /** Can't take this job. The same as replying NO: the Quote Request is declined while it still can be. */
+    async declineQuoteRequest(token: string) {
+      const id = (await quotes.requestIdByToken(token)) ?? notFound('Quote Request');
+      await quotes.recordTradieReply(id, { kind: 'decline', text: 'NO', pdfFileId: null });
+    },
+
+    /** The visit a Tradie's Mark done or Need another time link is about. Reading it changes nothing. */
+    tradieVisit: (token: string, kind: 'repair' | 'inspection') => scheduling.tradieVisit(token, kind),
+
+    /** Mark job done, or mark a Site Inspection done. The same as replying DONE. */
+    markTradieVisitDone: (token: string, kind: 'repair' | 'inspection') => scheduling.markTradieVisitDone(token, kind),
+
+    /** Need another time. A repair starts a new offer round; a Site Inspection is rescheduled as before. */
+    tradieNeedsAnotherTime: (token: string, kind: 'repair' | 'inspection') => scheduling.tradieNeedsAnotherTime(token, kind),
+
+    /** The Tenant's confirm page for one offered time. Reading it never books. */
+    visitOffer: (token: string, pick?: string) => scheduling.visitOffer(token, pick),
+
+    /** The page for a booked visit's confirm link. Reading it never confirms. */
+    visitConfirmation: (token: string) => scheduling.visitConfirmation(token),
+
+    /** Records the Tenant's confirmation of a booked visit, and stops waiting for YES. */
+    confirmBookedVisit: (token: string) => scheduling.confirmBookedVisit(token),
+
+    /** The Tenant asks for another time. A repair starts a new offer round; a Site Inspection is rescheduled as before. */
+    askToMoveVisit: (token: string) => scheduling.askToMoveVisit(token),
+
+    /** Books the time the Tenant picked. The visit is confirmed, because they chose it. A booked visit moves instead. */
+    pickVisitTime: (token: string, pick: string) => scheduling.pickVisitTime(token, pick),
+
+    /** The Tenant asks for another time. The visit stays booked until they pick a new one. */
+    requestAnotherTime: (token: string) => scheduling.requestAnotherTime(token),
+
+    /** None of the times work. Saves when the Tenant is home and asks the Tradie to offer again. */
+    declineVisitTimes: (token: string, input: { availability: string; note: string }) => scheduling.declineVisitTimes(token, input),
+
     /** The Tenant's progress tracker, reached by its no-login link. */
     tracker: (token: string) => tickets.tracker(token),
 
@@ -377,8 +416,11 @@ export function createApp(
           scheduling.freeSlots(agencyId, tradieId, options),
         sendWorkOrder: (jobId: number, options?: { start?: string; durationMinutes?: number }) =>
           scheduling.sendWorkOrder(agencyId, jobId, options),
+        /** Asks the Tradie to offer visit times, including when a visit is already booked. */
+        askTradieToOfferTimes: (jobId: number) => scheduling.askTradieToOfferTimes(agencyId, jobId),
         suggestTimes: (workOrderId: number) => scheduling.suggestTimes(agencyId, workOrderId),
         acceptTime: (workOrderId: number, start: string) => scheduling.acceptTime(agencyId, workOrderId, start),
+        resendVisitEmail: (workOrderId: number, to: 'tenant' | 'tradie') => scheduling.queueVisitEmailResend(agencyId, workOrderId, to),
         rateTradie: (jobId: number, score: number) => scheduling.rateTradie(agencyId, jobId, score),
 
         // Site Inspections, one Tradie at a time

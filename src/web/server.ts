@@ -13,6 +13,8 @@ import { NO_CONNECTORS, type ChannelConnectors } from './connectors.ts';
 import type { WebEnv } from './env.ts';
 import { landingRoutes } from './pages/landing.ts';
 import { quoteFormPages } from './pages/quote-form.ts';
+import { visitConfirmPages } from './pages/visit-confirm.ts';
+import { visitOfferPages } from './pages/visit-offer.ts';
 import { signupRoutes } from './pages/signup.ts';
 import { pmPages } from './pm-pages.ts';
 import { rateLimit } from './rate-limit.ts';
@@ -57,12 +59,16 @@ export function createWebApp(deps: {
   // pages than a person would. RATE_LIMIT_UPLOADS raises the cap for that run.
   const uploadMax = Number(process.env.RATE_LIMIT_UPLOADS);
   const uploads = rateLimit({ max: uploadMax > 0 ? uploadMax : 20, windowMs: 60_000 });
-  for (const path of ['/t/*', '/api/t/*']) web.use(path, links);
+  for (const path of ['/t/*', '/api/t/*', '/v/*']) web.use(path, links);
   for (const path of ['/u/*', '/api/u/*', '/q/*']) web.use(path, uploads);
   web.route('/', assetRoutes());
   web.route('/', tenantPages(deps.app));
   // The no-login Tradie quote page (Estimate, then Firm Quote).
   web.route('/', quoteFormPages(deps.app));
+  // The Tenant confirms a booked visit, or asks for another time. A GET only shows the page.
+  web.route('/', visitConfirmPages(deps.app));
+  // The Tenant picks a visit time. A GET only shows the button.
+  web.route('/', visitOfferPages(deps.app));
   web.route('/', createHttpApp(deps.app, deps));
   web.route('/', authRoutes(deps.app, deps.sessions));
   web.route('/', signupRoutes(deps.app, deps.sessions));

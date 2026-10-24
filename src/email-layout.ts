@@ -74,7 +74,13 @@ const BUTTON_LABELS: [RegExp, string][] = [
   [/progress/i, 'Follow progress'],
 ];
 
+/** A line that is only "<label>: ", with a label of 40 characters or fewer, names its own button. */
+const LABELLED_LINE = /^(.{1,40}):\s*$/;
+
 function buttonLabel(before: string) {
+  const line = before.slice(before.lastIndexOf('\n') + 1).trim();
+  const labelled = LABELLED_LINE.exec(line);
+  if (labelled) return labelled[1]!;
   const lastSentence = before.split(/(?<=[.!?])\s+/).at(-1)!;
   for (const text of [lastSentence, before]) {
     const label = BUTTON_LABELS.find(([pattern]) => pattern.test(text));
@@ -83,12 +89,87 @@ function buttonLabel(before: string) {
   return 'Open link';
 }
 
+/**
+ * "None of these work" declines the choices, "Need another time?" asks to leave a
+ * booked time, and "Can't take this job" declines a Quote Request. The renderer draws
+ * them quieter than a visit time: outlined Harbour on a white fill. Every other button
+ * stays the Harbour fill. The label decides it; a template does not pass a style.
+ */
+const QUIET_BUTTONS = new Set(['None of these work', 'Need another time?', "Can't take this job"]);
+
+/** The plain-text mark on a Tradie's preferred time. The button drops it and says so underneath. */
+const PREFERRED_MARK = ' (preferred)';
+
 /** The button for a link, with its address as text under it. */
-const button = (url: string, label: string) =>
-  `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td bgcolor="${HARBOUR}" style="background-color:${HARBOUR};border-radius:6px;">` +
-  `<a href="${escapeHtml(url)}" style="display:inline-block;padding:12px 24px;font-family:${FONT};font-size:16px;line-height:20px;font-weight:600;color:${SURFACE};text-decoration:none;">${label}</a>` +
-  '</td></tr></table>' +
-  `<p style="margin:8px 0 0;font-family:${FONT};font-size:13px;line-height:20px;color:${SLATE};word-break:break-all;"><a href="${escapeHtml(url)}" style="color:${SLATE};text-decoration:underline;">${escapeHtml(url)}</a></p>`;
+const button = (url: string, label: string) => {
+  const preferred = label.endsWith(PREFERRED_MARK);
+  const shown = preferred ? label.slice(0, -PREFERRED_MARK.length) : label;
+  const quiet = QUIET_BUTTONS.has(shown);
+  const cell = quiet
+    ? `bgcolor="${SURFACE}" style="background-color:${SURFACE};border:1px solid ${HARBOUR};border-radius:6px;"`
+    : `bgcolor="${HARBOUR}" style="background-color:${HARBOUR};border-radius:6px;"`;
+  const text = quiet ? HARBOUR : SURFACE;
+  const note = preferred
+    ? `<p style="margin:8px 0 0;font-family:${FONT};font-size:13px;line-height:20px;color:${SLATE};">${escapeHtml("Tradie's preferred time")}</p>`
+    : '';
+  return (
+    `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td ${cell}>` +
+    `<a href="${escapeHtml(url)}" style="display:inline-block;padding:12px 24px;font-family:${FONT};font-size:16px;line-height:20px;font-weight:600;color:${text};text-decoration:none;">${escapeHtml(shown)}</a>` +
+    '</td></tr></table>' +
+    note +
+    `<p style="margin:8px 0 0;font-family:${FONT};font-size:13px;line-height:20px;color:${SLATE};word-break:break-all;"><a href="${escapeHtml(url)}" style="color:${SLATE};text-decoration:underline;">${escapeHtml(url)}</a></p>`
+  );
+};
+
+/** "<Label>: <value>" with a label of 24 characters or fewer. A URL value is a button, not a detail. */
+const DETAIL_LINE = /^(.{1,24}?): (.+)$/;
+
+function detailOf(line: string): { label: string; value: string } | null {
+  const match = DETAIL_LINE.exec(line);
+  if (!match || /^https?:\/\//.test(match[2]!)) return null;
+  return { label: match[1]!, value: match[2]! };
+}
+
+/** A compact two-column table: the label in Slate, the value in Night. Plain text keeps the lines. */
+function detailsTable(details: { label: string; value: string }[]) {
+  return (
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">' +
+    details
+      .map((detail, i) => {
+        const bottom = i === details.length - 1 ? '0' : '8px';
+        return (
+          '<tr>' +
+          `<td width="124" valign="top" style="width:124px;padding:0 16px ${bottom} 0;font-family:${FONT};font-size:14px;line-height:20px;color:${SLATE};">${escapeHtml(detail.label)}</td>` +
+          `<td valign="top" style="padding:0 0 ${bottom};font-family:${FONT};font-size:16px;line-height:24px;color:${NIGHT};">${escapeHtml(detail.value)}</td>` +
+          '</tr>'
+        );
+      })
+      .join('') +
+    '</table>'
+  );
+}
+
+/**
+ * A block's lines. A run of two or more detail lines is one table. Anything else
+ * is paragraphs and buttons, as a paragraph's rows.
+ */
+function rowsOfLines(lines: string[]) {
+  const rows: string[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    if (detailOf(lines[i]!) && detailOf(lines[i + 1] ?? '')) {
+      const details = [];
+      while (i < lines.length && detailOf(lines[i]!)) details.push(detailOf(lines[i++]!)!);
+      rows.push(row(detailsTable(details)));
+      continue;
+    }
+    const start = i;
+    i++;
+    while (i < lines.length && !(detailOf(lines[i]!) && detailOf(lines[i + 1] ?? ''))) i++;
+    rows.push(...paragraphRows(lines.slice(start, i)));
+  }
+  return rows;
+}
 
 /**
  * A paragraph's rows. A link alone, at the end, or after a colon or the end of a
@@ -100,7 +181,10 @@ function paragraphRows(lines: string[]) {
   const rows: string[] = [];
   let start = 0;
   const flush = (end: number) => {
-    const run = text.slice(start, end).trim();
+    let run = text.slice(start, end).trim();
+    // A short "<label>: <url>" line is the button's words, so it is not also a paragraph above it.
+    const lineStart = run.lastIndexOf('\n') + 1;
+    if (LABELLED_LINE.test(run.slice(lineStart))) run = run.slice(0, lineStart).trim();
     if (run) rows.push(row(paragraph(run)));
   };
   for (const match of text.matchAll(URL_PATTERN)) {
@@ -149,7 +233,7 @@ export function renderEmail({ agencyName, subject, text }: EmailContent): string
 <tr><td colspan="5" height="32" style="height:32px;font-size:0;line-height:0;">&nbsp;</td></tr>
 ${blocksOf(text)
   .flatMap(blocksIn)
-  .flatMap((block) => (block.kind === 'list' ? [row(list(block.start, block.items), { wattle: true })] : paragraphRows(block.lines)))
+  .flatMap((block) => (block.kind === 'list' ? [row(list(block.start, block.items), { wattle: true })] : rowsOfLines(block.lines)))
   .join(SPACER + '\n')}
 <tr><td colspan="5" height="32" style="height:32px;font-size:0;line-height:0;">&nbsp;</td></tr>
 </table>

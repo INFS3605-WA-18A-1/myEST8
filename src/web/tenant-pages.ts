@@ -281,6 +281,8 @@ type Step = {
   trade?: Trade;
   visitConfirmed?: boolean;
   rescheduleRequested?: boolean;
+  rescheduleRequestedBy?: string;
+  anotherTimeLink?: string;
   visits?: { tradie: string; visitStart: string; done: boolean }[];
 };
 
@@ -328,8 +330,9 @@ function statusLine(step: Step, agencyName: string, timeZone: string): string {
       return `The repair is approved. ${agencyName} is booking a visit next.`;
     case 'booked': {
       const booked = step.visitStart ? `${whoIsComing(step)} is booked for ${formatWhen(step.visitStart, timeZone)}.` : `${whoIsComing(step)} is booked.`;
-      if (step.rescheduleRequested) return `${booked} You asked for another time, so ${agencyName} will be in touch with a new one.`;
-      return step.visitConfirmed ? `${booked} Thanks for confirming you'll be there.` : `${booked} ${CONFIRM_VISIT}`;
+      if (step.rescheduleRequestedBy === 'tenant') return `${booked} You asked for another time. This visit stays booked until you pick a new one.`;
+      if (step.rescheduleRequested) return `${booked} This visit stays booked until you pick a new one.`;
+      return step.visitConfirmed ? `${booked} Thanks for confirming you'll be there.` : booked;
     }
     case 'fixed':
       return 'The repair is done. Thanks for letting us know about it.';
@@ -369,20 +372,23 @@ function trackerPage(progress: Tracker, link: string): Html {
   });
 }
 
-/** Asked of the Tenant until they have confirmed the repair visit, in the words of their booking message. */
-const CONFIRM_VISIT = "Please confirm you'll be home or can let the tradie in: reply YES to our message.";
-
 /**
  * The lines under a step: each Site visit booked or done; for the repair visit, who is
- * coming and when, then whether the Tenant has confirmed they'll be in; or else when it happened.
+ * coming and when, then whether the Tenant has confirmed they'll be in, and the link to
+ * ask for another time; or else when it happened.
  */
-function stepDetail(s: Step, timeZone: string): string[] {
-  if (s.visits?.length) return s.visits.map((v) => (v.done ? `${v.tradie}: visited ${formatWhen(v.visitStart, timeZone)}` : `${v.tradie}: booked for ${formatWhen(v.visitStart, timeZone)}`));
+function stepDetail(s: Step, timeZone: string): Html[] {
+  if (s.visits?.length) return s.visits.map((v) => html`${v.done ? `${v.tradie}: visited ${formatWhen(v.visitStart, timeZone)}` : `${v.tradie}: booked for ${formatWhen(v.visitStart, timeZone)}`}`);
   if (s.visitStart) {
-    const confirm = s.done ? [] : [s.rescheduleRequested ? 'You asked for another time' : s.visitConfirmed ? 'Confirmed' : CONFIRM_VISIT];
-    return [...(s.tradie ? [s.tradie] : []), `Visit ${formatWhen(s.visitStart, timeZone)}`, ...confirm];
+    const lines: Html[] = [...(s.tradie ? [html`${s.tradie}`] : []), html`Visit ${formatWhen(s.visitStart, timeZone)}`];
+    if (!s.done) {
+      if (s.rescheduleRequestedBy === 'tenant') lines.push(html`You asked for another time`);
+      else if (s.visitConfirmed) lines.push(html`Confirmed`);
+      if (s.anotherTimeLink) lines.push(html`<a href="${s.anotherTimeLink}">Need another time?</a>`);
+    }
+    return lines;
   }
-  return s.at ? [formatWhen(s.at, timeZone)] : [];
+  return s.at ? [html`${formatWhen(s.at, timeZone)}`] : [];
 }
 
 /**
