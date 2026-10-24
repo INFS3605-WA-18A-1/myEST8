@@ -29,8 +29,10 @@ import {
   formatWhen,
   humanise,
   linkButton,
+  othersUsing,
   page,
   postButton,
+  sharedAddressNote,
   rowLink,
   section,
   sectionHeader,
@@ -120,6 +122,7 @@ async function profilePage(c: Context<WebEnv>, id: number, refused?: DetailsEdit
   const { timeZone } = actions.agency();
   // Someone who has left their Property has no details to edit: their addresses are free for others.
   const editing = tenant.property !== null && (!!refused || c.req.query('edit') === 'details');
+  const people = editing ? [] : await actions.people();
   return c.html(
     page({
       title: tenant.name,
@@ -131,10 +134,16 @@ async function profilePage(c: Context<WebEnv>, id: number, refused?: DetailsEdit
         ? html`Tenant at ${entityLink('property', tenant.property.address, `/properties/${tenant.property.propertyId}`)}`
         : 'Former Tenant: no longer at a Property',
       actions: html`${tenant.property ? removeButton(tenant.tenantId, tenant.name, tenant.property.address) : ''}${linkButton('Back to Tenants', '/tenants', { variant: 'ghost', size: 'sm' })}`,
-      body: html`${refused && !editing ? alert(refused.message, 'error') : ''}${facts(tenant, editing, refused)} ${ticketsSection(tenant, timeZone)} ${requestsSection(tenant, timeZone)} ${reimbursementsSection(tenant, timeZone)}`,
+      body: html`${refused && !editing ? alert(refused.message, 'error') : ''}${facts(tenant, editing, refused, people)} ${ticketsSection(tenant, timeZone)} ${requestsSection(tenant, timeZone)} ${reimbursementsSection(tenant, timeZone)}`,
     }),
     refused ? 400 : 200,
   );
+}
+
+/** The address, and a quiet note of who else in the Agency uses it. */
+function contactDetail(kind: 'mobile' | 'email', value: string | null, people: Parameters<typeof othersUsing>[0], selfId: number): Html | string {
+  if (!value) return '—';
+  return html`${contactLink(kind, value)}${sharedAddressNote('Also', othersUsing(people, value, selfId))}`;
 }
 
 /** A mobile number and an email, each a link on its own line, or a dash for neither. */
@@ -208,7 +217,7 @@ function addForm(properties: Property[], refused: Html): Html {
  * Where they live, who manages it, and how and when to reach them, with a pen to edit the name, mobile and
  * email. Editing, the form takes the facts' place, filled in from the Tenant or from what was posted.
  */
-function facts(t: TenantView, editing: boolean, refused?: DetailsEdit): Html {
+function facts(t: TenantView, editing: boolean, refused: DetailsEdit | undefined, people: Parameters<typeof othersUsing>[0]): Html {
   if (editing) {
     const values = refused?.values ?? { name: t.name, mobile: t.mobile ?? '', email: t.email ?? '' };
     return html`<section class="section" id="details" aria-label="Tenant details">
@@ -227,8 +236,8 @@ function facts(t: TenantView, editing: boolean, refused?: DetailsEdit): Html {
           ['Property', t.property ? entityLink('property', t.property.address, `/properties/${t.property.propertyId}`) : html`<span class="text-muted">No Property</span>`],
           ['Property Manager', t.propertyManager ?? '—'],
           ['Tenant since', t.tenancyStart ? formatDate(t.tenancyStart) : '—'],
-          ['Mobile', t.mobile ? contactLink('mobile', t.mobile) : '—'],
-          ['Email', t.email ? contactLink('email', t.email) : '—'],
+          ['Mobile', contactDetail('mobile', t.mobile, people, t.tenantId)],
+          ['Email', contactDetail('email', t.email, people, t.tenantId)],
           ['Usually home', t.availability ? humanise(t.availability) : html`<span class="text-muted">Not asked yet</span>`],
         ])}
       </div>

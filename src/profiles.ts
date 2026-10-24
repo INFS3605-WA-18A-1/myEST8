@@ -246,6 +246,11 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
     return toPerson(row);
   }
 
+  /**
+   * Remembers an address as this person's, so a message from it can be matched to them.
+   * Several people may share one: `contact_addresses` keeps a single row (its key is the
+   * Agency and the address), and the others are found from their own email or mobile.
+   */
   async function addAddress(agencyId: number, personId: number, address: string) {
     const normalized = normalizeAddress(address);
     const existing = await one<{ person_id: number }>(
@@ -254,7 +259,6 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
       agencyId,
       normalized,
     );
-    if (existing && existing.person_id !== personId) invalid(`${address} already belongs to someone else`, address.includes('@') ? 'email' : 'mobile');
     if (!existing) await run(db, 'INSERT INTO contact_addresses (agency_id, address, person_id) VALUES (?, ?, ?)', agencyId, normalized, personId);
   }
 
@@ -497,8 +501,8 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
     /**
      * Changes a person's name, mobile and email, and moves the addresses messages are matched on with
      * them: a new mobile or email is theirs from now on, the old one no longer reaches them, and an address
-     * a Property Manager linked from the inbox stays. A Tradie's business name and Trades change too
-     * when given. Refuses an address someone else in the Agency already holds, changing nothing.
+     * a Property Manager linked from the inbox stays. Someone else in the Agency may already use the new
+     * one; both keep it. A Tradie's business name and Trades change too when given.
      */
     async updatePerson(personId: number, input: { name: string; mobile?: string; email?: string; businessName?: string; trades?: Trade[] }) {
       await transaction(db, async () => {
@@ -568,26 +572,29 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
       return toPerson(row);
     },
 
-    /** Finds who sent a message: their role, Agency and Properties. */
-    async findByAddress(agencyId: number, address: string) {
-      const row = await one<PersonRow>(
+    /**
+     * Every active person an address belongs to: their own email or mobile, and any address
+     * linked from the inbox (`contact_addresses` keeps one row per address). A removed person,
+     * and a Tenant who has left their Property, no longer match.
+     */
+    async findByAddress(agencyId: number, address: string): Promise<Person[]> {
+      const normalized = normalizeAddress(address);
+      const active = `people.removed_at IS NULL AND (people.role <> 'tenant' OR people.property_id IS NOT NULL)`;
+      const rows = await all<PersonRow>(
         db,
-        `SELECT people.* FROM contact_addresses JOIN people ON people.id = contact_addresses.person_id
-         WHERE contact_addresses.agency_id = ? AND contact_addresses.address = ?`,
+        `SELECT people.* FROM people
+         WHERE people.agency_id = ? AND ${active} AND (people.mobile = ? OR people.email = ?)
+         UNION
+         SELECT people.* FROM contact_addresses JOIN people ON people.id = contact_addresses.person_id
+         WHERE contact_addresses.agency_id = ? AND contact_addresses.address = ? AND ${active}
+         ORDER BY id`,
         agencyId,
-        normalizeAddress(address),
+        normalized,
+        normalized,
+        agencyId,
+        normalized,
       );
-      if (!row) return null;
-      const propertyIds =
-        row.role === 'tenant'
-          ? [row.property_id!]
-          : (await all<{ id: number }>(
-              db,
-              'SELECT id FROM properties WHERE owner_id = ? OR building_manager_id = ? ORDER BY id',
-              row.id,
-              row.id,
-            )).map((p) => p.id);
-      return { personId: row.id, role: row.role, agencyId: row.agency_id, propertyIds };
+      return rows.map(toPerson);
     },
 
     async linkAddress(agencyId: number, personId: number, address: string) {

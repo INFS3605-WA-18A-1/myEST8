@@ -75,13 +75,20 @@ describe('editing a Tenant', () => {
     expect(await w.alice.tenant(w.ids.tom)).toMatchObject({ name: 'Tom Tran', mobile: TOM, email: null });
   });
 
-  test('a mobile or email someone else in the Agency holds is refused naming the field, and nothing changes', async () => {
+  test('a mobile or email someone else in the Agency holds is kept by both', async () => {
     const w = await world();
 
-    expect((await refusal(w.alice.editTenant(w.ids.tom, { name: 'Tom Tran', mobile: HANA }))).fields).toEqual({ mobile: `${HANA} already belongs to someone else` });
-    expect((await refusal(w.alice.editTenant(w.ids.tom, { name: 'Tom Tran', mobile: PETE }))).fields.mobile).toBe(`${PETE} already belongs to someone else`);
-    expect((await refusal(w.alice.editTenant(w.ids.tom, { name: 'Tom Tran', mobile: TOM, email: QUICK_PIPES }))).fields).toEqual({ email: `${QUICK_PIPES} already belongs to someone else` });
-    expect(await w.alice.tenant(w.ids.tom)).toMatchObject({ mobile: TOM, email: null });
+    await w.alice.editTenant(w.ids.tom, { name: 'Tom Tran', mobile: HANA });
+    expect(await w.alice.tenant(w.ids.tom)).toMatchObject({ name: 'Tom Tran', mobile: HANA, email: null });
+    expect(await w.alice.tenant(w.ids.hana)).toMatchObject({ mobile: HANA });
+
+    await w.alice.editTenant(w.ids.tom, { name: 'Tom Tran', mobile: PETE });
+    expect(await w.alice.tenant(w.ids.tom)).toMatchObject({ mobile: PETE });
+    expect(await w.alice.tradie(w.ids.pete)).toMatchObject({ mobile: PETE });
+
+    await w.alice.editTenant(w.ids.tom, { name: 'Tom Tran', mobile: TOM, email: QUICK_PIPES });
+    expect(await w.alice.tenant(w.ids.tom)).toMatchObject({ mobile: TOM, email: QUICK_PIPES });
+    expect(await w.alice.tradie(w.ids.quick)).toMatchObject({ email: QUICK_PIPES });
   });
 
   test("another Agency's Tenant and someone who is not a Tenant are not found, and a Tenant who has left is refused", async () => {
@@ -137,12 +144,16 @@ describe('editing a Tradie', () => {
     expect(await w.alice.tradie(w.ids.pete)).toMatchObject({ name: 'Pete Park', businessName: "Pete's Plumbing", mobile: PETE });
   });
 
-  test('a mobile or email someone else in the Agency holds is refused naming the field', async () => {
+  test('a mobile or email someone else in the Agency holds is kept by both', async () => {
     const w = await world();
 
-    expect((await refusal(w.alice.editTradie(w.ids.pete, { ...edit, mobile: TOM }))).fields).toEqual({ mobile: `${TOM} already belongs to someone else` });
-    expect((await refusal(w.alice.editTradie(w.ids.pete, { ...edit, email: QUICK_PIPES }))).fields).toEqual({ email: `${QUICK_PIPES} already belongs to someone else` });
-    expect(await w.alice.tradie(w.ids.pete)).toMatchObject({ mobile: PETE, email: null });
+    await w.alice.editTradie(w.ids.pete, { ...edit, mobile: TOM });
+    expect(await w.alice.tradie(w.ids.pete)).toMatchObject({ mobile: TOM });
+    expect(await w.alice.tenant(w.ids.tom)).toMatchObject({ mobile: TOM });
+
+    await w.alice.editTradie(w.ids.pete, { ...edit, email: QUICK_PIPES });
+    expect(await w.alice.tradie(w.ids.pete)).toMatchObject({ mobile: NEW_MOBILE_E164, email: QUICK_PIPES });
+    expect(await w.alice.tradie(w.ids.quick)).toMatchObject({ email: QUICK_PIPES });
   });
 
   test("another Agency's Tradie and someone who is not a Tradie are not found", async () => {

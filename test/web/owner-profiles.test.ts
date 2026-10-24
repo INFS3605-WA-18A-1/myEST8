@@ -86,7 +86,7 @@ describe('a Property Owner profile', () => {
     expect(page).toContain('href="/owners"');
   });
 
-  test('?edit=details shows Save and Cancel, a save comes back saved, and a refused save names the field', async () => {
+  test("?edit=details shows Save and Cancel, a save comes back saved, and a Tenant's email is saved too", async () => {
     const w = await webWorld();
     const cookie = await w.signIn();
 
@@ -109,9 +109,10 @@ describe('a Property Owner profile', () => {
     expect(visible(after)).toContain('Details saved.');
     expect(after).toContain('href="mailto:olivia.owen@example.com"');
 
-    const refused = await w.post(`/owners/${w.ids.olivia}/details`, { name: 'Olivia Owen', mobile: OLIVIA, email: 'hana@example.com' }, cookie);
-    expect(refused.status).toBe(400);
-    expect(detailsOf(await refused.text())).toMatch(/<p id="owner-email-error" class="field-error">hana@example.com already belongs to someone else<\/p>/);
+    const shared = await w.post(`/owners/${w.ids.olivia}/details`, { name: 'Olivia Owen', mobile: OLIVIA, email: 'hana@example.com' }, cookie);
+    expect(shared.status).toBe(303);
+    expect(await (await w.get(shared.headers.get('location')!, cookie)).text()).toContain('href="mailto:hana@example.com"');
+    expect(await w.alice.tenant(w.ids.hana)).toMatchObject({ email: 'hana@example.com' });
   });
 
   test('Remove asks first, and is refused while they own a Property, naming it', async () => {
