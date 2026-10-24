@@ -200,6 +200,15 @@ describe('links', () => {
     expect(html).not.toContain('None of these work:');
   });
 
+  test('a time is a Harbour button, and None of these work is an outlined Harbour button on white', () => {
+    const html = render(
+      'Tue 27 Oct, 9:00 am: https://myest8.test/v/abc?pick=1\n\n' +
+        'None of these work: https://myest8.test/v/abc?pick=none',
+    );
+    expect(html).toMatch(/<td bgcolor="#1F5C8B"[^>]*>\s*<a [^>]*color:#FFFFFF[^>]*>Tue 27 Oct, 9:00 am<\/a>/);
+    expect(html).toMatch(/<td bgcolor="#FFFFFF"[^>]*border:1px solid #1F5C8B[^>]*>\s*<a [^>]*color:#1F5C8B[^>]*>None of these work<\/a>/);
+  });
+
   test('a label of 40 characters names the button, and one of 41 falls back to Open link', () => {
     const forty = 'a'.repeat(40);
     const fortyOne = 'a'.repeat(41);

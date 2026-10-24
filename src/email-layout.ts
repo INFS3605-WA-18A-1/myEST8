@@ -89,12 +89,27 @@ function buttonLabel(before: string) {
   return 'Open link';
 }
 
+/**
+ * "None of these work" declines the choices, so the renderer draws it quieter than them:
+ * outlined Harbour on a white fill. Every other button stays the Harbour fill. The label
+ * decides it; a template does not pass a style.
+ */
+const QUIET_BUTTON = 'None of these work';
+
 /** The button for a link, with its address as text under it. */
-const button = (url: string, label: string) =>
-  `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td bgcolor="${HARBOUR}" style="background-color:${HARBOUR};border-radius:6px;">` +
-  `<a href="${escapeHtml(url)}" style="display:inline-block;padding:12px 24px;font-family:${FONT};font-size:16px;line-height:20px;font-weight:600;color:${SURFACE};text-decoration:none;">${escapeHtml(label)}</a>` +
-  '</td></tr></table>' +
-  `<p style="margin:8px 0 0;font-family:${FONT};font-size:13px;line-height:20px;color:${SLATE};word-break:break-all;"><a href="${escapeHtml(url)}" style="color:${SLATE};text-decoration:underline;">${escapeHtml(url)}</a></p>`;
+const button = (url: string, label: string) => {
+  const quiet = label === QUIET_BUTTON;
+  const cell = quiet
+    ? `bgcolor="${SURFACE}" style="background-color:${SURFACE};border:1px solid ${HARBOUR};border-radius:6px;"`
+    : `bgcolor="${HARBOUR}" style="background-color:${HARBOUR};border-radius:6px;"`;
+  const text = quiet ? HARBOUR : SURFACE;
+  return (
+    `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td ${cell}>` +
+    `<a href="${escapeHtml(url)}" style="display:inline-block;padding:12px 24px;font-family:${FONT};font-size:16px;line-height:20px;font-weight:600;color:${text};text-decoration:none;">${escapeHtml(label)}</a>` +
+    '</td></tr></table>' +
+    `<p style="margin:8px 0 0;font-family:${FONT};font-size:13px;line-height:20px;color:${SLATE};word-break:break-all;"><a href="${escapeHtml(url)}" style="color:${SLATE};text-decoration:underline;">${escapeHtml(url)}</a></p>`
+  );
+};
 
 /**
  * A paragraph's rows. A link alone, at the end, or after a colon or the end of a
