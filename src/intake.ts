@@ -69,6 +69,22 @@ const TRADE_QUESTION = question(
   TRADE_OPTIONS,
 );
 
+/**
+ * Confidence at which a `risk` answer takes the Urgent path whatever Urgency
+ * said. Tuned for missing a real risk being the worst outcome: a clear risk
+ * is never left as a routine repair.
+ */
+const SAFETY_RISK_CONFIDENCE = 0.9;
+
+const SAFETY_QUESTION = question(
+  'safety',
+  "Does `message` describe a risk to people's safety? Judge the danger to people, not how soon the repair is needed and not whether an essential service is merely out. When the state has `answers`, they are the Tenant's replies: use them too.",
+  [
+    option('no_risk', 'Nothing here threatens people: a fault or a nuisance, a leak that is not near electrics, no power, no water or no hot water, or a lock that still secures the Property'),
+    option('risk', 'A risk to people: a gas smell or leak, sparking or exposed wiring, flooding near electrics, structural collapse, no lock on an entry door, or carbon monoxide'),
+  ],
+);
+
 const NOT_AN_ANSWER = option('not_an_answer', 'The message is not a reply to that question: it is about something else, or says nothing that answers it');
 
 /**
@@ -228,11 +244,17 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
     return (await modules.tickets.resolveRef(ref))?.issueId ?? null;
   }
 
-  // --- Urgency and Trade ---
+  // --- Urgency, safety and Trade ---
 
   function readUrgency(answers: Answers): { urgency: Urgency; checkUrgency: boolean } {
     // An unsure Urgency is treated as High and flagged, never as Urgent.
     return sure(answers, 'urgency') ? { urgency: pick(answers, 'urgency') as Urgency, checkUrgency: false } : { urgency: 'high', checkUrgency: true };
+  }
+
+  /** A safety risk this sure overrides Urgency. Anything less sure, or no answer, leaves Urgency to decide. */
+  function safetyRisk(answers: Answers): { risk: boolean; confidence: number } {
+    const confidence = answers.safety?.confidence ?? 0;
+    return { risk: answers.safety?.answer === 'risk' && confidence >= SAFETY_RISK_CONFIDENCE, confidence };
   }
 
   function readTrade(answers: Answers): { trade: Trade; checkTrade: boolean } {
@@ -262,6 +284,7 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
         itemOptions(openItems, 'It is not about any open item: it reports a different problem, or nothing in `openItems` fits'),
       ),
       URGENCY_QUESTION,
+      SAFETY_QUESTION,
       TRADE_QUESTION,
       question(
         'updateType',
@@ -305,16 +328,19 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
   }
 
   async function startIssue(msg: Received, tenant: Person, property: Property, answers: Answers) {
+    const safety = safetyRisk(answers);
     const issueId = await modules.tickets.createIssue({
       agencyId: tenant.agencyId,
       propertyId: property.id,
       tenantId: tenant.id,
       description: msg.text,
-      ...readUrgency(answers),
+      ...(safety.risk ? { urgency: 'urgent' as const, checkUrgency: false } : readUrgency(answers)),
       ...readTrade(answers),
     });
     await logInbound(msg, tenant.id, issueId);
-    if ((await modules.tickets.issue(issueId)).urgency === 'urgent') return startUrgentRepair(issueId);
+    if ((await modules.tickets.issue(issueId)).urgency === 'urgent') {
+      return startUrgentRepair(issueId, safety.risk ? { answer: 'risk', confidence: safety.confidence } : undefined);
+    }
     // Photos sent with the first message are the issue's photos; other attachments are ignored here.
     const arrived = await savePhotos(issueId, msg.fileIds);
     if (arrived) await modules.tickets.updateIssue(issueId, { photosOnArrival: arrived });
@@ -433,11 +459,12 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
     await worker.schedule('intake.no_photos', { issueId, stage: 'awaiting_photos' }, addMs(clock.now(), NO_PHOTOS_TIMEOUT_MS));
   }
 
-  async function startUrgentRepair(issueId: number) {
+  async function startUrgentRepair(issueId: number, safety?: { answer: 'risk'; confidence: number }) {
     const issue = await modules.tickets.issue(issueId);
-    const { receiptToken } = await modules.tickets.createUrgentRepair(issueId);
+    const repair = await modules.tickets.createUrgentRepair(issueId, safety);
     if ((await awaitingFrom(issue.tenantId)).some((a) => a.kind === 'guided' && a.issueId === issueId)) await stopWaiting(issue.tenantId, 'guided');
-    await sendReceiptReminder(issueId, receiptToken);
+    await sendReceiptReminder(issueId, repair.receiptToken);
+    return repair;
   }
 
   /** What to do now, the Property's Nominated Tradies, and the link for the receipt the Reimbursement Request needs. */

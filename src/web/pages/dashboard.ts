@@ -355,20 +355,28 @@ function requestRow(r: MaintenanceRequest, q: string, now: Date): Html {
 
 /** Each alert says what is wrong, on which Property, with the next step as its action. */
 function alertRow(alert: Alert, timeZone: string): Html {
-  const ticket = `/tickets/${alert.ticketId}`;
   switch (alert.kind) {
+    case 'safety_risk':
+      return queueRow({
+        href: `/reimbursements/${alert.urgentRepairId}`,
+        title: `Safety risk: ${alert.description}`,
+        detail: streetOf(alert.propertyAddress),
+        badges: [badge('Safety', 'error')],
+        decision: true,
+        actions: linkButton('Review the Urgent Repair', `/reimbursements/${alert.urgentRepairId}`, { size: 'sm' }),
+      });
     case 'invite_more_tradies':
       return queueRow({
-        href: ticket,
+        href: `/tickets/${alert.ticketId}`,
         title: `Only ${alert.confirmedQuotes} confirmed ${alert.confirmedQuotes === 1 ? 'Quote' : 'Quotes'} after 72 hours`,
         detail: streetOf(alert.propertyAddress),
         badges: [badge('Quotes', 'warning')],
         decision: true,
-        actions: linkButton('Ask more Tradies', `${ticket}#job-${alert.jobId}-tradies`, { size: 'sm' }),
+        actions: linkButton('Ask more Tradies', `/tickets/${alert.ticketId}#job-${alert.jobId}-tradies`, { size: 'sm' }),
       });
     case 'owner_no_reply':
       return queueRow({
-        href: ticket,
+        href: `/tickets/${alert.ticketId}`,
         title: `${alert.ownerName}, the Property Owner, hasn't replied since ${formatWhen(alert.requestedAt, timeZone)}`,
         detail: streetOf(alert.propertyAddress),
         badges: [badge('Approval', 'warning')],
@@ -377,12 +385,12 @@ function alertRow(alert: Alert, timeZone: string): Html {
       });
     case 'rating_due':
       return queueRow({
-        href: ticket,
+        href: `/tickets/${alert.ticketId}`,
         title: `${alert.businessName} finished the Job`,
         detail: streetOf(alert.propertyAddress),
         badges: [badge('Rating', 'info')],
         decision: true,
-        actions: linkButton('Rate the Tradie', `${ticket}#job-${alert.jobId}`, { size: 'sm' }),
+        actions: linkButton('Rate the Tradie', `/tickets/${alert.ticketId}#job-${alert.jobId}`, { size: 'sm' }),
       });
   }
 }

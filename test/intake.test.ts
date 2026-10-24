@@ -397,6 +397,124 @@ describe('an Urgent issue', () => {
   });
 });
 
+describe('a safety check on a new report', () => {
+  const GAS = 'I can smell gas in the kitchen';
+
+  test('a gas smell classified as a risk at 0.95 goes Urgent even when Urgency says routine', async () => {
+    const { h, alice } = await world();
+    h.classifier.when(GAS, {
+      messageClass: 'new_issue',
+      relatedItem: 'none',
+      urgency: 'routine',
+      trade: 'plumbing',
+      safety: ['risk', 0.95],
+    });
+
+    await h.receive(TOM, GAS);
+
+    expect(h.messenger.last(TOM)!.template).toBe('tenant.urgent_repair_reminder');
+    expect((await alice.dashboard()).maintenanceRequests).toEqual([]);
+    expect((await alice.dashboard()).urgentRepairs).toMatchObject([
+      { propertyAddress: KING_ST, tenantName: 'Tom Tran', description: GAS, status: 'reminder_sent' },
+    ]);
+  });
+
+  test('a risk at 0.6 does not override a routine Urgency', async () => {
+    const { h, alice } = await world();
+    h.classifier.when(GAS, {
+      messageClass: 'new_issue',
+      relatedItem: 'none',
+      urgency: 'routine',
+      trade: 'plumbing',
+      safety: ['risk', 0.6],
+    });
+
+    await h.receive(TOM, GAS);
+
+    expect(h.messenger.templatesTo(TOM)).toEqual(['tenant.acknowledgement', 'tenant.missing_details']);
+    expect((await alice.dashboard()).urgentRepairs).toEqual([]);
+    expect((await alice.dashboard()).alerts).toEqual([]);
+  });
+
+  test('a no_risk answer leaves Urgency to decide', async () => {
+    const { h, alice } = await world();
+    h.classifier.when(GAS, {
+      messageClass: 'new_issue',
+      relatedItem: 'none',
+      urgency: 'routine',
+      trade: 'plumbing',
+      safety: 'no_risk',
+    });
+
+    await h.receive(TOM, GAS);
+
+    expect(h.messenger.templatesTo(TOM)).toEqual(['tenant.acknowledgement', 'tenant.missing_details']);
+    expect((await alice.dashboard()).urgentRepairs).toEqual([]);
+    expect((await alice.dashboard()).alerts).toEqual([]);
+  });
+
+  test('the Property Manager gets an alert naming the risk', async () => {
+    const { h, alice, bob } = await world();
+    h.classifier.when(GAS, {
+      messageClass: 'new_issue',
+      relatedItem: 'none',
+      urgency: 'routine',
+      trade: 'plumbing',
+      safety: ['risk', 0.95],
+    });
+
+    await h.receive(TOM, GAS);
+
+    const [repair] = (await alice.dashboard()).urgentRepairs;
+    expect((await alice.dashboard()).alerts).toMatchObject([
+      { kind: 'safety_risk', urgentRepairId: repair!.urgentRepairId, propertyAddress: KING_ST, description: GAS, answer: 'risk', confidence: 0.95 },
+    ]);
+    expect((await bob.dashboard()).alerts).toEqual([]);
+  });
+
+  test('the safety answer and its confidence are recorded on the Urgent Repair timeline', async () => {
+    const { h, alice } = await world();
+    h.classifier.when(GAS, {
+      messageClass: 'new_issue',
+      relatedItem: 'none',
+      urgency: 'routine',
+      trade: 'plumbing',
+      safety: ['risk', 0.95],
+    });
+
+    await h.receive(TOM, GAS);
+
+    const [repair] = (await alice.dashboard()).urgentRepairs;
+    const timeline = (await alice.reimbursement(repair!.urgentRepairId)).timeline;
+    expect(timeline.map((e) => e.kind)).toEqual(['reported', 'safety', 'reminder_sent']);
+    expect(timeline[1]).toMatchObject({ answer: 'risk', confidence: 0.95 });
+  });
+
+  test('the safety question is sent in the same classify call as the others', async () => {
+    const { h } = await world();
+    h.classifier.when(GAS, {
+      messageClass: 'new_issue',
+      relatedItem: 'none',
+      urgency: 'routine',
+      trade: 'plumbing',
+      safety: ['risk', 0.95],
+    });
+
+    await h.receive(TOM, GAS);
+
+    expect(h.classifier.calls).toHaveLength(1);
+    const safety = h.classifier.calls[0]!.questions.find((q) => q.id === 'safety');
+    expect(h.classifier.calls[0]!.questions.map((q) => q.id)).toEqual(
+      expect.arrayContaining(['messageClass', 'relatedItem', 'urgency', 'trade', 'updateType', 'safety']),
+    );
+    expect(safety?.instructions).toMatch(/risk to people's safety/);
+    expect(safety?.options.map((o) => o.name)).toEqual(['no_risk', 'risk']);
+    expect(safety?.options.find((o) => o.name === 'risk')?.when).toMatch(
+      /gas smell or leak.*sparking or exposed wiring.*flooding near electrics.*structural collapse.*no lock on an entry door.*carbon monoxide/,
+    );
+  });
+});
+
 describe('a Common Area issue', () => {
   test('is passed to the Building Manager and the Tenant is told', async () => {
     const { h, bob } = await world();

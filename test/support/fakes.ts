@@ -92,10 +92,13 @@ export type ScriptedAnswers = Record<string, string | [answer: string, confidenc
  */
 export class FakeClassifier implements Classifier {
   #rules = new Map<string, ScriptedAnswers>();
+  /** Each classify call, so a test can see which questions went out together. */
+  calls: Parameters<Classifier['classify']>[0][] = [];
   when(text: string, answers: ScriptedAnswers) {
     this.#rules.set(text, answers);
   }
   async classify(input: Parameters<Classifier['classify']>[0]) {
+    this.calls.push(input);
     const script = this.#rules.get(input.text);
     if (!script) throw new Error(`FakeClassifier: no script for ${JSON.stringify(input.text)}`);
     const result: Record<string, ClassifierAnswer> = {};
