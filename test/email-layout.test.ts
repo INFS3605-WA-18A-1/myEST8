@@ -181,11 +181,11 @@ describe('links', () => {
     expect(linksOf(html)[0]).toEqual({ href: UPLOAD, text: 'Open link' });
   });
 
-  test('a line that is only a short label, a colon and an address is a button labelled with that text', () => {
+  test('a line that is only a short label, a colon and an address is a button labelled with that text, and the label is not also a paragraph', () => {
     const html = render(
-      'Pick a time.\n\n' +
-        'Tue 27 Oct, 9:00 am: https://myest8.test/v/abc?pick=1\n' +
-        'Wed 28 Oct, 1:00 pm: https://myest8.test/v/abc?pick=2\n' +
+      "Pete's Plumbing (plumbing) can visit. Pick a time.\n\n" +
+        'Tue 27 Oct, 9:00 am: https://myest8.test/v/abc?pick=1\n\n' +
+        'Wed 28 Oct, 1:00 pm: https://myest8.test/v/abc?pick=2\n\n' +
         'None of these work: https://myest8.test/v/abc?pick=none',
     );
     const buttons = linksOf(html).filter((_, i) => i % 2 === 0);
@@ -194,6 +194,10 @@ describe('links', () => {
       { href: 'https://myest8.test/v/abc?pick=2', text: 'Wed 28 Oct, 1:00 pm' },
       { href: 'https://myest8.test/v/abc?pick=none', text: 'None of these work' },
     ]);
+    // The label became the button, so it is not printed again above it.
+    expect(paragraphsOf(html).filter((p) => !p.startsWith('<a '))).toEqual(["Pete&#39;s Plumbing (plumbing) can visit. Pick a time."]);
+    expect(html).not.toContain('Tue 27 Oct, 9:00 am:');
+    expect(html).not.toContain('None of these work:');
   });
 
   test('a label of 40 characters names the button, and one of 41 falls back to Open link', () => {

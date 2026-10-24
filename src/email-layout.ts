@@ -106,7 +106,10 @@ function paragraphRows(lines: string[]) {
   const rows: string[] = [];
   let start = 0;
   const flush = (end: number) => {
-    const run = text.slice(start, end).trim();
+    let run = text.slice(start, end).trim();
+    // A short "<label>: <url>" line is the button's words, so it is not also a paragraph above it.
+    const lineStart = run.lastIndexOf('\n') + 1;
+    if (LABELLED_LINE.test(run.slice(lineStart))) run = run.slice(0, lineStart).trim();
     if (run) rows.push(row(paragraph(run)));
   };
   for (const match of text.matchAll(URL_PATTERN)) {
