@@ -13,6 +13,8 @@ import type {
   Geocoder,
   ImageMatcher,
   ImageMatchResult,
+  JobFitEvidence,
+  JobFitJudge,
   ListingDetails,
   Messenger,
   OutboundMessage,
@@ -180,6 +182,18 @@ export class FakeTradeSuggester implements TradeSuggester {
     this.calls.push(listing);
     if (this.next instanceof Error) throw this.next;
     return this.next;
+  }
+}
+
+/** Judges each Tradie by business name from `scores` (0-3), "Trade only" (1) for the rest; throws `failing` while it is set. */
+export class FakeJobFitJudge implements JobFitJudge {
+  scores = new Map<string, number>();
+  failing: Error | null = null;
+  calls: JobFitEvidence[] = [];
+  async judge(evidence: JobFitEvidence) {
+    this.calls.push(evidence);
+    if (this.failing) throw this.failing;
+    return { score: this.scores.get(evidence.tradie.businessName) ?? 1, confidence: 0.9 };
   }
 }
 

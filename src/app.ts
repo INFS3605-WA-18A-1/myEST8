@@ -56,6 +56,7 @@ export function createApp(
       geocoder: deps.geocoder,
       addressSuggester: deps.addressSuggester,
       tradeSuggester: deps.tradeSuggester,
+      jobFitJudge: deps.jobFitJudge,
       fetchMedia: deps.fetchMedia,
     },
     modules,

@@ -139,6 +139,7 @@ describe('the demo', () => {
     expect(apis).toEqual({
       classifier: 'mock',
       tradeSuggester: 'mock',
+      jobFitJudge: 'mock',
       imageMatcher: 'mock',
       quoteReader: 'mock',
       places: 'mock',
