@@ -36,6 +36,8 @@ export interface Person {
   googlePlaceId: string | null;
   googleRating: number | null;
   googleReviewCount: number | null;
+  /** Tradies only: what their Google listing says they do, read when they were linked to it; null for one linked before that was kept. */
+  googleListing: { types: string[]; summary: string | null } | null;
   /** Tradies only: where they work from, and the point it geocodes to (null until found). */
   businessAddress: string | null;
   location: { lat: number; lng: number } | null;
@@ -119,6 +121,8 @@ type PersonRow = {
   google_place_id: string | null;
   google_rating: number | null;
   google_review_count: number | null;
+  google_types: string | null;
+  google_summary: string | null;
   business_address: string | null;
   lat: number | null;
   lng: number | null;
@@ -193,6 +197,7 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
       googlePlaceId: row.google_place_id,
       googleRating: row.google_rating,
       googleReviewCount: row.google_review_count,
+      googleListing: row.google_types === null ? null : { types: JSON.parse(row.google_types) as string[], summary: row.google_summary },
       businessAddress: row.business_address,
       location: row.lat !== null && row.lng !== null ? { lat: row.lat, lng: row.lng } : null,
       removedAt: row.removed_at,
@@ -770,6 +775,22 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
       if (!tradie.googlePlaceId) return;
       const { rating, reviewCount } = await googleRating(tradie.googlePlaceId);
       await run(db, 'UPDATE people SET google_rating = ?, google_review_count = ? WHERE id = ?', rating, reviewCount, tradieId);
+    },
+
+    /** Reads a newly linked Tradie's listing: its rating, as refreshGoogleRating does, and what it says they do (for job fit, ADR 0016). */
+    async readGoogleListing(tradieId: number) {
+      const tradie = await person(tradieId);
+      if (!tradie.googlePlaceId) return;
+      const { rating, reviewCount, types, summary } = await ports.places.listingDetails(tradie.googlePlaceId);
+      await run(
+        db,
+        'UPDATE people SET google_rating = ?, google_review_count = ?, google_types = ?, google_summary = ? WHERE id = ?',
+        rating,
+        reviewCount,
+        JSON.stringify(types),
+        summary,
+        tradieId,
+      );
     },
 
     /** The Trades of a Property's past Tickets, most frequent first. */
