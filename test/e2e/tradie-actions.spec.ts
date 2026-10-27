@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { fixtureJpeg } from '../../src/demo/photo-exif.ts';
-import { signIn, unique } from './support/actions.ts';
+import { daysAhead, signIn, unique } from './support/actions.ts';
 
 // A Work Order email's View job, Mark job done and Need another time? each open
 // their page. Opening them changes nothing. Mark job done records the completion.
@@ -166,7 +166,7 @@ test("a Work Order email's buttons open their pages, and Mark job done records i
     await tradie.getByLabel('Firm price ($)').fill(price);
     await tradie.getByLabel('Scope of work').fill(scope);
     await tradie.getByLabel('How many days it takes').fill('1');
-    await tradie.getByLabel('Start date 1').fill('2026-10-27');
+    await tradie.getByLabel('Start date 1').fill(daysAhead(3).date);
     await tradie.getByRole('button', { name: 'Send Firm Quote' }).click();
     await expect(tradie.getByRole('status')).toContainText('has your Firm Quote');
   }
