@@ -422,7 +422,7 @@ The lists are `/owners` and `/building-managers` (`pages/owners.ts`), in the Pro
 
 ### Emails
 
-`renderEmail({ agencyName, subject, text })` in `src/email-layout.ts` turns any template's plain text into the HTML email, so no template writes HTML. `notifications` sets it as `html` on every email (the Resend and SendGrid mailers send it with `text` as the alternative); SMS and WhatsApp stay plain text.
+`renderEmail({ agencyName, subject, text })` in `src/email-layout.ts` turns any template's plain text into the HTML email, so no template writes HTML. `notifications` sets it as `html` on every email (the Resend and SendGrid mailers send it with `text` as the alternative); SMS and WhatsApp stay plain text. The text is Claude Haiku's when it wrote the email and its text passed the checks, otherwise the template's (ADR 0011). Either way the same renderer draws it, so a composed email keeps the template's button lines and its subject.
 
 ```
  Sand ────────────────────────────────────────────────
