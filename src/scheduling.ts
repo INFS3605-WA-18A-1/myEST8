@@ -1157,12 +1157,18 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
       const ticket = await tickets.ticket(found.request.ticket_id);
       const property = await profiles.property(ticket.propertyId);
       const row = found.row;
+      // When it was marked done: the timeline's entry for it, since the Work Order keeps no time of its own.
+      const doneKind = kind === 'inspection' ? 'inspected' : 'job_done';
+      const doneAt =
+        row?.status === 'done'
+          ? ((await tickets.timeline(row.ticket_id)).findLast((e) => e.kind === doneKind && (e as { jobId?: number }).jobId === row.job_id)?.at ?? null)
+          : null;
       return {
         agencyName: agency.name,
         timeZone: agency.timeZone,
         address: property.address,
         visit: row
-          ? { start: row.start, status: row.status, started: started(row), rescheduleRequestedBy: row.reschedule_requested_by }
+          ? { start: row.start, status: row.status, started: started(row), rescheduleRequestedBy: row.reschedule_requested_by, doneAt }
           : null,
       };
     },
