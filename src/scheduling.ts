@@ -602,6 +602,7 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
     const property = await profiles.property(ticket.propertyId);
     const tradie = await profiles.person(row.tradie_id);
     const tenant = await profiles.person(ticket.tenantId);
+    const repair = await one<WorkOrderRow>(db, `SELECT * FROM work_orders WHERE job_id = ? AND kind = 'repair' ORDER BY id DESC LIMIT 1`, row.job_id);
     return {
       agencyName: name,
       timeZone,
@@ -610,11 +611,15 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
       availability: tenant.availability,
       status: row.status,
       pick: pick ?? null,
+      /** Every time this offer named, the Tradie's preferred first. */
+      starts,
       start: index >= 0 ? starts[index]! : null,
       pickedStart: row.picked_start,
       /** The first offered time is the one the Tradie prefers. */
       preferred: index === 0,
       bookable: row.status === 'offered' && index >= 0,
+      /** The Job's repair visit, once one is booked: whether it can still be asked to move. */
+      visit: repair ? { start: repair.start, status: repair.status, rescheduleRequestedBy: repair.reschedule_requested_by } : null,
     };
   }
 
@@ -635,6 +640,7 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
       start: row.start,
       status: row.status,
       visitConfirmed: !!row.visit_confirmed,
+      rescheduleRequestedBy: row.reschedule_requested_by,
       kind: row.kind,
     };
   }

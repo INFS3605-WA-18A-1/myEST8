@@ -173,7 +173,7 @@ test('the Tradie offers visit times and the Tenant books one', async ({ page, br
   await expect(page.getByText('Tenant confirmed')).toHaveCount(0);
 
   await tenant.getByRole('button', { name: `Book ${preferred.long}` }).click();
-  await expect(tenant.getByText(`This visit is booked for ${preferred.short}.`)).toBeVisible();
+  await expect(tenant.getByRole('status')).toContainText(`Booked: ${preferred.short}`);
 
   await page.goto(ticketUrl);
   await expect(page.getByText('Tenant confirmed').first()).toBeVisible();
@@ -386,7 +386,7 @@ test('a booked visit can ask for another time, and the Ticket can ask the Tradie
   const tenant = await browser.newPage();
   await tenant.goto((await pick.getAttribute('href'))!);
   await tenant.getByRole('button', { name: `Book ${preferred.long}` }).click();
-  await expect(tenant.getByText(`This visit is booked for ${preferred.short}.`)).toBeVisible();
+  await expect(tenant.getByRole('status')).toContainText(`Booked: ${preferred.short}`);
 
   await tenant.goto((await progress.getAttribute('href'))!);
   const another = tenant.getByRole('link', { name: 'Need another time?' });
@@ -405,7 +405,8 @@ test('a booked visit can ask for another time, and the Ticket can ask the Tradie
 
   await another.click();
   await tenant.getByRole('button', { name: 'Need another time?' }).click();
-  await expect(tenant.getByText('This visit stays booked until you pick a new one.')).toBeVisible();
+  await expect(tenant.getByRole('status')).toContainText('Asked for another time');
+  await expect(tenant.getByRole('button', { name: 'Need another time?' })).toBeDisabled();
 
   await page.goto(ticketUrl);
   await expect(page.getByText('Tenant asked for another time').first()).toBeVisible();
@@ -503,7 +504,8 @@ test('a Property Manager moves a visit and the Tenant confirms it from the email
   const tenant = await browser.newPage();
   await tenant.goto((await confirmLink.getAttribute('href'))!);
   await tenant.getByRole('button', { name: `Confirm ${moved.long}` }).click();
-  await expect(tenant.getByText('Confirmed')).toBeVisible();
+  await expect(tenant.getByRole('status')).toContainText(`Confirmed: ${moved.short}`);
+  await expect(tenant.getByRole('button', { name: `Confirm ${moved.long}` })).toBeDisabled();
 
   await page.goto(ticketUrl);
   await expect(page.getByText('Confirmed the visit', { exact: true })).toBeVisible();
