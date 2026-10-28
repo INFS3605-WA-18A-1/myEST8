@@ -18,6 +18,12 @@ export interface Ports {
   summariser: Summariser;
   /** Writes the Property Manager's follow-up from their notes; null when no model is configured, and the notes stand as written. */
   composer: Composer | null;
+  /**
+   * Writes each outbound email from its template's facts and text (ADR 0011, `src/composing.ts`);
+   * null when no model is configured, and every email is its template's text. The same model as
+   * `composer` in production; a separate port so tests send template text unless they opt in.
+   */
+  emailComposer: Composer | null;
   /** Reads the guided details a Tenant's message states; null when no model is configured, and intake finds nothing in it (ADR 0014). */
   detailExtractor: DetailExtractor | null;
   places: PlacesLookup;

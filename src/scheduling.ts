@@ -2,7 +2,7 @@ import type { Context } from './context.ts';
 import { all, one, run, transaction } from './db.ts';
 import { ActionError, addMs, AVAILABILITY, HOUR_MS, invalid, iso, newToken, notFound, withoutContactDetails, type Availability } from './shared.ts';
 import type { OpenItem } from './tickets.ts';
-import { quotedLengthLabel, visitLengthLabel } from './templates.ts';
+import { quotedLengthLabel, visitLengthLabel, type DoneJob } from './templates.ts';
 import { dayOf, formatVisit, startOfDay, wallClock, zonedInstant } from './zoned-time.ts';
 
 const DEFAULT_SLOT_MINUTES = 120;
@@ -208,6 +208,34 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
     if (!quote || quote.stage !== 'firm') return quotedLengthLabel(null);
     const row = await one<{ duration_days: number | null }>(db, `SELECT duration_days FROM quotes WHERE job_id = ? AND status = 'approved'`, jobId);
     return quotedLengthLabel(row?.duration_days ?? null);
+  }
+
+  /**
+   * A done Job as the completion messages tell it: its Trade, the Tradie, the day of the done
+   * visit, what was done (the Firm Quote's scope of work, or the issue as the Tradie was asked
+   * to estimate it), and apart from that story the amount approved, which only the Property
+   * Owner hears. Null when the Job has no approved Quote.
+   */
+  async function doneJob(jobId: number): Promise<{ story: DoneJob; approvedCents: number } | null> {
+    const quote = await modules.quotes.approvedQuote(jobId);
+    if (!quote) return null;
+    const job = await tickets.job(jobId);
+    const issue = await tickets.issue((await tickets.ticket(job.ticketId)).issueId);
+    const tradie = await profiles.person(quote.tradieId);
+    const visit = await one<{ start: string }>(
+      db,
+      `SELECT start FROM work_orders WHERE job_id = ? AND kind = 'repair' AND status = 'done' ORDER BY id DESC LIMIT 1`,
+      jobId,
+    );
+    return {
+      story: {
+        trade: job.trade,
+        tradieBusinessName: tradie.businessName ?? tradie.name,
+        doneOn: visit?.start ?? null,
+        work: quote.scopeOfWork ?? withoutContactDetails(issue.summary ?? issue.description),
+      },
+      approvedCents: quote.priceCents,
+    };
   }
 
   /** The Tradie's Work Order for this visit, at its current time. */
@@ -752,6 +780,7 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
 
   return {
     isFree,
+    doneJob,
     askForVisitTimes,
     offeredVisit,
     declinedNote,
@@ -1135,8 +1164,10 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
         return { job, ticket, tradieBusinessName };
       });
       if (!done) return;
-      const { job, ticket, tradieBusinessName } = done;
-      await notifications.send(ticket.tenantId, 'tenant.fixed_properly', { trade: job.trade, tradieBusinessName }, { issueId: ticket.issueId });
+      const { job, ticket } = done;
+      // A repair visit is only ever booked on an approved Quote. The Tenant hears who did what and when, never what it cost.
+      const { story } = (await doneJob(job.id))!;
+      await notifications.send(ticket.tenantId, 'tenant.fixed_properly', story, { issueId: ticket.issueId });
       await modules.intake.expectAnswer(ticket.tenantId, { kind: 'fix_rating', jobId: job.id });
     },
 
