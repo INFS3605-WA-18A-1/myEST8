@@ -332,6 +332,16 @@ export function alert(body: Html | string, tone: Tone = 'info', o: { title?: str
   </div>`;
 }
 
+/**
+ * A choice saved from a no-login page (a booked visit, a confirmed one, a job marked
+ * done, an upload), in green with a tick: "✓ Booked: Mon 16 Nov, 9:00 am". It stays on
+ * the page rather than fading like a flash, and every link from the same email shows it
+ * again. `.tenant-done` is in tenant.css, which every no-login page loads.
+ */
+export function doneBox(message: Html | string): Html {
+  return html`<div role="status" class="tenant-done"><span aria-hidden="true">✓</span> ${message}</div>`;
+}
+
 const VARIANT: Record<Variant, string> = { primary: 'btn-primary', secondary: 'btn-outline', danger: 'btn-danger', ghost: 'btn-ghost' };
 
 /** Button sizes: `sm` 32px for rows and lanes, `md` (default) 36px, `lg` 44px for a page's main way in. All are 44px on phones. */
