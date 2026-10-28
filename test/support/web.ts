@@ -31,6 +31,17 @@ export function visible(page: string) {
     .replace(/\s+/g, ' ');
 }
 
+/** The green confirmed block on a no-login page (`doneBox`), as visible text, or null when there is none. */
+export function confirmedBlock(page: string) {
+  const block = /<div role="status" class="tenant-done">([\s\S]*?)<\/div>/.exec(page);
+  return block ? visible(block[1]!).trim() : null;
+}
+
+/** Each button on a page by its visible label, and whether it is disabled. */
+export function buttonsOn(page: string) {
+  return [...page.matchAll(/<button\b([^>]*)>([\s\S]*?)<\/button>/g)].map((m) => ({ label: visible(m[2]!).trim(), disabled: /\sdisabled\b/.test(m[1]!) }));
+}
+
 /** The standard world behind the web app, with helpers to sign in and click through pages. */
 export async function webWorld(
   options: { demo?: DemoControls; connectors?: ChannelConnectors; composer?: null; composeEmails?: boolean; smsNumbers?: NonNullable<Parameters<typeof world>[0]>['smsNumbers'] } = {},

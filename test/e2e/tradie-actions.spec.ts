@@ -221,7 +221,8 @@ test("a Work Order email's buttons open their pages, and Mark job done records i
     await expect(tradie.getByRole('button', { name: 'Mark job done' })).toBeVisible({ timeout: 1_000 });
   }).toPass({ timeout: 90_000 });
   await tradie.getByRole('button', { name: 'Mark job done' }).click();
-  await expect(tradie.getByText(/Already marked done on/)).toBeVisible();
+  await expect(tradie.getByRole('status')).toContainText('Marked done on');
+  await expect(tradie.getByRole('button', { name: 'Mark job done' })).toBeDisabled();
 
   await page.goto(ticketUrl);
   await expect(page.getByText("Pete's Plumbing finished the Job")).toBeVisible();

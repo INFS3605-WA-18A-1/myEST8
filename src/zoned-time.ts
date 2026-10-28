@@ -69,7 +69,7 @@ export function formatVisit(at: Date | string, timeZone: string) {
   return `${WEEKDAYS[w.weekday]} ${w.day} ${MONTHS[w.month - 1]}, ${time}`;
 }
 
-/** Formats the day of an instant for a message: "Tue 13 Oct", as `formatVisit` writes it without the time. */
+/** A day for a sentence: "Tue 27 Oct". */
 export function formatDay(at: Date | string, timeZone: string) {
   const w = wallClock(new Date(at), timeZone);
   return `${WEEKDAYS[w.weekday]} ${w.day} ${MONTHS[w.month - 1]}`;

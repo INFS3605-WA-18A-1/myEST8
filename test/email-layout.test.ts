@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
 import { renderEmail } from '../src/email-layout.ts';
+import { templates, type TemplateData, type TemplateName } from '../src/templates.ts';
 
 const AGENCY = 'Harbour Realty';
 const render = (text: string, overrides: { agencyName?: string; subject?: string } = {}) =>
@@ -8,6 +9,9 @@ const render = (text: string, overrides: { agencyName?: string; subject?: string
 
 /** The inner HTML of each paragraph in the body. */
 const paragraphsOf = (html: string) => [...html.matchAll(/<p [^>]*>(.*?)<\/p>/gs)].map((m) => m[1]);
+
+/** What a reader sees, hidden preheader included: the HTML with its tags, and so their attributes, taken out. */
+const textOf = (html: string) => html.replace(/<[^>]*>/g, ' ').replaceAll('&amp;', '&');
 
 describe('the document', () => {
   test('is Australian English and heads the email with the Agency, not myEST8', () => {
@@ -70,8 +74,8 @@ describe('the preheader', () => {
     expect(preheaderOf(render('Is the tap <b>still</b> dripping & worse'))).toBe('Is the tap &lt;b&gt;still&lt;/b&gt; dripping &amp; worse');
   });
 
-  test('keeps a link in a sentence whole', () => {
-    expect(preheaderOf(render('Follow it here: https://myest8.test/t/abc.def Thanks.'))).toBe('Follow it here: https://myest8.test/t/abc.def Thanks.');
+  test('stops before a web address, so the address never shows as text', () => {
+    expect(preheaderOf(render('Follow it here: https://myest8.test/t/abc.def Thanks.'))).toBe('Follow it here:');
   });
 });
 
@@ -129,23 +133,23 @@ describe('links', () => {
   const linksOf = (html: string) => [...html.matchAll(/<a href="([^"]*)"[^>]*>(.*?)<\/a>/gs)].map((m) => ({ href: m[1], text: m[2] }));
   const UPLOAD = 'https://myest8.test/upload/Ab12Cd34';
 
-  test('the photo upload link is a button labelled by what it does, with the address shown under it', () => {
+  test('the photo upload link is a button labelled by what it does, and the address is only in its href', () => {
     const html = render(`Thanks. Please upload a few photos of the issue here, straight from your phone: ${UPLOAD}`);
-    expect(paragraphsOf(html)).toEqual(['Thanks. Please upload a few photos of the issue here, straight from your phone:', expect.stringContaining(UPLOAD)]);
-    expect(linksOf(html)).toEqual([
-      { href: UPLOAD, text: 'Upload photos' },
-      { href: UPLOAD, text: UPLOAD },
-    ]);
+    // The sentence ending "here: <url>" is a paragraph, then the button.
+    expect(paragraphsOf(html)).toEqual(['Thanks. Please upload a few photos of the issue here, straight from your phone:']);
+    expect(html.indexOf('straight from your phone:')).toBeLessThan(html.indexOf(`<a href="${UPLOAD}"`));
+    expect(linksOf(html)).toEqual([{ href: UPLOAD, text: 'Upload photos' }]);
+    expect(textOf(html)).not.toContain(UPLOAD);
     // The button is the one Harbour fill, white on it.
     expect(html).toMatch(/<td bgcolor="#1F5C8B"[^>]*><a href="[^"]*"[^>]*color:#FFFFFF[^>]*>Upload photos<\/a>/);
   });
 
-  test('a button sits on the same Wattle edge as the questions, with its address', () => {
+  test('a button sits on the same Wattle edge as the questions, with no address under it', () => {
     const html = render(`Thanks, we have your 2 photos. Add more here if it helps: ${UPLOAD}`);
     const edged = html.match(/<tr><td width="8"><\/td><td width="4" bgcolor="#FFC233".*?<td width="24"><\/td><\/tr>/s)![0];
     expect(edged).not.toContain('Thanks, we have');
     expect(edged).toContain('>Upload photos<');
-    expect(edged).toContain(`>${UPLOAD}</a>`);
+    expect(edged).not.toContain(`>${UPLOAD}<`);
   });
 
   test.each([
@@ -167,11 +171,7 @@ describe('links', () => {
 
   test('a link in the middle of the text is a button, with the words after it in their own paragraph', () => {
     const html = render(`Give your Estimate here (your fixed price): ${UPLOAD} Or reply with a ballpark price, or NO to decline.`);
-    expect(paragraphsOf(html)).toEqual([
-      'Give your Estimate here (your fixed price):',
-      expect.stringContaining(UPLOAD),
-      'Or reply with a ballpark price, or NO to decline.',
-    ]);
+    expect(paragraphsOf(html)).toEqual(['Give your Estimate here (your fixed price):', 'Or reply with a ballpark price, or NO to decline.']);
     expect(linksOf(html)[0]).toEqual({ href: UPLOAD, text: 'Give your quote' });
   });
 
@@ -188,14 +188,13 @@ describe('links', () => {
         'Wed 28 Oct, 1:00 pm: https://myest8.test/v/abc?pick=2\n\n' +
         'None of these work: https://myest8.test/v/abc?pick=none',
     );
-    const buttons = linksOf(html).filter((_, i) => i % 2 === 0);
-    expect(buttons).toEqual([
+    expect(linksOf(html)).toEqual([
       { href: 'https://myest8.test/v/abc?pick=1', text: 'Tue 27 Oct, 9:00 am' },
       { href: 'https://myest8.test/v/abc?pick=2', text: 'Wed 28 Oct, 1:00 pm' },
       { href: 'https://myest8.test/v/abc?pick=none', text: 'None of these work' },
     ]);
     // The label became the button, so it is not printed again above it.
-    expect(paragraphsOf(html).filter((p) => !p.startsWith('<a '))).toEqual(["Pete&#39;s Plumbing (plumbing) can visit. Pick a time."]);
+    expect(paragraphsOf(html)).toEqual(["Pete&#39;s Plumbing (plumbing) can visit. Pick a time."]);
     expect(html).not.toContain('Tue 27 Oct, 9:00 am:');
     expect(html).not.toContain('None of these work:');
   });
@@ -237,24 +236,30 @@ describe('links', () => {
     expect(html).not.toContain('>Tom & Co<');
   });
 
-  test('an address inside a sentence stays a link in that sentence', () => {
+  test('an address inside a sentence is a button too: the sentence breaks around it and the address is never text', () => {
     const html = render('The warranty terms are at https://example.com/warranty if you need them.');
-    expect(paragraphsOf(html)).toEqual([expect.stringMatching(/^The warranty terms are at <a href="https:\/\/example\.com\/warranty"[^>]*>https:\/\/example\.com\/warranty<\/a> if you need them\.$/)]);
-    expect(linksOf(html)).toEqual([{ href: 'https://example.com/warranty', text: 'https://example.com/warranty' }]);
-    expect(html).not.toContain('#FFC233');
+    expect(paragraphsOf(html)).toEqual(['The warranty terms are at', 'if you need them.']);
+    expect(linksOf(html)).toEqual([{ href: 'https://example.com/warranty', text: 'Open link' }]);
+    expect(textOf(html)).not.toContain('https://');
   });
 
-  test('a full stop or bracket after an address is not part of it', () => {
+  test('a numbered line with an address is a paragraph and a button, not a list item showing the address', () => {
+    const html = render(`1. Please upload a few photos of the issue from your phone here: ${UPLOAD}`);
+    expect(html).not.toContain('<ol');
+    expect(linksOf(html)).toEqual([{ href: UPLOAD, text: 'Upload photos' }]);
+    expect(textOf(html)).not.toContain(UPLOAD);
+  });
+
+  test('a full stop or bracket after an address is not part of it, and the brackets around it go', () => {
     expect(linksOf(render('Details at https://example.com/guide.'))[0]!.href).toBe('https://example.com/guide');
-    expect(linksOf(render('Use the form (https://example.com/form) today.'))[0]!.href).toBe('https://example.com/form');
+    const bracketed = render('Use the form (https://example.com/form) today.');
+    expect(linksOf(bracketed)[0]!.href).toBe('https://example.com/form');
+    expect(paragraphsOf(bracketed)).toEqual(['Use the form', 'today.']);
   });
 
-  test('an ampersand in an address is escaped in the link and in the text', () => {
+  test('an ampersand in an address is escaped in the link', () => {
     const html = render('Open it here: https://example.com/a?b=1&c=2');
-    expect(linksOf(html)).toEqual([
-      { href: 'https://example.com/a?b=1&amp;c=2', text: 'Open it here' },
-      { href: 'https://example.com/a?b=1&amp;c=2', text: 'https://example.com/a?b=1&amp;c=2' },
-    ]);
+    expect(linksOf(html)).toEqual([{ href: 'https://example.com/a?b=1&amp;c=2', text: 'Open it here' }]);
   });
 
   test('only web addresses become links', () => {
@@ -289,7 +294,7 @@ describe('details', () => {
     // The lines became the table, so they are not also printed as paragraphs.
     expect(html).not.toContain('Trade: Plumbing');
     expect(html).not.toContain('Issue: The kitchen tap');
-    expect(paragraphsOf(html).filter((p) => !p.startsWith('<a '))).toEqual(['Harbour Realty is asking for a quote.']);
+    expect(paragraphsOf(html)).toEqual(['Harbour Realty is asking for a quote.']);
     // Details are not a decision, so they take no Wattle edge.
     expect(html.match(/<td width="4" bgcolor="#FFC233"/g)).toHaveLength(2);
   });
@@ -297,7 +302,7 @@ describe('details', () => {
   test('a URL value stays a button, and a single Label: value line stays a paragraph', () => {
     const html = render('Trade: Plumbing\n\nGive your quote: https://myest8.test/q/abc');
     expect(html).not.toMatch(/font-size:14px/);
-    expect(paragraphsOf(html).filter((p) => !p.startsWith('<a '))).toEqual(['Trade: Plumbing']);
+    expect(paragraphsOf(html)).toEqual(['Trade: Plumbing']);
     expect(linksOf(html)[0]).toEqual({ href: 'https://myest8.test/q/abc', text: 'Give your quote' });
   });
 
@@ -321,7 +326,7 @@ describe('details', () => {
 
   test('"Can\'t take this job" is an outlined Harbour button, decided from the label', () => {
     const html = render(QUOTE);
-    expect(linksOf(html).filter((_, i) => i % 2 === 0)).toEqual([
+    expect(linksOf(html)).toEqual([
       { href: 'https://myest8.test/q/abc', text: 'Give your quote' },
       { href: 'https://myest8.test/q/abc/decline', text: 'Can&#39;t take this job' },
     ]);
@@ -354,5 +359,110 @@ describe('the design tokens', () => {
     const html = render('Hi.\n\n1. One\n\nOpen it here: https://example.com/a');
     const allowed = ['ink', 'page', 'surface', 'muted', 'line', 'action', 'hivis'].map(token);
     for (const [hex] of html.matchAll(/#[0-9a-f]{3,8}\b/gi)) expect(allowed).toContain(hex.toUpperCase());
+  });
+});
+
+describe('every template', () => {
+  const LINK = 'https://myest8.test';
+  const TUE = '2026-10-27T09:00:00+11:00';
+  const WED = '2026-10-28T13:00:00+11:00';
+  const choices = [
+    { label: 'Tue 27 Oct, 9:00 am (preferred)', url: `${LINK}/v/abc?pick=1` },
+    { label: 'Wed 28 Oct, 1:00 pm', url: `${LINK}/v/abc?pick=2` },
+    { label: 'None of these work', url: `${LINK}/v/abc?pick=none` },
+  ];
+  const job = { trade: 'plumbing', urgency: 'routine', description: 'The kitchen tap is dripping', suburb: 'Newtown', quoteLink: `${LINK}/q/abc` } as const;
+  const offer = { trade: 'plumbing', propertyAddress: '12 King St, Newtown', quoteLink: `${LINK}/q/abc`, length: '1 day', availability: 'weekday_mornings' } as const;
+  const firm = { trade: 'plumbing', suburb: 'Newtown', propertyAddress: '12 King St, Newtown', quoteLink: `${LINK}/q/abc`, issue: 'Replace the tap', inspectedOn: TUE } as const;
+
+  /** Sample data for each template, links included: a template missing from here fails the typecheck. */
+  const SAMPLES: { [K in TemplateName]: TemplateData<K>[] } = {
+    'tenant.acknowledgement': [{ tenantName: 'Tom', propertyAddress: '12 King St, Newtown' }],
+    'tenant.missing_details': [{ tenantName: 'Tom', questions: ['location', 'availability'] }],
+    'tenant.upload_link': [{ uploadLink: `${LINK}/u/abc` }, { uploadLink: `${LINK}/u/abc`, alreadyHave: 2 }],
+    'tenant.urgent_repair_reminder': [
+      { limitCents: 300_00, nominatedTradies: [{ businessName: "Pete's Plumbing", phone: '0400 000 001' }], receiptLink: `${LINK}/u/abc` },
+      { limitCents: 300_00, nominatedTradies: [], receiptLink: `${LINK}/u/abc` },
+    ],
+    'tenant.common_area_passed_on': [{ buildingManagerName: 'Bea Brown' }],
+    'tenant.confirmed': [{ trackerLink: `${LINK}/t/abc` }],
+    'tenant.rejected': [{ reason: 'This is a common area issue' }],
+    'tenant.choose_visit_time': [{ tradieBusinessName: "Pete's Plumbing", trade: 'plumbing', choices }],
+    'tenant.pick_visit_time_reminder': [{ choices }],
+    'tenant.say_when_home': [{ whenHomeLink: `${LINK}/v/abc?home=1` }],
+    'tenant.visit_time': [
+      { visitStart: TUE, trade: 'plumbing', tradieBusinessName: "Pete's Plumbing", confirmLink: `${LINK}/v/confirm/abc`, anotherTimeLink: `${LINK}/v/confirm/abc?another=1` },
+    ],
+    'tenant.visit_booked': [{ visitStart: TUE, anotherTimeLink: `${LINK}/v/abc` }],
+    'tenant.visit_moved': [{ visitStart: WED, tradieBusinessName: "Pete's Plumbing", confirmLink: `${LINK}/v/confirm/abc`, anotherTimeLink: `${LINK}/v/confirm/abc?another=1` }],
+    'tenant.inspection': [
+      { tradieBusinessName: 'Drip Doctors', trade: 'plumbing', visitStart: TUE, confirmLink: `${LINK}/v/confirm/abc`, anotherTimeLink: `${LINK}/v/confirm/abc?another=1` },
+    ],
+    'tenant.inspection_cancelled': [{ tradieBusinessName: 'Drip Doctors', visitStart: TUE }],
+    'tenant.fixed_properly': [{ trade: 'plumbing' as const, tradieBusinessName: "Pete's Plumbing", doneOn: TUE, work: 'Replace the tap washer' }],
+    'tenant.reimbursed': [{ propertyAddress: '12 King St, Newtown', amountCents: 180_00 }],
+    'tenant.ticket_closed': [{ propertyAddress: '12 King St, Newtown', summary: 'Dripping kitchen tap', jobs: [{ trade: 'plumbing' as const, tradieBusinessName: "Pete's Plumbing", doneOn: TUE, work: 'Replace the tap washer' }] }],
+    'tenant.follow_up': [{ text: 'Is the tap still dripping?' }],
+    'tradie.quote_request': [job],
+    'tradie.quote_reminder': [job],
+    'tradie.not_chosen': [{ trade: 'plumbing', suburb: 'Newtown', inspectionStart: TUE }],
+    'tradie.offer_times': [offer],
+    'tradie.offer_times_reminder': [offer],
+    'tradie.offer_new_times': [offer],
+    'tradie.offer_times_again': [{ ...offer, note: 'Sunday 10 am works' }],
+    'tradie.work_order': [
+      {
+        propertyAddress: '12 King St, Newtown',
+        description: 'The kitchen tap is dripping',
+        trade: 'plumbing',
+        visitStart: TUE,
+        visitEnd: WED,
+        approvedCents: 150_00,
+        stage: 'firm',
+        tenantName: 'Tom Tran',
+        tenantContact: '0400 000 002',
+        quoteLink: `${LINK}/q/abc`,
+      },
+    ],
+    'tradie.done_too_early': [{ propertyAddress: '12 King St, Newtown', visitStart: TUE, inspection: true }],
+    'tradie.visit_moved': [{ propertyAddress: '12 King St, Newtown', visitStart: WED, wasStart: TUE, quoteLink: `${LINK}/q/abc` }],
+    'tradie.inspection': [
+      { propertyAddress: '12 King St, Newtown', trade: 'plumbing', summary: 'Dripping tap', visitStart: TUE, visitEnd: WED, tenantContact: '0400 000 002', quoteLink: `${LINK}/q/abc` },
+    ],
+    'tradie.firm_quote_request': [firm],
+    'tradie.firm_quote_reminder': [firm],
+    'tradie.firm_quote_link': [firm],
+    'owner.approval_request': [
+      { propertyAddress: '12 King St, Newtown', trade: 'plumbing', tradieBusinessName: "Pete's Plumbing", quotePriceCents: 900_00, repairCostCents: 900_00, maxRepairCostCents: 500_00 },
+    ],
+    'owner.approval_reminder': [{ propertyAddress: '12 King St, Newtown', trade: 'plumbing', quotePriceCents: 900_00 }],
+    'owner.work_booked': [{ propertyAddress: '12 King St, Newtown', trade: 'plumbing', visitStart: TUE }],
+    'owner.work_moved': [{ propertyAddress: '12 King St, Newtown', trade: 'plumbing', visitStart: WED }],
+    'owner.ticket_closed': [{ propertyAddress: '12 King St, Newtown', summary: 'Dripping kitchen tap', jobs: [{ ...{ trade: 'plumbing' as const, tradieBusinessName: "Pete's Plumbing", doneOn: TUE, work: 'Replace the tap washer' }, approvedCents: 150_00 }], repairCostCents: 150_00 }],
+    'owner.urgent_repair_receipt': [{ propertyAddress: '12 King St, Newtown', tenantName: 'Tom Tran', description: 'Burst pipe', amountCents: 250_00, limitCents: 300_00 }],
+    'building_manager.common_area_issue': [{ propertyAddress: '12 King St, Newtown', tenantName: 'Tom Tran', message: 'The lift is stuck' }],
+    'onboarding.test_message': [{}],
+    'onboarding.verification_code': [{ code: '123456' }],
+  };
+
+  const rendered = (Object.keys(SAMPLES) as TemplateName[]).flatMap((name) =>
+    (SAMPLES[name] as never[]).map((data, i) => {
+      const template = templates[name] as { subject: string; text: (d: never, a: { name: string; timeZone: string }) => string };
+      const text = template.text(data, { name: AGENCY, timeZone: 'Australia/Sydney' });
+      return [`${name}${i ? ` (${i + 1})` : ''}`, text, renderEmail({ agencyName: AGENCY, subject: template.subject, text })] as const;
+    }),
+  );
+
+  test('the samples carry links, so the checks below have something to check', () => {
+    expect(rendered.filter(([, text]) => /https?:\/\//.test(text)).length).toBeGreaterThan(20);
+  });
+
+  test.each(rendered)('%s shows no web address as text, and every address is a button saying what it does', (_, text, html) => {
+    expect(textOf(html)).not.toMatch(/https?:\/\//);
+    expect(html).not.toContain('>Open link<');
+    const urls = [...text.matchAll(/https?:\/\/\S+/g)].map((m) => m[0].replace(/[.,;:!?)]+$/, '').replaceAll('&', '&amp;'));
+    // Every link in the email is one of the text's addresses, drawn as a button: an <a> inside a table cell.
+    expect(linksOf(html).map((link) => link.href)).toEqual(urls);
+    for (const url of urls) expect(html).toMatch(new RegExp(`<td bgcolor="#(1F5C8B|FFFFFF)"[^>]*><a href="${url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`));
   });
 });
