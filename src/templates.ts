@@ -1,5 +1,8 @@
-// Every message myEST8 sends. Each template is fixed text with placeholders;
-// nothing here is written by a model.
+// Every message myEST8 sends. Each template is fixed text with placeholders. An
+// SMS or WhatsApp message is this text. An email is written by Claude Haiku from
+// the template's data, with this text as its draft, and is this text whenever no
+// model is configured, the model fails, or its text drops or adds a fact
+// (ADR 0011, src/composing.ts).
 
 import { dollars, type Availability, type Trade, type Urgency } from './shared.ts';
 import { formatVisit } from './zoned-time.ts';

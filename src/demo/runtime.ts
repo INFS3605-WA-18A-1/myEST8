@@ -334,6 +334,7 @@ export async function createDemo<Seeded extends boolean = true>(
     },
   };
   const twilioAuthToken = env.TWILIO_AUTH_TOKEN?.trim();
+  const haiku = anthropicKey ? createClaudeComposer({ apiKey: anthropicKey, fetch }) : null;
   const app = createApp({
     db,
     clock,
@@ -341,7 +342,9 @@ export async function createDemo<Seeded extends boolean = true>(
     classifier: classifierFromEnv(env, anthropicKey, jev, fetch),
     summariser: anthropicKey ? createClaudeSummariser({ apiKey: anthropicKey, fetch }) : mockSummariser,
     // Hosted with no key has no model at all, so a follow-up keeps the notes as written; the demo's mock shows the draft flow.
-    composer: anthropicKey ? createClaudeComposer({ apiKey: anthropicKey, fetch }) : hosted ? null : mockComposer,
+    composer: haiku ?? (hosted ? null : mockComposer),
+    // Only Haiku writes outbound emails: with no key every email is its template's text (ADR 0011).
+    emailComposer: haiku,
     // Hosted with no key reads nothing from a first message, so intake asks all four questions in one message.
     detailExtractor: anthropicKey ? createClaudeExtractor({ apiKey: anthropicKey, fetch }) : hosted ? null : mockExtractor,
     imageMatcher: createImageMatcher({ ...vision, apiKey: env.VISION_API_KEY ?? 'demo' }),

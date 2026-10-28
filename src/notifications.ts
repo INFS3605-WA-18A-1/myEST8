@@ -1,12 +1,21 @@
+import { mustIncludeIn, NEVER_COMPOSED, problemWith, PURPOSES, untrustedFieldsOf } from './composing.ts';
 import type { Context } from './context.ts';
 import { renderEmail } from './email-layout.ts';
-import { UndeliverableError, type ChannelType } from './ports.ts';
+import { UndeliverableError, type ChannelType, type RecipientRole } from './ports.ts';
 import type { Person } from './profiles.ts';
-import { HOUR_MS, invalid } from './shared.ts';
+import { HOUR_MS, invalid, type Role } from './shared.ts';
 import { templates, type TemplateData, type TemplateName } from './templates.ts';
 
 /** WhatsApp only allows free-form messages inside this window after the person's last message. */
 const REPLY_WINDOW_MS = 24 * HOUR_MS;
+
+/** Who a message is for, in the composer's words: the app's `owner` is the Property Owner. */
+const RECIPIENT_ROLES: Record<Role, RecipientRole> = {
+  tenant: 'tenant',
+  tradie: 'tradie',
+  owner: 'property_owner',
+  building_manager: 'building_manager',
+};
 
 export interface SendOptions {
   /** The issue (and so the Ticket) to log the message against. */
@@ -47,9 +56,46 @@ export function createNotifications({ clock, ports, files, modules }: Context) {
     );
   }
 
+  /**
+   * The email body to send: the composer's text when it keeps every button line, link, amount,
+   * time, phone number and reply instruction of the template's text and adds none, otherwise
+   * the template's text. A text turned down, or a composer that fails, is logged in one line
+   * that quotes neither text.
+   */
+  async function emailText<K extends TemplateName>(name: K, data: TemplateData<K>, draft: string, agencyName: string, recipientRole: RecipientRole) {
+    const { emailComposer } = ports;
+    if (!emailComposer || NEVER_COMPOSED.has(name)) return { text: draft, composed: false };
+    const mustInclude = mustIncludeIn(draft, data);
+    let problem: string | null;
+    let text = '';
+    try {
+      text = (
+        await emailComposer.compose({
+          template: name,
+          purpose: PURPOSES[name],
+          recipientRole,
+          channel: 'email',
+          agencyName,
+          facts: data,
+          untrustedFields: untrustedFieldsOf(data),
+          draft,
+          mustInclude,
+        })
+      ).text.trim();
+      problem = problemWith(text, draft, mustInclude);
+    } catch {
+      problem = 'the composer failed';
+    }
+    if (!problem) return { text, composed: true };
+    console.error(`Sent ${name} as its template's text: ${problem}`);
+    return { text: draft, composed: false };
+  }
+
+  /** Sends one message and returns the text sent, and whether the composer wrote it. Only an email is composed. */
   async function deliver<K extends TemplateName>(
     agencyId: number,
     channelType: ChannelType,
+    recipientRole: RecipientRole,
     to: string,
     cc: string[],
     name: K,
@@ -61,7 +107,8 @@ export function createNotifications({ clock, ports, files, modules }: Context) {
     const from = await profiles.channelAddress(agencyId, channelType);
     if (!from) throw new Error(`${agency.name} has no ${channelType} channel connected`);
     const template = templates[name] as { subject: string; text: (d: TemplateData<K>, a: typeof agency) => string };
-    const text = template.text(data, agency);
+    const draft = template.text(data, agency);
+    const { text, composed } = channelType === 'email' ? await emailText(name, data, draft, agency.name, recipientRole) : { text: draft, composed: false };
     await ports.messenger.send({
       channelType,
       from,
@@ -74,7 +121,7 @@ export function createNotifications({ clock, ports, files, modules }: Context) {
       data,
       attachments: await Promise.all(attachmentFileIds.map((id) => files.get(id))),
     });
-    return text;
+    return { text, composed };
   }
 
   async function sendToPropertyManager<K extends TemplateName>(
@@ -84,7 +131,7 @@ export function createNotifications({ clock, ports, files, modules }: Context) {
     options: SendOptions = {},
   ) {
     const pm = await modules.profiles.propertyManager(propertyManagerId);
-    const text = await deliver(pm.agencyId, 'email', pm.email, [], name, data, options.attachmentFileIds ?? []);
+    const { text, composed } = await deliver(pm.agencyId, 'email', 'property_manager', pm.email, [], name, data, options.attachmentFileIds ?? []);
     await modules.tickets.logMessage({
       agencyId: pm.agencyId,
       direction: 'out',
@@ -93,6 +140,7 @@ export function createNotifications({ clock, ports, files, modules }: Context) {
       address: pm.email,
       template: name,
       text,
+      composed,
       issueId: options.issueId ?? null,
       fileIds: options.attachmentFileIds ?? [],
     });
@@ -110,7 +158,7 @@ export function createNotifications({ clock, ports, files, modules }: Context) {
       const pm = options.copyPropertyManagerId ? await modules.profiles.propertyManager(options.copyPropertyManagerId) : null;
       const cc = pm && channelType === 'email' ? [pm.email] : [];
       const fileIds = options.attachmentFileIds ?? [];
-      const text = await deliver(person.agencyId, channelType, to, cc, name, data, fileIds);
+      const { text, composed } = await deliver(person.agencyId, channelType, RECIPIENT_ROLES[person.role], to, cc, name, data, fileIds);
       await modules.tickets.logMessage({
         agencyId: person.agencyId,
         direction: 'out',
@@ -119,6 +167,7 @@ export function createNotifications({ clock, ports, files, modules }: Context) {
         address: to,
         template: name,
         text,
+        composed,
         issueId: options.issueId ?? null,
         fileIds,
       });
@@ -130,7 +179,7 @@ export function createNotifications({ clock, ports, files, modules }: Context) {
     /** Sends the onboarding test message on one of the Agency's channels. */
     async sendTest(agencyId: number, channelType: ChannelType, to: string) {
       if (!(await modules.profiles.channelAddress(agencyId, channelType))) invalid(`Connect the ${channelType} channel first`);
-      await deliver(agencyId, channelType, to, [], 'onboarding.test_message', {}, []);
+      await deliver(agencyId, channelType, 'property_manager', to, [], 'onboarding.test_message', {}, []);
     },
 
     /**

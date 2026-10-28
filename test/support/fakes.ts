@@ -135,13 +135,14 @@ export class FakeSummariser implements Summariser {
   }
 }
 
-/** Composes "Composed: <draft>" unless `next` is set (a text to return, or an Error to throw). */
+/** Composes "Composed: <draft>" unless `next` is set: a text to return, a function writing one from the input, or an Error to throw. */
 export class FakeComposer implements Composer {
-  next: string | Error | null = null;
+  next: string | Error | ((input: Parameters<Composer['compose']>[0]) => string) | null = null;
   calls: Parameters<Composer['compose']>[0][] = [];
   async compose(input: Parameters<Composer['compose']>[0]) {
     this.calls.push(input);
     if (this.next instanceof Error) throw this.next;
+    if (typeof this.next === 'function') return { text: this.next(input) };
     return { text: this.next ?? `Composed: ${input.draft}` };
   }
 }
