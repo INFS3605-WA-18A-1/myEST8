@@ -820,12 +820,29 @@ export function createTickets({ db, clock, settings, ports, modules }: Context) 
         return closing;
       });
       const property = await modules.profiles.property(closing.propertyId);
-      const { description } = await issue(closing.issueId);
-      await modules.notifications.send(closing.tenantId, 'tenant.ticket_closed', { propertyAddress: property.address }, { issueId: closing.issueId });
+      const closed = await issue(closing.issueId);
+      const summary = closed.summary ?? closed.description;
+      const done = [];
+      for (const job of await jobsOf(ticketId)) {
+        const found = job.status === 'done' ? await modules.scheduling.doneJob(job.id) : null;
+        if (found) done.push(found);
+      }
+      // The Tenant hears what was done, by whom and when; the Property Owner also hears what it cost.
+      await modules.notifications.send(
+        closing.tenantId,
+        'tenant.ticket_closed',
+        { propertyAddress: property.address, summary, jobs: done.map((j) => j.story) },
+        { issueId: closing.issueId },
+      );
       await modules.notifications.send(
         property.ownerId,
         'owner.ticket_closed',
-        { propertyAddress: property.address, description },
+        {
+          propertyAddress: property.address,
+          summary,
+          jobs: done.map((j) => ({ ...j.story, approvedCents: j.approvedCents })),
+          repairCostCents: await modules.quotes.repairCost(ticketId),
+        },
         { issueId: closing.issueId },
       );
     },

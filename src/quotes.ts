@@ -1317,11 +1317,18 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dates: str
       return row ? { ticketId: row.ticket_id } : null;
     },
 
-    /** The Job's approved Quote: who does the work, what it counts towards the Repair Cost, and when they proposed. */
+    /** The Job's approved Quote: who does the work, what it counts towards the Repair Cost, when they proposed, and a Firm Quote's scope of work. */
     async approvedQuote(jobId: number) {
       const row = await one<QuoteRow>(db, `SELECT * FROM quotes WHERE job_id = ? AND status = 'approved'`, jobId);
       return row
-        ? { tradieId: row.tradie_id, stage: row.stage, priceCents: costOf(row), notToExceedCents: row.not_to_exceed_cents, proposedTime: row.proposed_time }
+        ? {
+            tradieId: row.tradie_id,
+            stage: row.stage,
+            priceCents: costOf(row),
+            notToExceedCents: row.not_to_exceed_cents,
+            proposedTime: row.proposed_time,
+            scopeOfWork: row.scope_of_work,
+          }
         : null;
     },
 
