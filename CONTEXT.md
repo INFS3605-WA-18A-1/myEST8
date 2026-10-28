@@ -72,6 +72,10 @@ _Avoid_: task
 The kind of work a Job needs, from a fixed list: plumbing, electrical, carpentry, roofing, appliances, locksmith, pest control, general handyman.
 _Avoid_: job type, category
 
+**Job fit**:
+How closely a Tradie's past work and Google listing match a Job's repair, judged by AI on four levels: no related work, Trade only, related work, done this kind of job. One part of how recommended Tradies are ranked, shown beside the ratings and never combined into them.
+_Avoid_: match score, relevance
+
 **Summary**:
 One plain-English line describing a Maintenance Request's issue, written by AI from the Tenant's words and answers and editable by the Property Manager. Never adds facts the Tenant didn't give.
 _Avoid_: title, headline, AI description

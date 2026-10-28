@@ -277,7 +277,7 @@ export function createOnboarding({ ports, modules }: Context) {
       checkTradie(input);
       const { notOnGoogle: _, ...person } = input;
       const id = await profiles.addPerson(agencyId, { role: 'tradie', ...person });
-      await profiles.refreshGoogleRating(id);
+      await profiles.readGoogleListing(id);
       return id;
     },
 

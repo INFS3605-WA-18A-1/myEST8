@@ -141,12 +141,12 @@ describe('the Ticket view', () => {
     expect(text).toContain('Max Repair Cost $500.00');
     // No Repair Cost until a Quote is approved.
     expect(text).not.toContain('Repair Cost $0.00');
-    // The Nominated Tradie first, then by myEST8 rating, Google rating, then name; four at most, and the electrician isn't recommended for plumbing.
+    // The Nominated Tradie first, then by the blend of ratings, job fit and price; four at most, and the electrician isn't recommended for plumbing.
     const ranked = ["1. Nina's Plumbing", '2. Drip Doctors', "3. Pete's Plumbing", '4. Quick Pipes'].map((t) => text.indexOf(t));
     expect(ranked.every((at, i) => at > -1 && (i === 0 || at > ranked[i - 1]!))).toBe(true);
     expect(text).not.toContain('Sparky Sam');
     expect(text).toContain('myEST8 5.0 (1) from 1 rating Not on Google');
-    expect(text).toContain('myEST8 4.0 (1) from 1 rating Google 4.8 (120) from 120 reviews');
+    expect(text).toContain('myEST8 4.0 (1) from 1 rating Google 4.8 (120) from 120 reviews Trade only');
     expect(text).toContain('Reported by the Tenant');
     expect(text).toContain('Confirmed as a Ticket');
     expect(text).toContain(`From ${TOM}`);

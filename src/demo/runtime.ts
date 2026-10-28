@@ -13,6 +13,7 @@ import { createClaudeSummariser } from '../adapters/claude-summariser.ts';
 import { createGooglePlaces } from '../adapters/google-places.ts';
 import { createImageMatcher } from '../adapters/image-matcher.ts';
 import { createJevClassifier } from '../adapters/jev.ts';
+import { createJevJobFitJudge } from '../adapters/jev-job-fit.ts';
 import { createJevTradeSuggester } from '../adapters/jev-trades.ts';
 import { messengersFromEnv } from '../adapters/messenger.ts';
 import { metaFetchMedia } from '../adapters/meta-whatsapp.ts';
@@ -45,7 +46,7 @@ const MOCK = 'http://mock.local';
 export type Env = Record<string, string | undefined>;
 
 /** Which external APIs are real (set by env vars) and which are the in-process mocks. */
-export type ApiChoice = Record<'classifier' | 'tradeSuggester' | 'imageMatcher' | 'quoteReader' | 'places' | 'geocoder' | 'addressSuggester' | 'messenger', 'mock' | 'real'>;
+export type ApiChoice = Record<'classifier' | 'tradeSuggester' | 'jobFitJudge' | 'imageMatcher' | 'quoteReader' | 'places' | 'geocoder' | 'addressSuggester' | 'messenger', 'mock' | 'real'>;
 
 /** The name a startup log uses. The classifier says which model answers when both are configured. */
 export function providerLogName(name: string, env: Env): string {
@@ -57,6 +58,7 @@ export function providerLogName(name: string, env: Env): string {
     return 'classifier';
   }
   if (name === 'tradeSuggester') return 'Trade suggester';
+  if (name === 'jobFitJudge') return 'job-fit judge';
   return name;
 }
 
@@ -65,7 +67,7 @@ export type HostedProvider = { provider: string; required: boolean; missing: str
 
 /**
  * What the hosted app needs from its environment, by the fallback that fills the
- * gap when a setting is absent: a mock (classifier, Trade suggester, Google Places, photo matcher,
+ * gap when a setting is absent: a mock (classifier, Trade suggester, job-fit judge, Google Places, photo matcher,
  * quote reader), a made-up value (the `mail.example.test` inbound domain), or a
  * feature left off (file storage in the database, Resend inbound, signed file
  * links, the cron route). The photo matcher and quote reader are listed but not
@@ -82,6 +84,8 @@ function hostedProviders(env: Env): HostedProvider[] {
     { provider: providerLogName('classifier', env), required: true, missing: set('ANTHROPIC_API_KEY') || set('JEV_API_URL') ? [] : ['ANTHROPIC_API_KEY'] },
     // The Trade suggester asks Jev. Without JEV_API_URL it runs on the mock.
     { provider: providerLogName('tradeSuggester', env), required: false, missing: unset('JEV_API_URL') },
+    // So does the job-fit judge that ranks recommended Tradies (ADR 0016).
+    { provider: providerLogName('jobFitJudge', env), required: false, missing: unset('JEV_API_URL') },
     { provider: 'places', required: true, missing: unset('GOOGLE_MAPS_API_KEY') },
     { provider: 'geocoder', required: false, missing: [] },
     { provider: 'address suggestions', required: false, missing: [] },
@@ -289,6 +293,7 @@ export async function createDemo<Seeded extends boolean = true>(
   const apis: ApiChoice = {
     classifier: anthropicKey || env.JEV_API_URL ? 'real' : 'mock',
     tradeSuggester: env.JEV_API_URL?.trim() ? 'real' : 'mock',
+    jobFitJudge: env.JEV_API_URL?.trim() ? 'real' : 'mock',
     imageMatcher: env.VISION_API_URL ? 'real' : 'mock',
     quoteReader: env.QUOTES_API_URL ? 'real' : 'mock',
     places: env.GOOGLE_MAPS_API_KEY ? 'real' : 'mock',
@@ -354,6 +359,7 @@ export async function createDemo<Seeded extends boolean = true>(
     geocoder: createNominatimGeocoder({ ...nominatim, userAgent: `myEST8 (${baseUrl})`, ...(nominatimUrl ? {} : { wait: async () => {} }) }),
     addressSuggester: createPhotonAddressSuggester({ ...photon, userAgent: `myEST8 (${baseUrl})` }),
     tradeSuggester: createJevTradeSuggester({ ...jev, apiKey: env.JEV_API_KEY ?? 'demo' }),
+    jobFitJudge: createJevJobFitJudge({ ...jev, apiKey: env.JEV_API_KEY ?? 'demo' }),
     fetchMedia: mediaFetcher(env, smsNumbers),
     settings: { baseUrl },
     blobs: storageFromEnv(env),

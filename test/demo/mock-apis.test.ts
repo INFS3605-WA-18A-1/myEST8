@@ -4,16 +4,18 @@ import { describe, expect, test } from 'vitest';
 import { createGooglePlaces } from '../../src/adapters/google-places.ts';
 import { createImageMatcher } from '../../src/adapters/image-matcher.ts';
 import { createJevClassifier } from '../../src/adapters/jev.ts';
+import { createJevJobFitJudge } from '../../src/adapters/jev-job-fit.ts';
 import { createJevTradeSuggester } from '../../src/adapters/jev-trades.ts';
 import { createNominatimGeocoder } from '../../src/adapters/nominatim.ts';
 import { createQuoteReader } from '../../src/adapters/quote-reader.ts';
 import { DEMO_PLACES, mockApis, mockFetch } from '../../src/demo/mock-apis.ts';
-import type { ListingDetails } from '../../src/ports.ts';
+import type { JobFitEvidence, ListingDetails } from '../../src/ports.ts';
 import { AVAILABILITY, TRADES, URGENCIES, type Trade } from '../../src/shared.ts';
 
 const fetch = mockFetch();
 const classifier = createJevClassifier({ baseUrl: 'http://mock.local/jev', apiKey: 'demo', fetch });
 const tradeSuggester = createJevTradeSuggester({ baseUrl: 'http://mock.local/jev', apiKey: 'demo', fetch });
+const jobFitJudge = createJevJobFitJudge({ baseUrl: 'http://mock.local/jev', apiKey: 'demo', fetch });
 const imageMatcher = createImageMatcher({ baseUrl: 'http://mock.local/vision', apiKey: 'demo', fetch });
 const quoteReader = createQuoteReader({
   baseUrl: 'http://mock.local/quotes',
@@ -256,7 +258,7 @@ describe('mock trade suggestions', () => {
   test.each([
     ['no questions', { state: {}, questions: {} }],
     ['no state', { questions: { plumbing: { type: 'noul' } } }],
-    ['a question that is neither a choice nor a trade noul', { state: {}, questions: { plumbing: { type: 'score', criteria: ['low'] } } }],
+    ['a question that is neither a choice, a trade noul nor job fit', { state: {}, questions: { plumbing: { type: 'score', criteria: ['low'] } } }],
     ['a question that is not about a Trade', { state: {}, questions: { painting: { type: 'noul' } } }],
     ['a body that is not JSON', 'nope'],
   ])('refuses %s with a 422, as TypeSafe does for a bad request', async (_, body) => {
@@ -280,6 +282,23 @@ describe('mock trade suggestions', () => {
     });
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ answers: { urgency: { type: 'choice', choice: 'routine', confidence: 0.8 } } });
+  });
+});
+
+describe('mock job-fit judge', () => {
+  const evidence = (record: Partial<JobFitEvidence['tradie']>): JobFitEvidence => ({
+    job: { trade: 'plumbing', summary: 'Hot water system leaking', description: 'The hot water tank drips', location: 'Garage' },
+    tradie: { businessName: 'Any Plumbing', trades: ['plumbing'], listing: null, pastJobs: [], ...record },
+  });
+
+  test('scores by the words the Job shares with past jobs and the listing, through the real adapter', async () => {
+    const same = await jobFitJudge.judge(evidence({ listing: { types: ['plumber'], summary: 'Hot water systems' } }));
+    const related = await jobFitJudge.judge(evidence({ pastJobs: [{ trade: 'plumbing', summary: 'Leaking shower', scopeOfWork: null }] }));
+    const none = await jobFitJudge.judge(evidence({}));
+    expect(Math.round(same.score)).toBe(3);
+    expect(Math.round(related.score)).toBe(2);
+    expect(Math.round(none.score)).toBe(1);
+    for (const fit of [same, related, none]) expect(fit.confidence).toBeGreaterThan(0.5);
   });
 });
 

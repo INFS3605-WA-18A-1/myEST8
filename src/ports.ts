@@ -269,6 +269,30 @@ export interface TradeSuggester {
   suggestTrades(listing: ListingDetails): Promise<Trade[]>;
 }
 
+/** What a job-fit judgment is shown: the Job, and one Tradie's record. No contact details. */
+export interface JobFitEvidence {
+  job: { trade: Trade; summary: string | null; description: string; location: string | null };
+  tradie: {
+    businessName: string;
+    trades: Trade[];
+    /** What their Google listing says they do; null when they aren't on Google or it wasn't read. */
+    listing: { types: string[]; summary: string | null } | null;
+    /** Their latest confirmed Quotes on other Jobs, newest first. `scopeOfWork` is a Firm Quote's, else null. */
+    pastJobs: { trade: Trade; summary: string; scopeOfWork: string | null }[];
+  };
+}
+
+/** How well a Tradie fits a Job: `score` from 0 to 3 on the job-fit levels (it can fall between them), and `confidence` 0-1. */
+export interface JobFit {
+  score: number;
+  confidence: number;
+}
+
+export interface JobFitJudge {
+  /** How well the Tradie's record fits this Job, judged from the evidence alone. Throws when the judgment fails. */
+  judge(evidence: JobFitEvidence): Promise<JobFit>;
+}
+
 export interface Clock {
   now(): Date;
 }
