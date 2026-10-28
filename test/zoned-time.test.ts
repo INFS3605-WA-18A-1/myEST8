@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { addDays, dayOf, daysFrom, formatWeekdayDateAndTime, mondayOf, parseDay, startOfDay, weekdayOf } from '../src/zoned-time.ts';
+import { addDays, dayOf, daysFrom, formatDay, formatVisit, formatWeekdayDateAndTime, mondayOf, parseDay, startOfDay, weekdayOf } from '../src/zoned-time.ts';
 
 const SYDNEY = 'Australia/Sydney';
 
@@ -8,6 +8,15 @@ describe('naming a visit in a sentence', () => {
     expect(formatWeekdayDateAndTime(new Date('2026-10-26T22:00:00Z'), SYDNEY)).toBe('Tuesday 27 October at 9 am');
     expect(formatWeekdayDateAndTime('2026-10-27T22:30:00Z', SYDNEY)).toBe('Wednesday 28 October at 9:30 am');
     expect(formatWeekdayDateAndTime('2026-12-31T14:15:00Z', SYDNEY)).toBe('Friday 1 January at 1:15 am');
+  });
+});
+
+describe('naming a visit in a message', () => {
+  test('the short weekday, the date and the time, and the day alone as the same words', () => {
+    expect(formatVisit('2026-10-26T22:00:00Z', SYDNEY)).toBe('Tue 27 Oct, 9:00 am');
+    expect(formatDay('2026-10-26T22:00:00Z', SYDNEY)).toBe('Tue 27 Oct');
+    // 1:15 am in Sydney is still the 31st in UTC.
+    expect(formatDay('2026-12-31T14:15:00Z', SYDNEY)).toBe('Fri 1 Jan');
   });
 });
 

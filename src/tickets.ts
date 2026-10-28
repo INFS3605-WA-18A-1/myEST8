@@ -97,6 +97,8 @@ export interface LoggedMessage {
   address: string;
   template: string | null;
   text: string;
+  /** Whether the composer wrote the text sent (ADR 0011), rather than the template. */
+  composed?: boolean;
   issueId: number | null;
   fileIds: number[];
   unread?: boolean;
@@ -818,12 +820,29 @@ export function createTickets({ db, clock, settings, ports, modules }: Context) 
         return closing;
       });
       const property = await modules.profiles.property(closing.propertyId);
-      const { description } = await issue(closing.issueId);
-      await modules.notifications.send(closing.tenantId, 'tenant.ticket_closed', { propertyAddress: property.address }, { issueId: closing.issueId });
+      const closed = await issue(closing.issueId);
+      const summary = closed.summary ?? closed.description;
+      const done = [];
+      for (const job of await jobsOf(ticketId)) {
+        const found = job.status === 'done' ? await modules.scheduling.doneJob(job.id) : null;
+        if (found) done.push(found);
+      }
+      // The Tenant hears what was done, by whom and when; the Property Owner also hears what it cost.
+      await modules.notifications.send(
+        closing.tenantId,
+        'tenant.ticket_closed',
+        { propertyAddress: property.address, summary, jobs: done.map((j) => j.story) },
+        { issueId: closing.issueId },
+      );
       await modules.notifications.send(
         property.ownerId,
         'owner.ticket_closed',
-        { propertyAddress: property.address, description },
+        {
+          propertyAddress: property.address,
+          summary,
+          jobs: done.map((j) => ({ ...j.story, approvedCents: j.approvedCents })),
+          repairCostCents: await modules.quotes.repairCost(ticketId),
+        },
         { issueId: closing.issueId },
       );
     },
@@ -834,8 +853,8 @@ export function createTickets({ db, clock, settings, ports, modules }: Context) 
     async logMessage(entry: LoggedMessage) {
       return run(
         db,
-        `INSERT INTO messages (agency_id, direction, person_id, channel_type, address, template, text, issue_id, files, unread, at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+        `INSERT INTO messages (agency_id, direction, person_id, channel_type, address, template, text, composed, issue_id, files, unread, at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
         entry.agencyId,
         entry.direction,
         entry.personId,
@@ -843,6 +862,7 @@ export function createTickets({ db, clock, settings, ports, modules }: Context) 
         entry.address,
         entry.template,
         entry.text,
+        entry.composed ?? false,
         entry.issueId,
         JSON.stringify(entry.fileIds),
         Number(entry.unread ?? false),
@@ -856,9 +876,9 @@ export function createTickets({ db, clock, settings, ports, modules }: Context) 
     },
 
     async messages(issueId: number) {
-      return (await all<{ direction: 'in' | 'out'; person_id: number | null; channel_type: ChannelType; address: string; template: string | null; text: string; delivery_error: string | null; unread: number; at: string }>(
+      return (await all<{ direction: 'in' | 'out'; person_id: number | null; channel_type: ChannelType; address: string; template: string | null; text: string; composed: boolean; delivery_error: string | null; unread: number; at: string }>(
         db,
-        'SELECT direction, person_id, channel_type, address, template, text, delivery_error, unread, at FROM messages WHERE issue_id = ? ORDER BY at, id',
+        'SELECT direction, person_id, channel_type, address, template, text, composed, delivery_error, unread, at FROM messages WHERE issue_id = ? ORDER BY at, id',
         issueId,
       )).map((m) => ({
         direction: m.direction,
@@ -867,6 +887,8 @@ export function createTickets({ db, clock, settings, ports, modules }: Context) 
         address: m.address,
         template: m.template,
         text: m.text,
+        /** Written by the composer (ADR 0011): the timeline marks it as written by AI. */
+        composed: m.composed,
         deliveryError: m.delivery_error,
         unread: !!m.unread,
         at: m.at,

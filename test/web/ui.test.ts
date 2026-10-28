@@ -8,6 +8,7 @@ import {
   chatBubble,
   docket,
   dl,
+  doneBox,
   field,
   filterBar,
   formatAge,
@@ -104,6 +105,12 @@ describe('ui', () => {
     expect(out).not.toContain('<script>alert');
     expect(out).toContain('&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;');
     expect(out).toContain('aria-current="page"');
+  });
+
+  it('draws a saved choice as the green confirmed block, a status with a tick screen readers skip, and escapes it', async () => {
+    const out = await render(doneBox('Booked: Mon 16 Nov, 9:00 am'));
+    expect(out).toBe('<div role="status" class="tenant-done"><span aria-hidden="true">✓</span> Booked: Mon 16 Nov, 9:00 am</div>');
+    expect(await render(doneBox(HOSTILE))).not.toContain('<script>');
   });
 
   it('gives the rail a Collapse menu button, and keeps each label as its link\'s name for the folded rail', async () => {

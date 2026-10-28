@@ -37,14 +37,23 @@ body {
   gap: 16px;
   min-width: 0;
 }
+/* The email's choices once one is saved: the ones that no longer apply, disabled. */
+.tenant-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
 /* These pages don't load Tailwind, so a control's w-full would otherwise not apply. */
 .tenant-form .input,
 .tenant-form .textarea,
+.tenant-buttons .btn,
 .tenant-form .btn {
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
 }
+.tenant-buttons .btn,
 .tenant-form .btn {
   white-space: normal;
   height: auto;

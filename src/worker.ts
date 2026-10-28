@@ -36,6 +36,21 @@ export function createWorker(db: Db, clock: Clock) {
       await run(db, 'INSERT INTO tasks (kind, payload, run_at) VALUES (?, ?, ?)', kind, JSON.stringify(payload), iso(runAt));
     },
 
+    /** Schedules the task to run now, unless the same task is already waiting or running. Two calls at once can both add it, so its handler must be safe to run twice. */
+    async scheduleUnlessWaiting(kind: string, payload: object) {
+      const text = JSON.stringify(payload);
+      await run(
+        db,
+        `INSERT INTO tasks (kind, payload, run_at) SELECT ?, ?, ?
+         WHERE NOT EXISTS (SELECT 1 FROM tasks WHERE kind = ? AND payload = ? AND status IN ('pending', 'running'))`,
+        kind,
+        text,
+        iso(clock.now()),
+        kind,
+        text,
+      );
+    },
+
     /**
      * Runs every task that is due, including tasks those tasks schedule. Returns the
      * errors raised. With `budgetMs` it stops starting tasks once that much real time

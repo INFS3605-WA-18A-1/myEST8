@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { one } from '../../src/db.ts';
-import { visible, webWorld } from '../support/web.ts';
+import { buttonsOn, confirmedBlock, visible, webWorld } from '../support/web.ts';
 import { confirmedEstimates, firmQuote, jobView, KING_ST, OLIVIA, quoteToken, TOM, tomsTapTicket } from '../support/world.ts';
 
 const TUE_27_9AM = new Date('2026-10-27T09:00:00+11:00');
@@ -168,9 +168,10 @@ describe('confirming a visit time', () => {
     expect(posted.status).toBe(303);
     await w.h.drain();
 
-    const thanks = visible(await (await w.get(`/v/${token}?pick=none`)).text());
-    expect(thanks).toContain("We'll ask Pete's Plumbing for other times.");
-    expect(thanks).not.toContain('When are you usually home?');
+    const thanks = await (await w.get(`/v/${token}?pick=none`)).text();
+    expect(confirmedBlock(thanks)).toBe('✓ Asked for other times');
+    expect(visible(thanks)).toContain("We'll ask Pete's Plumbing for other times.");
+    expect(visible(thanks)).not.toContain('When are you usually home?');
 
     const quote = visible(await (await w.get(`/q/${await quoteToken(w, job, w.tradies.pete)}`)).text());
     expect(quote).toContain('usually home Saturdays');
@@ -218,9 +219,9 @@ describe('confirming a visit time', () => {
 
     const opened = await w.get(`/v/${token}`);
     expect(opened.status).toBe(200);
-    const text = visible(await opened.text());
-    expect(text).toContain('This visit is booked for Tue 27 Oct, 9:00 am.');
-    expect(text).toContain('Need another time?');
+    const page = await opened.text();
+    expect(confirmedBlock(page)).toBe('✓ Booked: Tue 27 Oct, 9:00 am');
+    expect(buttonsOn(page)).toContainEqual({ label: 'Need another time?', disabled: false });
     expect((await jobView(w, job)).workOrder).toMatchObject({ start: TUE_27_9AM.toISOString(), rescheduleRequestedBy: null });
     expect(w.h.messenger.last(w.tradies.pete.address)).toBeUndefined();
 
@@ -263,5 +264,92 @@ describe('confirming a visit time', () => {
     expect(posted.status).toBe(400);
     expect(visible(await posted.text())).toContain('Choose when you are usually home');
     expect((await one<{ status: string }>(w.h.db, 'SELECT status FROM visit_offers WHERE token = ?', token))?.status).toBe('offered');
+  });
+});
+
+describe('once the Tenant has chosen', () => {
+  const LINKS = ['?pick=1', '?pick=2', '?pick=none', ''];
+  const book = (w: Awaited<ReturnType<typeof webWorld>>, token: string, pick: string) =>
+    w.web.request(`/v/${token}`, { method: 'POST', body: new URLSearchParams({ pick }) });
+
+  test('every link from the email shows the booked time in green, with the offered times disabled', async () => {
+    const { w, job, token } = await offeredTimes();
+    const posted = await book(w, token, '1');
+    expect(posted.status).toBe(303);
+    expect(posted.headers.get('location')).toBe(`/v/${token}`);
+    await w.h.drain();
+    w.h.messenger.clear();
+    const before = await jobView(w, job);
+
+    for (const link of LINKS) {
+      const page = await (await w.get(`/v/${token}${link}`)).text();
+      expect(confirmedBlock(page), link).toBe('✓ Booked: Tue 27 Oct, 9:00 am');
+      expect(buttonsOn(page), link).toEqual([
+        { label: 'Tue 27 Oct, 9:00 am', disabled: true },
+        { label: 'Wed 28 Oct, 1:00 pm', disabled: true },
+        { label: 'None of these work', disabled: true },
+        { label: 'Need another time?', disabled: false },
+      ]);
+      expect(visible(page), link).not.toContain('When are you usually home?');
+    }
+    // Opening them changed nothing.
+    expect(await jobView(w, job)).toEqual(before);
+    expect(w.h.messenger.to(TOM)).toEqual([]);
+  });
+
+  test('picking a second time after the first was booked is refused, and the page still shows the booking', async () => {
+    const { w, job, token } = await offeredTimes();
+    await book(w, token, '1');
+    await w.h.drain();
+
+    const again = await book(w, token, '2');
+    expect(again.status).toBe(400);
+    const page = await again.text();
+    expect(visible(page)).toContain('These times are no longer on offer');
+    expect(confirmedBlock(page)).toBe('✓ Booked: Tue 27 Oct, 9:00 am');
+    expect(buttonsOn(page)).toContainEqual({ label: 'Wed 28 Oct, 1:00 pm', disabled: true });
+    expect((await jobView(w, job)).workOrder).toMatchObject({ start: TUE_27_9AM.toISOString() });
+  });
+
+  test('after asking for another time, every link says so in green and Need another time? is disabled', async () => {
+    const { w, job, token } = await offeredTimes();
+    await book(w, token, '1');
+    await w.h.drain();
+    expect((await book(w, token, 'another')).status).toBe(303);
+    await w.h.drain();
+    w.h.messenger.clear();
+
+    for (const link of LINKS) {
+      const page = await (await w.get(`/v/${token}${link}`)).text();
+      expect(confirmedBlock(page), link).toBe('✓ Asked for another time');
+      expect(visible(page), link).toContain("We'll ask Pete's Plumbing for other times. This visit stays booked for Tue 27 Oct, 9:00 am until you pick a new one.");
+      expect(buttonsOn(page), link).toContainEqual({ label: 'Need another time?', disabled: true });
+      expect(buttonsOn(page).every((b) => b.disabled), link).toBe(true);
+    }
+    expect((await jobView(w, job)).workOrder).toMatchObject({ rescheduleRequestedBy: 'tenant' });
+    expect(w.h.messenger.last(w.tradies.pete.address)).toBeUndefined();
+  });
+
+  test('after none of these work, every time link shows that in green, with the times disabled', async () => {
+    const { w, job, token } = await offeredTimes();
+    await w.web.request(`/v/${token}`, { method: 'POST', body: new URLSearchParams({ pick: 'none', availability: 'saturdays', note: '' }) });
+    await w.h.drain();
+
+    for (const link of ['?pick=1', '?pick=2', '?pick=none']) {
+      const page = await (await w.get(`/v/${token}${link}`)).text();
+      expect(confirmedBlock(page), link).toBe('✓ Asked for other times');
+      expect(buttonsOn(page), link).toEqual([
+        { label: 'Tue 27 Oct, 9:00 am', disabled: true },
+        { label: 'Wed 28 Oct, 1:00 pm', disabled: true },
+        { label: 'None of these work', disabled: true },
+      ]);
+    }
+    expect(await jobView(w, job)).toMatchObject({ status: 'approved', workOrder: null });
+  });
+
+  test('a booked page has no green block while its times are still on offer', async () => {
+    const { w, token } = await offeredTimes();
+    expect(confirmedBlock(await (await w.get(`/v/${token}?pick=1`)).text())).toBeNull();
+    expect(confirmedBlock(await (await w.get(`/v/${token}?pick=none`)).text())).toBeNull();
   });
 });

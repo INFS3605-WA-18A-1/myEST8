@@ -5,6 +5,7 @@
 import { html } from 'hono/html';
 import type { ChannelType } from '../ports.ts';
 import { templates, type TemplateName } from '../templates.ts';
+import { icon } from './icons.ts';
 import { badge, chatBubble, emptyState, formatWhen, humanise, postButton, type Html } from './ui.ts';
 
 /** One logged message, as `tickets.messages` returns it. */
@@ -14,6 +15,8 @@ export type LoggedMessageView = {
   address: string;
   template: string | null;
   text: string;
+  /** The composer wrote it (ADR 0011), not the template. */
+  composed?: boolean;
   deliveryError: string | null;
   unread: boolean;
   at: string;
@@ -59,14 +62,17 @@ export function messageLog(messages: LoggedMessageView[], o: { timeZone: string;
   return collapsible(unread ? `Messages (${unread} unread)` : 'Messages', html`${read} ${log}`);
 }
 
-/** Inbound messages on the left, what myEST8 sent on the right; unread ones stand out. */
+/** The AI mark on a message the composer wrote: the sparkle, then the words that carry its meaning. */
+const writtenByAI = html`<span class="inline-flex items-center gap-1">${icon('sparkle', { size: 'size-3.5', weight: 'fill' })}Written by AI</span>`;
+
+/** Inbound messages on the left, what myEST8 sent on the right; unread ones stand out, and one the AI wrote says so. */
 function messageBubble(m: LoggedMessageView, timeZone: string): Html {
   const subject = m.template ? html`: <span class="font-medium">${templateSubject(m.template)}</span>` : nothing;
   return chatBubble({
     side: m.direction === 'in' ? 'start' : 'end',
     header: html`${m.direction === 'in' ? 'From' : 'To'} ${m.address} by ${CHANNELS[m.channel]}${subject}`,
     text: shortLinks(m.text),
-    footer: html`${formatWhen(m.at, timeZone)}${m.unread ? html` ${badge('Unread', 'warning')}` : nothing}${m.deliveryError ? html` ${badge(m.deliveryError, 'error')}` : nothing}`,
+    footer: html`${formatWhen(m.at, timeZone)}${m.composed ? html` · ${writtenByAI}` : nothing}${m.unread ? html` ${badge('Unread', 'warning')}` : nothing}${m.deliveryError ? html` ${badge(m.deliveryError, 'error')}` : nothing}`,
     tone: m.deliveryError ? 'error' : m.unread ? 'warning' : undefined,
   });
 }
