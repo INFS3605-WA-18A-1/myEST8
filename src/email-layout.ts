@@ -33,13 +33,20 @@ const blocksOf = (text: string) =>
 
 const NUMBERED = /^(\d+)\.\s+(.+)$/;
 
+/** A web address, without the full stop, comma or bracket that ends the sentence around it. */
+const URL_PATTERN = /https?:\/\/[^\s<>"]*[^\s<>".,;:!?)\]']/g;
+const hasUrl = (text: string) => text.search(URL_PATTERN) !== -1;
+
 type Block = { kind: 'paragraph'; lines: string[] } | { kind: 'list'; start: number; items: string[] };
 
-/** A block's lines as paragraphs and ordered lists: a run of numbered lines is one list. */
+/**
+ * A block's lines as paragraphs and ordered lists: a run of numbered lines is one list.
+ * A numbered line with a web address is a paragraph, so its address can be a button.
+ */
 function blocksIn(lines: string[]): Block[] {
   const blocks: Block[] = [];
   for (const line of lines) {
-    const numbered = NUMBERED.exec(line);
+    const numbered = hasUrl(line) ? null : NUMBERED.exec(line);
     const last = blocks.at(-1);
     if (numbered && last?.kind === 'list') last.items.push(numbered[2]!);
     else if (numbered) blocks.push({ kind: 'list', start: Number(numbered[1]), items: [numbered[2]!] });
@@ -49,19 +56,8 @@ function blocksIn(lines: string[]): Block[] {
   return blocks;
 }
 
-/** A web address, without the full stop, comma or bracket that ends the sentence around it. */
-const URL_PATTERN = /https?:\/\/[^\s<>"]*[^\s<>".,;:!?)\]']/g;
-
-/** Escaped text with its line breaks, and any web address in it as a link. */
-function inline(text: string) {
-  let html = '';
-  let end = 0;
-  for (const match of text.matchAll(URL_PATTERN)) {
-    html += escapeHtml(text.slice(end, match.index)) + `<a href="${escapeHtml(match[0])}" style="color:${HARBOUR};text-decoration:underline;">${escapeHtml(match[0])}</a>`;
-    end = match.index + match[0].length;
-  }
-  return (html + escapeHtml(text.slice(end))).replaceAll('\n', '<br>');
-}
+/** Escaped text with its line breaks. Its web addresses were taken out as buttons first. */
+const inline = (text: string) => escapeHtml(text).replaceAll('\n', '<br>');
 
 const paragraph = (text: string, margin = '0') =>
   `<p style="margin:${margin};font-family:${FONT};font-size:16px;line-height:24px;color:${NIGHT};">${inline(text)}</p>`;
@@ -100,7 +96,7 @@ const QUIET_BUTTONS = new Set(['None of these work', 'Need another time?', "Can'
 /** The plain-text mark on a Tradie's preferred time. The button drops it and says so underneath. */
 const PREFERRED_MARK = ' (preferred)';
 
-/** The button for a link, with its address as text under it. */
+/** The button for a link. The address is only its href: an email never shows a web address as text. */
 const button = (url: string, label: string) => {
   const preferred = label.endsWith(PREFERRED_MARK);
   const shown = preferred ? label.slice(0, -PREFERRED_MARK.length) : label;
@@ -116,8 +112,7 @@ const button = (url: string, label: string) => {
     `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td ${cell}>` +
     `<a href="${escapeHtml(url)}" style="display:inline-block;padding:12px 24px;font-family:${FONT};font-size:16px;line-height:20px;font-weight:600;color:${text};text-decoration:none;">${escapeHtml(shown)}</a>` +
     '</td></tr></table>' +
-    note +
-    `<p style="margin:8px 0 0;font-family:${FONT};font-size:13px;line-height:20px;color:${SLATE};word-break:break-all;"><a href="${escapeHtml(url)}" style="color:${SLATE};text-decoration:underline;">${escapeHtml(url)}</a></p>`
+    note
   );
 };
 
@@ -172,26 +167,26 @@ function rowsOfLines(lines: string[]) {
 }
 
 /**
- * A paragraph's rows. A link alone, at the end, or after a colon or the end of a
- * sentence is a button on a Wattle edge, and what follows it is a paragraph of
- * its own. A link in the middle of a sentence stays a link.
+ * A paragraph's rows. Every web address is a button on a Wattle edge: the words
+ * before it are a paragraph, and what follows it is a paragraph of its own. A
+ * template puts an address at the end of a sentence or on a "<Label>: <url>" line;
+ * one in the middle of a sentence still breaks it, so the address never shows as text.
  */
 function paragraphRows(lines: string[]) {
   const text = lines.join('\n');
   const rows: string[] = [];
   let start = 0;
   const flush = (end: number) => {
-    let run = text.slice(start, end).trim();
+    // A bracket opened just before an address closes just after it: both go with the address.
+    let run = text.slice(start, end).replace(/\($/, '').trim();
     // A short "<label>: <url>" line is the button's words, so it is not also a paragraph above it.
     const lineStart = run.lastIndexOf('\n') + 1;
     if (LABELLED_LINE.test(run.slice(lineStart))) run = run.slice(0, lineStart).trim();
     if (run) rows.push(row(paragraph(run)));
   };
   for (const match of text.matchAll(URL_PATTERN)) {
-    const lead = text.slice(start, match.index).trim();
+    const lead = text.slice(start, match.index).replace(/\($/, '').trim();
     const end = match.index + match[0].length;
-    const endsParagraph = /^[\s.,;:!?)]*$/.test(text.slice(end));
-    if (lead && !/[:.!?]$/.test(lead) && !endsParagraph) continue;
     flush(match.index);
     rows.push(row(button(match[0], buttonLabel(lead)), { wattle: true }));
     start = end + text.slice(end).match(/^[.,;:!?)]*/)![0].length;
@@ -211,8 +206,12 @@ const SPACER = '<tr><td colspan="5" height="16" style="height:16px;font-size:0;l
 const row = (content: string, { wattle = false } = {}) =>
   `<tr><td width="8"></td><td width="4"${wattle ? ` bgcolor="${WATTLE}" style="background-color:${WATTLE};"` : ''}></td><td width="12"></td><td>${content}</td><td width="24"></td></tr>`;
 
-/** The first sentence, for the inbox preview. */
-const preheaderOf = (text: string) => text.replace(/\s+/g, ' ').trim().match(/^.*?[.!?](?=\s|$)|^.*/)![0];
+/** The first sentence, for the inbox preview. It stops before a web address, which is never text. */
+function preheaderOf(text: string) {
+  const sentence = text.replace(/\s+/g, ' ').trim().match(/^.*?[.!?](?=\s|$)|^.*/)![0];
+  const url = sentence.search(URL_PATTERN);
+  return (url === -1 ? sentence : sentence.slice(0, url)).trim();
+}
 
 export function renderEmail({ agencyName, subject, text }: EmailContent): string {
   return `<!doctype html>
