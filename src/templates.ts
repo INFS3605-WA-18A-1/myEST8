@@ -1,8 +1,11 @@
-// Every message myEST8 sends. Each template is fixed text with placeholders;
-// nothing here is written by a model.
+// Every message myEST8 sends. Each template is fixed text with placeholders. An
+// SMS or WhatsApp message is this text. An email is written by Claude Haiku from
+// the template's data, with this text as its draft, and is this text whenever no
+// model is configured, the model fails, or its text drops or adds a fact
+// (ADR 0011, src/composing.ts).
 
 import { dollars, type Availability, type Trade, type Urgency } from './shared.ts';
-import { formatVisit } from './zoned-time.ts';
+import { formatDay, formatVisit } from './zoned-time.ts';
 
 export type GuidedQuestion = 'location' | 'started' | 'worsening' | 'availability';
 
@@ -43,6 +46,8 @@ export function availabilityChoice(value: Availability): string {
 
 const trade = (t: Trade) => t.replace('_', ' ');
 const visit = (at: string, agency: AgencyInfo) => formatVisit(at, agency.timeZone);
+/** Text that ends a sentence of its own, without the full stop it may already have. */
+const sentence = (text: string) => text.trim().replace(/[.!?\s]+$/, '');
 const titled = (value: string) => {
   const text = value.replaceAll('_', ' ');
   return text.charAt(0).toUpperCase() + text.slice(1);
@@ -70,6 +75,33 @@ export function quotedLengthLabel(durationDays: number | null): string {
 
 const kept = (rows: (string | false | null | undefined)[]) => rows.filter((row): row is string => !!row);
 const blocks = (parts: (string | false | null | undefined)[]) => kept(parts).join('\n\n');
+
+/**
+ * One done Job, as a completion message tells it. `work` is the Firm Quote's scope of
+ * work, or the issue as the Tradie was asked to estimate it when the Job went ahead on
+ * an Estimate. `doneOn` is the done visit's start, null when the Job had no visit.
+ */
+export interface DoneJob {
+  trade: Trade;
+  tradieBusinessName: string;
+  doneOn: string | null;
+  work: string;
+}
+
+/** A done Job as the Property Owner hears it: with the amount approved for it (a Firm Quote's price, or the Not-to-exceed Cap). */
+export interface OwnerDoneJob extends DoneJob {
+  approvedCents: number;
+}
+
+/** "Pete's Plumbing did the plumbing work on Tue 13 Oct: Replace the tap washer." */
+const doneJobLine = (j: DoneJob, a: AgencyInfo) =>
+  `${j.tradieBusinessName} did the ${trade(j.trade)} work${j.doneOn ? ` on ${formatDay(j.doneOn, a.timeZone)}` : ''}: ${sentence(j.work)}.`;
+
+/** "The plumbing repair", or "The plumbing and electrical repair": the Trades of the Jobs done, once each. */
+const repairOf = (jobs: DoneJob[]) => {
+  const trades = [...new Set(jobs.map((j) => trade(j.trade)))];
+  return trades.length ? `${trades.length > 1 ? `${trades.slice(0, -1).join(', ')} and ${trades.at(-1)}` : trades[0]} repair` : 'repair';
+};
 
 function offerDetails(d: { propertyAddress: string; length: string; availability: Availability; note?: string | null }) {
   return kept([
@@ -189,9 +221,11 @@ export const templates = {
     'Inspection cancelled',
     (d, a) => `${d.tradieBusinessName} won't be coming to inspect on ${visit(d.visitStart, a)}: that visit is cancelled, so you don't need to be home for it. We'll let you know when the repair is booked.`,
   ),
-  'tenant.fixed_properly': template<{ trade: Trade; tradieBusinessName: string }>(
+  'tenant.fixed_properly': template<DoneJob>(
     'Was it fixed properly?',
-    (d) => `${d.tradieBusinessName} has finished the ${trade(d.trade)} job. Was it fixed properly? Reply with a number from 1 (not at all) to 5 (perfectly).`,
+    (d, a) =>
+      `${d.tradieBusinessName} has finished the ${trade(d.trade)} job${d.doneOn ? ` on ${formatDay(d.doneOn, a.timeZone)}` : ''}: ${sentence(d.work)}. ` +
+      'Was it fixed properly? Reply with a number from 1 (not at all) to 5 (perfectly).',
   ),
   'tenant.reimbursed': template<{ propertyAddress: string; amountCents: number | null }>(
     'Reimbursement Request paid',
@@ -199,9 +233,15 @@ export const templates = {
       `Good news: the property owner has reimbursed you${d.amountCents === null ? '' : ` ${dollars(d.amountCents)}`} for the urgent repair at ${d.propertyAddress}. ` +
       "If the money hasn't reached you in a few days, reply to this message.",
   ),
-  'tenant.ticket_closed': template<{ propertyAddress: string }>(
+  // The story of the repair: the issue's Summary, then each done Job's Tradie, day and work. No amounts: those are the Property Owner's.
+  'tenant.ticket_closed': template<{ propertyAddress: string; summary: string; jobs: DoneJob[] }>(
     'Repair complete',
-    (d) => `The repair at ${d.propertyAddress} is complete and we've closed it. Thanks for your patience.`,
+    (d, a) =>
+      blocks([
+        `The ${repairOf(d.jobs)} at ${d.propertyAddress} is complete, and we've closed it. The issue: ${sentence(d.summary)}.`,
+        d.jobs.map((j) => doneJobLine(j, a)).join('\n'),
+        'Thanks for your patience.',
+      ]),
   ),
   // The Property Manager's own message, checked and sent as it stands: the body is the text, whoever or whatever drafted it.
   'tenant.follow_up': template<{ text: string }>('About your maintenance request', (d) => d.text),
@@ -370,9 +410,15 @@ export const templates = {
     'Repair visit moved',
     (d, a) => `The ${trade(d.trade)} repair at ${d.propertyAddress} has moved to ${visit(d.visitStart, a)}.`,
   ),
-  'owner.ticket_closed': template<{ propertyAddress: string; description: string }>(
+  // The Tenant's story of the repair, with what each Job was approved for and the Ticket's Repair Cost.
+  'owner.ticket_closed': template<{ propertyAddress: string; summary: string; jobs: OwnerDoneJob[]; repairCostCents: number }>(
     'Repair complete',
-    (d) => `The repair at ${d.propertyAddress} (${d.description}) is complete.`,
+    (d, a) =>
+      blocks([
+        `The ${repairOf(d.jobs)} at ${d.propertyAddress} is complete. The issue: ${sentence(d.summary)}.`,
+        d.jobs.map((j) => `${doneJobLine(j, a)} Approved: ${dollars(j.approvedCents)}.`).join('\n'),
+        `Repair Cost: ${dollars(d.repairCostCents)}.`,
+      ]),
   ),
   'owner.urgent_repair_receipt': template<{ propertyAddress: string; tenantName: string; description: string; amountCents: number; limitCents: number }>(
     'Reimbursement Request for an urgent repair',

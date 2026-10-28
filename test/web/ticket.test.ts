@@ -723,6 +723,22 @@ describe('the message log', () => {
 
     expect(text).toContain("WhatsApp couldn't deliver this message (131047): Re-engagement message");
   });
+
+  test('marks each email the AI wrote as written by AI, and nothing sent as its template', async () => {
+    const w = await webWorld({ composeEmails: true });
+    const job = await tomsTapTicket(w);
+    // Quick Pipes takes email, so their Quote Request is composed; Pete's goes by SMS as its template.
+    await w.alice.sendQuoteRequests(job.jobId, [w.tradies.quick.id, w.tradies.pete.id]);
+
+    const res = await w.get(`/tickets/${job.ticketId}`, await w.signIn());
+    const bubbles = (await res.text()).split('<div class="chat ').slice(1).map(visibleText);
+
+    const toQuick = bubbles.filter((b) => b.includes(`To ${w.tradies.quick.address} by Email`));
+    expect(toQuick).toHaveLength(1);
+    expect(toQuick[0]).toMatch(/Composed: Harbour Realty is asking for a quote/);
+    expect(toQuick[0]).toContain('· Written by AI');
+    expect(bubbles.filter((b) => b.includes('Written by AI'))).toHaveLength(1);
+  });
 });
 
 /** The stage tracker's words: each stage, how it stands for screen readers, and its line under it. */

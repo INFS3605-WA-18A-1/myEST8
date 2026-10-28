@@ -20,7 +20,15 @@ export type Harness = Awaited<ReturnType<typeof createHarness>>;
 
 /** Drives the app through its boundary: inbound messages, uploads, Property Manager actions and the clock. */
 export async function createHarness(
-  options: { blobs?: BlobStore; smsNumbers?: (db: Db, clock: Clock) => SmsNumbers; composer?: null; detailExtractor?: null; messenger?: Messenger } = {},
+  options: {
+    blobs?: BlobStore;
+    smsNumbers?: (db: Db, clock: Clock) => SmsNumbers;
+    composer?: null;
+    /** Have the fake composer write outbound emails too. Off, every email is its template's text. */
+    composeEmails?: boolean;
+    detailExtractor?: null;
+    messenger?: Messenger;
+  } = {},
 ) {
   const clock = new FakeClock(START);
   const recorded = new FakeMessenger();
@@ -55,6 +63,7 @@ export async function createHarness(
     quoteReader,
     summariser,
     composer: options.composer === null ? null : composer,
+    emailComposer: options.composeEmails ? composer : null,
     detailExtractor: options.detailExtractor === null ? null : detailExtractor,
     places,
     geocoder,

@@ -1,6 +1,6 @@
 # An AI Summary of each request; templates still own outbound prose
 
-**Amended by [ADR 0011](0011-jev-classifies-haiku-composes.md):** Claude Haiku will compose outbound messages too, under the same rules as the Summary. Templates become the fallback when Haiku is unavailable or its draft misses a required fact. The Summary decision below stands; the "templates own outbound prose" part describes the code until ADR 0011 is built.
+**Amended by [ADR 0011](0011-jev-classifies-haiku-composes.md):** Claude Haiku composes outbound emails too, under the same rules as the Summary. An email's prose may now come from Haiku, but only within ADR 0011's checks: it keeps every button line, link, amount, time, phone number and reply instruction of the template's text, and adds no link, amount, phone number or email address. Otherwise, and whenever Haiku is unavailable, the template's text is sent. SMS and WhatsApp messages, the verification code, the channel test and the Property Manager's follow-up are still their templates' text. The Summary decision below stands; "templates own outbound prose" now holds for those messages and as every email's fallback.
 
 Each Maintenance Request carries a Summary: one line, at most 160 characters, written by Claude Haiku from the Tenant's words and their answers to the guided questions. It is what the Property Manager reads first, what goes to Tradies in a Quote Request, and what the docket shows once the request is a Ticket. The Tenant's original text stays as the description underneath.
 

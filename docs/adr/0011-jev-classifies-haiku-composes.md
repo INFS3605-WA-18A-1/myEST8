@@ -1,10 +1,13 @@
 # Jev classifies what comes in; Claude Haiku composes what goes out
 
-**Gaps 1 and 2 are done.** Gap 3 is not built yet.
+**Gaps 1, 2 and 3 are done.**
 
 1. **Done.** Jev classifies when `JEV_API_URL` is set. If Jev throws, Claude Haiku classifies instead. With no `JEV_API_URL`, Claude classifies when `ANTHROPIC_API_KEY` is set, and the in-process mock otherwise (`src/demo/runtime.ts`).
 2. **Done.** `src/adapters/jev.ts` posts to `{JEV_API_URL}/v1/systemone` (checked 2026-10-24, https://docs.typesafe.ai/api.md): model `jev-latest`, a `choice` question per judgment with `instructions` and `criteria`, and answers keyed by question name with `choice` and `confidence`. The demo's mock Jev speaks the same path, and still answers the Trade suggester's noul questions there.
-3. No model writes outbound messages. Everything sent to a Tenant, Tradie or Property Owner is a fixed template ([ADR 0008](0008-ai-summary-templates-own-prose.md)).
+3. **Done (2026-10-28).** Claude Haiku writes every outbound email when `ANTHROPIC_API_KEY` is set (`notifications.deliver`, `src/composing.ts`). It gets the template's name, a purpose for it, the recipient's role, the template's data as facts, the template's text as the draft, and the names of the facts that are another person's words as `untrustedFields`. Code reads `mustInclude` from the template's text: each `<Label>: <url>` button line whole, every link, amount, visit time or day, phone number and "Reply …" instruction, leaving out those inside another person's words. Haiku's text is sent only when it keeps each of them verbatim (a button line as a line of its own), adds no link, amount, phone number or email address the template's text doesn't have, and is under 4,000 characters. Otherwise, or when Haiku fails or times out (8 seconds), the template's text is sent and one line naming the template and the reason, never either text, goes to stderr. The subject stays the template's, the HTML is rendered from the text sent, and the message log records whether it was composed, so a Ticket's messages mark it "Written by AI".
+   - **Never composed:** SMS and WhatsApp messages; the verification code and the channel test, which must read exactly as written; and `tenant.follow_up`, which is the Property Manager's own words, drafted with Haiku's help before they send it.
+   - **Without `ANTHROPIC_API_KEY`** every email is its template's text, in the demo too: the demo's mock composer drafts follow-ups only. Tests send template text unless one opts in (`createHarness({ composeEmails: true })`).
+   - The completion emails (`tenant.ticket_closed`, `owner.ticket_closed`) carry the facts for a summary: the issue's Summary and each done Job's Trade, Tradie, visit day and scope of work (the Firm Quote's, or the issue as it was put to the Tradie when the Job went ahead on an Estimate). Only the Property Owner's carries each Job's approved amount and the Ticket's Repair Cost.
 
 The decision below is what the code should do.
 
