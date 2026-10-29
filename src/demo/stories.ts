@@ -870,10 +870,13 @@ async function createKit({ app, simulator, seed, clock, end }: { app: App; simul
   /** Chooses this Tradie's Firm Quote. Returns what myEST8 sent as a result. */
   async function choose(ref: JobRef, tradieId: number) {
     await confirmQuotes(ref);
-    const chosen = (await view(ref)).quotes.find((q) => q.tradieId === tradieId && q.stage === 'firm');
+    const jobView_ = await view(ref);
+    const chosen = jobView_.quotes.find((q) => q.tradieId === tradieId && q.stage === 'firm');
     if (!chosen) throw new Error(`${person(tradieId).name} has no Firm Quote on the ${ref.trade} Job`);
+    const firmCount = jobView_.quotes.filter((q) => q.stage === 'firm' && q.confirmed).length;
+    const reason = firmCount < 2 ? 'Demo: only one Firm Quote' : undefined;
     const sentBefore = (await outbox()).length;
-    await ref.pm.chooseQuote(chosen.quoteId);
+    await ref.pm.chooseQuote(chosen.quoteId, reason);
     await tick();
     return (await outbox()).slice(sentBefore);
   }

@@ -469,7 +469,7 @@ export function createViews({ clock, modules }: Context) {
             minimum: 0,
             singleReason: null,
             candidates: [],
-            booking: { tradieId: tradie.id, businessName: tradie.businessName ?? tradie.name, priceCents: quote.notToExceedCents ?? quote.priceCents, proposedTime: quote.proposedTime, freeSlots },
+            booking: { tradieId: tradie.id, businessName: tradie.businessName ?? tradie.name, priceCents: quote.notToExceedCents ?? quote.priceCents, proposedTime: quote.proposedTime ?? quote.availableTimes?.[0] ?? null, freeSlots },
           };
         }
         return { ...base, needs: null, asked: 0, minimum: 0, singleReason: null, candidates: [], booking: null };
