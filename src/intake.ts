@@ -520,6 +520,10 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
     const found = await modules.tickets.urgentRepairInAgency(agencyId, urgentRepairId);
     const property = await modules.profiles.property(found.propertyId);
     const owner = await modules.profiles.person(property.ownerId);
+    // Where the Owner is reached can't change between here and sending, so check it before
+    // forwarding: an Owner the Agency can't reach is a clear refusal, and the request stays
+    // awaiting review instead of being marked forwarded with nothing sent.
+    await modules.notifications.channelFor(owner.id);
     const forwarded = await modules.tickets.forwardUrgentRepair(agencyId, urgentRepairId, { amountCents: o.amountCents ?? null, ownerName: owner.name });
     const issue = await modules.tickets.issue(forwarded.issueId);
     await modules.notifications.send(
