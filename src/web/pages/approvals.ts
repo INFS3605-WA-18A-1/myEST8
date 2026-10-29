@@ -2,16 +2,18 @@
 // because choosing them would take a Ticket's Repair Cost over the Property's Max Repair
 // Cost (the Property Owner must say yes), and every Reimbursement Request not yet
 // reimbursed (a Tenant's claim for an Urgent Repair they arranged), the ones whose
-// receipt the Property Manager is to check first, each opening its own page. The rail's
-// count is the Quotes waiting on a Property Owner and the Reimbursement Requests to check.
+// receipt the Property Manager is to check first, each opening its own page. A request
+// awaiting review can be forwarded to its Property Owner from its row, and marked
+// reimbursed there once the Owner has paid the Tenant. The rail's count is the Quotes
+// waiting on a Property Owner and the Reimbursement Requests to check.
 
 import { Hono } from 'hono';
 import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
 import type { WebEnv } from '../env.ts';
 import { shellInfo } from '../shell.ts';
-import { badge, contactLink, countSentence, emptyState, entityLink, flashFrom, formatAge, formatMoney, formatWhen, humanise, linkButton, page, rowLink, section, segmented, table, type Html } from '../ui.ts';
-import { reimbursementBadge } from './reimbursement.ts';
+import { badge, contactLink, countSentence, emptyState, entityLink, flashFrom, formatAge, formatMoney, formatWhen, humanise, linkButton, page, postButton, rowLink, section, segmented, table, type Html } from '../ui.ts';
+import { reimbursementBadge, reimbursementForwardForm } from './reimbursement.ts';
 
 type Approvals = Awaited<ReturnType<PropertyManagerActions['approvals']>>;
 
@@ -70,7 +72,7 @@ function body(waiting: Approvals, all: boolean, timeZone: string, now: Date): Ht
       ...(others ? [{ label: 'Reimbursement Requests waiting on a Tenant or Property Owner', one: 'Reimbursement Request waiting on a Tenant or Property Owner', count: others, href: '#reimbursements' }] : []),
     ])}
     ${owners.length ? section({ title: 'Waiting on a Property Owner', id: 'owners', body: ownerTable(owners, now) }) : ''}
-    ${claims.length ? section({ title: 'Reimbursement Requests', id: 'reimbursements', body: reimbursementTable(claims, timeZone, now) }) : ''}
+    ${claims.length ? section({ title: 'Reimbursement Requests', id: 'reimbursements', body: reimbursementTable(claims, all, timeZone, now) }) : ''}
   `;
 }
 
@@ -98,9 +100,9 @@ function ownerTable(waiting: Approvals['waitingOnOwner'], now: Date): Html {
 }
 
 /** Every open Reimbursement Request, each opening its page: the ones to review first, then oldest first. */
-function reimbursementTable(claims: Approvals['reimbursements'], timeZone: string, now: Date): Html {
+function reimbursementTable(claims: Approvals['reimbursements'], all: boolean, timeZone: string, now: Date): Html {
   return table(
-    ['Reimbursement Request', 'Tenant', 'Property Owner', 'Status', 'Amount', 'Reported'],
+    ['Reimbursement Request', 'Tenant', 'Property Owner', 'Status', 'Amount', 'Reported', ''],
     claims.map((u) => [
       html`<p>${rowLink(u.description, `/reimbursements/${u.urgentRepairId}`)}</p>
         <p class="mt-1">${entityLink('property', u.propertyAddress, `/properties/${u.propertyId}`)}</p>`,
@@ -111,7 +113,25 @@ function reimbursementTable(claims: Approvals['reimbursements'], timeZone: strin
         ? html`<span class="text-muted">Not given</span>`
         : html`<div><p class="num">${formatMoney(u.amountCents)}</p>${u.amountCents > u.limitCents ? html`<p class="text-xs text-high">Over the ${formatMoney(u.limitCents)} limit</p>` : ''}</div>`,
       html`<span class="whitespace-nowrap" title="${formatWhen(u.reportedAt, timeZone)}">${formatAge(u.reportedAt, now)}</span>`,
+      reimbursementAction(u, all),
     ]),
-    { stack: 'labelled', caption: 'Reimbursement Requests not yet reimbursed, the ones to review first', align: ['left', 'left', 'left', 'left', 'right', 'left'] },
+    { stack: 'labelled', caption: 'Reimbursement Requests not yet reimbursed, the ones to review first, each with the action it needs', align: ['left', 'left', 'left', 'left', 'right', 'left', 'left'] },
   );
+}
+
+/** Forward a checked receipt to the Property Owner, or mark it reimbursed once they have paid the Tenant. */
+function reimbursementAction(u: Approvals['reimbursements'][number], all: boolean): Html {
+  const query = `?from=approvals${all ? '&filter=all' : ''}`;
+  switch (u.status) {
+    case 'receipt_received':
+      return reimbursementForwardForm(u, `/reimbursements/${u.urgentRepairId}/forward${query}`, { compact: true });
+    case 'receipt_forwarded':
+      return postButton(`/reimbursements/${u.urgentRepairId}/reimbursed${query}`, 'Mark reimbursed', {
+        variant: 'secondary',
+        size: 'sm',
+        confirm: `Mark this reimbursed? ${u.tenantName} will be told.`,
+      });
+    default:
+      return html`<span class="text-muted">Waiting for the receipt</span>`;
+  }
 }
