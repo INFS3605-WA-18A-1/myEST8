@@ -53,7 +53,7 @@ async function giveFirmQuote(browser: Browser, link: string, price: string, scop
   await tradie.getByLabel('Firm price ($)').fill(price);
   await tradie.getByLabel('Scope of work').fill(scope);
   await tradie.getByLabel('How many days it takes').fill('1');
-  await tradie.getByLabel('Start date 1').fill(new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10));
+  await tradie.getByLabel('Preferred date and time').fill(new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 16));
   await tradie.getByRole('button', { name: 'Send Firm Quote' }).click();
   await expect(tradie.getByRole('status')).toContainText('has your Firm Quote');
   await tradie.close();
