@@ -235,20 +235,6 @@ export function ticketPages() {
     (params) => `?suggest=${encodeURIComponent(params.workOrderId ?? '')}`,
   );
 
-  onPost(pages, '/:id/quotes/:quoteId/proceed', async ({ actions, ticket, form, params }) => {
-    const { quote } = quoteIn(ticket, params.quoteId);
-    const warning = await actions.proceedOnEstimate(quote.quoteId, {
-      capCents: cents(form, 'cap', 'the Not-to-exceed Cap'),
-      ...(text(form, 'reason') ? { reason: text(form, 'reason') } : {}),
-      confirm: text(form, 'confirm') === 'yes',
-    });
-    if (warning) return warning;
-    const chosen = quoteIn(await actions.ticket(ticket.ticketId), params.quoteId).quote;
-    return chosen.status === 'awaiting_owner'
-      ? `Proceeding on ${chosen.businessName}'s Estimate. Its Not-to-exceed Cap takes the Repair Cost over the Max Repair Cost, so the Property Owner has been asked to approve it.`
-      : `Proceeding on ${chosen.businessName}'s Estimate, capped at ${formatMoney(chosen.notToExceedCents)}`;
-  });
-
   // Site Inspections, one Tradie at a time. Booking fields: `start` (a local date and time) and `minutes` (default 60).
   onPost(pages, '/:id/quote-requests/:quoteRequestId/inspection', async ({ actions, ticket, form, params, timeZone }) => {
     const request = requestIn(ticket, params.quoteRequestId);
@@ -575,9 +561,7 @@ function jobStep(t: TicketView, job: JobView, x: Extras): NextStep | null {
       }
       if (forFirm.length) {
         const names = andList(forFirm.map((r) => r.businessName));
-        // A cheap routine Job can go ahead on an Estimate instead (ADR 0009).
-        const orProceed = job.quoteRequests.some((r) => r.canProceedOnEstimate && !r.proceedNeedsConfirm) ? ', or proceed on an Estimate' : '';
-        return wait(`Waiting on ${plural(forFirm.length, 'a Firm Quote', 'Firm Quotes')} from ${names}${orProceed}`, 'requests');
+        return wait(`Waiting on ${plural(forFirm.length, 'a Firm Quote', 'Firm Quotes')} from ${names}`, 'requests');
       }
       if (firm.length === 1) return decide(`Choose ${firm[0]!.businessName}'s Firm Quote with a reason, or ask more Tradies`, 'quotes');
       return decide('Ask more Tradies to quote', 'tradies');
@@ -628,18 +612,15 @@ type Stage = { label: string; state: StepState; detail?: string };
  * is Firm Quote once one is in (or once every Tradie can quote firm), Site inspection while
  * one is still to happen, else Estimates. Site inspection is Not needed when no Tradie
  * still in the running needs one; once the Job is decided without one it is Not held if a
- * Tradie wanted one (Not needed if none did), and left out when the Job went ahead on an
- * Estimate without one; Firm Quote then says the Job is proceeding on an Estimate (and its
- * Not-to-exceed Cap, when one is on record), and With Property Owner is Not needed
- * when the Repair Cost stayed within the Max Repair Cost. Booked waits on the Tenant to
- * confirm the visit, and is ticked only once they have (or the Job is done).
+ * Tradie wanted one (Not needed if none did). Firm Quote is Done once the Job is decided.
+ * With Property Owner is Not needed when the Repair Cost stayed within the Max Repair Cost.
+ * Booked waits on the Tenant to confirm the visit, and is ticked only once they have
  */
 function jobStages(job: JobView, x: Extras): Stage[] {
   const [ESTIMATES, SITE, FIRM, OWNER, READY, BOOKED, DONE] = JOB_TRACKER_STAGES;
   const quoting = job.status === 'quoting';
   const decided = ['awaiting_owner', 'approved', 'scheduled', 'done'].includes(job.status);
   const chosen = decided ? job.quotes.find((q) => q.status === 'approved' || q.status === 'awaiting_owner') : undefined;
-  const proceeded = chosen?.stage === 'estimate';
   const requests = job.quoteRequests;
   const estimatesIn = job.quotes.some((q) => q.stage === 'estimate');
   const firmIn = job.quotes.filter((q) => q.stage === 'firm' && q.confirmed && q.status === 'open').length;
@@ -654,7 +635,7 @@ function jobStages(job: JobView, x: Extras): Stage[] {
 
   const stages: Stage[] = [{ label: ESTIMATES, state: state(ESTIMATES, estimatesIn) }];
   if (inspected) stages.push({ label: SITE, state: 'done' });
-  else if (!proceeded) {
+  else {
     // While a visit is booked, when the next one is.
     const next = requests.flatMap((r) => (r.inspection?.status === 'active' ? [r.inspection.start] : [])).sort()[0];
     // Not needed once every Tradie has answered and none still in the running needs one.
@@ -667,12 +648,8 @@ function jobStages(job: JobView, x: Extras): Stage[] {
           : { label: SITE, state: state(SITE, false), ...(next ? { detail: `Booked ${formatWhen(next, x.timeZone)}` } : {}) },
     );
   }
-  if (proceeded) {
-    const cap = chosen!.notToExceedCents;
-    stages.push({ label: FIRM, state: 'skipped', detail: cap === null ? 'Proceeding on Estimate' : `Proceeding on Estimate (cap ${formatMoney(cap)})` });
-  }
-  else stages.push({ label: FIRM, state: state(FIRM, decided), ...(quoting && firmIn ? { detail: `${firmIn} in` } : {}) });
 
+  stages.push({ label: FIRM, state: state(FIRM, decided), ...(quoting && firmIn ? { detail: `${firmIn} in` } : {}) });
   const approval = job.approval;
   if (job.status === 'awaiting_owner') stages.push({ label: OWNER, state: 'current', detail: 'Waiting on approval' });
   else if (decided && approval?.status === 'approved' && approval.quoteId === chosen?.quoteId) stages.push({ label: OWNER, state: 'done' });
@@ -1121,7 +1098,6 @@ function requestActions(t: TicketView, job: JobView, r: RequestView, x: Extras):
     if (r.inspectionNeeded) actions.push(bookingForm(t, job, r, x));
     actions.push(inspectionToggle(t, r));
   }
-  if (r.canProceedOnEstimate && e) actions.push(proceedForm(t, job, e, r, x));
   const firmNext = r.status === 'inspected' || (r.status === 'estimated' && !r.inspectionNeeded && !!e?.confirmed);
   if (r.status === 'inspected') actions.push(html`<p class="text-sm text-muted">Waiting on their Firm Quote, asked for after the Site Inspection.</p>`);
   if (firmNext) actions.push(firmQuoteEntry(t, r, x));
@@ -1326,41 +1302,6 @@ function firmAction(t: TicketView, job: JobView, q: QuoteView, firmIn: number, x
   if (q.status === 'open' && job.status === 'quoting' && q.confirmed) return chooseForm(t, q, firmIn, x);
   return q.status === 'open' ? badge('Confirmed', 'success') : statusBadge(q.status);
 }
-
-/**
- * Proceed on an Estimate with a Not-to-exceed Cap, folded away: for a cheap routine Job,
- * instead of waiting for Firm Quotes. Offered only when the core would allow it; the cap
- * starts at the Estimate, the reason is asked for while the Job has fewer than two
- * Tradies' Estimates, and the Ticket's Urgency must be confirmed when it isn't Routine.
- */
-function proceedForm(t: TicketView, job: JobView, e: EstimateView, request: RequestView, x: Extras): Html {
-  const estimates = job.quoteRequests.filter((r) => r.estimate?.confirmed || r.firmQuote?.confirmed).length;
-  return html`<details class="quote-check">
-    <summary class="btn btn-outline btn-sm">Proceed on Estimate</summary>
-    <form method="post" action="/tickets/${t.ticketId}/quotes/${e.quoteId}/proceed" class="mt-3 space-y-2">
-      <p class="text-xs text-muted">
-        For a cheap routine Job, go ahead now instead of waiting for a Firm Quote. The Not-to-exceed Cap is the most ${request.businessName} may
-        charge; it counts towards the Repair Cost, and the Property Owner is asked if it takes the Repair Cost over the Max Repair Cost.
-      </p>
-      ${asksOwner(t, e.priceCents) ? unreachedNote(t, x) : nothing}
-      ${field({
-        id: `quote-${e.quoteId}-cap`,
-        label: 'Not-to-exceed Cap ($)',
-        name: 'cap',
-        value: e.priceCents === null ? '' : (e.priceCents / 100).toFixed(2),
-        required: true,
-        hint: `At least the Estimate of ${formatMoney(e.priceCents)}.`,
-      })}
-      ${estimates < MIN_QUOTES ? field({ id: `quote-${e.quoteId}-proceed-reason`, label: 'Why go ahead with one Estimate?', name: 'reason', type: 'textarea', rows: 2, required: true }) : nothing}
-      ${request.proceedNeedsConfirm
-        ? html`<label class="flex items-center gap-2 text-sm"><input type="checkbox" class="checkbox checkbox-sm" name="confirm" value="yes" /> This Ticket isn't Routine. Go ahead anyway.</label>`
-        : nothing}
-      ${button('Proceed on this Estimate', { size: 'sm', block: true })}
-    </form>
-  </details>`;
-}
-
-/** An ISO date ("2026-10-20") as "Tue 20 Oct". */
 function formatDate(date: string): string {
   return new Intl.DateTimeFormat('en-AU', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' }).format(new Date(`${date}T00:00:00Z`));
 }
@@ -1691,14 +1632,6 @@ function describeEvent(t: TicketView, event: TimelineEvent, x: Extras): { title:
         title: `${tradie}'s Site Inspection cancelled`,
         detail: details(job, visit, d.why === 'declined' ? `${tradie} declined the Quote Request` : d.why === 'job_cancelled' ? 'The Job was cancelled' : 'Another Quote was approved'),
       };
-    case 'proceeded_on_estimate': {
-      const cap = typeof d.capCents === 'number' ? `Not-to-exceed Cap ${formatMoney(d.capCents)}` : undefined;
-      const reason = typeof d.reason === 'string' ? `Only one Estimate: ${d.reason}` : undefined;
-      return {
-        title: `Proceeding on ${tradie}'s Estimate`,
-        detail: details(job, price ? `Estimate ${price}` : undefined, cap, reason, d.notRoutine ? "Gone ahead although the Ticket isn't Routine" : undefined),
-      };
-    }
     case 'quote_chosen': {
       const reason = typeof d.reason === 'string' ? `Only one Quote: ${d.reason}` : undefined;
       return { title: `Firm Quote from ${tradie} chosen`, detail: details(job, price, reason) };

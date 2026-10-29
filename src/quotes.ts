@@ -543,17 +543,7 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
     };
   }
 
-  /** Whether the Property Manager may proceed on this Estimate (before the Routine check, which `confirm` can pass). */
-  function proceedRefusal(request: QuoteRequestRow, estimate: QuoteRow): string | null {
-    if (estimate.stage !== 'estimate') return 'Only an Estimate can be proceeded on';
-    if (estimate.status !== 'open') return 'This Estimate can no longer be proceeded on';
-    if (!estimate.confirmed) return 'Confirm the Estimate before proceeding on it';
-    if (inspectionNeeded(request, estimate)) return 'This Tradie needs a Site Inspection before they can give a Firm Quote, so you cannot proceed on their Estimate';
-    if (request.status !== 'estimated') return 'This Tradie has a Site Inspection on the way: wait for their Firm Quote';
-    return null;
-  }
-
-  /** How long the visit is: the Firm Quote's days, or 2 hours when the Job went ahead on an Estimate. */
+  /** How long the visit is from the Firm Quote's duration. */
 function visitLength(durationDays: number | null): { durationMinutes: number; durationLabel: string } {
   if (durationDays) return { durationMinutes: durationDays * 24 * 60, durationLabel: durationDays === 1 ? '1 day' : `${durationDays} days` };
   return { durationMinutes: 120, durationLabel: '2 hours' };
@@ -1085,15 +1075,15 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dates: str
     /**
      * Chooses a Firm Quote, then approves it or asks the Property Owner if it takes the Repair
      * Cost over the Max Repair Cost. Refuses before saving when that Owner cannot be reached.
-     * An Estimate is never chosen: see `proceedOnEstimate`. Returns a warning when the approval
-     * was saved but the request email did not go out.
+     * An Estimate is never chosen: a Firm Quote is always required (see ADR 0016). Returns a
+     * warning when the approval was saved but the request email did not go out.
      */
     async chooseQuote(agencyId: number, quoteId: number, reason?: string) {
       // Decided in one transaction: two Quotes chosen for a Job at once can't both be approved.
       const outcome = await transaction(db, async () => {
         const quote = await quoteInAgency(agencyId, quoteId);
         if (quote.stage !== 'firm') {
-          invalid('An Estimate is not a Firm Quote and is never chosen as one. Wait for Firm Quotes, or proceed on the Estimate with a Not-to-exceed Cap.');
+          invalid('An Estimate is not a Firm Quote and is never chosen as one. Wait for Firm Quotes.');
         }
         if (!quote.confirmed) invalid('Confirm the Quote before choosing it');
         if (quote.status !== 'open') invalid('This Quote can no longer be chosen');
@@ -1116,49 +1106,6 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dates: str
       });
       return afterDecision(outcome);
     },
-
-    /**
-     * Goes ahead on a Tradie's Estimate without waiting for a Firm Quote, for a cheap routine
-     * Job: the Tradie may charge at most `capCents`, the Not-to-exceed Cap, which counts towards
-     * the Repair Cost. Refused when the Tradie needs a Site Inspection, when the cap is below the
-     * Estimate, and on a Ticket that isn't Routine unless `confirm` is set. A reason is needed
-     * while the Job has fewer than two Tradies' confirmed Quotes. Refuses before saving when the
-     * cost would ask the Property Owner and no channel reaches them. Returns a warning when the
-     * approval was saved but the request email did not go out.
-     */
-    async proceedOnEstimate(agencyId: number, quoteId: number, options: { capCents: number; reason?: string; confirm?: boolean }) {
-      const outcome = await transaction(db, async () => {
-        const estimate = await quoteInAgency(agencyId, quoteId);
-        const request = (await quoteRequestRow(estimate.quote_request_id))!;
-        const refusal = proceedRefusal(request, estimate);
-        if (refusal) invalid(refusal);
-        const { job, ticket, property } = await jobPlace(estimate.job_id);
-        if (job.status !== 'quoting') invalid('This Job is not choosing a Quote');
-        requireAmount(options.capCents, 'Enter the Not-to-exceed Cap in dollars', 'cap');
-        if (options.capCents < estimate.price_cents!) {
-          invalid(`The Not-to-exceed Cap can't be below the Estimate of ${dollars(estimate.price_cents!)}`, 'cap');
-        }
-        if (ticket.urgency !== 'routine' && !options.confirm) {
-          invalid(`Proceeding on an Estimate is for Routine Jobs, and this Ticket is ${ticket.urgency === 'high' ? 'High' : ticket.urgency}. Wait for Firm Quotes, or confirm to go ahead anyway.`);
-        }
-        const why = options.reason?.trim() || null;
-        const onlyOne = (await pricedCount(job.id)) < MIN_QUOTES;
-        if (onlyOne && !why) invalid('Proceed on an Estimate once the Job has at least two, or record why you are going ahead with one');
-        await requireOwnerReachable(ticket.id, property.ownerId, options.capCents, property.maxRepairCostCents);
-        await run(db, 'UPDATE quotes SET not_to_exceed_cents = ?, single_quote_reason = ? WHERE id = ?', options.capCents, why, estimate.id);
-        await tickets.recordEvent(ticket.id, 'proceeded_on_estimate', {
-          jobId: job.id,
-          tradie: await businessName(estimate.tradie_id),
-          priceCents: estimate.price_cents,
-          capCents: options.capCents,
-          ...(why ? { reason: why } : {}),
-          ...(ticket.urgency !== 'routine' ? { notRoutine: true } : {}),
-        });
-        return approveOrAskOwner({ ...estimate, not_to_exceed_cents: options.capCents }, options.capCents);
-      });
-      return afterDecision(outcome);
-    },
-
     /**
      * Sends the Property Owner's approval request again, as it was first asked, when they say it
      * never arrived. Only while it is still open; the status stays as it is. A reminder is
@@ -1179,8 +1126,7 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dates: str
     },
 
     /**
-     * YES approves the Quote. NO declines it, and the Property Manager can choose another; an
-     * Estimate declined loses its Not-to-exceed Cap, which was only ever the proposal.
+     * YES approves the Quote. NO declines it, and the Property Manager can choose another.
      */
     async recordOwnerAnswer(approvalId: number, answer: 'yes' | 'no') {
       const approved = await transaction(db, async () => {
@@ -1358,7 +1304,6 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dates: str
         quoteRequests: await Promise.all((await quoteRequestsOf(jobId)).map(async (r) => {
           const estimateRow = rows.find((q) => q.quote_request_id === r.id && q.stage === 'estimate');
           const estimate = quotes.find((q) => q.quoteRequestId === r.id && q.stage === 'estimate') ?? null;
-          const refusal = estimateRow ? proceedRefusal(r, estimateRow) : 'No Estimate yet';
           return {
             quoteRequestId: r.id,
             tradieId: r.tradie_id,
@@ -1373,9 +1318,6 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dates: str
             /** The latest Site Inspection not cancelled, or null. */
             inspection: await modules.scheduling.inspectionFor(r.id),
             firmQuote: quotes.find((q) => q.quoteRequestId === r.id && q.stage === 'firm') ?? null,
-            /** Whether the Property Manager may proceed on this Estimate now; `proceedNeedsConfirm` when the Ticket isn't Routine. */
-            canProceedOnEstimate: job.status === 'quoting' && refusal === null,
-            proceedNeedsConfirm: ticket.urgency !== 'routine',
           };
         })),
         /** Every Quote on the Job, Estimates and Firm Quotes alike, oldest first. Compare by `stage`, never across it. */
