@@ -857,7 +857,7 @@ async function createKit({ app, simulator, seed, clock, end }: { app: App; simul
       const { year, month, day } = wallClock(new Date(now().getTime() + days * 24 * 60 * MINUTE_MS), DEMO_TIME_ZONE);
       return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     };
-    await app.submitFirmQuote(await quoteToken(tradieId, ref), { ...input, availableDates: [date(2), date(3)] });
+    await app.submitFirmQuote(await quoteToken(tradieId, ref), { ...input, availableTimes: [date(2), date(3)].map((d) => `${d}T09:00:00.000Z`) });
     await tick();
   }
 

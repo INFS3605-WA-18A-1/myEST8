@@ -906,7 +906,7 @@ describe('a Firm Quote the Tradie sent another way', () => {
       [w.tradies.dana, 180_00],
     ]);
     const action = formPosting((await open()).html, /\/firm-quote$/);
-    const fields = { price: '175', scopeOfWork: 'Replace the cartridge and both washers', durationDays: '2', availableDates: [dateAhead(w, 3), dateAhead(w, 4)] };
+    const fields = { price: '175', scopeOfWork: 'Replace the cartridge and both washers', durationDays: '2', availableTimes: [dateAhead(w, 3), dateAhead(w, 4)] };
 
     const refused = await submit(action, { ...fields, scopeOfWork: '' });
     expect(refused.error).toBe('Describe the scope of work: what you will do for this price');
@@ -928,7 +928,7 @@ describe('a Firm Quote the Tradie sent another way', () => {
     const action = formPosting((await open()).html, /\/firm-quote$/);
     const stranger = await w.signUp();
 
-    const res = await w.post(action, { price: '175', scopeOfWork: 'Replace the cartridge', durationDays: '1', availableDates: dateAhead(w, 3) }, stranger);
+    const res = await w.post(action, { price: '175', scopeOfWork: 'Replace the cartridge', durationDays: '1', availableTimes: dateAhead(w, 3) }, stranger);
 
     expect(res.status).toBe(303);
     expect(new URL(res.headers.get('location')!, 'https://myest8.test').searchParams.get('error')).toMatch(/no such Ticket|not found/i);

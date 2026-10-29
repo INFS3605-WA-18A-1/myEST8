@@ -161,14 +161,13 @@ export async function firmQuote(
   w: World,
   job: JobRef,
   tradie: TradieRef,
-  input: { priceCents: number; proposedTime?: Date; scopeOfWork?: string; durationDays?: number; availableDates?: string[] },
+  input: { priceCents: number; proposedTime?: Date; scopeOfWork?: string; durationDays?: number; availableTimes?: string[] },
 ) {
   await w.h.app.submitFirmQuote(await quoteToken(w, job, tradie), {
     priceCents: input.priceCents,
     scopeOfWork: input.scopeOfWork ?? 'Replace the washer and reseat the tap',
     durationDays: input.durationDays ?? 1,
-    availableDates: input.availableDates ?? [dateAhead(w, 5)],
-    proposedTime: input.proposedTime?.toISOString() ?? null,
+    availableTimes: input.availableTimes ?? [dateAhead(w, 5) + 'T09:00:00.000Z'],
   });
   await w.h.drain();
   return (await jobView(w, job)).quotes.find((q) => q.tradieId === tradie.id && q.stage === 'firm')!;

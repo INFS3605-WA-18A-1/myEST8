@@ -83,17 +83,16 @@ const OPEN_APPROVAL: ApprovalStatus[] = ['requested', 'reminded'];
 
 /** What a Tradie gives with an Estimate on the quote page. */
 export type EstimateInput = { priceCents: number; proposedTime?: string | null; needsInspection: boolean; calloutFeeCents?: number | null };
-/** What a Tradie gives with a Firm Quote on the quote page. `availableDates` are ISO dates ("2026-10-20"). */
+/** What a Tradie gives with a Firm Quote on the quote page. `availableTimes` are ISO datetimes ("2026-10-20T09:00:00.000Z"), up to three. */
 export type FirmQuoteInput = {
   priceCents: number;
   scopeOfWork: string;
   durationDays: number;
-  availableDates: string[];
-  proposedTime?: string | null;
+  availableTimes: string[];
   pdf?: { filename: string; contentType: string; content: Uint8Array } | null;
 };
 
-/** The ISO dates stored for a Firm Quote. */
+/** The ISO datetimes or dates stored for a Firm Quote's `available_dates` column (jsonb). */
 function datesOf(value: unknown): string[] {
   const parsed = typeof value === 'string' ? (JSON.parse(value) as unknown) : value;
   return Array.isArray(parsed) ? parsed.filter((d): d is string => typeof d === 'string') : [];
@@ -531,10 +530,10 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
       /** Estimate: whether the Tradie said they need a Site Inspection, and its Call-out Fee. */
       needsInspection: q.stage === 'estimate' ? q.needs_inspection : null,
       calloutFeeCents: q.stage === 'estimate' ? q.callout_fee_cents : null,
-      /** Firm Quote: the scope of work, the projected timeline in days, and the ISO dates the Tradie can start. */
+      /** Firm Quote: the scope of work, the projected timeline in days, and the dates and times the Tradie can start. */
       scopeOfWork: q.scope_of_work,
       durationDays: q.duration_days,
-      availableDates: q.stage === 'firm' ? datesOf(q.available_dates) : [],
+      availableTimes: q.stage === 'firm' ? datesOf(q.available_dates) : [],
       /** The Estimate a Firm Quote supersedes, and the Firm Quote that superseded an Estimate. */
       supersedesQuoteId: q.supersedes_quote_id,
       supersededByQuoteId: supersededBy,
@@ -560,16 +559,13 @@ function lengthOfVisit(start: string, end: string): { durationMinutes: number; d
   return { durationMinutes: minutes, durationLabel: hours === 1 ? '1 hour' : Number.isInteger(hours) ? `${hours} hours` : `${minutes} minutes` };
 }
 
-/** Up to three starts: the proposed time, then each other available date at 9:00 am. */
-function prefillStarts(timeZone: string, proposedTime: string | null, dates: string[]): string[] {
-  const starts: string[] = [];
-  if (proposedTime) starts.push(proposedTime);
-  const proposedDay = proposedTime ? dayOf(proposedTime, timeZone) : null;
-  for (const date of dates) {
-    if (starts.length >= 3 || date === proposedDay) continue;
-    const [year, month, day] = date.split('-').map(Number);
-    if (!year || !month || !day) continue;
-    starts.push(zonedInstant(timeZone, year, month, day, 9, 0).toISOString());
+/** Up to three start times from the Firm Quote's `available_dates` (ISO datetimes). */
+function prefillStarts(timeZone: string, proposedTime: string | null, dateTimes: string[]): string[] {
+  const starts = dateTimes.filter((t) => Date.parse(t) > 0).slice(0, 3);
+  // If the Firm Quote's proposed_time is set (older data) and not already among the datetimes, prepend it.
+  if (proposedTime && Date.parse(proposedTime) > 0 && !starts.includes(proposedTime)) {
+    starts.unshift(proposedTime);
+    if (starts.length > 3) starts.pop();
   }
   return starts;
 }
@@ -655,7 +651,7 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dates: str
             priceCents: firm.price_cents,
             scopeOfWork: firm.scope_of_work,
             durationDays: firm.duration_days,
-            availableDates: datesOf(firm.available_dates),
+            availableTimes: datesOf(firm.available_dates),
             proposedTime: firm.proposed_time,
             hasPdf: firm.pdf_file_id !== null,
             receivedAt: firm.received_at,
@@ -961,15 +957,14 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dates: str
       }
       const today = wallClock(clock.now(), timeZone);
       const todayIso = `${today.year}-${String(today.month).padStart(2, '0')}-${String(today.day).padStart(2, '0')}`;
-      const dates = [...new Set((input.availableDates ?? []).map((d) => d.trim()).filter(Boolean))].sort();
-      if (!dates.length) invalid('Give at least one date you can start', 'availableDates');
-      if (dates.length > MAX_AVAILABLE_DATES) invalid(`Give at most ${MAX_AVAILABLE_DATES} dates you can start`, 'availableDates');
-      for (const date of dates) {
-        const valid = /^\d{4}-\d{2}-\d{2}$/.test(date) && new Date(`${date}T00:00:00Z`).toISOString().startsWith(date);
-        if (!valid) invalid(`${date} is not a date`, 'availableDates');
-        if (date < todayIso) invalid('Pick start dates from today on', 'availableDates');
+      const times = [...new Set((input.availableTimes ?? []).map((t) => t.trim()).filter(Boolean))].sort();
+      if (!times.length) invalid('Give at least one date and time you can start', 'availableDates');
+      if (times.length > MAX_AVAILABLE_DATES) invalid(`Give at most ${MAX_AVAILABLE_DATES} start times`, 'availableDates');
+      for (const time of times) {
+        const parsed = Date.parse(time);
+        if (Number.isNaN(parsed)) invalid(`${time} is not a date and time`, 'availableDates');
+        if (new Date(parsed) < clock.now()) invalid('Pick start dates and times from now on', 'availableDates');
       }
-      const proposedTime = futureTime(input.proposedTime, 'proposedTime');
       if (input.pdf && input.pdf.contentType !== 'application/pdf') invalid('Attach your quote as a PDF', 'pdf');
 
       /** Refuses unless the request may take a Firm Quote now; returns its Estimate. */
@@ -991,9 +986,9 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dates: str
         const job = await tickets.job(current.job_id);
         await run(
           db,
-          `INSERT INTO quotes (agency_id, job_id, ticket_id, quote_request_id, tradie_id, trade, stage, price_cents, proposed_time, confirmed, status,
+          `INSERT INTO quotes (agency_id, job_id, ticket_id, quote_request_id, tradie_id, trade, stage, price_cents, confirmed, status,
              pdf_file_id, received_at, supersedes_quote_id, scope_of_work, duration_days, available_dates)
-           VALUES (?, ?, ?, ?, ?, ?, 'firm', ?, ?, 1, 'open', ?, ?, ?, ?, ?, ?::jsonb)`,
+           VALUES (?, ?, ?, ?, ?, ?, 'firm', ?, 1, 'open', ?, ?, ?, ?, ?, ?::jsonb)`,
           current.agency_id,
           job.id,
           current.ticket_id,
@@ -1001,13 +996,12 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dates: str
           current.tradie_id,
           job.trade,
           input.priceCents,
-          proposedTime,
           pdfFileId,
           iso(clock.now()),
           estimate.id,
           scope,
           input.durationDays,
-          JSON.stringify(dates),
+          JSON.stringify(times),
         );
         await run(db, `UPDATE quotes SET status = 'superseded' WHERE id = ? AND status = 'open'`, estimate.id);
         await run(db, `UPDATE quote_requests SET status = 'firm_quoted' WHERE id = ?`, current.id);

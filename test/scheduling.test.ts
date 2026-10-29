@@ -95,10 +95,11 @@ describe('Work Orders', () => {
       [w2.tradies.pete, 120_00, TUE_9AM],
       [w2.tradies.dana, 140_00],
     ]);
-    await w2.alice.proceedOnEstimate(pete!.quoteId, { capCents: 180_00 });
+    await firmQuote(w2, capped, w2.tradies.pete, { priceCents: 180_00, availableTimes: [dateAhead(w2, 2) + "T09:00:00.000Z"] });
+    await w2.alice.chooseQuote((await jobView(w2, capped)).quotes.find((q) => q.tradieId === w2.tradies.pete.id && q.stage === "firm")!.quoteId, "Usual plumber");
     await w2.alice.sendWorkOrder(capped.jobId);
-    expect(w2.h.messenger.last(w2.tradies.pete.address)).toMatchObject({ template: 'tradie.work_order', data: { approvedCents: 180_00, stage: 'estimate' } });
-    expect(w2.h.messenger.last(w2.tradies.pete.address)!.text).toContain('Approved on your Estimate: not to exceed $180.00.');
+    expect(w2.h.messenger.last(w2.tradies.pete.address)).toMatchObject({ template: 'tradie.work_order', data: { approvedCents: 180_00, stage: 'firm' } });
+    expect(w2.h.messenger.last(w2.tradies.pete.address)!.text).toContain('Approved: your Firm Quote of $180.00.');
   });
 
   test('the slot is 2 hours by default and can be made longer', async () => {

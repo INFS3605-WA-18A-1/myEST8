@@ -382,7 +382,6 @@ describe('reading Estimates and choosing Firm Quotes', () => {
       { stage: 'estimate', businessName: "Pete's Plumbing", priceCents: 3_50, proposedTime: null, confirmed: false, hasPdf: true },
     ]);
     expect(quoteRequests.map((r) => r.status)).toEqual(['estimated', 'estimated']);
-    await expect(alice.proceedOnEstimate(quotes[0]!.quoteId, { capCents: 250_00, reason: 'x' })).rejects.toThrow(/Confirm/);
 
     await alice.confirmQuote(quotes[0]!.quoteId);
     await alice.confirmQuote(quotes[1]!.quoteId, { priceCents: 350_00 });

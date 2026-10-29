@@ -1165,14 +1165,20 @@ function firmQuoteEntry(t: TicketView, r: RequestView, x: Extras): Html {
       ${field({ id: id('price'), label: 'Firm price ($)', name: 'price', required: true })}
       ${field({ id: id('scope'), label: 'Scope of work', name: 'scopeOfWork', type: 'textarea', rows: 3, required: true, hint: 'What they will do for this price.' })}
       ${field({ id: id('days'), label: 'How many days it takes', name: 'durationDays', type: 'number', min: 1, step: '1', required: true })}
-      <fieldset class="fieldset">
-        <legend class="fieldset-legend">Dates they can start</legend>
-        ${Array.from({ length: DATE_INPUTS }, (_, i) =>
-          html`<input id="${id(`date-${i + 1}`)}" name="availableDates" type="date" class="input w-full" aria-label="Start date ${i + 1}" ${i === 0 ? 'required' : ''} />`,
-        )}
-        <p class="field-hint">At least one, up to three.</p>
-      </fieldset>
-      ${field({ id: id('time'), label: 'Proposed start time', name: 'proposedTime', type: 'datetime-local', hint: `${x.timeZone} time. Optional.` })}
+      ${[
+        { label: 'Preferred date and time', hint: undefined },
+        { label: 'Another date and time', hint: 'Optional.' },
+        { label: 'A third date and time', hint: 'Optional.' },
+      ].map((inp, i) =>
+        field({
+          id: id(`time-${i + 1}`),
+          label: inp.label,
+          name: 'availableDates',
+          type: 'datetime-local',
+          required: i === 0,
+          hint: inp.hint ? `${x.timeZone} time. ${inp.hint}` : `${x.timeZone} time.`,
+        }),
+      )}
       ${field({ id: id('pdf'), label: 'Their quote as a PDF', name: 'pdf', type: 'file', accept: 'application/pdf', hint: 'Optional, under 10 MB.' })}
       ${button('Save Firm Quote', { size: 'sm', variant: 'secondary' })}
     </form>
@@ -1224,7 +1230,7 @@ function quotesSection(t: TicketView, job: JobView, x: Extras): Html {
             html`<span class="num font-semibold">${formatMoney(q.priceCents)}</span>`,
             html`${q.scopeOfWork ?? 'Not given'}`,
             html`${q.durationDays ? `${q.durationDays} ${plural(q.durationDays, 'day')}` : 'Not given'}`,
-            html`${q.availableDates.length ? q.availableDates.map(formatDate).join(', ') : 'Not given'}${q.proposedTime ? html`<br /><span class="text-xs text-muted">Proposed ${formatWhen(q.proposedTime, x.timeZone)}</span>` : nothing}`,
+            html`${q.availableTimes.length ? q.availableTimes.map((t) => formatWhen(t, x.timeZone)).join(', ') : 'Not given'}${q.proposedTime ? html`<br /><span class="text-xs text-muted">Proposed ${formatWhen(q.proposedTime, x.timeZone)}</span>` : nothing}`,
             q.pdfFileId !== null ? html`<a class="link" href="/files/${q.pdfFileId}">PDF</a>` : html`<span class="text-muted">None</span>`,
             ratingsCell(q),
             firmAction(t, job, q, firmIn, x),

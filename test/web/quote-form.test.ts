@@ -75,10 +75,10 @@ describe('the quote page', () => {
     expect(firmStep).toContain('Scope of work');
     expect(firmStep).toContain('Dates you can start');
 
-    const refused = await post('firm', { price: '1200', scopeOfWork: '', durationDays: '0', availableDates: ['2020-01-01'] });
+    const refused = await post('firm', { price: '1200', scopeOfWork: '', durationDays: '0', availableTimes: ['2020-01-01'] });
     expect(refused.status).toBe(400);
     expect(visible(refused.html)).toContain('Describe the scope of work');
-    const badDates = await post('firm', { price: '1200', scopeOfWork: 'New tap', durationDays: '2', availableDates: ['2020-01-01'] });
+    const badDates = await post('firm', { price: '1200', scopeOfWork: 'New tap', durationDays: '2', availableTimes: ['2020-01-01'] });
     expect(visible(badDates.html)).toContain('Pick start dates from today on');
     expect(badDates.html).toContain('value="2020-01-01"');
 
@@ -99,7 +99,7 @@ describe('the quote page', () => {
     expect(done).toContain('PDF Attached');
     expect(done).toContain('Your Estimate (superseded by your Firm Quote)');
     expect(done).not.toContain('Send Firm Quote');
-    expect((await quoteRequestFor(w, job, w.tradies.pete)).firmQuote).toMatchObject({ priceCents: 1200_00, availableDates: [dateAhead(w, 3), dateAhead(w, 4)], hasPdf: true });
+    expect((await quoteRequestFor(w, job, w.tradies.pete)).firmQuote).toMatchObject({ priceCents: 1200_00, availableTimes: [dateAhead(w, 3), dateAhead(w, 4)], hasPdf: true });
   });
 
   test('a Tradie who needs to inspect waits for the booking, then sees its time and the address', async () => {
@@ -116,7 +116,7 @@ describe('the quote page', () => {
     const booked = visible((await open()).html);
     expect(booked).toContain('Your Site Inspection is booked for');
     expect(booked).toContain(KING_ST);
-    expect((await post('firm', { price: '420', scopeOfWork: 'x', durationDays: '1', availableDates: [dateAhead(w, 6)] })).status).toBe(400);
+    expect((await post('firm', { price: '420', scopeOfWork: 'x', durationDays: '1', availableTimes: [dateAhead(w, 6)] })).status).toBe(400);
   });
 
   test('an Estimate post over 64 KB is refused on the page', async () => {
@@ -131,7 +131,7 @@ describe('the quote page', () => {
     const { w, job, open } = await petesPage();
     await w.h.app.submitEstimate(await quoteToken(w, job, w.tradies.pete), { priceCents: 600_00, needsInspection: false });
     await w.h.app.submitEstimate(await quoteToken(w, job, w.tradies.dana), { priceCents: 700_00, needsInspection: false });
-    await w.h.app.submitFirmQuote(await quoteToken(w, job, w.tradies.pete), { priceCents: 650_00, scopeOfWork: 'New tap', durationDays: 1, availableDates: [dateAhead(w, 3)] });
+    await w.h.app.submitFirmQuote(await quoteToken(w, job, w.tradies.pete), { priceCents: 650_00, scopeOfWork: 'New tap', durationDays: 1, availableTimes: [dateAhead(w, 3)] });
     const pete = (await quoteRequestFor(w, job, w.tradies.pete)).firmQuote!;
     await w.alice.chooseQuote(pete.quoteId, 'Dana is a week away');
 

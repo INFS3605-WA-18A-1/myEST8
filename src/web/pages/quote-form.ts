@@ -101,7 +101,7 @@ export function quoteFormPages(app: App) {
       try {
         await app.submitFirmQuote(token, await firmQuoteFrom(form, page.timeZone));
       } catch (error) {
-        return refused(c, token, page, error, form, ['price', 'scopeOfWork', 'durationDays', 'availableDates', 'proposedTime']);
+        return refused(c, token, page, error, form, ['price', 'scopeOfWork', 'durationDays', 'availableDates']);
       }
       return c.redirect(`/q/${encodeURIComponent(token)}?sent=firm`, 303);
     },
@@ -211,8 +211,7 @@ export async function firmQuoteFrom(form: FormValues, timeZone: string): Promise
     priceCents: dollarsToCents(text(form, 'price')),
     scopeOfWork: text(form, 'scopeOfWork'),
     durationDays: text(form, 'durationDays') ? Number(text(form, 'durationDays')) : NaN,
-    availableDates: list(form, 'availableDates'),
-    proposedTime: text(form, 'proposedTime') ? localTime(text(form, 'proposedTime'), timeZone, 'proposedTime') : null,
+    availableTimes: list(form, 'availableDates'),
     pdf: pdf ? { filename: pdf.name, contentType: pdf.type || 'application/octet-stream', content: new Uint8Array(await pdf.arrayBuffer()) } : null,
   };
 }
@@ -426,8 +425,7 @@ function firmQuoteSummary(p: QuotePage): Html {
       ['Price', formatMoney(f.priceCents)],
       ['Scope of work', f.scopeOfWork ?? 'Not given'],
       ['Takes', f.durationDays ? `${f.durationDays} ${f.durationDays === 1 ? 'day' : 'days'}` : 'Not given'],
-      ['Can start', f.availableDates.length ? f.availableDates.map(dateWords).join(', ') : 'Not given'],
-      ['Proposed time', f.proposedTime ? formatWhen(f.proposedTime, p.timeZone) : 'Not given'],
+      ['Can start', f.availableTimes.length ? f.availableTimes.map((t) => formatWhen(t, p.timeZone)).join(', ') : 'Not given'],
       ...(f.hasPdf ? [['PDF', 'Attached'] as [string, string]] : []),
     ]),
   });
@@ -493,8 +491,13 @@ const CALLOUT_SCRIPT = raw(`<script>
 </script>`);
 
 function firmQuoteForm(token: string, p: QuotePage, r: Refusal | undefined): Html {
-  const dates = r?.posted.availableDates;
-  const typedDates = Array.isArray(dates) ? dates : [];
+  const posted = r?.posted.availableDates;
+  const typed = Array.isArray(posted) ? posted : [];
+  const inputs = [
+    { label: 'Preferred date and time', required: true, hint: undefined },
+    { label: 'Another date and time', required: false, hint: 'Optional.' },
+    { label: 'A third date and time', required: false, hint: 'Optional.' },
+  ];
   return card({
     title: 'Your Firm Quote',
     body: html`${refusalAlert(r)}
@@ -512,22 +515,18 @@ function firmQuoteForm(token: string, p: QuotePage, r: Refusal | undefined): Htm
           error: r?.fields.scopeOfWork,
         })}
         ${field({ label: 'How many days it takes', name: 'durationDays', type: 'number', min: 1, step: '1', value: value(r, 'durationDays'), required: true, error: r?.fields.durationDays })}
-        <fieldset class="fieldset">
-          <legend class="fieldset-legend">Dates you can start</legend>
-          ${Array.from({ length: DATE_INPUTS }, (_, i) =>
-            html`<input id="field-available-date-${i + 1}" name="availableDates" type="date" class="input w-full${r?.fields.availableDates ? ' input-error' : ''}" value="${typedDates[i] ?? ''}" aria-label="Start date ${i + 1}" ${i === 0 ? 'required' : ''} />`,
-          )}
-          ${r?.fields.availableDates ? html`<p class="field-error">${r.fields.availableDates}</p>` : ''}
-          <p class="field-hint">At least one, up to three.</p>
-        </fieldset>
-        ${field({
-          label: 'Proposed start time',
-          name: 'proposedTime',
-          type: 'datetime-local',
-          value: value(r, 'proposedTime'),
-          hint: 'Optional.',
-          error: r?.fields.proposedTime,
-        })}
+        ${inputs.map((inp, i) =>
+          field({
+            label: inp.label,
+            name: 'availableDates',
+            id: `field-available-time-${i + 1}`,
+            type: 'datetime-local',
+            value: typed.length ? (typed[i] ?? '') : '',
+            required: inp.required,
+            hint: inp.hint,
+            error: i === 0 ? r?.fields.availableDates : undefined,
+          }),
+        )}
         ${field({ label: 'Your quote as a PDF', name: 'pdf', type: 'file', accept: 'application/pdf', hint: 'Optional, under 10 MB.', error: r?.fields.pdf })}
         ${button('Send Firm Quote', { block: true })}
       </form>`,
