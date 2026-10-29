@@ -180,7 +180,7 @@ describe('requirements 3 and 4: Estimates and Firm Quotes are apart, and a Firm 
     expect(firm).toMatchObject({ stage: 'firm', priceCents: 175_00, scopeOfWork: 'New mixer tap', availableTimes: [dateAhead(w, 2)], supersedesQuoteId: est.quoteId });
     expect(view.quoteRequests[0]).toMatchObject({ status: 'firm_quoted', estimate: { quoteId: est.quoteId }, firmQuote: { quoteId: firm.quoteId } });
     await expect(w.alice.chooseQuote(est.quoteId, 'x')).rejects.toThrow(/An Estimate is not a Firm Quote/);
-    // proceed-on-estimate removed
+    // A routine Job with two confirmed Estimates needs Firm Quotes before choosing.
     // A second Firm Quote is refused; the first stands.
     await expect(firmQuote(w, job, w.tradies.pete, { priceCents: 160_00 })).rejects.toThrow(/already given a Firm Quote/);
   });

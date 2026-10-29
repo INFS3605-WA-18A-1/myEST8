@@ -129,7 +129,7 @@ function hanasHallwayLight(k: Kit) {
   });
   s.on(6, '15:30', 'Sam quotes', () => k.quote(ids.sam, job, '$140 to replace the fitting, tomorrow 2pm', 140_00));
   s.on(6, '17:30', 'Erin quotes', () => k.quote(ids.erin, job, '$185 incl GST, Friday 9am', 185_00));
-  s.on(7, '08:30', "Alice proceeds on Sam's Estimate, capped at $160, and books him", async () => {
+  s.on(7, '08:30', "Sam gives a Firm Quote; Alice chooses it at $160 and books him", async () => {
     await k.firmQuote(ids.sam, job, { priceCents: 160_00, scopeOfWork: "Replace the light fitting", durationDays: 1 });
     await k.choose(job, ids.sam);
     await k.book(job, k.at(8, '14:00'), 60);
@@ -189,7 +189,7 @@ function priyasBlockedToilet(k: Kit) {
     k.quote(ids.quinn, job, 'Hi, $240 + GST to clear the blockage in Glebe. Could attend Thursday 9am.', 240_00),
   );
   s.on(1, '16:30', 'Finn quotes', () => k.quote(ids.finn, job, '$190 for the Glebe job, tomorrow 11am', 190_00));
-  s.on(2, '09:10', "Bob proceeds on Finn's Estimate, capped at $220, and books him", async () => {
+  s.on(2, '09:10', "Finn gives a Firm Quote; Bob chooses it at $220 and books him", async () => {
     await k.firmQuote(ids.finn, job, { priceCents: 220_00, scopeOfWork: "As quoted", durationDays: 1 });
     await k.choose(job, ids.finn);
     await k.book(job, k.at(2, '11:00'), 90);
@@ -216,7 +216,7 @@ function bellasOvenDoor(k: Kit) {
   });
   s.on(0, '17:00', 'Ally quotes by email', () => k.quote(ids.ally, job, 'Hi Bob, $150 inc GST to replace the door seal, Wednesday 10am.', 150_00));
   s.on(1, '09:00', 'Arlo quotes by email', () => k.quote(ids.arlo, job, 'We can do it for $210 + GST, Friday 2pm', 210_00));
-  s.on(1, '11:00', "Bob proceeds on Ally's Estimate, capped at $180, and books her", async () => {
+  s.on(1, '11:00', "Ally gives a Firm Quote; Bob chooses it at $180 and books her", async () => {
     await k.firmQuote(ids.ally, job, { priceCents: 180_00, scopeOfWork: "As quoted", durationDays: 1 });
     await k.choose(job, ids.ally);
     await k.book(job, k.at(2, '10:00'), 60);
@@ -382,7 +382,7 @@ function mayasDoorHandle(k: Kit) {
   s.on(6, '11:00', 'Carl quotes', () => k.quote(ids.carl, job, '$120 for the Annandale job, tomorrow 10am', 120_00));
   // Harry is also quoting in Marrickville, so he names the suburb.
   s.on(6, '12:15', 'Harry quotes', () => k.quote(ids.harry, job, '$95 + GST for the Annandale job, Thursday 1pm', 95_00));
-  s.on(6, '13:30', "Alice proceeds on Carl's Estimate, capped at $140, and books him", async () => {
+  s.on(6, '13:30', "Carl gives a Firm Quote; Alice chooses it at $140 and books him", async () => {
     await k.firmQuote(ids.carl, job, { priceCents: 140_00, scopeOfWork: "As quoted", durationDays: 1 });
     await k.choose(job, ids.carl);
     await k.book(job, k.at(7, '10:00'), 60);
@@ -432,7 +432,7 @@ function liamsLightSwitch(k: Kit) {
   });
   s.on(7, '09:30', 'Sam quotes', () => k.quote(ids.sam, job, '$180 for the Camperdown job, Thursday 9am', 180_00));
   s.on(7, '10:00', 'Erin quotes', () => k.quote(ids.erin, job, '$165 incl GST, Friday 1pm', 165_00));
-  s.on(7, '11:00', "Alice confirms both and proceeds on Erin's Estimate, capped at $180", async () => {
+  s.on(7, '11:00', "Alice confirms both Estimates and Erin gives a Firm Quote; Alice chooses it at $180", async () => {
     await k.firmQuote(ids.erin, job, { priceCents: 180_00, scopeOfWork: "As quoted", durationDays: 1 });
     await k.choose(job, ids.erin);
   });
@@ -456,7 +456,7 @@ function weisRunningToilet(k: Kit) {
   });
   s.on(8, '12:00', 'Finn quotes', () => k.quote(ids.finn, job, '$180 for the Newtown job, Mon 8am', 180_00));
   s.on(8, '13:30', 'Nina quotes', () => k.quote(ids.nina, job, 'Can do it for $210, Tuesday 9am', 210_00));
-  s.on(8, '15:10', "Alice proceeds on Finn's Estimate and books him for the next weekday", async () => {
+  s.on(8, '15:10', "Finn gives a Firm Quote; Alice chooses it and books him for the next weekday", async () => {
     await k.firmQuote(ids.finn, job, { priceCents: 200_00, scopeOfWork: "As quoted", durationDays: 1 });
     await k.choose(job, ids.finn);
     await k.book(job, k.upcoming(1, '09:00'), 120);
@@ -538,7 +538,7 @@ function omarsStiffLock(k: Kit) {
   });
   s.on(7, '19:20', 'Lucy quotes', () => k.quote(ids.lucy, job, '$165 to service the lock, Tuesday 2pm', 165_00));
   s.on(7, '19:40', 'Kev quotes', () => k.quote(ids.kev, job, '$210 incl GST, tomorrow 3pm', 210_00));
-  s.on(7, '20:00', "Bob proceeds on Lucy's Estimate and books her", async () => {
+  s.on(7, '20:00', "Lucy gives a Firm Quote; Bob chooses it and books her", async () => {
     await k.firmQuote(ids.lucy, job, { priceCents: 180_00, scopeOfWork: "As quoted", durationDays: 1 });
     await k.choose(job, ids.lucy);
     await k.book(job, k.upcoming(2, '13:00'), 60);
@@ -579,7 +579,7 @@ function bellasDishwasher(k: Kit) {
   });
   s.on(7, '13:00', 'Ally quotes by email', () => k.quote(ids.ally, job, '$185 inc GST for the Bondi job, Wednesday 1pm', 185_00));
   s.on(7, '15:30', 'Arlo quotes by email', () => k.quote(ids.arlo, job, '$230 + GST, Thursday 9am', 230_00));
-  s.on(7, '17:00', "Bob proceeds on Ally's Estimate and books her six weekdays out", async () => {
+  s.on(7, '17:00', "Ally gives a Firm Quote; Bob chooses it and books her six weekdays out", async () => {
     await k.firmQuote(ids.ally, job, { priceCents: 200_00, scopeOfWork: "As quoted", durationDays: 1 });
     await k.choose(job, ids.ally);
     await k.book(job, k.upcoming(6, '13:00'), 120);

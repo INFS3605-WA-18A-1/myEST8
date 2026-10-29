@@ -852,7 +852,7 @@ function nextAction(t: TicketView, job: JobView, x: Extras): Html {
 function quotingAction(t: TicketView, job: JobView, x: Extras): Html {
   const declined = job.approval?.status === 'declined';
   return html`<div class="space-y-6">
-    ${declined ? alert('The Property Owner said NO. Choose another Firm Quote, or proceed on another Estimate.', 'warning') : nothing}
+    ${declined ? alert('The Property Owner said NO. Choose another Firm Quote.', 'warning') : nothing}
     ${job.checkTrade && !job.quoteRequests.length ? tradeForm(t, job) : nothing}
     ${job.quoteRequests.length ? tradieProgress(t, job, x) : nothing}
     ${job.quotes.length ? quotesSection(t, job, x) : nothing}
@@ -1005,7 +1005,7 @@ const NO_REPLY: Record<string, string> = { sent: 'No reply yet', reminded: 'No r
  * were asked and have given an Estimate, then per Tradie a chip for where they are,
  * what they have given (the Estimate, the Site Inspection, the Firm Quote) and their
  * next action: check the Estimate, book or mark the Site Inspection, say whether one is
- * needed, proceed on the Estimate, or enter a Firm Quote they sent another way.
+ * needed, or enter a Firm Quote they sent another way.
  */
 function tradieProgress(t: TicketView, job: JobView, x: Extras): Html {
   const waiting = job.quoteRequests.filter((r) => r.status === 'sent' || r.status === 'reminded').length;

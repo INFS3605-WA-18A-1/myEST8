@@ -13,7 +13,7 @@ const FIRM_QUOTE_REMINDER_MS = 48 * HOUR_MS;
 const MORE_QUOTES_PROMPT_MS = 72 * HOUR_MS;
 const OWNER_REMINDER_MS = 24 * HOUR_MS;
 const OWNER_ALERT_MS = 48 * HOUR_MS;
-/** Firm Quotes a Job needs before one can be chosen without a reason (and Estimates, to proceed on one without a reason). */
+/** Firm Quotes a Job needs before one can be chosen without a reason. */
 export const MIN_QUOTES = 2;
 /** Quote Requests a Job needs (sent and new together) before the Property Manager compares prices. */
 export const MIN_QUOTE_REQUESTS = 2;
@@ -111,7 +111,7 @@ function datesOf(value: unknown): string[] {
   return Array.isArray(parsed) ? parsed.filter((d): d is string => typeof d === 'string') : [];
 }
 
-/** What a Quote counts towards the Repair Cost: the Not-to-exceed Cap when proceeding on an Estimate, else its price. */
+/** What a Quote counts towards the Repair Cost: the Firm Quote's price. */
 const costOf = (q: QuoteRow) => q.not_to_exceed_cents ?? q.price_cents!;
 
 /** A recommendation's place in the order after the Nominated Tradies: the weighted mean of the parts it has (RANK_WEIGHTS). */
@@ -258,7 +258,7 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
     );
   }
 
-  /** The total of a Ticket's approved Quotes: each Firm Quote's price, or the Not-to-exceed Cap of an Estimate proceeded on. */
+  /** The total of a Ticket's approved Quotes: each Firm Quote's price. */
   async function repairCost(ticketId: number) {
     return (await one<{ total: number }>(
       db,

@@ -260,9 +260,9 @@ describe('Quotes', () => {
     expect(confirmed.ok).toBe("Estimate from Pete's Plumbing confirmed at $180.00");
     expect(confirmed.page.text).toContain('Confirmed');
     expect(confirmed.page.text).toContain(when(sydney('2026-10-13T10:00:00')));
-    // An Estimate is never chosen: it offers no Choose, only (folded) Proceed on Estimate.
+    // An Estimate is never chosen: it offers no Choose; a Firm Quote must come next.
     expect(confirmed.page.html).not.toMatch(/\/choose"/);
-    expect(confirmed.page.text).toContain('Proceed on Estimate');
+    expect(confirmed.page.text).toContain('Enter a Firm Quote');
 
     await firmFrom(w.tradies.pete, { price: '190' });
     const firm = await open();
@@ -280,22 +280,17 @@ describe('Quotes', () => {
     expect(approved.page.text).toContain('Repair Cost $190.00');
   });
 
-  test('a routine Job proceeds on an Estimate with a Not-to-exceed Cap', async () => {
-    const { w, job, open, submit } = await tapTicket();
+  test('an Estimate alone cannot be chosen: a Firm Quote is always required', async () => {
+    const { w, job, open } = await tapTicket();
     await confirmedEstimates(w, job, [
       [w.tradies.pete, 120_00],
       [w.tradies.dana, 140_00],
     ]);
     const page = await open();
-    const proceed = formPosting(page.html, /\/proceed$/);
-
-    expect((await submit(proceed, { cap: '100' })).error).toBe("The Not-to-exceed Cap can't be below the Estimate of $120.00");
-    const done = await submit(proceed, { cap: '150' });
-
-    expect(done.ok).toBe("Proceeding on Pete's Plumbing's Estimate, capped at $150.00");
-    expect(done.page.text).toContain('Capped at $150.00');
-    expect(done.page.text).toContain("Proceeding on Pete's Plumbing's Estimate");
-    expect(done.page.text).toContain('Repair Cost $150.00');
+    // No proceed or choose form for an Estimate: a Firm Quote must come first.
+    expect(page.html).not.toMatch(/\/proceed"/);
+    expect(page.html).not.toMatch(new RegExp(`/quotes/.*/choose"`));
+    expect(page.text).toContain('Enter a Firm Quote');
   });
 
   test('a Quote over the Max Repair Cost goes to the Property Owner, and the page says what they were asked', async () => {
@@ -345,12 +340,13 @@ describe('Quotes', () => {
     expect(w.h.messenger.templatesTo(OLIVIA)).toEqual(['owner.approval_request', 'owner.approval_request']);
   });
 
-  test('proceeding on an Estimate whose email is refused says to resend the approval request', async () => {
-    const { w, job, open, submit } = await tapTicket();
+  test('choosing a Firm Quote whose email to the Property Owner is refused says to resend the approval request', async () => {
+    const { w, job, open, submit, firmFrom } = await tapTicket();
     await confirmedEstimates(w, job, [
       [w.tradies.pete, 600_00],
       [w.tradies.dana, 650_00],
     ]);
+    await firmFrom(w.tradies.pete, { price: '600' });
     await w.alice.disconnectServerSms(AGENCY_NUMBER);
     const send = w.h.messenger.send.bind(w.h.messenger);
     w.h.messenger.send = async (message) => {
@@ -358,7 +354,7 @@ describe('Quotes', () => {
       return send(message);
     };
 
-    const done = await submit(formPosting((await open()).html, /\/proceed$/), { cap: '600' });
+    const done = await submit(formPosting((await open()).html, /\/choose$/), { reason: 'Usual plumber' });
 
     expect(done.ok).toBe(
       "Sent to the Property Owner for approval, but the email to Olivia Owens didn't go: the email provider is limiting how many emails go out. Use Resend approval request.",
@@ -872,45 +868,6 @@ describe('Firm Quotes and Estimates stay apart', () => {
     expect(headers).toContain('Firm Quote');
     expect(headers).toContain('Estimate');
     expect(headers).not.toContain('Price');
-  });
-});
-
-describe('Proceed on Estimate', () => {
-  test('is offered only where it can work: not for a Tradie who needs a Site Inspection, with the cap at the Estimate, a reason with one Estimate, and a confirmation when not Routine', async () => {
-    const { w, job, path, open, submit } = await tapTicket();
-    await w.alice.sendQuoteRequests(job.jobId, [w.tradies.pete.id, w.tradies.dana.id]);
-    await w.h.app.submitEstimate(await quoteToken(w, job, w.tradies.pete), { priceCents: 150_00, needsInspection: false });
-    await w.h.app.submitEstimate(await quoteToken(w, job, w.tradies.dana), { priceCents: 300_00, needsInspection: true });
-    const quotes = (await w.alice.ticket(job.ticketId)).jobs[0]!.quotes;
-    const pete = quotes.find((q) => q.tradieId === w.tradies.pete.id)!;
-    const dana = quotes.find((q) => q.tradieId === w.tradies.dana.id)!;
-
-    const page = await open();
-
-    expect(page.html).toContain(`/quotes/${pete.quoteId}/proceed`);
-    expect(page.html).not.toContain(`/quotes/${dana.quoteId}/proceed`);
-    expect(page.html).toMatch(new RegExp(`id="quote-${pete.quoteId}-cap"[^>]*value="150.00"`));
-    expect(page.text).toContain('The Not-to-exceed Cap is the most');
-    // Two Estimates are in, so no reason is asked; the Ticket is Routine, so no confirmation.
-    const form = new RegExp(`<form[^>]*/quotes/${pete.quoteId}/proceed"[\\s\\S]*?</form>`).exec(page.html)![0];
-    expect(form).not.toContain('name="reason"');
-    expect(form).not.toContain('name="confirm"');
-
-    await submit(`${path}/urgency`, { urgency: 'high' });
-    const high = new RegExp(`<form[^>]*/quotes/${pete.quoteId}/proceed"[\\s\\S]*?</form>`).exec((await open()).html)![0];
-    expect(high).toContain('name="confirm"');
-    expect(visibleText(high)).toContain("This Ticket isn't Routine. Go ahead anyway.");
-  });
-
-  test('asks why when only one Tradie has given an Estimate', async () => {
-    const { w, open, quoteFrom, submit } = await tapTicket();
-    await quoteFrom(w.tradies.pete, 'Pete can do $150', { priceCents: 150_00 });
-    await submit(formPosting((await open()).html, /\/confirm$/), { price: '150' });
-
-    const form = /<form[^>]*\/proceed"[\s\S]*?<\/form>/.exec((await open()).html)![0];
-
-    expect(form).toContain('name="reason"');
-    expect(visibleText(form)).toContain('Why go ahead with one Estimate?');
   });
 });
 

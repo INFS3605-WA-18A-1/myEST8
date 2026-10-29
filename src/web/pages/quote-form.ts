@@ -201,7 +201,7 @@ async function actionFailed(c: Context, error: unknown, again: (message: string)
 }
 
 /**
- * A posted Firm Quote form (price, scopeOfWork, durationDays, availableDates, proposedTime
+ * A posted Firm Quote form (price, scopeOfWork, durationDays, availableTimes, proposedTime
  * and an optional pdf) as the core's input. Shared with the Ticket page, where the Property
  * Manager enters a Firm Quote a Tradie sent another way; the core checks every field.
  */

@@ -77,7 +77,7 @@ describe('the demo stories', () => {
     expect(inspecting[0]!.quoteRequests.find((r) => r.status === 'inspection_booked')!.estimate).toMatchObject({ needsInspection: true, calloutFeeCents: 90_00 });
     expect(jobs.some((j) => j.decision === 'book_inspection')).toBe(true);
     expect(jobs.some((j) => j.decision === 'choose_quote')).toBe(true);
-    expect(jobs.some((j) => j.quotes.some((q) => q.stage === 'estimate' && q.status === 'approved' && q.notToExceedCents !== null))).toBe(true);
+    expect(jobs.some((j) => j.quotes.some((q) => q.stage === 'firm' && q.status === 'approved'))).toBe(true);
     const calendar = (await dashboard()).calendar.filter((b) => b.kind === 'inspection' && b.status === 'active');
     expect(calendar).toHaveLength(1);
   });

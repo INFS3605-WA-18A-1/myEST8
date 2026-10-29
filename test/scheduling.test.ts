@@ -84,7 +84,7 @@ describe('Work Orders', () => {
     expect(tracker.stages.find((s) => s.stage === 'booked')).toMatchObject({ reached: true, visitStart: TUE_9AM.toISOString() });
   });
 
-  test("the Work Order carries what was approved: the Firm Quote's price, or the Estimate's Not-to-exceed Cap", async () => {
+  test("the Work Order carries what was approved: the Firm Quote's price", async () => {
     const w = await world();
     const job = await approvedTapJob(w, w.tradies.pete, TUE_9AM);
     await w.alice.sendWorkOrder(job.jobId);
