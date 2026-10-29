@@ -210,6 +210,26 @@ describe('requirements 3 and 4: Estimates and Firm Quotes are apart, and a Firm 
     await expect(w.h.app.submitFirmQuote('nope', valid)).rejects.toThrow(/not found/);
   });
 
+  test("a Firm Quote keeps the Tradie's start times in the order they were entered, preferred first", async () => {
+    const w = await world();
+    const job = await askPeteAndDana(w);
+    await estimate(w, job, w.tradies.pete, { priceCents: 150_00, needsInspection: false });
+    // Later instant first: sorting by date would make the earlier backup the preferred time.
+    const preferred = '2026-10-20T04:00:00.000Z';
+    const backup = '2026-10-15T00:00:00.000Z';
+    const firm = await firmQuote(w, job, w.tradies.pete, {
+      priceCents: 175_00,
+      availableTimes: [preferred, '  ', backup, preferred],
+    });
+
+    expect(firm.availableTimes).toEqual([preferred, backup]);
+    expect((await w.h.app.quotePage(await quoteToken(w, job, w.tradies.pete)))!.firmQuote!.availableTimes).toEqual([preferred, backup]);
+
+    await w.alice.chooseQuote(firm.quoteId, 'Usual plumber');
+    await w.alice.sendWorkOrder(job.jobId);
+    expect((await jobView(w, job)).workOrder!.start).toBe(preferred);
+  });
+
   test('an Estimate is checked too, and given once', async () => {
     const w = await world();
     const job = await askPeteAndDana(w);

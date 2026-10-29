@@ -1067,7 +1067,8 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dateTimes:
       }
       const today = wallClock(clock.now(), timeZone);
       const todayIso = `${today.year}-${String(today.month).padStart(2, '0')}-${String(today.day).padStart(2, '0')}`;
-      const times = [...new Set((input.availableTimes ?? []).map((t) => t.trim()).filter(Boolean))].sort();
+      // The first time is the one the Tradie prefers. Drop blanks and repeats, and keep the order they typed.
+      const times = [...new Set((input.availableTimes ?? []).map((t) => t.trim()).filter(Boolean))];
       if (!times.length) invalid('Give at least one date and time you can start', 'availableTimes');
       if (times.length > MAX_AVAILABLE_DATES) invalid(`Give at most ${MAX_AVAILABLE_DATES} start times`, 'availableTimes');
       for (const time of times) {
