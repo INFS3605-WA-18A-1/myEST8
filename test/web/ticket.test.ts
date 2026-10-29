@@ -141,12 +141,12 @@ describe('the Ticket view', () => {
     expect(text).toContain('Max Repair Cost $500.00');
     // No Repair Cost until a Quote is approved.
     expect(text).not.toContain('Repair Cost $0.00');
-    // The Nominated Tradie first, then by myEST8 rating, Google rating, then name; four at most, and the electrician isn't recommended for plumbing.
+    // The Nominated Tradie first, then by the blend of ratings, job fit and price; four at most, and the electrician isn't recommended for plumbing.
     const ranked = ["1. Nina's Plumbing", '2. Drip Doctors', "3. Pete's Plumbing", '4. Quick Pipes'].map((t) => text.indexOf(t));
     expect(ranked.every((at, i) => at > -1 && (i === 0 || at > ranked[i - 1]!))).toBe(true);
     expect(text).not.toContain('Sparky Sam');
     expect(text).toContain('myEST8 5.0 (1) from 1 rating Not on Google');
-    expect(text).toContain('myEST8 4.0 (1) from 1 rating Google 4.8 (120) from 120 reviews');
+    expect(text).toContain('myEST8 4.0 (1) from 1 rating Google 4.8 (120) from 120 reviews Trade only');
     expect(text).toContain('Reported by the Tenant');
     expect(text).toContain('Confirmed as a Ticket');
     expect(text).toContain(`From ${TOM}`);
@@ -722,6 +722,22 @@ describe('the message log', () => {
     })();
 
     expect(text).toContain("WhatsApp couldn't deliver this message (131047): Re-engagement message");
+  });
+
+  test('marks each email the AI wrote as written by AI, and nothing sent as its template', async () => {
+    const w = await webWorld({ composeEmails: true });
+    const job = await tomsTapTicket(w);
+    // Quick Pipes takes email, so their Quote Request is composed; Pete's goes by SMS as its template.
+    await w.alice.sendQuoteRequests(job.jobId, [w.tradies.quick.id, w.tradies.pete.id]);
+
+    const res = await w.get(`/tickets/${job.ticketId}`, await w.signIn());
+    const bubbles = (await res.text()).split('<div class="chat ').slice(1).map(visibleText);
+
+    const toQuick = bubbles.filter((b) => b.includes(`To ${w.tradies.quick.address} by Email`));
+    expect(toQuick).toHaveLength(1);
+    expect(toQuick[0]).toMatch(/Composed: Harbour Realty is asking for a quote/);
+    expect(toQuick[0]).toContain('· Written by AI');
+    expect(bubbles.filter((b) => b.includes('Written by AI'))).toHaveLength(1);
   });
 });
 

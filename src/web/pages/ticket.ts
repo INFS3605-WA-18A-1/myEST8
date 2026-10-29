@@ -922,14 +922,14 @@ function recommendationsSection(t: TicketView, job: JobView, x: Extras): Html {
   return html`<section class="space-y-3">
     ${header}
     <p class="text-muted">
-      Ranked by myEST8 rating, then Google rating, then median previous Firm Quote.
+      Nominated Tradies first, then a blend of myEST8 rating, Google rating, job fit (how closely their past work matches this Job, judged by Jev) and median previous Firm Quote.
       ${firstRound ? 'Send the first round to three or four Tradies; the top three are ticked.' : 'Invite more Tradies if the Job is short of Quotes.'}
     </p>
     ${rule?.singleReason ? alert(rule.singleReason, 'info') : (rule?.minimum ?? MIN_QUOTES) > 1
       ? html`<p class="text-sm text-muted">Send Quote Requests to at least ${rule?.minimum === 3 ? 'three' : 'two'} Tradies.</p>`
       : nothing}
     <form method="post" action="/tickets/${t.ticketId}/jobs/${job.jobId}/quote-requests" class="space-y-3">
-      ${compactTable(['Tradie', 'Rating', 'Google', 'Median Firm Quote', 'Ask'], rows, `Recommended Tradies for the ${humanise(job.trade)} Job`)}
+      ${compactTable(['Tradie', 'Rating', 'Google', 'Job fit', 'Median Firm Quote', 'Ask'], rows, `Recommended Tradies for the ${humanise(job.trade)} Job`)}
       ${anyLeft ? button('Send Quote Requests', { block: true }) : html`<p>Every recommended Tradie has been asked.</p>`}
     </form>
   </section>`;
@@ -950,7 +950,7 @@ function compactTable(headers: string[], rows: Html[][], caption: string): Html 
   </div>`;
 }
 
-/** One recommended Tradie as a table row. The two ratings sit in their own columns, never combined; bookings sit under the name. */
+/** One recommended Tradie as a table row. The two ratings and the job fit sit in their own columns, never combined; bookings sit under the name. */
 function recommendationRow(job: JobView, r: Recommendation, rank: number, ticked: boolean, x: Extras): Html[] {
   const id = `job-${job.jobId}-tradie-${r.tradieId}`;
   return [
@@ -969,6 +969,9 @@ function recommendationRow(job: JobView, r: Recommendation, rank: number, ticked
     </div>`,
     ratingChip({ source: 'myEST8', rating: r.myEst8Rating.average, count: r.myEst8Rating.count, named: false }),
     ratingChip({ source: 'Google', rating: r.googleRating?.rating ?? null, count: r.googleRating?.reviewCount ?? 0, onGoogle: !!r.googleRating, named: false }),
+    r.jobFit
+      ? html`<span class="metric" title="Judged by Jev from their past Jobs and Google listing, ${Math.round(r.jobFit.confidence * 100)}% sure">${r.jobFit.label}</span>`
+      : html`<span class="metric is-empty">Checking…</span>`,
     html`<span class="num">${
       r.medianQuoteCents === null ? 'No previous Firm Quotes' : `Median Firm Quote ${formatMoney(r.medianQuoteCents)} (${r.firmQuoteCount} previous)`
     }</span>`,

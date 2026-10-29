@@ -69,6 +69,12 @@ export function formatVisit(at: Date | string, timeZone: string) {
   return `${WEEKDAYS[w.weekday]} ${w.day} ${MONTHS[w.month - 1]}, ${time}`;
 }
 
+/** A day for a sentence: "Tue 27 Oct". */
+export function formatDay(at: Date | string, timeZone: string) {
+  const w = wallClock(new Date(at), timeZone);
+  return `${WEEKDAYS[w.weekday]} ${w.day} ${MONTHS[w.month - 1]}`;
+}
+
 /** The confirm-page button: "Tuesday 27 Oct, 9:00 am". The short form is formatVisit. */
 export function formatVisitDay(at: Date | string, timeZone: string) {
   const { w, time } = clockWords(at, timeZone);

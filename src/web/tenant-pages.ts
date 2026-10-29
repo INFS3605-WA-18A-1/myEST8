@@ -15,7 +15,7 @@ import { ActionError, dollars, type Trade } from '../shared.ts';
 import { files, optionalCents, text, type FormValues } from './forms.ts';
 import { shareButton, shareUrl } from './share.ts';
 import { icon } from './icons.ts';
-import { alert, button, card, formatWhen, publicPage, type Html } from './ui.ts';
+import { alert, button, card, doneBox, formatWhen, publicPage, type Html } from './ui.ts';
 
 const MB = 1024 * 1024;
 const MAX_FILES = 10;
@@ -263,11 +263,6 @@ const CHOSEN_SCRIPT = raw(`<script>
   });
 })();
 </script>`);
-
-/** The confirmation after an upload: a `--done` block that stays on the page. */
-function doneBox(message: string): Html {
-  return html`<div role="status" class="tenant-done">${message}</div>`;
-}
 
 type Step = {
   stage: string;

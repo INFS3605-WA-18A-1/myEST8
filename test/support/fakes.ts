@@ -13,6 +13,8 @@ import type {
   Geocoder,
   ImageMatcher,
   ImageMatchResult,
+  JobFitEvidence,
+  JobFitJudge,
   ListingDetails,
   Messenger,
   OutboundMessage,
@@ -135,13 +137,14 @@ export class FakeSummariser implements Summariser {
   }
 }
 
-/** Composes "Composed: <draft>" unless `next` is set (a text to return, or an Error to throw). */
+/** Composes "Composed: <draft>" unless `next` is set: a text to return, a function writing one from the input, or an Error to throw. */
 export class FakeComposer implements Composer {
-  next: string | Error | null = null;
+  next: string | Error | ((input: Parameters<Composer['compose']>[0]) => string) | null = null;
   calls: Parameters<Composer['compose']>[0][] = [];
   async compose(input: Parameters<Composer['compose']>[0]) {
     this.calls.push(input);
     if (this.next instanceof Error) throw this.next;
+    if (typeof this.next === 'function') return { text: this.next(input) };
     return { text: this.next ?? `Composed: ${input.draft}` };
   }
 }
@@ -180,6 +183,18 @@ export class FakeTradeSuggester implements TradeSuggester {
     this.calls.push(listing);
     if (this.next instanceof Error) throw this.next;
     return this.next;
+  }
+}
+
+/** Judges each Tradie by business name from `scores` (0-3), "Trade only" (1) for the rest; throws `failing` while it is set. */
+export class FakeJobFitJudge implements JobFitJudge {
+  scores = new Map<string, number>();
+  failing: Error | null = null;
+  calls: JobFitEvidence[] = [];
+  async judge(evidence: JobFitEvidence) {
+    this.calls.push(evidence);
+    if (this.failing) throw this.failing;
+    return { score: this.scores.get(evidence.tradie.businessName) ?? 1, confidence: 0.9 };
   }
 }
 

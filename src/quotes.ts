@@ -1,8 +1,10 @@
+import { createHash } from 'node:crypto';
 import type { Context } from './context.ts';
 import { all, one, run, transaction } from './db.ts';
-import { ProviderRefusedError, UndeliverableError } from './ports.ts';
+import { ProviderRefusedError, UndeliverableError, type JobFitEvidence } from './ports.ts';
+import type { Person } from './profiles.ts';
 import { addMs, dollars, HOUR_MS, invalid, iso, median, newToken, notFound, withoutContactDetails, type Trade } from './shared.ts';
-import type { OpenItem } from './tickets.ts';
+import type { Issue, Job, OpenItem } from './tickets.ts';
 import { AVAILABILITY_LABELS } from './templates.ts';
 import { dayOf, wallClock, zonedInstant } from './zoned-time.ts';
 
@@ -18,6 +20,16 @@ export const MIN_QUOTE_REQUESTS = 2;
 /** The most Tradies `recommend` returns, and how many of them start ticked. */
 const MAX_RECOMMENDED = 4;
 const PRESELECTED = 3;
+/**
+ * What places a recommended Tradie after the Nominated ones: each part, from 0 to 1, by its
+ * weight (ADR 0016). A part a Tradie has no value for (not on Google, no Firm Quotes yet,
+ * job fit not judged yet) is left out, and the parts they have share the whole weight.
+ */
+const RANK_WEIGHTS = { myEst8Rating: 0.4, googleRating: 0.2, jobFit: 0.3, price: 0.1 };
+/** Short names for Jev's job-fit levels (src/adapters/jev-job-fit.ts), lowest first. */
+const JOB_FIT_LABELS = ['No related work', 'Trade only', 'Related work', 'Done this kind of job'] as const;
+/** The most of a Tradie's past Jobs a job-fit judgment is shown. */
+const PAST_JOBS_SHOWN = 10;
 /** The most start dates a Firm Quote lists. */
 const MAX_AVAILABLE_DATES = 3;
 const MAX_SCOPE_LENGTH = 2000;
@@ -72,6 +84,7 @@ type QuoteRow = {
   available_dates: unknown;
   not_to_exceed_cents: number | null;
 };
+type JobFitRow = { job_id: number; tradie_id: number; score: number; confidence: number; evidence_key: string; judged_at: string };
 type CancelledVisit = { id: number; ticket_id: number; job_id: number; tradie_id: number; start: string; end: string };
 type ApprovalRow = { id: number; agency_id: number; quote_id: number; job_id: number; ticket_id: number; owner_id: number; status: ApprovalStatus; requested_at: string };
 
@@ -100,6 +113,21 @@ function datesOf(value: unknown): string[] {
 
 /** What a Quote counts towards the Repair Cost: the Not-to-exceed Cap when proceeding on an Estimate, else its price. */
 const costOf = (q: QuoteRow) => q.not_to_exceed_cents ?? q.price_cents!;
+
+/** A recommendation's place in the order after the Nominated Tradies: the weighted mean of the parts it has (RANK_WEIGHTS). */
+function rankScore(parts: Record<keyof typeof RANK_WEIGHTS, number | null>) {
+  let total = 0;
+  let weight = 0;
+  for (const [name, value] of Object.entries(parts) as [keyof typeof RANK_WEIGHTS, number | null][]) {
+    if (value === null) continue;
+    total += RANK_WEIGHTS[name] * value;
+    weight += RANK_WEIGHTS[name];
+  }
+  return weight ? total / weight : 0;
+}
+
+/** A short fingerprint of what a job-fit judgment was shown: a kept judgment is current while its evidence hashes the same. */
+const evidenceKey = (evidence: JobFitEvidence) => createHash('sha256').update(JSON.stringify(evidence)).digest('base64url');
 
 /** Refuses a send of Quote Requests that reached no Tradie, naming each and why. */
 function refuseNoneSent(unreached: { tradie: string; reason: string }[]): never {
@@ -187,6 +215,47 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
       tradieId,
       trade,
     )).map((q) => ({ priceCents: q.price_cents, at: q.received_at, jobId: q.job_id, stage: q.stage }));
+  }
+
+  /** A Tradie's latest confirmed Quote on each Job but `exceptJobId`, newest first, with what the Job was: what job fit is judged on. */
+  async function pastJobsOf(tradieId: number, exceptJobId: number) {
+    const rows = await all<{ trade: Trade; summary: string | null; description: string; stage: QuoteStage; scope_of_work: string | null }>(
+      db,
+      `SELECT * FROM (
+         SELECT DISTINCT ON (q.job_id) q.id, q.received_at, q.stage, q.scope_of_work, j.trade, i.summary, i.description
+         FROM quotes q JOIN jobs j ON j.id = q.job_id JOIN tickets t ON t.id = q.ticket_id JOIN issues i ON i.id = t.issue_id
+         WHERE q.tradie_id = ? AND q.confirmed = 1 AND q.job_id <> ?
+         ORDER BY q.job_id, (q.stage = 'firm') DESC, q.id DESC
+       ) latest ORDER BY received_at DESC, id DESC LIMIT ?`,
+      tradieId,
+      exceptJobId,
+      PAST_JOBS_SHOWN,
+    );
+    return rows.map((r) => ({
+      trade: r.trade,
+      summary: withoutContactDetails(r.summary ?? r.description),
+      scopeOfWork: r.stage === 'firm' && r.scope_of_work ? withoutContactDetails(r.scope_of_work) : null,
+    }));
+  }
+
+  /**
+   * Each Tradie with what Jev is shown to judge how well they fit the Job, and the
+   * judgment kept for it: null when there is none yet, or the evidence has changed since.
+   */
+  async function jobFits(job: Job, issue: Issue, tradies: Person[]) {
+    const kept = new Map((await all<JobFitRow>(db, 'SELECT * FROM job_fits WHERE job_id = ?', job.id)).map((r) => [r.tradie_id, r]));
+    const clean = (text: string | null) => (text === null ? null : withoutContactDetails(text));
+    return Promise.all(
+      tradies.map(async (tradie) => {
+        const evidence: JobFitEvidence = {
+          job: { trade: job.trade, summary: clean(issue.summary), description: withoutContactDetails(issue.description), location: clean(issue.answers.location) },
+          tradie: { businessName: tradie.businessName ?? tradie.name, trades: tradie.trades, listing: tradie.googleListing, pastJobs: await pastJobsOf(tradie.id, job.id) },
+        };
+        const key = evidenceKey(evidence);
+        const row = kept.get(tradie.id);
+        return { tradieId: tradie.id, evidence, key, fit: row?.evidence_key === key ? { score: row.score, confidence: row.confidence } : null };
+      }),
+    );
   }
 
   /** The total of a Ticket's approved Quotes: each Firm Quote's price, or the Not-to-exceed Cap of an Estimate proceeded on. */
@@ -454,6 +523,33 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
     );
   }
 
+  // Judges the Job's Tradies that have no current job fit. Each one kept is kept even if another fails;
+  // the failure throws, so the task retries and judges only those left. Running twice judges nobody twice.
+  worker.on<{ jobId: number }>('quotes.judge_fit', async ({ jobId }) => {
+    const job = await tickets.job(jobId);
+    if (job.status !== 'quoting') return;
+    const issue = await tickets.issue((await tickets.ticket(job.ticketId)).issueId);
+    const stale = (await jobFits(job, issue, await profiles.tradiesWithTrade(job.agencyId, job.trade))).filter((c) => !c.fit);
+    const results = await Promise.allSettled(
+      stale.map(async ({ tradieId, evidence, key }) => {
+        const { score, confidence } = await ports.jobFitJudge.judge(evidence);
+        await run(
+          db,
+          `INSERT INTO job_fits (job_id, tradie_id, score, confidence, evidence_key, judged_at) VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT (job_id, tradie_id) DO UPDATE SET score = excluded.score, confidence = excluded.confidence, evidence_key = excluded.evidence_key, judged_at = excluded.judged_at`,
+          jobId,
+          tradieId,
+          score,
+          confidence,
+          key,
+          iso(clock.now()),
+        );
+      }),
+    );
+    const failed = results.find((r) => r.status === 'rejected');
+    if (failed) throw failed.reason;
+  });
+
   worker.on<{ quoteRequestId: number }>('quotes.reminder', async ({ quoteRequestId }) => {
     // Only a request still waiting is reminded, even if the Tradie's reply lands at the same moment.
     const request = await one<QuoteRequestRow>(db, `UPDATE quote_requests SET status = 'reminded' WHERE id = ? AND status = 'sent' RETURNING *`, quoteRequestId);
@@ -680,18 +776,24 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dateTimes:
   return {
     /**
      * At most four of the Agency's Tradies with the Job's Trade: the Property's Nominated Tradies
-     * first, then myEST8 rating, Google rating, median previous Firm Quote (none last: Estimates
-     * are never compared with Firm Quotes, so they don't count). The first three that
-     * have not been asked yet are `preselected`.
+     * first, then by a weighted blend of myEST8 rating, Google rating, Jev's job fit and median
+     * previous Firm Quote (RANK_WEIGHTS, ADR 0016; Estimates are never compared with Firm Quotes,
+     * so they don't count). The first three that have not been asked yet are `preselected`.
+     * A Tradie whose job fit isn't judged yet (`jobFit` null) is ranked without it, and the
+     * judgment is asked for in the background.
      */
     async recommend(agencyId: number, jobId: number) {
       const job = await tickets.jobInAgency(agencyId, jobId);
+      const ticket = await tickets.ticket(job.ticketId);
       const requested = new Set((await quoteRequestsOf(jobId)).map((r) => r.tradie_id));
-      const nominatedIds = new Set((await profiles.property((await tickets.ticket(job.ticketId)).propertyId)).nominatedTradieIds);
+      const nominatedIds = new Set((await profiles.property(ticket.propertyId)).nominatedTradieIds);
       const tradies = await profiles.tradiesWithTrade(agencyId, job.trade);
+      const fits = new Map((await jobFits(job, await tickets.issue(ticket.issueId), tradies)).map((c) => [c.tradieId, c.fit]));
+      if ([...fits.values()].some((fit) => !fit)) await worker.scheduleUnlessWaiting('quotes.judge_fit', { jobId });
       const recommendations = await Promise.all(
         tradies.map(async (tradie) => {
           const previous = await previousQuotes(tradie.id, job.trade);
+          const fit = fits.get(tradie.id) ?? null;
           return {
             tradieId: tradie.id,
             businessName: tradie.businessName ?? tradie.name,
@@ -704,18 +806,26 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dateTimes:
             bookings: await modules.scheduling.bookings(agencyId, tradie.id),
             requested: requested.has(tradie.id),
             nominated: nominatedIds.has(tradie.id),
+            /** Jev's judgment of how well the Tradie's past work fits this Job, on the JOB_FIT_LABELS levels. */
+            jobFit: fit ? { ...fit, label: JOB_FIT_LABELS[Math.round(fit.score)]! } : null,
           };
         }),
       );
+      // Price counts as how close a Tradie's median Firm Quote is to the cheapest one here.
+      const cheapest = Math.min(...recommendations.map((r) => r.medianQuoteCents ?? Infinity));
+      const rank = new Map(
+        recommendations.map((r) => [
+          r.tradieId,
+          rankScore({
+            myEst8Rating: r.myEst8Rating.average / 5,
+            googleRating: r.googleRating?.rating != null ? r.googleRating.rating / 5 : null,
+            jobFit: r.jobFit ? r.jobFit.score / (JOB_FIT_LABELS.length - 1) : null,
+            price: r.medianQuoteCents ? cheapest / r.medianQuoteCents : null,
+          }),
+        ]),
+      );
       const ranked = recommendations
-        .sort(
-          (a, b) =>
-            Number(b.nominated) - Number(a.nominated) ||
-            b.myEst8Rating.average - a.myEst8Rating.average ||
-            (b.googleRating?.rating ?? -1) - (a.googleRating?.rating ?? -1) ||
-            (a.medianQuoteCents ?? Infinity) - (b.medianQuoteCents ?? Infinity) ||
-            a.businessName.localeCompare(b.businessName),
-        )
+        .sort((a, b) => Number(b.nominated) - Number(a.nominated) || rank.get(b.tradieId)! - rank.get(a.tradieId)! || a.businessName.localeCompare(b.businessName))
         .slice(0, MAX_RECOMMENDED);
       return ranked.map((r, i) => ({ ...r, preselected: i < PRESELECTED && !r.requested }));
     },
@@ -1257,11 +1367,19 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dateTimes:
       return row ? { ticketId: row.ticket_id } : null;
     },
 
-    /** The Job's approved Quote: who does the work, what it counts towards the Repair Cost, and when they proposed. */
+    /** The Job's approved Quote: who does the work, what it counts towards the Repair Cost, when they proposed, and a Firm Quote's scope of work. */
     async approvedQuote(jobId: number) {
       const row = await one<QuoteRow>(db, `SELECT * FROM quotes WHERE job_id = ? AND status = 'approved'`, jobId);
       return row
-        ? { tradieId: row.tradie_id, stage: row.stage, priceCents: costOf(row), notToExceedCents: row.not_to_exceed_cents, proposedTime: row.proposed_time, availableTimes: datesOf(row.available_dates) }
+? {
+            tradieId: row.tradie_id,
+            stage: row.stage,
+            priceCents: costOf(row),
+            notToExceedCents: row.not_to_exceed_cents,
+            proposedTime: row.proposed_time,
+            availableTimes: datesOf(row.available_dates),
+            scopeOfWork: row.scope_of_work,
+          }
         : null;
     },
 

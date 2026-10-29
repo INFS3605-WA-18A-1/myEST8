@@ -23,8 +23,8 @@ import type { App } from '../../app.ts';
 import type { FirmQuoteInput } from '../../quotes.ts';
 import { ActionError } from '../../shared.ts';
 import { files, isoToLocal, list, localToIso, text, type FormValues } from '../forms.ts';
-import { formatVisit } from '../../zoned-time.ts';
-import { alert, button, card, dl, field, formatMoney, formatWhen, humanise, publicPage, type Html } from '../ui.ts';
+import { formatDay, formatVisit } from '../../zoned-time.ts';
+import { alert, button, card, dl, doneBox, field, formatMoney, formatWhen, humanise, publicPage, type Html } from '../ui.ts';
 
 const KB = 1024;
 const MB = 1024 * KB;
@@ -173,7 +173,7 @@ async function showVisit(c: Context, app: App, kind: VisitKind, step: VisitStep)
   const token = c.req.param('token') ?? '';
   const page = await app.tradieVisit(token, kind);
   if (!page) return c.html(unknownLinkPage(), 404);
-  return c.html(step === 'done' ? donePage(token, kind, page) : anotherPage(token, kind, page));
+  return c.html(visitPage(token, kind, step, page));
 }
 
 async function postVisit(c: Context, app: App, kind: VisitKind, step: VisitStep) {
@@ -186,7 +186,7 @@ async function postVisit(c: Context, app: App, kind: VisitKind, step: VisitStep)
     return actionFailed(c, error, async (message) => {
       const page = await app.tradieVisit(token, kind);
       if (!page) return null;
-      return step === 'done' ? donePage(token, kind, page, message) : anotherPage(token, kind, page, message);
+      return visitPage(token, kind, step, page, message);
     });
   }
   return c.redirect(`/q/${encodeURIComponent(token)}/${path}`, 303);
@@ -249,7 +249,8 @@ function unknownLinkPage(): Html {
   });
 }
 
-function actionPage(title: string, brand: string, body: Html): Html {
+/** A confirm page from a Tradie's email: the green block of what they chose, if they have, then the card. */
+function actionPage(title: string, brand: string, body: Html, done: Html | string = ''): Html {
   return publicPage({
     css: ['tenant.css'],
     runtime: false,
@@ -257,68 +258,85 @@ function actionPage(title: string, brand: string, body: Html): Html {
     brand,
     title,
     footer: replyTo(brand),
-    body: card({ body }),
+    body: html`${done}${card({ body })}`,
   });
 }
 
-/** Statuses where replying NO still declines. A Firm Quote, or a closed request, does not. */
+/** Statuses where replying NO still declines. A Firm Quote, or a closed request, does not. Once declined, the decline shows in green. */
 function declinePage(token: string, page: QuotePage, error?: string): Html {
-  const open = CAN_DECLINE.has(page.status) && page.outcome !== 'declined';
-  const title = page.outcome === 'declined' ? 'Quote Request' : open ? "Can't take this job" : 'Quote Request';
-  const body =
-    page.outcome === 'declined'
-      ? html`<p>You declined this Quote Request.</p>`
-      : open
-        ? html`<p>${page.agencyName} asked you to quote for the ${humanise(page.trade).toLowerCase()} job in ${page.suburb}.</p>
-            <form method="post" action="/q/${encodeURIComponent(token)}/decline" class="tenant-form">
-              ${button('Decline this job', { block: true })}
-            </form>`
-        : html`<p>This Quote Request no longer takes a decline.</p>`;
-  return actionPage(title, page.agencyName, html`${error ? alert(error, 'error') : ''}${body}`);
+  const declined = page.outcome === 'declined';
+  const open = CAN_DECLINE.has(page.status) && !declined;
+  const title = open ? "Can't take this job" : 'Quote Request';
+  const body = declined
+    ? html`<p>${page.agencyName} asked you to quote for the ${humanise(page.trade).toLowerCase()} job in ${page.suburb}.</p>${disabledButton('Decline this job')}`
+    : open
+      ? html`<p>${page.agencyName} asked you to quote for the ${humanise(page.trade).toLowerCase()} job in ${page.suburb}.</p>
+          <form method="post" action="/q/${encodeURIComponent(token)}/decline" class="tenant-form">
+            ${button('Decline this job', { block: true })}
+          </form>`
+      : html`<p>This Quote Request no longer takes a decline.</p>${disabledButton('Decline this job')}`;
+  return actionPage(title, page.agencyName, html`${error ? alert(error, 'error') : ''}${body}`, declined ? doneBox('You declined this Quote Request.') : '');
 }
 
-function donePage(token: string, kind: VisitKind, page: TradieVisit, error?: string): Html {
+/** One of an email's buttons that no longer applies. */
+const disabledButton = (label: string, variant: 'primary' | 'secondary' = 'primary') =>
+  html`<div class="tenant-buttons">${button(label, { block: true, variant, disabled: true, type: 'button' })}</div>`;
+
+/**
+ * The page a Work Order's or Site Inspection's Mark done or Need another time? opens.
+ * Before the Tradie answers, the link's own button. Once they have, both links show
+ * the answer in green and both buttons, disabled where they no longer apply.
+ */
+function visitPage(token: string, kind: VisitKind, step: VisitStep, page: TradieVisit, error?: string): Html {
   const visit = page.visit;
-  const when = visit ? formatVisit(visit.start, page.timeZone) : '';
   const mark = kind === 'inspection' ? 'Mark inspection done' : 'Mark job done';
-  const ready = visit?.status === 'active' && visit.started;
-  const title = visit?.status === 'done' ? (kind === 'inspection' ? 'Inspection done' : 'Job done') : ready ? mark : 'Not done yet';
-  const path = visitPath(kind, 'done');
-  const body = !visit
+  const what = kind === 'inspection' ? 'The Site Inspection' : 'The job';
+  const stays = kind === 'inspection' ? `until it moves` : `until the Tenant picks a new one`;
+  const when = visit ? formatVisit(visit.start, page.timeZone) : '';
+  const done = visit?.status === 'done';
+  const asked = visit?.status === 'active' && visit.rescheduleRequestedBy === 'tradie';
+  const settled = !!visit && (visit.status !== 'active' || asked);
+  const canMark = visit?.status === 'active' && visit.started;
+  const canAsk = visit?.status === 'active' && !visit.rescheduleRequestedBy;
+  const title = done
+    ? kind === 'inspection' ? 'Inspection done' : 'Job done'
+    : step === 'done'
+      ? canMark ? mark : 'Not done yet'
+      : canAsk ? 'Need another time?' : 'Another time';
+  const line = !visit
     ? html`<p>This visit isn't booked.</p>`
     : visit.status === 'cancelled'
       ? html`<p>This visit is cancelled.</p>`
-      : visit.status === 'done'
-        ? html`<p>Already marked done on ${when}.</p>`
-        : !visit.started
-          ? html`<p>This visit is booked for ${when}, so it can't be marked done yet.</p>`
-          : html`<p>${kind === 'inspection' ? 'The Site Inspection' : 'The job'} at ${page.address} is booked for ${when}.</p>
-              <form method="post" action="/q/${encodeURIComponent(token)}/${path}" class="tenant-form">
-                ${button(mark, { block: true })}
-              </form>`;
-  return actionPage(title, page.agencyName, html`${error ? alert(error, 'error') : ''}${body}`);
+      : done
+        ? html`<p>${what} at ${page.address} was booked for ${when}.</p>`
+        : visit.rescheduleRequestedBy
+          ? html`<p>${asked ? '' : 'A new time has been asked for. '}This visit stays booked for ${when} ${stays}.</p>`
+          : step === 'done'
+            ? canMark
+              ? html`<p>${what} at ${page.address} is booked for ${when}.</p>`
+              : html`<p>This visit is booked for ${when}, so it can't be marked done yet.</p>`
+            : html`<p>This visit stays booked for ${when} ${stays}.</p>`;
+  const showMark = settled || (step === 'done' && canMark);
+  const showAsk = settled || (!!visit && step === 'another');
+  const box = done
+    ? doneBox(`Marked done on ${formatDay(visit.doneAt ?? visit.start, page.timeZone)}`)
+    : asked
+      ? doneBox('Asked for another time')
+      : '';
+  return actionPage(
+    title,
+    page.agencyName,
+    html`${error ? alert(error, 'error') : ''}${line}
+      ${showMark ? (canMark ? visitButton(token, kind, 'done', mark) : disabledButton(mark)) : ''}
+      ${showAsk ? (canAsk ? visitButton(token, kind, 'another', 'Need another time?') : disabledButton('Need another time?', 'secondary')) : ''}`,
+    box,
+  );
 }
 
-function anotherPage(token: string, kind: VisitKind, page: TradieVisit, error?: string): Html {
-  const visit = page.visit;
-  const when = visit ? formatVisit(visit.start, page.timeZone) : '';
-  const asked = !!visit?.rescheduleRequestedBy;
-  const open = visit?.status === 'active' && !asked;
-  const stays = kind === 'inspection' ? `until it moves` : `until the Tenant picks a new one`;
-  const title = open ? 'Need another time?' : 'Another time';
-  const body = !visit
-    ? html`<p>This visit isn't booked.</p>`
-    : visit.status === 'cancelled'
-      ? html`<p>This visit is cancelled.</p>`
-      : visit.status === 'done'
-        ? html`<p>Already marked done on ${when}.</p>`
-        : asked
-          ? html`<p>You already asked for another time. This visit stays booked for ${when} ${stays}.</p>`
-          : html`<p>This visit stays booked for ${when} ${stays}.</p>
-              <form method="post" action="/q/${encodeURIComponent(token)}/${visitPath(kind, 'another')}" class="tenant-form">
-                ${button('Need another time?', { block: true, variant: 'secondary' })}
-              </form>`;
-  return actionPage(title, page.agencyName, html`${error ? alert(error, 'error') : ''}${body}`);
+function visitButton(token: string, kind: VisitKind, step: VisitStep, label: string): Html {
+  return html`<form method="post" action="/q/${encodeURIComponent(token)}/${visitPath(kind, step)}" class="tenant-form">
+    ${button(label, { block: true, variant: step === 'done' ? 'primary' : 'secondary' })}
+  </form>`;
 }
 
 const replyTo = (agencyName: string) => `Questions? Reply to any message from ${agencyName}.`;
@@ -334,7 +352,7 @@ function quotePage(token: string, p: QuotePage, o: { thanks?: 'estimate' | 'firm
     subtitle: `${job}, for ${p.tradieName}`,
     footer: replyTo(p.agencyName),
     body: html`
-      ${o.thanks ? html`<div role="status" class="tenant-done">${thanksLine(o.thanks, p.agencyName)}</div>` : ''}
+      ${o.thanks ? doneBox(thanksLine(o.thanks, p.agencyName)) : ''}
       ${card({
         title: 'The job',
         body: html`<div class="tenant-issue">
@@ -380,7 +398,8 @@ function outcomeNote(p: QuotePage): Html | string {
     case 'not_chosen':
       return alert(`${p.agencyName} has gone with another quote this time. Thanks for quoting.`, 'info');
     case 'declined':
-      return alert('You declined this Quote Request, so it no longer takes a quote.', 'info');
+      // The same green block as the decline page, which the email's other button opens.
+      return doneBox('You declined this Quote Request, so it no longer takes a quote.');
     case 'closed':
       return alert(`This Quote Request has closed: ${p.agencyName} is no longer taking quotes for this job.`, 'info');
     default:

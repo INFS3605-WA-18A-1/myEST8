@@ -6,6 +6,7 @@ import { Hono, type Context } from 'hono';
 import { wallClock, zonedInstant } from '../zoned-time.ts';
 import type { Composer, DetailExtractor, ExtractedDetails, Summariser } from '../ports.ts';
 import { AVAILABILITY_WORDS, mockClassify } from './mock-classifier.ts';
+import { mockJobFitAnswers } from './mock-job-fit.ts';
 import { isTrade, mockTradeAnswers } from './mock-trades.ts';
 
 /** A Google listing the demo's mock Places API knows. A listing may lack a phone, website or summary, as real ones do. */
@@ -84,7 +85,8 @@ export function mockApis() {
   const app = new Hono();
 
   // Choice questions are the classifier. Noul questions named for a Trade are the Trade suggester.
-  // Both are TypeSafe's /v1/systemone; a request is one or the other.
+  // A single Score question named job_fit is the job-fit judge. All are TypeSafe's /v1/systemone;
+  // a request is one of them.
   app.post('/jev/v1/systemone', async (c) => {
     const body = await jsonBody(c);
     const questions = isObject(body) ? body.questions : null;
@@ -96,8 +98,10 @@ export function mockApis() {
     const values = Object.values(questions);
     if (values.every((q) => isObject(q) && q.type === 'choice')) return c.json(mockClassify(body));
     if (!isObject(body) || !isObject(body.state)) return refused('state is required');
+    const fit = questions.job_fit;
+    if (Object.keys(questions).length === 1 && isObject(fit) && fit.type === 'score' && Array.isArray(fit.criteria)) return c.json(mockJobFitAnswers(body.state));
     if (!Object.entries(questions).every(([name, q]) => isTrade(name) && isObject(q) && q.type === 'noul')) {
-      return refused('questions must be choice questions, or noul questions named for a Trade');
+      return refused('questions must be choice questions, noul questions named for a Trade, or one job_fit score question');
     }
     return c.json(mockTradeAnswers(body.state, questions));
   });

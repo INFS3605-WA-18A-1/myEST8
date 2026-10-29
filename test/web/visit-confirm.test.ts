@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { one } from '../../src/db.ts';
-import { visible, webWorld } from '../support/web.ts';
+import { buttonsOn, confirmedBlock, visible, webWorld } from '../support/web.ts';
 import { confirmedEstimates, confirmedQuotes, jobView, quoteRequestFor, TOM, tomsTapTicket } from '../support/world.ts';
 
 const TUE_9AM = new Date('2026-10-13T09:00:00+11:00');
@@ -92,11 +92,11 @@ describe('the visit confirm page', () => {
 
     const posted = await w.web.request(`/v/confirm/${token}`, { method: 'POST', body: new URLSearchParams({ action: 'confirm' }) });
     expect(posted.status).toBe(303);
-    expect(posted.headers.get('location')).toBe(`/v/confirm/${token}?confirmed=1`);
+    expect(posted.headers.get('location')).toBe(`/v/confirm/${token}`);
 
-    const after = visible(await (await w.get(`/v/confirm/${token}`)).text());
-    expect(after).toContain('Confirmed');
-    expect(after).not.toContain('Confirm Tuesday 13 Oct, 9:00 am');
+    const after = await (await w.get(`/v/confirm/${token}`)).text();
+    expect(confirmedBlock(after)).toBe('✓ Confirmed: Tue 13 Oct, 9:00 am');
+    expect(buttonsOn(after)).toContainEqual({ label: 'Confirm Tuesday 13 Oct, 9:00 am', disabled: true });
     expect(await jobView(w, job)).toMatchObject({ workOrder: { visitConfirmed: true } });
     expect(await pendingVisit(w)).toBeNull();
   });
@@ -112,9 +112,53 @@ describe('the visit confirm page', () => {
     expect(await jobView(w, job)).toMatchObject({ workOrder: { visitConfirmed: false, start: WED_2PM.toISOString() } });
 
     await w.web.request(`/v/confirm/${token}`, { method: 'POST', body: new URLSearchParams({ action: 'confirm' }) });
-    const confirmed = visible(await (await w.get(`/v/confirm/${token}`)).text());
-    expect(confirmed).toContain('Confirmed');
-    expect(confirmed).toContain('Wednesday 14 Oct, 2:00 pm');
-    expect(confirmed).not.toContain('Confirm Wednesday 14 Oct, 2:00 pm');
+    const confirmed = await (await w.get(`/v/confirm/${token}`)).text();
+    expect(confirmedBlock(confirmed)).toBe('✓ Confirmed: Wed 14 Oct, 2:00 pm');
+    expect(buttonsOn(confirmed)).toContainEqual({ label: 'Confirm Wednesday 14 Oct, 2:00 pm', disabled: true });
+    expect(visible(confirmed)).not.toContain('Tuesday 13 Oct');
+  });
+
+  test('once confirmed, both links from the email show it in green, and Need another time? still works', async () => {
+    const { w, job, token } = await bookedByManager();
+    await w.web.request(`/v/confirm/${token}`, { method: 'POST', body: new URLSearchParams({ action: 'confirm' }) });
+
+    for (const link of ['', '?another=1']) {
+      const page = await (await w.get(`/v/confirm/${token}${link}`)).text();
+      expect(confirmedBlock(page), link).toBe('✓ Confirmed: Tue 13 Oct, 9:00 am');
+      expect(buttonsOn(page), link).toEqual([
+        { label: 'Confirm Tuesday 13 Oct, 9:00 am', disabled: true },
+        { label: 'Need another time?', disabled: false },
+      ]);
+    }
+    // Opening them changed nothing.
+    expect((await jobView(w, job)).workOrder).toMatchObject({ visitConfirmed: true, rescheduleRequestedBy: null });
+  });
+
+  test('once the Tenant asks for another time, both links say so in green, with both buttons disabled', async () => {
+    const { w, job, token } = await bookedByManager();
+    const posted = await w.web.request(`/v/confirm/${token}`, { method: 'POST', body: new URLSearchParams({ action: 'another' }) });
+    expect(posted.status).toBe(303);
+    expect(posted.headers.get('location')).toBe(`/v/confirm/${token}?another=1`);
+
+    for (const link of ['', '?another=1']) {
+      const page = await (await w.get(`/v/confirm/${token}${link}`)).text();
+      expect(confirmedBlock(page), link).toBe('✓ Asked for another time');
+      expect(visible(page), link).toContain('This visit stays booked for Tuesday 13 Oct, 9:00 am until you pick a new one.');
+      expect(buttonsOn(page), link).toEqual([
+        { label: 'Confirm Tuesday 13 Oct, 9:00 am', disabled: true },
+        { label: 'Need another time?', disabled: true },
+      ]);
+    }
+    expect((await jobView(w, job)).workOrder).toMatchObject({ rescheduleRequestedBy: 'tenant', status: 'active' });
+  });
+
+  test('before the Tenant answers, each link has only its own button and no green block', async () => {
+    const { w, token } = await bookedByManager();
+    const confirm = await (await w.get(`/v/confirm/${token}`)).text();
+    expect(confirmedBlock(confirm)).toBeNull();
+    expect(buttonsOn(confirm)).toEqual([{ label: 'Confirm Tuesday 13 Oct, 9:00 am', disabled: false }]);
+    const another = await (await w.get(`/v/confirm/${token}?another=1`)).text();
+    expect(confirmedBlock(another)).toBeNull();
+    expect(buttonsOn(another)).toEqual([{ label: 'Need another time?', disabled: false }]);
   });
 });

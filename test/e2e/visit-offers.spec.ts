@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { fixtureJpeg } from '../../src/demo/photo-exif.ts';
-import { signIn, unique } from './support/actions.ts';
+import { daysAhead, signIn, unique } from './support/actions.ts';
 
 // The Tradie offers two visit times, the Tenant opens one (which does not book it),
 // then presses Book. Roles and visible text only.
@@ -137,7 +137,7 @@ test('the Tradie offers visit times and the Tenant books one', async ({ page, br
     await tradie.getByLabel('Firm price ($)').fill(price);
     await tradie.getByLabel('Scope of work').fill(scope);
     await tradie.getByLabel('How many days it takes').fill('1');
-    await tradie.getByLabel('Start date 1').fill('2026-10-27');
+    await tradie.getByLabel('Start date 1').fill(daysAhead(3).date);
     await tradie.getByRole('button', { name: 'Send Firm Quote' }).click();
     await expect(tradie.getByRole('status')).toContainText('has your Firm Quote');
   }
@@ -150,8 +150,10 @@ test('the Tradie offers visit times and the Tenant books one', async ({ page, br
 
   await tradie.goto(await quoteLink(page, 'Pete Park', report));
   await expect(tradie.getByRole('heading', { name: 'Offer visit times' })).toBeVisible();
-  await tradie.getByLabel('Preferred time').fill('2026-11-16T09:00');
-  await tradie.getByLabel('Another time').fill('2026-11-17T13:00');
+  // Each spec offers Pete its own times, so offers made side by side never clash.
+  const preferred = daysAhead(23, 9);
+  await tradie.getByLabel('Preferred time').fill(preferred.input);
+  await tradie.getByLabel('Another time').fill(daysAhead(24, 13).input);
   await tradie.getByRole('button', { name: 'Offer visit times' }).click();
   await expect(tradie.getByText('will ask the Tenant to pick a time')).toBeVisible();
 
@@ -165,13 +167,13 @@ test('the Tradie offers visit times and the Tenant books one', async ({ page, br
   }).toPass({ timeout: 15_000 });
   const tenant = await browser.newPage();
   await tenant.goto((await pick.getAttribute('href'))!);
-  await expect(tenant.getByRole('button', { name: 'Book Monday 16 Nov, 9:00 am' })).toBeVisible();
+  await expect(tenant.getByRole('button', { name: `Book ${preferred.long}` })).toBeVisible();
 
   await page.goto(ticketUrl);
   await expect(page.getByText('Tenant confirmed')).toHaveCount(0);
 
-  await tenant.getByRole('button', { name: 'Book Monday 16 Nov, 9:00 am' }).click();
-  await expect(tenant.getByText('This visit is booked for Mon 16 Nov, 9:00 am.')).toBeVisible();
+  await tenant.getByRole('button', { name: `Book ${preferred.long}` }).click();
+  await expect(tenant.getByRole('status')).toContainText(`Booked: ${preferred.short}`);
 
   await page.goto(ticketUrl);
   await expect(page.getByText('Tenant confirmed').first()).toBeVisible();
@@ -233,7 +235,7 @@ test('none of the times work, so the Tenant says when they are home and the Trad
     await tradie.getByLabel('Firm price ($)').fill(price);
     await tradie.getByLabel('Scope of work').fill(scope);
     await tradie.getByLabel('How many days it takes').fill('1');
-    await tradie.getByLabel('Start date 1').fill('2026-10-27');
+    await tradie.getByLabel('Start date 1').fill(daysAhead(3).date);
     await tradie.getByRole('button', { name: 'Send Firm Quote' }).click();
     await expect(tradie.getByRole('status')).toContainText('has your Firm Quote');
   }
@@ -247,8 +249,8 @@ test('none of the times work, so the Tenant says when they are home and the Trad
   const offerPath = await quoteLink(page, 'Pete Park', report);
   await tradie.goto(offerPath);
   await expect(tradie.getByRole('heading', { name: 'Offer visit times' })).toBeVisible();
-  await tradie.getByLabel('Preferred time').fill('2026-10-27T09:00');
-  await tradie.getByLabel('Another time').fill('2026-10-28T13:00');
+  await tradie.getByLabel('Preferred time').fill(daysAhead(3, 9).input);
+  await tradie.getByLabel('Another time').fill(daysAhead(4, 13).input);
   await tradie.getByRole('button', { name: 'Offer visit times' }).click();
   await expect(tradie.getByText('will ask the Tenant to pick a time')).toBeVisible();
 
@@ -275,8 +277,8 @@ test('none of the times work, so the Tenant says when they are home and the Trad
   await tradie.goto(offerPath);
   await expect(tradie.getByText('Sunday 10 am works')).toBeVisible();
   await expect(tradie.getByText('usually home Saturdays')).toBeVisible();
-  await tradie.getByLabel('Preferred time').fill('2026-10-31T09:00');
-  await tradie.getByLabel('Another time').fill('2026-11-02T13:00');
+  await tradie.getByLabel('Preferred time').fill(daysAhead(7, 9).input);
+  await tradie.getByLabel('Another time').fill(daysAhead(9, 13).input);
   await tradie.getByRole('button', { name: 'Offer visit times' }).click();
   await expect(tradie.getByText('will ask the Tenant to pick a time')).toBeVisible();
   await tradie.close();
@@ -339,7 +341,7 @@ test('a booked visit can ask for another time, and the Ticket can ask the Tradie
     await tradie.getByLabel('Firm price ($)').fill(price);
     await tradie.getByLabel('Scope of work').fill(scope);
     await tradie.getByLabel('How many days it takes').fill('1');
-    await tradie.getByLabel('Start date 1').fill('2026-10-27');
+    await tradie.getByLabel('Start date 1').fill(daysAhead(3).date);
     await tradie.getByRole('button', { name: 'Send Firm Quote' }).click();
     await expect(tradie.getByRole('status')).toContainText('has your Firm Quote');
   }
@@ -352,9 +354,10 @@ test('a booked visit can ask for another time, and the Ticket can ask the Tradie
 
   await tradie.goto(await quoteLink(page, 'Pete Park', report));
   await expect(tradie.getByRole('heading', { name: 'Offer visit times' })).toBeVisible();
-  // A different morning from the other specs, which book Pete for Tuesday 27 October.
-  await tradie.getByLabel('Preferred time').fill('2026-10-29T10:00');
-  await tradie.getByLabel('Another time').fill('2026-10-30T11:00');
+  // A different morning from the other specs, which offer Pete 9:00 am three days ahead.
+  const preferred = daysAhead(5, 10);
+  await tradie.getByLabel('Preferred time').fill(preferred.input);
+  await tradie.getByLabel('Another time').fill(daysAhead(6, 11).input);
   await tradie.getByRole('button', { name: 'Offer visit times' }).click();
   await expect(tradie.getByText('will ask the Tenant to pick a time')).toBeVisible();
 
@@ -382,8 +385,8 @@ test('a booked visit can ask for another time, and the Ticket can ask the Tradie
   const progress = messages.getByRole('link', { name: /\/t\// }).last();
   const tenant = await browser.newPage();
   await tenant.goto((await pick.getAttribute('href'))!);
-  await tenant.getByRole('button', { name: 'Book Thursday 29 Oct, 10:00 am' }).click();
-  await expect(tenant.getByText('This visit is booked for Thu 29 Oct, 10:00 am.')).toBeVisible();
+  await tenant.getByRole('button', { name: `Book ${preferred.long}` }).click();
+  await expect(tenant.getByRole('status')).toContainText(`Booked: ${preferred.short}`);
 
   await tenant.goto((await progress.getAttribute('href'))!);
   const another = tenant.getByRole('link', { name: 'Need another time?' });
@@ -402,7 +405,8 @@ test('a booked visit can ask for another time, and the Ticket can ask the Tradie
 
   await another.click();
   await tenant.getByRole('button', { name: 'Need another time?' }).click();
-  await expect(tenant.getByText('This visit stays booked until you pick a new one.')).toBeVisible();
+  await expect(tenant.getByRole('status')).toContainText('Asked for another time');
+  await expect(tenant.getByRole('button', { name: 'Need another time?' })).toBeDisabled();
 
   await page.goto(ticketUrl);
   await expect(page.getByText('Tenant asked for another time').first()).toBeVisible();
@@ -464,7 +468,7 @@ test('a Property Manager moves a visit and the Tenant confirms it from the email
     await tradie.getByLabel('Firm price ($)').fill(price);
     await tradie.getByLabel('Scope of work').fill(scope);
     await tradie.getByLabel('How many days it takes').fill('1');
-    await tradie.getByLabel('Start date 1').fill('2026-10-27');
+    await tradie.getByLabel('Start date 1').fill(daysAhead(3).date);
     await tradie.getByRole('button', { name: 'Send Firm Quote' }).click();
     await expect(tradie.getByRole('status')).toContainText('has your Firm Quote');
   }
@@ -475,22 +479,23 @@ test('a Property Manager moves a visit and the Tenant confirms it from the email
   await page.getByRole('row', { name: /Pete's Plumbing.*Replace the tap washer/ }).getByRole('button', { name: 'Choose this Firm Quote' }).click();
   await expect(page.getByText("Firm Quote from Pete's Plumbing chosen and approved", { exact: true })).toBeVisible();
 
-  await page.getByLabel('Start').fill('2026-12-03T09:00');
+  await page.getByLabel('Start').fill(daysAhead(40, 9).input);
   await page.getByRole('button', { name: 'Send Work Order' }).click();
   await expect(page.getByText(/Work Order sent to Pete's Plumbing/).first()).toBeVisible();
 
   await page.getByRole('link', { name: 'Suggest new times' }).click();
-  await page.getByLabel('Pick another time').fill('2026-12-04T14:00');
+  const moved = daysAhead(41, 14);
+  await page.getByLabel('Pick another time').fill(moved.input);
   await page.getByRole('button', { name: 'Move visit' }).click();
   await expect(page.getByText(/Visit moved to/).first()).toBeVisible();
 
   await page.goto('/demo');
   await page.getByRole('navigation', { name: 'People' }).getByRole('link', { name: /^Ruby Russo/ }).click();
-  const moved = messages.getByText(/Confirm this time:/).last();
+  const confirmTime = messages.getByText(/Confirm this time:/).last();
   await expect(async () => {
     await page.reload();
     await page.getByRole('navigation', { name: 'People' }).getByRole('link', { name: /^Ruby Russo/ }).click();
-    await expect(moved).toBeVisible({ timeout: 1_000 });
+    await expect(confirmTime).toBeVisible({ timeout: 1_000 });
     await expect(messages.getByText(/Need another time\?:/).last()).toBeVisible({ timeout: 1_000 });
   }).toPass({ timeout: 15_000 });
   const confirmLink = messages.getByRole('link', { name: /\/v\/confirm\/[^/?\s]+$/ }).last();
@@ -498,8 +503,9 @@ test('a Property Manager moves a visit and the Tenant confirms it from the email
 
   const tenant = await browser.newPage();
   await tenant.goto((await confirmLink.getAttribute('href'))!);
-  await tenant.getByRole('button', { name: 'Confirm Friday 4 Dec, 2:00 pm' }).click();
-  await expect(tenant.getByText('Confirmed')).toBeVisible();
+  await tenant.getByRole('button', { name: `Confirm ${moved.long}` }).click();
+  await expect(tenant.getByRole('status')).toContainText(`Confirmed: ${moved.short}`);
+  await expect(tenant.getByRole('button', { name: `Confirm ${moved.long}` })).toBeDisabled();
 
   await page.goto(ticketUrl);
   await expect(page.getByText('Confirmed the visit', { exact: true })).toBeVisible();

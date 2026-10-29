@@ -1,5 +1,6 @@
 import { format } from 'node:util';
 import { describe, expect, test, vi } from 'vitest';
+import { one } from '../src/db.ts';
 import { ProviderRefusedError, UndeliverableError } from '../src/ports.ts';
 import { AGENCY_NUMBER, HOUR, type Harness } from './support/harness.ts';
 import { upload } from './support/photos.ts';
@@ -17,12 +18,12 @@ function failSendsTo(h: Harness, address: string, error: Error) {
 }
 
 describe('recommending Tradies', () => {
-  test('only Tradies with the Trade are recommended, by myEST8 rating, then Google rating, then median Firm Quote, with both ratings shown', async () => {
+  test('only Tradies with the Trade are recommended, Nominated first, then by a blend of myEST8 rating, Google rating and median Firm Quote, with both ratings shown', async () => {
     const w = await world();
     const { alice, tradies } = w;
     const job = await tomsTapTicket(w);
 
-    // Nina and Quick Pipes tie on both ratings, so their Quotes decide.
+    // Nina and Quick Pipes tie on both ratings; the dearer median Firm Quote counts against Quick Pipes.
     await alice.sendQuoteRequests(job.jobId, [tradies.nina.id, tradies.quick.id]);
     await tradieQuotes(w, job, tradies.nina, '$180 Tuesday', { priceCents: 180_00 });
     await tradieQuotes(w, job, tradies.quick, '$260 Wednesday', { priceCents: 260_00 });
@@ -33,7 +34,7 @@ describe('recommending Tradies', () => {
     await firmQuote(w, job, tradies.quick, { priceCents: 260_00 });
 
     const { recommendations } = await jobView(w, job);
-    // The Property's Nominated Tradie (Nina) leads, then myEST8 rating, Google rating, median Firm Quote; four at most.
+    // The Property's Nominated Tradie (Nina) leads, then the blend (Drip Doctors' 5.0 stands alone, not being on Google); four at most.
     expect(recommendations.map((r) => r.businessName)).toEqual(["Nina's Plumbing", 'Drip Doctors', "Pete's Plumbing", 'Quick Pipes']);
     expect(recommendations).toMatchObject([
       { nominated: true, requested: true, preselected: false, googleRating: { rating: 4.2 }, previousQuotes: [{ priceCents: 180_00 }], medianQuoteCents: 180_00 },
@@ -42,7 +43,100 @@ describe('recommending Tradies', () => {
       { googleRating: { rating: 4.2 }, previousQuotes: [{ priceCents: 260_00 }], medianQuoteCents: 260_00, requested: true },
     ]);
   });
+
+  test('Jev judges each Tradie once in the background, and a close job fit lifts a lower-rated Tradie, though never above a Nominated one', async () => {
+    const w = await world();
+    w.h.jobFitJudge.scores.set('Flow Bros', 3);
+    w.h.jobFitJudge.scores.set("Nina's Plumbing", 0);
+    // Opening the new Ticket asks Jev, in the background, about every Tradie with the Trade.
+    const job = await tomsTapTicket(w);
+    expect(w.h.jobFitJudge.calls.map((c) => c.tradie.businessName).sort()).toEqual(['Drip Doctors', 'Flow Bros', "Nina's Plumbing", "Pete's Plumbing", 'Quick Pipes']);
+
+    const after = (await jobView(w, job)).recommendations;
+    expect(after.map((r) => r.businessName)).toEqual(["Nina's Plumbing", 'Flow Bros', 'Drip Doctors', "Pete's Plumbing"]);
+    expect(after).toMatchObject([
+      { jobFit: { score: 0, label: 'No related work' } },
+      { jobFit: { score: 3, confidence: 0.9, label: 'Done this kind of job' } },
+      { jobFit: { score: 1, label: 'Trade only' } },
+      { jobFit: { score: 1, label: 'Trade only' } },
+    ]);
+
+    // Kept judgments are used: opening the Ticket again asks Jev nothing.
+    await jobView(w, job);
+    expect(w.h.jobFitJudge.calls).toHaveLength(5);
+    expect(await judgeTasks(w)).toBe(0);
+  });
+
+  test("Jev is shown the Job and each Tradie's past work and listing, without contact details, and judges again when they change", async () => {
+    const w = await world();
+    const { alice, tradies } = w;
+    w.h.places.listings.set('place-hot', { name: 'Hot Water Heroes', address: 'Tempe', rating: 4.6, reviewCount: 30, types: ['plumber'], summary: 'Hot water systems and leaking taps' });
+    await alice.addTradie({ name: 'Hugo Heat', businessName: 'Hot Water Heroes', mobile: '+61400000999', trades: ['plumbing'], startingRating: 4, googlePlaceId: 'place-hot' });
+
+    // Pete quotes on a first Job, so it is past work on the next.
+    const first = await tomsTapTicket(w);
+    await alice.sendQuoteRequests(first.jobId, [tradies.pete.id, tradies.quick.id]);
+    await tradieQuotes(w, first, tradies.pete, '$180 Tuesday', { priceCents: 180_00 });
+    for (const quote of (await jobView(w, first)).quotes) await alice.confirmQuote(quote.quoteId);
+    await firmQuote(w, first, tradies.pete, { priceCents: 180_00, scopeOfWork: 'Replace the tap washer, call 0412 555 018' });
+
+    w.h.classifier.when('The shower leaks', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });
+    await w.h.receive(TOM, 'The shower leaks');
+    await w.h.answerAll(TOM, { location: 'Bathroom', started: 'Yesterday', worsening: 'no', availability: 'weekday_mornings' });
+    await w.h.advance(48 * HOUR);
+    const request = (await alice.dashboard()).maintenanceRequests.find((r) => r.description === 'The shower leaks')!;
+    w.h.jobFitJudge.calls = [];
+    const ticketId = await alice.confirmMaintenanceRequest(request.issueId, { summary: 'Shower leaks, email tom@example.com' });
+    const second = { ticketId, jobId: (await alice.ticket(ticketId)).jobs[0]!.jobId };
+
+    const shown = (name: string) => w.h.jobFitJudge.calls.find((c) => c.tradie.businessName === name)!;
+    expect(shown("Pete's Plumbing")).toEqual({
+      job: { trade: 'plumbing', summary: 'Shower leaks, email [contact removed]', description: 'The shower leaks', location: 'Bathroom' },
+      tradie: {
+        businessName: "Pete's Plumbing",
+        trades: ['plumbing'],
+        listing: { types: [], summary: null },
+        pastJobs: [{ trade: 'plumbing', summary: expect.any(String), scopeOfWork: 'Replace the tap washer, call [contact removed]' }],
+      },
+    });
+    expect(shown('Hot Water Heroes').tradie).toMatchObject({ listing: { types: ['plumber'], summary: 'Hot water systems and leaking taps' }, pastJobs: [] });
+    expect(shown('Drip Doctors').tradie.listing).toBeNull();
+
+    // A new Summary is new evidence: every Tradie is judged again.
+    await alice.editSummary({ ticketId }, 'Shower head leaks');
+    w.h.jobFitJudge.calls = [];
+    expect((await jobView(w, second)).recommendations.every((r) => r.jobFit === null)).toBe(true);
+    expect(w.h.jobFitJudge.calls.map((c) => c.job.summary)).toEqual(Array(6).fill('Shower head leaks'));
+  });
+
+  test('while Jev fails, Tradies are ranked without job fit, and the one task tries again', async () => {
+    const w = await world();
+    const job = await tomsTapTicket(w);
+    // Opened without letting the worker run, so its failure can be seen.
+    const view = async () => (await (await w.h.app.asPropertyManager(w.ids.aliceId)).ticket(job.ticketId)).jobs[0]!;
+    w.h.jobFitJudge.failing = new Error('Jev returned 500: down');
+    await w.alice.editSummary({ ticketId: job.ticketId }, 'Kitchen tap drips');
+
+    expect((await view()).recommendations.map((r) => [r.businessName, r.jobFit])).toEqual([
+      ["Nina's Plumbing", null],
+      ['Drip Doctors', null],
+      ["Pete's Plumbing", null],
+      ['Quick Pipes', null],
+    ]);
+    await expect(w.h.drain()).rejects.toThrow('Jev returned 500: down');
+    await view();
+    expect(await judgeTasks(w)).toBe(1);
+
+    w.h.jobFitJudge.failing = null;
+    await w.h.advance(HOUR);
+    expect((await view()).recommendations.every((r) => r.jobFit !== null)).toBe(true);
+  });
 });
+
+/** Job-fit tasks waiting to run. */
+async function judgeTasks(w: Awaited<ReturnType<typeof world>>) {
+  return (await one<{ n: number }>(w.h.db, `SELECT count(*) AS n FROM tasks WHERE kind = 'quotes.judge_fit' AND status = 'pending'`))!.n;
+}
 
 describe('at least two Tradies', () => {
   test('recommend returns four at most, Nominated first, with the first three preselected', async () => {
