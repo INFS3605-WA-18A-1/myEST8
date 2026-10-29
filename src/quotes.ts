@@ -1261,7 +1261,7 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dateTimes:
     async approvedQuote(jobId: number) {
       const row = await one<QuoteRow>(db, `SELECT * FROM quotes WHERE job_id = ? AND status = 'approved'`, jobId);
       return row
-        ? { tradieId: row.tradie_id, stage: row.stage, priceCents: costOf(row), notToExceedCents: row.not_to_exceed_cents, proposedTime: row.proposed_time }
+        ? { tradieId: row.tradie_id, stage: row.stage, priceCents: costOf(row), notToExceedCents: row.not_to_exceed_cents, proposedTime: row.proposed_time, availableTimes: datesOf(row.available_dates) }
         : null;
     },
 

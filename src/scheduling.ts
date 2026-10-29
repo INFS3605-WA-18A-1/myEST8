@@ -787,7 +787,7 @@ export function createScheduling({ db, clock, settings, worker, modules }: Conte
       if (!Number.isInteger(durationMinutes) || durationMinutes <= 0 || durationMinutes > 24 * 60) {
         invalid('The slot must be between 1 minute and 24 hours long');
       }
-      const startAt = options.start ?? quote.proposedTime;
+      const startAt = options.start ?? quote.proposedTime ?? quote.availableTimes?.[0];
       if (!startAt) invalid('The Quote has no proposed time. Pick a start time.');
       const start = new Date(startAt);
       if (Number.isNaN(start.getTime())) invalid(`${startAt} is not a time`);

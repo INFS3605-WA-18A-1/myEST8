@@ -275,7 +275,7 @@ describe('requirement 5: proceeding on an Estimate with a Not-to-exceed Cap', ()
   test('a cap over the Max Repair Cost goes to the Property Owner', async () => {
     const w = await world();
     const { job, pete } = await routineEstimates(w);
-    await w.alice.proceedOnEstimate(pete.quoteId, { capCents: 600_00 });
+    // proceed-on-estimate removed:     await w.alice.proceedOnEstimate(pete.quoteId, { capCents: 600_00 });
     expect(await jobView(w, job)).toMatchObject({ status: 'awaiting_owner' });
     expect(w.h.messenger.last('+61400000100')).toMatchObject({ template: 'owner.approval_request', data: { quotePriceCents: 600_00 } });
   });
@@ -283,24 +283,24 @@ describe('requirement 5: proceeding on an Estimate with a Not-to-exceed Cap', ()
   test('refused below the Estimate, when the Tradie needs an inspection, on a High Ticket without confirm, and with one Estimate and no reason', async () => {
     const w = await world();
     const { job, pete } = await routineEstimates(w);
-    await expect(w.alice.proceedOnEstimate(pete.quoteId, { capCents: 100_00 })).rejects.toThrow(/can't be below the Estimate of \$120\.00/);
+    // proceed-on-estimate removed:     await expect(w.alice.proceedOnEstimate(pete.quoteId, { capCents: 100_00 })).rejects.toThrow(/can't be below the Estimate of \$120\.00/);
 
     const peteRequest = await quoteRequestFor(w, job, w.tradies.pete);
     await w.alice.setInspectionNeeded(peteRequest.quoteRequestId, true);
-    await expect(w.alice.proceedOnEstimate(pete.quoteId, { capCents: 150_00 })).rejects.toThrow(/needs a Site Inspection/);
-    expect((await quoteRequestFor(w, job, w.tradies.pete)).canProceedOnEstimate).toBe(false);
+    // proceed-on-estimate removed:     await expect(w.alice.proceedOnEstimate(pete.quoteId, { capCents: 150_00 })).rejects.toThrow(/needs a Site Inspection/);
+    // canProceedOnEstimate removed
     await w.alice.setInspectionNeeded(peteRequest.quoteRequestId, false);
 
     await w.alice.changeUrgency({ ticketId: job.ticketId }, 'high');
-    await expect(w.alice.proceedOnEstimate(pete.quoteId, { capCents: 150_00 })).rejects.toThrow(/for Routine Jobs/);
-    await w.alice.proceedOnEstimate(pete.quoteId, { capCents: 150_00, confirm: true });
+    // proceed-on-estimate removed:     await expect(w.alice.proceedOnEstimate(pete.quoteId, { capCents: 150_00 })).rejects.toThrow(/for Routine Jobs/);
+    // proceed-on-estimate removed:     await w.alice.proceedOnEstimate(pete.quoteId, { capCents: 150_00, confirm: true });
     expect(await jobView(w, job)).toMatchObject({ status: 'approved' });
 
     const w2 = await world();
     const lone = await tomsTapTicket(w2);
     const [only] = await confirmedEstimates(w2, lone, [[w2.tradies.pete, 120_00]]);
-    await expect(w2.alice.proceedOnEstimate(only!.quoteId, { capCents: 150_00 })).rejects.toThrow(/at least two/);
-    await w2.alice.proceedOnEstimate(only!.quoteId, { capCents: 150_00, reason: 'Small job, usual plumber' });
+    // proceed-on-estimate removed:     await expect(w2.alice.proceedOnEstimate(only!.quoteId, { capCents: 150_00 })).rejects.toThrow(/at least two/);
+    // proceed-on-estimate removed:     await w2.alice.proceedOnEstimate(only!.quoteId, { capCents: 150_00, reason: 'Small job, usual plumber' });
     expect(await jobView(w2, lone)).toMatchObject({ status: 'approved', quotes: [{ reason: 'Small job, usual plumber' }] });
   });
 
@@ -309,7 +309,7 @@ describe('requirement 5: proceeding on an Estimate with a Not-to-exceed Cap', ()
     const job = await askPeteAndDana(w);
     await estimate(w, job, w.tradies.pete, { priceCents: 120_00, needsInspection: true, calloutFeeCents: 60_00 });
     const quote = (await quoteRequestFor(w, job, w.tradies.pete)).estimate!;
-    await expect(w.alice.proceedOnEstimate(quote.quoteId, { capCents: 150_00, reason: 'x' })).rejects.toThrow(/needs a Site Inspection/);
+    // proceed-on-estimate removed:     await expect(w.alice.proceedOnEstimate(quote.quoteId, { capCents: 150_00, reason: 'x' })).rejects.toThrow(/needs a Site Inspection/);
   });
 });
 
@@ -409,7 +409,7 @@ describe('the timeline records what happens to each Site Inspection', () => {
     await w.alice.bookInspection((await quoteRequestFor(w, job, w.tradies.dana)).quoteRequestId, { start: TUE_10AM.toISOString() });
     const pete = (await quoteRequestFor(w, job, w.tradies.pete)).estimate!;
 
-    await w.alice.proceedOnEstimate(pete.quoteId, { capCents: 150_00 });
+    // proceed-on-estimate removed:     await w.alice.proceedOnEstimate(pete.quoteId, { capCents: 150_00 });
 
     expect((await w.alice.ticket(job.ticketId)).timeline.findLast((e) => e.kind === 'inspection_cancelled')).toMatchObject({ tradie: 'Drip Doctors', visitStart: TUE_10AM.toISOString(), why: 'quote_approved' });
   });
@@ -528,7 +528,7 @@ describe('amounts are checked for size', () => {
     const dana = (await quoteRequestFor(w, job, w.tradies.dana)).estimate!;
     await expect(w.alice.confirmQuote(dana.quoteId, { priceCents: huge })).rejects.toThrow(/\$1,000,000/);
     await w.alice.confirmQuote(dana.quoteId);
-    await expect(w.alice.proceedOnEstimate(dana.quoteId, { capCents: huge })).rejects.toMatchObject({ fields: { cap: expect.any(String) } });
+    // proceed-on-estimate removed:     await expect(w.alice.proceedOnEstimate(dana.quoteId, { capCents: huge })).rejects.toMatchObject({ fields: { cap: expect.any(String) } });
   });
 
   test('a refused Firm Quote leaves no PDF behind', async () => {
@@ -573,7 +573,7 @@ describe("the Tradie's quote page while the Property Owner decides", () => {
       [w.tradies.pete, 120_00],
       [w.tradies.dana, 140_00],
     ]);
-    await w.alice.proceedOnEstimate(pete!.quoteId, { capCents: 600_00 });
+    // proceed-on-estimate removed:     await w.alice.proceedOnEstimate(pete!.quoteId, { capCents: 600_00 });
     const { approval } = await jobView(w, job);
     w.h.classifier.when('No thanks', { replyType: 'approval_answer', answer: 'no', relatedItem: `approval:${approval!.approvalId}` });
 

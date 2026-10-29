@@ -3,6 +3,8 @@ import { one, run } from '../src/db.ts';
 import {
   BELLA,
   confirmedEstimates,
+  dateAhead,
+  firmQuote,
   confirmedQuotes,
   jobView,
   KING_ST,
