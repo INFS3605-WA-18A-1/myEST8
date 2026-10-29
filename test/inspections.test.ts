@@ -258,6 +258,19 @@ describe('requirements 3 and 4: Estimates and Firm Quotes are apart, and a Firm 
     expect((await jobView(w, job)).workOrder!.start).toBe(preferred);
   });
 
+  test('a zoneless start time is wall-clock time in the Agency time zone', async () => {
+    const w = await world();
+    const job = await askPeteAndDana(w);
+    await estimate(w, job, w.tradies.pete, { priceCents: 150_00, needsInspection: false });
+    // What a datetime-local input posts: no offset. 9:00 am and 2:30 pm in Sydney (AEDT, UTC+11).
+    const firm = await firmQuote(w, job, w.tradies.pete, { priceCents: 175_00, availableTimes: ['2026-10-13T09:00', '2026-10-14T14:30'] });
+
+    expect(firm.availableTimes).toEqual(['2026-10-12T22:00:00.000Z', '2026-10-14T03:30:00.000Z']);
+    await w.alice.chooseQuote(firm.quoteId, 'Usual plumber');
+    await w.alice.sendWorkOrder(job.jobId);
+    expect((await jobView(w, job)).workOrder!.start).toBe('2026-10-12T22:00:00.000Z');
+  });
+
   test('an Estimate is checked too, and given once', async () => {
     const w = await world();
     const job = await askPeteAndDana(w);

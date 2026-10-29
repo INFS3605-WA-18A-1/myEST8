@@ -96,7 +96,13 @@ const OPEN_APPROVAL: ApprovalStatus[] = ['requested', 'reminded'];
 
 /** What a Tradie gives with an Estimate on the quote page. */
 export type EstimateInput = { priceCents: number; proposedTime?: string | null; needsInspection: boolean; calloutFeeCents?: number | null };
-/** What a Tradie gives with a Firm Quote on the quote page. `availableTimes` are ISO datetimes ("2026-10-20T09:00:00.000Z"), up to three. */
+/**
+ * What a Tradie gives with a Firm Quote. `availableTimes` are up to three start times:
+ * an ISO instant ("2026-10-20T09:00:00.000Z"), a zoneless datetime-local value
+ * ("2026-10-20T09:00"), or a plain day from before start times were datetimes.
+ * A zoneless value is wall-clock time in the Agency's time zone, and a plain day is
+ * 9:00 am there. They are stored as ISO instants.
+ */
 export type FirmQuoteInput = {
   priceCents: number;
   scopeOfWork: string;
@@ -107,19 +113,57 @@ export type FirmQuoteInput = {
 
 /** A calendar day stored before Firm Quotes kept start times: "2026-10-20". */
 const PLAIN_DAY = /^\d{4}-\d{2}-\d{2}$/;
+/** datetime-local, optional seconds, no offset: "2026-10-13T09:00". */
+const LOCAL_TIME = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?$/;
+/** An explicit offset, so the string is already an absolute instant. */
+const HAS_OFFSET = /(?:[zZ]|[+-]\d{2}:?\d{2})$/;
 
 /**
- * The start times stored on a Firm Quote. A plain date from before start times were
- * datetimes meant that day at 9:00 am in the Agency's time zone, not midnight UTC.
+ * A Firm Quote start as an absolute instant. A value with an offset is that instant.
+ * A zoneless datetime, and a plain day (9:00 am), are wall-clock time in `timeZone`,
+ * never the process time zone. Null when it isn't a real time there (a day that
+ * doesn't exist, or an hour skipped by daylight saving).
+ */
+function startInstant(value: string, timeZone: string): Date | null {
+  if (HAS_OFFSET.test(value)) {
+    const at = new Date(value);
+    return Number.isNaN(at.getTime()) ? null : at;
+  }
+  const local = LOCAL_TIME.exec(value);
+  if (local) return wallInstant(timeZone, local[1]!, local[2]!, local[3]!, local[4]!, local[5]!, local[6] ?? '0');
+  if (!PLAIN_DAY.test(value)) return null;
+  const [year, month, day] = value.split('-');
+  return wallInstant(timeZone, year!, month!, day!, '9', '0', '0');
+}
+
+/** The instant at which `timeZone` shows this wall-clock time, or null when it doesn't. */
+function wallInstant(timeZone: string, year: string, month: string, day: string, hour: string, minute: string, second: string): Date | null {
+  const y = Number(year);
+  const mo = Number(month);
+  const d = Number(day);
+  const h = Number(hour);
+  const mi = Number(minute);
+  const s = Number(second);
+  if (mo < 1 || mo > 12 || d < 1 || d > 31 || h > 23 || mi > 59 || s > 59) return null;
+  const at = zonedInstant(timeZone, y, mo, d, h, mi, s);
+  const wall = wallClock(at, timeZone);
+  if (wall.year !== y || wall.month !== mo || wall.day !== d || wall.hour !== h || wall.minute !== mi) return null;
+  return at;
+}
+
+/**
+ * The start times stored on a Firm Quote, as ISO instants. A plain day from before
+ * start times were datetimes meant that day at 9:00 am in the Agency's time zone,
+ * and a zoneless datetime is wall-clock time there. An instant that already has an
+ * offset is left as stored.
  */
 function datesOf(value: unknown, timeZone: string): string[] {
   const parsed = typeof value === 'string' ? (JSON.parse(value) as unknown) : value;
   if (!Array.isArray(parsed)) return [];
   return parsed.filter((d): d is string => typeof d === 'string').map((day) => {
-    if (!PLAIN_DAY.test(day)) return day;
-    const [year, month, date] = day.split('-').map(Number);
-    if (!year || !month || !date) return day;
-    return zonedInstant(timeZone, year, month, date, 9, 0).toISOString();
+    if (HAS_OFFSET.test(day)) return day;
+    const at = startInstant(day, timeZone);
+    return at ? iso(at) : day;
   });
 }
 
@@ -1077,16 +1121,21 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dateTimes:
       if (!Number.isInteger(input.durationDays) || input.durationDays < 1 || input.durationDays > MAX_DURATION_DAYS) {
         invalid(`Enter how many days the work takes, from 1 to ${MAX_DURATION_DAYS}`, 'durationDays');
       }
-      const today = wallClock(clock.now(), timeZone);
-      const todayIso = `${today.year}-${String(today.month).padStart(2, '0')}-${String(today.day).padStart(2, '0')}`;
       // The first time is the one the Tradie prefers. Drop blanks and repeats, and keep the order they typed.
-      const times = [...new Set((input.availableTimes ?? []).map((t) => t.trim()).filter(Boolean))];
-      if (!times.length) invalid('Give at least one date and time you can start', 'availableTimes');
-      if (times.length > MAX_AVAILABLE_DATES) invalid(`Give at most ${MAX_AVAILABLE_DATES} start times`, 'availableTimes');
-      for (const time of times) {
-        const parsed = Date.parse(time);
-        if (Number.isNaN(parsed)) invalid(`${time} is not a date and time`, 'availableTimes');
-        if (new Date(parsed) < clock.now()) invalid('Pick start dates and times from now on', 'availableTimes');
+      const typed = [...new Set((input.availableTimes ?? []).map((t) => t.trim()).filter(Boolean))];
+      if (!typed.length) invalid('Give at least one date and time you can start', 'availableTimes');
+      if (typed.length > MAX_AVAILABLE_DATES) invalid(`Give at most ${MAX_AVAILABLE_DATES} start times`, 'availableTimes');
+      const seen = new Set<string>();
+      const times: string[] = [];
+      for (const time of typed) {
+        // A zoneless datetime-local value is the Agency's wall clock, not the process zone.
+        const at = startInstant(time, timeZone);
+        if (!at) invalid(`${time} is not a date and time`, 'availableTimes');
+        if (at < clock.now()) invalid('Pick start dates and times from now on', 'availableTimes');
+        const stored = iso(at);
+        if (seen.has(stored)) continue;
+        seen.add(stored);
+        times.push(stored);
       }
       if (input.pdf && input.pdf.contentType !== 'application/pdf') invalid('Attach your quote as a PDF', 'pdf');
 
