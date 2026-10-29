@@ -3,8 +3,9 @@
 // it reimbursed once the Owner has paid the Tenant back.
 
 import { describe, expect, test } from 'vitest';
-import { HOUR } from './support/harness.ts';
-import { KING_ST, OLIVIA_EMAIL, TOM, world } from './support/world.ts';
+import { UndeliverableError } from '../src/ports.ts';
+import { AGENCY_NUMBER, HOUR } from './support/harness.ts';
+import { KING_ST, OLIVIA, OLIVIA_EMAIL, TOM, world } from './support/world.ts';
 
 type World = Awaited<ReturnType<typeof world>>;
 
@@ -190,6 +191,25 @@ describe('a Reimbursement Request', () => {
 
     await alice.markReimbursementRead(id);
     expect((await alice.reimbursement(id)).messages.some((m) => m.unread)).toBe(false);
+  });
+
+  test('is refused before forwarding when the Property Owner cannot be reached, so it stays awaiting review', async () => {
+    const w = await world();
+    const { h, alice } = w;
+    const { link, id } = await tomsBurstPipe(w);
+    await h.upload(link, [pdf()], { amountCents: 300_00 });
+    // Olivia has only her mobile left, and the Agency has no SMS channel to text it on.
+    await alice.editOwner(w.ids.olivia, { name: 'Olivia Owens', mobile: OLIVIA });
+    await alice.disconnectServerSms(AGENCY_NUMBER);
+
+    const error = await alice.forwardReimbursement(id).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(UndeliverableError);
+    expect((error as Error).message).toContain("can't reach Olivia Owens: no SMS channel is connected and they have no email address");
+    expect(await alice.reimbursement(id)).toMatchObject({ status: 'receipt_received', amountCents: 300_00, forwardedAt: null });
+    expect(h.messenger.to(OLIVIA)).toEqual([]);
+    expect(h.messenger.to(OLIVIA_EMAIL)).toEqual([]);
+    expect((await alice.approvals()).reimbursements).toMatchObject([{ urgentRepairId: id, status: 'receipt_received' }]);
   });
 
   test("is only seen and changed inside the Tenant's Agency", async () => {

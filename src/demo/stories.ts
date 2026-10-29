@@ -227,6 +227,20 @@ function bellasOvenDoor(k: Kit) {
   s.on(3, '10:00', 'Bob rates Ally and closes the Ticket', () => k.rateAndClose(job, 4));
 }
 
+/** Urgent Repair awaiting review: Maya's ceiling leak at Albion St, its receipt in but not yet forwarded. */
+function mayasCeilingLeak(k: Kit) {
+  const { ids, alice } = k;
+  const s = k.story("Maya's ceiling leak");
+  let receiptToken = '';
+  s.on(9, '10:20', 'Maya texts that water is pouring through the bathroom ceiling', async () => {
+    const sent = await k.say(ids.maya, 'Water is pouring through the bathroom ceiling from the flat above');
+    receiptToken = k.tokenIn(k.expectSent(sent, ids.maya, 'tenant.urgent_repair_reminder'));
+  });
+  s.on(9, '15:40', "Maya uploads the plumber's receipt and claims $340", () =>
+    k.upload(receiptToken, [{ filename: 'receipt.jpg', contentType: 'image/jpeg', content: k.sample('receipt') }], { amountCents: 340_00 }),
+  );
+}
+
 /** Urgent Repair, its Reimbursement Request forwarded: Noah's burst pipe at Llewellyn St, fixed by Dana after hours. */
 function noahsBurstPipe(k: Kit) {
   const { ids, alice } = k;
@@ -607,6 +621,7 @@ const STORIES: ((k: Kit) => void)[] = [
   weisLeakingTap,
   priyasBlockedToilet,
   bellasOvenDoor,
+  mayasCeilingLeak,
   noahsBurstPipe,
   ethansLeakingRoof,
   priyasHotWater,
