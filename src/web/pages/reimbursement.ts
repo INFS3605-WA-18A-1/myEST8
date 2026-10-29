@@ -121,12 +121,18 @@ function onPost(
   run: (actions: PropertyManagerActions, request: Reimbursement, form: FormValues) => Promise<string>,
 ) {
   pages.post(path, (c) => {
-    const back = `/reimbursements/${encodeURIComponent(c.req.param('id') ?? '')}`;
+    const back = backAfter(c.req.param('id'), c.req.query('from') === 'approvals', c.req.query('filter') === 'all');
     return formAction(c, back, async (form) => {
       const actions = c.var.actions;
       return { ok: await run(actions, await load(actions, c.req.param('id')), form), redirect: back };
     });
   });
+}
+
+/** Where an action returns to: its Reimbursement Request page, or Approvals when it was forwarded from its row there. */
+function backAfter(id: string | undefined, fromApprovals: boolean, all: boolean) {
+  if (!fromApprovals) return `/reimbursements/${encodeURIComponent(id ?? '')}`;
+  return `/approvals${all ? '?filter=all' : ''}#reimbursements`;
 }
 
 async function load(actions: PropertyManagerActions, raw: string | undefined): Promise<Reimbursement> {
@@ -221,7 +227,7 @@ function nextCard(r: Reimbursement, timeZone: string): Html {
         title: 'Check the receipt and forward it',
         body: html`<div class="space-y-3">
           <p>Check the receipts below match the repair and the amount. Forwarding emails them to ${owner}, the Property Owner, with you copied in.</p>
-          ${forwardForm(r)}
+          ${reimbursementForwardForm(r, `/reimbursements/${r.urgentRepairId}/forward`)}
         </div>`,
       });
     case 'receipt_forwarded':
@@ -232,7 +238,7 @@ function nextCard(r: Reimbursement, timeZone: string): Html {
           ${postButton(`/reimbursements/${r.urgentRepairId}/reimbursed`, 'Mark reimbursed', { confirm: `Mark this reimbursed? ${tenant} will be told.` })}
           <details class="reimbursement-again">
             <summary>Forward again</summary>
-            ${forwardForm(r)}
+            ${reimbursementForwardForm(r, `/reimbursements/${r.urgentRepairId}/forward`)}
           </details>
         </div>`,
       });
@@ -244,22 +250,30 @@ function nextCard(r: Reimbursement, timeZone: string): Html {
   }
 }
 
-/** The amount, filled in with the Tenant's (or the last forwarded) amount, and Forward to Property Owner. */
-function forwardForm(r: Reimbursement): Html {
-  return html`<form method="post" action="/reimbursements/${r.urgentRepairId}/forward" class="reimbursement-forward">
-    <div class="min-w-48 flex-1">
+/** What forwarding needs from a Reimbursement Request: the row on Approvals has these too. */
+type Forwardable = Pick<Reimbursement, 'urgentRepairId' | 'amountCents' | 'limitCents'>;
+
+/**
+ * The amount, filled in with the Tenant's (or the last forwarded) amount, and Forward.
+ * `action` says where to post (the request page, or Approvals with a way back); `compact`
+ * drops the hint and shortens the label for a table row.
+ */
+export function reimbursementForwardForm(r: Forwardable, action: string, o: { compact?: boolean } = {}): Html {
+  const amount = r.amountCents === null ? 'The Tenant gave no amount: enter the total on the receipt.' : 'As the Tenant entered it; correct it to match the receipt.';
+  return html`<form method="post" action="${action}" class="reimbursement-forward">
+    <div class="${o.compact ? 'min-w-32 flex-1' : 'min-w-48 flex-1'}">
       ${field({
-        id: `amount-${r.urgentRepairId}`,
-        label: 'Amount to reimburse ($)',
+        id: o.compact ? `amount-approvals-${r.urgentRepairId}` : `amount-${r.urgentRepairId}`,
+        label: o.compact ? 'Amount ($)' : 'Amount to reimburse ($)',
         name: 'amount',
         type: 'text',
         value: r.amountCents === null ? '' : (r.amountCents / 100).toFixed(2),
         required: true,
         placeholder: '0.00',
-        hint: `${r.amountCents === null ? 'The Tenant gave no amount: enter the total on the receipt.' : 'As the Tenant entered it; correct it to match the receipt.'} Up to ${formatMoney(r.limitCents)} can be claimed; more is warned about, not refused.`,
+        ...(o.compact ? {} : { hint: `${amount} Up to ${formatMoney(r.limitCents)} can be claimed; more is warned about, not refused.` }),
       })}
     </div>
-    ${button('Forward to Property Owner')}
+    ${button(o.compact ? 'Forward to Owner' : 'Forward to Property Owner', o.compact ? { size: 'sm' } : {})}
   </form>`;
 }
 
