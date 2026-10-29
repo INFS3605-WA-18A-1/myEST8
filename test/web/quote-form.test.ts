@@ -73,13 +73,13 @@ describe('the quote page', () => {
     expect(firmStep).toContain('Give your Firm Quote');
     expect(firmStep).toContain('Your Estimate Estimate $1,150.50');
     expect(firmStep).toContain('Scope of work');
-    expect(firmStep).toContain('Dates you can start');
+    expect(firmStep).toContain('Preferred date and time');
 
     const refused = await post('firm', { price: '1200', scopeOfWork: '', durationDays: '0', availableTimes: ['2020-01-01'] });
     expect(refused.status).toBe(400);
     expect(visible(refused.html)).toContain('Describe the scope of work');
     const badDates = await post('firm', { price: '1200', scopeOfWork: 'New tap', durationDays: '2', availableTimes: ['2020-01-01'] });
-    expect(visible(badDates.html)).toContain('Pick start dates from today on');
+    expect(visible(badDates.html)).toContain('Pick start dates and times from now on');
     expect(badDates.html).toContain('value="2020-01-01"');
 
     const pdf = new File([new Uint8Array([37, 80, 68, 70])], 'quote.pdf', { type: 'application/pdf' });

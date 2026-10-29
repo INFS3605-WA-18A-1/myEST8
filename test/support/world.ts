@@ -180,7 +180,10 @@ export async function firmQuote(
  */
 export async function confirmedQuotes(w: World, job: JobRef, quotes: [TradieRef, number, Date?][]) {
   await confirmedEstimates(w, job, quotes);
-  for (const [tradie, priceCents, proposedTime] of quotes) await firmQuote(w, job, tradie, { priceCents, ...(proposedTime ? { proposedTime } : {}) });
+  for (const [tradie, priceCents, proposedTime] of quotes) {
+    const availableTimes = proposedTime ? [proposedTime.toISOString()] : undefined;
+    await firmQuote(w, job, tradie, { priceCents, availableTimes, ...(proposedTime ? { proposedTime } : {}) });
+  }
   return (await jobView(w, job)).quotes.filter((q) => q.stage === 'firm');
 }
 

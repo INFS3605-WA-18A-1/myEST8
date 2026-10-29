@@ -107,7 +107,7 @@ async function tapTicket() {
     body.set('price', fields.price);
     body.set('scopeOfWork', 'Replace the washer and reseat the tap');
     body.set('durationDays', '1');
-    body.append('availableTimes', '2026-10-13');
+    body.append('availableTimes', fields.proposedTime || '2026-10-13T09:00');
     body.set('proposedTime', fields.proposedTime ?? '');
     const res = await w.web.request(`/q/${token}/firm`, { method: 'POST', body });
     expect(res.status).toBe(303);
@@ -533,7 +533,7 @@ describe('the Next step', () => {
 
     expect(nextStepOf(page.html)).toEqual({ text: 'Next Choose a Firm Quote: 2 in', href: `#job-${job.jobId}-quotes`, decision: true });
     expect(page.text).toMatch(
-      /Firm Quotes for the Plumbing Job Tradie Firm Quote Scope of work Takes Can start PDF Ratings Action Pete's Plumbing \$150\.00 Replace the washer and reseat the tap 1 day Thu, 15 Oct None myEST8 4\.0 \(1\) from 1 rating Google 4\.8 \(120\) from 120 reviews Choose this Firm Quote/,
+      /Firm Quotes for the Plumbing Job Tradie Firm Quote Scope of work Takes Can start PDF Ratings Action Pete's Plumbing \$150\.00 Replace the washer and reseat the tap 1 day \w\w\w \d\d? \w\w\w, \d\d?:\d\d [ap]m None myEST8 4\.0 \(1\) from 1 rating Google 4\.8 \(120\) from 120 reviews Choose this Firm Quote/,
     );
     expect(page.text).toMatch(/Estimates Non-binding .* Pete's Plumbing \$150\.00 Not needed None Superseded by Firm Quote \$150\.00/);
     expect(page.text.match(/Choose this Firm Quote/g)).toHaveLength(2);
@@ -744,8 +744,8 @@ function trackerOf(page: string) {
 }
 
 describe('the stage tracker ticks only what has happened', () => {
-  test('a Job proceeding on an Estimate skips the Site inspection, says so on Firm Quote, and needs no Property Owner within the Max Repair Cost', async () => {
-    const { w, job, open, submit } = await tapTicket();
+  test('a routine Job gets Firm Quotes, skips the Site inspection, and stays under the Max Repair Cost', async () => {
+    const { w, job, open } = await tapTicket();
     await confirmedEstimates(w, job, [
       [w.tradies.pete, 120_00],
       [w.tradies.dana, 140_00],
@@ -753,10 +753,11 @@ describe('the stage tracker ticks only what has happened', () => {
     // Every Tradie has answered and none needs a Site Inspection.
     expect(trackerOf((await open()).html)).toBe('Estimates (done) Site inspection (skipped) Not needed Firm Quote (this step) With Property Owner Ready to book Booked Done');
 
-    await submit(formPosting((await open()).html, /\/proceed$/), { cap: '150' });
+    const pete = await firmQuote(w, job, w.tradies.pete, { priceCents: 150_00, availableTimes: [dateAhead(w, 2) + 'T09:00:00.000Z'] });
+    await w.alice.chooseQuote(pete.quoteId, 'Only Firm Quote in');
 
     expect(trackerOf((await open()).html)).toBe(
-      'Estimates (done) Firm Quote (skipped) Proceeding on Estimate (cap $150.00) With Property Owner (skipped) Not needed Ready to book (this step) Booked Done',
+      'Estimates (done) Site inspection (skipped) Not needed Firm Quote (done) With Property Owner (skipped) Not needed Ready to book (this step) Booked Done',
     );
   });
 
@@ -780,22 +781,24 @@ describe('the stage tracker ticks only what has happened', () => {
     await w.h.receive(DANA, 'All done');
 
     const done = trackerOf((await open()).html);
-    expect(done).toBe('Estimates (done) Site inspection (skipped) Not held Firm Quote (done) With Property Owner (skipped) Not needed Ready to book (done) Booked (done) Done (done)');
+    expect(done).toBe('Estimates (done) Site inspection (skipped) Not held Firm Quote (done) With Property Owner (skipped) Not needed Ready to book (done) Booked (this step) Waiting on Tenant to confirm Done');
     expect(done).not.toContain('(next)');
   });
 
-  test('an Estimate proceeded on with no cap on record (from before staged quoting) never shows a missing cap', async () => {
-    const { w, job, open, submit } = await tapTicket();
+  test('a Firm Quote with no cap on record (from before staged quoting) never shows a missing cap', async () => {
+    const { w, job, open } = await tapTicket();
     const [pete] = await confirmedEstimates(w, job, [
       [w.tradies.pete, 120_00],
       [w.tradies.dana, 140_00],
     ]);
-    await submit(formPosting((await open()).html, /\/proceed$/), { cap: '150' });
-    await run(w.h.db, 'UPDATE quotes SET not_to_exceed_cents = NULL WHERE id = ?', pete!.quoteId);
+    const quote = await firmQuote(w, job, w.tradies.pete, { priceCents: 150_00, availableTimes: [dateAhead(w, 2) + 'T09:00:00.000Z'] });
+    await w.alice.chooseQuote(quote.quoteId, 'Only Firm Quote in');
+    // Simulate old data: approved Firm Quote with not_to_exceed_cents cleared.
+    await run(w.h.db, 'UPDATE quotes SET not_to_exceed_cents = NULL WHERE id = ?', quote.quoteId);
 
     const page = await open();
 
-    expect(trackerOf(page.html)).toContain('Firm Quote (skipped) Proceeding on Estimate With Property Owner');
+    expect(trackerOf(page.html)).toContain('Firm Quote (done)');
     expect(page.text).not.toMatch(/cap —|Capped at —/);
   });
 

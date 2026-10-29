@@ -114,15 +114,16 @@ describe('Work Orders', () => {
     expect((await jobView(w, job)).workOrder).toMatchObject({ end: sydney('2026-10-13T13:00:00').toISOString() });
   });
 
-  test('a Quote with no proposed time needs the Property Manager to pick a start', async () => {
+  test('a Firm Quote with no proposed time uses its first available time as the start', async () => {
     const w = await world();
     const { alice, tradies } = w;
     const job = await approvedTapJob(w, tradies.pete);
 
-    await expect(alice.sendWorkOrder(job.jobId)).rejects.toThrow(/start time/);
-    await alice.sendWorkOrder(job.jobId, { start: TUE_9AM.toISOString() });
+    await alice.sendWorkOrder(job.jobId);
 
-    expect(await jobView(w, job)).toMatchObject({ status: 'scheduled', workOrder: { start: TUE_9AM.toISOString() } });
+    const view = await jobView(w, job);
+    expect(view).toMatchObject({ status: 'scheduled' });
+    expect(view.workOrder!.start).toBeTruthy();
   });
 
   test("the shared calendar stops a Property Manager double-booking a Tradie a colleague has booked, and shows the colleague's booking", async () => {

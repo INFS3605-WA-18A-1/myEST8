@@ -294,7 +294,7 @@ describe('requirement 5: choosing a Firm Quote (always required)', () => {
     const { job } = await routineEstimates(w);
     const pete = await firmQuote(w, job, w.tradies.pete, { priceCents: 600_00, availableTimes: [dateAhead(w, 2) + 'T09:00:00.000Z'] });
 
-    await w.alice.chooseQuote(pete.quoteId);
+    await w.alice.chooseQuote(pete.quoteId, 'Only Firm Quote in');
 
     expect(await jobView(w, job)).toMatchObject({ status: 'awaiting_owner' });
     expect(w.h.messenger.last('+61400000100')).toMatchObject({ template: 'owner.approval_request', data: { quotePriceCents: 600_00 } });
@@ -569,7 +569,7 @@ describe("the Tradie's quote page while the Property Owner decides", () => {
       [w.tradies.dana, 140_00],
     ]);
     const peteQuote = await firmQuote(w, job, w.tradies.pete, { priceCents: 600_00, availableTimes: [dateAhead(w, 2) + 'T09:00:00.000Z'] });
-    await w.alice.chooseQuote(peteQuote.quoteId);
+    await w.alice.chooseQuote(peteQuote.quoteId, 'Only Firm Quote in');
     const { approval } = await jobView(w, job);
     w.h.classifier.when('No thanks', { replyType: 'approval_answer', answer: 'no', relatedItem: `approval:${approval!.approvalId}` });
 
