@@ -13,7 +13,7 @@ const FIRM_QUOTE_REMINDER_MS = 48 * HOUR_MS;
 const MORE_QUOTES_PROMPT_MS = 72 * HOUR_MS;
 const OWNER_REMINDER_MS = 24 * HOUR_MS;
 const OWNER_ALERT_MS = 48 * HOUR_MS;
-/** Firm Quotes a Job needs before one can be chosen without a reason (and Estimates, to proceed on one without a reason). */
+/** Firm Quotes a Job needs before one can be chosen without a reason. */
 export const MIN_QUOTES = 2;
 /** Quote Requests a Job needs (sent and new together) before the Property Manager compares prices. */
 export const MIN_QUOTE_REQUESTS = 2;
@@ -96,23 +96,78 @@ const OPEN_APPROVAL: ApprovalStatus[] = ['requested', 'reminded'];
 
 /** What a Tradie gives with an Estimate on the quote page. */
 export type EstimateInput = { priceCents: number; proposedTime?: string | null; needsInspection: boolean; calloutFeeCents?: number | null };
-/** What a Tradie gives with a Firm Quote on the quote page. `availableDates` are ISO dates ("2026-10-20"). */
+/**
+ * What a Tradie gives with a Firm Quote. `availableTimes` are up to three start times:
+ * an ISO instant ("2026-10-20T09:00:00.000Z"), a zoneless datetime-local value
+ * ("2026-10-20T09:00"), or a plain day from before start times were datetimes.
+ * A zoneless value is wall-clock time in the Agency's time zone, and a plain day is
+ * 9:00 am there. They are stored as ISO instants.
+ */
 export type FirmQuoteInput = {
   priceCents: number;
   scopeOfWork: string;
   durationDays: number;
-  availableDates: string[];
-  proposedTime?: string | null;
+  availableTimes: string[];
   pdf?: { filename: string; contentType: string; content: Uint8Array } | null;
 };
 
-/** The ISO dates stored for a Firm Quote. */
-function datesOf(value: unknown): string[] {
-  const parsed = typeof value === 'string' ? (JSON.parse(value) as unknown) : value;
-  return Array.isArray(parsed) ? parsed.filter((d): d is string => typeof d === 'string') : [];
+/** A calendar day stored before Firm Quotes kept start times: "2026-10-20". */
+const PLAIN_DAY = /^\d{4}-\d{2}-\d{2}$/;
+/** datetime-local, optional seconds, no offset: "2026-10-13T09:00". */
+const LOCAL_TIME = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?$/;
+/** An explicit offset, so the string is already an absolute instant. */
+const HAS_OFFSET = /(?:[zZ]|[+-]\d{2}:?\d{2})$/;
+
+/**
+ * A Firm Quote start as an absolute instant. A value with an offset is that instant.
+ * A zoneless datetime, and a plain day (9:00 am), are wall-clock time in `timeZone`,
+ * never the process time zone. Null when it isn't a real time there (a day that
+ * doesn't exist, or an hour skipped by daylight saving).
+ */
+function startInstant(value: string, timeZone: string): Date | null {
+  if (HAS_OFFSET.test(value)) {
+    const at = new Date(value);
+    return Number.isNaN(at.getTime()) ? null : at;
+  }
+  const local = LOCAL_TIME.exec(value);
+  if (local) return wallInstant(timeZone, local[1]!, local[2]!, local[3]!, local[4]!, local[5]!, local[6] ?? '0');
+  if (!PLAIN_DAY.test(value)) return null;
+  const [year, month, day] = value.split('-');
+  return wallInstant(timeZone, year!, month!, day!, '9', '0', '0');
 }
 
-/** What a Quote counts towards the Repair Cost: the Not-to-exceed Cap when proceeding on an Estimate, else its price. */
+/** The instant at which `timeZone` shows this wall-clock time, or null when it doesn't. */
+function wallInstant(timeZone: string, year: string, month: string, day: string, hour: string, minute: string, second: string): Date | null {
+  const y = Number(year);
+  const mo = Number(month);
+  const d = Number(day);
+  const h = Number(hour);
+  const mi = Number(minute);
+  const s = Number(second);
+  if (mo < 1 || mo > 12 || d < 1 || d > 31 || h > 23 || mi > 59 || s > 59) return null;
+  const at = zonedInstant(timeZone, y, mo, d, h, mi, s);
+  const wall = wallClock(at, timeZone);
+  if (wall.year !== y || wall.month !== mo || wall.day !== d || wall.hour !== h || wall.minute !== mi) return null;
+  return at;
+}
+
+/**
+ * The start times stored on a Firm Quote, as ISO instants. A plain day from before
+ * start times were datetimes meant that day at 9:00 am in the Agency's time zone,
+ * and a zoneless datetime is wall-clock time there. An instant that already has an
+ * offset is left as stored.
+ */
+function datesOf(value: unknown, timeZone: string): string[] {
+  const parsed = typeof value === 'string' ? (JSON.parse(value) as unknown) : value;
+  if (!Array.isArray(parsed)) return [];
+  return parsed.filter((d): d is string => typeof d === 'string').map((day) => {
+    if (HAS_OFFSET.test(day)) return day;
+    const at = startInstant(day, timeZone);
+    return at ? iso(at) : day;
+  });
+}
+
+/** What a Quote counts towards the Repair Cost: the Firm Quote's price. */
 const costOf = (q: QuoteRow) => q.not_to_exceed_cents ?? q.price_cents!;
 
 /** A recommendation's place in the order after the Nominated Tradies: the weighted mean of the parts it has (RANK_WEIGHTS). */
@@ -259,7 +314,7 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
     );
   }
 
-  /** The total of a Ticket's approved Quotes: each Firm Quote's price, or the Not-to-exceed Cap of an Estimate proceeded on. */
+  /** The total of a Ticket's approved Quotes: each Firm Quote's price. */
   async function repairCost(ticketId: number) {
     return (await one<{ total: number }>(
       db,
@@ -609,7 +664,7 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
   }
 
   /** A Quote as the Property Manager's screens show it. Estimate and Firm Quote fields are null on the other stage. */
-  async function quoteView(q: QuoteRow, supersededBy: number | null) {
+  async function quoteView(q: QuoteRow, supersededBy: number | null, timeZone: string) {
     return {
       quoteId: q.id,
       quoteRequestId: q.quote_request_id,
@@ -627,10 +682,10 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
       /** Estimate: whether the Tradie said they need a Site Inspection, and its Call-out Fee. */
       needsInspection: q.stage === 'estimate' ? q.needs_inspection : null,
       calloutFeeCents: q.stage === 'estimate' ? q.callout_fee_cents : null,
-      /** Firm Quote: the scope of work, the projected timeline in days, and the ISO dates the Tradie can start. */
+      /** Firm Quote: the scope of work, the projected timeline in days, and the dates and times the Tradie can start. */
       scopeOfWork: q.scope_of_work,
       durationDays: q.duration_days,
-      availableDates: q.stage === 'firm' ? datesOf(q.available_dates) : [],
+      availableTimes: q.stage === 'firm' ? datesOf(q.available_dates, timeZone) : [],
       /** The Estimate a Firm Quote supersedes, and the Firm Quote that superseded an Estimate. */
       supersedesQuoteId: q.supersedes_quote_id,
       supersededByQuoteId: supersededBy,
@@ -639,17 +694,7 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
     };
   }
 
-  /** Whether the Property Manager may proceed on this Estimate (before the Routine check, which `confirm` can pass). */
-  function proceedRefusal(request: QuoteRequestRow, estimate: QuoteRow): string | null {
-    if (estimate.stage !== 'estimate') return 'Only an Estimate can be proceeded on';
-    if (estimate.status !== 'open') return 'This Estimate can no longer be proceeded on';
-    if (!estimate.confirmed) return 'Confirm the Estimate before proceeding on it';
-    if (inspectionNeeded(request, estimate)) return 'This Tradie needs a Site Inspection before they can give a Firm Quote, so you cannot proceed on their Estimate';
-    if (request.status !== 'estimated') return 'This Tradie has a Site Inspection on the way: wait for their Firm Quote';
-    return null;
-  }
-
-  /** How long the visit is: the Firm Quote's days, or 2 hours when the Job went ahead on an Estimate. */
+  /** How long the visit is from the Firm Quote's duration. */
 function visitLength(durationDays: number | null): { durationMinutes: number; durationLabel: string } {
   if (durationDays) return { durationMinutes: durationDays * 24 * 60, durationLabel: durationDays === 1 ? '1 day' : `${durationDays} days` };
   return { durationMinutes: 120, durationLabel: '2 hours' };
@@ -666,16 +711,13 @@ function lengthOfVisit(start: string, end: string): { durationMinutes: number; d
   return { durationMinutes: minutes, durationLabel: hours === 1 ? '1 hour' : Number.isInteger(hours) ? `${hours} hours` : `${minutes} minutes` };
 }
 
-/** Up to three starts: the proposed time, then each other available date at 9:00 am. */
-function prefillStarts(timeZone: string, proposedTime: string | null, dates: string[]): string[] {
-  const starts: string[] = [];
-  if (proposedTime) starts.push(proposedTime);
-  const proposedDay = proposedTime ? dayOf(proposedTime, timeZone) : null;
-  for (const date of dates) {
-    if (starts.length >= 3 || date === proposedDay) continue;
-    const [year, month, day] = date.split('-').map(Number);
-    if (!year || !month || !day) continue;
-    starts.push(zonedInstant(timeZone, year, month, day, 9, 0).toISOString());
+/** Up to three start times from the Firm Quote's `available_dates` (ISO datetimes). */
+function prefillStarts(timeZone: string, proposedTime: string | null, dateTimes: string[]): string[] {
+  const starts = dateTimes.filter((t) => Date.parse(t) > 0).slice(0, 3);
+  // If the Firm Quote's proposed_time is set (older data) and not already among the datetimes, prepend it.
+  if (proposedTime && Date.parse(proposedTime) > 0 && !starts.includes(proposedTime)) {
+    starts.unshift(proposedTime);
+    if (starts.length > 3) starts.pop();
   }
   return starts;
 }
@@ -761,7 +803,7 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dates: str
             priceCents: firm.price_cents,
             scopeOfWork: firm.scope_of_work,
             durationDays: firm.duration_days,
-            availableDates: datesOf(firm.available_dates),
+            availableTimes: datesOf(firm.available_dates, agency.timeZone),
             proposedTime: firm.proposed_time,
             hasPdf: firm.pdf_file_id !== null,
             receivedAt: firm.received_at,
@@ -781,7 +823,7 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dates: str
               note: declinedNote,
               reschedule: rescheduling,
               ...(rescheduling && repair ? lengthOfVisit(repair.start, repair.end) : visitLength(firm?.duration_days ?? null)),
-              starts: prefillStarts(agency.timeZone, quoted?.proposed_time ?? null, firm ? datesOf(firm.available_dates) : []),
+              starts: prefillStarts(agency.timeZone, quoted?.proposed_time ?? null, firm ? datesOf(firm.available_dates, agency.timeZone) : []),
             }
           : null,
     };
@@ -1079,17 +1121,22 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dates: str
       if (!Number.isInteger(input.durationDays) || input.durationDays < 1 || input.durationDays > MAX_DURATION_DAYS) {
         invalid(`Enter how many days the work takes, from 1 to ${MAX_DURATION_DAYS}`, 'durationDays');
       }
-      const today = wallClock(clock.now(), timeZone);
-      const todayIso = `${today.year}-${String(today.month).padStart(2, '0')}-${String(today.day).padStart(2, '0')}`;
-      const dates = [...new Set((input.availableDates ?? []).map((d) => d.trim()).filter(Boolean))].sort();
-      if (!dates.length) invalid('Give at least one date you can start', 'availableDates');
-      if (dates.length > MAX_AVAILABLE_DATES) invalid(`Give at most ${MAX_AVAILABLE_DATES} dates you can start`, 'availableDates');
-      for (const date of dates) {
-        const valid = /^\d{4}-\d{2}-\d{2}$/.test(date) && new Date(`${date}T00:00:00Z`).toISOString().startsWith(date);
-        if (!valid) invalid(`${date} is not a date`, 'availableDates');
-        if (date < todayIso) invalid('Pick start dates from today on', 'availableDates');
+      // The first time is the one the Tradie prefers. Drop blanks and repeats, and keep the order they typed.
+      const typed = [...new Set((input.availableTimes ?? []).map((t) => t.trim()).filter(Boolean))];
+      if (!typed.length) invalid('Give at least one date and time you can start', 'availableTimes');
+      if (typed.length > MAX_AVAILABLE_DATES) invalid(`Give at most ${MAX_AVAILABLE_DATES} start times`, 'availableTimes');
+      const seen = new Set<string>();
+      const times: string[] = [];
+      for (const time of typed) {
+        // A zoneless datetime-local value is the Agency's wall clock, not the process zone.
+        const at = startInstant(time, timeZone);
+        if (!at) invalid(`${time} is not a date and time`, 'availableTimes');
+        if (at < clock.now()) invalid('Pick start dates and times from now on', 'availableTimes');
+        const stored = iso(at);
+        if (seen.has(stored)) continue;
+        seen.add(stored);
+        times.push(stored);
       }
-      const proposedTime = futureTime(input.proposedTime, 'proposedTime');
       if (input.pdf && input.pdf.contentType !== 'application/pdf') invalid('Attach your quote as a PDF', 'pdf');
 
       /** Refuses unless the request may take a Firm Quote now; returns its Estimate. */
@@ -1111,9 +1158,9 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dates: str
         const job = await tickets.job(current.job_id);
         await run(
           db,
-          `INSERT INTO quotes (agency_id, job_id, ticket_id, quote_request_id, tradie_id, trade, stage, price_cents, proposed_time, confirmed, status,
+          `INSERT INTO quotes (agency_id, job_id, ticket_id, quote_request_id, tradie_id, trade, stage, price_cents, confirmed, status,
              pdf_file_id, received_at, supersedes_quote_id, scope_of_work, duration_days, available_dates)
-           VALUES (?, ?, ?, ?, ?, ?, 'firm', ?, ?, 1, 'open', ?, ?, ?, ?, ?, ?::jsonb)`,
+           VALUES (?, ?, ?, ?, ?, ?, 'firm', ?, 1, 'open', ?, ?, ?, ?, ?, ?::jsonb)`,
           current.agency_id,
           job.id,
           current.ticket_id,
@@ -1121,13 +1168,12 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dates: str
           current.tradie_id,
           job.trade,
           input.priceCents,
-          proposedTime,
           pdfFileId,
           iso(clock.now()),
           estimate.id,
           scope,
           input.durationDays,
-          JSON.stringify(dates),
+          JSON.stringify(times),
         );
         await run(db, `UPDATE quotes SET status = 'superseded' WHERE id = ? AND status = 'open'`, estimate.id);
         await run(db, `UPDATE quote_requests SET status = 'firm_quoted' WHERE id = ?`, current.id);
@@ -1195,15 +1241,15 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dates: str
     /**
      * Chooses a Firm Quote, then approves it or asks the Property Owner if it takes the Repair
      * Cost over the Max Repair Cost. Refuses before saving when that Owner cannot be reached.
-     * An Estimate is never chosen: see `proceedOnEstimate`. Returns a warning when the approval
-     * was saved but the request email did not go out.
+     * An Estimate is never chosen: a Firm Quote is always required (see ADR 0016). Returns a
+     * warning when the approval was saved but the request email did not go out.
      */
     async chooseQuote(agencyId: number, quoteId: number, reason?: string) {
       // Decided in one transaction: two Quotes chosen for a Job at once can't both be approved.
       const outcome = await transaction(db, async () => {
         const quote = await quoteInAgency(agencyId, quoteId);
         if (quote.stage !== 'firm') {
-          invalid('An Estimate is not a Firm Quote and is never chosen as one. Wait for Firm Quotes, or proceed on the Estimate with a Not-to-exceed Cap.');
+          invalid('An Estimate is not a Firm Quote and is never chosen as one. Wait for Firm Quotes.');
         }
         if (!quote.confirmed) invalid('Confirm the Quote before choosing it');
         if (quote.status !== 'open') invalid('This Quote can no longer be chosen');
@@ -1226,49 +1272,6 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dates: str
       });
       return afterDecision(outcome);
     },
-
-    /**
-     * Goes ahead on a Tradie's Estimate without waiting for a Firm Quote, for a cheap routine
-     * Job: the Tradie may charge at most `capCents`, the Not-to-exceed Cap, which counts towards
-     * the Repair Cost. Refused when the Tradie needs a Site Inspection, when the cap is below the
-     * Estimate, and on a Ticket that isn't Routine unless `confirm` is set. A reason is needed
-     * while the Job has fewer than two Tradies' confirmed Quotes. Refuses before saving when the
-     * cost would ask the Property Owner and no channel reaches them. Returns a warning when the
-     * approval was saved but the request email did not go out.
-     */
-    async proceedOnEstimate(agencyId: number, quoteId: number, options: { capCents: number; reason?: string; confirm?: boolean }) {
-      const outcome = await transaction(db, async () => {
-        const estimate = await quoteInAgency(agencyId, quoteId);
-        const request = (await quoteRequestRow(estimate.quote_request_id))!;
-        const refusal = proceedRefusal(request, estimate);
-        if (refusal) invalid(refusal);
-        const { job, ticket, property } = await jobPlace(estimate.job_id);
-        if (job.status !== 'quoting') invalid('This Job is not choosing a Quote');
-        requireAmount(options.capCents, 'Enter the Not-to-exceed Cap in dollars', 'cap');
-        if (options.capCents < estimate.price_cents!) {
-          invalid(`The Not-to-exceed Cap can't be below the Estimate of ${dollars(estimate.price_cents!)}`, 'cap');
-        }
-        if (ticket.urgency !== 'routine' && !options.confirm) {
-          invalid(`Proceeding on an Estimate is for Routine Jobs, and this Ticket is ${ticket.urgency === 'high' ? 'High' : ticket.urgency}. Wait for Firm Quotes, or confirm to go ahead anyway.`);
-        }
-        const why = options.reason?.trim() || null;
-        const onlyOne = (await pricedCount(job.id)) < MIN_QUOTES;
-        if (onlyOne && !why) invalid('Proceed on an Estimate once the Job has at least two, or record why you are going ahead with one');
-        await requireOwnerReachable(ticket.id, property.ownerId, options.capCents, property.maxRepairCostCents);
-        await run(db, 'UPDATE quotes SET not_to_exceed_cents = ?, single_quote_reason = ? WHERE id = ?', options.capCents, why, estimate.id);
-        await tickets.recordEvent(ticket.id, 'proceeded_on_estimate', {
-          jobId: job.id,
-          tradie: await businessName(estimate.tradie_id),
-          priceCents: estimate.price_cents,
-          capCents: options.capCents,
-          ...(why ? { reason: why } : {}),
-          ...(ticket.urgency !== 'routine' ? { notRoutine: true } : {}),
-        });
-        return approveOrAskOwner({ ...estimate, not_to_exceed_cents: options.capCents }, options.capCents);
-      });
-      return afterDecision(outcome);
-    },
-
     /**
      * Sends the Property Owner's approval request again, as it was first asked, when they say it
      * never arrived. Only while it is still open; the status stays as it is. A reminder is
@@ -1289,8 +1292,7 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dates: str
     },
 
     /**
-     * YES approves the Quote. NO declines it, and the Property Manager can choose another; an
-     * Estimate declined loses its Not-to-exceed Cap, which was only ever the proposal.
+     * YES approves the Quote. NO declines it, and the Property Manager can choose another.
      */
     async recordOwnerAnswer(approvalId: number, answer: 'yes' | 'no') {
       const approved = await transaction(db, async () => {
@@ -1430,16 +1432,17 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dates: str
     /** The Job's approved Quote: who does the work, what it counts towards the Repair Cost, when they proposed, and a Firm Quote's scope of work. */
     async approvedQuote(jobId: number) {
       const row = await one<QuoteRow>(db, `SELECT * FROM quotes WHERE job_id = ? AND status = 'approved'`, jobId);
-      return row
-        ? {
-            tradieId: row.tradie_id,
-            stage: row.stage,
-            priceCents: costOf(row),
-            notToExceedCents: row.not_to_exceed_cents,
-            proposedTime: row.proposed_time,
-            scopeOfWork: row.scope_of_work,
-          }
-        : null;
+      if (!row) return null;
+      const { timeZone } = await profiles.agency(row.agency_id);
+      return {
+        tradieId: row.tradie_id,
+        stage: row.stage,
+        priceCents: costOf(row),
+        notToExceedCents: row.not_to_exceed_cents,
+        proposedTime: row.proposed_time,
+        availableTimes: datesOf(row.available_dates, timeZone),
+        scopeOfWork: row.scope_of_work,
+      };
     },
 
     repairCost,
@@ -1467,7 +1470,8 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dates: str
       const { ticket } = await jobPlace(jobId);
       const rows = await quotesOf(jobId);
       const supersededBy = new Map(rows.filter((q) => q.supersedes_quote_id !== null).map((q) => [q.supersedes_quote_id!, q.id]));
-      const quotes = await Promise.all(rows.map((q) => quoteView(q, supersededBy.get(q.id) ?? null)));
+      const { timeZone } = await profiles.agency(job.agencyId);
+      const quotes = await Promise.all(rows.map((q) => quoteView(q, supersededBy.get(q.id) ?? null, timeZone)));
       return {
         recommendations: job.status === 'quoting' ? await this.recommend(agencyId, jobId) : [],
         /** For the send form: new requests it must hold (`minimum`), and why one is enough when it is. */
@@ -1475,7 +1479,6 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dates: str
         quoteRequests: await Promise.all((await quoteRequestsOf(jobId)).map(async (r) => {
           const estimateRow = rows.find((q) => q.quote_request_id === r.id && q.stage === 'estimate');
           const estimate = quotes.find((q) => q.quoteRequestId === r.id && q.stage === 'estimate') ?? null;
-          const refusal = estimateRow ? proceedRefusal(r, estimateRow) : 'No Estimate yet';
           return {
             quoteRequestId: r.id,
             tradieId: r.tradie_id,
@@ -1490,9 +1493,6 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dates: str
             /** The latest Site Inspection not cancelled, or null. */
             inspection: await modules.scheduling.inspectionFor(r.id),
             firmQuote: quotes.find((q) => q.quoteRequestId === r.id && q.stage === 'firm') ?? null,
-            /** Whether the Property Manager may proceed on this Estimate now; `proceedNeedsConfirm` when the Ticket isn't Routine. */
-            canProceedOnEstimate: job.status === 'quoting' && refusal === null,
-            proceedNeedsConfirm: ticket.urgency !== 'routine',
           };
         })),
         /** Every Quote on the Job, Estimates and Firm Quotes alike, oldest first. Compare by `stage`, never across it. */

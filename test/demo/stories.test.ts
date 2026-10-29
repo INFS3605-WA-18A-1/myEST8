@@ -68,7 +68,7 @@ describe('the demo stories', () => {
     expect(new Set(tickets.map((t) => t.urgency))).toEqual(new Set(['high', 'routine']));
   });
 
-  test('leave each Tradie on their own quoting path: a Site Inspection booked beside a Firm Quote, one to book, and Jobs proceeded on an Estimate', async () => {
+  test('leave each Tradie on their own quoting path: a Site Inspection booked beside a Firm Quote, one to book, and Jobs with a chosen Firm Quote', async () => {
     const board = (await dashboard()).tickets;
     const jobs = (await Promise.all(board.map(async (t) => (await alice()).ticket(t.ticketId)))).flatMap((t) => t.jobs);
     const inspecting = jobs.filter((j) => j.status === 'quoting' && j.quoteRequests.some((r) => r.status === 'inspection_booked'));
@@ -77,7 +77,7 @@ describe('the demo stories', () => {
     expect(inspecting[0]!.quoteRequests.find((r) => r.status === 'inspection_booked')!.estimate).toMatchObject({ needsInspection: true, calloutFeeCents: 90_00 });
     expect(jobs.some((j) => j.decision === 'book_inspection')).toBe(true);
     expect(jobs.some((j) => j.decision === 'choose_quote')).toBe(true);
-    expect(jobs.some((j) => j.quotes.some((q) => q.stage === 'estimate' && q.status === 'approved' && q.notToExceedCents !== null))).toBe(true);
+    expect(jobs.some((j) => j.quotes.some((q) => q.stage === 'firm' && q.status === 'approved'))).toBe(true);
     const calendar = (await dashboard()).calendar.filter((b) => b.kind === 'inspection' && b.status === 'active');
     expect(calendar).toHaveLength(1);
   });
