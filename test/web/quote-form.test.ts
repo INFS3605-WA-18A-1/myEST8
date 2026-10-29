@@ -1,10 +1,16 @@
 import { describe, expect, test } from 'vitest';
+import { zonedInstant } from '../../src/zoned-time.ts';
 import { visible, webWorld } from '../support/web.ts';
 import { dateAhead, KING_ST, quoteRequestFor, quoteToken, TOM, tomsTapTicket } from '../support/world.ts';
 
 // The Tradie's no-login quote page at /q/:token: Estimate, Site Inspection, Firm Quote.
 
 const TUE_10AM = new Date('2026-10-13T10:00:00+11:00');
+/** A plain stored day, read back as 9:00 am in the test Agency's time zone. */
+const nineAm = (day: string) => {
+  const [year, month, date] = day.split('-').map(Number);
+  return zonedInstant('Australia/Sydney', year!, month!, date!, 9, 0).toISOString();
+};
 
 /** Tom's tap with Quote Requests to Pete and Dana, and Pete's quote page. */
 async function petesPage() {
@@ -99,7 +105,7 @@ describe('the quote page', () => {
     expect(done).toContain('PDF Attached');
     expect(done).toContain('Your Estimate (superseded by your Firm Quote)');
     expect(done).not.toContain('Send Firm Quote');
-    expect((await quoteRequestFor(w, job, w.tradies.pete)).firmQuote).toMatchObject({ priceCents: 1200_00, availableTimes: [dateAhead(w, 3), dateAhead(w, 4)], hasPdf: true });
+    expect((await quoteRequestFor(w, job, w.tradies.pete)).firmQuote).toMatchObject({ priceCents: 1200_00, availableTimes: [nineAm(dateAhead(w, 3)), nineAm(dateAhead(w, 4))], hasPdf: true });
   });
 
   test('a Tradie who needs to inspect waits for the booking, then sees its time and the address', async () => {

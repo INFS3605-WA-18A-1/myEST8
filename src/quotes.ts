@@ -105,10 +105,22 @@ export type FirmQuoteInput = {
   pdf?: { filename: string; contentType: string; content: Uint8Array } | null;
 };
 
-/** The ISO datetimes or dates stored for a Firm Quote's `available_dates` column (jsonb). */
-function datesOf(value: unknown): string[] {
+/** A calendar day stored before Firm Quotes kept start times: "2026-10-20". */
+const PLAIN_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * The start times stored on a Firm Quote. A plain date from before start times were
+ * datetimes meant that day at 9:00 am in the Agency's time zone, not midnight UTC.
+ */
+function datesOf(value: unknown, timeZone: string): string[] {
   const parsed = typeof value === 'string' ? (JSON.parse(value) as unknown) : value;
-  return Array.isArray(parsed) ? parsed.filter((d): d is string => typeof d === 'string') : [];
+  if (!Array.isArray(parsed)) return [];
+  return parsed.filter((d): d is string => typeof d === 'string').map((day) => {
+    if (!PLAIN_DAY.test(day)) return day;
+    const [year, month, date] = day.split('-').map(Number);
+    if (!year || !month || !date) return day;
+    return zonedInstant(timeZone, year, month, date, 9, 0).toISOString();
+  });
 }
 
 /** What a Quote counts towards the Repair Cost: the Firm Quote's price. */
@@ -608,7 +620,7 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
   }
 
   /** A Quote as the Property Manager's screens show it. Estimate and Firm Quote fields are null on the other stage. */
-  async function quoteView(q: QuoteRow, supersededBy: number | null) {
+  async function quoteView(q: QuoteRow, supersededBy: number | null, timeZone: string) {
     return {
       quoteId: q.id,
       quoteRequestId: q.quote_request_id,
@@ -629,7 +641,7 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
       /** Firm Quote: the scope of work, the projected timeline in days, and the dates and times the Tradie can start. */
       scopeOfWork: q.scope_of_work,
       durationDays: q.duration_days,
-      availableTimes: q.stage === 'firm' ? datesOf(q.available_dates) : [],
+      availableTimes: q.stage === 'firm' ? datesOf(q.available_dates, timeZone) : [],
       /** The Estimate a Firm Quote supersedes, and the Firm Quote that superseded an Estimate. */
       supersedesQuoteId: q.supersedes_quote_id,
       supersededByQuoteId: supersededBy,
@@ -747,7 +759,7 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dateTimes:
             priceCents: firm.price_cents,
             scopeOfWork: firm.scope_of_work,
             durationDays: firm.duration_days,
-            availableTimes: datesOf(firm.available_dates),
+            availableTimes: datesOf(firm.available_dates, agency.timeZone),
             proposedTime: firm.proposed_time,
             hasPdf: firm.pdf_file_id !== null,
             receivedAt: firm.received_at,
@@ -767,7 +779,7 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dateTimes:
               note: declinedNote,
               reschedule: rescheduling,
               ...(rescheduling && repair ? lengthOfVisit(repair.start, repair.end) : visitLength(firm?.duration_days ?? null)),
-              starts: prefillStarts(agency.timeZone, quoted?.proposed_time ?? null, firm ? datesOf(firm.available_dates) : []),
+              starts: prefillStarts(agency.timeZone, quoted?.proposed_time ?? null, firm ? datesOf(firm.available_dates, agency.timeZone) : []),
             }
           : null,
     };
@@ -1371,17 +1383,17 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dateTimes:
     /** The Job's approved Quote: who does the work, what it counts towards the Repair Cost, when they proposed, and a Firm Quote's scope of work. */
     async approvedQuote(jobId: number) {
       const row = await one<QuoteRow>(db, `SELECT * FROM quotes WHERE job_id = ? AND status = 'approved'`, jobId);
-      return row
-? {
-            tradieId: row.tradie_id,
-            stage: row.stage,
-            priceCents: costOf(row),
-            notToExceedCents: row.not_to_exceed_cents,
-            proposedTime: row.proposed_time,
-            availableTimes: datesOf(row.available_dates),
-            scopeOfWork: row.scope_of_work,
-          }
-        : null;
+      if (!row) return null;
+      const { timeZone } = await profiles.agency(row.agency_id);
+      return {
+        tradieId: row.tradie_id,
+        stage: row.stage,
+        priceCents: costOf(row),
+        notToExceedCents: row.not_to_exceed_cents,
+        proposedTime: row.proposed_time,
+        availableTimes: datesOf(row.available_dates, timeZone),
+        scopeOfWork: row.scope_of_work,
+      };
     },
 
     repairCost,
@@ -1409,7 +1421,8 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dateTimes:
       const { ticket } = await jobPlace(jobId);
       const rows = await quotesOf(jobId);
       const supersededBy = new Map(rows.filter((q) => q.supersedes_quote_id !== null).map((q) => [q.supersedes_quote_id!, q.id]));
-      const quotes = await Promise.all(rows.map((q) => quoteView(q, supersededBy.get(q.id) ?? null)));
+      const { timeZone } = await profiles.agency(job.agencyId);
+      const quotes = await Promise.all(rows.map((q) => quoteView(q, supersededBy.get(q.id) ?? null, timeZone)));
       return {
         recommendations: job.status === 'quoting' ? await this.recommend(agencyId, jobId) : [],
         /** For the send form: new requests it must hold (`minimum`), and why one is enough when it is. */

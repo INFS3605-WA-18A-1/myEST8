@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { all, one, run } from '../src/db.ts';
+import { zonedInstant } from '../src/zoned-time.ts';
 import { HOUR } from './support/harness.ts';
 import {
   confirmedEstimates,
@@ -22,6 +23,11 @@ import {
 // Request moves on its own; the Job stays quoting throughout.
 
 const sydney = (local: string) => new Date(`${local}+11:00`);
+/** A plain stored day, read back as 9:00 am in the test Agency's time zone. */
+const nineAm = (day: string) => {
+  const [year, month, date] = day.split('-').map(Number);
+  return zonedInstant('Australia/Sydney', year!, month!, date!, 9, 0).toISOString();
+};
 const TUE_10AM = sydney('2026-10-13T10:00:00');
 const WED_10AM = sydney('2026-10-14T10:00:00');
 
@@ -177,7 +183,7 @@ describe('requirements 3 and 4: Estimates and Firm Quotes are apart, and a Firm 
     const view = await jobView(w, job);
     const est = view.quotes.find((q) => q.stage === 'estimate')!;
     expect(est).toMatchObject({ priceCents: 150_00, status: 'superseded', supersededByQuoteId: firm.quoteId });
-    expect(firm).toMatchObject({ stage: 'firm', priceCents: 175_00, scopeOfWork: 'New mixer tap', availableTimes: [dateAhead(w, 2)], supersedesQuoteId: est.quoteId });
+    expect(firm).toMatchObject({ stage: 'firm', priceCents: 175_00, scopeOfWork: 'New mixer tap', availableTimes: [nineAm(dateAhead(w, 2))], supersedesQuoteId: est.quoteId });
     expect(view.quoteRequests[0]).toMatchObject({ status: 'firm_quoted', estimate: { quoteId: est.quoteId }, firmQuote: { quoteId: firm.quoteId } });
     await expect(w.alice.chooseQuote(est.quoteId, 'x')).rejects.toThrow(/An Estimate is not a Firm Quote/);
     // A routine Job with two confirmed Estimates needs Firm Quotes before choosing.
@@ -226,6 +232,28 @@ describe('requirements 3 and 4: Estimates and Firm Quotes are apart, and a Firm 
     expect((await w.h.app.quotePage(await quoteToken(w, job, w.tradies.pete)))!.firmQuote!.availableTimes).toEqual([preferred, backup]);
 
     await w.alice.chooseQuote(firm.quoteId, 'Usual plumber');
+    await w.alice.sendWorkOrder(job.jobId);
+    expect((await jobView(w, job)).workOrder!.start).toBe(preferred);
+  });
+
+  test('a Firm Quote saved as plain dates is read as 9:00 am in the Agency time zone', async () => {
+    const w = await world();
+    const job = await askPeteAndDana(w);
+    await estimate(w, job, w.tradies.pete, { priceCents: 150_00, needsInspection: false });
+    const firm = await firmQuote(w, job, w.tradies.pete, { priceCents: 175_00, availableTimes: ['2026-10-20T04:00:00.000Z'] });
+    // Quotes from before start times were datetimes store calendar days, preferred day first.
+    await run(w.h.db, 'UPDATE quotes SET available_dates = ?::jsonb WHERE id = ?', JSON.stringify(['2026-10-20', '2026-10-15']), firm.quoteId);
+    // Tue 20 Oct and Thu 15 Oct 2026, 9:00 am Sydney (AEDT, UTC+11). Not midnight UTC.
+    const preferred = '2026-10-19T22:00:00.000Z';
+    const backup = '2026-10-14T22:00:00.000Z';
+
+    const again = (await jobView(w, job)).quotes.find((q) => q.quoteId === firm.quoteId)!;
+    expect(again.availableTimes).toEqual([preferred, backup]);
+    const page = (await w.h.app.quotePage(await quoteToken(w, job, w.tradies.pete)))!;
+    expect(page.firmQuote!.availableTimes).toEqual([preferred, backup]);
+
+    await w.alice.chooseQuote(firm.quoteId, 'Usual plumber');
+    expect((await w.h.app.quotePage(await quoteToken(w, job, w.tradies.pete)))!.offerTimes!.starts).toEqual([preferred, backup]);
     await w.alice.sendWorkOrder(job.jobId);
     expect((await jobView(w, job)).workOrder!.start).toBe(preferred);
   });
