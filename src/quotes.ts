@@ -1068,12 +1068,12 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dateTimes:
       const today = wallClock(clock.now(), timeZone);
       const todayIso = `${today.year}-${String(today.month).padStart(2, '0')}-${String(today.day).padStart(2, '0')}`;
       const times = [...new Set((input.availableTimes ?? []).map((t) => t.trim()).filter(Boolean))].sort();
-      if (!times.length) invalid('Give at least one date and time you can start', 'availableDates');
-      if (times.length > MAX_AVAILABLE_DATES) invalid(`Give at most ${MAX_AVAILABLE_DATES} start times`, 'availableDates');
+      if (!times.length) invalid('Give at least one date and time you can start', 'availableTimes');
+      if (times.length > MAX_AVAILABLE_DATES) invalid(`Give at most ${MAX_AVAILABLE_DATES} start times`, 'availableTimes');
       for (const time of times) {
         const parsed = Date.parse(time);
-        if (Number.isNaN(parsed)) invalid(`${time} is not a date and time`, 'availableDates');
-        if (new Date(parsed) < clock.now()) invalid('Pick start dates and times from now on', 'availableDates');
+        if (Number.isNaN(parsed)) invalid(`${time} is not a date and time`, 'availableTimes');
+        if (new Date(parsed) < clock.now()) invalid('Pick start dates and times from now on', 'availableTimes');
       }
       if (input.pdf && input.pdf.contentType !== 'application/pdf') invalid('Attach your quote as a PDF', 'pdf');
 

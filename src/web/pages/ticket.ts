@@ -1176,7 +1176,7 @@ function firmQuoteEntry(t: TicketView, r: RequestView, x: Extras): Html {
         field({
           id: id(`time-${i + 1}`),
           label: inp.label,
-          name: 'availableDates',
+          name: 'availableTimes',
           type: 'datetime-local',
           required: i === 0,
           hint: inp.hint ? `${x.timeZone} time. ${inp.hint}` : `${x.timeZone} time.`,

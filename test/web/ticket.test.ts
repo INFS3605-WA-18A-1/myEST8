@@ -107,7 +107,7 @@ async function tapTicket() {
     body.set('price', fields.price);
     body.set('scopeOfWork', 'Replace the washer and reseat the tap');
     body.set('durationDays', '1');
-    body.append('availableDates', '2026-10-13');
+    body.append('availableTimes', '2026-10-13');
     body.set('proposedTime', fields.proposedTime ?? '');
     const res = await w.web.request(`/q/${token}/firm`, { method: 'POST', body });
     expect(res.status).toBe(303);

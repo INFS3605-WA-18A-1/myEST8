@@ -101,7 +101,7 @@ export function quoteFormPages(app: App) {
       try {
         await app.submitFirmQuote(token, await firmQuoteFrom(form, page.timeZone));
       } catch (error) {
-        return refused(c, token, page, error, form, ['price', 'scopeOfWork', 'durationDays', 'availableDates']);
+        return refused(c, token, page, error, form, ['price', 'scopeOfWork', 'durationDays', 'availableTimes']);
       }
       return c.redirect(`/q/${encodeURIComponent(token)}?sent=firm`, 303);
     },
@@ -211,7 +211,7 @@ export async function firmQuoteFrom(form: FormValues, timeZone: string): Promise
     priceCents: dollarsToCents(text(form, 'price')),
     scopeOfWork: text(form, 'scopeOfWork'),
     durationDays: text(form, 'durationDays') ? Number(text(form, 'durationDays')) : NaN,
-    availableTimes: list(form, 'availableDates'),
+    availableTimes: list(form, 'availableTimes'),
     pdf: pdf ? { filename: pdf.name, contentType: pdf.type || 'application/octet-stream', content: new Uint8Array(await pdf.arrayBuffer()) } : null,
   };
 }
@@ -235,7 +235,7 @@ function localTime(value: string, timeZone: string, field: string): string {
 function refused(c: Context, token: string, page: QuotePage, error: unknown, form: FormValues, names: string[]) {
   if (!(error instanceof ActionError)) throw error;
   if (error.code === 'not_found') return c.html(unknownLinkPage(), 404);
-  const posted: Posted = Object.fromEntries(names.map((n) => [n, n === 'availableDates' || n === 'starts' ? list(form, n) : text(form, n)]));
+  const posted: Posted = Object.fromEntries(names.map((n) => [n, n === 'availableTimes' || n === 'starts' ? list(form, n) : text(form, n)]));
   return c.html(quotePage(token, page, { refusal: { message: error.message, fields: error.fields, posted } }), STATUS[error.code]);
 }
 
@@ -510,7 +510,7 @@ const CALLOUT_SCRIPT = raw(`<script>
 </script>`);
 
 function firmQuoteForm(token: string, p: QuotePage, r: Refusal | undefined): Html {
-  const posted = r?.posted.availableDates;
+  const posted = r?.posted.availableTimes;
   const typed = Array.isArray(posted) ? posted : [];
   const inputs = [
     { label: 'Preferred date and time', required: true, hint: undefined },
@@ -537,13 +537,13 @@ function firmQuoteForm(token: string, p: QuotePage, r: Refusal | undefined): Htm
         ${inputs.map((inp, i) =>
           field({
             label: inp.label,
-            name: 'availableDates',
+            name: 'availableTimes',
             id: `field-available-time-${i + 1}`,
             type: 'datetime-local',
             value: typed.length ? (typed[i] ?? '') : '',
             required: inp.required,
             hint: inp.hint,
-            error: i === 0 ? r?.fields.availableDates : undefined,
+            error: i === 0 ? r?.fields.availableTimes : undefined,
           }),
         )}
         ${field({ label: 'Your quote as a PDF', name: 'pdf', type: 'file', accept: 'application/pdf', hint: 'Optional, under 10 MB.', error: r?.fields.pdf })}

@@ -85,9 +85,9 @@ describe('the quote page', () => {
     const pdf = new File([new Uint8Array([37, 80, 68, 70])], 'quote.pdf', { type: 'application/pdf' });
     const body = new FormData();
     for (const [k, v] of Object.entries({ price: '1200', scopeOfWork: 'Replace the mixer tap and both isolation valves', durationDays: '2', proposedTime: '' })) body.set(k, v);
-    body.append('availableDates', dateAhead(w, 3));
-    body.append('availableDates', '');
-    body.append('availableDates', dateAhead(w, 4));
+    body.append('availableTimes', dateAhead(w, 3));
+    body.append('availableTimes', '');
+    body.append('availableTimes', dateAhead(w, 4));
     body.set('pdf', pdf);
     const firm = await w.web.request(`/q/${await quoteToken(w, job, w.tradies.pete)}/firm`, { method: 'POST', body });
     expect(firm.status).toBe(303);
