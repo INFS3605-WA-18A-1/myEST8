@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'vitest';
-import { confirmedEstimates, confirmedQuotes, jobView, KING_ST, OLIVIA, TOM, tomsTapTicket, visitStarted, world, type JobRef, type TradieRef, type World } from './support/world.ts';
+import { confirmedQuotes, jobView, KING_ST, OLIVIA, TOM, tomsTapTicket, visitStarted, world, type JobRef, type TradieRef, type World } from './support/world.ts';
 
 const TUE_9AM = new Date('2026-10-13T09:00:00+11:00');
 const SUMMARY = 'Summary: The kitchen tap is dripping';
+const SCOPE = 'Replace the washer and reseat the tap';
 
 /** The Tradie replies "done" once the Job's visit has started. */
 async function tradieDone(w: World, job: JobRef, tradie: TradieRef, start: Date) {
@@ -77,27 +78,26 @@ describe('closing a Ticket', () => {
 });
 
 describe('the completion messages', () => {
-  test('tell each done Job: the Tradie, the day, and what they were asked to do on an Estimate gone ahead with', async () => {
+  test('tell each done Job: the Tradie, the day, and the scope of work from the Firm Quote they were chosen for', async () => {
     const w = await world();
     const { h, alice, tradies } = w;
     const job = await tomsTapTicket(w);
-    const [estimate] = await confirmedEstimates(w, job, [[tradies.pete, 120_00, TUE_9AM], [tradies.dana, 140_00]]);
-    await alice.proceedOnEstimate(estimate!.quoteId, { capCents: 150_00 });
+    const [quote] = await confirmedQuotes(w, job, [[tradies.pete, 150_00, TUE_9AM], [tradies.dana, 140_00]]);
+    await alice.chooseQuote(quote!.quoteId, 'Usual plumber');
     await alice.sendWorkOrder(job.jobId);
     await tradieDone(w, job, tradies.pete, TUE_9AM);
 
-    const story = { trade: 'plumbing', tradieBusinessName: "Pete's Plumbing", doneOn: TUE_9AM.toISOString(), work: SUMMARY };
+    const story = { trade: 'plumbing', tradieBusinessName: "Pete's Plumbing", doneOn: TUE_9AM.toISOString(), work: SCOPE };
     expect(h.messenger.last(TOM)).toMatchObject({
       template: 'tenant.fixed_properly',
       data: story,
-      text: `Pete's Plumbing has finished the plumbing job on Tue 13 Oct: ${SUMMARY}. Was it fixed properly? Reply with a number from 1 (not at all) to 5 (perfectly).`,
+      text: `Pete's Plumbing has finished the plumbing job on Tue 13 Oct: ${SCOPE}. Was it fixed properly? Reply with a number from 1 (not at all) to 5 (perfectly).`,
     });
     expect(h.messenger.last(TOM)!.data).toEqual(story);
 
     await alice.closeTicket(job.ticketId);
 
     expect(h.messenger.last(TOM)!.data).toEqual({ propertyAddress: KING_ST, summary: SUMMARY, jobs: [story] });
-    // The Not-to-exceed Cap is what was approved, and what the Repair Cost counts.
     expect(h.messenger.last(OLIVIA)!.data).toEqual({ propertyAddress: KING_ST, summary: SUMMARY, jobs: [{ ...story, approvedCents: 150_00 }], repairCostCents: 150_00 });
   });
 

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { all, one, run } from '../src/db.ts';
+import { zonedInstant } from '../src/zoned-time.ts';
 import { HOUR } from './support/harness.ts';
 import {
   confirmedEstimates,
@@ -22,6 +23,11 @@ import {
 // Request moves on its own; the Job stays quoting throughout.
 
 const sydney = (local: string) => new Date(`${local}+11:00`);
+/** A plain stored day, read back as 9:00 am in the test Agency's time zone. */
+const nineAm = (day: string) => {
+  const [year, month, date] = day.split('-').map(Number);
+  return zonedInstant('Australia/Sydney', year!, month!, date!, 9, 0).toISOString();
+};
 const TUE_10AM = sydney('2026-10-13T10:00:00');
 const WED_10AM = sydney('2026-10-14T10:00:00');
 
@@ -103,7 +109,7 @@ describe('requirement 1: each Tradie progresses on their own', () => {
     await h.advance(49 * HOUR);
     expect(h.messenger.last(tradies.dana.address)!.template).toBe('tradie.firm_quote_reminder');
 
-    const dana = await firmQuote(w, job, tradies.dana, { priceCents: 420_00, durationDays: 2, availableDates: [dateAhead(w, 3), dateAhead(w, 4)] });
+    const dana = await firmQuote(w, job, tradies.dana, { priceCents: 420_00, durationDays: 2, availableTimes: [dateAhead(w, 3), dateAhead(w, 4)] });
     expect(dana).toMatchObject({ stage: 'firm', priceCents: 420_00, durationDays: 2, confirmed: true });
     expect(await jobView(w, job)).toMatchObject({ status: 'quoting', decision: 'choose_quote' });
     await h.advance(49 * HOUR);
@@ -172,15 +178,15 @@ describe('requirements 3 and 4: Estimates and Firm Quotes are apart, and a Firm 
     const w = await world();
     const job = await askPeteAndDana(w);
     await estimate(w, job, w.tradies.pete, { priceCents: 150_00, needsInspection: false });
-    const firm = await firmQuote(w, job, w.tradies.pete, { priceCents: 175_00, scopeOfWork: 'New mixer tap', durationDays: 1, availableDates: [dateAhead(w, 2)] });
+    const firm = await firmQuote(w, job, w.tradies.pete, { priceCents: 175_00, scopeOfWork: 'New mixer tap', durationDays: 1, availableTimes: [dateAhead(w, 2)] });
 
     const view = await jobView(w, job);
     const est = view.quotes.find((q) => q.stage === 'estimate')!;
     expect(est).toMatchObject({ priceCents: 150_00, status: 'superseded', supersededByQuoteId: firm.quoteId });
-    expect(firm).toMatchObject({ stage: 'firm', priceCents: 175_00, scopeOfWork: 'New mixer tap', availableDates: [dateAhead(w, 2)], supersedesQuoteId: est.quoteId });
+    expect(firm).toMatchObject({ stage: 'firm', priceCents: 175_00, scopeOfWork: 'New mixer tap', availableTimes: [nineAm(dateAhead(w, 2))], supersedesQuoteId: est.quoteId });
     expect(view.quoteRequests[0]).toMatchObject({ status: 'firm_quoted', estimate: { quoteId: est.quoteId }, firmQuote: { quoteId: firm.quoteId } });
     await expect(w.alice.chooseQuote(est.quoteId, 'x')).rejects.toThrow(/An Estimate is not a Firm Quote/);
-    await expect(w.alice.proceedOnEstimate(est.quoteId, { capCents: 200_00, reason: 'x' })).rejects.toThrow(/no longer/);
+    // A routine Job with two confirmed Estimates needs Firm Quotes before choosing.
     // A second Firm Quote is refused; the first stands.
     await expect(firmQuote(w, job, w.tradies.pete, { priceCents: 160_00 })).rejects.toThrow(/already given a Firm Quote/);
   });
@@ -189,7 +195,7 @@ describe('requirements 3 and 4: Estimates and Firm Quotes are apart, and a Firm 
     const w = await world();
     const job = await askPeteAndDana(w);
     const token = await quoteToken(w, job, w.tradies.pete);
-    const valid = { priceCents: 175_00, scopeOfWork: 'New tap', durationDays: 1, availableDates: [dateAhead(w, 2)] };
+    const valid = { priceCents: 175_00, scopeOfWork: 'New tap', durationDays: 1, availableTimes: [dateAhead(w, 2)] };
     await expect(w.h.app.submitFirmQuote(token, valid)).rejects.toThrow(/Estimate first/);
     await estimate(w, job, w.tradies.pete, { priceCents: 150_00, needsInspection: false });
     const fieldOf = async (input: Partial<typeof valid>) => {
@@ -203,11 +209,66 @@ describe('requirements 3 and 4: Estimates and Firm Quotes are apart, and a Firm 
     expect(await fieldOf({ priceCents: NaN })).toEqual(['price']);
     expect(await fieldOf({ scopeOfWork: '  ' })).toEqual(['scopeOfWork']);
     expect(await fieldOf({ durationDays: 0 })).toEqual(['durationDays']);
-    expect(await fieldOf({ availableDates: [] })).toEqual(['availableDates']);
-    expect(await fieldOf({ availableDates: ['2020-01-01'] })).toEqual(['availableDates']);
-    expect(await fieldOf({ availableDates: ['2026-02-30'] })).toEqual(['availableDates']);
-    expect(await fieldOf({ availableDates: [dateAhead(w, 1), dateAhead(w, 2), dateAhead(w, 3), dateAhead(w, 4)] })).toEqual(['availableDates']);
+    expect(await fieldOf({ availableTimes: [] })).toEqual(['availableTimes']);
+    expect(await fieldOf({ availableTimes: ['2020-01-01'] })).toEqual(['availableTimes']);
+    expect(await fieldOf({ availableTimes: ['2026-02-30'] })).toEqual(['availableTimes']);
+    expect(await fieldOf({ availableTimes: [dateAhead(w, 1), dateAhead(w, 2), dateAhead(w, 3), dateAhead(w, 4)] })).toEqual(['availableTimes']);
     await expect(w.h.app.submitFirmQuote('nope', valid)).rejects.toThrow(/not found/);
+  });
+
+  test("a Firm Quote keeps the Tradie's start times in the order they were entered, preferred first", async () => {
+    const w = await world();
+    const job = await askPeteAndDana(w);
+    await estimate(w, job, w.tradies.pete, { priceCents: 150_00, needsInspection: false });
+    // Later instant first: sorting by date would make the earlier backup the preferred time.
+    const preferred = '2026-10-20T04:00:00.000Z';
+    const backup = '2026-10-15T00:00:00.000Z';
+    const firm = await firmQuote(w, job, w.tradies.pete, {
+      priceCents: 175_00,
+      availableTimes: [preferred, '  ', backup, preferred],
+    });
+
+    expect(firm.availableTimes).toEqual([preferred, backup]);
+    expect((await w.h.app.quotePage(await quoteToken(w, job, w.tradies.pete)))!.firmQuote!.availableTimes).toEqual([preferred, backup]);
+
+    await w.alice.chooseQuote(firm.quoteId, 'Usual plumber');
+    await w.alice.sendWorkOrder(job.jobId);
+    expect((await jobView(w, job)).workOrder!.start).toBe(preferred);
+  });
+
+  test('a Firm Quote saved as plain dates is read as 9:00 am in the Agency time zone', async () => {
+    const w = await world();
+    const job = await askPeteAndDana(w);
+    await estimate(w, job, w.tradies.pete, { priceCents: 150_00, needsInspection: false });
+    const firm = await firmQuote(w, job, w.tradies.pete, { priceCents: 175_00, availableTimes: ['2026-10-20T04:00:00.000Z'] });
+    // Quotes from before start times were datetimes store calendar days, preferred day first.
+    await run(w.h.db, 'UPDATE quotes SET available_dates = ?::jsonb WHERE id = ?', JSON.stringify(['2026-10-20', '2026-10-15']), firm.quoteId);
+    // Tue 20 Oct and Thu 15 Oct 2026, 9:00 am Sydney (AEDT, UTC+11). Not midnight UTC.
+    const preferred = '2026-10-19T22:00:00.000Z';
+    const backup = '2026-10-14T22:00:00.000Z';
+
+    const again = (await jobView(w, job)).quotes.find((q) => q.quoteId === firm.quoteId)!;
+    expect(again.availableTimes).toEqual([preferred, backup]);
+    const page = (await w.h.app.quotePage(await quoteToken(w, job, w.tradies.pete)))!;
+    expect(page.firmQuote!.availableTimes).toEqual([preferred, backup]);
+
+    await w.alice.chooseQuote(firm.quoteId, 'Usual plumber');
+    expect((await w.h.app.quotePage(await quoteToken(w, job, w.tradies.pete)))!.offerTimes!.starts).toEqual([preferred, backup]);
+    await w.alice.sendWorkOrder(job.jobId);
+    expect((await jobView(w, job)).workOrder!.start).toBe(preferred);
+  });
+
+  test('a zoneless start time is wall-clock time in the Agency time zone', async () => {
+    const w = await world();
+    const job = await askPeteAndDana(w);
+    await estimate(w, job, w.tradies.pete, { priceCents: 150_00, needsInspection: false });
+    // What a datetime-local input posts: no offset. 9:00 am and 2:30 pm in Sydney (AEDT, UTC+11).
+    const firm = await firmQuote(w, job, w.tradies.pete, { priceCents: 175_00, availableTimes: ['2026-10-13T09:00', '2026-10-14T14:30'] });
+
+    expect(firm.availableTimes).toEqual(['2026-10-12T22:00:00.000Z', '2026-10-14T03:30:00.000Z']);
+    await w.alice.chooseQuote(firm.quoteId, 'Usual plumber');
+    await w.alice.sendWorkOrder(job.jobId);
+    expect((await jobView(w, job)).workOrder!.start).toBe('2026-10-12T22:00:00.000Z');
   });
 
   test('an Estimate is checked too, and given once', async () => {
@@ -247,7 +308,8 @@ describe('requirements 3 and 4: Estimates and Firm Quotes are apart, and a Firm 
   });
 });
 
-describe('requirement 5: proceeding on an Estimate with a Not-to-exceed Cap', () => {
+describe('requirement 5: choosing a Firm Quote (always required)', () => {
+  /** Quote Requests to Pete and Dana, both give routine Estimates (no Site Inspection needed). */
   async function routineEstimates(w: World) {
     const job = await tomsTapTicket(w);
     const [pete, dana] = await confirmedEstimates(w, job, [
@@ -257,58 +319,55 @@ describe('requirement 5: proceeding on an Estimate with a Not-to-exceed Cap', ()
     return { job, pete: pete!, dana: dana! };
   }
 
-  test('a routine Job goes ahead on an Estimate; the cap counts towards the Repair Cost and the others are told', async () => {
-    const w = await world();
-    const { job, pete } = await routineEstimates(w);
-    expect((await quoteRequestFor(w, job, w.tradies.pete)).canProceedOnEstimate).toBe(true);
+  /** Gets Estimates without a Site Inspection, then Firm Quotes and chooses one. */
+  async function routineFirmQuotes(w: World) {
+    const { job } = await routineEstimates(w);
+    const pete = await firmQuote(w, job, w.tradies.pete, { priceCents: 150_00, availableTimes: [dateAhead(w, 2) + 'T09:00:00.000Z'] });
+    const dana = await firmQuote(w, job, w.tradies.dana, { priceCents: 145_00, availableTimes: [dateAhead(w, 3) + 'T10:00:00.000Z'] });
+    return { job, pete, dana };
+  }
 
-    await w.alice.proceedOnEstimate(pete.quoteId, { capCents: 150_00 });
+  test('a routine Job gets Firm Quotes and one is chosen; the Repair Cost is the Firm Quote price, the others are told', async () => {
+    const w = await world();
+    const { job, pete } = await routineFirmQuotes(w);
+
+    await w.alice.chooseQuote(pete.quoteId, 'Usual plumber');
 
     expect(await jobView(w, job)).toMatchObject({ status: 'approved' });
-    expect((await jobView(w, job)).quotes.find((q) => q.quoteId === pete.quoteId)).toMatchObject({ status: 'approved', notToExceedCents: 150_00, priceCents: 120_00 });
+    const firm = (await jobView(w, job)).quotes.find((q) => q.quoteId === pete.quoteId)!;
+    expect(firm).toMatchObject({ status: 'approved', priceCents: 150_00, stage: 'firm' });
+    expect(firm.notToExceedCents).toBeNull();
     expect((await w.alice.ticket(job.ticketId)).repairCostCents).toBe(150_00);
     expect(w.h.messenger.last(w.tradies.dana.address)!.template).toBe('tradie.not_chosen');
-    expect((await w.alice.ticket(job.ticketId)).timeline.find((e) => e.kind === 'proceeded_on_estimate')).toMatchObject({ priceCents: 120_00, capCents: 150_00 });
+    expect((await w.alice.ticket(job.ticketId)).timeline.find((e) => e.kind === 'quote_chosen')).toMatchObject({ priceCents: 150_00, tradie: "Pete's Plumbing" });
   });
 
-  test('a cap over the Max Repair Cost goes to the Property Owner', async () => {
+  test('choosing an Estimate is refused: a Firm Quote is always required', async () => {
     const w = await world();
     const { job, pete } = await routineEstimates(w);
-    await w.alice.proceedOnEstimate(pete.quoteId, { capCents: 600_00 });
+
+    await expect(w.alice.chooseQuote(pete.quoteId, 'x')).rejects.toThrow(/An Estimate is not a Firm Quote/);
+    expect(await jobView(w, job)).toMatchObject({ status: 'quoting' });
+  });
+
+  test('an expensive Firm Quote goes to the Property Owner for approval', async () => {
+    const w = await world();
+    const { job } = await routineEstimates(w);
+    const pete = await firmQuote(w, job, w.tradies.pete, { priceCents: 600_00, availableTimes: [dateAhead(w, 2) + 'T09:00:00.000Z'] });
+
+    await w.alice.chooseQuote(pete.quoteId, 'Only Firm Quote in');
+
     expect(await jobView(w, job)).toMatchObject({ status: 'awaiting_owner' });
     expect(w.h.messenger.last('+61400000100')).toMatchObject({ template: 'owner.approval_request', data: { quotePriceCents: 600_00 } });
   });
 
-  test('refused below the Estimate, when the Tradie needs an inspection, on a High Ticket without confirm, and with one Estimate and no reason', async () => {
-    const w = await world();
-    const { job, pete } = await routineEstimates(w);
-    await expect(w.alice.proceedOnEstimate(pete.quoteId, { capCents: 100_00 })).rejects.toThrow(/can't be below the Estimate of \$120\.00/);
-
-    const peteRequest = await quoteRequestFor(w, job, w.tradies.pete);
-    await w.alice.setInspectionNeeded(peteRequest.quoteRequestId, true);
-    await expect(w.alice.proceedOnEstimate(pete.quoteId, { capCents: 150_00 })).rejects.toThrow(/needs a Site Inspection/);
-    expect((await quoteRequestFor(w, job, w.tradies.pete)).canProceedOnEstimate).toBe(false);
-    await w.alice.setInspectionNeeded(peteRequest.quoteRequestId, false);
-
-    await w.alice.changeUrgency({ ticketId: job.ticketId }, 'high');
-    await expect(w.alice.proceedOnEstimate(pete.quoteId, { capCents: 150_00 })).rejects.toThrow(/for Routine Jobs/);
-    await w.alice.proceedOnEstimate(pete.quoteId, { capCents: 150_00, confirm: true });
-    expect(await jobView(w, job)).toMatchObject({ status: 'approved' });
-
-    const w2 = await world();
-    const lone = await tomsTapTicket(w2);
-    const [only] = await confirmedEstimates(w2, lone, [[w2.tradies.pete, 120_00]]);
-    await expect(w2.alice.proceedOnEstimate(only!.quoteId, { capCents: 150_00 })).rejects.toThrow(/at least two/);
-    await w2.alice.proceedOnEstimate(only!.quoteId, { capCents: 150_00, reason: 'Small job, usual plumber' });
-    expect(await jobView(w2, lone)).toMatchObject({ status: 'approved', quotes: [{ reason: 'Small job, usual plumber' }] });
-  });
-
-  test('a Tradie who asked to inspect is never proceeded on', async () => {
+  test('an Estimate needs at least a Site Inspection or a Firm Quote before it can be chosen', async () => {
     const w = await world();
     const job = await askPeteAndDana(w);
     await estimate(w, job, w.tradies.pete, { priceCents: 120_00, needsInspection: true, calloutFeeCents: 60_00 });
     const quote = (await quoteRequestFor(w, job, w.tradies.pete)).estimate!;
-    await expect(w.alice.proceedOnEstimate(quote.quoteId, { capCents: 150_00, reason: 'x' })).rejects.toThrow(/needs a Site Inspection/);
+
+    await expect(w.alice.chooseQuote(quote.quoteId, 'x')).rejects.toThrow(/An Estimate is not a Firm Quote/);
   });
 });
 
@@ -377,8 +436,8 @@ describe('the Property Manager enters a Firm Quote the Tradie sent another way',
     await estimate(w, job, w.tradies.pete, { priceCents: 180_00, needsInspection: false });
     const pete = await quoteRequestFor(w, job, w.tradies.pete);
 
-    await expect(w.alice.enterFirmQuote(pete.quoteRequestId, { priceCents: 190_00, scopeOfWork: ' ', durationDays: 1, availableDates: [dateAhead(w, 2)] })).rejects.toThrow(/scope of work/);
-    await w.alice.enterFirmQuote(pete.quoteRequestId, { priceCents: 190_00, scopeOfWork: 'Replace the cartridge', durationDays: 2, availableDates: [dateAhead(w, 2), dateAhead(w, 3)] });
+    await expect(w.alice.enterFirmQuote(pete.quoteRequestId, { priceCents: 190_00, scopeOfWork: ' ', durationDays: 1, availableTimes: [dateAhead(w, 2)] })).rejects.toThrow(/scope of work/);
+    await w.alice.enterFirmQuote(pete.quoteRequestId, { priceCents: 190_00, scopeOfWork: 'Replace the cartridge', durationDays: 2, availableTimes: [dateAhead(w, 2), dateAhead(w, 3)] });
 
     const view = await jobView(w, job);
     expect(view.quoteRequests.find((r) => r.tradieId === w.tradies.pete.id)).toMatchObject({ status: 'firm_quoted', firmQuote: { priceCents: 190_00, durationDays: 2, confirmed: true } });
@@ -394,7 +453,7 @@ describe('the Property Manager enters a Firm Quote the Tradie sent another way',
     const other = await w.h.app.setup.createAgency({ name: 'Other Realty', timeZone: 'Australia/Sydney' });
     const olga = w.h.as(await w.h.app.setup.addPropertyManager(other, { name: 'Olga Other', email: 'olga@other.example', password: 'other-password' }));
 
-    await expect(olga.enterFirmQuote(pete.quoteRequestId, { priceCents: 190_00, scopeOfWork: 'Replace the cartridge', durationDays: 1, availableDates: [dateAhead(w, 2)] })).rejects.toThrow(/Quote Request/);
+    await expect(olga.enterFirmQuote(pete.quoteRequestId, { priceCents: 190_00, scopeOfWork: 'Replace the cartridge', durationDays: 1, availableTimes: [dateAhead(w, 2)] })).rejects.toThrow(/Quote Request/);
     expect((await quoteRequestFor(w, job, w.tradies.pete)).status).toBe('estimated');
   });
 });
@@ -406,9 +465,8 @@ describe('the timeline records what happens to each Site Inspection', () => {
     await estimate(w, job, w.tradies.pete, { priceCents: 120_00, needsInspection: false });
     await estimate(w, job, w.tradies.dana, { priceCents: 160_00, needsInspection: true });
     await w.alice.bookInspection((await quoteRequestFor(w, job, w.tradies.dana)).quoteRequestId, { start: TUE_10AM.toISOString() });
-    const pete = (await quoteRequestFor(w, job, w.tradies.pete)).estimate!;
-
-    await w.alice.proceedOnEstimate(pete.quoteId, { capCents: 150_00 });
+    const peteQuote = await firmQuote(w, job, w.tradies.pete, { priceCents: 150_00, availableTimes: [dateAhead(w, 2) + 'T09:00:00.000Z'] });
+    await w.alice.chooseQuote(peteQuote.quoteId, 'Usual plumber');
 
     expect((await w.alice.ticket(job.ticketId)).timeline.findLast((e) => e.kind === 'inspection_cancelled')).toMatchObject({ tradie: 'Drip Doctors', visitStart: TUE_10AM.toISOString(), why: 'quote_approved' });
   });
@@ -527,7 +585,6 @@ describe('amounts are checked for size', () => {
     const dana = (await quoteRequestFor(w, job, w.tradies.dana)).estimate!;
     await expect(w.alice.confirmQuote(dana.quoteId, { priceCents: huge })).rejects.toThrow(/\$1,000,000/);
     await w.alice.confirmQuote(dana.quoteId);
-    await expect(w.alice.proceedOnEstimate(dana.quoteId, { capCents: huge })).rejects.toMatchObject({ fields: { cap: expect.any(String) } });
   });
 
   test('a refused Firm Quote leaves no PDF behind', async () => {
@@ -539,11 +596,11 @@ describe('amounts are checked for size', () => {
 
     // Before the Estimate, and then with a bad price.
     await expect(
-      w.h.app.submitFirmQuote(await quoteToken(w, job, w.tradies.pete), { priceCents: 200_00, scopeOfWork: 'New tap', durationDays: 1, availableDates: [dateAhead(w, 2)], pdf }),
+      w.h.app.submitFirmQuote(await quoteToken(w, job, w.tradies.pete), { priceCents: 200_00, scopeOfWork: 'New tap', durationDays: 1, availableTimes: [dateAhead(w, 2)], pdf }),
     ).rejects.toThrow(/Estimate first/);
     await estimate(w, job, w.tradies.dana, { priceCents: 160_00, needsInspection: true });
     await expect(
-      w.h.app.submitFirmQuote(await quoteToken(w, job, w.tradies.dana), { priceCents: 200_00, scopeOfWork: 'New tap', durationDays: 1, availableDates: [dateAhead(w, 2)], pdf }),
+      w.h.app.submitFirmQuote(await quoteToken(w, job, w.tradies.dana), { priceCents: 200_00, scopeOfWork: 'New tap', durationDays: 1, availableTimes: [dateAhead(w, 2)], pdf }),
     ).rejects.toThrow(/Site Inspection comes first/);
 
     expect(await files()).toBe(before);
@@ -565,21 +622,21 @@ describe("the Tradie's quote page while the Property Owner decides", () => {
     expect(await w.h.app.quotePage(await quoteToken(w, job, w.tradies.dana))).toMatchObject({ outcome: 'on_hold', next: 'done' });
   });
 
-  test("the Property Owner's NO clears the Not-to-exceed Cap from the declined Estimate", async () => {
+  test("the Property Owner's NO declines the chosen Firm Quote", async () => {
     const w = await world();
     const job = await tomsTapTicket(w);
     const [pete] = await confirmedEstimates(w, job, [
       [w.tradies.pete, 120_00],
       [w.tradies.dana, 140_00],
     ]);
-    await w.alice.proceedOnEstimate(pete!.quoteId, { capCents: 600_00 });
+    const peteQuote = await firmQuote(w, job, w.tradies.pete, { priceCents: 600_00, availableTimes: [dateAhead(w, 2) + 'T09:00:00.000Z'] });
+    await w.alice.chooseQuote(peteQuote.quoteId, 'Only Firm Quote in');
     const { approval } = await jobView(w, job);
     w.h.classifier.when('No thanks', { replyType: 'approval_answer', answer: 'no', relatedItem: `approval:${approval!.approvalId}` });
 
     await w.h.receive('+61400000100', 'No thanks');
 
-    expect((await jobView(w, job)).quotes.find((q) => q.quoteId === pete!.quoteId)).toMatchObject({ status: 'declined_by_owner', notToExceedCents: null });
-    expect((await w.h.app.quotePage(await quoteToken(w, job, w.tradies.pete)))!.estimate).toMatchObject({ notToExceedCents: null });
+    expect((await jobView(w, job)).quotes.find((q) => q.quoteId === peteQuote.quoteId)).toMatchObject({ status: 'declined_by_owner' });
     expect((await w.alice.ticket(job.ticketId)).timeline.findLast((e) => e.kind === 'owner_declined')).toMatchObject({ priceCents: 600_00 });
   });
 });

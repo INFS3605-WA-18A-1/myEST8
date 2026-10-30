@@ -129,8 +129,9 @@ function hanasHallwayLight(k: Kit) {
   });
   s.on(6, '15:30', 'Sam quotes', () => k.quote(ids.sam, job, '$140 to replace the fitting, tomorrow 2pm', 140_00));
   s.on(6, '17:30', 'Erin quotes', () => k.quote(ids.erin, job, '$185 incl GST, Friday 9am', 185_00));
-  s.on(7, '08:30', "Alice proceeds on Sam's Estimate, capped at $160, and books him", async () => {
-    await k.proceed(job, ids.sam, 160_00);
+  s.on(7, '08:30', "Sam gives a Firm Quote; Alice chooses it at $160 and books him", async () => {
+    await k.firmQuote(ids.sam, job, { priceCents: 160_00, scopeOfWork: "Replace the light fitting", durationDays: 1 });
+    await k.choose(job, ids.sam);
     await k.book(job, k.at(8, '14:00'), 60);
   });
   s.on(7, '09:00', 'Hana confirms the visit', () => k.confirmVisit(ids.hana, job, 'Sounds good, thanks'));
@@ -188,8 +189,9 @@ function priyasBlockedToilet(k: Kit) {
     k.quote(ids.quinn, job, 'Hi, $240 + GST to clear the blockage in Glebe. Could attend Thursday 9am.', 240_00),
   );
   s.on(1, '16:30', 'Finn quotes', () => k.quote(ids.finn, job, '$190 for the Glebe job, tomorrow 11am', 190_00));
-  s.on(2, '09:10', "Bob proceeds on Finn's Estimate, capped at $220, and books him", async () => {
-    await k.proceed(job, ids.finn, 220_00);
+  s.on(2, '09:10', "Finn gives a Firm Quote; Bob chooses it at $220 and books him", async () => {
+    await k.firmQuote(ids.finn, job, { priceCents: 220_00, scopeOfWork: "As quoted", durationDays: 1 });
+    await k.choose(job, ids.finn);
     await k.book(job, k.at(2, '11:00'), 90);
   });
   s.on(2, '09:20', 'Priya confirms the visit', () => k.confirmVisit(ids.priya, job, 'Yes, see you then'));
@@ -214,14 +216,29 @@ function bellasOvenDoor(k: Kit) {
   });
   s.on(0, '17:00', 'Ally quotes by email', () => k.quote(ids.ally, job, 'Hi Bob, $150 inc GST to replace the door seal, Wednesday 10am.', 150_00));
   s.on(1, '09:00', 'Arlo quotes by email', () => k.quote(ids.arlo, job, 'We can do it for $210 + GST, Friday 2pm', 210_00));
-  s.on(1, '11:00', "Bob proceeds on Ally's Estimate, capped at $180, and books her", async () => {
-    await k.proceed(job, ids.ally, 180_00);
+  s.on(1, '11:00', "Ally gives a Firm Quote; Bob chooses it at $180 and books her", async () => {
+    await k.firmQuote(ids.ally, job, { priceCents: 180_00, scopeOfWork: "As quoted", durationDays: 1 });
+    await k.choose(job, ids.ally);
     await k.book(job, k.at(2, '10:00'), 60);
   });
   s.on(1, '12:00', 'Bella confirms the visit', () => k.confirmVisit(ids.bella, job, 'Thanks, that works for me'));
   s.on(2, '12:30', 'Ally finishes', () => k.done(ids.ally, job, 'All done at Ocean Ave, new seal fitted'));
   s.on(2, '17:10', 'Bella rates the repair', () => k.tenantRates(ids.bella, job, '5 stars, thanks'));
   s.on(3, '10:00', 'Bob rates Ally and closes the Ticket', () => k.rateAndClose(job, 4));
+}
+
+/** Urgent Repair awaiting review: Maya's ceiling leak at Albion St, its receipt in but not yet forwarded. */
+function mayasCeilingLeak(k: Kit) {
+  const { ids, alice } = k;
+  const s = k.story("Maya's ceiling leak");
+  let receiptToken = '';
+  s.on(9, '10:20', 'Maya texts that water is pouring through the bathroom ceiling', async () => {
+    const sent = await k.say(ids.maya, 'Water is pouring through the bathroom ceiling from the flat above');
+    receiptToken = k.tokenIn(k.expectSent(sent, ids.maya, 'tenant.urgent_repair_reminder'));
+  });
+  s.on(9, '15:40', "Maya uploads the plumber's receipt and claims $340", () =>
+    k.upload(receiptToken, [{ filename: 'receipt.jpg', contentType: 'image/jpeg', content: k.sample('receipt') }], { amountCents: 340_00 }),
+  );
 }
 
 /** Urgent Repair, its Reimbursement Request forwarded: Noah's burst pipe at Llewellyn St, fixed by Dana after hours. */
@@ -379,8 +396,9 @@ function mayasDoorHandle(k: Kit) {
   s.on(6, '11:00', 'Carl quotes', () => k.quote(ids.carl, job, '$120 for the Annandale job, tomorrow 10am', 120_00));
   // Harry is also quoting in Marrickville, so he names the suburb.
   s.on(6, '12:15', 'Harry quotes', () => k.quote(ids.harry, job, '$95 + GST for the Annandale job, Thursday 1pm', 95_00));
-  s.on(6, '13:30', "Alice proceeds on Carl's Estimate, capped at $140, and books him", async () => {
-    await k.proceed(job, ids.carl, 140_00);
+  s.on(6, '13:30', "Carl gives a Firm Quote; Alice chooses it at $140 and books him", async () => {
+    await k.firmQuote(ids.carl, job, { priceCents: 140_00, scopeOfWork: "As quoted", durationDays: 1 });
+    await k.choose(job, ids.carl);
     await k.book(job, k.at(7, '10:00'), 60);
   });
   s.on(6, '14:00', 'Maya confirms the visit', () => k.confirmVisit(ids.maya, job, 'Yes, that works'));
@@ -428,8 +446,9 @@ function liamsLightSwitch(k: Kit) {
   });
   s.on(7, '09:30', 'Sam quotes', () => k.quote(ids.sam, job, '$180 for the Camperdown job, Thursday 9am', 180_00));
   s.on(7, '10:00', 'Erin quotes', () => k.quote(ids.erin, job, '$165 incl GST, Friday 1pm', 165_00));
-  s.on(7, '11:00', "Alice confirms both and proceeds on Erin's Estimate, capped at $180", async () => {
-    await k.proceed(job, ids.erin, 180_00);
+  s.on(7, '11:00', "Alice confirms both Estimates and Erin gives a Firm Quote; Alice chooses it at $180", async () => {
+    await k.firmQuote(ids.erin, job, { priceCents: 180_00, scopeOfWork: "As quoted", durationDays: 1 });
+    await k.choose(job, ids.erin);
   });
   s.on(9, '19:30', "Liam reports the building's intercom, a Common Area with no Building Manager on file", () =>
     k.say(ids.liam, 'The intercom at the front entrance has stopped working', { toInbox: 'common_area_no_building_manager' }),
@@ -451,8 +470,9 @@ function weisRunningToilet(k: Kit) {
   });
   s.on(8, '12:00', 'Finn quotes', () => k.quote(ids.finn, job, '$180 for the Newtown job, Mon 8am', 180_00));
   s.on(8, '13:30', 'Nina quotes', () => k.quote(ids.nina, job, 'Can do it for $210, Tuesday 9am', 210_00));
-  s.on(8, '15:10', "Alice proceeds on Finn's Estimate and books him for the next weekday", async () => {
-    await k.proceed(job, ids.finn, 200_00);
+  s.on(8, '15:10', "Finn gives a Firm Quote; Alice chooses it and books him for the next weekday", async () => {
+    await k.firmQuote(ids.finn, job, { priceCents: 200_00, scopeOfWork: "As quoted", durationDays: 1 });
+    await k.choose(job, ids.finn);
     await k.book(job, k.upcoming(1, '09:00'), 120);
   });
   s.on(8, '15:30', 'Wei confirms the visit', () => k.confirmVisit(ids.wei, job, 'Yes that works, thanks'));
@@ -532,8 +552,9 @@ function omarsStiffLock(k: Kit) {
   });
   s.on(7, '19:20', 'Lucy quotes', () => k.quote(ids.lucy, job, '$165 to service the lock, Tuesday 2pm', 165_00));
   s.on(7, '19:40', 'Kev quotes', () => k.quote(ids.kev, job, '$210 incl GST, tomorrow 3pm', 210_00));
-  s.on(7, '20:00', "Bob proceeds on Lucy's Estimate and books her", async () => {
-    await k.proceed(job, ids.lucy, 180_00);
+  s.on(7, '20:00', "Lucy gives a Firm Quote; Bob chooses it and books her", async () => {
+    await k.firmQuote(ids.lucy, job, { priceCents: 180_00, scopeOfWork: "As quoted", durationDays: 1 });
+    await k.choose(job, ids.lucy);
     await k.book(job, k.upcoming(2, '13:00'), 60);
   });
   s.on(7, '21:00', 'Omar asks for another day', async () => {
@@ -572,8 +593,9 @@ function bellasDishwasher(k: Kit) {
   });
   s.on(7, '13:00', 'Ally quotes by email', () => k.quote(ids.ally, job, '$185 inc GST for the Bondi job, Wednesday 1pm', 185_00));
   s.on(7, '15:30', 'Arlo quotes by email', () => k.quote(ids.arlo, job, '$230 + GST, Thursday 9am', 230_00));
-  s.on(7, '17:00', "Bob proceeds on Ally's Estimate and books her six weekdays out", async () => {
-    await k.proceed(job, ids.ally, 200_00);
+  s.on(7, '17:00', "Ally gives a Firm Quote; Bob chooses it and books her six weekdays out", async () => {
+    await k.firmQuote(ids.ally, job, { priceCents: 200_00, scopeOfWork: "As quoted", durationDays: 1 });
+    await k.choose(job, ids.ally);
     await k.book(job, k.upcoming(6, '13:00'), 120);
   });
   s.on(7, '18:10', 'Bella confirms the visit', () => k.confirmVisit(ids.bella, job, 'Thanks, that works for me'));
@@ -599,6 +621,7 @@ const STORIES: ((k: Kit) => void)[] = [
   weisLeakingTap,
   priyasBlockedToilet,
   bellasOvenDoor,
+  mayasCeilingLeak,
   noahsBurstPipe,
   ethansLeakingRoof,
   priyasHotWater,
@@ -849,7 +872,7 @@ async function createKit({ app, simulator, seed, clock, end }: { app: App; simul
       const { year, month, day } = wallClock(new Date(now().getTime() + days * 24 * 60 * MINUTE_MS), DEMO_TIME_ZONE);
       return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     };
-    await app.submitFirmQuote(await quoteToken(tradieId, ref), { ...input, availableDates: [date(2), date(3)] });
+    await app.submitFirmQuote(await quoteToken(tradieId, ref), { ...input, availableTimes: [date(2), date(3)].map((d) => `${d}T09:00:00.000Z`) });
     await tick();
   }
 
@@ -862,26 +885,17 @@ async function createKit({ app, simulator, seed, clock, end }: { app: App; simul
   /** Chooses this Tradie's Firm Quote. Returns what myEST8 sent as a result. */
   async function choose(ref: JobRef, tradieId: number) {
     await confirmQuotes(ref);
-    const chosen = (await view(ref)).quotes.find((q) => q.tradieId === tradieId && q.stage === 'firm');
+    const jobView_ = await view(ref);
+    const chosen = jobView_.quotes.find((q) => q.tradieId === tradieId && q.stage === 'firm');
     if (!chosen) throw new Error(`${person(tradieId).name} has no Firm Quote on the ${ref.trade} Job`);
+    const firmCount = jobView_.quotes.filter((q) => q.stage === 'firm' && q.confirmed).length;
+    const reason = firmCount < 2 ? 'Demo: only one Firm Quote' : undefined;
     const sentBefore = (await outbox()).length;
-    await ref.pm.chooseQuote(chosen.quoteId);
+    await ref.pm.chooseQuote(chosen.quoteId, reason);
     await tick();
     return (await outbox()).slice(sentBefore);
   }
 
-  /** Confirms the Job's Estimates and proceeds on this Tradie's with a Not-to-exceed Cap. Returns what myEST8 sent as a result. */
-  async function proceed(ref: JobRef, tradieId: number, capCents: number) {
-    await confirmQuotes(ref);
-    const estimate = (await view(ref)).quotes.find((q) => q.tradieId === tradieId && q.stage === 'estimate');
-    if (!estimate) throw new Error(`${person(tradieId).name} has no Estimate on the ${ref.trade} Job`);
-    const sentBefore = (await outbox()).length;
-    await ref.pm.proceedOnEstimate(estimate.quoteId, { capCents });
-    await tick();
-    return (await outbox()).slice(sentBefore);
-  }
-
-  /** Sends the Work Order for a visit starting at `start`. */
   async function book(ref: JobRef, start: Date, minutes: number) {
     await ref.pm.sendWorkOrder((await view(ref)).jobId, { start: start.toISOString(), durationMinutes: minutes });
     await tick();
@@ -959,7 +973,6 @@ async function createKit({ app, simulator, seed, clock, end }: { app: App; simul
     firmQuote,
     confirmQuotes,
     choose,
-    proceed,
     book,
     bookInspection,
     confirmVisit,

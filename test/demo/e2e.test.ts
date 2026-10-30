@@ -96,7 +96,7 @@ describe('the demo script', () => {
     const quoteRequest = (await d.demo.outbox(d.seed.ids.aliceId)).find((m) => m.to === '+61400000200' && m.template === 'tradie.quote_request')!;
     const quotePath = new URL(/https?:\/\/\S+\/q\/[\w-]+/.exec(quoteRequest.text)![0]).pathname;
     const firm = new FormData();
-    for (const [name, value] of Object.entries({ price: '650', scopeOfWork: 'Replace the tap cartridge and washer', durationDays: '1', availableDates: '2026-10-13', proposedTime: '2026-10-13T09:00' })) firm.set(name, value);
+    for (const [name, value] of Object.entries({ price: '650', scopeOfWork: 'Replace the tap cartridge and washer', durationDays: '1', availableTimes: '2026-10-13', proposedTime: '2026-10-13T09:00' })) firm.set(name, value);
     // The Estimate came by SMS, so the page asks for the Firm Quote next.
     expect(await (await d.web.request(quotePath)).text()).not.toContain('Give your Estimate');
     expect((await d.web.request(`${quotePath}/firm`, { method: 'POST', body: firm })).status).toBe(303);

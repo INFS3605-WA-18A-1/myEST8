@@ -98,21 +98,17 @@ _Avoid_: site quote, site visit (on its own), onsite quote
 What a Tradie charges for a Site Inspection, owed whether or not they get the Job.
 
 **Firm Quote**:
-A Tradie's fixed price for a defined scope of work, with a projected timeline and the dates they can start. Binding once accepted. It supersedes the same Tradie's Estimate, which stays on record.
+A Tradie's fixed price for a defined scope of work, with a projected timeline and the dates and times they can start. Binding once accepted. It supersedes the same Tradie's Estimate, which stays on record. Always required before a Job can move forward; a Site Inspection may or may not be needed before one (see ADR 0016).
 _Avoid_: final quote, formal quote
-
-**Not-to-exceed Cap**:
-The most a Tradie may charge when the Property Manager proceeds on an Estimate for a cheap routine Job instead of waiting for a Firm Quote.
-_Avoid_: limit, ceiling
 
 **Work Order**:
 The confirmation sent to the chosen Tradie that authorises them to do a Job. For a repair, the Tradie offers a preferred time and up to two more, and the Tenant picks one; the Property Manager can still book or move a time, which supersedes an open offer. Every Tenant visit message has a link to confirm the time and a link to ask for another. A Site Inspection stays booked by the Property Manager.
 _Avoid_: notice of work confirmation, job confirmation
 
-**Repair Cost**:
-The total of the approved Quotes across a Ticket's Jobs: each Firm Quote's price, or the Not-to-exceed Cap where the Property Manager proceeded on an Estimate.
-_Avoid_: repair amount, total cost
 
+**Repair Cost**:
+The total of the approved Firm Quotes across a Ticket's Jobs.
+_Avoid_: repair amount, total cost
 **Max Repair Cost**:
 The most a Ticket's Repair Cost can reach on a Property before the Property Owner must approve.
 _Avoid_: spending limit, approval limit

@@ -137,7 +137,7 @@ test('the Tradie offers visit times and the Tenant books one', async ({ page, br
     await tradie.getByLabel('Firm price ($)').fill(price);
     await tradie.getByLabel('Scope of work').fill(scope);
     await tradie.getByLabel('How many days it takes').fill('1');
-    await tradie.getByLabel('Start date 1').fill(daysAhead(3).date);
+    await tradie.getByLabel('Preferred date and time').fill(daysAhead(3).date + 'T09:00');
     await tradie.getByRole('button', { name: 'Send Firm Quote' }).click();
     await expect(tradie.getByRole('status')).toContainText('has your Firm Quote');
   }
@@ -235,7 +235,7 @@ test('none of the times work, so the Tenant says when they are home and the Trad
     await tradie.getByLabel('Firm price ($)').fill(price);
     await tradie.getByLabel('Scope of work').fill(scope);
     await tradie.getByLabel('How many days it takes').fill('1');
-    await tradie.getByLabel('Start date 1').fill(daysAhead(3).date);
+    await tradie.getByLabel('Preferred date and time').fill(daysAhead(3).date + 'T09:00');
     await tradie.getByRole('button', { name: 'Send Firm Quote' }).click();
     await expect(tradie.getByRole('status')).toContainText('has your Firm Quote');
   }
@@ -341,7 +341,7 @@ test('a booked visit can ask for another time, and the Ticket can ask the Tradie
     await tradie.getByLabel('Firm price ($)').fill(price);
     await tradie.getByLabel('Scope of work').fill(scope);
     await tradie.getByLabel('How many days it takes').fill('1');
-    await tradie.getByLabel('Start date 1').fill(daysAhead(3).date);
+    await tradie.getByLabel('Preferred date and time').fill(daysAhead(3).date + 'T09:00');
     await tradie.getByRole('button', { name: 'Send Firm Quote' }).click();
     await expect(tradie.getByRole('status')).toContainText('has your Firm Quote');
   }
@@ -468,7 +468,7 @@ test('a Property Manager moves a visit and the Tenant confirms it from the email
     await tradie.getByLabel('Firm price ($)').fill(price);
     await tradie.getByLabel('Scope of work').fill(scope);
     await tradie.getByLabel('How many days it takes').fill('1');
-    await tradie.getByLabel('Start date 1').fill(daysAhead(3).date);
+    await tradie.getByLabel('Preferred date and time').fill(daysAhead(3).date + 'T09:00');
     await tradie.getByRole('button', { name: 'Send Firm Quote' }).click();
     await expect(tradie.getByRole('status')).toContainText('has your Firm Quote');
   }

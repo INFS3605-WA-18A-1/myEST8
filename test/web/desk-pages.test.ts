@@ -3,9 +3,9 @@
 
 import { describe, expect, test } from 'vitest';
 import type { Trade } from '../../src/shared.ts';
-import { HOUR } from '../support/harness.ts';
+import { AGENCY_NUMBER, HOUR } from '../support/harness.ts';
 import { visible, webWorld } from '../support/web.ts';
-import { BELLA, confirmedQuotes, HANA, KING_ST, OCEAN_AVE, OLIVIA, TOM } from '../support/world.ts';
+import { BELLA, confirmedQuotes, HANA, KING_ST, OCEAN_AVE, OLIVIA, OLIVIA_EMAIL, TOM } from '../support/world.ts';
 
 type Web = Awaited<ReturnType<typeof webWorld>>;
 
@@ -74,6 +74,24 @@ function sectionOf(html: string, title: string) {
 
 /** The table row that links to Ticket `id`, or '' when there is none. */
 const rowOf = (html: string, id: number) => html.split('<tr>').find((r) => r.includes(`href="/tickets/${id}"`)) ?? '';
+
+/** The table row that links to Reimbursement Request `id`, or '' when there is none. */
+const reimbursementRow = (html: string, id: number) => html.split('<tr>').find((r) => r.includes(`href="/reimbursements/${id}"`)) ?? '';
+
+/** Follows a POST's redirect and returns the page it lands on. */
+async function follow(w: Web, res: Response, cookie: string) {
+  expect(res.status).toBe(303);
+  const location = res.headers.get('location')!;
+  return { html: await text(w, location.replace(/#.*/, ''), cookie), location };
+}
+
+/** Tom reports water through the ceiling, an Urgent Repair; returns its receipt link and id. */
+async function burstPipe(w: Web) {
+  w.h.classifier.when('Water is pouring through the ceiling', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'urgent', trade: 'plumbing' });
+  await w.h.receive(TOM, 'Water is pouring through the ceiling');
+  const link = w.h.messenger.last(TOM)!.data.receiptLink as string;
+  return { link, id: (await w.alice.dashboard()).urgentRepairs[0]!.urgentRepairId };
+}
 
 describe('Tickets: new Maintenance Requests', () => {
   test('lists the Maintenance Requests waiting above the open Tickets, oldest first, each with Confirm and a link to its review', async () => {
@@ -353,9 +371,7 @@ describe('Approvals', () => {
 
   test('lists every Reimbursement Request not yet reimbursed, the ones to review first, each opening its page', async () => {
     const w = await webWorld();
-    w.h.classifier.when('Water is pouring through the ceiling', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'urgent', trade: 'plumbing' });
-    await w.h.receive(TOM, 'Water is pouring through the ceiling');
-    const waiting = (await w.alice.dashboard()).urgentRepairs[0]!.urgentRepairId;
+    const { id: waiting } = await burstPipe(w);
     w.h.classifier.when('The front door lock is broken and will not close', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'urgent', trade: 'locksmith' });
     await w.h.receive(HANA, 'The front door lock is broken and will not close');
     const link = w.h.messenger.last(HANA)!.data.receiptLink as string;
@@ -384,5 +400,57 @@ describe('Approvals', () => {
     expect(after).not.toContain(`href="/reimbursements/${received}"`);
     expect(after).toContain(`href="/reimbursements/${waiting}"`);
     expect(railCount(after, '/approvals')).toBeNull();
+  });
+
+  test('forwards an awaiting Reimbursement Request from its row, then marks it reimbursed there', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+    const { link, id } = await burstPipe(w);
+    await w.h.upload(link, [{ filename: 'receipt.pdf', contentType: 'application/pdf', content: new Uint8Array([1]) }], { amountCents: 450_00 });
+
+    const before = await text(w, '/approvals', cookie);
+    const row = reimbursementRow(before, id);
+    expect(row).toContain('Awaiting your review');
+    expect(row).toContain(`action="/reimbursements/${id}/forward?from=approvals"`);
+    expect(row).toContain('value="450.00"');
+    expect(row).toContain('Forward to Owner');
+    expect(row).not.toContain('Mark reimbursed');
+
+    const { html: forwarded, location } = await follow(w, await w.post(`/reimbursements/${id}/forward?from=approvals`, { amount: '$430' }, cookie), cookie);
+    expect(location).toContain('/approvals');
+    expect(visible(forwarded)).toContain('Forwarded to Olivia Owens, the Property Owner, with you copied in.');
+    const forwardedRow = reimbursementRow(forwarded, id);
+    expect(forwardedRow).toContain('With Property Owner');
+    expect(forwardedRow).toContain('Mark reimbursed');
+    expect(forwardedRow).not.toContain('/forward');
+    expect(w.h.messenger.to(OLIVIA_EMAIL)).toMatchObject([
+      { template: 'owner.urgent_repair_receipt', cc: ['alice@harbour.example'], attachments: ['receipt.pdf'], data: { amountCents: 430_00 } },
+    ]);
+
+    const { html: done } = await follow(w, await w.post(`/reimbursements/${id}/reimbursed?from=approvals`, {}, cookie), cookie);
+    expect(visible(done)).toContain('Marked reimbursed. Tom Tran has been told.');
+    expect(reimbursementRow(done, id)).toBe('');
+    expect(w.h.messenger.last(TOM)!.template).toBe('tenant.reimbursed');
+  });
+
+  test('refuses to forward from the row without an amount, or when the Property Owner cannot be reached, and keeps it for review', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+    const { link, id } = await burstPipe(w);
+    await w.h.upload(link, [{ filename: 'receipt.pdf', contentType: 'application/pdf', content: new Uint8Array([1]) }]);
+
+    const blank = await follow(w, await w.post(`/reimbursements/${id}/forward?from=approvals`, { amount: '' }, cookie), cookie);
+    expect(visible(blank.html)).toContain('Enter the amount on the receipt');
+    expect(reimbursementRow(blank.html, id)).toContain('Awaiting your review');
+    expect(w.h.messenger.to(OLIVIA_EMAIL)).toEqual([]);
+
+    // Olivia has only her mobile left, and the Agency has no SMS channel to text it on.
+    await w.alice.editOwner(w.ids.olivia, { name: 'Olivia Owens', mobile: OLIVIA });
+    await w.alice.disconnectServerSms(AGENCY_NUMBER);
+    const unreachable = await follow(w, await w.post(`/reimbursements/${id}/forward?from=approvals`, { amount: '450' }, cookie), cookie);
+    expect(visible(unreachable.html)).toContain("Couldn't send the message: no SMS channel is connected and they have no email address.");
+    expect(visible(unreachable.html)).toContain('Awaiting your review');
+    expect(reimbursementRow(unreachable.html, id)).toContain('Forward to Owner');
+    expect(w.h.messenger.to(OLIVIA_EMAIL)).toEqual([]);
   });
 });

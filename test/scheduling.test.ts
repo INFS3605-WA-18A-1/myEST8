@@ -3,6 +3,8 @@ import { one, run } from '../src/db.ts';
 import {
   BELLA,
   confirmedEstimates,
+  dateAhead,
+  firmQuote,
   confirmedQuotes,
   jobView,
   KING_ST,
@@ -82,7 +84,7 @@ describe('Work Orders', () => {
     expect(tracker.stages.find((s) => s.stage === 'booked')).toMatchObject({ reached: true, visitStart: TUE_9AM.toISOString() });
   });
 
-  test("the Work Order carries what was approved: the Firm Quote's price, or the Estimate's Not-to-exceed Cap", async () => {
+  test("the Work Order carries what was approved: the Firm Quote's price", async () => {
     const w = await world();
     const job = await approvedTapJob(w, w.tradies.pete, TUE_9AM);
     await w.alice.sendWorkOrder(job.jobId);
@@ -95,10 +97,11 @@ describe('Work Orders', () => {
       [w2.tradies.pete, 120_00, TUE_9AM],
       [w2.tradies.dana, 140_00],
     ]);
-    await w2.alice.proceedOnEstimate(pete!.quoteId, { capCents: 180_00 });
+    await firmQuote(w2, capped, w2.tradies.pete, { priceCents: 180_00, availableTimes: [dateAhead(w2, 2) + "T09:00:00.000Z"] });
+    await w2.alice.chooseQuote((await jobView(w2, capped)).quotes.find((q) => q.tradieId === w2.tradies.pete.id && q.stage === "firm")!.quoteId, "Usual plumber");
     await w2.alice.sendWorkOrder(capped.jobId);
-    expect(w2.h.messenger.last(w2.tradies.pete.address)).toMatchObject({ template: 'tradie.work_order', data: { approvedCents: 180_00, stage: 'estimate' } });
-    expect(w2.h.messenger.last(w2.tradies.pete.address)!.text).toContain('Approved on your Estimate: not to exceed $180.00.');
+    expect(w2.h.messenger.last(w2.tradies.pete.address)).toMatchObject({ template: 'tradie.work_order', data: { approvedCents: 180_00, stage: 'firm' } });
+    expect(w2.h.messenger.last(w2.tradies.pete.address)!.text).toContain('Approved: your Firm Quote of $180.00.');
   });
 
   test('the slot is 2 hours by default and can be made longer', async () => {
@@ -111,15 +114,16 @@ describe('Work Orders', () => {
     expect((await jobView(w, job)).workOrder).toMatchObject({ end: sydney('2026-10-13T13:00:00').toISOString() });
   });
 
-  test('a Quote with no proposed time needs the Property Manager to pick a start', async () => {
+  test('a Firm Quote with no proposed time uses its first available time as the start', async () => {
     const w = await world();
     const { alice, tradies } = w;
     const job = await approvedTapJob(w, tradies.pete);
 
-    await expect(alice.sendWorkOrder(job.jobId)).rejects.toThrow(/start time/);
-    await alice.sendWorkOrder(job.jobId, { start: TUE_9AM.toISOString() });
+    await alice.sendWorkOrder(job.jobId);
 
-    expect(await jobView(w, job)).toMatchObject({ status: 'scheduled', workOrder: { start: TUE_9AM.toISOString() } });
+    const view = await jobView(w, job);
+    expect(view).toMatchObject({ status: 'scheduled' });
+    expect(view.workOrder!.start).toBeTruthy();
   });
 
   test("the shared calendar stops a Property Manager double-booking a Tradie a colleague has booked, and shows the colleague's booking", async () => {

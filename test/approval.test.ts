@@ -181,28 +181,6 @@ describe('Property Owner approval', () => {
     expect((await alice.ticket(job.ticketId)).timeline.map((e) => e.kind)).not.toContain('approval_requested');
   });
 
-  test('proceeding on an Estimate is refused the same way when the Owner cannot be reached', async () => {
-    const w = await world();
-    const { h, alice, tradies } = w;
-    const job = await tomsTapTicket(w);
-    const [estimate] = await confirmedEstimates(w, job, [
-      [tradies.pete, 600_00],
-      [tradies.dana, 650_00],
-    ]);
-    await alice.disconnectServerSms(AGENCY_NUMBER);
-    await alice.editOwner(w.ids.olivia, { name: 'Olivia Owens', mobile: OLIVIA });
-    const asked = h.messenger.sent.length;
-
-    await expect(alice.proceedOnEstimate(estimate!.quoteId, { capCents: 600_00 })).rejects.toThrow(
-      "Olivia Owens can't be reached: no SMS channel is connected and they have no email address.",
-    );
-
-    expect(await jobView(w, job)).toMatchObject({ status: 'quoting', approval: null });
-    expect((await jobView(w, job)).quotes.find((q) => q.quoteId === estimate!.quoteId)).toMatchObject({ status: 'open', notToExceedCents: null });
-    expect(await all(h.db, 'SELECT id FROM approvals')).toEqual([]);
-    expect(h.messenger.sent).toHaveLength(asked);
-  });
-
   test('a refused email keeps the approval, schedules the reminder, and warns the Property Manager', async () => {
     const w = await world();
     const { h, alice, tradies } = w;

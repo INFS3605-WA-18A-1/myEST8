@@ -42,7 +42,9 @@ export function createNotifications({ clock, ports, files, modules }: Context) {
     }
     if (person.mobile && (await connected(person, 'sms'))) return { channelType: 'sms', to: person.mobile };
     if (person.email && (await connected(person, 'email'))) return { channelType: 'email', to: person.email };
-    if (!person.mobile && !person.email) throw new Error(`${person.name} has no mobile number or email address`);
+    if (!person.mobile && !person.email) {
+      throw new UndeliverableError('email', '', `${person.name} has no mobile number or email address`, 'they have no mobile number or email address');
+    }
     // A mobile or email address here is one whose channel the Agency hasn't connected.
     const why = [
       person.mobile ? 'no SMS channel is connected' : 'they have no mobile number',

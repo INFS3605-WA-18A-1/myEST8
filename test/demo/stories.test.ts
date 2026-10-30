@@ -25,7 +25,7 @@ describe('the demo stories', () => {
   test('play without a task error and leave the clock at the real time', () => {
     expect(errors).toEqual([]);
     expect(Math.abs(d.clock.now().getTime() - Date.now())).toBeLessThan(5_000);
-    expect(d.stories).toMatchObject({ maintenanceRequests: 4, openTickets: 10, closedTickets: 5, urgentRepairs: 2, inbox: 4, alerts: 5 });
+    expect(d.stories).toMatchObject({ maintenanceRequests: 4, openTickets: 10, closedTickets: 5, urgentRepairs: 3, inbox: 4, alerts: 5 });
   });
 
   test('leave Maintenance Requests with clean photos, flagged photos, no photos, and an Urgency to check', async () => {
@@ -68,7 +68,7 @@ describe('the demo stories', () => {
     expect(new Set(tickets.map((t) => t.urgency))).toEqual(new Set(['high', 'routine']));
   });
 
-  test('leave each Tradie on their own quoting path: a Site Inspection booked beside a Firm Quote, one to book, and Jobs proceeded on an Estimate', async () => {
+  test('leave each Tradie on their own quoting path: a Site Inspection booked beside a Firm Quote, one to book, and Jobs with a chosen Firm Quote', async () => {
     const board = (await dashboard()).tickets;
     const jobs = (await Promise.all(board.map(async (t) => (await alice()).ticket(t.ticketId)))).flatMap((t) => t.jobs);
     const inspecting = jobs.filter((j) => j.status === 'quoting' && j.quoteRequests.some((r) => r.status === 'inspection_booked'));
@@ -77,15 +77,17 @@ describe('the demo stories', () => {
     expect(inspecting[0]!.quoteRequests.find((r) => r.status === 'inspection_booked')!.estimate).toMatchObject({ needsInspection: true, calloutFeeCents: 90_00 });
     expect(jobs.some((j) => j.decision === 'book_inspection')).toBe(true);
     expect(jobs.some((j) => j.decision === 'choose_quote')).toBe(true);
-    expect(jobs.some((j) => j.quotes.some((q) => q.stage === 'estimate' && q.status === 'approved' && q.notToExceedCents !== null))).toBe(true);
+    expect(jobs.some((j) => j.quotes.some((q) => q.stage === 'firm' && q.status === 'approved'))).toBe(true);
     const calendar = (await dashboard()).calendar.filter((b) => b.kind === 'inspection' && b.status === 'active');
     expect(calendar).toHaveLength(1);
   });
 
-  test('raise every kind of alert, Urgent Repairs in both states, and every kind of inbox message', async () => {
+  test('raise every kind of alert, Urgent Repairs at every open state, and every kind of inbox message', async () => {
     const { alerts, urgentRepairs, inbox } = await dashboard();
     expect(new Set(alerts.map((a) => a.kind))).toEqual(new Set(['invite_more_tradies', 'owner_no_reply', 'rating_due', 'tradie_no_visit_times']));
-    expect(new Set(urgentRepairs.map((u) => u.status))).toEqual(new Set(['reminder_sent', 'receipt_forwarded']));
+    expect(new Set(urgentRepairs.map((u) => u.status))).toEqual(new Set(['reminder_sent', 'receipt_received', 'receipt_forwarded']));
+    // One receipt waits for Alice on Approvals, so forwarding to the Property Owner can be shown from there.
+    expect((await (await alice()).approvals()).reimbursements.find((r) => r.tenantName === 'Maya Morris')).toMatchObject({ status: 'receipt_received', amountCents: 340_00 });
     expect(new Set(inbox.map((i) => i.reason))).toEqual(new Set(['unknown_sender', 'other', 'low_confidence', 'common_area_no_building_manager']));
     expect(inbox.find((i) => i.reason === 'low_confidence')?.bestGuess).toBeTruthy();
   });

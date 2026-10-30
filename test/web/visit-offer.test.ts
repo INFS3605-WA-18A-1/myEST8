@@ -17,7 +17,7 @@ async function petesOfferPage() {
     priceCents: 150_00,
     proposedTime: TUE_27_9AM,
     durationDays: 1,
-    availableDates: ['2026-10-27', '2026-10-28'],
+    availableTimes: ['2026-10-26T22:00:00.000Z', '2026-10-27T22:00:00.000Z'],
   });
   await w.alice.chooseQuote(firm.quoteId, 'Usual plumber');
   const path = `/q/${await quoteToken(w, job, w.tradies.pete)}`;
@@ -38,16 +38,17 @@ describe("the Tradie's offer visit times form", () => {
     expect(html).toContain('value="2026-10-28T09:00"');
   });
 
-  test('an approved Estimate offers a 2 hour visit, prefilled from its proposed time', async () => {
+  test('a chosen Firm Quote offers a visit of its duration, prefilled from its available times', async () => {
     const w = await webWorld();
     const job = await tomsTapTicket(w);
     const [pete] = await confirmedEstimates(w, job, [
       [w.tradies.pete, 120_00, TUE_27_9AM],
       [w.tradies.dana, 140_00],
     ]);
-    await w.alice.proceedOnEstimate(pete!.quoteId, { capCents: 180_00 });
+    await firmQuote(w, job, w.tradies.pete, { priceCents: 180_00, availableTimes: [TUE_27_9AM.toISOString()] });
+    await w.alice.chooseQuote((await jobView(w, job)).quotes.find((q) => q.tradieId === w.tradies.pete.id && q.stage === "firm")!.quoteId, "Usual plumber");
     const html = await (await w.get(`/q/${await quoteToken(w, job, w.tradies.pete)}`)).text();
-    expect(visible(html)).toContain('The visit takes 2 hours.');
+    expect(visible(html)).toContain('The visit takes 1 day.');
     expect(html).toContain('value="2026-10-27T09:00"');
   });
 
