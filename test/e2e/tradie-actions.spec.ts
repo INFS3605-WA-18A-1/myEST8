@@ -139,6 +139,8 @@ test("a Work Order email's buttons open their pages, and Mark job done records i
   await page.goto('/tickets');
   // Ethan Evans's Property is Bob's, so it is under All rather than Alice's Mine.
   await page.getByRole('link', { name: 'All', exact: true }).click();
+  // All swaps the list in place; a reload before the address changes would show Mine again.
+  await expect(page).toHaveURL(/filter=all/);
   await eventually(page, () => expect(page.getByText(report).first()).toBeVisible({ timeout: 1_000 }));
   await page.getByRole('link', { name: new RegExp(report) }).first().click();
   const confirm = page.getByRole('button', { name: /^Confirm( anyway)?$/ });
