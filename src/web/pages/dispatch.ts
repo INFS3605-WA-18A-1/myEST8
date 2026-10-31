@@ -128,7 +128,7 @@ export function dispatchPages() {
               stat({ label: 'Visits today', value: bookedToday, hint: 'Work Orders and Site Inspections' }),
             ])}
           </section>
-          ${section({ title: 'To dispatch', id: 'to-dispatch', body: queue(waiting, tradies, timeZone) })}
+          ${section({ title: 'To dispatch', id: 'to-dispatch', body: queue(waiting, tradies, timeZone, actions.now().toISOString()) })}
           <div class="dispatch-board">
             ${mapSection()}
             ${panels(ordered, tradies, bookings, timeZone, tradiesPlaced > 0)}
@@ -186,12 +186,12 @@ export function dispatchPages() {
  * ratings, the nearest ticked; a Job ready to book offers the chosen Tradie's next free
  * times and a start time to send the Work Order for.
  */
-function queue(waiting: Waiting[], tradies: TradieView[], timeZone: string): Html {
+function queue(waiting: Waiting[], tradies: TradieView[], timeZone: string, now: string): Html {
   if (!waiting.length) return emptyState('Nothing to dispatch. Every open Job has its Quote Requests out or its visit booked.');
-  return html`<ul class="dispatch-queue" role="list">${waiting.map((w) => queueCard(w, tradies, timeZone))}</ul>`;
+  return html`<ul class="dispatch-queue" role="list">${waiting.map((w) => queueCard(w, tradies, timeZone, now))}</ul>`;
 }
 
-function queueCard({ job, ticket, property }: Waiting, tradies: TradieView[], timeZone: string): Html {
+function queueCard({ job, ticket, property }: Waiting, tradies: TradieView[], timeZone: string, now: string): Html {
   const id = `dispatch-job-${job.jobId}`;
   return html`<li class="dispatch-card" id="${id}" aria-labelledby="${id}-title">
     <div class="dispatch-card-head">
@@ -204,7 +204,7 @@ function queueCard({ job, ticket, property }: Waiting, tradies: TradieView[], ti
         </p>
       </div>
     </div>
-    ${job.needs === 'tradies' ? quoteRequestForm(job, property, tradies) : workOrderForm(job, timeZone)}
+    ${job.needs === 'tradies' ? quoteRequestForm(job, property, tradies) : workOrderForm(job, timeZone, now)}
   </li>`;
 }
 
@@ -230,10 +230,12 @@ function quoteRequestForm(job: DispatchJob, property: PropertyView, tradies: Tra
   </form>`;
 }
 
-function workOrderForm(job: DispatchJob, timeZone: string): Html {
+function workOrderForm(job: DispatchJob, timeZone: string, now: string): Html {
   const b = job.booking!;
   const id = `dispatch-job-${job.jobId}-start`;
-  const first = b.proposedTime ?? b.freeSlots[0]?.start;
+  // A proposed time that has already passed can't be booked: start from the first free time instead.
+  const proposed = b.proposedTime && Date.parse(b.proposedTime) > Date.parse(now) ? b.proposedTime : null;
+  const first = proposed ?? b.freeSlots[0]?.start;
   return html`<form method="post" action="/dispatch/jobs/${job.jobId}/work-order" class="dispatch-card-body">
     <p class="dispatch-card-legend">
       ${entityLink('tradie', b.businessName, `/tradies/${b.tradieId}`)} approved at <strong class="num">${formatMoney(b.priceCents)}</strong>.
@@ -246,7 +248,7 @@ function workOrderForm(job: DispatchJob, timeZone: string): Html {
       : html`<p class="text-sm text-muted">${b.businessName} has no free time in the next 7 days. Pick a start time.</p>`}
     <div class="ticket-inline-form">
       <div class="min-w-56 flex-1">
-        ${field({ id, label: 'Start', name: 'start', type: 'datetime-local', required: true, value: first ? isoToLocal(first, timeZone) : '', hint: b.proposedTime ? "The Quote's proposed time." : undefined })}
+        ${field({ id, label: 'Start', name: 'start', type: 'datetime-local', required: true, value: first ? isoToLocal(first, timeZone) : '', hint: proposed ? "The Quote's proposed time." : undefined })}
       </div>
       <div class="w-32">${field({ id: `${id}-hours`, label: 'Length (hours)', name: 'hours', type: 'number', value: DEFAULT_VISIT_HOURS, step: '0.5', min: '0.5' })}</div>
       ${button('Send Work Order', { size: 'sm' })}
