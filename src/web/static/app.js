@@ -1,7 +1,14 @@
 // Small enhancements for every page. Pages work without this file: it only adds
 // confirm dialogs, a guard against double submits, dismissable flash messages,
 // the drawer that opens the rail under 1024px, collapsing the rail from 1024px,
-// and closing the user menu.
+// closing the user menu, a loading bar, and in-page navigation (at the end).
+
+// Setup for elements in the page goes through onContent: it runs on the document
+// now, and again on #main's new content after an in-page navigation.
+function onContent(setup) {
+  setup(document);
+  document.addEventListener('myest8:content', (event) => setup(event.detail));
+}
 
 (() => {
   // A button with data-fill="<input id>" and data-value puts that value in the input (a quick choice of time).
@@ -46,19 +53,21 @@
   // stay until closed.
   const X_ICON =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" width="16" height="16" aria-hidden="true" focusable="false"><path d="M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z"/></svg>';
-  for (const flash of document.querySelectorAll('[data-flash]')) {
-    const close = document.createElement('button');
-    close.type = 'button';
-    close.className = 'btn btn-ghost btn-sm btn-square flash-close';
-    close.setAttribute('aria-label', 'Dismiss message');
-    close.innerHTML = X_ICON;
-    close.addEventListener('click', () => flash.remove());
-    flash.append(close);
-    if (flash.dataset.flash === 'ok') {
-      const fade = () => (flash.matches(':hover, :focus-within') ? setTimeout(fade, 2000) : flash.remove());
-      setTimeout(fade, 8000);
+  onContent((root) => {
+    for (const flash of root.querySelectorAll('[data-flash]')) {
+      const close = document.createElement('button');
+      close.type = 'button';
+      close.className = 'btn btn-ghost btn-sm btn-square flash-close';
+      close.setAttribute('aria-label', 'Dismiss message');
+      close.innerHTML = X_ICON;
+      close.addEventListener('click', () => flash.remove());
+      flash.append(close);
+      if (flash.dataset.flash === 'ok') {
+        const fade = () => (flash.matches(':hover, :focus-within') ? setTimeout(fade, 2000) : flash.remove());
+        setTimeout(fade, 8000);
+      }
     }
-  }
+  });
 
   // Drop ?ok= / ?error= from the address bar so a reload doesn't repeat the message.
   const url = new URL(window.location.href);
@@ -145,83 +154,84 @@
 // own share sheet where there is one, a close button, and closing on Escape, a
 // click elsewhere or after picking a channel. Only one panel is open at a time.
 (() => {
-  const shares = [...document.querySelectorAll('details[data-share]')];
-  if (!shares.length) return;
+  const allShares = () => document.querySelectorAll('details[data-share]');
 
   const close = (share, returnFocus = false) => {
     share.open = false;
     if (returnFocus) share.querySelector('summary')?.focus();
   };
 
-  for (const share of shares) {
-    const input = share.querySelector('[data-share-url]');
-    const status = share.querySelector('[data-share-status]');
-    const copy = share.querySelector('[data-share-copy]');
-    const native = share.querySelector('[data-share-native]');
-    const closeButton = share.querySelector('[data-share-close]');
-    let clear;
+  onContent((root) => {
+    for (const share of root.querySelectorAll('details[data-share]')) {
+      const input = share.querySelector('[data-share-url]');
+      const status = share.querySelector('[data-share-status]');
+      const copy = share.querySelector('[data-share-copy]');
+      const native = share.querySelector('[data-share-native]');
+      const closeButton = share.querySelector('[data-share-close]');
+      let clear;
 
-    const say = (message) => {
-      status.textContent = message;
-      clearTimeout(clear);
-      clear = setTimeout(() => (status.textContent = ''), 5000);
-    };
-    const selectLink = () => {
-      input.focus();
-      input.select();
-      input.setSelectionRange(0, input.value.length);
-    };
+      const say = (message) => {
+        status.textContent = message;
+        clearTimeout(clear);
+        clear = setTimeout(() => (status.textContent = ''), 5000);
+      };
+      const selectLink = () => {
+        input.focus();
+        input.select();
+        input.setSelectionRange(0, input.value.length);
+      };
 
-    if (copy) {
-      copy.hidden = false;
-      copy.addEventListener('click', async () => {
-        try {
-          await navigator.clipboard.writeText(input.value);
-          say('Link copied');
-        } catch {
-          selectLink();
-          say('The link is selected: copy it with Ctrl+C, or Cmd+C on a Mac.');
-        }
-      });
-    }
-
-    if (native && typeof navigator.share === 'function') {
-      native.hidden = false;
-      native.querySelector('button')?.addEventListener('click', async () => {
-        try {
-          await navigator.share({ title: share.dataset.shareTitle, text: share.dataset.shareText, url: input.value });
-          close(share, true);
-        } catch (error) {
-          if (error?.name !== 'AbortError') say("Your device's share options didn't open. Copy the link instead.");
-        }
-      });
-    }
-
-    if (closeButton) {
-      closeButton.hidden = false;
-      closeButton.addEventListener('click', () => close(share, true));
-    }
-
-    input.addEventListener('focus', () => input.select());
-    for (const link of share.querySelectorAll('[data-share-channel]')) link.addEventListener('click', () => close(share));
-
-    share.addEventListener('toggle', () => {
-      if (!share.open) {
-        status.textContent = '';
-        return;
+      if (copy) {
+        copy.hidden = false;
+        copy.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(input.value);
+            say('Link copied');
+          } catch {
+            selectLink();
+            say('The link is selected: copy it with Ctrl+C, or Cmd+C on a Mac.');
+          }
+        });
       }
-      for (const other of shares) if (other !== share) other.open = false;
-      // A panel opened near the bottom of a long page is brought into view.
-      if (!window.matchMedia('(max-width: 39.99rem)').matches) share.querySelector('.share-panel')?.scrollIntoView({ block: 'nearest' });
-    });
-  }
+
+      if (native && typeof navigator.share === 'function') {
+        native.hidden = false;
+        native.querySelector('button')?.addEventListener('click', async () => {
+          try {
+            await navigator.share({ title: share.dataset.shareTitle, text: share.dataset.shareText, url: input.value });
+            close(share, true);
+          } catch (error) {
+            if (error?.name !== 'AbortError') say("Your device's share options didn't open. Copy the link instead.");
+          }
+        });
+      }
+
+      if (closeButton) {
+        closeButton.hidden = false;
+        closeButton.addEventListener('click', () => close(share, true));
+      }
+
+      input.addEventListener('focus', () => input.select());
+      for (const link of share.querySelectorAll('[data-share-channel]')) link.addEventListener('click', () => close(share));
+
+      share.addEventListener('toggle', () => {
+        if (!share.open) {
+          status.textContent = '';
+          return;
+        }
+        for (const other of allShares()) if (other !== share) other.open = false;
+        // A panel opened near the bottom of a long page is brought into view.
+        if (!window.matchMedia('(max-width: 39.99rem)').matches) share.querySelector('.share-panel')?.scrollIntoView({ block: 'nearest' });
+      });
+    }
+  });
 
   document.addEventListener('click', (event) => {
-    for (const share of shares) if (share.open && !share.contains(event.target)) close(share);
+    for (const share of allShares()) if (share.open && !share.contains(event.target)) close(share);
   });
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
-    for (const share of shares) if (share.open) close(share, share.contains(document.activeElement));
+    for (const share of allShares()) if (share.open) close(share, share.contains(document.activeElement));
   });
 })();
 
@@ -246,8 +256,8 @@
 // === import ===
 // The review page's "Add N Properties" button counts the ticked rows as they're
 // ticked. Without this file the count is the one the page was drawn with.
-(() => {
-  const form = document.querySelector('[data-import-rows]');
+onContent((root) => {
+  const form = root.querySelector('[data-import-rows]');
   const add = form?.querySelector('[data-import-add]');
   if (!form || !add) return;
   const status = form.querySelector('[data-import-count]');
@@ -262,13 +272,13 @@
   form.addEventListener('change', (event) => {
     if (event.target instanceof HTMLInputElement && event.target.name === 'include') update();
   });
-})();
+});
 
 // === copy ===
 // A button with data-copy-for="<input id>" copies that field. Without this file
 // the field is still there to copy by hand.
-(() => {
-  for (const button of document.querySelectorAll('[data-copy-for]')) {
+onContent((root) => {
+  for (const button of root.querySelectorAll('[data-copy-for]')) {
     button.addEventListener('click', async () => {
       const input = document.getElementById(button.getAttribute('data-copy-for'));
       if (!(input instanceof HTMLInputElement)) return;
@@ -285,7 +295,7 @@
       }
     });
   }
-})();
+});
 
 // === direct upload ===
 // The Tenant upload form (data-direct-upload="<token>") sends its files straight to
@@ -339,12 +349,12 @@
 // === filter bar ===
 // A filter bar's selects apply as soon as one changes, so its Apply button is only
 // for pages without this file.
-(() => {
-  for (const form of document.querySelectorAll('form[data-autosubmit]')) {
+onContent((root) => {
+  for (const form of root.querySelectorAll('form[data-autosubmit]')) {
     form.addEventListener('change', () => form.requestSubmit());
     form.querySelector('.filter-bar-apply')?.setAttribute('hidden', '');
   }
-})();
+});
 
 // === searchable selects ===
 // A <select data-combobox> (field's `search`) becomes a text box that filters its
@@ -491,33 +501,35 @@
     input.addEventListener('invalid', () => input.setCustomValidity(select.value ? '' : 'Choose one from the list'));
   }
 
-  for (const select of document.querySelectorAll('select[data-combobox]')) enhance(select);
+  onContent((root) => {
+    for (const select of root.querySelectorAll('select[data-combobox]')) enhance(select);
 
-  for (const picker of document.querySelectorAll('[data-picker]')) {
-    const rows = picker.querySelector('[data-picker-rows]');
-    const template = picker.querySelector('template[data-picker-template]');
-    const add = picker.querySelector('[data-picker-add]');
-    if (!rows || !template || !add) continue;
-    add.hidden = false;
-    let count = rows.children.length;
-    add.addEventListener('click', () => {
-      const row = template.content.firstElementChild.cloneNode(true);
-      count += 1;
-      for (const element of row.querySelectorAll('[id]')) element.id = `${element.id}-${count}`;
-      for (const label of row.querySelectorAll('label[for]')) label.htmlFor = `${label.htmlFor}-${count}`;
-      rows.append(row);
-      for (const select of row.querySelectorAll('select[data-combobox]')) enhance(select);
-      row.querySelector('input, select')?.focus();
-    });
-    picker.addEventListener('click', (event) => {
-      const remove = event.target instanceof Element ? event.target.closest('[data-picker-remove]') : null;
-      if (!remove) return;
-      const row = remove.closest('[data-picker-row]');
-      const next = row?.nextElementSibling || row?.previousElementSibling;
-      row?.remove();
-      (next?.querySelector('input, select') || add).focus();
-    });
-  }
+    for (const picker of root.querySelectorAll('[data-picker]')) {
+      const rows = picker.querySelector('[data-picker-rows]');
+      const template = picker.querySelector('template[data-picker-template]');
+      const add = picker.querySelector('[data-picker-add]');
+      if (!rows || !template || !add) continue;
+      add.hidden = false;
+      let count = rows.children.length;
+      add.addEventListener('click', () => {
+        const row = template.content.firstElementChild.cloneNode(true);
+        count += 1;
+        for (const element of row.querySelectorAll('[id]')) element.id = `${element.id}-${count}`;
+        for (const label of row.querySelectorAll('label[for]')) label.htmlFor = `${label.htmlFor}-${count}`;
+        rows.append(row);
+        for (const select of row.querySelectorAll('select[data-combobox]')) enhance(select);
+        row.querySelector('input, select')?.focus();
+      });
+      picker.addEventListener('click', (event) => {
+        const remove = event.target instanceof Element ? event.target.closest('[data-picker-remove]') : null;
+        if (!remove) return;
+        const row = remove.closest('[data-picker-row]');
+        const next = row?.nextElementSibling || row?.previousElementSibling;
+        row?.remove();
+        (next?.querySelector('input, select') || add).focus();
+      });
+    }
+  });
 })();
 
 // === schedule ===
@@ -529,50 +541,54 @@
 // shown. There is no transition, so it never animates, including when less
 // motion is asked for.
 (() => {
-  const line = document.querySelector('[data-schedule-now]');
-  if (line) {
-    const zone = line.dataset.zone;
-    const first = Number(line.dataset.first);
-    const last = Number(line.dataset.last);
-    const header = line.dataset.header === '1';
-    const serverNow = Number(line.dataset.now);
-    const today = line.dataset.today;
-    const opened = Date.now();
-    const place = () => {
-      const when = new Date(serverNow + (Date.now() - opened));
-      const parts = new Intl.DateTimeFormat('en-US', {
-        timeZone: zone,
-        hourCycle: 'h23',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: 'numeric',
-        minute: 'numeric',
-      }).formatToParts(when);
-      const part = (type) => parts.find((p) => p.type === type)?.value ?? '';
-      const date = `${part('year')}-${part('month')}-${part('day')}`;
-      const mins = Number(part('hour')) * 60 + Number(part('minute'));
-      const start = first * 60;
-      line.hidden = date !== today || mins < start || mins >= last * 60;
-      const into = mins - start;
-      line.style.gridRow = String(Math.floor(into / 15) + (header ? 2 : 1));
-      const fraction = ((into % 15) + 15) % 15;
-      line.style.setProperty('--now-frac', String(fraction / 15));
-    };
-    setInterval(place, 60_000);
-  }
+  let timer;
+  onContent((root) => {
+    const line = root.querySelector('[data-schedule-now]');
+    clearInterval(timer);
+    if (line) {
+      const zone = line.dataset.zone;
+      const first = Number(line.dataset.first);
+      const last = Number(line.dataset.last);
+      const header = line.dataset.header === '1';
+      const serverNow = Number(line.dataset.now);
+      const today = line.dataset.today;
+      const opened = Date.now();
+      const place = () => {
+        const when = new Date(serverNow + (Date.now() - opened));
+        const parts = new Intl.DateTimeFormat('en-US', {
+          timeZone: zone,
+          hourCycle: 'h23',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: 'numeric',
+          minute: 'numeric',
+        }).formatToParts(when);
+        const part = (type) => parts.find((p) => p.type === type)?.value ?? '';
+        const date = `${part('year')}-${part('month')}-${part('day')}`;
+        const mins = Number(part('hour')) * 60 + Number(part('minute'));
+        const start = first * 60;
+        line.hidden = date !== today || mins < start || mins >= last * 60;
+        const into = mins - start;
+        line.style.gridRow = String(Math.floor(into / 15) + (header ? 2 : 1));
+        const fraction = ((into % 15) + 15) % 15;
+        line.style.setProperty('--now-frac', String(fraction / 15));
+      };
+      timer = setInterval(place, 60_000);
+    }
 
-  // The server marks the hour the grid should open on (an hour before the first
-  // visit, or 7 am). Scroll the frame to it; without this file the grid starts
-  // at the top, which is still the working day.
-  const open = document.querySelector('[data-schedule-open]');
-  const frame = open?.closest('.schedule-scroll');
-  if (open && frame) {
-    const header = frame.querySelector('.schedule-col-title');
-    const headerHeight = header ? header.getBoundingClientRect().height : 0;
-    const top = open.getBoundingClientRect().top - frame.getBoundingClientRect().top + frame.scrollTop;
-    frame.scrollTop = Math.max(0, top - headerHeight);
-  }
+    // The server marks the hour the grid should open on (an hour before the first
+    // visit, or 7 am). Scroll the frame to it; without this file the grid starts
+    // at the top, which is still the working day.
+    const open = root.querySelector('[data-schedule-open]');
+    const frame = open?.closest('.schedule-scroll');
+    if (open && frame) {
+      const header = frame.querySelector('.schedule-col-title');
+      const headerHeight = header ? header.getBoundingClientRect().height : 0;
+      const top = open.getBoundingClientRect().top - frame.getBoundingClientRect().top + frame.scrollTop;
+      frame.scrollTop = Math.max(0, top - headerHeight);
+    }
+  });
 })();
 
 // === photo viewer ===
@@ -721,138 +737,261 @@
 (() => {
   let made = 0;
 
-  for (const input of document.querySelectorAll('input[data-address-suggest]')) {
-    if (!(input instanceof HTMLInputElement) || !input.form) continue;
-    const form = input.form;
-    const suburb = form.elements.namedItem('suburb');
-    const lat = form.elements.namedItem('lat');
-    const lng = form.elements.namedItem('lng');
-    if (!(suburb instanceof HTMLInputElement) || !(lat instanceof HTMLInputElement) || !(lng instanceof HTMLInputElement)) continue;
+  onContent((root) => {
+    for (const input of root.querySelectorAll('input[data-address-suggest]')) {
+      if (!(input instanceof HTMLInputElement) || !input.form) continue;
+      const form = input.form;
+      const suburb = form.elements.namedItem('suburb');
+      const lat = form.elements.namedItem('lat');
+      const lng = form.elements.namedItem('lng');
+      if (!(suburb instanceof HTMLInputElement) || !(lat instanceof HTMLInputElement) || !(lng instanceof HTMLInputElement)) continue;
 
-    const n = ++made;
-    const box = document.createElement('div');
-    box.className = 'combobox';
-    input.before(box);
-    input.classList.add('combobox-input');
-    input.autocomplete = 'off';
-    input.setAttribute('role', 'combobox');
-    input.setAttribute('aria-autocomplete', 'list');
-    input.setAttribute('aria-expanded', 'false');
-    const list = document.createElement('ul');
-    list.className = 'combobox-list';
-    list.id = `address-suggest-${n}-list`;
-    list.setAttribute('role', 'listbox');
-    list.hidden = true;
-    input.setAttribute('aria-controls', list.id);
-    box.append(input, list);
-
-    /** @type {{ label: string, address: string, suburb: string, location: { lat: number, lng: number } }[]} */
-    let shown = [];
-    let active = -1;
-    let timer = 0;
-    let request = 0;
-
-    function setActive(i) {
-      active = i;
-      for (const item of list.querySelectorAll('[role="option"]')) {
-        const on = item.id === `address-suggest-${n}-${i}`;
-        item.classList.toggle('is-active', on);
-        item.setAttribute('aria-selected', on ? 'true' : 'false');
-      }
-      if (i >= 0) {
-        input.setAttribute('aria-activedescendant', `address-suggest-${n}-${i}`);
-        document.getElementById(`address-suggest-${n}-${i}`)?.scrollIntoView({ block: 'nearest' });
-      } else input.removeAttribute('aria-activedescendant');
-    }
-
-    function close() {
-      list.hidden = true;
+      const n = ++made;
+      const box = document.createElement('div');
+      box.className = 'combobox';
+      input.before(box);
+      input.classList.add('combobox-input');
+      input.autocomplete = 'off';
+      input.setAttribute('role', 'combobox');
+      input.setAttribute('aria-autocomplete', 'list');
       input.setAttribute('aria-expanded', 'false');
-      input.removeAttribute('aria-activedescendant');
-    }
+      const list = document.createElement('ul');
+      list.className = 'combobox-list';
+      list.id = `address-suggest-${n}-list`;
+      list.setAttribute('role', 'listbox');
+      list.hidden = true;
+      input.setAttribute('aria-controls', list.id);
+      box.append(input, list);
 
-    /** Drops a suggestion that has been asked for but not drawn yet. */
-    function dropInFlight() {
-      window.clearTimeout(timer);
-      request++;
-    }
+      /** @type {{ label: string, address: string, suburb: string, location: { lat: number, lng: number } }[]} */
+      let shown = [];
+      let active = -1;
+      let timer = 0;
+      let request = 0;
 
-    function render(suggestions) {
-      // The field was left while this reply was on its way.
-      if (document.activeElement !== input) return;
-      shown = suggestions;
-      list.replaceChildren(
-        ...(shown.length
-          ? shown.map((suggestion, i) => {
-              const item = document.createElement('li');
-              item.id = `address-suggest-${n}-${i}`;
-              item.className = 'combobox-option';
-              item.setAttribute('role', 'option');
-              item.setAttribute('aria-selected', 'false');
-              item.textContent = suggestion.label;
-              item.addEventListener('mousedown', (event) => event.preventDefault());
-              item.addEventListener('click', () => choose(suggestion));
-              return item;
-            })
-          : [Object.assign(document.createElement('li'), { className: 'combobox-empty', textContent: 'No matches' })]),
-      );
-      setActive(shown.length ? 0 : -1);
-      list.hidden = false;
-      input.setAttribute('aria-expanded', 'true');
-    }
-
-    function choose(suggestion) {
-      dropInFlight();
-      input.value = suggestion.address;
-      suburb.value = suggestion.suburb;
-      lat.value = String(suggestion.location.lat);
-      lng.value = String(suggestion.location.lng);
-      close();
-    }
-
-    input.addEventListener('input', () => {
-      // A typed change is no longer the pin that was picked.
-      lat.value = '';
-      lng.value = '';
-      window.clearTimeout(timer);
-      const query = input.value.trim();
-      if (query.length < 3) {
-        dropInFlight();
-        return close();
-      }
-      const mine = ++request;
-      timer = window.setTimeout(async () => {
-        let suggestions = [];
-        try {
-          const response = await fetch(`/properties/address-suggestions?q=${encodeURIComponent(query)}`, { headers: { accept: 'application/json' } });
-          const body = response.ok ? await response.json() : [];
-          if (Array.isArray(body)) suggestions = body;
-        } catch {
-          suggestions = [];
+      function setActive(i) {
+        active = i;
+        for (const item of list.querySelectorAll('[role="option"]')) {
+          const on = item.id === `address-suggest-${n}-${i}`;
+          item.classList.toggle('is-active', on);
+          item.setAttribute('aria-selected', on ? 'true' : 'false');
         }
-        if (mine === request) render(suggestions);
-      }, 300);
-    });
+        if (i >= 0) {
+          input.setAttribute('aria-activedescendant', `address-suggest-${n}-${i}`);
+          document.getElementById(`address-suggest-${n}-${i}`)?.scrollIntoView({ block: 'nearest' });
+        } else input.removeAttribute('aria-activedescendant');
+      }
 
-    input.addEventListener('keydown', (event) => {
-      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-        event.preventDefault();
-        if (list.hidden || !shown.length) return;
-        setActive((active + (event.key === 'ArrowDown' ? 1 : shown.length - 1)) % shown.length);
-      } else if (event.key === 'Enter' && !list.hidden && active >= 0) {
-        event.preventDefault();
-        choose(shown[active]);
-      } else if (event.key === 'Escape') {
+      function close() {
+        list.hidden = true;
+        input.setAttribute('aria-expanded', 'false');
+        input.removeAttribute('aria-activedescendant');
+      }
+
+      /** Drops a suggestion that has been asked for but not drawn yet. */
+      function dropInFlight() {
+        window.clearTimeout(timer);
+        request++;
+      }
+
+      function render(suggestions) {
+        // The field was left while this reply was on its way.
+        if (document.activeElement !== input) return;
+        shown = suggestions;
+        list.replaceChildren(
+          ...(shown.length
+            ? shown.map((suggestion, i) => {
+                const item = document.createElement('li');
+                item.id = `address-suggest-${n}-${i}`;
+                item.className = 'combobox-option';
+                item.setAttribute('role', 'option');
+                item.setAttribute('aria-selected', 'false');
+                item.textContent = suggestion.label;
+                item.addEventListener('mousedown', (event) => event.preventDefault());
+                item.addEventListener('click', () => choose(suggestion));
+                return item;
+              })
+            : [Object.assign(document.createElement('li'), { className: 'combobox-empty', textContent: 'No matches' })]),
+        );
+        setActive(shown.length ? 0 : -1);
+        list.hidden = false;
+        input.setAttribute('aria-expanded', 'true');
+      }
+
+      function choose(suggestion) {
         dropInFlight();
-        if (!list.hidden) {
+        input.value = suggestion.address;
+        suburb.value = suggestion.suburb;
+        lat.value = String(suggestion.location.lat);
+        lng.value = String(suggestion.location.lng);
+        close();
+      }
+
+      input.addEventListener('input', () => {
+        // A typed change is no longer the pin that was picked.
+        lat.value = '';
+        lng.value = '';
+        window.clearTimeout(timer);
+        const query = input.value.trim();
+        if (query.length < 3) {
+          dropInFlight();
+          return close();
+        }
+        const mine = ++request;
+        timer = window.setTimeout(async () => {
+          let suggestions = [];
+          try {
+            const response = await fetch(`/properties/address-suggestions?q=${encodeURIComponent(query)}`, { headers: { accept: 'application/json' } });
+            const body = response.ok ? await response.json() : [];
+            if (Array.isArray(body)) suggestions = body;
+          } catch {
+            suggestions = [];
+          }
+          if (mine === request) render(suggestions);
+        }, 300);
+      });
+
+      input.addEventListener('keydown', (event) => {
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
           event.preventDefault();
-          close();
+          if (list.hidden || !shown.length) return;
+          setActive((active + (event.key === 'ArrowDown' ? 1 : shown.length - 1)) % shown.length);
+        } else if (event.key === 'Enter' && !list.hidden && active >= 0) {
+          event.preventDefault();
+          choose(shown[active]);
+        } else if (event.key === 'Escape') {
+          dropInFlight();
+          if (!list.hidden) {
+            event.preventDefault();
+            close();
+          }
         }
+      });
+      input.addEventListener('blur', () => {
+        dropInFlight();
+        close();
+      });
+    }
+  });
+})();
+
+// === loading and in-page navigation ===
+// A thin bar along the top shows while a page or a form's reply is on its way.
+// A link or GET form that stays on the same page and only changes the query (the
+// Schedule's Day, Week and Month, its previous and next, Mine and All, Settings'
+// sections, a filter bar) fetches the page and swaps #main's content in place:
+// the address bar and Back and Forward follow, and onContent's setup runs on the
+// new content. Anything else, a reply that isn't the same page, a failed fetch,
+// or a page with a script of its own (Dispatch's map) is an ordinary navigation.
+(() => {
+  const root = document.documentElement;
+  const bar = document.createElement('div');
+  bar.className = 'nav-progress';
+  bar.setAttribute('aria-hidden', 'true');
+  const status = document.createElement('p');
+  status.className = 'sr-only';
+  status.setAttribute('aria-live', 'polite');
+  document.body.append(bar, status);
+
+  let stopTimer;
+  const start = () => {
+    root.classList.add('is-navigating');
+    // A download doesn't leave the page, so the bar doesn't wait for it forever.
+    clearTimeout(stopTimer);
+    stopTimer = setTimeout(stop, 10_000);
+  };
+  const stop = () => {
+    clearTimeout(stopTimer);
+    root.classList.remove('is-navigating');
+  };
+  window.addEventListener('pageshow', stop);
+
+  const main = document.getElementById('main');
+  const swappable = main && document.querySelector('[data-shell]') && !main.querySelector('script:not([type="application/json"])');
+  const pageOf = (url) => url.pathname + url.search;
+  let current = pageOf(new URL(location.href));
+  let controller;
+
+  // The same page, maybe another query; a jump to an anchor on this page stays with the browser.
+  const samePage = (url) =>
+    swappable && url.origin === location.origin && url.pathname === location.pathname && !(url.search === location.search && url.hash);
+
+  async function load(url, push, focusHref) {
+    controller?.abort();
+    controller = new AbortController();
+    start();
+    main.setAttribute('aria-busy', 'true');
+    try {
+      const response = await fetch(url, { signal: controller.signal, headers: { accept: 'text/html' } });
+      const arrived = new URL(response.url);
+      if (!response.ok || !(response.headers.get('content-type') ?? '').includes('text/html') || arrived.pathname !== url.pathname) throw new Error('not this page');
+      const doc = new DOMParser().parseFromString(await response.text(), 'text/html');
+      const next = doc.getElementById('main');
+      if (!next || next.querySelector('script:not([type="application/json"])')) throw new Error('not this page');
+      arrived.hash = url.hash;
+      if (push) history.pushState(null, '', arrived);
+      current = pageOf(arrived);
+      const focused = main.contains(document.activeElement) ? document.activeElement.id : null;
+      document.title = doc.title;
+      main.replaceChildren(...[...next.childNodes].map((node) => document.importNode(node, true)));
+      document.dispatchEvent(new CustomEvent('myest8:content', { detail: main }));
+      // Focus goes back to the control that was used (a filter, the tab picked), or to the content.
+      const target =
+        (focused && document.getElementById(focused)) ||
+        (focusHref && [...main.querySelectorAll('a[href]')].find((a) => a.href === focusHref)) ||
+        null;
+      if (target) target.focus({ preventScroll: true });
+      else if (focused !== null || focusHref) {
+        main.tabIndex = -1;
+        main.focus({ preventScroll: true });
       }
-    });
-    input.addEventListener('blur', () => {
-      dropInFlight();
-      close();
-    });
+      if (url.hash) document.getElementById(decodeURIComponent(url.hash.slice(1)))?.scrollIntoView();
+      status.textContent = `Loaded ${doc.title}`;
+      main.removeAttribute('aria-busy');
+      stop();
+    } catch (error) {
+      if (error?.name === 'AbortError') return;
+      location.assign(url);
+    }
   }
+
+  // Registered last, so the confirm, photo viewer and upload handlers above have had their say.
+  document.addEventListener('click', (event) => {
+    const link = event.target instanceof Element ? event.target.closest('a[href]') : null;
+    if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if ((link.target && link.target !== '_self') || link.hasAttribute('download')) return;
+    const url = new URL(link.href);
+    if (url.origin !== location.origin) return;
+    if (samePage(url)) {
+      event.preventDefault();
+      load(url, true, link.href);
+    } else if (!(url.pathname === location.pathname && url.search === location.search && url.hash)) {
+      start();
+    }
+  });
+
+  document.addEventListener('submit', (event) => {
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement) || event.defaultPrevented) return;
+    const submitter = event.submitter;
+    const method = (submitter?.getAttribute('formmethod') || form.method).toLowerCase();
+    const url = new URL(submitter?.getAttribute('formaction') || form.action, location.href);
+    if (method === 'get' && !form.target && samePage(new URL(url.pathname, location.href))) {
+      event.preventDefault();
+      url.search = new URLSearchParams(new FormData(form, submitter)).toString();
+      load(url, true).finally(() => {
+        delete form.dataset.submitting;
+        form.removeAttribute('aria-busy');
+      });
+    } else if (!form.target) {
+      start();
+    }
+  });
+
+  window.addEventListener('popstate', () => {
+    const url = new URL(location.href);
+    // Only the hash changed (Dispatch's picked pin, an anchor): nothing to load.
+    if (!swappable || pageOf(url) === current) return;
+    load(url, false);
+  });
 })();

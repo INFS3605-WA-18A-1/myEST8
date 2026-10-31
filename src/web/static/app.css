@@ -6324,3 +6324,57 @@
   }
 }
 
+@layer app {
+  /* Loading (static/app.js): a Harbour bar along the top while a page or a form's reply is on
+     its way. It creeps towards the end and never claims to finish; the new page replaces it. */
+  .nav-progress {
+    position: fixed;
+    inset: 0 0 auto;
+    z-index: 100;
+    height: 3px;
+    background: var(--action);
+    transform: scaleX(0);
+    transform-origin: left;
+    opacity: 0;
+    pointer-events: none;
+  }
+  html.is-navigating .nav-progress {
+    opacity: 1;
+    animation: nav-progress 8s cubic-bezier(0.1, 0.7, 0.2, 1) forwards;
+  }
+  @keyframes nav-progress {
+    from {
+      transform: scaleX(0.05);
+    }
+    to {
+      transform: scaleX(0.9);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html.is-navigating .nav-progress {
+      animation: none;
+      transform: scaleX(1);
+      opacity: 0.6;
+    }
+  }
+  /* Content being replaced in place fades back a little, only after a moment so a quick reply doesn't flicker. */
+  #main[aria-busy='true'] {
+    opacity: 0.55;
+    transition: opacity 150ms ease 150ms;
+  }
+  /* A form on its way: its buttons look and act busy. */
+  form[aria-busy='true'] :is(button, .btn) {
+    cursor: progress;
+    opacity: 0.7;
+  }
+  html.is-navigating {
+    cursor: progress;
+  }
+}
+
+/* Moving to another page cross-fades where the browser can (same origin only). */
+@media (prefers-reduced-motion: no-preference) {
+  @view-transition {
+    navigation: auto;
+  }
+}
