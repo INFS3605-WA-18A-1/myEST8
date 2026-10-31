@@ -139,7 +139,7 @@ test('the views and Back swap the Schedule in place, without loading a new page'
   await page.goto('/calendar?filter=all');
   await expect(page.getByRole('region', { name: 'The week, hour by hour' })).toBeVisible();
   // A full page load would drop this.
-  await page.evaluate(() => Object.assign(window, { samePage: true }));
+  await page.evaluate('window.samePage = true');
 
   const views = page.getByRole('navigation', { name: 'Calendar views' });
   await views.getByRole('link', { name: 'Month' }).click();
@@ -150,5 +150,5 @@ test('the views and Back swap the Schedule in place, without loading a new page'
   await page.goBack();
   await expect(page).not.toHaveURL(/view=month/);
   await expect(page.getByRole('region', { name: 'The week, hour by hour' })).toBeVisible();
-  expect(await page.evaluate(() => (window as unknown as { samePage?: boolean }).samePage)).toBe(true);
+  expect(await page.evaluate<boolean>('window.samePage === true')).toBe(true);
 });
