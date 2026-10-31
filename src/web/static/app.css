@@ -318,6 +318,8 @@
     .btn-ghost:hover {
       --btn-bg: var(--page);
       --btn-border: transparent;
+      background: var(--page);
+      border-color: transparent;
       color: var(--action-hover);
     }
     /* Inside a message (the flash's close button) it takes the message's colour. */
@@ -1596,6 +1598,27 @@
       color: var(--action);
       text-decoration: underline;
     }
+    /* A row with a link: the title's link covers the whole row, so the row is the target and
+       its tint fills the box; the actions and other links sit above it. */
+    .queue-row:has(a.queue-title) {
+      position: relative;
+    }
+    .queue-row:has(a.queue-title):hover {
+      background: var(--page);
+      border-color: var(--control);
+    }
+    .queue-row:has(details[open]) {
+      z-index: 2;
+    }
+    a.queue-title::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+    }
+    .queue-row :where(a:not(.queue-title), button, form, details, label, input, select, textarea) {
+      position: relative;
+      z-index: 1;
+    }
     .queue-detail {
       margin: 0;
       font-size: 14px;
@@ -2099,6 +2122,14 @@
       border: 1px solid var(--line);
       border-radius: 8px;
       box-shadow: var(--shadow-lift);
+    }
+    /* Sign out fills the menu's width, so its hover tint does too. */
+    .user-menu-panel > form,
+    .user-menu-panel > form > .btn {
+      width: 100%;
+    }
+    .user-menu-panel > form > .btn {
+      justify-content: flex-start;
     }
     .user-menu[open] > .user-menu-panel {
       animation: menu-in 150ms ease-out;
@@ -2802,7 +2833,6 @@
     @media (min-width: 64rem) {
       .dispatch-board {
         grid-template-columns: minmax(0, 1fr) 24rem;
-        align-items: start;
       }
     }
 
@@ -3017,6 +3047,7 @@
     }
     .tradie-entry.is-pick:hover {
       border-color: var(--control);
+      background: var(--page);
     }
     .tradie-entry.is-pick:has(.tradie-check:checked) {
       border-color: var(--action);
@@ -3210,15 +3241,18 @@
       border: 1px solid var(--line);
       border-radius: 8px;
     }
+    /* Beside the map the column is the map's height, and the panel picked scrolls inside it. */
     @media (min-width: 64rem) {
       .dispatch-side {
-        max-height: 36.5rem;
+        height: 32rem;
         overflow-y: auto;
       }
     }
+    /* With nothing picked, the hint sits in the middle of the column rather than at its top. */
     .dispatch-panel-empty {
-      margin: 0;
+      margin: auto 0;
       color: var(--muted);
+      text-align: center;
     }
     .dispatch-side.has-selection .dispatch-panel-empty,
     html:not(.js) .dispatch-side:has(.dispatch-panel:target) .dispatch-panel-empty {
@@ -3424,6 +3458,7 @@
     }
     .listing-result:hover {
       border-color: var(--control);
+      background: var(--page);
     }
     .listing-result[aria-current='true'] {
       border-color: var(--action);
@@ -3662,7 +3697,7 @@
       position: relative;
       z-index: 1;
     }
-    .table-frame.is-stacked tbody tr:hover :is(th, td) {
+    .table-frame.is-stacked tbody tr:hover {
       background: var(--page);
     }
     /* Cells of different kinds (a two-line Ticket, a badge, an age) line up on their first line's baseline, so a badge doesn't sit lower than the text beside it. */
@@ -3725,8 +3760,9 @@
       .table-frame.is-stacked tbody :is(th, td):last-child {
         margin-left: auto;
       }
-      .table-frame.is-stacked tbody tr:hover :is(th, td) {
-        background: transparent;
+      .table-frame.is-stacked tbody tr:hover {
+        background: var(--page);
+        border-color: var(--control);
       }
       /* A picked row (rowAttributes: { 'data-selected': true }) keeps Harbour's tint as a block. */
       .table-frame.is-stacked tbody tr[data-selected] {
@@ -4248,6 +4284,7 @@
     }
     .trade-filter-item:hover {
       border-color: var(--control);
+      background: var(--page);
     }
     .trade-filter-item:focus-visible {
       outline: 2px solid var(--action);
@@ -6286,3 +6323,4 @@
     }
   }
 }
+
