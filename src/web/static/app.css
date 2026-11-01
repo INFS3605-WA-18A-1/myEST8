@@ -7771,3 +7771,127 @@
     navigation: auto;
   }
 }
+
+/* === Maintenance Request: soft cards (pages/requests.ts) ===
+   The same look as the Ticket page: the Summary in a dark-yellow outline, soft white cards,
+   and a square grey column for Decide and the follow-up. */
+@layer utilities {
+  @layer app {
+    .request-review .section {
+      border: 0;
+      border-radius: 22px;
+      box-shadow: var(--shadow-soft);
+    }
+    .request-lead {
+      order: 0;
+      align-content: start;
+    }
+    /* On phones the ring only costs height: the Summary leads, then Decide. */
+    @media (max-width: 47.99rem) {
+      .request-lead .ticket-ring-wrap {
+        display: none;
+      }
+    }
+    .request-lead .ai-filled {
+      gap: 10px;
+      padding: 0;
+      background: transparent;
+    }
+    .request-lead .ai-filled-label {
+      width: fit-content;
+      padding: 2px 10px;
+      color: var(--action);
+      background: var(--info-bg);
+      border-radius: 999px;
+    }
+    .request-lead .request-issue {
+      font-size: 22px;
+      line-height: 1.35;
+    }
+    .ticket-state.is-waiting::before {
+      background: #c8961a;
+    }
+    /* Label and value as tiles. */
+    .request-facts {
+      grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+      gap: 8px;
+    }
+    .request-facts > div {
+      display: grid;
+      align-content: start;
+      gap: 2px;
+      min-width: 0;
+      padding: 8px 12px;
+      background: var(--page);
+      border-radius: 12px;
+    }
+    .request-facts dt {
+      font-size: 12px;
+    }
+    .request-facts dd {
+      font-weight: 600;
+    }
+    .request-lead .request-facts > div {
+      background: var(--surface);
+    }
+    .request-meta {
+      display: grid;
+      font-size: 14px;
+    }
+    .request-meta > div {
+      display: grid;
+    }
+    #answers .request-facts {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    #answers .request-facts > div:first-child:nth-last-child(5) {
+      grid-column: 1 / -1;
+    }
+    .request-trade {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    /* Photos: a small thumbnail, not a wide strip. */
+    .request-photos ul[role='list']:not(.request-checks) {
+      display: flex !important;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .request-photos ul[role='list']:not(.request-checks) > li {
+      flex: 0 0 7.5rem;
+      width: 7.5rem;
+    }
+    /* Decide waits on the Property Manager: a Wattle edge and a "Needs you" chip. */
+    .request-side > #decide {
+      border: 2px solid var(--hivis);
+    }
+    .request-needs {
+      padding: 1px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      background: var(--hivis);
+      border-radius: 999px;
+    }
+    @media (min-width: 64rem) {
+      .request-review {
+        align-items: stretch;
+      }
+      .request-side {
+        align-self: stretch;
+        padding: 12px;
+        background: #d9d6d0;
+        border-radius: 0;
+        gap: 12px;
+      }
+      .request-details {
+        align-self: start;
+      }
+    }
+    @media (min-width: 80rem) {
+      .request-details {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        align-items: stretch;
+      }
+    }
+  }
+}
