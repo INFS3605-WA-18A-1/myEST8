@@ -357,9 +357,9 @@ export function contactFields(
  * The Add form for a Property Owner or Building Manager: name, mobile and email, posting to `action`.
  * Setup and the two profile lists share it, so they can't drift.
  */
-export function addPersonForm(o: { id: string; action: string; submit: string }): Html {
+export function addPersonForm(o: { id: string; action: string; submit: string; values?: Values; errors?: Errors }): Html {
   return html`<form method="post" action="${o.action}">
-    ${fieldGrid(contactFields(o.id))}
+    ${fieldGrid(contactFields(o.id, { values: o.values, errors: o.errors }))}
     <div class="mt-3">${button(o.submit, { size: 'sm' })}</div>
   </form>`;
 }

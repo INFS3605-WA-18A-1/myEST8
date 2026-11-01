@@ -1119,6 +1119,29 @@ export function aiFilled(content: Html | string, o: { label?: string; edit?: Htm
 }
 
 /**
+ * A profile's read: the sentence is the heading, with the numbers under it.
+ * Concern is Ochre, good is the done green, and a neutral chip is muted on a line.
+ * The words carry the meaning. When the sentence used a model, the "Filled in by AI"
+ * mark sits beside it. No history is one quiet line instead.
+ */
+export function profileRead(read: { sentence: string; chips: { text: string; tone: 'concern' | 'good' | 'neutral' }[]; ai: boolean } | null): Html {
+  if (!read) return html`<p class="profile-read-empty">No history yet</p>`;
+  const chip = (text: string, tone: 'concern' | 'good' | 'neutral') =>
+    tone === 'concern'
+      ? badge(text, 'warning', { wrap: true })
+      : tone === 'good'
+        ? badge(text, 'success', { wrap: true })
+        : html`<span class="badge badge-soft badge-muted max-w-full whitespace-normal text-left">${text}</span>`;
+  return html`<section class="profile-read" aria-label="At a glance">
+    <div class="profile-read-line${read.ai ? ' is-ai' : ''}">
+      <h2 class="profile-read-sentence">${read.sentence}</h2>
+      ${read.ai ? html`<span class="ai-filled-label">${icon('sparkle', { size: 'size-3.5', weight: 'fill' })}<span>Filled in by AI</span></span>` : ''}
+    </div>
+    ${read.chips.length ? html`<div class="profile-read-chips">${read.chips.map((item) => chip(item.text, item.tone))}</div>` : ''}
+  </section>`;
+}
+
+/**
  * A compact queue row: an optional photo thumbnail, then the title (a link when
  * `href` is given) with the actions such as Confirm and Review beside it, a detail
  * line, and the badges with the meta (an age) at the end of their row.
