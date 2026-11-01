@@ -1097,24 +1097,7 @@
       font-size: 13px;
       color: var(--muted);
     }
-    @media (min-width: 64rem) {
-      .dashboard-glance .lane-body {
-        max-height: 15rem;
-      }
-      .dashboard-inbox {
-        max-height: 34rem;
-        overflow-y: auto;
-        padding-right: 4px;
-      }
-    }
-
-    /* The dashboard Inbox: no outer box, each message its own white card (title and reason on top, who and when, then quiet actions). */
-    .dashboard-main > .section:has(.dashboard-inbox) {
-      padding: 0;
-      background: transparent;
-      border: 0;
-      box-shadow: none;
-    }
+    /* Inbox messages in the open panel: each its own white card (who and when on top, the message in a tinted box, then quiet actions). */
     .dashboard-inbox > .grid {
       gap: 12px;
     }
@@ -1209,59 +1192,609 @@
     .dashboard-inbox .inbox-pick[open] > summary {
       margin-bottom: 8px;
     }
-    /* Ticket lanes in the right column: a white box with a thin blue outline and a pale blue heading, flat rows inside. */
-    .dashboard-glance .lane {
-      overflow: hidden;
-      background: var(--surface);
-      border: 1px solid #8fb0cc;
-      border-radius: 8px;
+    /* ===== The dashboard: soft cards. Left: the day at a glance and what to do next. Right: the inbox, the week and Tickets by stage. ===== */
+    .dashboard-desk {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 16px;
     }
-    .dashboard-glance .lane-head {
-      padding: 8px 12px;
-      background: #e8f0f7;
-      border-bottom: 1px solid #c4d7e7;
+    .dash-col {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      min-width: 0;
     }
-    .dashboard-glance .lane-title,
-    .dashboard-glance .lane-count {
+    .dashboard-desk .section {
+      padding: 16px 18px;
+      border: 0;
+      border-radius: 22px;
+    }
+    .dash-hello {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 0 14px;
+      margin: -6px 0 -10px;
+    }
+    .dash-hello-name {
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
       color: var(--ink);
     }
-    .dashboard-glance .lane-body {
-      gap: 0;
-      padding: 0 12px;
-      scrollbar-width: thin;
+    .dash-hello-line {
+      margin: 0;
+      font-size: 14px;
+      color: var(--muted);
     }
-    .dashboard-glance .docket {
+    @media (min-width: 64rem) {
+      .dashboard-desk {
+        grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+      }
+    }
+    /* On a tall enough window the desk is exactly one screen: each column fills it and the long lists scroll inside their own card. */
+    @media (min-width: 64rem) and (min-height: 58rem) {
+      .dashboard-desk {
+        height: calc(100dvh - 9.5rem);
+        min-height: 33rem;
+        overflow: clip;
+      }
+      .dash-col {
+        min-height: 0;
+      }
+      #decisions,
+      #tickets {
+        flex: 1 1 0;
+        min-height: 0;
+        overflow: hidden;
+      }
+      #decisions .section-body,
+      #tickets .section-body {
+        min-height: 0;
+        overflow-y: auto;
+        scrollbar-width: thin;
+      }
+    }
+    /* On a shorter window the page scrolls a little instead of squeezing the lists. */
+    @media (min-width: 64rem) and (max-height: 57.99rem) {
+      #decisions .section-body {
+        max-height: 26rem;
+        overflow-y: auto;
+      }
+      #tickets .section-body {
+        max-height: 17rem;
+        overflow-y: auto;
+      }
+    }
+
+    /* Your day at a glance: sand-tan card, bubbles sized by count. */
+    .glance {
       position: relative;
-      padding: 10px 0;
-      background: transparent;
-      border: 0;
-      border-bottom: 1px solid var(--line);
-      border-radius: 0;
+      display: grid;
+      grid-template-columns: 10.5rem minmax(0, 1fr);
+      gap: 8px;
+      flex: none;
+      min-height: 14.5rem;
+      padding: 16px 22px;
+      overflow: hidden;
+      background: #e4d9c6;
+      border-radius: 22px;
     }
-    .dashboard-glance a.docket:hover {
-      background: var(--page);
+    .glance-key {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
     }
-    .dashboard-glance .docket:last-child {
-      border-bottom: 0;
+    .glance-title {
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 18px;
+      font-weight: 600;
+      line-height: 1.25;
+      color: var(--ink);
     }
-    .dashboard-glance .docket-perf {
-      display: none;
+    .glance-legend {
+      display: grid;
+      gap: 10px;
+      margin: auto 0 0;
+      padding: 0;
+      list-style: none;
+      font-size: 14px;
     }
-    /* The number and age live on the Ticket itself; here only the unread dot stays, at the corner. */
-    .dashboard-glance .docket-foot {
+    .glance-legend li {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+    .glance-legend i {
+      flex: none;
+      width: 22px;
+      height: 6px;
+      border-radius: 3px;
+      background: var(--c);
+    }
+    .glance-legend b {
+      margin-left: auto;
+      font-family: var(--font-head);
+      font-weight: 600;
+    }
+    .is-tickets { --c: #1f5c8b; --fg: #fff; }
+    .is-alerts { --c: #e98b6d; --fg: #3a1708; }
+    .is-requests { --c: #ffc233; --fg: #13212e; }
+    .is-inbox { --c: #13212e; --fg: #fff; }
+    .is-quotes { --c: #cdbd94; --fg: #13212e; }
+    .is-urgent { --c: #c8372d; --fg: #fff; }
+    .glance-bubbles {
+      position: relative;
+      min-width: 0;
+    }
+    .bubble {
       position: absolute;
-      top: 12px;
-      right: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: var(--size);
+      height: var(--size);
+      border-radius: 50%;
+      background: var(--c);
+      color: var(--fg);
+      text-align: center;
+      text-decoration: none;
+      box-shadow: 0 14px 30px color-mix(in srgb, var(--c) 35%, transparent);
+      animation: bubble-in 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) backwards, bubble-float 7s ease-in-out infinite;
+      animation-delay: calc(var(--i) * 0.14s + 0.1s), calc(var(--i) * -1.4s);
+      transition: transform 0.2s;
     }
-    .dashboard-glance .docket-foot .docket-number,
-    .dashboard-glance .docket-foot .ml-auto {
+    .bubble:hover {
+      color: var(--fg);
+      transform: scale(1.04);
+    }
+    .bubble.is-tickets { left: 0; top: 6px; }
+    .bubble.is-alerts { left: 28%; top: 74px; }
+    .bubble.is-requests { left: 50%; top: 0; }
+    .bubble.is-inbox { left: 57%; top: 112px; }
+    .bubble.is-quotes { right: 0; top: 8px; }
+    .bubble.is-urgent { right: 0; bottom: 0; }
+    .bubble.is-zero {
+      opacity: 0.6;
+    }
+    .bubble-num {
+      font-family: var(--font-head);
+      font-size: calc(var(--size) * 0.27);
+      font-weight: 600;
+      line-height: 1;
+    }
+    .bubble-label {
+      margin-top: 3px;
+      font-size: 12px;
+      line-height: 1.2;
+    }
+    @keyframes bubble-in {
+      from { opacity: 0; transform: scale(0.4); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    @keyframes bubble-float {
+      0%, 100% { translate: 0 0; }
+      50% { translate: 0 -6px; }
+    }
+
+    /* Do next: soft rows, one clear action each. */
+    .do-next {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+    .do-next-list {
+      display: contents;
+    }
+    .do-next .queue-row {
+      align-items: center;
+      gap: 12px;
+      padding: 9px 10px 9px 14px;
+      background: #f4efe6;
+      border: 0;
+      border-radius: 14px;
+    }
+    .do-next .queue-row.is-decision {
+      border-left-width: 0;
+    }
+    .do-next .queue-thumb {
+      flex-basis: 44px;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+    }
+    .do-next .queue-main {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      column-gap: 12px;
+      row-gap: 1px;
+    }
+    .do-next .queue-head {
+      display: contents;
+    }
+    .do-next .queue-title {
+      grid-column: 1;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      font-size: 14.5px;
+    }
+    .do-next .queue-detail {
+      grid-column: 1;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .do-next .queue-actions {
+      grid-column: 2;
+      grid-row: 1 / span 3;
+      align-self: center;
+      flex-wrap: nowrap;
+    }
+    .do-next .queue-actions .btn {
+      border-radius: 999px;
+    }
+    .do-next .queue-badges {
+      grid-column: 1;
+    }
+    .do-next .queue-badges .badge {
       display: none;
     }
-    .dashboard-glance .docket.is-decision,
-    .dashboard-glance a.docket.is-decision:hover {
-      padding-left: 10px;
-      border-left-width: 0;
-      box-shadow: inset 3px 0 0 var(--hivis);
+    .do-next .queue-meta {
+      margin: 0;
+    }
+    .do-next-sub {
+      margin: 0 0 6px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .do-next-urgent .do-next-sub {
+      color: #8f1d14;
+    }
+    .do-next-urgent .urgent-item {
+      background: var(--surface);
+      border: 1px solid #ecc3be;
+      border-left: 3px solid #c8372d;
+      border-radius: 14px;
+    }
+    .do-next-clear {
+      margin: 4px 0 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    /* The inbox card: Night, the three newest as one-liners, a button that opens the rest over the page. */
+    .inbox-card {
+      position: relative;
+      display: flex;
+      flex: none;
+      flex-direction: column;
+      gap: 8px;
+      padding: 16px 18px;
+      color: #fff;
+      background: #13212e;
+      border-radius: 22px;
+    }
+    .inbox-card-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .inbox-card-title {
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 17px;
+      font-weight: 600;
+      color: #fff;
+    }
+    .inbox-card-count {
+      padding: 2px 9px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #13212e;
+      background: var(--hivis);
+      border-radius: 999px;
+    }
+    .inbox-card-note {
+      margin-left: auto;
+      font-size: 12.5px;
+      color: #8fa2b3;
+    }
+    .inbox-previews {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .inbox-preview {
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      padding: 5px 10px;
+      color: #fff;
+      text-decoration: none;
+      background: rgba(255, 255, 255, 0.07);
+      border-radius: 14px;
+      transition: background 0.15s;
+    }
+    .inbox-preview:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.13);
+    }
+    .inbox-avatar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 34px;
+      height: 34px;
+      font-size: 13px;
+      font-weight: 600;
+      background: rgba(255, 255, 255, 0.14);
+      border-radius: 50%;
+    }
+    .inbox-preview-main {
+      display: grid;
+      min-width: 0;
+    }
+    .inbox-preview-who {
+      overflow: hidden;
+      font-size: 14px;
+      font-weight: 600;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .inbox-preview-text {
+      overflow: hidden;
+      font-size: 12.5px;
+      color: #a9baca;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .inbox-preview-when {
+      font-size: 12px;
+      line-height: 1.3;
+      color: #a9baca;
+      text-align: right;
+      white-space: nowrap;
+    }
+    .inbox-empty {
+      margin: 0;
+      padding: 4px 0 6px;
+      font-size: 14px;
+      color: #c9d4de;
+    }
+    .inbox-more > summary {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 38px;
+      font-weight: 600;
+      color: #13212e;
+      list-style: none;
+      cursor: pointer;
+      background: var(--hivis);
+      border-radius: 999px;
+    }
+    .inbox-more > summary::-webkit-details-marker {
+      display: none;
+    }
+    .inbox-more > summary:hover {
+      filter: brightness(0.96);
+    }
+    .inbox-more .when-open,
+    .inbox-more[open] .when-closed {
+      display: none;
+    }
+    .inbox-more[open] .when-open {
+      display: inline;
+    }
+    .inbox-panel {
+      max-height: 32rem;
+      margin-top: 8px;
+      padding: 14px;
+      overflow-y: auto;
+      color: var(--ink);
+      background: #f4efe6;
+      border-radius: 18px;
+    }
+    /* On a tall window the open list floats over the cards below it, kept inside the desk. */
+    @media (min-width: 64rem) and (min-height: 58rem) {
+      .inbox-panel {
+        position: absolute;
+        top: calc(100% + 8px);
+        right: 0;
+        left: 0;
+        z-index: 20;
+        max-height: calc(100dvh - 9.5rem - 17.5rem);
+        margin-top: 0;
+        box-shadow: 0 18px 44px rgba(19, 33, 46, 0.28);
+      }
+    }
+
+    /* Tickets by stage: a bar and counts, then one soft row per Ticket with its progress. */
+    .stage-board {
+      display: grid;
+      gap: 8px;
+    }
+    .stage-quoting { --sc: #1f5c8b; }
+    .stage-awaiting_owner { --sc: #3f78a6; }
+    .stage-approved { --sc: #6a9ac3; }
+    .stage-scheduled { --sc: #8db0cf; }
+    .stage-done { --sc: #5b9c86; }
+    .stage-scale {
+      display: flex;
+      gap: 3px;
+      height: 11px;
+      overflow: hidden;
+      background: #eee9df;
+      border-radius: 6px;
+    }
+    .stage-scale i {
+      display: block;
+      flex-basis: 0;
+      height: 100%;
+      background: var(--sc);
+    }
+    .stage-counts {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 6px;
+      margin: 0;
+      padding: 0;
+      font-size: 12px;
+      color: var(--muted);
+      list-style: none;
+    }
+    .stage-counts li {
+      white-space: nowrap;
+    }
+    .stage-counts b {
+      margin-right: 3px;
+      font-family: var(--font-head);
+      font-size: 16px;
+      color: var(--ink);
+    }
+    .stage-counts .is-zero b {
+      color: #8a97a3;
+    }
+    .stage-rows {
+      display: grid;
+      gap: 6px;
+    }
+    .ticket-row {
+      position: relative;
+      display: grid;
+      grid-template-columns: 36px minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      padding: 7px 12px;
+      color: var(--ink);
+      text-decoration: none;
+      background: #f4efe6;
+      border-radius: 14px;
+    }
+    .ticket-row:hover {
+      color: var(--ink);
+      background: #ece5d7;
+    }
+    .ticket-row-id {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      font-family: var(--font-head);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--action);
+      background: #fff;
+      border-radius: 50%;
+    }
+    .ticket-row-main {
+      display: grid;
+      min-width: 0;
+    }
+    .ticket-row-title {
+      position: relative;
+      overflow: hidden;
+      font-size: 14px;
+      font-weight: 600;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .ticket-row-title .unread-dot {
+      display: inline-block;
+      margin-left: 6px;
+    }
+    .ticket-row-sub {
+      overflow: hidden;
+      font-size: 12.5px;
+      color: var(--muted);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .ticket-row-urgency {
+      font-weight: 600;
+    }
+    .ticket-row-urgency.is-urgent {
+      color: #9c1f17;
+    }
+    .ticket-row-urgency.is-high {
+      color: #8a4b00;
+    }
+    .ticket-row-stage {
+      display: grid;
+      gap: 3px;
+      justify-items: start;
+    }
+    .stage-segs {
+      display: flex;
+      gap: 3px;
+    }
+    .stage-segs i {
+      display: block;
+      width: 16px;
+      height: 12px;
+      background: #ddd6c8;
+      border-radius: 4px;
+    }
+    .stage-segs i.on {
+      background: var(--sc);
+    }
+    .ticket-row-stage-name {
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    /* Phones: the legend sits above the bubbles, rows put their actions under the text, the counts wrap. */
+    @media (max-width: 39.99rem) {
+      .glance {
+        grid-template-columns: minmax(0, 1fr);
+        min-height: 0;
+        padding: 16px 18px;
+      }
+      .glance-legend {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 6px 18px;
+        margin-top: 12px;
+        font-size: 13px;
+      }
+      .glance-bubbles {
+        height: 200px;
+      }
+      .bubble.is-tickets { left: 0; top: 4px; }
+      .bubble.is-alerts { left: 34%; top: 70px; }
+      .bubble.is-requests { left: 52%; top: 0; }
+      .bubble.is-inbox { left: auto; right: 0; top: 96px; }
+      .bubble.is-quotes { left: 2%; right: auto; top: auto; bottom: 0; }
+      .bubble.is-urgent { right: 0; top: 0; }
+      .do-next .queue-main {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .do-next .queue-actions {
+        grid-column: 1;
+        grid-row: auto;
+        margin-top: 6px;
+      }
+      .stage-counts {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 14px;
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .bubble {
+        animation: none;
+        transition: none;
+      }
     }
 
     /* Next 7 days: day chips (the chosen day filled, today ringed, a dot where a visit is booked), then that day's visits. */
@@ -1269,7 +1802,7 @@
       display: grid;
       grid-template-columns: repeat(7, minmax(0, 1fr));
       gap: 6px;
-      margin: 0 0 10px;
+      margin: 0 0 6px;
       padding: 0;
       list-style: none;
     }
@@ -1277,7 +1810,7 @@
       display: grid;
       justify-items: center;
       gap: 1px;
-      padding: 6px 0 8px;
+      padding: 5px 0 6px;
       background: var(--page);
       border: 1px solid transparent;
       border-radius: 10px;
@@ -1340,9 +1873,8 @@
       /* 4.5rem fits "12:30 pm", so "9:00 am" does not pull the issue to a different edge. */
       grid-template-columns: minmax(4.5rem, max-content) minmax(0, 1fr) auto;
       gap: 8px;
-      align-items: baseline;
-      padding: 10px 0;
-      border-top: 1px solid var(--line);
+      align-items: center;
+      padding: 4px 0 2px;
       font-size: 14px;
     }
     .visit-what {
@@ -1350,40 +1882,37 @@
       min-width: 0;
     }
     .visit-tradie {
+      overflow: hidden;
       font-weight: 600;
+      line-height: 1.25;
       color: var(--ink);
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .visit-place {
-      font-size: 13px;
+      overflow: hidden;
+      font-size: 12.5px;
+      line-height: 1.25;
       color: var(--muted);
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .visit-time {
       font-weight: 600;
       white-space: nowrap;
     }
+    .visit-more {
+      display: block;
+      padding-left: calc(3.2rem + 8px);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--action);
+      text-decoration: underline;
+    }
     .visit-none {
       margin: 0;
       font-size: 14px;
       color: var(--muted);
-    }
-
-    /* Urgent Repairs, when there are any: a plain card; the red is a thin edge on each repair and the heading. */
-    .urgent-panel .section-title {
-      color: #8f1d14;
-    }
-    .urgent-panel .urgent-item {
-      border-left: 3px solid #c8372d;
-    }
-
-    /* Needs your attention: each decision row keeps a 4px Wattle edge. */
-    .dashboard-main .queue-row.is-decision {
-      border-left-width: 4px;
-      border-left-color: var(--hivis);
-    }
-
-    /* The dashboard: what needs attention leads, in larger type. */
-    .dashboard-main > .section:first-child > .section-head .section-title {
-      font-size: 22px;
     }
 
     /* ----- Filled in by AI: the info tint, with a quiet label, for text the AI wrote that the

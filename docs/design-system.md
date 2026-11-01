@@ -95,6 +95,69 @@ myEST8 is where a Property Manager at a small Australian Agency sees every repai
 - `countSentence(items, { empty })` is the other pages' counts (Approvals and the desk pages). One sentence under the title in 16px: "2 Maintenance Requests to confirm, 1 Quote to choose and 1 Tradie to rate." Each count is a link into its queue. Items take `{ label, one?, count, href, decision? }`; `one` is the wording for a count of 1. Counts of zero are left out. A count that needs a decision is Night on a Wattle chip; the rest are Harbour links. When nothing is left the sentence says so ("Nothing needs you right now.").
 - `aiFilled(content, { label?, edit? })` is the "Filled in by AI" style: `--info-bg` tint, 4px radius, a quiet label after the `sparkle` icon (14px, `aria-hidden`; "Filled in by AI" unless `label` says more), and an optional edit control. The sparkle is the one mark on every AI-written thing: the Summary, a drafted follow-up, an import's AI values, an email Haiku wrote in a message log. Use it only for text the AI wrote; text a person wrote or edited, and the Tenant's own words, are not tinted.
 
+### Dashboard: soft cards
+
+One screen on a window at least 928 px tall (shorter ones scroll a little rather than squeeze the lists). "Hi, {first name}" and one line of what waits ("3 things need you today · 4 messages in the inbox") lead; under it two columns (1.2 : 1) of soft cards (22 px radius, no hairline, `--shadow-soft`).
+
+```
+┌ Hi, Alice   3 things need you today · 4 messages in the inbox ─────────────────────────────┐
+├──────────────────────────────────────────┬─────────────────────────────────────────────────┤
+│ Your day at a glance  (bubbles)          │ Inbox (Night)  latest 3, "Check all N messages" │
+├──────────────────────────────────────────┼─────────────────────────────────────────────────┤
+│ Do next                                  │ Next 7 days (day chips + next visit)            │
+│  Urgent Repairs (when any)               ├─────────────────────────────────────────────────┤
+│  Maintenance Requests, then alerts       │ Tickets by stage (bar, counts, one row each)    │
+└──────────────────────────────────────────┴─────────────────────────────────────────────────┘
+```
+
+- **Your day at a glance** (Sand-tan `#E4D9C6`): a legend (Open Tickets, Alerts, Maintenance Requests, Inbox, and Urgent Repairs when one needs a receipt, each with its count) and bubbles sized by count, within a cap: Open Tickets Harbour, Alerts clay `#E98B6D`, Requests Wattle, Inbox Night, Urgent red. Each bubble links to its card (`#tickets`, `#alerts`, `#requests`, `#inbox`, `#urgent-repairs`). The bubbles pop in once and float gently; both stop under `prefers-reduced-motion`.
+- **Do next**: Urgent Repairs first when there are any (white rows with a thin red edge), then Maintenance Requests (oldest first), then alerts. Each is a soft Sand row with its title (two lines at most), the street, its age and one or two actions: Confirm (a Harbour pill) and Review for a request; one outlined action for an alert. The Urgency and Trade badges stay on the Review page. With none of either, one quiet line says so.
+- **Inbox** (Night card): the three newest messages as one-line previews (initials, sender, the start of the message, when), a count pill and a Wattle button, "Check all N messages", which opens every message with its actions (link the sender, route, dismiss) in a panel over the cards below it (from 928 px tall; in the flow on shorter and narrower windows). Newest first. The preview rows link to their message in the panel.
+- **Next 7 days**: seven day chips (today filled with Night, a Harbour dot under a day with a visit), then the next visit as one line (day, Tradie, issue and street, time) and "+N more visits this week" linking to `/calendar`.
+- **Tickets by stage**: a segmented bar and five counts (Quoting, With owner, Ready, Booked, Done) show where the open Tickets are, then one soft row per Ticket in workflow order: its number, the issue, the street, the age, what it waits on and Urgency when High or Urgent, and a five-segment progress marker filled up to its stage with the stage's name. Stage colours step from Harbour to a pale blue, then green for Done. The core works out the stage, Quote counts and decisions (`views.dashboard`); the page only draws them. With no open Tickets it is one empty state.
+- Setup is not on the dashboard. While the Agency is unfinished the rail shows an outlined "Setup guide" link above Collapse menu, pointing at the next step still to do.
+- Phone and narrow windows: one column, in the order Your day at a glance, Do next, Inbox, Next 7 days, Tickets by stage; nothing scrolls inside a card except the open message list.
+
+### Dispatch: the map
+
+`/dispatch` (`src/web/pages/dispatch.ts`, `static/dispatch-map.js`) shows where the Agency's Properties and Tradies are, so a Property Manager can see which Tradies are near a Property with work waiting. Leaflet 1.9.4 draws OpenStreetMap tiles; Leaflet's JS, CSS and images are served from `/assets` (`assets.ts` allowlists each file by name) so the map works offline apart from the tiles.
+
+```
+┌ pin key: ▲ Urgent  ◆ High  ● Routine  ○ No open Tickets  ■ Tradie ┐
+├──────────────────────────────────────────────┬────────────────────┤
+│ map  (24rem tall, 32rem from 1024px)         │ panel: the picked  │
+│                                              │ Property or Tradie │
+├──────────────────────────────────────────────┴────────────────────┤
+│ Properties: Address  Suburb  Open Tickets  Worst urgency           │
+├────────────────────────────────────────────────────────────────────┤
+│ Tradie schedule: Tradie × today and the next six days              │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+- **Pins.** A Property is a 32 px pin: the shape is the worst open Ticket's Urgency (triangle Urgent, diamond High, filled circle Routine, open circle none) and the number inside is how many open Tickets it has. Colours are tokens (`--urgent`, `--high`, `--muted`, `--surface` with a `--muted` outline), so colour only backs up the shape. A Tradie is a 26 px `--ink` square with the initial of the business, drawn under the Property pins. The pin key above the map names each shape in words. The picked pin gets a 3 px Harbour ring and a Harbour dashed ring of the Tradie search radius (`TRADIE_SEARCH_RADIUS_KM`, 15, in `src/geo.ts`; the Settings page will make it the Agency's own). The map fits the ring when a Property is picked.
+- **Panel, not a tooltip.** Beside the map from 1024 px, under it on phones. It shows the street address, the open Tickets (each links to `/tickets/:id`) and up to five nearest Tradies within the radius, nearest first, with distance, Trades and both ratings (myEST8 and Google, never combined). A Tradie's panel shows their ratings and bookings. Opening it moves focus to its heading; Close or Escape closes it and puts the focus back on the pin or link that opened it.
+- **Table.** The map is not usable with a keyboard or a screen reader on its own, so the table is the same information: every Property (most urgent first) with the address as a link that picks it, the suburb, the open Tickets and the worst urgency. A Property the map could not place says **Address not found** (a warning badge) and its panel says why it lists no Tradies; its address is looked up again each time the page opens (`geocodeMissing`, at most 10 Properties and 10 Tradies per visit, a failing lookup never stops the page).
+- **Keyboard.** Every pin is a focusable `role="button"` named by its address and tickets (or the Tradie's name and Trades): Tab to it, Enter or Space picks it. The map itself takes arrow keys and + / -. The scroll wheel zooms only after the map has been clicked or focused, so the page still scrolls.
+- **Without JavaScript.** The map's place says it needs JavaScript. The table and a panel per Property work: a row's link goes to its panel (`:target`). The pin key is hidden.
+- **Tradie schedule.** Rows are Tradies, columns today and the next six days in the Agency's time zone, from the same `calendar` bookings as the Calendar page. Each visit links to its Ticket and says Done, Reschedule requested or Not confirmed yet in words. Empty cells say "Nothing booked" to screen readers. There is no routing.
+- **Pin data.** The page writes one `<script type="application/json" id="dispatch-data">` block with the tile source, the radius and the pins. `<`, `>`, `&` and U+2028/9 are written as `\uXXXX`, so an address cannot close the script or open a comment. The script builds every pin with DOM calls and `textContent`, never `innerHTML`; there are no inline handlers.
+- **Tiles.** The tile URL template, attribution and maximum zoom are one value, `MAP_TILES` in `src/web/map-config.ts`, defaulting to OpenStreetMap's public tile server. OSM's tile policy is not for heavy production use: before wider use, change that one value to a provider the Agency has an account with.
+- **Where Tradies are.** A Tradie's business address is set with `setTradieAddress` and geocoded like a Property's. There is no form for it yet (the Tradie forms are owned by onboarding); the demo seed sets them.
+
+### Landing page (`/` signed out)
+
+The front door is the dispatch desk at an editorial scale, built from the same tokens (`pages/landing.ts`, styles in `static/landing.css`, loaded only there). A three-line Lexend headline: "Tenants text the problem. / You decide. / myEST8 does the chasing.", where only "You decide." carries the Wattle stripe, because Wattle means "needs your decision" everywhere. Beside it, the one bold element: a Tenant's SMS thread with the words the intake agent used for the Trade and Urgency marked in Harbour's tint (the "Filled in by AI" colour), and the resulting Maintenance Request as a decision card. Two large (44 px) actions with the sign-up page's wording: **Create your Agency's account** (primary) and **Sign in**. Then the workflow as a dispatch log (weekday times, a numbered track, a Wattle "You" chip on the Property Manager's decisions), what waits for you against what myEST8 handles, and a closing Night band like the rail. The only motion is a "now" marker stepping down the workflow, with a Pause button; under reduced motion nothing moves. No stat blocks, no gradients.
+
+**No plain text with an inline link on any public page.** Every link is a real button (`linkButton`) or sits in a nav bar. The public bar's `headerActions` are ghost small buttons: the landing page's bar has **Sign in** (ghost) and, from 640 px, **Create your Agency's account** (primary); `/login` and `/signup` carry only **Home**, so the sign-in page has exactly one control named Sign in. The sentence around a button ("Already have an account?") is plain text above it.
+
+**Demo sign-ins** (demo deployments only) sit under the workflow, below a hairline, as a bordered list with one row per demo Property Manager: name and email as text, and a secondary button "Sign in as Alice Archer" (or Bob Baker). Each button is a `<form method="post" action="/login">` with hidden email, password and next fields, so one click signs in. The password is also written out as text, and none of it appears outside demo mode.
+
+### Sign-in and sign-up pages (`/login`, `/signup`)
+
+Both fill the viewport (`authPage()` in `src/web/auth-card.ts`, styles in `static/auth.css`, loaded only there). From 1024 px the page splits: a full-height Night panel on the left (5/12), where the rail will sit after sign-in, with the logo in the rail's colours, the landing page's three-line thesis (Wattle stripe on "You decide.") and "What happens next" as a numbered track, one step showing a Maintenance Request decision card; the form on white on the right (7/12), in a centred column 400 px wide on sign-in and 600 px on sign-up, under a Lexend 700 h1. The panel is sticky while the sign-up form scrolls. On phones and tablets it is one column: bar, form, Night panel, Night footer. The card fading in once is the only motion, and not under reduced motion. Under the form's 44 px submit button a hairline divides it from the other way in: a muted sentence and a full-width secondary button (**Create your Agency's account** on sign-in, **Sign in** on sign-up). The sign-up page's Share sentence and button sit under that.
+
+After sign-up the onboarding wizard (`/welcome`) also fills the page, with no rail (`page({ fullPage: true })`). Its first step, connecting the Agency's email, can't be skipped: until email is connected every Property Manager page leads there (`requireEmailFirst`).
+
 ### The docket (Tickets only)
 
 ```
@@ -112,24 +175,12 @@ myEST8 is where a Property Manager at a small Australian Agency sees every repai
 - `size: 'large'` is the Ticket page header: the same order with the number at 40px.
 - A docket in its own right draws no Wattle; Tickets waiting on the Property Manager are listed in "Needs your attention". On the dashboard board a docket that waits on the Property Manager keeps a 3px Wattle edge.
 
-### Dashboard
+### Dashboard: details that carry over
 
-```
- count strip: six counts linking into their queues, under a 3 px Harbour line
- left, wider column (1.4 : 1)        right column
- Needs your attention (22 px)        Urgent Repairs (compact list)
- Inbox                               Next 7 days (day chips, then visits)
-                                     Tickets by stage (lanes stacked)
-```
-
-- Count strip: Maintenance Requests to confirm, Tickets waiting on you (Quotes to check, Site Inspections to book and Quotes to choose together, linking to the first of them), Open Tickets, Alerts, In the inbox (each `attention`), and Urgent Repairs needing a receipt (`urgent`). Count numbers stay dark (Slate at zero); only Urgent Repairs turns red. Six equal tiles fill the content width: one row from 1024 px, three per row from 640 px to 1023 px, two per row under 640 px. A label wraps inside its tile and is never shortened. On the one row, a tile under 10.5 rem (beside the rail at 1024 px) sets the label at 12 px so the words still fit on two lines.
-- Left, wider column, "Needs your attention" in 22 px type: Maintenance Requests to confirm (oldest first; an empty state when there are none), then Quotes to check, Site Inspections to book and Quotes to choose (each a group left out when empty), then Alerts (a safety risk first, then Tradies to rate and the others). Each row has a 4 px Wattle left edge. A Maintenance Request row: 56 px photo thumbnail (or a "No photos" tile), the Summary, street, Urgency and Trade badges plus "Check urgency", "Flagged photos" or "No photos" flags, age, and two actions: **Confirm** (POST) and **Review** (link to `/requests/:issueId`). A Ticket row names its step as its action: Check Quotes, Book a Site Inspection, Choose a Quote. On phones the inbox follows in brief, each row linking down to its message.
-- Under it, the Inbox: flat white message cards (who sent it and when with the reason on the right, the message in a tinted box, the best guess folded away, then **Pick a contact**, Route and **Dismiss** as outlined buttons). From 1024 px it scrolls inside its own box. A message from an address several people share, when intake cannot tell who sent it, is reason **Shared address**. Under the message, a quiet line names them and links each profile: "Could be Olivia Owens (Property Owner) or Pete Park (Tradie)." **Pick a contact** records this message as from the person chosen. The hint says a later message from the address is still shared.
-- Right: Urgent Repairs lead as a compact list (the issue linking to its Reimbursement Request, address · Tenant · reported time, the Reimbursement status badge, receipts), in a plain white card with a red heading and a thin red edge on each repair when there are any.
+- "Do next" also lists the Tickets waiting on a Quote decision, as groups under the Maintenance Requests: Quotes to check, Site Inspections to book and Quotes to choose (a group with none is left out). They count together as the **Quotes** bubble, which links to the first of them.
 - Next 7 days: today and the six days after it in the Agency's time zone, as a strip of seven day chips. Each chip links to that day (`/?day=YYYY-MM-DD#next-7-days`), keeping Mine or All. Mine and All keep the chosen day and return to the strip (`#next-7-days`). The chosen day (today when `day` is missing or not one of the seven) is filled with Harbour's tint and marked `aria-current="date"`; today's chip carries the visually hidden word today, and keeps a Harbour ring when another day is chosen. A dot marks a day with a visit. Under the strip, a heading names the day ("Thursday 23 October") and only that day's visits are listed, including one that has already ended, in time order: the time (a column wide enough for 12:30 pm, so the issue starts at one edge), the Tradie, the issue and street, and a Site inspection badge when it is one. An empty day says "Nothing booked on Thursday." Open calendar links to that day (`/calendar?view=day&date=…`) and keeps All (`filter=all`).
-- Tickets by stage: lanes stacked in workflow order (Quoting, With Property Owner, Ready to book, Booked, Done), a stage with no Tickets left out, each a white lane with a thin Harbour-tint outline and pale blue heading holding flat docket rows, scrolling inside 15 rem from 1024 px. With no open Tickets the board is one empty state.
-- Phone: one column: count strip (two tiles per row), Needs your attention, Inbox, Urgent Repairs, Next 7 days, Tickets by stage.
 - Setup is not on the dashboard. While the Agency is unfinished the rail shows an outlined "Setup guide" link above Collapse menu, pointing at the next step still to do (`loadSetupLink`).
+- `countStrip` stays in the design system but the dashboard no longer uses it; the bubbles replace it.
 
 ### Dispatch: the queue and the map
 
