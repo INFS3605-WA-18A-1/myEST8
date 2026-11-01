@@ -6004,18 +6004,6 @@
       padding: 0;
       font-weight: 600;
     }
-    .dispatch-stack .dispatch-address .entity-link svg {
-      flex: none;
-      width: 36px;
-      height: 36px;
-      padding: 8px;
-      border-radius: 10px;
-      background: #f1ece2;
-    }
-    .dispatch-stack tr:has(.dispatch-go[href]) .dispatch-address .entity-link svg {
-      background: #a4510a;
-      color: #fff;
-    }
     .dispatch-card-legend strong {
       font-size: 14px;
       color: var(--ink);
@@ -6077,6 +6065,74 @@
     }
     .dispatch-stack tr[hidden] {
       display: none !important;
+    }
+    /* The address in the Properties table: a house in a rounded square, coloured by the worst Urgency. */
+    .dispatch-stack .dispatch-address .entity-link svg {
+      flex: none;
+      width: 34px !important;
+      height: 34px !important;
+      padding: 8px;
+      box-sizing: border-box;
+      border-radius: 10px;
+      background: #f1ece2;
+      color: var(--muted);
+    }
+    .dispatch-stack tr[data-urgency='routine'] .dispatch-address .entity-link svg {
+      background: #e7eef5;
+      color: #1f5c8b;
+    }
+    .dispatch-stack tr[data-urgency='high'] .dispatch-address .entity-link svg {
+      background: #a4510a;
+      color: #fff;
+    }
+    .dispatch-stack tr[data-urgency='urgent'] .dispatch-address .entity-link svg {
+      background: #b3261e;
+      color: #fff;
+    }
+    .dispatch-stack .dispatch-address .entity-link {
+      gap: 10px;
+    }
+
+    /* A Work Order's free times: one line of quick choices. The one in the Start box is filled. */
+    .free-times {
+      display: grid;
+      gap: 6px;
+    }
+    .free-times-label {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .free-times-label span {
+      font-weight: 400;
+      color: var(--muted);
+    }
+    .free-times-row {
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 6px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+    }
+    .free-time {
+      flex: none;
+      min-height: 36px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      font: inherit;
+      font-size: 13px;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    .free-time:hover {
+      background: var(--info-bg);
+    }
+    .free-time[aria-pressed='true'] {
+      border-color: var(--action);
+      background: var(--info-bg);
+      font-weight: 600;
     }
     .dispatch-go-cell {
       width: 56px;

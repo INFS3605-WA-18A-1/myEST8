@@ -541,6 +541,7 @@ describe('Dispatch: the Jobs to dispatch', () => {
     expect(text).toContain('Ready to book');
     expect(text).toContain("Pete's Plumbing approved at $150.00");
     expect(card).toContain('data-fill=');
+    expect(visible(card)).toContain('Pick a free time');
     expect(card).toContain('value="2026-10-13T09:00"');
 
     const res = await w.post(`/dispatch/jobs/${job.jobId}/work-order`, { start: '2026-10-13T09:00', hours: '2' }, cookie);

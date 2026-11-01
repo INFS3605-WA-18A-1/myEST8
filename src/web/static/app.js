@@ -18,7 +18,22 @@ function onContent(setup) {
     if (input instanceof HTMLInputElement) {
       input.value = button.dataset.value ?? '';
       input.dispatchEvent(new Event('change', { bubbles: true }));
+      markFilled(input);
     }
+  });
+  // The quick choice that matches the input is marked pressed, so it is clear which one is in use.
+  function markFilled(input) {
+    for (const choice of document.querySelectorAll(`[data-fill="${input.id}"]`)) choice.setAttribute('aria-pressed', String(choice.dataset.value === input.value));
+  }
+  const markAll = () => {
+    for (const choice of document.querySelectorAll('[data-fill][aria-pressed]')) {
+      const input = document.getElementById(choice.dataset.fill);
+      if (input instanceof HTMLInputElement) markFilled(input);
+    }
+  };
+  markAll();
+  document.addEventListener('input', (event) => {
+    if (event.target instanceof HTMLInputElement && event.target.id) markFilled(event.target);
   });
 
   // Forms with data-confirm (postButton's `confirm`) ask first. A form already

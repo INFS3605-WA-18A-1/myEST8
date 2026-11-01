@@ -140,7 +140,7 @@ export function dispatchPages() {
               <div class="dispatch-layers" role="group" aria-label="Show on the map">
                 <button type="button" class="dispatch-layer" data-layer="properties" aria-pressed="true">${icon('house-line', { size: 'size-4' })}<span>Properties</span></button>
                 <button type="button" class="dispatch-layer" data-layer="tradies" aria-pressed="true">${icon('users-three', { size: 'size-4' })}<span>Tradies</span></button>
-                <button type="button" class="dispatch-layer" data-layer="tickets" aria-pressed="false">${icon('ticket', { size: 'size-4' })}<span>Tickets</span></button>
+                <button type="button" class="dispatch-layer" data-layer="urgent" aria-pressed="false">${icon('warning', { size: 'size-4' })}<span>High &amp; urgent</span></button>
               </div>
               <button type="button" class="dispatch-fab dispatch-expand" data-map-expand aria-pressed="false" aria-label="Make the map bigger">${icon('arrows-out-simple', { size: 'size-5' })}</button>
               <button type="button" class="dispatch-fab dispatch-locate" data-map-locate aria-label="Show where I am">${icon('crosshair', { size: 'size-5' })}</button>
@@ -325,9 +325,12 @@ function workOrderForm(job: DispatchJob, timeZone: string, now: string): Html {
       Send the Work Order to book the visit; the Tenant and Property Owner are told the time.
     </p>
     ${b.freeSlots.length
-      ? html`<p class="flex flex-wrap items-center gap-1 text-sm"><span class="text-muted">Free:</span>
-          ${b.freeSlots.map((slot) => html`<button type="button" class="btn btn-outline btn-sm" data-fill="${id}" data-value="${isoToLocal(slot.start, timeZone)}">${formatWhen(slot.start, timeZone)}</button>`)}
-        </p>`
+      ? html`<div class="free-times">
+          <p class="free-times-label">Pick a free time <span>(it fills the Start box below)</span></p>
+          <div class="free-times-row" role="group" aria-label="Free times">
+            ${b.freeSlots.map((slot) => html`<button type="button" class="free-time" aria-pressed="false" data-fill="${id}" data-value="${isoToLocal(slot.start, timeZone)}">${formatWhen(slot.start, timeZone)}</button>`)}
+          </div>
+        </div>`
       : html`<p class="text-sm text-muted">${b.businessName} has no free time in the next 7 days. Pick a start time.</p>`}
     <div class="ticket-inline-form">
       <div class="min-w-56 flex-1">

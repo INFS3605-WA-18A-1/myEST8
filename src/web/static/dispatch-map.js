@@ -214,13 +214,13 @@
     return entry;
   }
 
-  // What the buttons under the map show: Properties, Tradies, and (Tickets) only the Properties with open Tickets.
-  const layers = { properties: true, tradies: true, tickets: false };
-  const openTicketsOf = new Map(data.properties.map((p) => [p.key, p.openTickets]));
+  // What the buttons under the map show: Properties, Tradies, and (High & urgent) only the Properties whose worst open Ticket is High or Urgent.
+  const layers = { properties: true, tradies: true, urgent: false };
+  const urgencyOf = new Map(data.properties.map((p) => [p.key, p.urgency]));
 
   function layerShows(key) {
     if (key.startsWith('tradie-')) return layers.tradies;
-    return layers.properties && (!layers.tickets || (openTicketsOf.get(key) || 0) > 0);
+    return layers.properties && (!layers.urgent || urgencyOf.get(key) === 'urgent' || urgencyOf.get(key) === 'high');
   }
 
   /** Every pin the buttons leave on, as a GeoJSON point, which is all MapLibre needs to work out the groups. */
