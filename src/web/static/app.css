@@ -6094,6 +6094,183 @@
     .dispatch-go:hover {
       background: var(--info-bg);
     }
+    /* The header's search and filters. */
+    .dispatch-controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    .dispatch-q {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 40px;
+      width: min(15rem, 100%);
+      padding: 0 14px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface);
+      color: var(--muted);
+    }
+    .dispatch-q input {
+      flex: 1;
+      min-width: 0;
+      border: 0;
+      background: transparent;
+      font: inherit;
+      font-size: 14px;
+      color: var(--ink);
+    }
+    .dispatch-q input:focus {
+      outline: none;
+    }
+    .dispatch-q:focus-within {
+      outline: 2px solid var(--action);
+    }
+    .dispatch-pick {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 40px;
+      padding: 0 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface);
+      font-size: 14px;
+      color: var(--muted);
+    }
+    .dispatch-pick select {
+      border: 0;
+      background: transparent;
+      font: inherit;
+      font-weight: 600;
+      color: var(--ink);
+    }
+    /* The page header is a row already; keep the title first and the controls under it on phones. */
+    @media (max-width: 63.98rem) {
+      .dispatch-controls {
+        width: 100%;
+      }
+    }
+
+    /* On the map: layer buttons along the bottom, expand and locate beside the zoom. */
+    .dispatch-layers {
+      position: absolute;
+      left: 50%;
+      bottom: 22px;
+      z-index: 2;
+      display: inline-flex;
+      gap: 2px;
+      padding: 4px;
+      transform: translateX(-50%);
+      border-radius: 14px;
+      background: var(--surface);
+      box-shadow: 0 2px 12px rgb(19 33 46 / 16%);
+    }
+    html:not(.js) .dispatch-layers,
+    html:not(.js) .dispatch-fab {
+      display: none;
+    }
+    .dispatch-layer {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 40px;
+      padding: 0 12px;
+      border: 0;
+      border-radius: 10px;
+      background: transparent;
+      font: inherit;
+      font-size: 13px;
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .dispatch-layer[aria-pressed='true'] {
+      background: var(--info-bg);
+      color: var(--ink);
+    }
+    .dispatch-fab {
+      position: absolute;
+      z-index: 2;
+      display: grid;
+      width: 44px;
+      height: 44px;
+      place-items: center;
+      border: 0;
+      border-radius: 50%;
+      background: var(--surface);
+      box-shadow: 0 2px 12px rgb(19 33 46 / 16%);
+      color: var(--ink);
+      cursor: pointer;
+    }
+    .dispatch-expand {
+      top: 12px;
+      right: 12px;
+    }
+    .dispatch-locate {
+      bottom: 22px;
+      left: 12px;
+    }
+    .dispatch-mapcard .maplibregl-ctrl-top-right {
+      top: 64px;
+    }
+    .dispatch-mapcard .maplibregl-ctrl-top-right .maplibregl-ctrl {
+      margin: 0 12px 0 0;
+    }
+    .dispatch-mapcard .maplibregl-ctrl-group {
+      border-radius: 22px;
+    }
+    .dispatch-mapcard.is-expanded {
+      position: fixed;
+      inset: 12px;
+      z-index: 60;
+      height: auto;
+      max-height: none;
+    }
+    body.dispatch-map-open {
+      overflow: hidden;
+    }
+    .dispatch-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .dispatch-foot {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px 16px;
+      margin-top: 8px;
+    }
+    .dispatch-foot .dispatch-more {
+      margin-top: 0;
+    }
+    .dispatch-foot .dispatch-more[open] {
+      flex-basis: 100%;
+    }
+    .dispatch-showing {
+      margin: 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .dispatch-more > summary {
+      display: inline-flex;
+      align-items: center;
+      min-height: 40px;
+      padding: 0 16px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      list-style: none;
+    }
+    .glance-tile.is-warm::after {
+      content: '\2197';
+      margin-left: auto;
+      font-size: 14px;
+      color: #a4510a;
+    }
     @media (max-width: 639.98px) {
       .dispatch-go-cell {
         display: none;

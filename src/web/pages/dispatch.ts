@@ -20,7 +20,7 @@ import { Hono } from 'hono';
 import { html, raw } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
 import { distanceKm, nearest, TRADIE_SEARCH_RADIUS_KM } from '../../geo.ts';
-import { ActionError, type Urgency } from '../../shared.ts';
+import { ActionError, TRADES, type Urgency } from '../../shared.ts';
 import { addDays, dayOf, startOfDay } from '../../zoned-time.ts';
 import { bookingCard, type Booking } from '../bookings.ts';
 import type { WebEnv } from '../env.ts';
@@ -37,6 +37,7 @@ import {
   formatMoney,
   formatWhen,
   humanise,
+  linkButton,
   page,
   postButton,
   statusBadge,
@@ -82,19 +83,34 @@ export function dispatchPages() {
     const { actions, pm } = c.var;
     const { timeZone } = actions.agency();
     const today = dayOf(actions.now(), timeZone);
-    const [{ properties, tradies }, bookings, people] = await Promise.all([
+    const [{ properties: everyProperty, tradies: everyTradie }, bookings, people] = await Promise.all([
       actions.dispatch(),
       actions.calendar({ from: startOfDay(today, timeZone).toISOString(), to: startOfDay(addDays(today, BOOKED_DAYS), timeZone).toISOString() }),
       actions.people('tradie'),
     ]);
     // A Tradie without a business address isn't missing from the map, just not on it.
-    const missing = properties.some((p) => !p.location) || people.some((t) => t.businessAddress && !t.location);
+    const missing = everyProperty.some((p) => !p.location) || people.some((t) => t.businessAddress && !t.location);
+
+    // The header's search, Region (the state in a Property's address) and Trade narrow the map, the queue and the table together.
+    const search = (c.req.query('q') ?? '').trim();
+    const regions = [...new Set(everyProperty.map((p) => stateOf(p.address)).filter((r): r is string => r !== null))].sort();
+    const region = regions.includes(c.req.query('region') ?? '') ? c.req.query('region')! : '';
+    const trade = (TRADES as readonly string[]).includes(c.req.query('trade') ?? '') ? c.req.query('trade')! : '';
+    const words = search.toLowerCase();
+    const properties = everyProperty
+      .map((p) => (trade ? { ...p, openTickets: p.openTickets.filter((t) => t.jobs.some((j) => j.trade === trade)) } : p))
+      .filter((p) => !region || stateOf(p.address) === region)
+      .filter((p) => !trade || p.openTickets.length > 0)
+      .filter((p) => !words || [p.address, p.suburb, ...p.openTickets.flatMap((t) => [t.description, `#${t.ticketId}`])].some((text) => text.toLowerCase().includes(words)));
+    const tradies = everyTradie
+      .filter((t) => !trade || t.trades.includes(trade as never))
+      .filter((t) => !words || [t.businessName, t.name, ...t.trades.map(humanise)].some((text) => text.toLowerCase().includes(words)));
 
     const ordered = [...properties].sort(
       (a, b) => (URGENCY_RANK[a.worstUrgency ?? ''] ?? 3) - (URGENCY_RANK[b.worstUrgency ?? ''] ?? 3) || a.address.localeCompare(b.address),
     );
     const waiting: Waiting[] = ordered.flatMap((property) =>
-      property.openTickets.flatMap((ticket) => ticket.jobs.filter((job) => job.needs).map((job) => ({ job, ticket, property }))),
+      property.openTickets.flatMap((ticket) => ticket.jobs.filter((job) => job.needs && (!trade || job.trade === trade)).map((job) => ({ job, ticket, property }))),
     );
     waiting.sort((a, b) => (URGENCY_RANK[a.ticket.urgency] ?? 3) - (URGENCY_RANK[b.ticket.urgency] ?? 3) || a.ticket.reportedAt.localeCompare(b.ticket.reportedAt));
     const needTradies = waiting.filter((w) => w.job.needs === 'tradies').length;
@@ -115,11 +131,19 @@ export function dispatchPages() {
         shell: shellInfo(c),
         flash: flashFrom(c.req.url),
         subtitle,
+        controls: dispatchControls({ search, region, regions, trade }),
         actions: missing ? postButton('/dispatch/addresses', 'Look up missing addresses', { size: 'sm' }) : undefined,
         body: html`
           <div class="dispatch-top">
             <div class="dispatch-mapcard">
               ${mapSection()}
+              <div class="dispatch-layers" role="group" aria-label="Show on the map">
+                <button type="button" class="dispatch-layer" data-layer="properties" aria-pressed="true">${icon('house-line', { size: 'size-4' })}<span>Properties</span></button>
+                <button type="button" class="dispatch-layer" data-layer="tradies" aria-pressed="true">${icon('users-three', { size: 'size-4' })}<span>Tradies</span></button>
+                <button type="button" class="dispatch-layer" data-layer="tickets" aria-pressed="false">${icon('ticket', { size: 'size-4' })}<span>Tickets</span></button>
+              </div>
+              <button type="button" class="dispatch-fab dispatch-expand" data-map-expand aria-pressed="false" aria-label="Make the map bigger">${icon('arrows-out-simple', { size: 'size-5' })}</button>
+              <button type="button" class="dispatch-fab dispatch-locate" data-map-locate aria-label="Show where I am">${icon('crosshair', { size: 'size-5' })}</button>
               <p class="dispatch-chip"><span aria-hidden="true"></span>${placed} ${placed === 1 ? 'property' : 'properties'} · ${tradiesPlaced} ${tradiesPlaced === 1 ? 'tradie' : 'tradies'} located</p>
               ${panels(ordered, tradies, bookings, timeZone, tradiesPlaced > 0)}
             </div>
@@ -211,6 +235,32 @@ function glanceTile(o: { label: string; value: number; hint: string; tone: Glanc
   return html`<a class="glance-tile is-${o.tone}" href="${o.href}"><b class="glance-tile-value num">${o.value}</b><span class="glance-tile-text"><span class="glance-tile-label">${o.label}</span><span class="glance-tile-hint">${o.hint}</span></span></a>`;
 }
 
+const STATE = /\b(NSW|VIC|QLD|SA|WA|TAS|ACT|NT)\b/;
+
+/** The state in an address ("12 King St, Newtown NSW 2042"), or null. */
+function stateOf(address: string): string | null {
+  return STATE.exec(address)?.[1] ?? null;
+}
+
+/** The header's controls: a search over Properties, Tickets and Tradies, then Region and Trade. A GET form, so a result can be linked to. */
+function dispatchControls(o: { search: string; region: string; regions: string[]; trade: string }): Html {
+  const option = (value: string, label: string, chosen: string) => html`<option value="${value}"${value === chosen ? html` selected` : ''}>${label}</option>`;
+  return html`<form method="get" action="/dispatch" class="dispatch-controls" role="search" aria-label="Narrow Dispatch" data-autosubmit>
+    <label class="dispatch-q">
+      <span class="sr-only">Search Properties, Tickets or Tradies</span>
+      ${icon('magnifying-glass', { size: 'size-4' })}
+      <input type="search" name="q" value="${o.search}" placeholder="Search properties, tickets or tradies" autocomplete="off" />
+    </label>
+    ${o.regions.length
+      ? html`<label class="dispatch-pick"><span>Region</span>
+          <select name="region">${option('', 'All', o.region)}${o.regions.map((r) => option(r, r, o.region))}</select></label>`
+      : ''}
+    <label class="dispatch-pick"><span>Trade</span>
+      <select name="trade">${option('', 'All', o.trade)}${TRADES.map((t) => option(t, humanise(t), o.trade))}</select></label>
+    <button type="submit" class="btn btn-sm filter-bar-apply">Search</button>
+  </form>`;
+}
+
 /**
  * The Jobs waiting on dispatch, most urgent first: a card each with its Ticket, Property
  * and Trade, and what sends it on. A Job that needs Tradies lists those of its Trade not
@@ -259,7 +309,7 @@ function quoteRequestForm(job: DispatchJob, property: PropertyView, tradies: Tra
         ${candidates.map((c, i) => tradieEntry(c, { id: `dispatch-job-${job.jobId}-tradie-${c.tradieId}`, checked: i < ticked, nominated: c.nominated }))}
       </ul>
     </fieldset>
-    <div>${button('Send Quote Requests', { size: 'sm' })}</div>
+    <div class="dispatch-actions">${button('Send Quote Requests', { size: 'sm' })}${linkButton('Add a tradie', '/tradies#add-tradie', { variant: 'secondary', size: 'sm' })}</div>
   </form>`;
 }
 
@@ -470,7 +520,7 @@ function propertyTable(properties: PropertyView[]): Html {
         </div>`
       : emptyState('No open Tickets at any Property.')}
     ${quiet.length
-      ? html`<details class="dispatch-more">
+      ? html`<div class="dispatch-foot"><p class="dispatch-showing">Showing ${open.length} of ${properties.length} properties</p><details class="dispatch-more">
           <summary class="cursor-pointer text-sm font-medium text-action">Show the ${quiet.length} ${quiet.length === 1 ? 'Property' : 'Properties'} with no open Tickets</summary>
           <div class="table-frame dispatch-stack">
             <table class="table table-sm">
@@ -486,7 +536,7 @@ function propertyTable(properties: PropertyView[]): Html {
               </tbody>
             </table>
           </div>
-        </details>`
+        </details></div>`
       : ''}`;
 }
 

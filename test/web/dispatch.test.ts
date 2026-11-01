@@ -120,6 +120,35 @@ describe('Dispatch: the map data', () => {
   });
 });
 
+describe('Dispatch: the header search and filters', () => {
+  test('the search narrows the table and the pins together; the Trade filter keeps only that Trade', async () => {
+    const w = await webWorld();
+    const { ticketId } = await tomsTapTicket(w);
+    const cookie = await w.signIn();
+
+    const all = await dispatch(w, cookie);
+    expect(all).toContain('placeholder="Search properties, tickets or tradies"');
+    expect(pinData(all).properties.map((p) => p.address)).toContain(KING_ST);
+
+    const hit = await dispatch(w, cookie, `/dispatch?q=${encodeURIComponent('kitchen tap')}`);
+    expect(sectionText(hit, 'properties')).toContain(`href="#panel-property-${w.ids.kingSt}"`);
+    const byNumber = await dispatch(w, cookie, `/dispatch?q=${encodeURIComponent(`#${ticketId}`)}`);
+    expect(sectionText(byNumber, 'properties')).toContain(`href="#panel-property-${w.ids.kingSt}"`);
+
+    const miss = await dispatch(w, cookie, '/dispatch?q=zzzzzz');
+    expect(sectionText(miss, 'properties')).not.toContain(`href="#panel-property-${w.ids.kingSt}"`);
+    expect(pinData(miss).properties).toEqual([]);
+
+    const plumbing = await dispatch(w, cookie, '/dispatch?trade=plumbing');
+    expect(sectionText(plumbing, 'properties')).toContain(`href="#panel-property-${w.ids.kingSt}"`);
+    const roofing = await dispatch(w, cookie, '/dispatch?trade=roofing');
+    expect(sectionText(roofing, 'properties')).not.toContain(`href="#panel-property-${w.ids.kingSt}"`);
+    // A Trade or Region the page doesn't know is ignored rather than emptying it.
+    const odd = await dispatch(w, cookie, '/dispatch?trade=astrology&region=XX');
+    expect(sectionText(odd, 'properties')).toContain(`href="#panel-property-${w.ids.kingSt}"`);
+  });
+});
+
 describe('Dispatch: the table of Properties', () => {
   test('lists the Properties with open Tickets, each Ticket named by its issue, and folds the rest away', async () => {
     const w = await webWorld();

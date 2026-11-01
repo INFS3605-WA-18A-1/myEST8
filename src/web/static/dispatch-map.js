@@ -214,10 +214,58 @@
     return entry;
   }
 
-  /** Every pin as a GeoJSON point, which is all MapLibre needs to work out the groups. */
-  function pinFeatures() {
-    return [...markers].map(([key, entry]) => ({ type: 'Feature', geometry: { type: 'Point', coordinates: entry.lngLat }, properties: { key, rank: entry.rank } }));
+  // What the buttons under the map show: Properties, Tradies, and (Tickets) only the Properties with open Tickets.
+  const layers = { properties: true, tradies: true, tickets: false };
+  const openTicketsOf = new Map(data.properties.map((p) => [p.key, p.openTickets]));
+
+  function layerShows(key) {
+    if (key.startsWith('tradie-')) return layers.tradies;
+    return layers.properties && (!layers.tickets || (openTicketsOf.get(key) || 0) > 0);
   }
+
+  /** Every pin the buttons leave on, as a GeoJSON point, which is all MapLibre needs to work out the groups. */
+  function pinFeatures() {
+    return [...markers]
+      .filter(([key]) => layerShows(key))
+      .map(([key, entry]) => ({ type: 'Feature', geometry: { type: 'Point', coordinates: entry.lngLat }, properties: { key, rank: entry.rank } }));
+  }
+
+  for (const button of document.querySelectorAll('[data-layer]')) {
+    button.addEventListener('click', () => {
+      const layer = button.dataset.layer;
+      layers[layer] = !layers[layer];
+      button.setAttribute('aria-pressed', String(layers[layer]));
+      if (selected && !layerShows(selected)) clearSelection(false);
+      map?.getSource(PINS)?.setData({ type: 'FeatureCollection', features: pinFeatures() });
+    });
+  }
+
+  // Expand: the map card fills the window until it is pressed again or Escape is.
+  const card = mapElement.closest('.dispatch-mapcard');
+  const expand = document.querySelector('[data-map-expand]');
+  function setExpanded(on) {
+    if (!card || !expand) return;
+    card.classList.toggle('is-expanded', on);
+    document.body.classList.toggle('dispatch-map-open', on);
+    expand.setAttribute('aria-pressed', String(on));
+    expand.setAttribute('aria-label', on ? 'Make the map smaller' : 'Make the map bigger');
+    setTimeout(() => map?.resize(), 50);
+  }
+  expand?.addEventListener('click', () => setExpanded(!card.classList.contains('is-expanded')));
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && card?.classList.contains('is-expanded') && !selected) setExpanded(false);
+  });
+
+  // Locate: centre the map on where the browser says the person is.
+  const locate = document.querySelector('[data-map-locate]');
+  if (locate && !navigator.geolocation) locate.hidden = true;
+  locate?.addEventListener('click', () => {
+    navigator.geolocation.getCurrentPosition(
+      (position) => map?.easeTo({ center: [position.coords.longitude, position.coords.latitude], zoom: Math.max(map.getZoom(), 12), animate: !reduceMotion }),
+      () => {},
+      { timeout: 8000 },
+    );
+  });
 
   /** The groups MapLibre has made at this zoom, one feature each (a tile edge can repeat one). */
   function clusterFeatures() {
@@ -386,7 +434,7 @@
     const current = map;
     map.touchZoomRotate.disableRotation();
     map.keyboard.disableRotation();
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false, showZoom: true, visualizePitch: false }), 'top-left');
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false, showZoom: true, visualizePitch: false }), 'top-right');
     // The page scrolls: the wheel only zooms the map once the map has been clicked or focused.
     map.scrollZoom.disable();
     mapElement.addEventListener('focusin', () => map?.scrollZoom.enable());
