@@ -16,6 +16,29 @@
 // far enough to need it: if that, WebGL or the basemap's style fails, the map's place
 // says so and the table and panels still work.
 
+// === The Properties table's filter and search (progressive: without JavaScript the whole table shows) ===
+(() => {
+  const tabs = [...document.querySelectorAll('[data-prop-filter]')];
+  const search = document.querySelector('[data-prop-search]');
+  const table = document.getElementById('properties');
+  if (!tabs.length || !search || !table) return;
+  let mode = 'all';
+  function apply() {
+    const words = search.value.trim().toLowerCase();
+    for (const row of table.querySelectorAll('tbody tr[data-row]')) {
+      const urgent = row.dataset.urgency === 'urgent' || row.dataset.urgency === 'high';
+      const matchesTab = mode === 'all' || (mode === 'open' && 'urgency' in row.dataset && row.closest('details') === null) || (mode === 'urgent' && urgent);
+      const matchesText = !words || (row.querySelector('th')?.textContent || '').toLowerCase().includes(words);
+      row.hidden = !(matchesTab && matchesText);
+    }
+    // "Open tickets" and "High & urgent" leave the quiet Properties folded away.
+    for (const more of table.querySelectorAll('details.dispatch-more')) more.hidden = mode !== 'all' && !words;
+    for (const tab of tabs) tab.setAttribute('aria-pressed', String(tab.dataset.propFilter === mode));
+  }
+  for (const tab of tabs) tab.addEventListener('click', () => { mode = tab.dataset.propFilter; apply(); });
+  search.addEventListener('input', apply);
+})();
+
 (() => {
   const dataElement = document.getElementById('dispatch-data');
   const mapElement = document.getElementById('dispatch-map');
@@ -191,10 +214,58 @@
     return entry;
   }
 
-  /** Every pin as a GeoJSON point, which is all MapLibre needs to work out the groups. */
-  function pinFeatures() {
-    return [...markers].map(([key, entry]) => ({ type: 'Feature', geometry: { type: 'Point', coordinates: entry.lngLat }, properties: { key, rank: entry.rank } }));
+  // What the buttons under the map show: Properties, Tradies, and (High & urgent) only the Properties whose worst open Ticket is High or Urgent.
+  const layers = { properties: true, tradies: true, urgent: false };
+  const urgencyOf = new Map(data.properties.map((p) => [p.key, p.urgency]));
+
+  function layerShows(key) {
+    if (key.startsWith('tradie-')) return layers.tradies;
+    return layers.properties && (!layers.urgent || urgencyOf.get(key) === 'urgent' || urgencyOf.get(key) === 'high');
   }
+
+  /** Every pin the buttons leave on, as a GeoJSON point, which is all MapLibre needs to work out the groups. */
+  function pinFeatures() {
+    return [...markers]
+      .filter(([key]) => layerShows(key))
+      .map(([key, entry]) => ({ type: 'Feature', geometry: { type: 'Point', coordinates: entry.lngLat }, properties: { key, rank: entry.rank } }));
+  }
+
+  for (const button of document.querySelectorAll('[data-layer]')) {
+    button.addEventListener('click', () => {
+      const layer = button.dataset.layer;
+      layers[layer] = !layers[layer];
+      button.setAttribute('aria-pressed', String(layers[layer]));
+      if (selected && !layerShows(selected)) clearSelection(false);
+      map?.getSource(PINS)?.setData({ type: 'FeatureCollection', features: pinFeatures() });
+    });
+  }
+
+  // Expand: the map card fills the window until it is pressed again or Escape is.
+  const card = mapElement.closest('.dispatch-mapcard');
+  const expand = document.querySelector('[data-map-expand]');
+  function setExpanded(on) {
+    if (!card || !expand) return;
+    card.classList.toggle('is-expanded', on);
+    document.body.classList.toggle('dispatch-map-open', on);
+    expand.setAttribute('aria-pressed', String(on));
+    expand.setAttribute('aria-label', on ? 'Make the map smaller' : 'Make the map bigger');
+    setTimeout(() => map?.resize(), 50);
+  }
+  expand?.addEventListener('click', () => setExpanded(!card.classList.contains('is-expanded')));
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && card?.classList.contains('is-expanded') && !selected) setExpanded(false);
+  });
+
+  // Locate: centre the map on where the browser says the person is.
+  const locate = document.querySelector('[data-map-locate]');
+  if (locate && !navigator.geolocation) locate.hidden = true;
+  locate?.addEventListener('click', () => {
+    navigator.geolocation.getCurrentPosition(
+      (position) => map?.easeTo({ center: [position.coords.longitude, position.coords.latitude], zoom: Math.max(map.getZoom(), 12), animate: !reduceMotion }),
+      () => {},
+      { timeout: 8000 },
+    );
+  });
 
   /** The groups MapLibre has made at this zoom, one feature each (a tile edge can repeat one). */
   function clusterFeatures() {
@@ -363,7 +434,7 @@
     const current = map;
     map.touchZoomRotate.disableRotation();
     map.keyboard.disableRotation();
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false, showZoom: true, visualizePitch: false }), 'top-left');
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false, showZoom: true, visualizePitch: false }), 'top-right');
     // The page scrolls: the wheel only zooms the map once the map has been clicked or focused.
     map.scrollZoom.disable();
     mapElement.addEventListener('focusin', () => map?.scrollZoom.enable());

@@ -187,15 +187,15 @@ After sign-up the onboarding wizard (`/welcome`) also fills the page, with no ra
 `/dispatch` (`src/web/pages/dispatch.ts`, `static/dispatch-map.js`) shows where the Agency's Properties and Tradies are, so a Property Manager can see which Tradies are near a Property with work waiting. MapLibre GL JS (6.x) draws a light grey vector basemap and works out which pins overlap; the pins and groups are HTML buttons laid over it. MapLibre's module, worker and stylesheet are served from `/assets` (`assets.ts` allowlists each file by name, `vercel.json` ships them from `node_modules/maplibre-gl/dist/`), so only the basemap's style, tiles and fonts come from the network.
 
 ```
-┌ Need Tradies │ Ready to book │ High or Urgent │ Visits today ───────┐
-├ To dispatch: a card per Job waiting, most urgent first ────────────┤
-├──────────────────────────────────────────────┬────────────────────┤
-│ map  (55vh on phones, 32rem from 1024px)     │ panel: the picked  │
-│                                              │ Property or Tradie │
-├──────────────────────────────────────────────┴────────────────────┤
-│ Properties: Address  Suburb  Open Tickets  Worst urgency           │
-└────────────────────────────────────────────────────────────────────┘
+┌ map card (43rem from 1024px, 55vh on phones) ─┬ Today at a glance (4 soft tiles) ─┐
+│  count chip; the picked Property or Tradie    ├ To dispatch (count, View queue)   │
+│  floats over the map                          │  a soft card per Job, most urgent │
+├───────────────────────────────────────────────┴───────────────────────────────────┤
+│ Properties (count, All / Open tickets / High & urgent tabs, address search)       │
+└────────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+Cards are soft: white, 1px `--line`, 16px radius. The glance tiles are Paper-tinted (Ochre-tinted when Tradies are needed, Harbour-tinted when Jobs are ready to book, a red number for High or urgent). Each Job card has a Ticket box (number) beside what it needs. The tabs and search over the Properties table are JavaScript only (`dispatch-map.js`); without it the whole table shows. A row's arrow opens the Property's details over the map.
 
 - **At a glance.** Four stats: Jobs that need Tradies to quote, Jobs ready to book (a Quote approved, no Work Order), open High or Urgent Tickets, and today's visits.
 - **To dispatch.** A card per Job waiting on the Property Manager, most urgent then oldest first, with a Wattle edge: what it needs (Needs Tradies to quote, Ready to book), the Ticket's issue, its Urgency, Trade and Property (the Property's chip picks it on the map). A Job with fewer than two Quote Requests lists up to six Tradies of its Trade not asked yet, nominated first then nearest, each as a Tradie entry (below) with its checkbox, the first ones ticked, and **Send Quote Requests**. A Job with an approved Quote names the Tradie and price, offers their next three free times (each fills the start) and **Send Work Order**. Both post to `/dispatch/jobs/:id/…` and refuse as the Ticket page does.

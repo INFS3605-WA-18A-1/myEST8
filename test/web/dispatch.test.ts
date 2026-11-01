@@ -120,6 +120,35 @@ describe('Dispatch: the map data', () => {
   });
 });
 
+describe('Dispatch: the header search and filters', () => {
+  test('the search narrows the table and the pins together; the Trade filter keeps only that Trade', async () => {
+    const w = await webWorld();
+    const { ticketId } = await tomsTapTicket(w);
+    const cookie = await w.signIn();
+
+    const all = await dispatch(w, cookie);
+    expect(all).toContain('placeholder="Search properties, tickets or tradies"');
+    expect(pinData(all).properties.map((p) => p.address)).toContain(KING_ST);
+
+    const hit = await dispatch(w, cookie, `/dispatch?q=${encodeURIComponent('kitchen tap')}`);
+    expect(sectionText(hit, 'properties')).toContain(`href="#panel-property-${w.ids.kingSt}"`);
+    const byNumber = await dispatch(w, cookie, `/dispatch?q=${encodeURIComponent(`#${ticketId}`)}`);
+    expect(sectionText(byNumber, 'properties')).toContain(`href="#panel-property-${w.ids.kingSt}"`);
+
+    const miss = await dispatch(w, cookie, '/dispatch?q=zzzzzz');
+    expect(sectionText(miss, 'properties')).not.toContain(`href="#panel-property-${w.ids.kingSt}"`);
+    expect(pinData(miss).properties).toEqual([]);
+
+    const plumbing = await dispatch(w, cookie, '/dispatch?trade=plumbing');
+    expect(sectionText(plumbing, 'properties')).toContain(`href="#panel-property-${w.ids.kingSt}"`);
+    const roofing = await dispatch(w, cookie, '/dispatch?trade=roofing');
+    expect(sectionText(roofing, 'properties')).not.toContain(`href="#panel-property-${w.ids.kingSt}"`);
+    // A Trade or Region the page doesn't know is ignored rather than emptying it.
+    const odd = await dispatch(w, cookie, '/dispatch?trade=astrology&region=XX');
+    expect(sectionText(odd, 'properties')).toContain(`href="#panel-property-${w.ids.kingSt}"`);
+  });
+});
+
 describe('Dispatch: the table of Properties', () => {
   test('lists the Properties with open Tickets, each Ticket named by its issue, and folds the rest away', async () => {
     const w = await webWorld();
@@ -427,7 +456,7 @@ describe('Dispatch: the Jobs to dispatch', () => {
 
     const html = await dispatch(w, cookie);
 
-    expect(visible(html)).toMatch(/Need Tradies 1 Jobs to ask for Quotes/);
+    expect(visible(html)).toMatch(/1 Need tradies Jobs to ask for Quotes/);
     const card = html.slice(html.indexOf(`id="dispatch-job-${job.jobId}"`), html.indexOf('</li>\n</ul>', html.indexOf(`id="dispatch-job-${job.jobId}"`)));
     const text = visible(card);
     expect(text).toContain('Needs Tradies to quote');
@@ -512,6 +541,7 @@ describe('Dispatch: the Jobs to dispatch', () => {
     expect(text).toContain('Ready to book');
     expect(text).toContain("Pete's Plumbing approved at $150.00");
     expect(card).toContain('data-fill=');
+    expect(visible(card)).toContain('Pick a free time');
     expect(card).toContain('value="2026-10-13T09:00"');
 
     const res = await w.post(`/dispatch/jobs/${job.jobId}/work-order`, { start: '2026-10-13T09:00', hours: '2' }, cookie);
