@@ -15,7 +15,7 @@ test('on a phone, an Owner gets an email from the pen and nothing scrolls sidewa
 
   const name = `Eden ${unique()}`;
   const email = `eden.${unique()}@example.com`;
-  await page.goto('/owners#add-owner');
+  await page.goto('/owners/new');
   await page.getByRole('textbox', { name: 'Name' }).fill(name);
   await page.getByRole('textbox', { name: 'Mobile' }).fill(mobile());
   await page.getByRole('button', { name: 'Add Property Owner' }).click();

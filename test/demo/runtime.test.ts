@@ -140,6 +140,7 @@ describe('the demo', () => {
       classifier: 'mock',
       tradeSuggester: 'mock',
       jobFitJudge: 'mock',
+      requestJudge: 'mock',
       imageMatcher: 'mock',
       quoteReader: 'mock',
       places: 'mock',

@@ -51,10 +51,13 @@ describe('Tradies', () => {
     expect(row).toMatch(/data-label="Previous Quotes">0</);
   });
 
-  test('the add form and spreadsheet import stay on the page', async () => {
+  test('the add form and spreadsheet import are on the Add page, not the list', async () => {
     const w = await webWorld();
     const cookie = await w.signIn();
-    const page = await (await w.get('/tradies?manual=1', cookie)).text();
+    const list = await (await w.get('/tradies', cookie)).text();
+    expect(list).not.toContain('id="import-tradies"');
+    expect(list).not.toContain('action="/setup/tradies');
+    const page = await (await w.get('/tradies/new?manual=1', cookie)).text();
     expect(page).toContain('action="/setup/tradies?manual=1"');
     expect(page).toContain('id="import-tradies"');
   });
