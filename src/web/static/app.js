@@ -995,3 +995,153 @@ onContent((root) => {
     load(url, false);
   });
 })();
+
+// === Ticket page: Progress tabs, tools and the message log ===
+// The Progress card's three views (Timeline, the Job, Costs) show one at a time, with its
+// tab buttons; without this file they show one under another. Its tools print the page,
+// open the Summary's editor and fill the screen; the message log is kept short with a
+// button that shows all of it.
+onContent((root) => {
+  for (const tabs of root.querySelectorAll('[data-tabs]')) {
+    const selected = tabs.querySelector('[role="tab"][aria-selected="true"]') || tabs.querySelector('[role="tab"]');
+    if (selected) selectTab(selected);
+  }
+  for (const msgs of root.querySelectorAll('[data-msgs]')) {
+    const body = msgs.querySelector('.section-body');
+    const toggle = msgs.querySelector('[data-msgs-toggle]');
+    if (!body || !toggle) continue;
+    // The short view ends at the newest message; the button is only for a log longer than it.
+    body.scrollTop = body.scrollHeight;
+    toggle.hidden = body.scrollHeight <= body.clientHeight + 4;
+  }
+  // A slider under the Timeline board that scrolls it sideways (and follows it), shown
+  // only while the board is wider than the card. Dragging the board itself works too.
+  for (const board of root.querySelectorAll('.tl-board')) {
+    if (board.dataset.slider) continue;
+    board.dataset.slider = '1';
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.className = 'tl-slider';
+    slider.min = '0';
+    slider.step = '1';
+    slider.value = '0';
+    slider.setAttribute('aria-label', 'Scroll the Timeline sideways');
+    board.after(slider);
+    const sync = () => {
+      const max = board.scrollWidth - board.clientWidth;
+      slider.hidden = max <= 4;
+      slider.max = String(Math.max(0, Math.round(max)));
+      slider.value = String(Math.round(board.scrollLeft));
+    };
+    slider.addEventListener('input', () => {
+      board.scrollLeft = Number(slider.value);
+    });
+    board.addEventListener('scroll', sync, { passive: true });
+    if ('ResizeObserver' in window) new ResizeObserver(sync).observe(board);
+    window.addEventListener('resize', sync);
+    sync();
+  }
+});
+
+function selectTab(tab) {
+  const tabs = tab.closest('[data-tabs]');
+  if (!tabs) return;
+  for (const other of tabs.querySelectorAll('[role="tab"]')) {
+    const on = other === tab;
+    other.setAttribute('aria-selected', String(on));
+    const pane = document.getElementById(other.getAttribute('aria-controls'));
+    if (pane) pane.hidden = !on;
+  }
+}
+
+document.addEventListener('click', (event) => {
+  const target = event.target instanceof Element ? event.target : null;
+  if (!target) return;
+  const tab = target.closest('[data-tabs] [role="tab"]');
+  if (tab) return selectTab(tab);
+  const link = target.closest('[data-tab-link]');
+  if (link) {
+    const pane = document.getElementById(link.getAttribute('data-tab-link'));
+    const own = pane && document.getElementById(`tab-${pane.id}`);
+    if (own) {
+      selectTab(own);
+      event.preventDefault();
+      pane.closest('[data-tabs]')?.scrollIntoView({ block: 'start' });
+    }
+    return;
+  }
+  if (target.closest('[data-print]')) return window.print();
+  const summary = target.closest('[data-open-summary]');
+  if (summary) {
+    const editor = document.getElementById('edit-summary');
+    if (editor) {
+      event.preventDefault();
+      editor.open = true;
+      editor.scrollIntoView({ block: 'center' });
+      editor.querySelector('textarea')?.focus();
+    }
+    return;
+  }
+  const expand = target.closest('[data-expand]');
+  if (expand) {
+    const card = expand.closest('[data-tabs]');
+    const on = card?.classList.toggle('is-expanded');
+    expand.setAttribute('aria-pressed', String(Boolean(on)));
+    document.documentElement.classList.toggle('has-expanded', Boolean(on));
+    return;
+  }
+  const toggle = target.closest('[data-msgs-toggle]');
+  if (toggle) {
+    const msgs = toggle.closest('[data-msgs]');
+    const open = msgs?.classList.toggle('is-open');
+    toggle.setAttribute('aria-expanded', String(Boolean(open)));
+    if (!open) msgs.querySelector('.section-body')?.scrollTo({ top: 1e9 });
+    toggle.textContent = open ? 'Show fewer messages' : 'Show the whole conversation';
+  }
+});
+
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') return;
+  const open = document.querySelector('[data-tabs].is-expanded');
+  if (!open) return;
+  open.classList.remove('is-expanded');
+  open.querySelector('[data-expand]')?.setAttribute('aria-pressed', 'false');
+  document.documentElement.classList.remove('has-expanded');
+});
+
+// The Progress timeline: drag it sideways with the mouse (touch scrolls it natively).
+// A drag is not a click, so a link under the pointer isn't followed when it ends.
+{
+  let drag = null;
+  document.addEventListener('dragstart', (event) => {
+    if (event.target instanceof Element && event.target.closest('.tl-board')) event.preventDefault();
+  });
+  document.addEventListener('pointerdown', (event) => {
+    if (event.pointerType !== 'mouse' || event.button !== 0) return;
+    const board = event.target instanceof Element ? event.target.closest('.tl-board') : null;
+    if (!board || board.scrollWidth <= board.clientWidth) return;
+    drag = { board, x: event.clientX, left: board.scrollLeft, moved: false };
+  });
+  document.addEventListener('pointermove', (event) => {
+    if (!drag) return;
+    const dx = event.clientX - drag.x;
+    if (!drag.moved && Math.abs(dx) < 5) return;
+    drag.moved = true;
+    drag.board.classList.add('is-dragging');
+    drag.board.scrollLeft = drag.left - dx;
+    event.preventDefault();
+  });
+  const end = () => {
+    if (!drag) return;
+    const { board, moved } = drag;
+    drag = null;
+    board.classList.remove('is-dragging');
+    if (moved) {
+      const stop = (e) => e.stopPropagation();
+      board.addEventListener('click', stop, { capture: true, once: true });
+      setTimeout(() => board.removeEventListener('click', stop, true), 0);
+    }
+  };
+  document.addEventListener('pointerup', end);
+  document.addEventListener('pointercancel', end);
+}

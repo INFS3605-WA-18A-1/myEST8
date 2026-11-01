@@ -136,8 +136,9 @@ function rail(active: NavKey | undefined, agencyName: string | undefined, counts
 
 /** The Property Manager's name, opening a menu with Sign out. */
 function userMenu(name: string): Html {
+  const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('');
   return html`<details class="user-menu" data-menu>
-    <summary><span class="user-menu-name">${name}</span>${ICON.chevron}</summary>
+    <summary><span class="user-menu-avatar" aria-hidden="true">${initials}</span><span class="user-menu-name">${name}</span>${ICON.chevron}</summary>
     <div class="user-menu-panel">${postButton('/logout', 'Sign out', { variant: 'ghost', size: 'sm' })}</div>
   </details>`;
 }
@@ -150,17 +151,19 @@ function userMenu(name: string): Html {
  */
 function pageHeader(
   title: string,
-  o: { menu: boolean; controls?: Html; today?: string; pm?: { name: string } | null },
+  o: { menu: boolean; controls?: Html; today?: string; pm?: { name: string } | null; back?: { label: string; href: string }; titleExtra?: Html },
 ): Html {
-  return html`<header class="page-header">
+  return html`<header class="page-header${o.back ? ' has-back' : ''}">
+    ${o.back ? html`<a class="page-back" href="${o.back.href}">${icon('caret-left', { size: 'size-3.5' })}${o.back.label}</a>` : ''}
     <div class="page-header-lead">
       ${o.menu ? html`<button type="button" class="menu-button" data-drawer-toggle aria-controls="rail" aria-expanded="false" aria-label="Menu">${ICON.menu}</button>` : ''}
       <h1 class="page-title">${title}</h1>
+      ${o.titleExtra ?? ''}
     </div>
     <div class="page-header-end">
       ${o.controls ? html`<div class="page-header-controls">${o.controls}</div>` : ''}
-      ${o.today ? html`<time class="page-header-date">${o.today}</time>` : ''}
-      ${o.pm ? userMenu(o.pm.name) : ''}
+      ${o.today ? html`<time class="page-header-date">${icon('calendar-blank', { size: 'size-4' })}${o.today}</time>` : ''}
+      ${o.pm ? html`<a class="page-header-bell" href="/#alerts" aria-label="Alerts" title="Alerts">${icon('bell', { size: 'size-5' })}</a>${userMenu(o.pm.name)}` : ''}
     </div>
   </header>`;
 }
@@ -193,6 +196,10 @@ export function page(o: {
   actions?: Html;
   /** Controls in the page header, such as the Mine/All segmented control. */
   controls?: Html;
+  /** A link back to the list this page came from, above the title. */
+  back?: { label: string; href: string };
+  /** Beside the title, such as the Ticket's Urgency. */
+  titleExtra?: Html;
   /** The Agency's name for the rail and today's date for the page header. */
   shell?: ShellInfo;
   /** Counts shown beside rail links. */
@@ -214,7 +221,7 @@ export function page(o: {
           ${withRail ? rail(o.active, o.shell?.agencyName, o.navCounts ?? o.shell?.counts ?? {}, o.demo ?? o.shell?.demo ?? false, o.shell?.setupHref) : ''}
           <div class="app-main">
             <main id="main" class="app-content">
-              ${pageHeader(o.title, { menu: withRail, controls: o.controls, today: o.shell?.today, pm: o.pm })}
+              ${pageHeader(o.title, { menu: withRail, controls: o.controls, today: o.shell?.today, pm: o.pm, back: o.back, titleExtra: o.titleExtra })}
               ${o.flash ? flashMessage(o.flash) : ''}
               ${contentHead(o.subtitle, o.actions)}
               <div class="app-body-stack">${o.body}</div>
