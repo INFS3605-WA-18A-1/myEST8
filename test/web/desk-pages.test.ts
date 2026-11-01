@@ -75,6 +75,9 @@ function sectionOf(html: string, title: string) {
 /** The table row that links to Ticket `id`, or '' when there is none. */
 const rowOf = (html: string, id: number) => html.split('<tr>').find((r) => r.includes(`href="/tickets/${id}"`)) ?? '';
 
+/** The Tickets page's card for Ticket `id`, or '' when there is none. */
+const cardOf = (html: string, id: number) => html.split('<li class="tk-card').find((r) => r.includes(`href="/tickets/${id}"`)) ?? '';
+
 /** The table row that links to Reimbursement Request `id`, or '' when there is none. */
 const reimbursementRow = (html: string, id: number) => html.split('<tr>').find((r) => r.includes(`href="/reimbursements/${id}"`)) ?? '';
 
@@ -144,15 +147,15 @@ describe('Tickets: open Tickets', () => {
     expect(visible(html)).toContain(OCEAN_AVE);
   });
 
-  test('reads each row issue first, then the address linking to the Property, with the number quiet after the issue', async () => {
+  test('reads each card with its number, the issue, then the address linking to the Property', async () => {
     const w = await webWorld();
     const ids = await threeTickets(w);
 
     const html = await text(w, '/tickets');
-    const row = rowOf(html, ids.tap);
+    const row = cardOf(html, ids.tap);
     const issue = row.indexOf('The kitchen tap is dripping');
     expect(issue).toBeGreaterThan(-1);
-    expect(row.indexOf(`#${ids.tap}`)).toBeGreaterThan(issue);
+    expect(row.indexOf(`#${ids.tap}`)).toBeGreaterThan(-1);
     expect(row.indexOf(KING_ST)).toBeGreaterThan(issue);
     expect(row).toContain(`href="/properties/${w.ids.kingSt}"`);
   });
@@ -160,7 +163,7 @@ describe('Tickets: open Tickets', () => {
   test('a Ticket without photos shows the same quiet placeholder as a request without one', async () => {
     const w = await webWorld();
     const ids = await threeTickets(w);
-    const row = rowOf(await text(w, '/tickets'), ids.tap);
+    const row = cardOf(await text(w, '/tickets'), ids.tap);
     expect(row).toContain('class="issue-thumb-none"');
     expect(row).not.toContain('<img');
   });
@@ -190,18 +193,42 @@ describe('Tickets: open Tickets', () => {
     expect(res.headers.get('location')).toBe('/archive?filter=all&urgency=routine');
   });
 
-  test('pairs each Job’s Trade with its stage, and says when an open Ticket is ready to close', async () => {
+  test('shows each Ticket’s Trade and stage, and offers Close ticket only when it is ready to close', async () => {
     const w = await webWorld();
     const ids = await threeTickets(w);
     await w.alice.cancelJob((await w.alice.ticket(ids.fan)).jobs[0]!.jobId);
 
     const html = await text(w, '/tickets?filter=all');
-    // Each Job is its own item, its Trade then its stage.
-    const jobsOf = (id: number) => [...rowOf(html, id).matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/g)].map((m) => visible(m[1]!).trim());
-    expect(jobsOf(ids.tap)).toEqual(['Plumbing Quoting']);
-    expect(visible(rowOf(html, ids.tap))).not.toContain('Ready to close');
-    expect(jobsOf(ids.fan)).toEqual(['Plumbing Cancelled']);
-    expect(visible(rowOf(html, ids.fan))).toContain('Ready to close');
+    const tap = visible(cardOf(html, ids.tap));
+    expect(tap).toContain('Trade Plumbing');
+    expect(tap).toContain('Quoting');
+    expect(tap).not.toContain('Close ticket');
+    const fan = visible(cardOf(html, ids.fan));
+    expect(fan).toContain('Done · ready to close');
+    expect(fan).toContain('Close ticket');
+    expect(cardOf(html, ids.fan)).toContain(`action="/tickets/${ids.fan}/close"`);
+    expect(html).toContain('class="tk-legend"');
+  });
+
+  test('stage tabs count the open Tickets and narrow the cards, keeping the other filters', async () => {
+    const w = await webWorld();
+    const ids = await threeTickets(w);
+    await w.alice.cancelJob((await w.alice.ticket(ids.fan)).jobs[0]!.jobId);
+
+    const all = await text(w, '/tickets?filter=all');
+    const tabs = visible(/<nav class="tk-tabs"[\s\S]*?<\/nav>/.exec(all)?.[0] ?? '');
+    expect(tabs).toContain('All open 3');
+    expect(tabs).toContain('Quoting 2');
+    expect(tabs).toContain('Ready to close 1');
+    expect(tabs).not.toContain('Booked');
+
+    const ready = await text(w, '/tickets?filter=all&stage=done');
+    expect(ready).toContain(`href="/tickets/${ids.fan}"`);
+    expect(ready).not.toContain(`href="/tickets/${ids.tap}"`);
+    expect(ready).toContain('name="stage" value="done"');
+
+    const plumbing = await text(w, '/tickets?filter=all&trade=plumbing&stage=done');
+    expect(plumbing).toContain('href="/tickets?filter=all&amp;trade=plumbing&amp;stage=quoting"');
   });
 
   test('says so when there are none, with the way to every Property Manager’s', async () => {

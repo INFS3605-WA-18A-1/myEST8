@@ -6451,6 +6451,348 @@
   }
 }
 
+/* === Tickets page: soft cards (pages/ticket-list.ts) ===
+   One bar with the stage tabs and compact filters, the new Maintenance Requests as cards
+   with their photos, and the open Tickets as a grid of cards with a stage bar. The Archive
+   keeps its table. */
+@layer utilities {
+  @layer app {
+    .tickets-page {
+      display: grid;
+      gap: 16px;
+    }
+    .tk-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px 16px;
+      padding: 8px 12px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      box-shadow: var(--shadow-soft);
+    }
+    .tk-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 2px;
+    }
+    .tk-tab {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 36px;
+      padding: 0 10px;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--muted);
+      text-decoration: none;
+      border-radius: 999px;
+    }
+    .tk-tab:hover {
+      background: var(--page);
+      color: var(--ink);
+    }
+    .tk-tab[aria-current='page'] {
+      color: var(--ink);
+      background: var(--page);
+      box-shadow: inset 0 0 0 1px var(--line);
+      font-weight: 600;
+    }
+    .tk-tab-count {
+      min-width: 22px;
+      padding: 0 6px;
+      font-size: 12px;
+      line-height: 20px;
+      text-align: center;
+      color: var(--ink);
+      background: var(--page);
+      border-radius: 999px;
+    }
+    .tk-tab.is-ready .tk-tab-count {
+      background: var(--hivis);
+    }
+    .tk-bar .filter-bar.is-compact {
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 12px;
+      margin-left: auto;
+    }
+    .filter-bar.is-compact .filter-bar-field {
+      flex-direction: row;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+    /* The select says what it is in its first option ("Any Urgency"), so its label is for screen readers. */
+    .filter-bar.is-compact .filter-bar-label {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+    .filter-bar.is-compact select,
+    .filter-bar.is-compact .combobox-input {
+      width: 8.5rem;
+    }
+    .filter-bar.is-compact .filter-bar-search {
+      min-width: 0;
+    }
+    .tk-clear {
+      font-size: 14px;
+    }
+    .tk-section-note {
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .tickets-page .section-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    /* New Maintenance Requests */
+    .tk-request {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 16px;
+      padding: 12px;
+      background: #dbeaf7;
+      border-radius: 12px;
+    }
+    .tk-photos {
+      display: flex;
+      gap: 6px;
+    }
+    .tk-photo {
+      position: relative;
+      display: block;
+      width: 64px;
+      height: 64px;
+      overflow: hidden;
+      background: var(--surface);
+      border-radius: 8px;
+    }
+    .tk-photo img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .tk-photo-flag {
+      position: absolute;
+      left: 4px;
+      bottom: 4px;
+      padding: 0 6px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--ink);
+      background: var(--hivis);
+      border-radius: 999px;
+    }
+    .tk-photo-more {
+      display: grid;
+      place-items: center;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .tk-photos > .issue-thumb-none {
+      width: 64px;
+      height: 64px;
+      background: var(--surface);
+      border-radius: 8px;
+    }
+    .tk-request-main {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+    }
+    .tk-request-title {
+      font-weight: 600;
+      color: var(--ink);
+      text-decoration: none;
+    }
+    .tk-request-title:hover {
+      text-decoration: underline;
+    }
+    .tk-request-address,
+    .tk-card-address {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin: 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .tk-card-address a {
+      color: inherit;
+      text-decoration: none;
+    }
+    .tk-card-address a:hover {
+      text-decoration: underline;
+    }
+    .tk-request-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 6px;
+    }
+    .tk-request-meta {
+      margin: 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .tk-request-actions,
+    .tk-card-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    /* Open Tickets */
+    .tk-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
+      gap: 12px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .tk-card {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-width: 0;
+      padding: 12px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+    .tk-card-photo {
+      display: block;
+      height: 96px;
+      overflow: hidden;
+      background: var(--page);
+      border-radius: 8px;
+    }
+    .tk-card-photo img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .tk-card-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px 8px;
+    }
+    .tk-card-number {
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .tk-card-urgency {
+      display: inline-flex;
+      gap: 4px;
+      margin-left: auto;
+    }
+    .tk-facts {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin: 0;
+    }
+    .tk-facts > div {
+      padding: 6px 10px;
+      background: var(--page);
+      border-radius: 8px;
+    }
+    .tk-facts dt {
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .tk-facts dd {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .tk-card-issue {
+      font-weight: 500;
+      color: var(--ink);
+      text-decoration: none;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .tk-card-issue:hover {
+      text-decoration: underline;
+    }
+    .tk-stage {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px 8px;
+      margin-top: auto;
+    }
+    .tk-stage-label {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .tk-stage .stage-segs i {
+      width: 18px;
+    }
+    .tk-stage-name {
+      margin-left: auto;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .tk-card-actions {
+      flex-wrap: nowrap;
+    }
+    .tk-legend {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px 16px;
+      margin: 16px 0 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .tk-legend-label {
+      font-weight: 600;
+    }
+    .tk-legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .tk-legend-item i {
+      width: 14px;
+      height: 8px;
+      background: var(--sc);
+      border-radius: 3px;
+    }
+    @media (max-width: 39.99rem) {
+      .tk-bar .filter-bar.is-compact {
+        width: 100%;
+        margin-left: 0;
+      }
+      .filter-bar.is-compact .filter-bar-field {
+        flex: 1 1 8rem;
+      }
+      .filter-bar.is-compact select,
+      .filter-bar.is-compact .combobox-input {
+        width: 100%;
+      }
+      .tk-request {
+        grid-template-columns: minmax(0, 1fr);
+        align-items: start;
+      }
+    }
+  }
+}
+
 /* === Reimbursement Requests (/reimbursements/:id, and the amount on the Tenant's receipt upload) ===
    The header reads like the Ticket's without the docket stub (a Reimbursement Request
    is not a Ticket): the issue, the Property, then one line of facts. Under the steps,

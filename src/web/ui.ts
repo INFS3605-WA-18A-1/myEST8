@@ -1156,6 +1156,10 @@ export function filterBar(o: {
   urgencies?: { value: string; label: string }[];
   trades?: { value: string; label: string }[];
   properties?: Option[];
+  /** Fields a form keeps when it submits, such as the Tickets page's stage tab. */
+  hidden?: Record<string, string | undefined>;
+  /** The Tickets page's bar: no Clear link (the page puts one beside its tabs) and a `is-compact` look. */
+  compact?: boolean;
 }): Html {
   const f = o.filter;
   const select = (name: string, label: string, all: string, options: Option[] | undefined, value: string | undefined, search = false) =>
@@ -1167,13 +1171,14 @@ export function filterBar(o: {
           </select></label>`
       : '';
   const any = Boolean(f.urgency || f.trade || f.propertyId);
-  return html`<form method="get" action="${o.action}" class="filter-bar" data-autosubmit role="search" aria-label="Filter">
+  return html`<form method="get" action="${o.action}" class="filter-bar${o.compact ? ' is-compact' : ''}" data-autosubmit role="search" aria-label="Filter">
     ${f.scope === 'all' ? html`<input type="hidden" name="filter" value="all" />` : ''}
+    ${Object.entries(o.hidden ?? {}).map(([name, value]) => (value ? html`<input type="hidden" name="${name}" value="${value}" />` : ''))}
     ${select('urgency', 'Urgency', 'Any Urgency', o.urgencies, f.urgency)}
     ${select('trade', 'Trade', 'Any Trade', o.trades, f.trade)}
     ${select('property', 'Property', 'Any Property', o.properties, f.propertyId ? String(f.propertyId) : undefined, true)}
     <button type="submit" class="btn btn-sm filter-bar-apply">Apply</button>
-    ${any ? html`<a class="link filter-bar-clear" href="${o.action}${f.scope === 'all' ? '?filter=all' : ''}">Clear filters</a>` : ''}
+    ${any && !o.compact ? html`<a class="link filter-bar-clear" href="${o.action}${f.scope === 'all' ? '?filter=all' : ''}">Clear filters</a>` : ''}
   </form>`;
 }
 
