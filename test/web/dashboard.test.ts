@@ -151,27 +151,27 @@ describe('the count strip and Needs your attention', () => {
     return { w, cookie: await w.signIn(), routine, high };
   }
 
-  test('the strip counts the Tickets waiting on a Quote decision, and links to the first of them', async () => {
+  test('the Quotes bubble counts the Tickets waiting on a Quote decision, and links to the first of them', async () => {
     const { w, cookie } = await quoteDecisions();
     const dashboard = await page(w, '/', cookie);
-    const strip = match(dashboard, /<ul class="count-strip">([\s\S]*?)<\/ul>/);
-    expect(strip).toMatch(/<a href="#inspections" class="count-item is-attention"><span class="count-chip is-decision">2<\/span><span class="count-label">Tickets waiting on you<\/span>/);
-    expect(strip).toContain('Open Tickets');
+    expect(dashboard).toMatch(/<a href="#inspections" class="bubble is-quotes[^"]*"[^>]*><span class="bubble-num">2<\/span><span class="bubble-label">Quotes<\/span>/);
+    expect(dashboard).toContain('Quote decisions');
+    expect(dashboard).toContain('Open Tickets');
   });
 
   test('with nothing waiting every count is quiet', async () => {
     const w = await webWorld();
     const cookie = await w.signIn();
     const dashboard = await page(w, '/', cookie);
-    expect(dashboard).not.toMatch(/count-item is-(attention|urgent)/);
+    expect(dashboard).toMatch(/class="bubble is-quotes is-zero"/);
     expect(dashboard).toContain('No Maintenance Requests waiting for you.');
   });
 
-  test('Needs your attention leads the page and holds Quotes to choose and Site Inspections to book once each', async () => {
+  test('Do next leads the page and holds Quotes to choose and Site Inspections to book once each', async () => {
     const { w, cookie, routine, high } = await quoteDecisions();
     const dashboard = await page(w, '/', cookie);
     expect(dashboard.indexOf('id="decisions"')).toBeLessThan(dashboard.indexOf('id="tickets"'));
-    expect(dashboard).toContain('Needs your attention');
+    expect(dashboard).toContain('Do next');
     expect(dashboard).toContain('Site Inspections to book');
     expect(dashboard).toContain('Book a Site Inspection');
     expect(dashboard).toContain('Choose a Quote');
@@ -216,11 +216,11 @@ describe('Tickets on the dashboard', () => {
     const docketOf = (page: string) => inBoard(page, job.ticketId);
 
     const board = await page(w, '/', cookie);
-    expect(board).toContain('<h3 class="lane-title">Quoting</h3>');
+    expect(board).toContain('<li><b>1</b> Quoting</li>');
     expect(board).toContain('href="/tickets"');
     expect(board).not.toContain('All open Tickets');
     const asked = docketOf(board);
-    expect(asked).toContain('class="docket"');
+    expect(asked).toContain('class="ticket-row"');
     expect(asked).toContain('No Quote Requests yet');
     expect(asked.indexOf('The kitchen tap is dripping')).toBeLessThan(asked.indexOf(KING_ST.split(',')[0]!));
 
@@ -228,7 +228,7 @@ describe('Tickets on the dashboard', () => {
     await tradieQuotes(w, job, w.tradies.pete, '$150 Tuesday', { priceCents: 150_00 });
     await tradieQuotes(w, job, w.tradies.dana, '$180 Tuesday', { priceCents: 180_00 });
     const toCheck = docketOf(await page(w, '/', cookie));
-    expect(toCheck).toContain('class="docket is-decision"');
+    expect(toCheck).toContain('class="ticket-row is-decision"');
     expect(toCheck).toContain('2 Quotes to check');
 
     for (const quote of (await jobView(w, job)).quotes) await w.alice.confirmQuote(quote.quoteId);
@@ -240,7 +240,7 @@ describe('Tickets on the dashboard', () => {
     expect(docketOf(await page(w, '/', cookie))).toContain('2 of 2 Estimates in, 1 Firm Quote');
     await firmQuote(w, job, w.tradies.dana, { priceCents: 180_00 });
     const ready = docketOf(await page(w, '/', cookie));
-    expect(ready).toContain('class="docket is-decision"');
+    expect(ready).toContain('class="ticket-row is-decision"');
     expect(ready).toContain('Ready to choose');
   });
 
@@ -267,6 +267,8 @@ describe('the Agency inbox', () => {
 
     const inbox = await page(w, '/', cookie);
     expect(inbox).toContain('Unknown sender');
+    // The preview row in the Inbox card points at the item and its actions below.
+    expect(inbox).toMatch(/href="#inbox-(\d+)"[\s\S]*id="inbox-\1"/);
     expect(inbox).toContain(STRANGER);
     // The message sits in the Inbox with its actions on it; on phones a brief row in Needs your attention points at it.
     const box = inbox.slice(inbox.indexOf('id="inbox"'), inbox.indexOf('</section>', inbox.indexOf('id="inbox"')));
