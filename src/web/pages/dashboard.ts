@@ -9,10 +9,11 @@ import { Hono, type Context } from 'hono';
 import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
 import { ActionError, type Urgency } from '../../shared.ts';
-import { STAGES, type Stage } from '../../views.ts';
+import { dashboardCalendarRange, STAGES, type Stage } from '../../views.ts';
 import { addDays, dayOf, parseDay } from '../../zoned-time.ts';
 import type { WebEnv } from '../env.ts';
 import { formAction, text, type FormValues } from '../forms.ts';
+import { icon } from '../icons.ts';
 import { requestFlags } from '../request-checks.ts';
 import { COLLEAGUES_ONLY, shareButton, shareUrl } from '../share.ts';
 import { shellInfo } from '../shell.ts';
@@ -142,7 +143,7 @@ export function dashboardPages() {
           ${greeting(pm.name, view, needReceipt)}
           <div class="dashboard-desk">
             <div class="dash-col">
-              ${glance(view, needReceipt, waiting, firstGroup(decided))}
+              ${glance(view, needReceipt, waiting, filter)}
               ${doNext({ view, ...decided, q, timeZone, now, shareLink: shareUrl(c, '/?filter=all#requests') })}
             </div>
             <div class="dash-col">
@@ -151,9 +152,21 @@ export function dashboardPages() {
               ${ticketsByStage(view.tickets, filter, now)}
             </div>
           </div>
+          ${inboxDialog(view.inbox, people, timeZone, q)}
+          ${alertsDialog(view.alerts, timeZone)}
         `,
       }),
     );
+  });
+
+  // The day strip asks for this on its own, so choosing a day does not redraw the dashboard.
+  // The visits are the same window dashboard() returns, which Mine and All do not narrow.
+  pages.get('/next-7-days', async (c) => {
+    const { actions } = c.var;
+    const { timeZone } = actions.agency();
+    const now = actions.now();
+    const bookings = await actions.calendar(dashboardCalendarRange(now, timeZone));
+    return c.html(nextSevenDays(bookings, now, timeZone, c.req.query('day'), filterOf(c)));
   });
 
   pages.post('/requests/:issueId{[0-9]+}/confirm', async (c) =>
@@ -267,52 +280,105 @@ const bubbleSize = (count: number, min: number, step: number, max: number) => (c
 
 type Decided = { toCheck: BoardTicket[]; toBook: BoardTicket[]; toChoose: BoardTicket[] };
 
-/** Where the "Tickets waiting on you" count links: the first of its groups with a Ticket in it. */
-function firstGroup(d: Decided) {
-  return d.toCheck.length ? '#quotes-to-check' : d.toBook.length ? '#inspections' : d.toChoose.length ? '#quotes-to-choose' : '#decisions';
+/** The Tickets list, keeping All when the dashboard is showing everyone's work. */
+function ticketsHref(filter: Filter) {
+  return filter === 'all' ? '/tickets?filter=all' : '/tickets';
 }
+
+type GlanceItem = {
+  cls: string;
+  /** The word in the bubble. */
+  label: string;
+  /** The words in the legend, when they are longer than the bubble. */
+  legend: string;
+  count: number;
+  href: string;
+  size: number;
+  /** Set when the bubble opens a dialog instead of a page. The href stays an anchor for when JavaScript is off. */
+  dialog?: string;
+};
 
 /**
  * Today at a glance: a soft card of bubbles, one for each thing a Property Manager
- * counts (Open Tickets, Alerts, Maintenance Requests, the inbox, and Urgent Repairs
- * when one needs a receipt). Each bubble links to where that thing is, and its size
- * follows its count.
+ * counts (Open Tickets, Alerts, Maintenance Requests, Quotes, the inbox, and Urgent
+ * Repairs when one needs a receipt). Open Tickets, Requests, Quotes and Urgent open
+ * their lists. Inbox and Alerts open a dialog over the dashboard (the legend does
+ * the same). A bubble's size follows its count. The Tickets list has no view that is
+ * only quote decisions or Urgent Repairs, so those two open `/tickets`.
  */
-function glance(view: Dashboard, needReceipt: number, waiting: number, waitingHref: string): Html {
+function glance(view: Dashboard, needReceipt: number, waiting: number, filter: Filter): Html {
   const tickets = view.tickets.length;
   const alerts = view.alerts.length;
   const requests = view.maintenanceRequests.length;
   const inbox = view.inbox.length;
-  const bubbles = [
-    { cls: 'is-tickets', label: 'Open Tickets', count: tickets, href: '#tickets', size: bubbleSize(tickets, 80, 12, 164) },
-    { cls: 'is-alerts', label: 'Alerts', count: alerts, href: '#alerts', size: bubbleSize(alerts, 68, 14, 132) },
-    { cls: 'is-requests', label: 'Requests', count: requests, href: '#requests', size: bubbleSize(requests, 64, 20, 108) },
-    { cls: 'is-quotes', label: 'Quotes', count: waiting, href: waitingHref, size: bubbleSize(waiting, 60, 14, 96) },
-    { cls: 'is-inbox', label: 'Inbox', count: inbox, href: '#inbox', size: bubbleSize(inbox, 60, 10, 98) },
-    ...(needReceipt ? [{ cls: 'is-urgent', label: 'Urgent', count: needReceipt, href: '#urgent-repairs', size: bubbleSize(needReceipt, 60, 14, 96) }] : []),
+  const list = ticketsHref(filter);
+  const items: GlanceItem[] = [
+    { cls: 'is-tickets', label: 'Open Tickets', legend: 'Open Tickets', count: tickets, href: list, size: bubbleSize(tickets, 80, 12, 164) },
+    { cls: 'is-alerts', label: 'Alerts', legend: 'Alerts', count: alerts, href: '#alerts', dialog: 'alerts-dialog', size: bubbleSize(alerts, 68, 14, 132) },
+    { cls: 'is-requests', label: 'Requests', legend: 'Requests', count: requests, href: '/requests', size: bubbleSize(requests, 64, 20, 108) },
+    { cls: 'is-quotes', label: 'Quotes', legend: 'Quote decisions', count: waiting, href: list, size: bubbleSize(waiting, 60, 14, 96) },
+    { cls: 'is-inbox', label: 'Inbox', legend: 'Inbox', count: inbox, href: '#inbox', dialog: 'inbox-dialog', size: bubbleSize(inbox, 60, 10, 98) },
+    ...(needReceipt
+      ? [{ cls: 'is-urgent', label: 'Urgent', legend: 'Urgent Repairs', count: needReceipt, href: list, size: bubbleSize(needReceipt, 60, 14, 96) }]
+      : []),
   ];
-  const legend = [
-    ['is-tickets', 'Open Tickets', tickets],
-    ['is-alerts', 'Alerts', alerts],
-    ['is-requests', 'Requests', requests],
-    ['is-quotes', 'Quote decisions', waiting],
-    ['is-inbox', 'Inbox', inbox],
-    ...(needReceipt ? [['is-urgent', 'Urgent Repairs', needReceipt]] : []),
-  ] as const;
   return html`<section class="glance" aria-label="Today at a glance">
     <div class="glance-key">
       <h3 class="glance-title">Your day<br />at a glance</h3>
       <ul class="glance-legend">
-        ${legend.map(([cls, label, count]) => html`<li class="${cls}"><i></i>${label}<b>${count}</b></li>`)}
+        ${items.map((item) => legendItem(item))}
       </ul>
     </div>
     <div class="glance-bubbles" role="group" aria-label="Counts">
-      ${bubbles.map(
-        (b, i) =>
-          html`<a href="${b.href}" class="bubble ${b.cls}${b.count === 0 ? ' is-zero' : ''}" style="--size:${b.size}px;--i:${i}"><span class="bubble-num">${b.count}</span><span class="bubble-label">${b.label}</span></a>`,
-      )}
+      ${items.map((item, i) => bubble(item, i))}
     </div>
   </section>`;
+}
+
+/** A legend row: the same destination as its bubble. */
+function legendItem(item: GlanceItem): Html {
+  const dialog = item.dialog ? html` data-dialog="${item.dialog}" aria-haspopup="dialog"` : '';
+  return html`<li class="${item.cls}"><a href="${item.href}" class="glance-legend-link"${dialog}><i></i>${item.legend}<b>${item.count}</b></a></li>`;
+}
+
+/** One bubble. The glyph under the count says whether it opens a page or a dialog. */
+function bubble(item: GlanceItem, i: number): Html {
+  const dialog = item.dialog ? html` data-dialog="${item.dialog}" aria-haspopup="dialog"` : '';
+  return html`<a href="${item.href}" class="bubble ${item.cls}${item.count === 0 ? ' is-zero' : ''}" style="--size:${item.size}px;--i:${i}"${dialog}><span class="bubble-num">${item.count}</span><span class="bubble-go">${icon(item.dialog ? 'tray' : 'arrow-up-right', { size: 'size-3.5' })}</span><span class="bubble-label">${item.label}</span></a>`;
+}
+
+/**
+ * Inbox and Alerts over the dashboard. The rows are the same ones the card and
+ * Do next draw, so linking a sender, routing, dismissing and each alert's action
+ * post as they do there. An id prefix keeps the dialog's fields from repeating the
+ * card's. Without JavaScript the bubbles are anchors and these stay closed.
+ */
+function inboxDialog(items: InboxItem[], people: Person[], timeZone: string, q: string): Html {
+  const byNewest = [...items].sort((a, b) => b.receivedAt.localeCompare(a.receivedAt));
+  return glanceDialog({
+    id: 'inbox-dialog',
+    title: 'Inbox',
+    body: html`<div class="dashboard-inbox">${inboxList(byNewest, people, timeZone, q, 'dialog-')}</div>`,
+  });
+}
+
+function alertsDialog(alerts: Alert[], timeZone: string): Html {
+  return glanceDialog({
+    id: 'alerts-dialog',
+    title: 'Alerts',
+    body: alerts.length ? html`<div class="grid gap-2">${alerts.map((alert) => alertRow(alert, timeZone))}</div>` : emptyState('No alerts.'),
+  });
+}
+
+function glanceDialog(o: { id: string; title: string; body: Html }): Html {
+  const titleId = `${o.id}-title`;
+  return html`<dialog id="${o.id}" class="glance-dialog" aria-labelledby="${titleId}">
+    <div class="glance-dialog-head">
+      <h2 id="${titleId}" class="section-title">${o.title}</h2>
+      <button type="button" class="glance-dialog-close" data-dialog-close aria-label="Close">${icon('x', { size: 'size-5' })}</button>
+    </div>
+    <div class="glance-dialog-body">${o.body}</div>
+  </dialog>`;
 }
 
 // Do next
@@ -557,6 +623,14 @@ function dayHref(day: string, filter: Filter) {
   return `/?${params.toString()}#next-7-days`;
 }
 
+/** The same day, as the fragment the chip fetches so the rest of the dashboard stays put. */
+function dayFragment(day: string, filter: Filter) {
+  const params = new URLSearchParams();
+  params.set('day', day);
+  if (filter === 'all') params.set('filter', 'all');
+  return `/next-7-days?${params.toString()}`;
+}
+
 /** Mine or All, keeping the chosen day and returning to the strip when one is set. */
 function scopeHref(filter: Filter, day: string | undefined) {
   const params = new URLSearchParams();
@@ -583,9 +657,11 @@ function shownDay(now: Date, timeZone: string, dayQuery: string | undefined) {
 }
 
 /**
- * Today and the six days after it, in the Agency's time zone. Each day is a link, and the
- * chosen one (today, when `day` is missing or not one of the seven) is filled; today stays
- * ringed when another day is chosen. Under the strip, that day's visits in time order.
+ * Today and the six days after it, in the Agency's time zone. Each day is a link (and a
+ * fragment the page fetches in place), and the chosen one (today, when `day` is missing
+ * or not one of the seven) is filled; today stays ringed when another day is chosen.
+ * Under the strip, that day's visits in time order. The dashboard and `GET /next-7-days`
+ * both draw this.
  */
 function nextSevenDays(bookings: Booking[], now: Date, timeZone: string, dayQuery: string | undefined, filter: Filter): Html {
   const { today, days, chosen } = shownDay(now, timeZone, dayQuery);
@@ -605,7 +681,7 @@ function nextSevenDays(bookings: Booking[], now: Date, timeZone: string, dayQuer
     body: html`<ol class="day-strip">
         ${days.map((day) => {
           const at = new Date(`${day}T00:00:00Z`);
-          return html`<li><a class="day-chip${day === today ? ' is-today' : ''}" href="${dayHref(day, filter)}" ${day === chosen ? html`aria-current="date"` : ''}><time datetime="${day}"><span class="day-name">${weekday.format(at)}</span><span class="day-num">${dateOf.format(at)}</span></time>${day === today ? html`<span class="sr-only">today</span>` : ''}${byDay.has(day) ? html`<span class="day-dot" role="img" aria-label="Has a visit"></span>` : ''}</a></li>`;
+          return html`<li><a class="day-chip${day === today ? ' is-today' : ''}" href="${dayHref(day, filter)}" data-fragment="${dayFragment(day, filter)}" ${day === chosen ? html`aria-current="date"` : ''}><time datetime="${day}"><span class="day-name">${weekday.format(at)}</span><span class="day-num">${dateOf.format(at)}</span></time>${day === today ? html`<span class="sr-only">today</span>` : ''}${byDay.has(day) ? html`<span class="day-dot" role="img" aria-label="Has a visit"></span>` : ''}</a></li>`;
         })}
       </ol>
       <h3 class="visit-heading">${longDay(chosen)}</h3>
@@ -656,20 +732,20 @@ function urgentRepairsList(repairs: UrgentRepair[], timeZone: string): Html {
 
 // Inbox
 
-function inboxList(items: InboxItem[], people: Person[], timeZone: string, q: string): Html {
+function inboxList(items: InboxItem[], people: Person[], timeZone: string, q: string, idPrefix = ''): Html {
   if (!items.length) return emptyState('The inbox is empty.');
-  return html`<div class="grid gap-2">${items.map((item) => inboxItem(item, people, timeZone, q))}</div>`;
+  return html`<div class="grid gap-2">${items.map((item) => inboxItem(item, people, timeZone, q, idPrefix))}</div>`;
 }
 
 /**
  * One inbox item, compact: the message, who sent it and when, then the agent's best
  * guess in one line beside the actions. Every answer behind the guess is one click away.
  */
-function inboxItem(item: InboxItem, people: Person[], timeZone: string, q: string): Html {
+function inboxItem(item: InboxItem, people: Person[], timeZone: string, q: string, idPrefix = ''): Html {
   const [reason, tone] = INBOX_REASON[item.reason];
   const base = `/inbox/${item.itemId}`;
   const guesses = item.bestGuess && Object.keys(item.bestGuess).length ? item.bestGuess : null;
-  return html`<article class="inbox-item${item.personId === null ? ' is-unknown' : ''}" id="inbox-${item.itemId}">
+  return html`<article class="inbox-item${item.personId === null ? ' is-unknown' : ''}" id="${idPrefix}inbox-${item.itemId}">
     <div class="inbox-item-head">
       <div class="min-w-0">
         <p class="inbox-item-who">${item.personName ?? item.from}</p>
@@ -701,7 +777,7 @@ function inboxItem(item: InboxItem, people: Person[], timeZone: string, q: strin
             ${field({
               label: 'Link sender to',
               name: 'personId',
-              id: `person-${item.itemId}`,
+              id: `${idPrefix}person-${item.itemId}`,
               type: 'select',
               required: true,
               placeholder: 'Search people by name',

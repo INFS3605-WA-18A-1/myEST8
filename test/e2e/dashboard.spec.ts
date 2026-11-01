@@ -36,6 +36,43 @@ test('on a laptop and a tablet the count bubbles sit inside their card, and none
   }
 });
 
+test('the Inbox bubble opens a dialog, and Escape returns focus to the bubble', async ({ page }) => {
+  // The bubble floats until it is asked not to, so a click waits forever for it to sit still.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await signIn(page);
+  await page.setViewportSize({ width: 1366, height: 900 });
+  await page.goto('/');
+  const bubble = page.getByRole('group', { name: 'Counts' }).getByRole('link', { name: /Inbox/ });
+  await bubble.click();
+  const dialog = page.getByRole('dialog', { name: 'Inbox' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('heading', { name: 'Inbox' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await expect(bubble).toBeFocused();
+});
+
+test('choosing a day refreshes the visit list and leaves the greeting in place', async ({ page }) => {
+  await signIn(page);
+  await page.setViewportSize({ width: 1366, height: 900 });
+  await page.goto('/');
+  const greeting = page.getByRole('heading', { level: 2, name: /^Hi,/ });
+  await greeting.evaluate((el) => {
+    Reflect.set(el, '__stay', 'greeting');
+  });
+  const week = nextSeven(page);
+  const heading = week.getByRole('heading', { level: 3 });
+  const before = ((await heading.textContent()) ?? '').trim();
+  await week.getByRole('list').first().getByRole('link').nth(1).click();
+  await expect(page).toHaveURL(/[?&]day=\d{4}-\d{2}-\d{2}/);
+  await expect(heading).not.toHaveText(before);
+  await expect(greeting).toHaveJSProperty('__stay', 'greeting');
+  await expect(page.getByRole('navigation', { name: 'Views' }).getByRole('link', { name: 'All' })).toHaveAttribute(
+    'href',
+    /[?&]day=\d{4}-\d{2}-\d{2}/,
+  );
+});
+
 test('on a phone the bubbles stay inside their card, and the page never scrolls sideways', async ({ page }) => {
   await signIn(page);
   await page.setViewportSize({ width: 390, height: 844 });

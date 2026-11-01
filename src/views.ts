@@ -9,8 +9,20 @@ import type { Issue, Job, JobStatus, Ticket, UrgentRepairStatus } from './ticket
 const REIMBURSEMENT_ORDER: UrgentRepairStatus[] = ['receipt_received', 'reminder_sent', 'receipt_forwarded', 'reimbursed'];
 
 /** What the Property Manager's screens show, composed from each module's queries. */
-/** How far ahead the dashboard's calendar looks. */
+/** How far ahead the dashboard's calendar looks, from the start of today. */
 const CALENDAR_DAYS = 14;
+
+/**
+ * The window the dashboard's Next 7 days reads. The strip shows seven days; the
+ * query runs further so a visit that starts this week and runs past it still counts.
+ * Mine and All do not narrow this list: the dashboard returns every booking in the window.
+ */
+export function dashboardCalendarRange(now: Date, timeZone: string): { from: string; to: string } {
+  return {
+    from: iso(startOfDay(dayOf(now, timeZone), timeZone)),
+    to: iso(addMs(now, CALENDAR_DAYS * 24 * HOUR_MS)),
+  };
+}
 
 /** A lane of the dashboard's board: the Job status that puts a Ticket in it. */
 export type Stage = Exclude<JobStatus, 'cancelled'>;
@@ -226,7 +238,7 @@ export function createViews({ clock, modules }: Context) {
         modules.quotes.alerts(agencyId, propertyIds),
         modules.scheduling.alerts(agencyId, propertyIds),
         tickets.alerts(agencyId, propertyIds),
-        modules.scheduling.calendar(agencyId, { from: iso(startOfDay(dayOf(now, timeZone), timeZone)), to: iso(addMs(now, CALENDAR_DAYS * 24 * HOUR_MS)) }),
+        modules.scheduling.calendar(agencyId, dashboardCalendarRange(now, timeZone)),
       ]);
       const [boardTickets, repairs] = await Promise.all([
         board(openTickets),
