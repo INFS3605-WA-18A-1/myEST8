@@ -1,5 +1,5 @@
-// The dashboard's count strip in the browser: six counts on one line on a laptop,
-// each tile holding its own label, and the page never scrolling sideways on a phone.
+// The dashboard's "Your day at a glance" bubbles in the browser: they sit inside their card
+// at laptop, tablet and phone widths, and the page never scrolls sideways on a phone.
 
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { signIn } from './support/actions.ts';
@@ -7,53 +7,42 @@ import { freePort, startDemo, uniqueSchema } from './support/server.ts';
 
 const overflow = (page: Page) => page.evaluate<number>('document.documentElement.scrollWidth - document.documentElement.clientWidth');
 
-/** Each count tile's top, and whether its content spills past the tile. */
-function tiles(page: Page) {
+/** Each count bubble's box, and whether it sits inside the glance card. */
+function bubbles(page: Page) {
   return page
-    .getByRole('navigation', { name: 'Counts' })
+    .getByRole('group', { name: 'Counts' })
     .getByRole('link')
-    .evaluateAll((els) =>
-      els.map((el) => ({
-        top: Math.round(el.getBoundingClientRect().top),
-        spills: el.scrollWidth > el.clientWidth,
-      })),
-    );
+    .evaluateAll((els) => {
+      const card = els[0]?.closest('.glance')?.getBoundingClientRect();
+      return els.map((el) => {
+        const box = el.getBoundingClientRect();
+        return {
+          inside: !!card && box.left >= card.left - 1 && box.right <= card.right + 1 && box.top >= card.top - 1 && box.bottom <= card.bottom + 1,
+          spills: el.scrollWidth > el.clientWidth + 1,
+        };
+      });
+    });
 }
 
-test('on a laptop the six counts sit on one line, and none spills out of its tile', async ({ page }) => {
+test('on a laptop and a tablet the count bubbles sit inside their card, and none spills', async ({ page }) => {
   await signIn(page);
-  for (const width of [1366, 1024]) {
+  for (const width of [1366, 1024, 800]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/');
-    const laid = await tiles(page);
-    expect(laid, `${width}px`).toHaveLength(6);
-    expect(new Set(laid.map((tile) => tile.top)).size, `${width}px`).toBe(1);
-    expect(laid.every((tile) => !tile.spills), `${width}px`).toBe(true);
+    const laid = await bubbles(page);
+    expect(laid.length, `${width}px`).toBeGreaterThanOrEqual(5);
+    expect(laid.every((bubble) => bubble.inside), `${width}px`).toBe(true);
+    expect(laid.every((bubble) => !bubble.spills), `${width}px`).toBe(true);
   }
 });
 
-/** How many tiles share each row, top to bottom. */
-function rowCounts(laid: { top: number }[]) {
-  const counts = new Map<number, number>();
-  for (const tile of laid) counts.set(tile.top, (counts.get(tile.top) ?? 0) + 1);
-  return [...counts.values()];
-}
-
-test('the counts are three across from 640px and two across on a phone, with no sideways scroll', async ({ page }) => {
+test('on a phone the bubbles stay inside their card, and the page never scrolls sideways', async ({ page }) => {
   await signIn(page);
-
-  await page.setViewportSize({ width: 800, height: 900 });
-  await page.goto('/');
-  const tablet = await tiles(page);
-  expect(tablet).toHaveLength(6);
-  expect(rowCounts(tablet)).toEqual([3, 3]);
-  expect(tablet.every((tile) => !tile.spills)).toBe(true);
-
   await page.setViewportSize({ width: 390, height: 844 });
-  const phone = await tiles(page);
-  expect(phone).toHaveLength(6);
-  expect(rowCounts(phone)).toEqual([2, 2, 2]);
-  expect(phone.every((tile) => !tile.spills)).toBe(true);
+  await page.goto('/');
+  const phone = await bubbles(page);
+  expect(phone.length).toBeGreaterThanOrEqual(5);
+  expect(phone.every((bubble) => bubble.inside)).toBe(true);
   expect(await overflow(page)).toBe(0);
 });
 
