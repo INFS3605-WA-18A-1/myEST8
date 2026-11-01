@@ -39,9 +39,6 @@ import {
   humanise,
   page,
   postButton,
-  section,
-  stat,
-  statGroup,
   statusBadge,
   ticketCell,
   urgencyBadge,
@@ -120,20 +117,48 @@ export function dispatchPages() {
         subtitle,
         actions: missing ? postButton('/dispatch/addresses', 'Look up missing addresses', { size: 'sm' }) : undefined,
         body: html`
-          <section aria-label="At a glance" class="section">
-            ${statGroup([
-              stat({ label: 'Need Tradies', value: needTradies, hint: 'Jobs to ask for Quotes', tone: needTradies ? 'warning' : 'neutral' }),
-              stat({ label: 'Ready to book', value: toBook, hint: 'Approved, no Work Order yet', tone: toBook ? 'warning' : 'neutral' }),
-              stat({ label: 'High or Urgent', value: urgentOpen, hint: 'Open Tickets', tone: urgentOpen ? 'error' : 'neutral' }),
-              stat({ label: 'Visits today', value: bookedToday, hint: 'Work Orders and Site Inspections' }),
-            ])}
-          </section>
-          ${section({ title: 'To dispatch', id: 'to-dispatch', body: queue(waiting, tradies, timeZone, actions.now().toISOString()) })}
-          <div class="dispatch-board">
-            ${mapSection()}
-            ${panels(ordered, tradies, bookings, timeZone, tradiesPlaced > 0)}
+          <div class="dispatch-top">
+            <div class="dispatch-mapcard">
+              ${mapSection()}
+              <p class="dispatch-chip"><span aria-hidden="true"></span>${placed} ${placed === 1 ? 'property' : 'properties'} · ${tradiesPlaced} ${tradiesPlaced === 1 ? 'tradie' : 'tradies'} located</p>
+              ${panels(ordered, tradies, bookings, timeZone, tradiesPlaced > 0)}
+            </div>
+            <div class="dispatch-right">
+              <section aria-labelledby="glance-title" class="soft-card">
+                <h2 id="glance-title" class="soft-title">Today at a glance</h2>
+                <div class="glance-tiles">
+                  ${glanceTile({ label: 'Need tradies', value: needTradies, hint: 'Jobs to ask for Quotes', tone: needTradies ? 'warm' : 'quiet', href: '#to-dispatch' })}
+                  ${glanceTile({ label: 'Ready to book', value: toBook, hint: 'Approved, no Work Order yet', tone: toBook ? 'cool' : 'quiet', href: '#to-dispatch' })}
+                  ${glanceTile({ label: 'High or urgent', value: urgentOpen, hint: 'Open Tickets', tone: urgentOpen ? 'hot' : 'quiet', href: '/tickets' })}
+                  ${glanceTile({ label: 'Visits today', value: bookedToday, hint: 'Work Orders and Site Inspections', tone: 'quiet', href: '/calendar' })}
+                </div>
+              </section>
+              <section id="to-dispatch" aria-labelledby="to-dispatch-title" class="soft-card">
+                <div class="soft-head">
+                  <h2 id="to-dispatch-title" class="soft-title">To dispatch <span class="soft-count">${waiting.length}</span></h2>
+                  <a class="soft-link" href="/tickets">View queue</a>
+                </div>
+                ${queue(waiting, tradies, timeZone, actions.now().toISOString())}
+              </section>
+            </div>
           </div>
-          ${section({ title: 'Properties', id: 'properties', body: propertyTable(ordered) })}
+          <section id="properties" aria-labelledby="properties-title" class="soft-card">
+            <div class="soft-head">
+              <h2 id="properties-title" class="soft-title">Properties <span class="soft-count">${ordered.length}</span></h2>
+              <div class="dispatch-filters">
+                <div class="dispatch-tabs" role="group" aria-label="Show Properties">
+                  <button type="button" class="dispatch-tab" data-prop-filter="all" aria-pressed="true">All</button>
+                  <button type="button" class="dispatch-tab" data-prop-filter="open" aria-pressed="false">Open tickets</button>
+                  <button type="button" class="dispatch-tab" data-prop-filter="urgent" aria-pressed="false">High &amp; urgent</button>
+                </div>
+                <label class="dispatch-search">
+                  <span class="sr-only">Search address</span>
+                  <input type="search" placeholder="Search address" data-prop-search autocomplete="off" />
+                </label>
+              </div>
+            </div>
+            ${propertyTable(ordered)}
+          </section>
           ${pinIcons()}
           ${pinData(ordered, tradies)}
           <link rel="stylesheet" href="/assets/maplibre-gl.css" />
@@ -179,6 +204,13 @@ export function dispatchPages() {
   return pages;
 }
 
+type GlanceTone = 'warm' | 'cool' | 'hot' | 'quiet';
+
+/** One of the four counts under "Today at a glance": a soft tile with the number, what it counts and a hint, linking to where it is. */
+function glanceTile(o: { label: string; value: number; hint: string; tone: GlanceTone; href: string }): Html {
+  return html`<a class="glance-tile is-${o.tone}" href="${o.href}"><b class="glance-tile-value num">${o.value}</b><span class="glance-tile-text"><span class="glance-tile-label">${o.label}</span><span class="glance-tile-hint">${o.hint}</span></span></a>`;
+}
+
 /**
  * The Jobs waiting on dispatch, most urgent first: a card each with its Ticket, Property
  * and Trade, and what sends it on. A Job that needs Tradies lists those of its Trade not
@@ -195,9 +227,10 @@ function queueCard({ job, ticket, property }: Waiting, tradies: TradieView[], ti
   const id = `dispatch-job-${job.jobId}`;
   return html`<li class="dispatch-card" id="${id}" aria-labelledby="${id}-title">
     <div class="dispatch-card-head">
+      <p class="dispatch-ticketbox" aria-hidden="true"><span>Ticket</span><b class="num">#${ticket.ticketId}</b></p>
       <div class="min-w-0">
         <p class="dispatch-card-kind">${job.needs === 'tradies' ? html`${icon('users-three', { size: 'size-4' })} Needs Tradies to quote` : html`${icon('calendar-plus', { size: 'size-4' })} Ready to book`}</p>
-        <h3 id="${id}-title" class="dispatch-card-title"><a class="row-link" href="/tickets/${ticket.ticketId}">${ticket.description}</a> <span class="ticket-cell-number num">#${ticket.ticketId}</span></h3>
+        <h3 id="${id}-title" class="dispatch-card-title"><a class="row-link" href="/tickets/${ticket.ticketId}">${ticket.description}</a></h3>
         <p class="dispatch-card-meta">
           ${urgencyBadge(ticket.urgency)} ${badge(humanise(job.trade), 'info')}
           <a class="entity-link entity-link-property" href="#panel-property-${property.propertyId}" data-select="property-${property.propertyId}">${icon('house-line', { size: 'size-4' })}<span>${property.address}</span></a>
@@ -221,7 +254,7 @@ function quoteRequestForm(job: DispatchJob, property: PropertyView, tradies: Tra
   const asked = job.asked ? ` ${job.asked} asked so far.` : '';
   return html`<form method="post" action="/dispatch/jobs/${job.jobId}/quote-requests" class="dispatch-card-body">
     <fieldset class="min-w-0">
-      <legend class="dispatch-card-legend">Ask for Quotes${asked} ${job.singleReason ?? (job.minimum > 1 ? `Tick at least ${job.minimum}.` : '')}</legend>
+      <legend class="dispatch-card-legend"><strong>Ask for Quotes</strong><span class="dispatch-legend-note">${asked} ${job.singleReason ?? (job.minimum > 1 ? `Tick at least ${job.minimum}.` : '')}</span></legend>
       <ul class="tradie-entries" role="list">
         ${candidates.map((c, i) => tradieEntry(c, { id: `dispatch-job-${job.jobId}-tradie-${c.tradieId}`, checked: i < ticked, nominated: c.nominated }))}
       </ul>
@@ -417,17 +450,19 @@ function propertyTable(properties: PropertyView[]): Html {
                 <th scope="col">Suburb</th>
                 <th scope="col">Open Tickets</th>
                 <th scope="col">Worst urgency</th>
+                <th scope="col"><span class="sr-only">Details</span></th>
               </tr>
             </thead>
             <tbody>
               ${open.map(
-                (p) => html`<tr data-row="property-${p.propertyId}">
+                (p) => html`<tr data-row="property-${p.propertyId}" data-urgency="${p.worstUrgency ?? ''}">
                   ${addressCell(p)}
                   <td>${p.suburb}</td>
                   <td class="dispatch-tickets">
                     <ul class="dispatch-list">${p.openTickets.map((t) => html`<li>${ticketCell({ ticketId: t.ticketId, issue: t.description })}</li>`)}</ul>
                   </td>
                   <td>${p.worstUrgency ? urgencyBadge(p.worstUrgency) : ''}</td>
+                  <td class="dispatch-go-cell"><a class="dispatch-go" href="#panel-property-${p.propertyId}" data-select="property-${p.propertyId}" aria-label="Details for ${p.address}">${icon('caret-right', { size: 'size-4' })}</a></td>
                 </tr>`,
               )}
             </tbody>

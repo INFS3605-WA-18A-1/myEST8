@@ -16,6 +16,29 @@
 // far enough to need it: if that, WebGL or the basemap's style fails, the map's place
 // says so and the table and panels still work.
 
+// === The Properties table's filter and search (progressive: without JavaScript the whole table shows) ===
+(() => {
+  const tabs = [...document.querySelectorAll('[data-prop-filter]')];
+  const search = document.querySelector('[data-prop-search]');
+  const table = document.getElementById('properties');
+  if (!tabs.length || !search || !table) return;
+  let mode = 'all';
+  function apply() {
+    const words = search.value.trim().toLowerCase();
+    for (const row of table.querySelectorAll('tbody tr[data-row]')) {
+      const urgent = row.dataset.urgency === 'urgent' || row.dataset.urgency === 'high';
+      const matchesTab = mode === 'all' || (mode === 'open' && 'urgency' in row.dataset && row.closest('details') === null) || (mode === 'urgent' && urgent);
+      const matchesText = !words || (row.querySelector('th')?.textContent || '').toLowerCase().includes(words);
+      row.hidden = !(matchesTab && matchesText);
+    }
+    // "Open tickets" and "High & urgent" leave the quiet Properties folded away.
+    for (const more of table.querySelectorAll('details.dispatch-more')) more.hidden = mode !== 'all' && !words;
+    for (const tab of tabs) tab.setAttribute('aria-pressed', String(tab.dataset.propFilter === mode));
+  }
+  for (const tab of tabs) tab.addEventListener('click', () => { mode = tab.dataset.propFilter; apply(); });
+  search.addEventListener('input', apply);
+})();
+
 (() => {
   const dataElement = document.getElementById('dispatch-data');
   const mapElement = document.getElementById('dispatch-map');

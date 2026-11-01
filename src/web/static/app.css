@@ -5774,6 +5774,335 @@
       margin-bottom: 8px;
     }
 
+    /* ----- Dispatch, soft cards: the map card beside Today at a glance and To dispatch, Properties under them. */
+    .dispatch-top {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 16px;
+      min-width: 0;
+    }
+    @media (min-width: 64rem) {
+      .dispatch-top {
+        grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+        align-items: start;
+      }
+    }
+    .dispatch-top > * {
+      min-width: 0;
+    }
+    .soft-card {
+      display: grid;
+      gap: 14px;
+      padding: 16px 18px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+    }
+    .soft-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px 16px;
+    }
+    .soft-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 17px;
+      font-weight: 600;
+    }
+    .soft-count {
+      display: inline-grid;
+      min-width: 22px;
+      height: 22px;
+      padding: 0 6px;
+      place-items: center;
+      border-radius: 11px;
+      background: #13212e;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .soft-link {
+      font-size: 14px;
+      text-decoration: underline;
+    }
+
+    /* The map card: the map fills it, with a count chip and the picked Property or Tradie floating on top. */
+    .dispatch-mapcard {
+      position: relative;
+      height: 55vh;
+      min-height: 20rem;
+      max-height: 34rem;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--page);
+    }
+    @media (min-width: 64rem) {
+      .dispatch-mapcard {
+        height: 43rem;
+        max-height: none;
+        position: sticky;
+        top: 76px;
+      }
+    }
+    .dispatch-mapcard .dispatch-map-section {
+      position: absolute;
+      inset: 0;
+    }
+    .dispatch-mapcard .dispatch-map {
+      height: 100%;
+      min-height: 0;
+      max-height: none;
+      border: 0;
+      border-radius: 0;
+    }
+    .dispatch-chip {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      z-index: 2;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: var(--surface);
+      box-shadow: 0 2px 10px rgb(19 33 46 / 12%);
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .dispatch-chip span {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--high);
+    }
+    .dispatch-mapcard .dispatch-side {
+      position: absolute;
+      top: 56px;
+      left: 12px;
+      z-index: 2;
+      width: min(21rem, calc(100% - 24px));
+      max-height: calc(100% - 68px);
+      height: auto;
+      overflow-y: auto;
+      border-radius: 14px;
+      box-shadow: 0 6px 24px rgb(19 33 46 / 16%);
+    }
+    .dispatch-mapcard .dispatch-panel-empty {
+      margin: 0;
+      text-align: left;
+      font-size: 13px;
+    }
+
+    /* Today at a glance: four soft tiles, the number beside what it counts. */
+    .glance-tiles {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .glance-tile {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: #f6f1e8;
+      color: var(--ink);
+      text-decoration: none;
+      transition: transform 0.15s;
+    }
+    .glance-tile:hover {
+      transform: translateY(-1px);
+      color: var(--ink);
+    }
+    .glance-tile.is-warm {
+      background: #fbeede;
+    }
+    .glance-tile.is-cool {
+      background: #e7eef5;
+    }
+    .glance-tile-value {
+      font-family: var(--font-head);
+      font-size: 30px;
+      font-weight: 600;
+      line-height: 1;
+    }
+    .glance-tile.is-warm .glance-tile-value {
+      color: #a4510a;
+    }
+    .glance-tile.is-hot .glance-tile-value {
+      color: #b3261e;
+    }
+    .glance-tile-text {
+      display: grid;
+      min-width: 0;
+    }
+    .glance-tile-label {
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .glance-tile-hint {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    /* To dispatch: one soft card per Job, a Ticket box beside what it needs. */
+    .soft-card .dispatch-card {
+      border: 1px solid var(--line);
+      border-left-width: 1px;
+      border-radius: 14px;
+      background: var(--surface);
+    }
+    .dispatch-card-head {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+    }
+    .dispatch-ticketbox {
+      display: grid;
+      flex: none;
+      gap: 2px;
+      width: 56px;
+      margin: 0;
+      padding: 10px 0;
+      justify-items: center;
+      border-radius: 10px;
+      background: #f6f1e8;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .dispatch-ticketbox b {
+      font-family: var(--font-head);
+      font-size: 20px;
+      color: var(--ink);
+    }
+    .soft-card .dispatch-card-kind {
+      color: #a4510a;
+    }
+    legend.dispatch-card-legend {
+      display: grid;
+      gap: 2px;
+    }
+    .dispatch-card-legend .entity-link {
+      display: inline-flex;
+    }
+    .dispatch-right {
+      display: grid;
+      gap: 16px;
+    }
+    .dispatch-stack .dispatch-address .entity-link {
+      border: 0;
+      background: transparent;
+      padding: 0;
+      font-weight: 600;
+    }
+    .dispatch-stack .dispatch-address .entity-link svg {
+      flex: none;
+      width: 36px;
+      height: 36px;
+      padding: 8px;
+      border-radius: 10px;
+      background: #f1ece2;
+    }
+    .dispatch-stack tr:has(.dispatch-go[href]) .dispatch-address .entity-link svg {
+      background: #a4510a;
+      color: #fff;
+    }
+    .dispatch-card-legend strong {
+      font-size: 14px;
+      color: var(--ink);
+    }
+    .dispatch-legend-note {
+      font-size: 13px;
+    }
+
+    /* Properties: filter tabs and a search over the table, a soft row for each Property. */
+    .dispatch-filters {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 12px;
+    }
+    html:not(.js) .dispatch-filters {
+      display: none;
+    }
+    .dispatch-tabs {
+      display: inline-flex;
+      padding: 3px;
+      border-radius: 999px;
+      background: #f1ece2;
+    }
+    .dispatch-tab {
+      min-height: 32px;
+      padding: 0 14px;
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
+      font: inherit;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .dispatch-tab[aria-pressed='true'] {
+      background: #13212e;
+      color: #fff;
+    }
+    .dispatch-search input {
+      min-height: 38px;
+      width: min(16rem, 100%);
+      padding: 0 14px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      font: inherit;
+      font-size: 14px;
+    }
+    .soft-card .dispatch-stack {
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+    }
+    .soft-card .dispatch-stack thead th {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--muted);
+      background: transparent;
+    }
+    .dispatch-stack tr[hidden] {
+      display: none !important;
+    }
+    .dispatch-go-cell {
+      width: 56px;
+      text-align: right;
+    }
+    .dispatch-go {
+      display: inline-grid;
+      width: 36px;
+      height: 36px;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: 50%;
+      color: var(--ink);
+    }
+    .dispatch-go:hover {
+      background: var(--info-bg);
+    }
+    @media (max-width: 639.98px) {
+      .dispatch-go-cell {
+        display: none;
+      }
+      .glance-tile-value {
+        font-size: 26px;
+      }
+    }
+
     /* Dashboard page */
     /* Two columns from 1024px (Tailwind classes on the page); see the count strip block for the rest. */
     .dashboard-desk > * {

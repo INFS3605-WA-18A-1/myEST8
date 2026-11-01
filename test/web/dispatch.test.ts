@@ -427,7 +427,7 @@ describe('Dispatch: the Jobs to dispatch', () => {
 
     const html = await dispatch(w, cookie);
 
-    expect(visible(html)).toMatch(/Need Tradies 1 Jobs to ask for Quotes/);
+    expect(visible(html)).toMatch(/1 Need tradies Jobs to ask for Quotes/);
     const card = html.slice(html.indexOf(`id="dispatch-job-${job.jobId}"`), html.indexOf('</li>\n</ul>', html.indexOf(`id="dispatch-job-${job.jobId}"`)));
     const text = visible(card);
     expect(text).toContain('Needs Tradies to quote');
