@@ -875,6 +875,66 @@ onContent((root) => {
   });
 })();
 
+// === glance dialogs ===
+// Inbox and Alerts open over the dashboard. Without this file those bubbles are
+// anchors on the page. The listener stays on the document, so a dashboard swapped
+// in by in-page navigation (myest8:content replaces #main) still opens them.
+(() => {
+  let opener = null;
+  // Closing one dialog to open another must not send focus back in between.
+  let restoring = true;
+
+  document.addEventListener('click', (event) => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target) return;
+
+    const close = target.closest('[data-dialog-close]');
+    if (close) {
+      const dialog = close.closest('dialog');
+      if (dialog instanceof HTMLDialogElement) {
+        event.preventDefault();
+        dialog.close();
+      }
+      return;
+    }
+
+    if (target instanceof HTMLDialogElement && target.classList.contains('glance-dialog') && target.open) {
+      const box = target.getBoundingClientRect();
+      const outside = event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom;
+      if (outside) target.close();
+      return;
+    }
+
+    const link = target.closest('[data-dialog]');
+    if (!(link instanceof HTMLElement)) return;
+    const dialog = document.getElementById(link.getAttribute('data-dialog') ?? '');
+    if (!(dialog instanceof HTMLDialogElement)) return;
+    event.preventDefault();
+    opener = link;
+    restoring = false;
+    for (const open of document.querySelectorAll('dialog.glance-dialog[open]')) {
+      if (open !== dialog) open.close();
+    }
+    restoring = true;
+    if (!dialog.open) dialog.showModal();
+  });
+
+  // close does not bubble; capture hears it from the dialog.
+  document.addEventListener(
+    'close',
+    (event) => {
+      if (!restoring) return;
+      const dialog = event.target;
+      if (!(dialog instanceof HTMLDialogElement) || !dialog.classList.contains('glance-dialog')) return;
+      const back = opener;
+      opener = null;
+      if (back instanceof HTMLElement && back.isConnected) back.focus();
+    },
+    true,
+  );
+})();
+
 // === loading and in-page navigation ===
 // A thin bar along the top shows while a page or a form's reply is on its way.
 // A link or GET form that stays on the same page and only changes the query (the
@@ -954,6 +1014,63 @@ onContent((root) => {
       location.assign(url);
     }
   }
+
+  // A day chip refreshes only Next 7 days. Its href is still the whole dashboard, so
+  // Back and Forward load the page the usual way. A failure follows that href.
+  // Registered before the generic swapper, which leaves a click alone once prevented.
+  let dayLoad = 0;
+  let dayController;
+  document.addEventListener('click', (event) => {
+    const link = event.target instanceof Element ? event.target.closest('a[data-fragment]') : null;
+    if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const fragment = link.getAttribute('data-fragment');
+    const section = document.getElementById('next-7-days');
+    if (!fragment || !(section instanceof HTMLElement)) return;
+    event.preventDefault();
+    const href = link.href;
+    const loadId = ++dayLoad;
+    dayController?.abort();
+    dayController = new AbortController();
+    section.setAttribute('aria-busy', 'true');
+    start();
+    fetch(fragment, { signal: dayController.signal, headers: { accept: 'text/html' } })
+      .then(async (response) => {
+        const type = response.headers.get('content-type') ?? '';
+        const arrived = new URL(response.url, location.origin);
+        if (!response.ok || !type.includes('text/html') || arrived.pathname !== '/next-7-days') throw new Error('not the day');
+        const doc = new DOMParser().parseFromString(await response.text(), 'text/html');
+        const next = doc.getElementById('next-7-days');
+        if (!next || doc.getElementById('main')) throw new Error('not the day');
+        if (loadId !== dayLoad) return;
+        const live = document.getElementById('next-7-days');
+        if (!live) throw new Error('not the day');
+        const imported = document.importNode(next, true);
+        live.replaceWith(imported);
+        const url = new URL(href);
+        history.pushState(null, '', url);
+        current = pageOf(url);
+        const day = url.searchParams.get('day');
+        const scope = document.querySelector('#main .page-header-controls .segmented');
+        if (scope && day) {
+          for (const item of scope.querySelectorAll('a[href]')) {
+            const nextHref = new URL(item.getAttribute('href'), location.origin);
+            if (nextHref.pathname !== '/') continue;
+            nextHref.searchParams.set('day', day);
+            nextHref.hash = 'next-7-days';
+            item.setAttribute('href', `${nextHref.pathname}${nextHref.search}${nextHref.hash}`);
+          }
+        }
+        const chosen = imported.querySelector('[aria-current="date"]');
+        if (chosen instanceof HTMLElement) chosen.focus({ preventScroll: true });
+        const heading = imported.querySelector('.visit-heading');
+        status.textContent = `Loaded ${heading?.textContent?.trim() || 'the day'}`;
+        stop();
+      })
+      .catch((error) => {
+        if (error?.name === 'AbortError' || loadId !== dayLoad) return;
+        location.assign(href);
+      });
+  });
 
   // Registered last, so the confirm, photo viewer and upload handlers above have had their say.
   document.addEventListener('click', (event) => {

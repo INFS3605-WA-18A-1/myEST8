@@ -45,6 +45,16 @@ function match(text: string, pattern: RegExp) {
   return found[1]!;
 }
 
+/** One glance dialog, from its opening tag through the close tag. */
+function dialogOf(page: string, id: string) {
+  const marker = `id="${id}"`;
+  const at = page.indexOf(marker);
+  if (at < 0) throw new Error(`No dialog ${id}`);
+  const start = page.lastIndexOf('<dialog', at);
+  const end = page.indexOf('</dialog>', at);
+  return page.slice(start, end + '</dialog>'.length);
+}
+
 describe('Maintenance Requests on the dashboard', () => {
   test('a waiting Maintenance Request shows its answers and flags, and confirming it opens the new Ticket', async () => {
     const w = await webWorld();
@@ -151,10 +161,10 @@ describe('the count strip and Needs your attention', () => {
     return { w, cookie: await w.signIn(), routine, high };
   }
 
-  test('the Quotes bubble counts the Tickets waiting on a Quote decision, and links to the first of them', async () => {
+  test('the Quotes bubble counts the Tickets waiting on a Quote decision, and opens the Tickets list', async () => {
     const { w, cookie } = await quoteDecisions();
     const dashboard = await page(w, '/', cookie);
-    expect(dashboard).toMatch(/<a href="#inspections" class="bubble is-quotes[^"]*"[^>]*><span class="bubble-num">2<\/span><span class="bubble-label">Quotes<\/span>/);
+    expect(dashboard).toMatch(/<a href="\/tickets" class="bubble is-quotes[^"]*"[^>]*><span class="bubble-num">2<\/span><span class="bubble-go">[\s\S]*?<span class="bubble-label">Quotes<\/span>/);
     expect(dashboard).toContain('Quote decisions');
     expect(dashboard).toContain('Open Tickets');
   });
@@ -188,6 +198,60 @@ describe('the count strip and Needs your attention', () => {
     expect(dashboard.match(/id="inbox"/g)).toHaveLength(1);
     expect(dashboard.match(/All open Tickets/g) ?? []).toHaveLength(0);
     expect(dashboard.match(/id="tickets"/g)).toHaveLength(1);
+  });
+});
+
+describe('glance bubbles', () => {
+  test('page bubbles open their lists, and Inbox and Alerts open dialogs', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+    const dashboard = await page(w, '/', cookie);
+
+    expect(dashboard).toMatch(/<a href="\/tickets" class="bubble is-tickets/);
+    expect(dashboard).toMatch(/<a href="\/requests" class="bubble is-requests/);
+    expect(dashboard).toMatch(/<a href="\/tickets" class="bubble is-quotes/);
+    expect(dashboard).toMatch(/<a href="#alerts" class="bubble is-alerts[^"]*"[^>]*data-dialog="alerts-dialog" aria-haspopup="dialog">/);
+    expect(dashboard).toMatch(/<a href="#inbox" class="bubble is-inbox[^"]*"[^>]*data-dialog="inbox-dialog" aria-haspopup="dialog">/);
+    expect(dashboard).toMatch(/<a href="\/tickets" class="glance-legend-link"><i><\/i>Open Tickets/);
+    expect(dashboard).toMatch(/<a href="\/requests" class="glance-legend-link"><i><\/i>Requests/);
+    expect(dashboard).toMatch(/<a href="#inbox" class="glance-legend-link" data-dialog="inbox-dialog" aria-haspopup="dialog"><i><\/i>Inbox/);
+    expect(dashboard).toMatch(/<a href="#alerts" class="glance-legend-link" data-dialog="alerts-dialog" aria-haspopup="dialog"><i><\/i>Alerts/);
+
+    expect(dialogOf(dashboard, 'inbox-dialog')).toContain('The inbox is empty.');
+    expect(dialogOf(dashboard, 'alerts-dialog')).toContain('No alerts.');
+    expect(dialogOf(dashboard, 'inbox-dialog')).toContain('aria-label="Close"');
+
+    const all = await page(w, '/?filter=all', cookie);
+    expect(all).toMatch(/<a href="\/tickets\?filter=all" class="bubble is-tickets/);
+    expect(all).toMatch(/<a href="\/tickets\?filter=all" class="bubble is-quotes/);
+    expect(all).toMatch(/<a href="\/requests" class="bubble is-requests/);
+    expect(all).not.toMatch(/href="\/requests\?/);
+  });
+
+  test('the Inbox and Alerts dialogs repeat the rows and their actions', async () => {
+    const w = await webWorld();
+    const text = 'I can smell gas in the kitchen';
+    w.h.classifier.when(text, {
+      messageClass: 'new_issue',
+      relatedItem: 'none',
+      urgency: 'routine',
+      trade: 'plumbing',
+      safety: ['risk', 0.95],
+    });
+    await w.h.receive(TOM, text);
+    await w.h.receive(STRANGER, 'Hi, this is Tom on my work phone');
+    const cookie = await w.signIn();
+    const dashboard = await page(w, '/', cookie);
+
+    const inbox = dialogOf(dashboard, 'inbox-dialog');
+    expect(inbox).toContain('Hi, this is Tom on my work phone');
+    expect(inbox).toMatch(/action="\/inbox\/\d+\/link"/);
+    expect(inbox).toMatch(/action="\/inbox\/\d+\/dismiss"/);
+    expect(inbox).toContain('id="dialog-inbox-');
+
+    const alerts = dialogOf(dashboard, 'alerts-dialog');
+    expect(alerts).toContain(`Safety risk: ${text}`);
+    expect(alerts).toContain('Review the Urgent Repair');
   });
 });
 
@@ -461,6 +525,47 @@ describe('picking a day in the Next 7 days', () => {
     expect(strip).toContain(`href="/tickets/${job.ticketId}"`);
     expect(strip).toContain('aria-label="Has a visit"');
     expect(strip).not.toContain('Nothing booked on Tuesday.');
+  });
+
+  test('/next-7-days returns only that section, for the chosen day', async () => {
+    const { w, cookie, tuesday, monday } = await twoDays();
+
+    const res = await w.get('/next-7-days?day=2026-10-13', cookie);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toMatch(/text\/html/);
+    const html = await res.text();
+
+    expect(html.trimStart().startsWith('<section')).toBe(true);
+    expect(html).toContain('id="next-7-days"');
+    expect(html).not.toContain('<html');
+    expect(html).not.toContain('id="main"');
+    expect(html).not.toContain('Hi,');
+    expect(html).toContain('Tuesday 13 October');
+    expect(html).toContain('9:00 am');
+    expect(html).toContain(`href="/tickets/${tuesday.ticketId}"`);
+    expect(html).not.toContain(`href="/tickets/${monday.ticketId}"`);
+    expect(html).toContain('data-fragment="/next-7-days?day=2026-10-13"');
+    expect(html).not.toContain('filter=all');
+  });
+
+  test('/next-7-days keeps All, and an invalid day falls back to today', async () => {
+    const { w, cookie, monday } = await twoDays();
+
+    const all = await (await w.get('/next-7-days?day=2026-10-13&filter=all', cookie)).text();
+    expect(all).toContain('data-fragment="/next-7-days?day=2026-10-13&amp;filter=all"');
+    expect(all).toContain('href="/?filter=all&amp;day=2026-10-13#next-7-days"');
+    expect(all).toContain('9:00 am');
+    expect(all).not.toContain('<html');
+
+    for (const day of ['nope', '2026-02-31', '2026-10-19']) {
+      const html = await (await w.get(`/next-7-days?day=${encodeURIComponent(day)}`, cookie)).text();
+      expect(html, day).toContain('Monday 12 October');
+      expect(html, day).toContain('2:00 pm');
+      expect(html, day).toContain(`href="/tickets/${monday.ticketId}"`);
+      expect(html, day).not.toContain('9:00 am');
+      expect(html, day).not.toContain('<html');
+      expect(html, day).not.toContain('id="main"');
+    }
   });
 
   test('a Site Inspection is badged, and links to the Tradie and the Ticket', async () => {
