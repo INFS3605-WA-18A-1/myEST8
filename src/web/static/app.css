@@ -5834,9 +5834,6 @@
     /* The map card: the map fills it, with a count chip and the picked Property or Tradie floating on top. */
     .dispatch-mapcard {
       position: relative;
-      height: 55vh;
-      min-height: 20rem;
-      max-height: 34rem;
       overflow: hidden;
       border: 1px solid var(--line);
       border-radius: 16px;
@@ -5849,6 +5846,20 @@
         position: sticky;
         top: 76px;
       }
+      .dispatch-stage {
+        position: absolute;
+        inset: 0;
+        height: auto;
+        min-height: 0;
+        max-height: none;
+      }
+    }
+    /* The map with its buttons. On a phone it is a block of its own and the panel opens under it; from 64rem the panel floats over it. */
+    .dispatch-stage {
+      position: relative;
+      height: 55vh;
+      min-height: 20rem;
+      max-height: 34rem;
     }
     .dispatch-mapcard .dispatch-map-section {
       position: absolute;
@@ -5884,6 +5895,14 @@
       background: var(--high);
     }
     .dispatch-mapcard .dispatch-side {
+      position: static;
+      width: auto;
+      max-height: none;
+      border-radius: 0;
+      box-shadow: none;
+    }
+    @media (min-width: 64rem) {
+    .dispatch-mapcard .dispatch-side {
       position: absolute;
       top: 56px;
       left: 12px;
@@ -5894,6 +5913,7 @@
       overflow-y: auto;
       border-radius: 14px;
       box-shadow: 0 6px 24px rgb(19 33 46 / 16%);
+    }
     }
     .dispatch-mapcard .dispatch-panel-empty {
       margin: 0;
@@ -6307,11 +6327,12 @@
       bottom: 22px;
       left: 12px;
     }
+    /* MapLibre's own stylesheet is outside the layers, so these need !important to move the zoom buttons below the expand button. */
     .dispatch-mapcard .maplibregl-ctrl-top-right {
-      top: 64px;
+      top: 64px !important;
     }
     .dispatch-mapcard .maplibregl-ctrl-top-right .maplibregl-ctrl {
-      margin: 0 12px 0 0;
+      margin: 0 12px 0 0 !important;
     }
     .dispatch-mapcard .maplibregl-ctrl-group {
       border-radius: 22px;
@@ -6321,6 +6342,13 @@
       inset: 12px;
       z-index: 60;
       height: auto;
+      max-height: none;
+    }
+    .dispatch-mapcard.is-expanded .dispatch-stage {
+      position: absolute;
+      inset: 0;
+      height: auto;
+      min-height: 0;
       max-height: none;
     }
     body.dispatch-map-open {

@@ -136,6 +136,7 @@ export function dispatchPages() {
         body: html`
           <div class="dispatch-top">
             <div class="dispatch-mapcard">
+              <div class="dispatch-stage">
               ${mapSection()}
               <div class="dispatch-layers" role="group" aria-label="Show on the map">
                 <button type="button" class="dispatch-layer" data-layer="properties" aria-pressed="true">${icon('house-line', { size: 'size-4' })}<span>Properties</span></button>
@@ -145,6 +146,7 @@ export function dispatchPages() {
               <button type="button" class="dispatch-fab dispatch-expand" data-map-expand aria-pressed="false" aria-label="Make the map bigger">${icon('arrows-out-simple', { size: 'size-5' })}</button>
               <button type="button" class="dispatch-fab dispatch-locate" data-map-locate aria-label="Show where I am">${icon('crosshair', { size: 'size-5' })}</button>
               <p class="dispatch-chip"><span aria-hidden="true"></span>${placed} ${placed === 1 ? 'property' : 'properties'} · ${tradiesPlaced} ${tradiesPlaced === 1 ? 'tradie' : 'tradies'} located</p>
+              </div>
               ${panels(ordered, tradies, bookings, timeZone, tradiesPlaced > 0)}
             </div>
             <div class="dispatch-right">
