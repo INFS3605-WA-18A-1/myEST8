@@ -58,6 +58,7 @@ export function createApp(
       addressSuggester: deps.addressSuggester,
       tradeSuggester: deps.tradeSuggester,
       jobFitJudge: deps.jobFitJudge,
+      requestJudge: deps.requestJudge,
       fetchMedia: deps.fetchMedia,
     },
     modules,

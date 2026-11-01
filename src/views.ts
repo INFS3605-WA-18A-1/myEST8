@@ -1,4 +1,6 @@
 import type { Context } from './context.ts';
+import { commonAreaIssues, tenantProfileRead, tradieProfileRead } from './profile-glance.ts';
+import { buildingManagerRead, ownerRead } from './profile-reads.ts';
 import { URGENT_REPAIR_LIMIT_CENTS } from './intake.ts';
 import { MIN_QUOTE_REQUESTS, MIN_QUOTES } from './quotes.ts';
 import { addMs, HOUR_MS, iso, URGENCIES, type Trade, type Urgency } from './shared.ts';
@@ -70,7 +72,8 @@ function cached<K, V>(lookup: (key: K) => Promise<V>) {
   };
 }
 
-export function createViews({ clock, modules }: Context) {
+export function createViews(ctx: Context) {
+  const { clock, modules } = ctx;
   const { profiles, tickets, intake } = modules;
 
   const propertyLabel = async (propertyId: number) => {
@@ -562,6 +565,7 @@ export function createViews({ clock, modules }: Context) {
               };
             }),
         ),
+        read: await tradieProfileRead(ctx.db, tradie.id),
         // Upcoming visits from the same Work Orders as `scheduling.bookings`, with the
         // Ticket each is for. Five years ahead stands in for "every future booking".
         bookings: await Promise.all(
@@ -676,6 +680,7 @@ export function createViews({ clock, modules }: Context) {
               reportedAt: u.createdAt,
             })),
         ),
+        read: await tenantProfileRead(ctx, agencyId, tenant.id),
       };
     },
 
@@ -687,6 +692,7 @@ export function createViews({ clock, modules }: Context) {
     async contactProfile(agencyId: number, personId: number, role: 'owner' | 'building_manager') {
       const person = await profiles.personInAgency(agencyId, personId, role);
       const properties = (await profiles.properties(agencyId)).filter((p) => (role === 'owner' ? p.ownerId === personId : p.buildingManagerId === personId));
+      const approvals = role === 'owner' ? await modules.quotes.approvalsFor(personId) : [];
       return {
         personId: person.id,
         name: person.name,
@@ -694,7 +700,11 @@ export function createViews({ clock, modules }: Context) {
         email: person.email,
         removedAt: person.removedAt,
         properties: properties.map((p) => ({ propertyId: p.id, address: p.address })),
-        approvals: role === 'owner' ? await modules.quotes.approvalsFor(personId) : [],
+        approvals,
+        read:
+          role === 'owner'
+            ? ownerRead(approvals.map((approval) => ({ status: approval.status, requestedAt: approval.requestedAt, answeredAt: approval.answeredAt })))
+            : buildingManagerRead({ commonAreaIssues: await commonAreaIssues(ctx.db, agencyId, personId) }),
       };
     },
 

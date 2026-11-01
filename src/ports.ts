@@ -293,6 +293,33 @@ export interface JobFitJudge {
   judge(evidence: JobFitEvidence): Promise<JobFit>;
 }
 
+/** One Maintenance Request, as the request judge sees it. The description and summary are the Tenant's words. */
+export interface RequestToJudge {
+  issueId: number;
+  description: string;
+  summary: string | null;
+  urgency: string;
+  propertyType?: string;
+}
+
+/**
+ * How minor a Maintenance Request is, and how likely the Tenant's misuse caused it.
+ * Both are 0 to 1. `minor` is higher for a smaller thing. `tenantCaused` is the
+ * probability of misuse or negligence, not a finding.
+ */
+export interface RequestJudgment {
+  minor: number;
+  tenantCaused: number;
+}
+
+export interface RequestJudge {
+  /**
+   * Judges every request in one call. Throws when the judgment fails.
+   * An empty list is an empty map, and asks nothing.
+   */
+  judge(requests: RequestToJudge[]): Promise<Map<number, RequestJudgment>>;
+}
+
 export interface Clock {
   now(): Date;
 }
