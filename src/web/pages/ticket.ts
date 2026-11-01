@@ -10,14 +10,14 @@ import type { PropertyManagerActions } from '../../app.ts';
 import { ActionError, notFound, TRADES, type Trade, type Urgency } from '../../shared.ts';
 import { AVAILABILITY_LABELS } from '../../templates.ts';
 import type { WebEnv } from '../env.ts';
+import { icon } from '../icons.ts';
 import { PHOTO_FLAG } from './dashboard.ts';
 import { DATE_INPUTS, firmQuoteFrom } from './quote-form.ts';
 import { cents, formAction, int, isoToLocal, list, localToIso, text, type FormValues } from '../forms.ts';
-import { collapsible, messageLog } from '../messages.ts';
+import { messageLog } from '../messages.ts';
 import { COLLEAGUES_ONLY, shareButton, shareUrl } from '../share.ts';
 import { shellInfo } from '../shell.ts';
 import {
-  aiFilled,
   alert,
   badge,
   button,
@@ -28,6 +28,7 @@ import {
   field,
   flashFrom,
   formatAge,
+  formatDay,
   formatMoney,
   formatWhen,
   humanise,
@@ -43,6 +44,7 @@ import {
   table,
   timeline,
   withFlash,
+  urgencyBadge,
   type Html,
   type StepState,
 } from '../ui.ts';
@@ -105,6 +107,9 @@ export function ticketPages() {
         pm,
         active: 'tickets',
         flash,
+        back: { label: 'Tickets', href: '/tickets' },
+        titleExtra: urgencyBadge(ticket.urgency),
+        subtitle: ticketSubtitle(ticket, extras),
         body: ticketBody(ticket, extras, shareButton({
           title: `Ticket #${ticket.ticketId}: ${ticket.description}`,
           text: `Ticket #${ticket.ticketId} at ${ticket.propertyAddress}: ${ticket.description}`,
@@ -415,84 +420,306 @@ async function freeSlotsFor(actions: PropertyManagerActions, ticket: TicketView)
 // The page
 
 /**
- * The header, the stage tracker and the Next block first; then the Jobs (where the
- * next action is) with the timeline under them in the main column, and what the
- * Tenant reported, the Ticket's details and the messages beside them. On phones it is
- * one column: the Jobs, what the Tenant reported, the details, the timeline, the
- * messages. `share` is the Share button, which sits in the header with the Ticket's
- * other tools.
+ * The page under the title and subtitle: the tools (Share, Change Urgency, Close Ticket),
+ * then the Summary band (the Summary, a stage ring and Add another Job), the Jobs beside
+ * what the Tenant reported (stacked while a Job is open, as its tables need the room),
+ * with a grey column beside them (who is on the Ticket, the costs, the Next step,
+ * the messages and the details), and the Progress across the whole width underneath. On phones it is one column in the order the
+ * work is read: the Summary, Next, the Jobs, what the Tenant reported, the Progress, the
+ * messages, the people, the costs, the details.
  */
 function ticketBody(t: TicketView, x: Extras, share: Html): Html {
-  return html`${ticketHeader(t, x, share)} ${stageTracker(t, x)} ${nextStepLine(t, x)}
+  const paired = t.jobs.every((j) => !isOpen(j));
+  return html`<div class="ticket-tools">${share}${urgencyMenu(t)}${closeControl(t)}</div>
     <div class="ticket-layout">
       <div class="ticket-main">
-        <div class="ticket-jobs">
-          ${t.jobs.map((job) => jobCard(t, job, x))}
-          ${jobsFoot(t)}
+        ${heroCard(t, x)}
+        <div class="ticket-pair${paired ? ' is-paired' : ''}">
+          <div class="ticket-jobs">
+            ${t.jobs.map((job) => jobCard(t, job, x))}
+            ${jobsFoot(t)}
+          </div>
+          <div class="ticket-report">${reportCard(t)}</div>
         </div>
-        <div class="ticket-history">${timelineCard(t, x)}</div>
       </div>
       <div class="ticket-side">
-        <div class="ticket-report">${reportCard(t)} ${detailsCard(t)}</div>
+        <div class="ticket-people">${peopleCard(t)}</div>
+        <div class="ticket-costs-slot">${costTiles(t)}</div>
+        <div class="ticket-next-slot">${nextStepLine(t, x)}</div>
         <div class="ticket-messages">${messagesCard(t, x)}</div>
+        <div class="ticket-details">${detailsCard(t)}</div>
       </div>
+      <div class="ticket-history">${progressCard(t, x)}</div>
     </div>`;
 }
 
-/**
- * The Ticket's header, hand-built in the docket's large shape (the number at 40px and
- * Urgency in the stub, a dashed perforation) because it reads the Summary first, with
- * the address linked under it: then the Tenant, status, age, Repair Cost (once there
- * is one), Max Repair Cost and any Call-out Fees owed (never part of the Repair Cost) in one line. Share, Change Urgency and Close Ticket
- * (once it can work) sit at its top right from 1024px and under the facts on phones.
- */
-function ticketHeader(t: TicketView, x: Extras, share: Html): Html {
-  const overMax = t.repairCostCents > t.maxRepairCostCents;
-  const fees = t.jobs.reduce((sum, job) => sum + calloutFeesOwed(job).cents, 0);
-  const stub = t.urgency === 'high' ? 'bg-high-bg text-high' : 'bg-page text-ink';
-  return html`<header class="ticket-head">
-    <div class="ticket-stub ${stub}">
-      <span class="ticket-number num">#${t.ticketId}</span>
-      <span class="ticket-urgency">${humanise(t.urgency)}<span class="sr-only"> Urgency</span></span>
-    </div>
-    <div aria-hidden="true" class="ticket-perf"></div>
-    <div class="ticket-head-body">
-      <div class="ticket-head-main">
-        ${summaryBlock(t)}
-        <p class="ticket-address">${entityLink('property', t.propertyAddress, `/properties/${t.propertyId}`)}</p>
-        <p class="ticket-meta">
-          <span>Tenant ${entityLink('tenant', t.tenantName, `/tenants/${t.tenantId}`)}</span>
-          <span>${statusBadge(t.status)}</span>
-          <time datetime="${t.reportedAt}">${reportedAgo(t.reportedAt, x.now)}</time>
-          ${t.repairCostCents > 0
-            ? html`<span class="num ${overMax ? 'text-high' : 'text-ink'}">Repair Cost <strong>${formatMoney(t.repairCostCents)}</strong>${overMax ? ", over the Max Repair Cost with the Property Owner's approval" : ''}</span>`
-            : nothing}
-          <span class="num">Max Repair Cost ${formatMoney(t.maxRepairCostCents)}</span>
-          ${fees > 0 ? html`<span class="num" data-callout-fees>Call-out Fees owed ${formatMoney(fees)}, on top of the Repair Cost</span>` : nothing}
-          ${t.checkUrgency ? html`<span class="flex items-center gap-2">${badge('Check urgency', 'warning')} The intake agent wasn't sure.</span>` : nothing}
-        </p>
-      </div>
-      <div class="ticket-tools">${share}${urgencyMenu(t)}${closeControl(t)}</div>
-    </div>
-  </header>`;
+/** The line under the title: the Trades, the address, when it was reported and by whom. */
+function ticketSubtitle(t: TicketView, x: Extras): Html {
+  const trades = [...new Set(t.jobs.filter((j) => j.status !== 'cancelled').map((j) => humanise(j.trade)))];
+  return html`${trades.length ? trades.join(', ') : 'Ticket'} at ${t.propertyAddress} · ${reportedAgo(t.reportedAt, x.now).replace(/^Reported/, 'reported')} by <a class="ticket-sub-link" href="/tenants/${t.tenantId}">${t.tenantName}</a>`;
 }
 
-/** The Summary (else the Tenant's words), on the AI tint when AI wrote it, with a small form to edit it. */
+/** The Job the stage ring and the Progress are about: the one the Next step is about, else the first still open, else the last. */
+function focusJob(t: TicketView, x: Extras): JobView | undefined {
+  const live = t.jobs.filter((j) => j.status !== 'cancelled');
+  return nextStep(t, x)?.job ?? live.find(isOpen) ?? live.at(-1);
+}
+
+/** The Summary, its address and status, the stage ring, and (open Tickets) the tile that adds another Job. */
+function heroCard(t: TicketView, x: Extras): Html {
+  return html`<section class="ticket-hero" id="ticket-hero" aria-label="Summary">
+    <div class="ticket-hero-card">
+      <div class="ticket-hero-text">
+        ${summaryBlock(t)}
+        <p class="ticket-hero-meta">
+          <span class="ticket-chip">${entityLink('property', t.propertyAddress, `/properties/${t.propertyId}`)}</span>
+          <span class="ticket-state${t.status === 'open' ? '' : ' is-closed'}">${humanise(t.status)}</span>
+          ${summaryEdit(t)}
+          ${t.checkUrgency ? html`<span class="text-sm text-muted">The intake agent wasn't sure of the Urgency.</span>` : nothing}
+        </p>
+      </div>
+      ${stageRing(t, x)}
+    </div>
+    ${addJobTile(t)}
+  </section>`;
+}
+
+/** A ring filled by how many of the Job's stages are done (those that were not needed don't count), with what is left in words. */
+function stageRing(t: TicketView, x: Extras): Html {
+  const job = focusJob(t, x);
+  if (!job) return nothing;
+  const { done, total, skipped, current } = stageCounts(jobStages(job, x));
+  const pct = total ? Math.round((done / total) * 100) : 0;
+  return html`<div class="ticket-ring-wrap">
+    <div class="ticket-ring${done === total ? ' is-done' : ''}" style="--pct:${pct}"><span class="ticket-ring-label">${done === total ? 'Done' : (current?.label ?? '')}</span></div>
+    <p class="ticket-ring-note">${done} of ${total} stages done${skipped ? html`<br />${skipped} not needed` : nothing}</p>
+  </div>`;
+}
+
+/** How many of a Job's stages are done, not needed or in all (a stage that was not needed isn't counted), and the one it is at. */
+function stageCounts(stages: Stage[]) {
+  const skipped = stages.filter((s) => s.state === 'skipped').length;
+  return {
+    done: stages.filter((s) => s.state === 'done').length,
+    total: stages.length - skipped,
+    skipped,
+    current: stages.find((s) => s.state === 'current') ?? stages.find((s) => s.state === 'upcoming'),
+  };
+}
+
+/** "Add another Job" as a dashed tile that opens its form in place. */
+function addJobTile(t: TicketView): Html {
+  if (t.status !== 'open') return nothing;
+  return html`<details class="ticket-add-job">
+    <summary><span>Add another Job</span><span class="ticket-add-plus" aria-hidden="true">${icon('plus', { size: 'size-6' })}</span></summary>
+    <form method="post" action="/tickets/${t.ticketId}/jobs" class="ticket-inline-form">
+      <div class="min-w-48 flex-1">
+        ${field({ label: 'Trade', name: 'trade', type: 'select', options: tradeOptions(), hint: 'When the issue needs another Trade as well.' })}
+      </div>
+      ${button('Add Job', { variant: 'secondary' })}
+    </form>
+  </details>`;
+}
+
+/** Two letters for an avatar: the first letters of the first two words ("Lena Le" is LL). */
+function initials(name: string): string {
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('');
+}
+
+/** Who is on the Ticket: the Tenant, the Property Manager and each Tradie with a Work Order. */
+function peopleCard(t: TicketView): Html {
+  const people: { name: string; role: string }[] = [
+    { name: t.tenantName, role: 'Tenant' },
+    { name: t.propertyManager, role: 'Property Manager' },
+    ...[...new Set(t.jobs.flatMap((j) => (j.workOrder ? [j.workOrder.businessName] : [])))].map((name) => ({ name, role: 'Tradie' })),
+  ];
+  return html`<section class="ticket-people-card" aria-label="People on this Ticket">
+    <h2 class="ticket-people-title">People on this Ticket</h2>
+    <ul class="ticket-avatars" role="list">
+      ${people.map((p) => html`<li class="ticket-avatar" title="${p.name}, ${p.role}"><span aria-hidden="true">${initials(p.name)}</span><span class="sr-only">${p.name}, ${p.role}</span></li>`)}
+    </ul>
+  </section>`;
+}
+
+/** The Repair Cost (once there is one) and the Max Repair Cost as two tiles, with any Call-out Fees owed (never part of the Repair Cost) under them. */
+function costTiles(t: TicketView): Html {
+  const overMax = t.repairCostCents > t.maxRepairCostCents;
+  const fees = t.jobs.reduce((sum, job) => sum + calloutFeesOwed(job).cents, 0);
+  return html`<div class="ticket-costs">
+      <div class="ticket-cost${overMax ? ' is-over' : ''}">
+        <span class="ticket-cost-icon" aria-hidden="true">${icon('receipt', { size: 'size-5' })}</span>
+        <span class="ticket-cost-label">Repair Cost</span> <strong class="ticket-cost-amount num">${t.repairCostCents > 0 ? formatMoney(t.repairCostCents) : '—'}</strong>
+        ${overMax ? html`<span class="ticket-cost-note">Over the Max Repair Cost, with the Property Owner's approval</span>` : nothing}
+        <a class="ticket-cost-link" href="#ticket-costs" data-tab-link="ticket-costs">Costs ${icon('arrow-right', { size: 'size-3.5' })}</a>
+      </div>
+      <div class="ticket-cost is-max">
+        <span class="ticket-cost-icon" aria-hidden="true">${icon('shield', { size: 'size-5' })}</span>
+        <span class="ticket-cost-label">Max Repair Cost</span> <strong class="ticket-cost-amount num">${formatMoney(t.maxRepairCostCents)}</strong>
+        <a class="ticket-cost-link" href="/properties/${t.propertyId}">Change ${icon('arrow-right', { size: 'size-3.5' })}</a>
+      </div>
+    </div>
+    ${fees > 0 ? html`<p class="ticket-fees num" data-callout-fees>Call-out Fees owed ${formatMoney(fees)}, on top of the Repair Cost</p>` : nothing}`;
+}
+
+/** Which column of the Progress board an event goes in: a stage, or the start of the Ticket. Unknown kinds follow the one before. */
+const REPORTED_COLUMN = 'Reported';
+const TIMELINE_COLUMN: Record<string, string> = (() => {
+  const [ESTIMATES, SITE, FIRM, OWNER, READY, BOOKED, DONE] = JOB_TRACKER_STAGES;
+  const columns: [string, string[]][] = [
+    [REPORTED_COLUMN, ['reported', 'confirmed', 'urgency_changed', 'summary_edited', 'job_added', 'trade_changed', 'job_cancelled']],
+    [ESTIMATES!, ['quote_requests_sent', 'tradie_declined', 'quote_received', 'estimate_received']],
+    [SITE!, ['inspection_need_set', 'inspection_booked', 'inspected', 'inspection_cancelled', 'site_quotes_booked', 'site_quotes_skipped', 'site_quote_done']],
+    [FIRM!, ['firm_quote_received', 'quotes_final', 'quote_chosen']],
+    [OWNER!, ['approval_requested', 'owner_declined']],
+    [READY!, ['quote_approved', 'work_order_sent', 'visit_times_asked', 'other_times_requested']],
+    [BOOKED!, ['reschedule_requested', 'visit_confirmed', 'visit_moved']],
+    [DONE!, ['job_done', 'tenant_rated', 'tradie_rated', 'closed']],
+  ];
+  return Object.fromEntries(columns.flatMap(([column, kinds]) => kinds.map((kind) => [kind, column])));
+})();
+
+const EVENT_ICON: Record<string, string> = {
+  reported: 'chat-circle',
+  confirmed: 'file-text',
+  quote_requests_sent: 'file-text',
+  estimate_received: 'file-text',
+  firm_quote_received: 'file-text',
+  quote_received: 'file-text',
+  quote_chosen: 'seal-check',
+  quote_approved: 'seal-check',
+  approval_requested: 'seal-check',
+  work_order_sent: 'wrench',
+  inspected: 'wrench',
+  visit_confirmed: 'calendar-check',
+  visit_moved: 'calendar-check',
+  job_done: 'check-circle',
+  closed: 'check-circle',
+  tenant_rated: 'star',
+  tradie_rated: 'star',
+};
+
+/** The timeline as a board: a column for each stage that has something in it, the events in each as small cards, side by side. */
+function timelineBoard(t: TicketView, x: Extras): Html {
+  const job = focusJob(t, x);
+  const stages = job ? jobStages(job, x) : [];
+  const columns = new Map<string, { kind: string; at: string; title: string; detail?: string }[]>();
+  let column = REPORTED_COLUMN;
+  for (const group of timelineGroups(t.timeline)) {
+    const kind = String((group[0] as Record<string, unknown>).kind);
+    column = TIMELINE_COLUMN[kind] ?? column;
+    columns.set(column, [...(columns.get(column) ?? []), { kind, ...describeGroup(t, group, x) }]);
+  }
+  if (!columns.size) return emptyState('Nothing has happened yet.');
+  const [ESTIMATES, SITE] = JOB_TRACKER_STAGES;
+  // The Site inspection column holds a quiet "Not needed" when the Job went without one.
+  const siteSkipped = stages.some((s) => s.label === SITE && s.state === 'skipped') && columns.has(ESTIMATES!) && !columns.has(SITE!);
+  const order = [REPORTED_COLUMN, ...JOB_TRACKER_STAGES].filter((c) => columns.has(c) || (siteSkipped && c === SITE));
+  const stageDone = (label: string) => label === REPORTED_COLUMN || stages.some((s) => s.label === label && s.state === 'done');
+  return html`<div class="tl-board" tabindex="0" role="region" aria-label="Timeline by stage">
+    ${order.map(
+      (label, i) => html`${i ? html`<span class="tl-arrow" aria-hidden="true">${icon('arrows-left-right', { size: 'size-4' })}</span>` : nothing}<section class="tl-column">
+        <h3 class="tl-head${stageDone(label) ? ' is-done' : ''}">${stageDone(label) ? icon('check', { size: 'size-3.5', weight: 'bold' }) : nothing}${label}</h3>
+        <ol class="tl-cards" role="list">
+          ${columns.has(label)
+            ? columns.get(label)!.map(
+                (e) => html`<li class="tl-card">
+                  <span class="tl-title">${icon(EVENT_ICON[e.kind] ?? 'circle', { size: 'size-4' })}<b>${e.title}</b></span>
+                  <time class="tl-time">${e.at}</time>
+                  ${e.detail ? html`<span class="tl-detail">${e.detail}</span>` : nothing}
+                </li>`,
+              )
+            : html`<li class="tl-card is-skipped"><b>${label}</b><span class="tl-detail">Not needed</span></li>`}
+        </ol>
+      </section>`,
+    )}
+  </div>`;
+}
+
+/** What each Quote on the Ticket was for and what it costs, with the Repair Cost, the Max and any Call-out Fees under them. */
+function costsPane(t: TicketView): Html {
+  const quotes = t.jobs.flatMap((job) => job.quotes.map((q) => ({ job, q })));
+  const fees = t.jobs.reduce((sum, job) => sum + calloutFeesOwed(job).cents, 0);
+  return html`<div class="space-y-4">
+    ${quotes.length
+      ? table(
+          ['Tradie', 'Type', 'Amount', 'Status'],
+          quotes.map(({ job, q }) => [
+            html`${q.businessName}${t.jobs.length > 1 ? html` <span class="text-muted">${jobLabel(t, job.jobId)}</span>` : nothing}`,
+            html`${q.stage === 'firm' ? 'Firm Quote' : 'Estimate'}`,
+            html`<span class="num">${formatMoney(q.priceCents)}${q.notToExceedCents !== null ? html` <span class="text-muted">capped at ${formatMoney(q.notToExceedCents)}</span>` : nothing}</span>`,
+            statusBadge(q.status),
+          ]),
+          { caption: 'Quotes on this Ticket', stack: true },
+        )
+      : html`<p class="text-sm text-muted">No Quotes yet.</p>`}
+    <dl class="ticket-facts">
+      <div><dt>Repair Cost</dt><dd class="num">${t.repairCostCents > 0 ? formatMoney(t.repairCostCents) : '—'}</dd></div>
+      <div><dt>Max Repair Cost</dt><dd class="num">${formatMoney(t.maxRepairCostCents)}</dd></div>
+      ${fees > 0 ? html`<div><dt>Call-out Fees owed</dt><dd class="num">${formatMoney(fees)}</dd></div>` : nothing}
+    </dl>
+  </div>`;
+}
+
+/**
+ * Progress: a strip of how it is going (stages done, when it finished and how long it took),
+ * then tabs: the Timeline as a board by stage, the Job's stage tracker, and the Costs. Without
+ * JavaScript the three show one under another. The tools: photos, print, edit the Summary and expand.
+ */
+function progressCard(t: TicketView, x: Extras): Html {
+  const job = focusJob(t, x);
+  const { done, total, skipped, current } = job ? stageCounts(jobStages(job, x)) : { done: 0, total: 0, skipped: 0, current: undefined };
+  const all = total > 0 && done === total;
+  const finished = job ? (lastEvent(t, 'job_done', job.jobId)?.at as string | undefined) : undefined;
+  const days = finished ? Math.max(0, Math.round((new Date(finished).getTime() - new Date(t.reportedAt).getTime()) / 86_400_000)) : null;
+  const jobsTab = t.jobs.length > 1 ? 'Jobs' : job ? jobLabel(t, job.jobId) : 'Job';
+  const tab = (id: string, label: string, selected = false) =>
+    html`<button type="button" role="tab" id="tab-${id}" class="ticket-tab" aria-controls="${id}" aria-selected="${selected ? 'true' : 'false'}">${label}</button>`;
+  return html`<section class="ticket-progress" data-tabs aria-label="Progress">
+    <aside class="ticket-progress-strip${all ? ' is-done' : ''}">
+      <p class="ticket-progress-state">${icon('check-circle', { size: 'size-5' })}${all ? 'Done' : (current?.label ?? 'Open')}</p>
+      <p class="ticket-progress-stat"><b class="num">${done}/${total}</b><span>Stages done</span>${skipped ? html`<span class="text-muted">${skipped} not needed</span>` : nothing}</p>
+      ${finished ? html`<p class="ticket-progress-stat"><b>Completed on</b><span>${formatDay(finished, x.timeZone)}</span></p>` : nothing}
+      ${days !== null ? html`<p class="ticket-progress-stat"><b>Took</b><span>${days} ${plural(days, 'day')}</span></p>` : nothing}
+    </aside>
+    <div class="ticket-progress-main">
+      <div class="ticket-progress-head">
+        <h2 class="section-title">Progress</h2>
+        <div class="ticket-progress-tools">
+          <button type="button" class="icon-btn js-only" data-print aria-label="Print this Ticket" title="Print">${icon('clipboard-text', { size: 'size-[18px]' })}</button>
+          ${t.status === 'open' ? html`<a href="#edit-summary" class="icon-btn" data-open-summary aria-label="Edit the Summary" title="Edit the Summary">${icon('pencil-simple', { size: 'size-[18px]' })}</a>` : nothing}
+          <button type="button" class="icon-btn js-only" data-expand aria-pressed="false" aria-label="Expand the Progress" title="Expand">${icon('arrows-out-simple', { size: 'size-[18px]' })}</button>
+        </div>
+      </div>
+      <div class="ticket-tablist js-only" role="tablist" aria-label="Progress views">
+        ${tab('ticket-timeline', 'Timeline', true)}${tab('ticket-job', jobsTab)}${tab('ticket-costs', 'Costs')}
+      </div>
+      <div class="ticket-pane" role="tabpanel" id="ticket-timeline" aria-labelledby="tab-ticket-timeline">${timelineBoard(t, x)}</div>
+      <div class="ticket-pane" role="tabpanel" id="ticket-job" aria-labelledby="tab-ticket-job">${stageTracker(t, x)}</div>
+      <div class="ticket-pane" role="tabpanel" id="ticket-costs" aria-labelledby="tab-ticket-costs">${costsPane(t)}</div>
+    </div>
+  </section>`;
+}
+
+/** The Summary (else the Tenant's words), with a "Filled in by AI" label when AI wrote it. */
 function summaryBlock(t: TicketView): Html {
   const words = t.summary ?? t.description;
-  const edit = t.status === 'open'
-    ? html`<details class="ticket-summary-edit">
-        <summary class="btn btn-ghost btn-sm" aria-label="Edit the Summary">Edit</summary>
-        <form method="post" action="/tickets/${t.ticketId}/summary" class="space-y-2">
-          ${field({ id: 'ticket-summary', label: 'Summary', name: 'summary', type: 'textarea', rows: 2, value: words, required: true, hint: 'One line, 160 characters at most.' })}
-          ${button('Save Summary', { size: 'sm' })}
-        </form>
-      </details>`
-    : nothing;
-  const issue = html`<h2 class="ticket-issue">${words}</h2>`;
-  return t.summaryBy === 'ai'
-    ? aiFilled(issue, { edit })
-    : html`<div class="ticket-summary">${issue}${edit}</div>`;
+  return html`<div class="ticket-summary">
+    ${t.summaryBy === 'ai' ? html`<span class="ticket-ai-chip">${icon('sparkle', { size: 'size-3.5', weight: 'fill' })}<span>Filled in by AI</span></span>` : nothing}
+    <h2 class="ticket-issue">${words}</h2>
+  </div>`;
+}
+
+/** "Edit summary", folded: a small form to change the Summary while the Ticket is open. */
+function summaryEdit(t: TicketView): Html {
+  if (t.status !== 'open') return nothing;
+  const words = t.summary ?? t.description;
+  return html`<details class="ticket-summary-edit" id="edit-summary">
+    <summary aria-label="Edit the Summary">Edit summary</summary>
+    <form method="post" action="/tickets/${t.ticketId}/summary" class="space-y-2">
+      ${field({ id: 'ticket-summary', label: 'Summary', name: 'summary', type: 'textarea', rows: 2, value: words, required: true, hint: 'One line, 160 characters at most.' })}
+      ${button('Save Summary', { size: 'sm' })}
+    </form>
+  </details>`;
 }
 
 type NextStep = { text: string; href: string; decision: boolean; job?: JobView };
@@ -506,10 +733,15 @@ function nextStepLine(t: TicketView, x: Extras): Html {
   const step = nextStep(t, x);
   if (!step) return nothing;
   const job = step.job && t.jobs.length > 1 ? html` <span class="text-sm text-muted">${jobLabel(t, step.job.jobId)}</span>` : nothing;
-  return html`<p class="ticket-next ${step.decision ? 'is-decision' : ''}" data-next-step>
-    <span class="ticket-next-label">Next</span>
-    <a class="link font-semibold" href="${step.href}">${step.text}</a>${job}
-  </p>`;
+  const rating = step.job && step.href === `#job-${step.job.jobId}-rating` ? ratingForm(t, step.job) : nothing;
+  return html`<div class="ticket-next-card">
+    ${step.decision ? html`<span class="ticket-next-chip">Needs you</span>` : nothing}
+    <p class="ticket-next ${step.decision ? 'is-decision' : ''}" data-next-step>
+      <span class="ticket-next-label">Next</span>
+      <a class="link font-semibold" href="${step.href}">${step.text}</a>${job}
+    </p>
+    ${rating}
+  </div>`;
 }
 
 function nextStep(t: TicketView, x: Extras): NextStep | null {
@@ -684,21 +916,19 @@ function reportedAgo(iso: string, now: Date): string {
   return `Reported ${days} ${plural(days, 'day')} ago`;
 }
 
-/** Who looks after the Ticket, what else goes wrong at the Property, and what the intake agent's photo check said. */
+/** Who looks after the Ticket, what else goes wrong at the Property, and what the intake agent's photo check said, as small tiles. */
 function detailsCard(t: TicketView): Html {
+  const tile = (iconName: string, label: string, value: Html | string) =>
+    html`<div class="ticket-detail-tile"><span class="ticket-detail-icon" aria-hidden="true">${icon(iconName, { size: 'size-4' })}</span><dt>${label}</dt><dd>${value}</dd></div>`;
   return card({
     title: 'Ticket details',
-    body: facts([
-      ['Property Manager', t.propertyManager],
-      ['Property Owner', entityLink('person', t.owner.name, `/owners/${t.owner.personId}`)],
-      ...(t.buildingManager
-        ? [['Building Manager', entityLink('person', t.buildingManager.name, `/building-managers/${t.buildingManager.personId}`)] as [string, Html]]
-        : []),
-      ['Frequent issues here', frequentIssues(t)],
-      ...(t.imageMatch
-        ? [['Photo check', html`${badge(humanise(t.imageMatch.result), t.imageMatch.result === 'matches' ? 'success' : 'warning')} <span class="text-muted">${t.imageMatch.reason}</span>`] as [string, Html]]
-        : []),
-    ]),
+    body: html`<dl class="ticket-detail-grid">
+      ${tile('user', 'Property Manager', t.propertyManager)}
+      ${tile('key', 'Property Owner', entityLink('person', t.owner.name, `/owners/${t.owner.personId}`))}
+      ${t.buildingManager ? tile('buildings', 'Building Manager', entityLink('person', t.buildingManager.name, `/building-managers/${t.buildingManager.personId}`)) : nothing}
+      ${tile('house-line', 'Frequent issues here', frequentIssues(t))}
+      ${t.imageMatch ? tile('check-circle', 'Photo check', html`${badge(humanise(t.imageMatch.result), t.imageMatch.result === 'matches' ? 'success' : 'warning')} <span class="ticket-detail-note">${t.imageMatch.reason}</span>`) : nothing}
+    </dl>`,
   });
 }
 
@@ -706,29 +936,19 @@ function detailsCard(t: TicketView): Html {
 function closeControl(t: TicketView): Html {
   if (t.status !== 'open' || t.jobs.some(isOpen)) return nothing;
   return html`<div id="close-ticket">
-    ${postButton(`/tickets/${t.ticketId}/close`, 'Close Ticket', { size: 'sm', confirm: 'Close this Ticket? The Tenant and Property Owner will be told.' })}
+    <form method="post" action="/tickets/${t.ticketId}/close" class="inline-flex" data-confirm="Close this Ticket? The Tenant and Property Owner will be told.">
+      <button type="submit" class="btn btn-primary btn-sm">${icon('check-circle', { size: 'size-4' })}Close Ticket</button>
+    </form>
   </div>`;
 }
 
 /**
- * Under the Jobs while the Ticket is open: another Job, folded away, and while a Job
- * is open, when the Ticket can be closed.
+ * Under the Jobs while a Job is open: when the Ticket can be closed.
  */
 function jobsFoot(t: TicketView): Html {
   if (t.status !== 'open') return nothing;
   const openJobs = t.jobs.filter(isOpen).length;
-  return html`<div class="ticket-jobs-foot">
-    <details class="ticket-add-job">
-      <summary>Add another Job</summary>
-      <form method="post" action="/tickets/${t.ticketId}/jobs" class="ticket-inline-form">
-        <div class="min-w-48 flex-1">
-          ${field({ label: 'Trade', name: 'trade', type: 'select', options: tradeOptions(), hint: 'When the issue needs another Trade as well.' })}
-        </div>
-        ${button('Add Job', { variant: 'secondary' })}
-      </form>
-    </details>
-    ${openJobs ? html`<p class="ticket-close-hint">Close once every Job is done or cancelled (${openJobs} still open).</p>` : nothing}
-  </div>`;
+  return openJobs ? html`<p class="ticket-close-hint">Close once every Job is done or cancelled (${openJobs} still open).</p>` : nothing;
 }
 
 function frequentIssues(t: TicketView): string {
@@ -761,16 +981,19 @@ function reportCard(t: TicketView): Html {
     ? photoGrid(t.photos.map((p) => ({ src: `/files/${p.fileId}`, caption: photoCaption(p) })))
     : html`<p class="text-sm text-muted">${t.noPhotos ? 'No photos arrived within 48 hours.' : 'No photos.'}</p>`;
   return card({
+    id: 'ticket-report',
     title: 'What the Tenant reported',
-    body: html`<div class="space-y-4">
-      ${photos}
-      ${facts([
-        ...(t.summary ? [["The Tenant's words", t.description] as [string, string]] : []),
-        ['Where', a.location ?? '—'],
-        ['Started', a.started ?? '—'],
-        ['Getting worse', a.worsening ? humanise(a.worsening) : '—'],
-        ['Usually home', a.availability ? AVAILABILITY_LABELS[a.availability] : '—'],
-      ])}
+    body: html`<div class="ticket-report-body">
+      <div class="ticket-report-photos">${photos}</div>
+      <div class="ticket-report-text">
+        ${t.summary ? html`<p class="ticket-words"><span class="ticket-words-label">The Tenant's words</span> ${t.description}</p>` : nothing}
+        ${facts([
+          ['Where', a.location ?? '—'],
+          ['Started', a.started ?? '—'],
+          ['Getting worse', a.worsening ? humanise(a.worsening) : '—'],
+          ['Usually home', a.availability ? AVAILABILITY_LABELS[a.availability] : '—'],
+        ])}
+      </div>
     </div>`,
   });
 }
@@ -780,17 +1003,44 @@ function photoCaption(p: Photo): Html {
   return p.metadata === 'ok' ? badge('Metadata OK', 'success') : badge('No metadata');
 }
 
-/** One Job: where it is, the one next action, and the details below it. A cancelled Job is collapsed. */
+/**
+ * One Job: its Trade and stage, small tiles of what is known (the Tradie, the visit, the
+ * price, the Tenant's rating), the one next action and the details folded below. A
+ * cancelled Job is collapsed.
+ */
 function jobCard(t: TicketView, job: JobView, x: Extras): Html {
   if (job.status === 'cancelled') return cancelledJob(t, job, x);
-  return card({
-    id: `job-${job.jobId}`,
-    title: jobLabel(t, job.jobId),
-    actions: html`${statusBadge(job.status, { job: true })} ${job.checkTrade ? badge('Check trade', 'warning') : nothing}`,
-    body: html`${nextAction(t, job, x)}
+  return html`<section class="section ticket-job" id="job-${job.jobId}">
+    <div class="section-head">
+      <h2 class="section-title ticket-job-title"><span class="ticket-job-icon" aria-hidden="true">${icon('wrench', { size: 'size-5' })}</span>${jobLabel(t, job.jobId)}</h2>
+      <div class="section-actions">${statusBadge(job.status, { job: true })} ${job.checkTrade ? badge('Check trade', 'warning') : nothing}</div>
+    </div>
+    <div class="section-body">
+      ${jobTiles(t, job, x)}
+      ${nextAction(t, job, x)}
       ${calloutFeesLine(job)}
-      ${jobMore(t, job, x)}`,
-  });
+      ${jobMore(t, job, x)}
+    </div>
+  </section>`;
+}
+
+/** What is known about a Job at a glance: the Tradie, the visit, the price (capped, if it is) and the Tenant's rating. */
+function jobTiles(t: TicketView, job: JobView, x: Extras): Html {
+  const wo = job.workOrder;
+  const approved = job.quotes.find((q) => q.status === 'approved');
+  const tradie = wo?.businessName ?? approved?.businessName;
+  const tenantScore = lastEvent(t, 'tenant_rated', job.jobId)?.score;
+  const tiles: [string, Html | string][] = [
+    ...(tradie ? ([['Tradie', tradie]] as [string, string][]) : []),
+    ...(wo ? ([['Visit', formatRange(wo.start, wo.end, x.timeZone)]] as [string, string][]) : []),
+    ...(approved ? ([[approved.stage === 'firm' ? 'Firm Quote' : 'Estimate', approved.notToExceedCents !== null ? `Capped at ${formatMoney(approved.notToExceedCents)}` : formatMoney(approved.priceCents)]] as [string, string][]) : []),
+    ...(job.status === 'done'
+      ? ([[`Tenant's rating`, tenantScore !== undefined ? html`<span class="ticket-star" aria-hidden="true">★</span> ${String(tenantScore)} out of 5` : 'Not yet']] as [string, Html][])
+      : []),
+    ...(!tradie && job.status === 'quoting' ? ([['Tradies asked', String(job.quoteRequests.length)], ['Quotes in', String(job.quotes.length)]] as [string, string][]) : []),
+  ];
+  if (!tiles.length) return nothing;
+  return html`<dl class="ticket-tiles">${tiles.map(([label, value]) => html`<div><dt>${label}</dt><dd>${value}</dd></div>`)}</dl>`;
 }
 
 /** The Call-out Fees the Job owes: each Tradie's whose Site Inspection has happened, whether or not they get the Job. */
@@ -837,7 +1087,7 @@ function nextAction(t: TicketView, job: JobView, x: Extras): Html {
     case 'scheduled':
       return job.workOrder ? workOrderDetails(t, job.workOrder, x) : nothing;
     case 'done':
-      return ratingSection(t, job);
+      return ratingSection(t, job, nextStep(t, x)?.href === `#job-${job.jobId}-rating`);
     default:
       return nothing;
   }
@@ -1507,27 +1757,33 @@ function suggestionsPanel(t: TicketView, wo: WorkOrderView, suggest: NonNullable
   </div>`;
 }
 
-function ratingSection(t: TicketView, job: JobView): Html {
+function ratingSection(t: TicketView, job: JobView, inNext = false): Html {
   const tradie = job.workOrder?.businessName ?? 'the Tradie';
   const rated = lastEvent(t, 'tradie_rated', job.jobId);
-  const tenant = lastEvent(t, 'tenant_rated', job.jobId);
-  const form = html`<form method="post" action="/tickets/${t.ticketId}/jobs/${job.jobId}/rate" class="space-y-2">
-    <p>How did ${tradie} do? 1 is poor, 5 is excellent. It feeds their myEST8 rating.</p>
-    <div class="flex flex-wrap gap-2">
-      ${[1, 2, 3, 4, 5].map((n) => button(String(n), { name: 'score', value: String(n), variant: 'secondary' }))}
-    </div>
-  </form>`;
+  // While the rating form is in the Next card, the Job says nothing more than the tiles do.
+  if (inNext && !rated) return nothing;
   return html`<section class="space-y-3" id="job-${job.jobId}-rating">
     ${sectionHeader('Rating')}
-    <p>${tenant ? `The Tenant rated the fix ${String(tenant.score)} out of 5.` : 'Waiting for the Tenant to say if it was fixed properly.'}</p>
-    ${rated ? html`<p>${tradie} was rated ${String(rated.score)} out of 5.</p>` : form}
+    <p>${ratedLine(t, job)}</p>
+    ${rated ? html`<p>${tradie} was rated ${String(rated.score)} out of 5.</p>` : ratingForm(t, job)}
   </section>`;
 }
 
-/** The Ticket's history, in a collapsible side panel that starts open, with runs of like events told once. */
-function timelineCard(t: TicketView, x: Extras): Html {
-  const events = timelineGroups(t.timeline).map((group) => describeGroup(t, group, x));
-  return collapsible('Timeline', events.length ? timeline(events) : emptyState('Nothing has happened yet.'));
+/** What the Tenant said of the fix, or that we are waiting. */
+function ratedLine(t: TicketView, job: JobView): string {
+  const tenant = lastEvent(t, 'tenant_rated', job.jobId);
+  return tenant ? `The Tenant rated the fix ${String(tenant.score)} out of 5.` : 'Waiting for the Tenant to say if it was fixed properly.';
+}
+
+/** How the Property Manager rates the Tradie: 1 (poor) to 5 (excellent), as five round buttons. */
+function ratingForm(t: TicketView, job: JobView): Html {
+  const tradie = job.workOrder?.businessName ?? 'the Tradie';
+  return html`<form method="post" action="/tickets/${t.ticketId}/jobs/${job.jobId}/rate" class="ticket-rate" id="job-${job.jobId}-rating-form">
+    <p>How did ${tradie} do? 1 is poor, 5 is excellent. It feeds their myEST8 rating. ${lastEvent(t, 'tenant_rated', job.jobId) ? `The Tenant gave ${String(lastEvent(t, 'tenant_rated', job.jobId)!.score)}.` : ''}</p>
+    <div class="ticket-rate-buttons">
+      ${[1, 2, 3, 4, 5].map((n) => button(String(n), { name: 'score', value: String(n), variant: 'secondary' }))}
+    </div>
+  </form>`;
 }
 
 /** Events that read as one line when they come one after another: "Quotes received from Drip Doctors and Pete's Plumbing". */
@@ -1693,7 +1949,10 @@ function describeEvent(t: TicketView, event: TimelineEvent, x: Extras): { title:
 
 /** The Ticket's issue's message log (src/web/messages.ts), marked read through the Ticket. */
 function messagesCard(t: TicketView, x: Extras): Html {
-  return messageLog(t.messages, { timeZone: x.timeZone, markRead: `/tickets/${t.ticketId}/read` });
+  return html`<div class="ticket-msgs" data-msgs>
+    ${messageLog(t.messages, { timeZone: x.timeZone, markRead: `/tickets/${t.ticketId}/read` })}
+    <button type="button" class="ticket-msgs-toggle js-only" data-msgs-toggle aria-expanded="false">Show the whole conversation</button>
+  </div>`;
 }
 
 // Small helpers

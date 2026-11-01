@@ -5065,127 +5065,10 @@
 /* === Ticket page === */
 @layer utilities {
   @layer app {
-    /* The header in the docket's shape: the stub (number and Urgency) along the top
-       on phones and down the left from 640px, then a dashed perforation. Its menus
-       (Share, Change Urgency) open over the page, so nothing here clips. */
-    .ticket-head {
-      display: flex;
-      flex-direction: column;
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: 8px;
-    }
-    .ticket-stub {
-      display: flex;
-      align-items: baseline;
-      gap: 12px;
-      padding: 10px 16px;
-      border-radius: 7px 7px 0 0;
-    }
-    .ticket-number {
-      font-family: var(--font-head);
-      font-size: 40px;
-      font-weight: 700;
-      line-height: 1;
-    }
-    .ticket-urgency {
-      font-family: var(--font-body);
-      font-size: 14px;
-      font-weight: 600;
-    }
-    .ticket-perf {
-      flex-shrink: 0;
-      margin: 0 12px;
-      border-top: 1px dashed var(--control);
-    }
-    @media (min-width: 40rem) {
-      .ticket-head {
-        flex-direction: row;
-      }
-      .ticket-stub {
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 4px;
-        width: 7.5rem;
-        flex-shrink: 0;
-        padding: 16px 4px;
-        border-radius: 7px 0 0 7px;
-      }
-      .ticket-perf {
-        margin: 12px 0;
-        border-top: 0;
-        border-left: 1px dashed var(--control);
-      }
-    }
-    /* The issue, the address and one line of facts; the Next step under them, full width;
-       the tools under it on phones and at the top right from 1024px. */
-    .ticket-head-body {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr);
-      flex: 1 1 auto;
-      gap: 12px;
-      min-width: 0;
-      padding: 16px;
-    }
-    .ticket-head-main {
-      display: grid;
-      gap: 4px;
-      min-width: 0;
-    }
-    .ticket-issue {
-      margin: 0;
-      font-family: var(--font-head);
-      font-size: 20px;
-      font-weight: 600;
-      line-height: 1.25;
-      overflow-wrap: anywhere;
-    }
-    .ticket-address {
-      margin: 0;
-      font-weight: 500;
-      overflow-wrap: anywhere;
-    }
-    .ticket-meta {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 4px 16px;
-      margin: 4px 0 0;
-      font-size: 14px;
-      color: var(--muted);
-    }
-    .ticket-meta strong {
-      font-weight: 700;
-    }
-    .ticket-tools {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 8px;
-    }
-    @media (min-width: 64rem) {
-      .ticket-head-body {
-        grid-template-columns: minmax(0, 1fr) auto;
-        column-gap: 24px;
-      }
-      .ticket-head-main {
-        grid-column: 1;
-        grid-row: 1;
-      }
-      .ticket-tools {
-        grid-column: 2;
-        grid-row: 1;
-        align-self: start;
-        justify-content: flex-end;
-      }
-      .ticket-head-body > .ticket-next {
-        grid-column: 1 / -1;
-      }
-    }
-    /* Under the header: one column on phones in the order the work is read (the Jobs,
-       what the Tenant reported, the details, the timeline, the messages); from 1024px
-       the Jobs and the timeline on the left, the report and the messages on the right. */
+    /* Under the title: the Summary band, the Jobs, what the Tenant reported and the Progress
+       in the main column, and a Night column beside them. One column on phones, in the order
+       the work is read: the Summary, Next, the Jobs, the report, the Progress, the messages,
+       the people, the costs, the details. */
     .ticket-layout,
     .ticket-jobs,
     .ticket-report {
@@ -5197,47 +5080,367 @@
     .ticket-side {
       display: contents;
     }
-    .ticket-jobs {
-      order: 1;
-    }
-    .ticket-report {
-      order: 2;
-    }
-    .ticket-history {
-      order: 3;
-      min-width: 0;
-    }
-    .ticket-messages {
-      order: 4;
-      min-width: 0;
+    .ticket-hero { order: 1; }
+    .ticket-next-slot { order: 2; }
+    .ticket-pair { order: 3; }
+    .ticket-history { order: 5; min-width: 0; }
+    .ticket-messages { order: 6; min-width: 0; }
+    .ticket-people { order: 7; }
+    .ticket-costs-slot { order: 8; }
+    .ticket-details { order: 9; }
+    .ticket-layout .section {
+      border: 0;
+      border-radius: 22px;
+      box-shadow: var(--shadow-soft);
     }
     @media (min-width: 64rem) {
       .ticket-layout {
-        grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+        grid-template-columns: minmax(0, 2fr) minmax(18rem, 1fr);
         align-items: start;
       }
-      .ticket-main,
-      .ticket-side {
+      .ticket-main {
         display: grid;
         gap: 16px;
         min-width: 0;
       }
+      .ticket-side {
+        display: grid;
+        gap: 12px;
+        min-width: 0;
+        grid-column: 2;
+        grid-row: 1;
+        align-self: stretch;
+        align-content: start;
+        padding: 12px;
+        background: #d9d6d0;
+        border-radius: 0;
+      }
+      .ticket-main {
+        grid-column: 1;
+        grid-row: 1;
+        align-self: stretch;
+        grid-template-rows: auto 1fr;
+      }
+      /* The Progress runs the full width under both columns. */
+      .ticket-history {
+        grid-column: 1 / -1;
+        grid-row: 2;
+      }
+      .ticket-pair.is-paired {
+        align-items: stretch;
+      }
+      .ticket-pair:not(.is-paired) {
+        grid-template-rows: auto 1fr;
+      }
+      .ticket-people { order: 1; }
+      .ticket-costs-slot { order: 2; }
+      .ticket-next-slot { order: 3; }
+      .ticket-messages { order: 4; }
+      .ticket-details { order: 5; }
     }
-    /* The Next block: the one thing to do, in a white panel; the Wattle bar when it waits on the Property Manager. */
-    .ticket-next {
+    /* The Summary band: the Summary card (with the stage ring) and the Add another Job tile, inside a dark-yellow outline. */
+    .ticket-hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 12px;
+      padding: 14px;
+      border: 2px solid #c8961a;
+      border-radius: 22px;
+    }
+    .ticket-hero-card {
       display: flex;
       flex-wrap: wrap;
-      align-items: baseline;
-      gap: 2px 12px;
-      margin: 16px 0;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 18px 20px;
+      background: var(--surface);
+      border-radius: 18px;
+    }
+    .ticket-hero-text {
+      display: grid;
+      flex: 1 1 18rem;
+      gap: 12px;
+      min-width: 0;
+    }
+    .ticket-issue {
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 20px;
+      font-weight: 600;
+      line-height: 1.3;
+      overflow-wrap: anywhere;
+    }
+    .ticket-hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px 10px;
+      margin: 0;
+    }
+    .ticket-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 10px;
+      font-size: 14px;
+      background: var(--page);
+      border-radius: 999px;
+    }
+    .ticket-ring-wrap {
+      display: grid;
+      justify-items: center;
+      gap: 6px;
+    }
+    .ticket-ring {
+      --pct: 0;
+      display: grid;
+      place-items: center;
+      width: 132px;
+      height: 132px;
+      background: radial-gradient(closest-side, var(--surface) 76%, transparent 78%), conic-gradient(var(--action) calc(var(--pct) * 1%), #e6dfd2 0);
+      border-radius: 50%;
+    }
+    .ticket-ring.is-done {
+      background: radial-gradient(closest-side, var(--surface) 76%, transparent 78%), conic-gradient(#2f6b52 calc(var(--pct) * 1%), #e6dfd2 0);
+    }
+    .ticket-ring-label {
+      max-width: 88px;
+      font-family: var(--font-head);
+      font-size: 15px;
+      overflow-wrap: anywhere;
+      font-weight: 700;
+      line-height: 1.15;
+      text-align: center;
+    }
+    .ticket-ring-note {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.35;
+      text-align: center;
+      color: var(--muted);
+    }
+    /* Add another Job: a dashed tile that opens its form in place. */
+    .ticket-add-job {
+      min-width: 0;
+      padding: 6px 12px;
+      background: var(--surface);
+      border: 2px dashed #c8c0b0;
+      border-radius: 14px;
+    }
+    .ticket-add-job > summary {
+      display: flex;
+      flex-direction: row-reverse;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      list-style: none;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .ticket-add-job > summary::-webkit-details-marker {
+      display: none;
+    }
+    .ticket-add-plus {
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      color: var(--action);
+      background: var(--info-bg);
+      border-radius: 50%;
+    }
+    .ticket-add-job[open] > summary {
+      margin-bottom: 8px;
+    }
+    /* The Night column's cards. */
+    .ticket-people-card {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px 12px;
       padding: 14px 16px;
       background: var(--surface);
-      border: 1px solid var(--line);
-      border-left: 4px solid var(--line);
-      border-radius: 4px;
+      border-radius: 18px;
     }
-    .ticket-next.is-decision {
-      border-left-color: var(--hivis);
+    .ticket-people-title {
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .ticket-avatars {
+      display: flex;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .ticket-avatar {
+      display: grid;
+      place-items: center;
+      width: 36px;
+      height: 36px;
+      margin-left: -6px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--surface);
+      background: var(--action);
+      border: 2px solid var(--surface);
+      border-radius: 50%;
+    }
+    .ticket-avatar:first-child {
+      margin-left: 0;
+      color: var(--ink);
+      background: #f0d78f;
+    }
+    .ticket-avatar:nth-child(2) {
+      background: var(--ink);
+    }
+    .ticket-costs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .ticket-cost {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 2px;
+      padding: 14px 8px;
+      text-align: center;
+      background: #dbeaf7;
+      border-radius: 18px;
+    }
+    .ticket-cost.is-max {
+      background: #ece3d3;
+    }
+    .ticket-cost.is-over {
+      background: #f6e0d6;
+    }
+    .ticket-cost > .ticket-cost-amount { order: 1; }
+    .ticket-cost > .ticket-cost-label { order: 2; }
+    .ticket-cost > .ticket-cost-note,
+    .ticket-cost > .ticket-cost-link { order: 3; }
+    .ticket-cost-amount {
+      font-family: var(--font-head);
+      font-size: 22px;
+      font-weight: 700;
+      line-height: 1.1;
+    }
+    .ticket-cost-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--action);
+    }
+    .ticket-cost.is-max .ticket-cost-label {
+      color: var(--muted);
+    }
+    .ticket-cost-note {
+      font-size: 12px;
+      color: var(--ink);
+    }
+    .ticket-cost-link {
+      margin-top: 6px;
+      padding: 2px 12px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink);
+      text-decoration: none;
+      background: var(--surface);
+      border-radius: 999px;
+    }
+    .ticket-cost-link:hover {
+      text-decoration: underline;
+    }
+    .ticket-fees {
+      margin: 0;
+      padding: 8px 12px;
+      font-size: 13px;
+      color: var(--ink);
+      background: #f0d78f;
+      border-radius: 12px;
+    }
+    /* What the Tenant reported: the photos, their words, and the answers as small tiles. */
+    .ticket-report-body {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      gap: 12px 16px;
+    }
+    .ticket-report-photos {
+      flex: 0 0 auto;
+      width: max-content;
+      max-width: min(100%, 16rem);
+    }
+    .ticket-report-photos [data-photo-grid] {
+      display: flex !important;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .ticket-report-photos [data-photo-grid] > li {
+      flex: 0 0 7.5rem;
+      width: 7.5rem;
+    }
+    .ticket-report-text {
+      display: grid;
+      flex: 1 1 15rem;
+      gap: 10px;
+      min-width: 0;
+    }
+    .ticket-words {
+      margin: 0;
+      font-size: 15px;
+    }
+    .ticket-words-label {
+      display: block;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .ticket-report-body .ticket-facts {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .ticket-report-body .ticket-facts > div {
+      display: grid;
+      gap: 2px;
+      padding: 8px 12px;
+      background: var(--page);
+      border-radius: 12px;
+    }
+    .ticket-report-body .ticket-facts dt {
+      font-size: 12px;
+    }
+    .ticket-report-body .ticket-facts dd {
+      font-weight: 600;
+    }
+    /* The Next block: the one thing to do, in a white card; "Needs you" when it waits on the Property Manager. */
+    .ticket-next-card {
+      position: relative;
+      padding: 14px 16px;
+      background: var(--surface);
+      border: 2px solid transparent;
+      border-radius: 18px;
+    }
+    .ticket-next-card:has(.is-decision) {
+      border-color: var(--hivis);
+    }
+    .ticket-next-chip {
+      position: absolute;
+      top: 12px;
+      right: 14px;
+      padding: 1px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      background: var(--hivis);
+      border-radius: 999px;
+    }
+    .ticket-next {
+      display: grid;
+      gap: 2px;
+      margin: 0;
     }
     .ticket-next-label {
       font-family: var(--font-head);
@@ -5280,13 +5483,10 @@
     .ticket-summary-edit[open] > summary {
       margin-bottom: 8px;
     }
-    /* The stage tracker under the header. */
+    /* The stage tracker, at the top of the Progress card. */
     .ticket-stages {
-      margin: 16px 0 0;
-      padding: 12px 8px 0;
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: 8px;
+      margin: 0 0 16px;
+      padding: 4px 0 0;
     }
     .ticket-stages-job {
       margin: 0 0 4px 8px;
@@ -5361,35 +5561,7 @@
     .ticket-inline-form > .btn {
       margin-top: calc(14px * 1.45 + 4px);
     }
-    /* Under the Jobs: Add another Job, folded, and when the Ticket can close. */
-    .ticket-jobs-foot {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 8px 24px;
-      padding: 0 4px;
-    }
-    .ticket-add-job {
-      flex: 1 1 20rem;
-      min-width: 0;
-    }
-    .ticket-add-job > summary {
-      cursor: pointer;
-      width: fit-content;
-      font-size: 14px;
-      font-weight: 500;
-      color: var(--action);
-    }
-    .ticket-add-job[open] {
-      padding: 12px 16px 16px;
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: 8px;
-    }
-    .ticket-add-job[open] > summary {
-      margin-bottom: 12px;
-    }
+    /* Under the Jobs: when the Ticket can close. */
     .ticket-close-hint {
       margin: 0;
       font-size: 13px;
@@ -6446,6 +6618,568 @@
       place-items: center;
       width: 100%;
       height: 100%;
+      color: var(--muted);
+    }
+  }
+}
+
+/* === Ticket page, as pictured: header, Job tiles, Progress board, Night column === */
+@layer utilities {
+  @layer app {
+    html:not(.js) .js-only {
+      display: none;
+    }
+    /* Page header: a link back above the title, the Urgency beside it, the date with its icon, the alerts bell and the user's initials. */
+    .page-header.has-back {
+      row-gap: 0;
+    }
+    .page-back {
+      display: inline-flex;
+      flex: 0 0 100%;
+      align-items: center;
+      gap: 2px;
+      margin-bottom: 4px;
+      font-size: 14px;
+      color: var(--muted);
+      text-decoration: none;
+    }
+    .page-back:hover {
+      color: var(--ink);
+      text-decoration: underline;
+    }
+    .page-header-lead > .badge {
+      flex: none;
+      align-self: center;
+    }
+    .page-header-date {
+      align-items: center;
+      gap: 6px;
+    }
+    @media (min-width: 40rem) {
+      .page-header-date {
+        display: inline-flex;
+      }
+    }
+    .page-header-bell {
+      display: grid;
+      place-items: center;
+      width: 40px;
+      height: 40px;
+      color: var(--ink);
+      background: var(--surface);
+      border-radius: 50%;
+      box-shadow: var(--shadow-soft);
+    }
+    .page-header-bell:hover {
+      background: var(--page);
+    }
+    .user-menu-avatar {
+      display: grid;
+      flex: none;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--surface);
+      background: var(--ink);
+      border-radius: 50%;
+    }
+    .ticket-sub-link {
+      color: inherit;
+    }
+    /* Share, Change Urgency and Close Ticket as pills under the subtitle. */
+    .ticket-tools {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    .ticket-tools .btn {
+      min-height: 40px;
+      padding-inline: 18px;
+      border-radius: 999px;
+    }
+    .ticket-tools .btn-outline {
+      background: var(--surface);
+      border-color: transparent;
+      box-shadow: var(--shadow-soft);
+    }
+    .ticket-tools .btn-primary {
+      gap: 6px;
+    }
+    /* The Summary card: the AI label as a small pill, the issue large, then the address, the status and Edit summary. */
+    .ticket-summary {
+      display: grid;
+      gap: 10px;
+    }
+    .ticket-ai-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      width: fit-content;
+      padding: 2px 10px;
+      font-size: 12px;
+      color: var(--action);
+      background: var(--info-bg);
+      border-radius: 999px;
+    }
+    .ticket-hero .ticket-issue {
+      font-size: 22px;
+      line-height: 1.35;
+    }
+    /* The Ticket's state is a label, not a pill: a dot and a word, so it doesn't read as a button. */
+    .ticket-state {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+    .ticket-state::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      background: #2f6b52;
+      border-radius: 50%;
+    }
+    .ticket-state.is-closed::before {
+      background: #8a8374;
+    }
+    .ticket-summary-edit > summary {
+      list-style: none;
+      cursor: pointer;
+      font-size: 14px;
+      text-decoration: underline;
+    }
+    .ticket-summary-edit > summary::-webkit-details-marker {
+      display: none;
+    }
+    .ticket-summary-edit[open] {
+      flex-basis: 100%;
+      padding: 12px;
+      background: var(--page);
+      border-radius: 12px;
+    }
+    /* The Jobs beside what the Tenant reported (stacked while a Job is open: its tables need the room). */
+    .ticket-pair {
+      display: grid;
+      gap: 16px;
+      min-width: 0;
+    }
+    @media (min-width: 80rem) {
+      .ticket-pair.is-paired {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        align-items: stretch;
+      }
+    }
+    .ticket-pair > .ticket-jobs {
+      align-content: start;
+    }
+    .ticket-pair .ticket-report > .section {
+      height: 100%;
+    }
+    .ticket-job-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .ticket-job-icon {
+      display: grid;
+      place-items: center;
+      width: 40px;
+      height: 40px;
+      color: var(--action);
+      background: var(--info-bg);
+      border-radius: 12px;
+    }
+    .ticket-tiles {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+      gap: 8px;
+      margin: 0 0 12px;
+    }
+    .ticket-tiles > div {
+      padding: 8px 12px;
+      background: var(--page);
+      border-radius: 12px;
+    }
+    .ticket-tiles dt {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .ticket-tiles dd {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }
+    .ticket-star {
+      color: #d99a00;
+    }
+    /* Progress: a green strip of where it stands, then the tabs and their views. */
+    .ticket-progress {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      min-width: 0;
+      overflow: hidden;
+      background: var(--surface);
+      border-radius: 22px;
+      box-shadow: var(--shadow-soft);
+    }
+    @media (min-width: 48rem) {
+      .ticket-progress {
+        grid-template-columns: 11rem minmax(0, 1fr);
+      }
+    }
+    .ticket-progress-strip {
+      display: grid;
+      align-content: start;
+      gap: 12px;
+      padding: 16px;
+      background: #e1ebe3;
+    }
+    .ticket-progress-state {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      margin: 0;
+      padding: 12px 8px;
+      font-weight: 700;
+      text-align: center;
+      background: var(--surface);
+      border-radius: 14px;
+    }
+    .ticket-progress-stat {
+      display: grid;
+      gap: 0;
+      margin: 0;
+      padding-bottom: 10px;
+      font-size: 13px;
+      border-bottom: 1px solid rgb(19 33 46 / 0.12);
+    }
+    .ticket-progress-stat:last-child {
+      border-bottom: 0;
+    }
+    .ticket-progress-stat b {
+      font-family: var(--font-head);
+      font-size: 15px;
+    }
+    .ticket-progress-stat:first-of-type b {
+      font-size: 22px;
+    }
+    .ticket-progress-main {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 12px;
+      min-width: 0;
+      padding: 16px;
+    }
+    .ticket-progress-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .ticket-progress-tools {
+      display: flex;
+      gap: 4px;
+    }
+    .ticket-tablist {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 2px;
+      border-bottom: 1px solid var(--line);
+    }
+    .ticket-tab {
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+      background: transparent;
+      border: 0;
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+    }
+    .ticket-tab[aria-selected='true'] {
+      color: var(--ink);
+      background: var(--page);
+      border-bottom-color: var(--ink);
+    }
+    html:not(.js) .ticket-pane + .ticket-pane {
+      padding-top: 16px;
+      border-top: 1px solid var(--line);
+    }
+    .ticket-pane[hidden] {
+      display: none;
+    }
+    .ticket-progress.is-expanded {
+      position: fixed;
+      inset: 16px;
+      z-index: 60;
+      overflow: auto;
+      box-shadow: var(--shadow-lift);
+    }
+    html.has-expanded {
+      overflow: hidden;
+    }
+    /* The timeline board: a column for each stage, its events as small cards, side by side. */
+    .tl-board {
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+      padding-bottom: 12px;
+      overflow-x: auto;
+      cursor: grab;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .tl-board.is-dragging {
+      cursor: grabbing;
+      user-select: none;
+    }
+    /* With JavaScript the slider below replaces the browser's own scrollbar; without it, the scrollbar stays. */
+    html.js .tl-board {
+      overflow-x: hidden;
+      scrollbar-width: none;
+    }
+    html.js .tl-board::-webkit-scrollbar {
+      display: none;
+    }
+    html:not(.js) .tl-board {
+      overflow-x: auto;
+      scrollbar-color: #c8961a #efe8da;
+    }
+    /* The slider under the board: a thick dark-yellow thumb on a pale track, easy to grab. */
+    .tl-slider {
+      display: block;
+      width: 100%;
+      height: 24px;
+      margin: 0;
+      padding: 0;
+      background: transparent;
+      cursor: pointer;
+      appearance: none;
+      -webkit-appearance: none;
+    }
+    .tl-slider[hidden] {
+      display: none;
+    }
+    .tl-slider::-webkit-slider-runnable-track {
+      height: 8px;
+      background: #e6dfd2;
+      border-radius: 999px;
+    }
+    .tl-slider::-moz-range-track {
+      height: 8px;
+      background: #e6dfd2;
+      border-radius: 999px;
+    }
+    .tl-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 64px;
+      height: 20px;
+      margin-top: -6px;
+      background: #c8961a;
+      border: 0;
+      border-radius: 999px;
+    }
+    .tl-slider::-moz-range-thumb {
+      width: 64px;
+      height: 20px;
+      background: #c8961a;
+      border: 0;
+      border-radius: 999px;
+    }
+    .tl-column {
+      flex: 0 0 13rem;
+      display: grid;
+      gap: 8px;
+    }
+    .tl-arrow {
+      flex: none;
+      align-self: flex-start;
+      margin-top: 8px;
+      color: var(--muted);
+    }
+    .tl-head {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      margin: 0;
+      padding: 4px 8px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      background: #ece3d3;
+      border-radius: 6px;
+    }
+    .tl-cards {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .tl-card {
+      display: grid;
+      gap: 4px;
+      padding: 10px 12px;
+      font-size: 13px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+    }
+    .tl-card.is-skipped {
+      text-align: center;
+      color: var(--muted);
+      border-style: dashed;
+    }
+    .tl-title {
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+    }
+    .tl-title b {
+      font-size: 14px;
+      line-height: 1.25;
+    }
+    .tl-time {
+      color: var(--muted);
+    }
+    .tl-detail {
+      font-size: 12px;
+      color: var(--muted);
+      white-space: pre-line;
+    }
+    /* The Night column: cost tiles with an icon chip and a pill link, the Next card with its rating, details as tiles. */
+    .ticket-cost {
+      position: relative;
+      padding-top: 26px;
+    }
+    .ticket-cost-icon {
+      position: absolute;
+      top: -14px;
+      left: 50%;
+      display: grid;
+      place-items: center;
+      width: 36px;
+      height: 36px;
+      color: var(--surface);
+      background: var(--action);
+      border-radius: 10px;
+      transform: translateX(-50%);
+    }
+    .ticket-cost.is-max .ticket-cost-icon {
+      background: #a5530f;
+    }
+    .ticket-cost-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .ticket-costs {
+      margin-top: 14px;
+    }
+    .ticket-next-card .ticket-next > a {
+      font-size: 22px;
+      line-height: 1.2;
+    }
+    .ticket-rate {
+      display: grid;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .ticket-rate p {
+      margin: 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .ticket-rate-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .ticket-rate-buttons .btn {
+      width: 44px;
+      height: 44px;
+      padding: 0;
+      border-radius: 50%;
+    }
+    /* The message log stays short (scrolling to the newest) until "Show the whole conversation". */
+    html.js .ticket-msgs:not(.is-open) .section-body {
+      max-height: 12rem;
+      overflow-y: auto;
+    }
+    .ticket-msgs {
+      display: grid;
+      gap: 8px;
+    }
+    .ticket-msgs-toggle {
+      justify-self: center;
+      padding: 6px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink);
+      background: var(--surface);
+      border: 0;
+      border-radius: 999px;
+      cursor: pointer;
+    }
+    .ticket-msgs-toggle[hidden] {
+      display: none;
+    }
+    .ticket-detail-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin: 0;
+    }
+    .ticket-detail-tile {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      grid-template-areas: 'icon label' 'icon value';
+      column-gap: 8px;
+      align-content: start;
+      padding: 10px;
+      background: var(--page);
+      border-radius: 14px;
+    }
+    .ticket-detail-icon {
+      grid-area: icon;
+      display: grid;
+      place-items: center;
+      width: 30px;
+      height: 30px;
+      color: var(--muted);
+      background: var(--surface);
+      border-radius: 50%;
+    }
+    .ticket-detail-tile dt {
+      grid-area: label;
+      font-size: 11px;
+      line-height: 1.2;
+      color: var(--muted);
+    }
+    .ticket-detail-tile dd {
+      grid-area: value;
+      margin: 0;
+      font-size: 13px;
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }
+    .ticket-detail-note {
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      font-size: 11px;
+      font-weight: 400;
       color: var(--muted);
     }
   }
