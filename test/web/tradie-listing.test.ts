@@ -9,7 +9,7 @@ type Web = Awaited<ReturnType<typeof webWorld>>;
 const PAGES = [
   { name: 'the welcome wizard', path: '/welcome/tradies', post: '/welcome/tradies' },
   { name: 'Setup', path: '/setup', post: '/setup/tradies?from=setup' },
-  { name: 'the Tradies page', path: '/tradies', post: '/setup/tradies' },
+  { name: 'the Tradies page', path: '/tradies/new', post: '/setup/tradies' },
 ];
 
 const LUCKY = {
@@ -233,22 +233,33 @@ describe('a refused Tradie form keeps the listing', () => {
     expect(valueOf(html, 'placeId')).toBe('none');
   });
 
-  test.each([
-    { name: 'Setup', post: '/setup/tradies?from=setup', back: '/setup' },
-    { name: 'the Tradies page', post: '/setup/tradies', back: '/tradies' },
-  ])('on $name it goes back to the page with the listing still chosen', async ({ post, back }) => {
+  test('on Setup it goes back to the page with the listing still chosen', async () => {
     const { w, cookie } = await luckyWorld();
-    const url = `${post}${post.includes('?') ? '&' : '?'}${listing.slice(1)}`;
 
-    const refused = await w.post(url, { ...posted, name: 'Lou Lucky' }, cookie);
+    const refused = await w.post(`/setup/tradies?from=setup&${listing.slice(1)}`, { ...posted, name: 'Lou Lucky' }, cookie);
     expect(refused.status).toBe(303);
     const location = refused.headers.get('location')!;
-    expect(location).toContain(`${back}?form=tradie&google=lucky&place=place-lucky&error=`);
+    expect(location).toContain('/setup?form=tradie&google=lucky&place=place-lucky&error=');
 
     const html = await page(w, location.replace(/#.*/, ''), cookie);
     expect(visible(html)).toContain('Choose a starting rating');
     expect(valueOf(html, 'placeId')).toBe('place-lucky');
     expect(valueOf(html, 'businessName')).toBe('Lucky Locks');
+    expect(results(html).map((r) => r.tag.includes('aria-current="true"'))).toEqual([true, false]);
+  });
+
+  test('on the Tradies page a refused save is the Add page, with what was typed', async () => {
+    const { w, cookie } = await luckyWorld();
+
+    const refused = await w.post(`/setup/tradies?${listing.slice(1)}`, { ...posted, name: 'Lou Lucky' }, cookie);
+    expect(refused.status).toBe(400);
+    const html = await refused.text();
+    expect(visible(html)).toContain('Choose a starting rating');
+    expect(valueOf(html, 'name')).toBe('Lou Lucky');
+    expect(valueOf(html, 'placeId')).toBe('place-lucky');
+    expect(valueOf(html, 'businessName')).toBe('Lucky Locks');
+    expect(html).toContain('/tradies/new?google=lucky&amp;place=place-lucky');
+    expect(html).not.toContain('#add-tradie');
     expect(results(html).map((r) => r.tag.includes('aria-current="true"'))).toEqual([true, false]);
   });
 
@@ -284,7 +295,7 @@ describe('adding the Tradie from the filled-in form', () => {
     const { w, cookie } = await luckyWorld();
     const before = (await w.alice.tradieDirectory()).length;
 
-    await page(w, '/tradies?google=lucky&place=place-lucky', cookie);
+    await page(w, '/tradies/new?google=lucky&place=place-lucky', cookie);
     expect((await w.alice.tradieDirectory()).length).toBe(before);
   });
 });

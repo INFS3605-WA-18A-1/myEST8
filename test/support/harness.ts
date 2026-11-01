@@ -5,7 +5,7 @@ import type { Availability } from '../../src/shared.ts';
 import type { SmsNumbers } from '../../src/sms-numbers.ts';
 import { AVAILABILITY_LABELS } from '../../src/templates.ts';
 import { testDb } from './db.ts';
-import { FakeClassifier, FakeClock, FakeComposer, FakeDetailExtractor, FakeAddressSuggester, FakeGeocoder, FakeImageMatcher, FakeJobFitJudge, FakeMessenger, FakePlaces, FakeQuoteReader, FakeSummariser, FakeTradeSuggester } from './fakes.ts';
+import { FakeClassifier, FakeClock, FakeComposer, FakeDetailExtractor, FakeAddressSuggester, FakeGeocoder, FakeImageMatcher, FakeJobFitJudge, FakeMessenger, FakePlaces, FakeQuoteReader, FakeRequestJudge, FakeSummariser, FakeTradeSuggester } from './fakes.ts';
 
 /** Thursday 8 October 2026, 9:00 am in Sydney. */
 export const START = new Date('2026-10-08T09:00:00+11:00');
@@ -53,6 +53,7 @@ export async function createHarness(
   const addressSuggester = new FakeAddressSuggester();
   const tradeSuggester = new FakeTradeSuggester();
   const jobFitJudge = new FakeJobFitJudge();
+  const requestJudge = new FakeRequestJudge();
   const db = await testDb();
   const smsNumbers = options.smsNumbers?.(db, clock) ?? null;
   const app = createApp({
@@ -71,6 +72,7 @@ export async function createHarness(
     addressSuggester,
     tradeSuggester,
     jobFitJudge,
+    requestJudge,
     fetchMedia: async (url) => {
       throw new Error(`no media at ${url}`);
     },
@@ -135,6 +137,7 @@ export async function createHarness(
     addressSuggester,
     tradeSuggester,
     jobFitJudge,
+    requestJudge,
     drain,
     receive,
 

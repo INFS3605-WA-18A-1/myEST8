@@ -14,6 +14,7 @@ import { createGooglePlaces } from '../adapters/google-places.ts';
 import { createImageMatcher } from '../adapters/image-matcher.ts';
 import { createJevClassifier } from '../adapters/jev.ts';
 import { createJevJobFitJudge } from '../adapters/jev-job-fit.ts';
+import { createJevRequestJudge } from '../adapters/jev-request-judge.ts';
 import { createJevTradeSuggester } from '../adapters/jev-trades.ts';
 import { messengersFromEnv } from '../adapters/messenger.ts';
 import { metaFetchMedia } from '../adapters/meta-whatsapp.ts';
@@ -46,7 +47,10 @@ const MOCK = 'http://mock.local';
 export type Env = Record<string, string | undefined>;
 
 /** Which external APIs are real (set by env vars) and which are the in-process mocks. */
-export type ApiChoice = Record<'classifier' | 'tradeSuggester' | 'jobFitJudge' | 'imageMatcher' | 'quoteReader' | 'places' | 'geocoder' | 'addressSuggester' | 'messenger', 'mock' | 'real'>;
+export type ApiChoice = Record<'classifier' | 'tradeSuggester' | 'jobFitJudge' | 'imageMatcher' | 'quoteReader' | 'places' | 'geocoder' | 'addressSuggester' | 'messenger', 'mock' | 'real'> & {
+  /** `off` is a hosted app with no Jev URL: the profile read stays on code-only signals. */
+  requestJudge: 'mock' | 'real' | 'off';
+};
 
 /** The name a startup log uses. The classifier says which model answers when both are configured. */
 export function providerLogName(name: string, env: Env): string {
@@ -59,6 +63,7 @@ export function providerLogName(name: string, env: Env): string {
   }
   if (name === 'tradeSuggester') return 'Trade suggester';
   if (name === 'jobFitJudge') return 'job-fit judge';
+  if (name === 'requestJudge') return 'request judge';
   return name;
 }
 
@@ -86,6 +91,8 @@ function hostedProviders(env: Env): HostedProvider[] {
     { provider: providerLogName('tradeSuggester', env), required: false, missing: unset('JEV_API_URL') },
     // So does the job-fit judge that ranks recommended Tradies (ADR 0016).
     { provider: providerLogName('jobFitJudge', env), required: false, missing: unset('JEV_API_URL') },
+    // And the request judge behind a Tenant's profile read (ADR 0018). Without it the read is code-only.
+    { provider: providerLogName('requestJudge', env), required: false, missing: unset('JEV_API_URL') },
     { provider: 'places', required: true, missing: unset('GOOGLE_MAPS_API_KEY') },
     { provider: 'geocoder', required: false, missing: [] },
     { provider: 'address suggestions', required: false, missing: [] },
@@ -294,6 +301,7 @@ export async function createDemo<Seeded extends boolean = true>(
     classifier: anthropicKey || env.JEV_API_URL ? 'real' : 'mock',
     tradeSuggester: env.JEV_API_URL?.trim() ? 'real' : 'mock',
     jobFitJudge: env.JEV_API_URL?.trim() ? 'real' : 'mock',
+    requestJudge: env.JEV_API_URL?.trim() ? 'real' : hosted ? 'off' : 'mock',
     imageMatcher: env.VISION_API_URL ? 'real' : 'mock',
     quoteReader: env.QUOTES_API_URL ? 'real' : 'mock',
     places: env.GOOGLE_MAPS_API_KEY ? 'real' : 'mock',
@@ -360,6 +368,12 @@ export async function createDemo<Seeded extends boolean = true>(
     addressSuggester: createPhotonAddressSuggester({ ...photon, userAgent: `myEST8 (${baseUrl})` }),
     tradeSuggester: createJevTradeSuggester({ ...jev, apiKey: env.JEV_API_KEY ?? 'demo' }),
     jobFitJudge: createJevJobFitJudge({ ...jev, apiKey: env.JEV_API_KEY ?? 'demo' }),
+    // Hosted with no Jev URL does not invent judgments. The demo's mock answers from keywords.
+    requestJudge: env.JEV_API_URL?.trim()
+      ? createJevRequestJudge({ baseUrl: env.JEV_API_URL.trim(), apiKey: env.JEV_API_KEY ?? 'demo', fetch })
+      : hosted
+        ? null
+        : createJevRequestJudge({ ...jev, apiKey: env.JEV_API_KEY ?? 'demo' }),
     fetchMedia: mediaFetcher(env, smsNumbers),
     settings: { baseUrl },
     blobs: storageFromEnv(env),

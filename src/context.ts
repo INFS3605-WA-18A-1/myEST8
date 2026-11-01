@@ -2,7 +2,7 @@ import type { Db } from './db.ts';
 import type { Files } from './files.ts';
 import type { Intake } from './intake.ts';
 import type { Notifications } from './notifications.ts';
-import type { Clock, Classifier, Composer, DetailExtractor, FetchMedia, Geocoder, AddressSuggester, ImageMatcher, JobFitJudge, Messenger, PlacesLookup, QuoteReader, Summariser, TradeSuggester } from './ports.ts';
+import type { Clock, Classifier, Composer, DetailExtractor, FetchMedia, Geocoder, AddressSuggester, ImageMatcher, JobFitJudge, Messenger, PlacesLookup, QuoteReader, RequestJudge, Summariser, TradeSuggester } from './ports.ts';
 import type { Profiles } from './profiles.ts';
 import type { Quotes } from './quotes.ts';
 import type { Scheduling } from './scheduling.ts';
@@ -33,6 +33,11 @@ export interface Ports {
   tradeSuggester: TradeSuggester;
   /** How well each Tradie's record fits a Job, for ranking recommendations (ADR 0016). */
   jobFitJudge: JobFitJudge;
+  /**
+   * How minor a Maintenance Request is, and whether the Tenant may have caused it (ADR 0018).
+   * Null when no model is configured: the profile read uses only the counts code can see.
+   */
+  requestJudge: RequestJudge | null;
   fetchMedia: FetchMedia;
 }
 

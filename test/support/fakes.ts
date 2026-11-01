@@ -16,6 +16,8 @@ import type {
   JobFitEvidence,
   JobFitJudge,
   ListingDetails,
+  RequestJudge,
+  RequestToJudge,
   Messenger,
   OutboundMessage,
   PlacesLookup,
@@ -184,6 +186,32 @@ export class FakeTradeSuggester implements TradeSuggester {
     if (this.next instanceof Error) throw this.next;
     return this.next;
   }
+}
+
+/**
+ * Judges each request from `byId`, or from a few keywords when it isn't set.
+ * Throws `failing` while that is set. `delayMs` waits before answering, so a
+ * profile can be seen to give up.
+ */
+export class FakeRequestJudge implements RequestJudge {
+  byId = new Map<number, { minor: number; tenantCaused: number }>();
+  failing: Error | null = null;
+  delayMs = 0;
+  calls: RequestToJudge[][] = [];
+  async judge(requests: RequestToJudge[]) {
+    this.calls.push(requests);
+    if (this.delayMs) await new Promise((resolve) => setTimeout(resolve, this.delayMs));
+    if (this.failing) throw this.failing;
+    return new Map(requests.map((request) => [request.issueId, this.byId.get(request.issueId) ?? keywordJudgment(request)]));
+  }
+}
+
+/** A dripping tap is minor; a flood is not. Words about something the Tenant did raise tenantCaused. */
+function keywordJudgment(request: RequestToJudge): { minor: number; tenantCaused: number } {
+  const text = `${request.description} ${request.summary ?? ''}`;
+  const minor = /\b(drip|dripping|globe|handle|squeak|loose)\b/i.test(text) ? 0.9 : /\b(flood|lock|gas|spark|pouring)\b/i.test(text) ? 0.1 : 0.4;
+  const tenantCaused = /\b(i broke|kicked|my fault|accidentally)\b/i.test(text) ? 0.9 : 0.05;
+  return { minor, tenantCaused };
 }
 
 /** Judges each Tradie by business name from `scores` (0-3), "Trade only" (1) for the rest; throws `failing` while it is set. */
