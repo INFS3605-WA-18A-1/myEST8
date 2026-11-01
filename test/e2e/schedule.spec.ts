@@ -132,3 +132,23 @@ test('on a phone the Week is a list of days, and no view scrolls the page sidewa
     expect(await overflow(page), view).toBe(0);
   }
 });
+
+test('the views and Back swap the Schedule in place, without loading a new page', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 900 });
+  await signIn(page);
+  await page.goto('/calendar?filter=all');
+  await expect(page.getByRole('region', { name: 'The week, hour by hour' })).toBeVisible();
+  // A full page load would drop this.
+  await page.evaluate('window.samePage = true');
+
+  const views = page.getByRole('navigation', { name: 'Calendar views' });
+  await views.getByRole('link', { name: 'Month' }).click();
+  await expect(page).toHaveURL(/view=month/);
+  await expect(page.getByRole('table')).toBeVisible();
+  await expect(views.getByRole('link', { name: 'Month' })).toBeFocused();
+
+  await page.goBack();
+  await expect(page).not.toHaveURL(/view=month/);
+  await expect(page.getByRole('region', { name: 'The week, hour by hour' })).toBeVisible();
+  expect(await page.evaluate<boolean>('window.samePage === true')).toBe(true);
+});

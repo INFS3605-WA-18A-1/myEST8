@@ -20,15 +20,12 @@ import {
   badge,
   button,
   clip,
-  countStrip,
   dl,
-  docket,
   emptyState,
   field,
   flashFrom,
   formatWhen,
   humanise,
-  lane,
   linkButton,
   page,
   postButton,
@@ -86,6 +83,15 @@ const MESSAGE_CLASS: Record<string, string> = {
 };
 
 /** The board's lanes, named as the Property Manager says them. */
+/** The same stages in a few words, for the counts above the Ticket rows. */
+const STAGE_SHORT: Record<Stage, string> = {
+  quoting: 'Quoting',
+  awaiting_owner: 'With owner',
+  approved: 'Ready',
+  scheduled: 'Booked',
+  done: 'Done',
+};
+
 const STAGE_TITLE: Record<Stage, string> = {
   quoting: 'Quoting',
   awaiting_owner: 'With Property Owner',
@@ -133,23 +139,16 @@ export function dashboardPages() {
           { label: 'All', href: scopeHref('all', shown.kept), active: filter === 'all' },
         ]),
         body: html`
-          ${countStrip([
-            { label: 'Maintenance Requests to confirm', count: view.maintenanceRequests.length, href: '#requests', decision: true, tone: 'attention' },
-            { label: 'Tickets waiting on you', count: waiting, href: firstGroup(decided), decision: true, tone: 'attention' },
-            { label: 'Open Tickets', count: view.tickets.length, href: '#tickets' },
-            { label: 'Alerts', count: view.alerts.length, href: '#alerts', decision: true, tone: 'attention' },
-            { label: 'In the inbox', count: view.inbox.length, href: '#inbox', decision: true, tone: 'attention' },
-            { label: 'Urgent Repairs needing a receipt', count: needReceipt, href: '#urgent-repairs', tone: 'urgent' },
-          ])}
-          <div class="dashboard-desk grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] lg:items-start">
-            <div class="dashboard-main grid min-w-0 gap-4">
-              ${decisions({ view, ...decided, q, timeZone, now, shareLink: shareUrl(c, '/?filter=all#requests') })}
-              ${section({ title: 'Inbox', id: 'inbox', actions: countBadge(view.inbox.length), body: html`<div class="dashboard-inbox">${inboxList(view.inbox, people, timeZone, q)}</div>` })}
+          ${greeting(pm.name, view, needReceipt)}
+          <div class="dashboard-desk">
+            <div class="dash-col">
+              ${glance(view, needReceipt, waiting, firstGroup(decided))}
+              ${doNext({ view, ...decided, q, timeZone, now, shareLink: shareUrl(c, '/?filter=all#requests') })}
             </div>
-            <div class="dashboard-glance grid min-w-0 gap-4">
-              <div class="${view.urgentRepairs.length ? 'urgent-panel' : ''}">${section({ title: 'Urgent Repairs', id: 'urgent-repairs', actions: countBadge(view.urgentRepairs.length, 'error'), body: urgentRepairsList(view.urgentRepairs, timeZone) })}</div>
+            <div class="dash-col">
+              ${inboxCard(view.inbox, people, timeZone, q)}
               ${nextSevenDays(view.calendar, now, timeZone, c.req.query('day'), filter)}
-              ${ticketsByStage(view.tickets, filter, now, timeZone)}
+              ${ticketsByStage(view.tickets, filter, now)}
             </div>
           </div>
         `,
@@ -249,11 +248,22 @@ function idParam(c: Context<WebEnv>, name: string) {
   return Number(c.req.param(name));
 }
 
-function countBadge(count: number, tone: Tone = 'neutral') {
-  return count ? badge(String(count), tone) : undefined;
+// Greeting and glance
+
+/** "Hi, Kevin" and what is waiting, in one line. */
+function greeting(name: string, view: Dashboard, needReceipt: number): Html {
+  const first = name.trim().split(/\s+/)[0] || name;
+  const things = view.maintenanceRequests.length + view.alerts.length + needReceipt;
+  const waiting = things === 0 ? 'Nothing needs you right now' : `${things} ${things === 1 ? 'thing needs' : 'things need'} you today`;
+  const inbox = view.inbox.length ? ` · ${view.inbox.length} ${view.inbox.length === 1 ? 'message' : 'messages'} in the inbox` : '';
+  return html`<div class="dash-hello">
+    <h2 class="dash-hello-name">Hi, ${first}</h2>
+    <p class="dash-hello-line">${waiting}${inbox}</p>
+  </div>`;
 }
 
-// Needs your attention
+/** Counts that size the bubbles: more of something, a bigger bubble, within a cap. */
+const bubbleSize = (count: number, min: number, step: number, max: number) => (count === 0 ? min : Math.min(max, min + 14 + count * step));
 
 type Decided = { toCheck: BoardTicket[]; toBook: BoardTicket[]; toChoose: BoardTicket[] };
 
@@ -263,53 +273,87 @@ function firstGroup(d: Decided) {
 }
 
 /**
- * Maintenance Requests (oldest first, as the core orders them), then the Tickets waiting on
- * a Quote decision (Quotes to check, Site Inspections to book, Quotes to choose; a group with
- * none is left out), then alerts, then the inbox in brief on phones: the decisions, each with
- * its actions. `shareLink` is the Agency-wide list of Maintenance Requests, which a Share
+ * Today at a glance: a soft card of bubbles, one for each thing a Property Manager
+ * counts (Open Tickets, Alerts, Maintenance Requests, the inbox, and Urgent Repairs
+ * when one needs a receipt). Each bubble links to where that thing is, and its size
+ * follows its count.
+ */
+function glance(view: Dashboard, needReceipt: number, waiting: number, waitingHref: string): Html {
+  const tickets = view.tickets.length;
+  const alerts = view.alerts.length;
+  const requests = view.maintenanceRequests.length;
+  const inbox = view.inbox.length;
+  const bubbles = [
+    { cls: 'is-tickets', label: 'Open Tickets', count: tickets, href: '#tickets', size: bubbleSize(tickets, 80, 12, 164) },
+    { cls: 'is-alerts', label: 'Alerts', count: alerts, href: '#alerts', size: bubbleSize(alerts, 68, 14, 132) },
+    { cls: 'is-requests', label: 'Requests', count: requests, href: '#requests', size: bubbleSize(requests, 64, 20, 108) },
+    { cls: 'is-quotes', label: 'Quotes', count: waiting, href: waitingHref, size: bubbleSize(waiting, 60, 14, 96) },
+    { cls: 'is-inbox', label: 'Inbox', count: inbox, href: '#inbox', size: bubbleSize(inbox, 60, 10, 98) },
+    ...(needReceipt ? [{ cls: 'is-urgent', label: 'Urgent', count: needReceipt, href: '#urgent-repairs', size: bubbleSize(needReceipt, 60, 14, 96) }] : []),
+  ];
+  const legend = [
+    ['is-tickets', 'Open Tickets', tickets],
+    ['is-alerts', 'Alerts', alerts],
+    ['is-requests', 'Requests', requests],
+    ['is-quotes', 'Quote decisions', waiting],
+    ['is-inbox', 'Inbox', inbox],
+    ...(needReceipt ? [['is-urgent', 'Urgent Repairs', needReceipt]] : []),
+  ] as const;
+  return html`<section class="glance" aria-label="Today at a glance">
+    <div class="glance-key">
+      <h3 class="glance-title">Your day<br />at a glance</h3>
+      <ul class="glance-legend">
+        ${legend.map(([cls, label, count]) => html`<li class="${cls}"><i></i>${label}<b>${count}</b></li>`)}
+      </ul>
+    </div>
+    <div class="glance-bubbles" role="group" aria-label="Counts">
+      ${bubbles.map(
+        (b, i) =>
+          html`<a href="${b.href}" class="bubble ${b.cls}${b.count === 0 ? ' is-zero' : ''}" style="--size:${b.size}px;--i:${i}"><span class="bubble-num">${b.count}</span><span class="bubble-label">${b.label}</span></a>`,
+      )}
+    </div>
+  </section>`;
+}
+
+// Do next
+
+/**
+ * Maintenance Requests (oldest first, as the core orders them), then alerts: the
+ * things only the Property Manager can do, each a soft row with its action. Urgent
+ * Repairs that need a receipt sit above them, and when there are none one quiet line
+ * says so. `shareLink` is the Agency-wide list of Maintenance Requests, which a Share
  * button passes on when there are any.
  */
-function decisions(n: Decided & { view: Dashboard; q: string; timeZone: string; now: Date; shareLink: string }): Html {
-  const { view, q, timeZone, now } = n;
+function doNext(n: Decided & { view: Dashboard; q: string; timeZone: string; now: Date; shareLink: string }): Html {
+  const { view, q, timeZone, now, shareLink } = n;
   const requests = view.maintenanceRequests;
+  const waiting = requests.length + n.toCheck.length + n.toBook.length + n.toChoose.length + view.alerts.length;
   const group = (id: string, title: string, rows: Html[]) =>
-    rows.length
-      ? html`<div id="${id}" class="grid gap-2">
-          <h3 class="text-sm font-semibold">${title}</h3>
-          ${rows}
-        </div>`
-      : '';
+    rows.length ? html`<div id="${id}" class="do-next-list"><h3 class="do-next-sub">${title}</h3>${rows}</div>` : '';
   return section({
-    title: 'Needs your attention',
+    title: 'Do next',
     id: 'decisions',
-    body: html`<div class="grid gap-4">
-      <div id="requests" class="grid gap-2">
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <h3 class="text-sm font-semibold">Maintenance Requests to confirm</h3>
-          ${requests.length
-            ? shareButton({
-                title: 'Maintenance Requests to confirm',
-                text: `${requests.length} ${requests.length === 1 ? 'Maintenance Request is' : 'Maintenance Requests are'} waiting for review in myEST8.`,
-                url: n.shareLink,
-                note: COLLEAGUES_ONLY,
-              })
-            : ''}
-        </div>
-        ${requests.length ? requests.map((r) => requestRow(r, q, now)) : emptyState('No Maintenance Requests waiting for you.')}
+    actions: requests.length
+      ? shareButton({
+          title: 'Maintenance Requests to confirm',
+          text: `${requests.length} ${requests.length === 1 ? 'Maintenance Request is' : 'Maintenance Requests are'} waiting for review in myEST8.`,
+          url: shareLink,
+          note: COLLEAGUES_ONLY,
+        })
+      : undefined,
+    body: html`<div class="do-next">
+      ${view.urgentRepairs.length ? html`<div id="urgent-repairs" class="do-next-urgent"><h3 class="do-next-sub">Urgent Repairs</h3>${urgentRepairsList(view.urgentRepairs, timeZone)}</div>` : ''}
+      <div id="requests" class="do-next-list">
+        ${requests.map((r) => requestRow(r, q, now))}
       </div>
       ${group('quotes-to-check', 'Quotes to check', n.toCheck.map((t) => ticketDecisionRow(t, 'check_quotes', now)))}
       ${group('inspections', 'Site Inspections to book', n.toBook.map((t) => ticketDecisionRow(t, 'book_inspection', now)))}
       ${group('quotes-to-choose', 'Quotes to choose', n.toChoose.map((t) => ticketDecisionRow(t, 'choose_quote', now)))}
-      <div id="alerts" class="grid gap-2">
-        <h3 class="text-sm font-semibold">Alerts</h3>
-        ${view.alerts.length ? view.alerts.map((a) => alertRow(a, timeZone)) : emptyState('No alerts.')}
+      <div id="alerts" class="do-next-list">
+        ${view.alerts.map((a) => alertRow(a, timeZone))}
       </div>
-      ${view.inbox.length
-        ? html`<div class="grid gap-2 lg:hidden">
-            <h3 class="text-sm font-semibold">In the inbox</h3>
-            ${view.inbox.map((item) => inboxRow(item, timeZone))}
-          </div>`
-        : ''}
+      ${waiting === 0 ? emptyState('No Maintenance Requests waiting for you. Nothing else needs you right now.') : ''}
+      ${view.urgentRepairs.length === 0 ? html`<p id="urgent-repairs" class="do-next-clear">No Urgent Repairs</p>` : ''}
     </div>`,
   });
 }
@@ -335,7 +379,7 @@ function ticketDecisionRow(t: BoardTicket, decision: keyof typeof DECISION_ACTIO
 }
 
 /**
- * A Maintenance Request in "Needs your attention", read like a docket: the issue, the
+ * A Maintenance Request in "Do next", read like a docket: the issue, the
  * street, then every badge (Urgency, Trade and each check that needs a second look),
  * with Confirm and Review on their own line.
  */
@@ -413,39 +457,60 @@ function alertRow(alert: Alert, timeZone: string): Html {
   }
 }
 
-/** An inbox item in brief: who sent it and what it says, linking to the item and its actions further down. */
-function inboxRow(item: InboxItem, timeZone: string): Html {
-  const [reason, tone] = INBOX_REASON[item.reason];
-  return queueRow({
-    href: `#inbox-${item.itemId}`,
-    title: item.text,
-    detail: item.personName ?? item.from,
-    badges: [badge(reason, tone)],
-    meta: formatWhen(item.receivedAt, timeZone),
-    decision: true,
-  });
+
+// Inbox
+
+/**
+ * The inbox in brief: the three newest messages as one-line previews, and a button
+ * that opens every message with its actions (link the sender, route, dismiss). The
+ * full list opens over the card, so the page keeps its shape.
+ */
+function inboxCard(items: InboxItem[], people: Person[], timeZone: string, q: string): Html {
+  const byNewest = [...items].sort((a, b) => b.receivedAt.localeCompare(a.receivedAt));
+  const newest = byNewest.slice(0, 3);
+  const initials = (name: string) => name.replace(/[^A-Za-z ]/g, '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('') || '+';
+  return html`<section class="inbox-card" id="inbox" aria-label="Inbox">
+    <div class="inbox-card-head">
+      <h3 class="inbox-card-title">Inbox</h3>
+      ${items.length ? html`<span class="inbox-card-count">${items.length} waiting</span><span class="inbox-card-note">Latest ${newest.length}</span>` : ''}
+    </div>
+    ${items.length
+      ? html`<ul class="inbox-previews">
+            ${newest.map(
+              (item) => html`<li><a class="inbox-preview" href="#inbox-${item.itemId}">
+                <span class="inbox-avatar" aria-hidden="true">${initials(item.personName ?? '')}</span>
+                <span class="inbox-preview-main"><span class="inbox-preview-who">${item.personName ?? item.from}</span><span class="inbox-preview-text">${item.text}</span></span>
+                <time class="inbox-preview-when" datetime="${item.receivedAt}">${formatWhen(item.receivedAt, timeZone)}</time>
+              </a></li>`,
+            )}
+          </ul>
+          <details class="inbox-more">
+            <summary><span class="when-closed">Check ${items.length === 1 ? 'the message' : `all ${items.length} messages`}</span><span class="when-open">Close messages</span></summary>
+            <div class="inbox-panel dashboard-inbox">${inboxList(byNewest, people, timeZone, q)}</div>
+          </details>`
+      : html`<p class="inbox-empty">The inbox is empty.</p>`}
+  </section>`;
 }
 
 // Tickets by stage
 
 /**
- * The board: the lanes stacked in workflow order, each scrolling inside itself from
- * 1024px, and a stage with no Tickets left out. The core gives each Ticket its lane,
- * Trades, Quote counts, next visit and whether it needs a decision; this only draws
- * them. With no open Tickets at all it is one empty state.
+ * Tickets by stage: a bar and counts that show where the open Tickets are, then one
+ * soft row for each Ticket with its progress through the five stages. The core gives
+ * each Ticket its stage, Quote counts and whether it needs a decision; this only draws
+ * them. With no open Tickets at all it is one empty state, not five.
  */
-function ticketsByStage(tickets: BoardTicket[], filter: Filter, now: Date, timeZone: string): Html {
+function ticketsByStage(tickets: BoardTicket[], filter: Filter, now: Date): Html {
+  const counts = STAGES.map((stage) => tickets.filter((t) => t.stage === stage).length);
   return section({
     title: 'Tickets by stage',
     id: 'tickets',
     actions: linkButton('See all Tickets', filter === 'all' ? '/tickets?filter=all' : '/tickets', { variant: 'ghost', size: 'sm' }),
     body: tickets.length
-      ? html`<div class="grid gap-3">
-          ${STAGES.map((stage) => {
-            const inLane = tickets.filter((t) => t.stage === stage);
-            if (!inLane.length) return '';
-            return lane({ title: STAGE_TITLE[stage], count: inLane.length, body: html`${inLane.map((t) => ticketDocket(t, now, timeZone))}` });
-          })}
+      ? html`<div class="stage-board">
+          <div class="stage-scale" aria-hidden="true">${STAGES.map((stage, i) => html`<i class="stage-${stage}" style="flex-grow:${counts[i]}"></i>`)}</div>
+          <ul class="stage-counts">${STAGES.map((stage, i) => html`<li${counts[i] === 0 ? html` class="is-zero"` : ''}><b>${counts[i]}</b> ${STAGE_SHORT[stage]}</li>`)}</ul>
+          <div class="stage-rows">${STAGES.flatMap((stage) => tickets.filter((t) => t.stage === stage).map((t) => ticketRow(t, now)))}</div>
         </div>`
       : emptyState(filter === 'mine' ? 'No open Tickets on your Properties. Confirming a Maintenance Request opens one.' : 'No open Tickets. Confirming a Maintenance Request opens one.'),
   });
@@ -464,25 +529,22 @@ function quotingStatus(t: Pick<BoardTicket, 'quoting' | 'decision'>): string | n
   return `${q.received} of ${of} ${of === 1 ? 'Estimate' : 'Estimates'} in${q.firm ? `, ${q.firm} ${q.firm === 1 ? 'Firm Quote' : 'Firm Quotes'}` : ''}`;
 }
 
-function ticketDocket(t: BoardTicket, now: Date, timeZone: string): Html {
+/** One Ticket as a soft row: its number, the issue and where, and how far along it is (filled segments up to its stage, then the stage's name). */
+function ticketRow(t: BoardTicket, now: Date): Html {
   const quoting = quotingStatus(t);
-  return docket({
-    number: t.ticketId,
-    href: `/tickets/${t.ticketId}`,
-    urgency: t.urgency,
-    address: t.propertyAddress,
-    street: t.propertyAddress.replace(/\s+[A-Z]{2,3}\s+\d{4}$/, ''),
-    issue: t.description,
-    meta: [
-      ...t.trades.map((trade) => html`${humanise(trade)}`),
-      ...(quoting ? [html`${quoting}`] : []),
-      ...(t.nextVisit ? [html`Visit ${formatWhen(t.nextVisit, timeZone)}`] : []),
-    ],
-    age: ageOf(t.reportedAt, now),
-    unread: t.unreadMessages,
-    decision: t.decision !== null,
-    lines: 2,
-  });
+  const reached = STAGES.indexOf(t.stage);
+  const street = t.propertyAddress.replace(/\s+[A-Z]{2,3}\s+\d{4}$/, '').split(',')[0]!;
+  return html`<a href="/tickets/${t.ticketId}" class="ticket-row${t.decision !== null ? ' is-decision' : ''}">
+    <span class="ticket-row-id">#${t.ticketId}</span>
+    <span class="ticket-row-main">
+      <span class="ticket-row-title">${t.description}${t.unreadMessages ? html`<span class="unread-dot" aria-hidden="true"></span><span class="sr-only">unread messages</span>` : ''}</span>
+      <span class="ticket-row-sub">${street} · ${ageOf(t.reportedAt, now)}${quoting ? html` · ${quoting}` : ''}${t.urgency === 'urgent' || t.urgency === 'high' ? html` · <span class="ticket-row-urgency is-${t.urgency}">${humanise(t.urgency)}</span>` : ''}</span>
+    </span>
+    <span class="ticket-row-stage">
+      <span class="stage-segs" aria-hidden="true">${STAGES.map((stage, i) => html`<i class="${i <= reached ? `on stage-${t.stage}` : ''}"></i>`)}</span>
+      <span class="ticket-row-stage-name">${STAGE_TITLE[t.stage]}</span>
+    </span>
+  </a>`;
 }
 
 // Next 7 days
@@ -548,7 +610,7 @@ function nextSevenDays(bookings: Booking[], now: Date, timeZone: string, dayQuer
       </ol>
       <h3 class="visit-heading">${longDay(chosen)}</h3>
       ${visits.length
-        ? html`<ul class="visit-list">${visits.map((b) => visitRow(b, timeZone))}</ul>`
+        ? html`<ul class="visit-list">${visits.slice(0, 2).map((b) => visitRow(b, timeZone))}</ul>${visits.length > 2 ? html`<a class="visit-more" href="${calendarHref(chosen, filter)}">+${visits.length - 2} more ${visits.length - 2 === 1 ? 'visit' : 'visits'} this day</a>` : ''}`
         : html`<p class="visit-none">Nothing booked on ${weekdayLong.format(new Date(`${chosen}T00:00:00Z`))}.</p>`}`,
   });
 }
@@ -561,7 +623,7 @@ function visitRow(b: Booking, timeZone: string): Html {
     <time datetime="${b.start}" class="visit-time num">${time}</time>
     <span class="visit-what">
       <a class="visit-tradie" href="/tradies/${b.tradieId}">${b.businessName}</a>
-      <a class="visit-place" href="${ticketHref(b)}">${clip(b.issue, { lines: 1 })} · ${streetOf(b.propertyAddress)}</a>
+      <a class="visit-place" href="${ticketHref(b)}">${b.issue} · ${streetOf(b.propertyAddress)}</a>
     </span>
     ${kind ? badge(kind, 'info', { outline: true }) : ''}
   </li>`;
