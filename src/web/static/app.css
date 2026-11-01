@@ -6115,6 +6115,7 @@
     }
     .dispatch-q input {
       flex: 1;
+      width: 100%;
       min-width: 0;
       border: 0;
       background: transparent;
@@ -6141,16 +6142,54 @@
       color: var(--muted);
     }
     .dispatch-pick select {
+      width: 6.25rem;
+      text-overflow: ellipsis;
       border: 0;
       background: transparent;
       font: inherit;
       font-weight: 600;
       color: var(--ink);
     }
-    /* The page header is a row already; keep the title first and the controls under it on phones. */
+    /* From 1024px the search and filters stay on one line beside the title: the search takes what room is left. */
+    @media (min-width: 64rem) {
+      .page-header-end:has(.dispatch-controls),
+      .page-header-controls:has(.dispatch-controls),
+      .dispatch-controls {
+        flex-wrap: nowrap;
+      }
+      .page-header:has(.dispatch-controls) .page-header-lead {
+        flex: 0 0 auto;
+      }
+      .page-header-end:has(.dispatch-controls) {
+        flex: 1 1 0%;
+      }
+      .page-header-controls:has(.dispatch-controls) {
+        flex: 1 1 auto;
+        justify-content: flex-end;
+      }
+      .dispatch-controls {
+        flex: 1 1 auto;
+        justify-content: flex-end;
+        min-width: 0;
+      }
+      .dispatch-q {
+        flex: 1 1 8rem;
+        width: auto;
+        min-width: 7rem;
+        max-width: 20rem;
+      }
+      .dispatch-pick {
+        flex: none;
+      }
+    }
+    /* Phones and tablets: the controls get their own row under the title. */
     @media (max-width: 63.98rem) {
       .dispatch-controls {
         width: 100%;
+      }
+      .dispatch-q {
+        flex: 1 1 100%;
+        width: auto;
       }
     }
 
