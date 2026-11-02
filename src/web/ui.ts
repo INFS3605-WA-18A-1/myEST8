@@ -55,7 +55,7 @@ export function head(title: string, o: { css?: string[]; runtime?: boolean } = {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${title} - myEST8</title>
     <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
-    <script>document.documentElement.classList.add('js');try{if(localStorage.getItem('rail')==='collapsed')document.documentElement.classList.add('rail-collapsed')}catch(e){}</script>
+    <script>document.documentElement.classList.add('js');try{if(localStorage.getItem('rail')==='collapsed')document.documentElement.classList.add('rail-collapsed')}catch(e){}try{if(sessionStorage.getItem('glance'))document.documentElement.classList.add('glance-seen')}catch(e){}</script>
     <link rel="preload" href="/assets/fonts/public-sans-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/assets/fonts/bricolage-grotesque-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="/assets/daisyui.css" />
@@ -91,7 +91,8 @@ const SIMULATOR = { key: 'simulator', label: 'Phone simulator (demo)', href: '/d
 function railLink(item: { key: NavKey; label: string; href: string }, active: NavKey | undefined, count: number | undefined, cls = 'rail-link'): Html {
   // Only the counts that mean "needs you" (Tickets' new Maintenance Requests, Approvals) are a Wattle chip; any other count is a plain numeral.
   const decision = item.key === 'tickets' || item.key === 'approvals' ? html` data-decision` : '';
-  return html`<a href="${item.href}" class="${cls}" ${item.key === active ? html`aria-current="page"` : ''}${decision}>${NAV_ICON[item.key]}<span class="rail-label">${item.label}${count ? html`<span class="rail-count num">${count}<span class="sr-only"> waiting</span></span>` : ''}</span></a>`;
+  const indicator = item.key === active ? html`<span class="rail-indicator" aria-hidden="true"></span>` : '';
+  return html`<a href="${item.href}" class="${cls}" ${item.key === active ? html`aria-current="page"` : ''}${decision}>${indicator}${NAV_ICON[item.key]}<span class="rail-label">${item.label}${count ? html`<span class="rail-count num">${count}<span class="sr-only"> waiting</span></span>` : ''}</span></a>`;
 }
 
 /**
