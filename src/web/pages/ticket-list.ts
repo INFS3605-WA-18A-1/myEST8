@@ -7,13 +7,13 @@ import { Hono } from 'hono';
 import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
 import { TRADES, URGENCIES } from '../../shared.ts';
-import type { ListOptions } from '../../views.ts';
+import { STAGES, stageOf, type ListOptions, type Stage } from '../../views.ts';
 import type { WebEnv } from '../env.ts';
 import { icon } from '../icons.ts';
 import { listFilterOf, listFilterQuery, type ListFilter } from '../list-filter.ts';
 import { requestFlags } from '../request-checks.ts';
 import { shellInfo } from '../shell.ts';
-import { badge, emptyState, filterBar, flashFrom, formatAge, formatDay, humanise, linkButton, page, postButton, queueRow, section, segmented, statusBadge, table, ticketCell, urgencyBadge, type Html } from '../ui.ts';
+import { badge, emptyState, filterBar, flashFrom, formatAge, formatDay, humanise, linkButton, page, postButton, section, segmented, statusBadge, table, ticketCell, urgencyBadge, type Html } from '../ui.ts';
 import { propertyOptions } from './onboarding-forms.ts';
 import { byUrgency } from './requests.ts';
 
@@ -36,8 +36,10 @@ export function ticketListPages() {
       return c.redirect(`/archive${params.size ? `?${params}` : ''}`, 303);
     }
     const f = listFilterOf(c);
-    const [requests, open, properties] = await Promise.all([actions.requests(listOptions(f)), actions.tickets(listOptions(f)), actions.properties()]);
+    const [requests, everyOpen, properties] = await Promise.all([actions.requests(listOptions(f)), actions.tickets(listOptions(f)), actions.properties()]);
     const now = actions.now();
+    const stage = STAGES.find((s) => s === c.req.query('stage'));
+    const open = stage ? everyOpen.filter((t) => stageOf(t.jobs) === stage) : everyOpen;
     return c.html(
       page({
         title: 'Tickets',
@@ -48,21 +50,27 @@ export function ticketListPages() {
         subtitle: 'New Maintenance Requests waiting for you to confirm, then the open Tickets.',
         controls: scopeControl('/tickets', f),
         body: html`
-          ${listFilterBar('/tickets', f, properties)}
-          ${section({ title: 'New Maintenance Requests', id: 'requests', actions: countBadge(requests.length), body: requestList(byUrgency(requests), now, f) })}
-          ${section({
-            title: 'Open Tickets',
-            id: 'open',
-            actions: countBadge(open.length),
-            body: open.length
-              ? ticketTable(open, { all: f.scope === 'all', now })
-              : emptyState(
-                  filtered(f)
-                    ? `No open Tickets match these filters${f.scope === 'mine' ? ' on your Properties' : ''}.`
-                    : `No open Tickets${f.scope === 'mine' ? ' on your Properties' : ''}. A Ticket opens when you confirm a Maintenance Request.`,
-                  f.scope === 'mine' ? linkButton('Show all Tickets', `/tickets${listFilterQuery({ ...f, scope: 'all' })}`) : undefined,
-                ),
-          })}
+          <div class="tickets-page">
+            ${stageBar(everyOpen, f, stage, properties)}
+            ${section({ title: 'New Maintenance Requests', id: 'requests', actions: requests.length ? html`${countBadge(requests.length)}<span class="tk-section-note">Waiting for you to confirm</span>` : undefined, body: requestList(byUrgency(requests), now, f) })}
+            ${section({
+              title: 'Open Tickets',
+              id: 'open',
+              actions: html`${countBadge(open.length)}${open.length ? html`<span class="tk-section-note">Most urgent first, then oldest</span>` : ''}`,
+              body: open.length
+                ? html`${ticketCards(open, now)}${stageLegend()}`
+                : emptyState(
+                    filtered(f) || stage
+                      ? `No open Tickets match these filters${f.scope === 'mine' ? ' on your Properties' : ''}.`
+                      : `No open Tickets${f.scope === 'mine' ? ' on your Properties' : ''}. A Ticket opens when you confirm a Maintenance Request.`,
+                    stage || filtered(f)
+                      ? linkButton('Clear filters', `/tickets${listFilterQuery({ scope: f.scope })}`)
+                      : f.scope === 'mine'
+                        ? linkButton('Show all Tickets', `/tickets${listFilterQuery({ ...f, scope: 'all' })}`)
+                        : undefined,
+                  ),
+            })}
+          </div>
         `,
       }),
     );
@@ -116,7 +124,58 @@ function issueThumb(photos: { fileId: number }[]): Html {
     : html`<span class="issue-thumb-none" aria-hidden="true">${icon('image', { size: 'size-6' })}</span>`;
 }
 
-/** Each request leads with its Summary, then the address, its badges, who reported it and when, with Confirm or Review. */
+/** The stage names the Property Manager reads on the Tickets page (a Ticket whose Jobs are all done waits on them to close it). */
+const STAGE_TITLE: Record<Stage, string> = {
+  quoting: 'Quoting',
+  awaiting_owner: 'With Property Owner',
+  approved: 'Ready to book',
+  scheduled: 'Booked',
+  done: 'Done · ready to close',
+};
+const STAGE_TAB: Record<Stage, string> = { ...STAGE_TITLE, done: 'Ready to close' };
+
+/**
+ * One bar over the Tickets: the stage tabs (All open, then each stage that has a Ticket, with
+ * its count) and the Urgency, Trade and Property selects. The tabs are links that keep the
+ * other filters; the selects keep the chosen tab.
+ */
+function stageBar(open: ListedTicket[], f: ListFilter, stage: Stage | undefined, properties: Property[]): Html {
+  const counts = STAGES.map((s) => open.filter((t) => stageOf(t.jobs) === s).length);
+  const href = (s?: Stage) => {
+    const q = listFilterQuery(f);
+    return `/tickets${s ? `${q ? `${q}&` : '?'}stage=${s}` : q}`;
+  };
+  const tab = (label: string, count: number, to: string, active: boolean, ready = false) =>
+    html`<a href="${to}" class="tk-tab${ready ? ' is-ready' : ''}" ${active ? html`aria-current="page"` : ''}>${label}<span class="tk-tab-count num">${count}</span></a>`;
+  return html`<div class="tk-bar">
+    <nav class="tk-tabs" aria-label="Stage">
+      ${tab('All open', open.length, href(), !stage)}
+      ${STAGES.map((s, i) => (counts[i] || s === stage ? tab(STAGE_TAB[s], counts[i]!, href(s), s === stage, s === 'done') : ''))}
+    </nav>
+    ${filterBar({
+      action: '/tickets',
+      filter: f,
+      hidden: { stage },
+      compact: true,
+      urgencies: URGENCIES.filter((u) => u !== 'urgent').map((u) => ({ value: u, label: humanise(u) })),
+      trades: TRADES.map((t) => ({ value: t, label: humanise(t) })),
+      properties: propertyOptions(properties),
+    })}
+    ${stage || filtered(f) ? html`<a class="link tk-clear" href="/tickets${listFilterQuery({ scope: f.scope })}">Clear</a>` : ''}
+  </div>`;
+}
+
+/** Up to three of an issue's photos as small squares, then "+n" for the rest; a quiet placeholder with none. */
+function photoStrip(photos: { fileId: number; metadata?: string }[]): Html {
+  if (!photos.length) return html`<span class="tk-photos"><span class="issue-thumb-none" aria-hidden="true">${icon('image', { size: 'size-6' })}</span></span>`;
+  const shown = photos.slice(0, 3);
+  return html`<span class="tk-photos">
+    ${shown.map((p) => html`<span class="tk-photo"><img src="/files/${p.fileId}" alt="Photo of the issue" width="64" height="64" loading="lazy" />${p.metadata === 'flagged' ? html`<span class="tk-photo-flag">Flagged</span>` : ''}</span>`)}
+    ${photos.length > shown.length ? html`<span class="tk-photo tk-photo-more num">+${photos.length - shown.length}</span>` : ''}
+  </span>`;
+}
+
+/** Each request is a card: its photos, its Summary, the address, its badges, who reported it and when, with Review and Confirm. */
 function requestList(requests: MaintenanceRequest[], now: Date, f: ListFilter): Html {
   if (!requests.length) {
     if (filtered(f)) return emptyState('No Maintenance Requests match these filters.');
@@ -125,20 +184,62 @@ function requestList(requests: MaintenanceRequest[], now: Date, f: ListFilter): 
       f.scope === 'all' ? undefined : linkButton('Show all Maintenance Requests', '/tickets?filter=all'),
     );
   }
-  return html`<div class="request-list grid gap-2">
-    ${requests.map((r) =>
-      queueRow({
-        href: `/requests/${r.issueId}`,
-        thumb: issueThumb(r.photos),
-        title: r.summary?.trim() || r.description,
-        detail: r.propertyAddress,
-        badges: [urgencyBadge(r.urgency), badge(humanise(r.trade)), ...requestFlags(r).map((flag) => badge(flag.label, flag.tone))],
-        meta: `${r.tenantName}, ${formatAge(r.reportedAt, now)}`,
-        decision: true,
-        actions: html`${postButton(`/requests/${r.issueId}/confirm`, 'Confirm', { size: 'sm' })}${linkButton('Review', `/requests/${r.issueId}`, { variant: 'secondary', size: 'sm' })}`,
-      }),
+  return html`<div class="request-list grid gap-3">
+    ${requests.map(
+      (r) => html`<article class="tk-request">
+        ${photoStrip(r.photos)}
+        <div class="tk-request-main">
+          <a href="/requests/${r.issueId}" class="tk-request-title">${r.summary?.trim() || r.description}</a>
+          <p class="tk-request-address">${icon('map-pin', { size: 'size-4' })}${r.propertyAddress}</p>
+          <div class="tk-request-badges">${urgencyBadge(r.urgency)}${badge(humanise(r.trade))}${requestFlags(r).map((flag) => badge(flag.label, flag.tone))}</div>
+          <p class="tk-request-meta">${r.tenantName} · ${formatAge(r.reportedAt, now)}</p>
+        </div>
+        <div class="tk-request-actions">
+          ${linkButton('Review', `/requests/${r.issueId}`, { variant: 'secondary', size: 'sm' })}${postButton(`/requests/${r.issueId}/confirm`, 'Confirm', { size: 'sm' })}
+        </div>
+      </article>`,
     )}
   </div>`;
+}
+
+/** Open Tickets as a grid of cards, in the order given. */
+function ticketCards(tickets: ListedTicket[], now: Date): Html {
+  return html`<ul class="tk-grid" role="list" aria-label="Open Tickets, most urgent and oldest first">
+    ${tickets.map((t) => {
+      const stage = stageOf(t.jobs);
+      const reached = STAGES.indexOf(stage);
+      const readyToClose = t.jobs.length > 0 && t.jobs.every((j) => j.status === 'done' || j.status === 'cancelled');
+      const trades = [...new Set(t.jobs.map((j) => humanise(j.trade)))];
+      return html`<li class="tk-card${readyToClose ? ' is-ready' : ''}">
+        <a href="/tickets/${t.ticketId}" class="tk-card-photo" aria-label="Open Ticket #${t.ticketId}">${t.photos[0] ? html`<img src="/files/${t.photos[0].fileId}" alt="Photo of the issue" loading="lazy" />` : html`<span class="issue-thumb-none" aria-hidden="true">${icon('image', { size: 'size-8' })}</span>`}</a>
+        <div class="tk-card-head">
+          <span class="tk-card-number num">Ticket #${t.ticketId}</span>
+          ${t.unreadMessages ? html`<span class="ticket-cell-unread"><span class="unread-dot" aria-hidden="true"></span>${t.unreadMessages} unread</span>` : ''}
+          <span class="tk-card-urgency">${urgencyBadge(t.urgency)}${t.checkUrgency ? badge('Check urgency', 'warning') : ''}</span>
+        </div>
+        <dl class="tk-facts">
+          <div><dt>Trade</dt><dd>${trades.length ? trades.join(', ') : '—'}</dd></div>
+          <div><dt>Reported</dt><dd>${formatAge(t.reportedAt, now)}</dd></div>
+        </dl>
+        <a href="/tickets/${t.ticketId}" class="tk-card-issue">${t.description}</a>
+        <p class="tk-card-address">${icon('map-pin', { size: 'size-4' })}<a href="/properties/${t.propertyId}">${t.propertyAddress}</a></p>
+        <div class="tk-stage">
+          <span class="tk-stage-label">Stage</span>
+          <span class="stage-segs" aria-hidden="true">${STAGES.map((s, i) => html`<i class="${i <= reached ? `on stage-${stage}` : ''}"></i>`)}</span>
+          <span class="tk-stage-name">${STAGE_TITLE[stage]}</span>
+        </div>
+        <div class="tk-card-actions">
+          ${linkButton('View ticket', `/tickets/${t.ticketId}`, { variant: 'secondary', size: 'sm' })}
+          ${readyToClose ? postButton(`/tickets/${t.ticketId}/close`, 'Close ticket', { size: 'sm', confirm: 'Close this Ticket? The Tenant and Property Owner will be told.' }) : ''}
+        </div>
+      </li>`;
+    })}
+  </ul>`;
+}
+
+/** The five stages in order, so the bar on each card reads the same way. */
+function stageLegend(): Html {
+  return html`<p class="tk-legend"><span class="tk-legend-label">Stages</span>${STAGES.map((s) => html`<span class="tk-legend-item"><i class="stage-${s}"></i>${STAGE_TAB[s] === 'Ready to close' ? 'Done' : STAGE_TAB[s]}</span>`)}</p>`;
 }
 
 /**

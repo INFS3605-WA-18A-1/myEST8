@@ -6605,6 +6605,635 @@
       margin-bottom: 8px;
     }
 
+    /* ----- Dispatch, soft cards: the map card beside Today at a glance and To dispatch, Properties under them. */
+    .dispatch-top {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 16px;
+      min-width: 0;
+    }
+    @media (min-width: 64rem) {
+      .dispatch-top {
+        grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+        align-items: start;
+      }
+    }
+    .dispatch-top > * {
+      min-width: 0;
+    }
+    .soft-card {
+      display: grid;
+      gap: 14px;
+      padding: 16px 18px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+    }
+    .soft-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px 16px;
+    }
+    .soft-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 17px;
+      font-weight: 600;
+    }
+    .soft-count {
+      display: inline-grid;
+      min-width: 22px;
+      height: 22px;
+      padding: 0 6px;
+      place-items: center;
+      border-radius: 11px;
+      background: #13212e;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .soft-link {
+      font-size: 14px;
+      text-decoration: underline;
+    }
+
+    /* The map card: the map fills it, with a count chip and the picked Property or Tradie floating on top. */
+    .dispatch-mapcard {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--page);
+    }
+    @media (min-width: 64rem) {
+      .dispatch-mapcard {
+        height: 43rem;
+        max-height: none;
+        position: sticky;
+        top: 76px;
+      }
+      .dispatch-stage {
+        position: absolute;
+        inset: 0;
+        height: auto;
+        min-height: 0;
+        max-height: none;
+      }
+    }
+    /* The map with its buttons. On a phone it is a block of its own and the panel opens under it; from 64rem the panel floats over it. */
+    .dispatch-stage {
+      position: relative;
+      height: 55vh;
+      min-height: 20rem;
+      max-height: 34rem;
+    }
+    .dispatch-mapcard .dispatch-map-section {
+      position: absolute;
+      inset: 0;
+    }
+    .dispatch-mapcard .dispatch-map {
+      height: 100%;
+      min-height: 0;
+      max-height: none;
+      border: 0;
+      border-radius: 0;
+    }
+    .dispatch-chip {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      z-index: 2;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: var(--surface);
+      box-shadow: 0 2px 10px rgb(19 33 46 / 12%);
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .dispatch-chip span {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--high);
+    }
+    .dispatch-mapcard .dispatch-side {
+      position: static;
+      width: auto;
+      max-height: none;
+      border-radius: 0;
+      box-shadow: none;
+    }
+    @media (min-width: 64rem) {
+    .dispatch-mapcard .dispatch-side {
+      position: absolute;
+      top: 56px;
+      left: 12px;
+      z-index: 2;
+      width: min(21rem, calc(100% - 24px));
+      max-height: calc(100% - 68px);
+      height: auto;
+      overflow-y: auto;
+      border-radius: 14px;
+      box-shadow: 0 6px 24px rgb(19 33 46 / 16%);
+    }
+    }
+    .dispatch-mapcard .dispatch-panel-empty {
+      margin: 0;
+      text-align: left;
+      font-size: 13px;
+    }
+
+    /* Today at a glance: four soft tiles, the number beside what it counts. */
+    .glance-tiles {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .glance-tile {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: #f6f1e8;
+      color: var(--ink);
+      text-decoration: none;
+      transition: transform 0.15s;
+    }
+    .glance-tile:hover {
+      transform: translateY(-1px);
+      color: var(--ink);
+    }
+    .glance-tile.is-warm {
+      background: #fbeede;
+    }
+    .glance-tile.is-cool {
+      background: #e7eef5;
+    }
+    .glance-tile-value {
+      font-family: var(--font-head);
+      font-size: 30px;
+      font-weight: 600;
+      line-height: 1;
+    }
+    .glance-tile.is-warm .glance-tile-value {
+      color: #a4510a;
+    }
+    .glance-tile.is-hot .glance-tile-value {
+      color: #b3261e;
+    }
+    .glance-tile-text {
+      display: grid;
+      min-width: 0;
+    }
+    .glance-tile-label {
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .glance-tile-hint {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    /* To dispatch: one soft card per Job, a Ticket box beside what it needs. */
+    .soft-card .dispatch-card {
+      border: 1px solid var(--line);
+      border-left-width: 1px;
+      border-radius: 14px;
+      background: var(--surface);
+    }
+    .dispatch-card-head {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+    }
+    .dispatch-ticketbox {
+      display: grid;
+      flex: none;
+      gap: 2px;
+      width: 56px;
+      margin: 0;
+      padding: 10px 0;
+      justify-items: center;
+      border-radius: 10px;
+      background: #f6f1e8;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .dispatch-ticketbox b {
+      font-family: var(--font-head);
+      font-size: 20px;
+      color: var(--ink);
+    }
+    .soft-card .dispatch-card-kind {
+      color: #a4510a;
+    }
+    legend.dispatch-card-legend {
+      display: grid;
+      gap: 2px;
+    }
+    .dispatch-card-legend .entity-link {
+      display: inline-flex;
+    }
+    .dispatch-right {
+      display: grid;
+      gap: 16px;
+    }
+    .dispatch-stack .dispatch-address .entity-link {
+      border: 0;
+      background: transparent;
+      padding: 0;
+      font-weight: 600;
+    }
+    .dispatch-card-legend strong {
+      font-size: 14px;
+      color: var(--ink);
+    }
+    .dispatch-legend-note {
+      font-size: 13px;
+    }
+
+    /* Properties: filter tabs and a search over the table, a soft row for each Property. */
+    .dispatch-filters {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 12px;
+    }
+    html:not(.js) .dispatch-filters {
+      display: none;
+    }
+    .dispatch-tabs {
+      display: inline-flex;
+      padding: 3px;
+      border-radius: 999px;
+      background: #f1ece2;
+    }
+    .dispatch-tab {
+      min-height: 32px;
+      padding: 0 14px;
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
+      font: inherit;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .dispatch-tab[aria-pressed='true'] {
+      background: #13212e;
+      color: #fff;
+    }
+    .dispatch-search input {
+      min-height: 38px;
+      width: min(16rem, 100%);
+      padding: 0 14px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      font: inherit;
+      font-size: 14px;
+    }
+    .soft-card .dispatch-stack {
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+    }
+    .soft-card .dispatch-stack thead th {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--muted);
+      background: transparent;
+    }
+    .dispatch-stack tr[hidden] {
+      display: none !important;
+    }
+    /* The address in the Properties table: a house in a rounded square, coloured by the worst Urgency. */
+    .dispatch-stack .dispatch-address .entity-link svg {
+      flex: none;
+      width: 34px !important;
+      height: 34px !important;
+      padding: 8px;
+      box-sizing: border-box;
+      border-radius: 10px;
+      background: #f1ece2;
+      color: var(--muted);
+    }
+    .dispatch-stack tr[data-urgency='routine'] .dispatch-address .entity-link svg {
+      background: #e7eef5;
+      color: #1f5c8b;
+    }
+    .dispatch-stack tr[data-urgency='high'] .dispatch-address .entity-link svg {
+      background: #a4510a;
+      color: #fff;
+    }
+    .dispatch-stack tr[data-urgency='urgent'] .dispatch-address .entity-link svg {
+      background: #b3261e;
+      color: #fff;
+    }
+    .dispatch-stack .dispatch-address .entity-link {
+      gap: 10px;
+    }
+
+    /* A Work Order's free times: one line of quick choices. The one in the Start box is filled. */
+    .free-times {
+      display: grid;
+      gap: 6px;
+    }
+    .free-times-label {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .free-times-label span {
+      font-weight: 400;
+      color: var(--muted);
+    }
+    .free-times-row {
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 6px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+    }
+    .free-time {
+      flex: none;
+      min-height: 36px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      font: inherit;
+      font-size: 13px;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    .free-time:hover {
+      background: var(--info-bg);
+    }
+    .free-time[aria-pressed='true'] {
+      border-color: var(--action);
+      background: var(--info-bg);
+      font-weight: 600;
+    }
+    .dispatch-go-cell {
+      width: 56px;
+      text-align: right;
+    }
+    .dispatch-go {
+      display: inline-grid;
+      width: 36px;
+      height: 36px;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: 50%;
+      color: var(--ink);
+    }
+    .dispatch-go:hover {
+      background: var(--info-bg);
+    }
+    /* The header's search and filters. */
+    .dispatch-controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    .dispatch-q {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 40px;
+      width: min(15rem, 100%);
+      padding: 0 14px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface);
+      color: var(--muted);
+    }
+    .dispatch-q input {
+      flex: 1;
+      width: 100%;
+      min-width: 0;
+      border: 0;
+      background: transparent;
+      font: inherit;
+      font-size: 14px;
+      color: var(--ink);
+    }
+    .dispatch-q input:focus {
+      outline: none;
+    }
+    .dispatch-q:focus-within {
+      outline: 2px solid var(--action);
+    }
+    .dispatch-pick {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 40px;
+      padding: 0 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface);
+      font-size: 14px;
+      color: var(--muted);
+    }
+    .dispatch-pick select {
+      width: 6.25rem;
+      text-overflow: ellipsis;
+      border: 0;
+      background: transparent;
+      font: inherit;
+      font-weight: 600;
+      color: var(--ink);
+    }
+    /* From 1024px the search and filters stay on one line beside the title: the search takes what room is left. */
+    @media (min-width: 64rem) {
+      .page-header-end:has(.dispatch-controls),
+      .page-header-controls:has(.dispatch-controls),
+      .dispatch-controls {
+        flex-wrap: nowrap;
+      }
+      .page-header:has(.dispatch-controls) .page-header-lead {
+        flex: 0 0 auto;
+      }
+      .page-header-end:has(.dispatch-controls) {
+        flex: 1 1 0%;
+      }
+      .page-header-controls:has(.dispatch-controls) {
+        flex: 1 1 auto;
+        justify-content: flex-end;
+      }
+      .dispatch-controls {
+        flex: 1 1 auto;
+        justify-content: flex-end;
+        min-width: 0;
+      }
+      .dispatch-q {
+        flex: 1 1 8rem;
+        width: auto;
+        min-width: 7rem;
+        max-width: 20rem;
+      }
+      .dispatch-pick {
+        flex: none;
+      }
+    }
+    /* Phones and tablets: the controls get their own row under the title. */
+    @media (max-width: 63.98rem) {
+      .dispatch-controls {
+        width: 100%;
+      }
+      .dispatch-q {
+        flex: 1 1 100%;
+        width: auto;
+      }
+    }
+
+    /* On the map: layer buttons along the bottom, expand and locate beside the zoom. */
+    .dispatch-layers {
+      position: absolute;
+      left: 50%;
+      bottom: 22px;
+      z-index: 2;
+      display: inline-flex;
+      gap: 2px;
+      padding: 4px;
+      transform: translateX(-50%);
+      border-radius: 14px;
+      background: var(--surface);
+      box-shadow: 0 2px 12px rgb(19 33 46 / 16%);
+    }
+    html:not(.js) .dispatch-layers,
+    html:not(.js) .dispatch-fab {
+      display: none;
+    }
+    .dispatch-layer {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 40px;
+      padding: 0 12px;
+      border: 0;
+      border-radius: 10px;
+      background: transparent;
+      font: inherit;
+      font-size: 13px;
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .dispatch-layer[aria-pressed='true'] {
+      background: var(--info-bg);
+      color: var(--ink);
+    }
+    .dispatch-fab {
+      position: absolute;
+      z-index: 2;
+      display: grid;
+      width: 44px;
+      height: 44px;
+      place-items: center;
+      border: 0;
+      border-radius: 50%;
+      background: var(--surface);
+      box-shadow: 0 2px 12px rgb(19 33 46 / 16%);
+      color: var(--ink);
+      cursor: pointer;
+    }
+    .dispatch-expand {
+      top: 12px;
+      right: 12px;
+    }
+    .dispatch-locate {
+      bottom: 22px;
+      left: 12px;
+    }
+    /* MapLibre's own stylesheet is outside the layers, so these need !important to move the zoom buttons below the expand button. */
+    .dispatch-mapcard .maplibregl-ctrl-top-right {
+      top: 64px !important;
+    }
+    .dispatch-mapcard .maplibregl-ctrl-top-right .maplibregl-ctrl {
+      margin: 0 12px 0 0 !important;
+    }
+    .dispatch-mapcard .maplibregl-ctrl-group {
+      border-radius: 22px;
+    }
+    .dispatch-mapcard.is-expanded {
+      position: fixed;
+      inset: 12px;
+      z-index: 60;
+      height: auto;
+      max-height: none;
+    }
+    .dispatch-mapcard.is-expanded .dispatch-stage {
+      position: absolute;
+      inset: 0;
+      height: auto;
+      min-height: 0;
+      max-height: none;
+    }
+    body.dispatch-map-open {
+      overflow: hidden;
+    }
+    .dispatch-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .dispatch-foot {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px 16px;
+      margin-top: 8px;
+    }
+    .dispatch-foot .dispatch-more {
+      margin-top: 0;
+    }
+    .dispatch-foot .dispatch-more[open] {
+      flex-basis: 100%;
+    }
+    .dispatch-showing {
+      margin: 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .dispatch-more > summary {
+      display: inline-flex;
+      align-items: center;
+      min-height: 40px;
+      padding: 0 16px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      list-style: none;
+    }
+    .glance-tile.is-warm::after {
+      content: '\2197';
+      margin-left: auto;
+      font-size: 14px;
+      color: #a4510a;
+    }
+    @media (max-width: 639.98px) {
+      .dispatch-go-cell {
+        display: none;
+      }
+      .glance-tile-value {
+        font-size: 26px;
+      }
+    }
+
     /* Dashboard page */
     /* Two columns from 1024px (Tailwind classes on the page); see the count strip block for the rest. */
     .dashboard-desk > * {
@@ -7311,6 +7940,348 @@
       font-size: 11px;
       font-weight: 400;
       color: var(--muted);
+    }
+  }
+}
+
+/* === Tickets page: soft cards (pages/ticket-list.ts) ===
+   One bar with the stage tabs and compact filters, the new Maintenance Requests as cards
+   with their photos, and the open Tickets as a grid of cards with a stage bar. The Archive
+   keeps its table. */
+@layer utilities {
+  @layer app {
+    .tickets-page {
+      display: grid;
+      gap: 16px;
+    }
+    .tk-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px 16px;
+      padding: 8px 12px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      box-shadow: var(--shadow-soft);
+    }
+    .tk-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 2px;
+    }
+    .tk-tab {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 36px;
+      padding: 0 10px;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--muted);
+      text-decoration: none;
+      border-radius: 999px;
+    }
+    .tk-tab:hover {
+      background: var(--page);
+      color: var(--ink);
+    }
+    .tk-tab[aria-current='page'] {
+      color: var(--ink);
+      background: var(--page);
+      box-shadow: inset 0 0 0 1px var(--line);
+      font-weight: 600;
+    }
+    .tk-tab-count {
+      min-width: 22px;
+      padding: 0 6px;
+      font-size: 12px;
+      line-height: 20px;
+      text-align: center;
+      color: var(--ink);
+      background: var(--page);
+      border-radius: 999px;
+    }
+    .tk-tab.is-ready .tk-tab-count {
+      background: var(--hivis);
+    }
+    .tk-bar .filter-bar.is-compact {
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 12px;
+      margin-left: auto;
+    }
+    .filter-bar.is-compact .filter-bar-field {
+      flex-direction: row;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+    /* The select says what it is in its first option ("Any Urgency"), so its label is for screen readers. */
+    .filter-bar.is-compact .filter-bar-label {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+    .filter-bar.is-compact select,
+    .filter-bar.is-compact .combobox-input {
+      width: 8.5rem;
+    }
+    .filter-bar.is-compact .filter-bar-search {
+      min-width: 0;
+    }
+    .tk-clear {
+      font-size: 14px;
+    }
+    .tk-section-note {
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .tickets-page .section-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    /* New Maintenance Requests */
+    .tk-request {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 16px;
+      padding: 12px;
+      background: #dbeaf7;
+      border-radius: 12px;
+    }
+    .tk-photos {
+      display: flex;
+      gap: 6px;
+    }
+    .tk-photo {
+      position: relative;
+      display: block;
+      width: 64px;
+      height: 64px;
+      overflow: hidden;
+      background: var(--surface);
+      border-radius: 8px;
+    }
+    .tk-photo img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .tk-photo-flag {
+      position: absolute;
+      left: 4px;
+      bottom: 4px;
+      padding: 0 6px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--ink);
+      background: var(--hivis);
+      border-radius: 999px;
+    }
+    .tk-photo-more {
+      display: grid;
+      place-items: center;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .tk-photos > .issue-thumb-none {
+      width: 64px;
+      height: 64px;
+      background: var(--surface);
+      border-radius: 8px;
+    }
+    .tk-request-main {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+    }
+    .tk-request-title {
+      font-weight: 600;
+      color: var(--ink);
+      text-decoration: none;
+    }
+    .tk-request-title:hover {
+      text-decoration: underline;
+    }
+    .tk-request-address,
+    .tk-card-address {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin: 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .tk-card-address a {
+      color: inherit;
+      text-decoration: none;
+    }
+    .tk-card-address a:hover {
+      text-decoration: underline;
+    }
+    .tk-request-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 6px;
+    }
+    .tk-request-meta {
+      margin: 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .tk-request-actions,
+    .tk-card-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    /* Open Tickets */
+    .tk-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
+      gap: 12px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .tk-card {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-width: 0;
+      padding: 12px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+    .tk-card-photo {
+      display: block;
+      height: 96px;
+      overflow: hidden;
+      background: var(--page);
+      border-radius: 8px;
+    }
+    .tk-card-photo img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .tk-card-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px 8px;
+    }
+    .tk-card-number {
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .tk-card-urgency {
+      display: inline-flex;
+      gap: 4px;
+      margin-left: auto;
+    }
+    .tk-facts {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin: 0;
+    }
+    .tk-facts > div {
+      padding: 6px 10px;
+      background: var(--page);
+      border-radius: 8px;
+    }
+    .tk-facts dt {
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .tk-facts dd {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .tk-card-issue {
+      font-weight: 500;
+      color: var(--ink);
+      text-decoration: none;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .tk-card-issue:hover {
+      text-decoration: underline;
+    }
+    .tk-stage {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px 8px;
+      margin-top: auto;
+    }
+    .tk-stage-label {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .tk-stage .stage-segs i {
+      width: 18px;
+    }
+    .tk-stage-name {
+      margin-left: auto;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .tk-card-actions {
+      flex-wrap: nowrap;
+    }
+    .tk-legend {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px 16px;
+      margin: 16px 0 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .tk-legend-label {
+      font-weight: 600;
+    }
+    .tk-legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .tk-legend-item i {
+      width: 14px;
+      height: 8px;
+      background: var(--sc);
+      border-radius: 3px;
+    }
+    @media (max-width: 39.99rem) {
+      .tk-bar .filter-bar.is-compact {
+        width: 100%;
+        margin-left: 0;
+      }
+      .filter-bar.is-compact .filter-bar-field {
+        flex: 1 1 8rem;
+      }
+      .filter-bar.is-compact select,
+      .filter-bar.is-compact .combobox-input {
+        width: 100%;
+      }
+      .tk-request {
+        grid-template-columns: minmax(0, 1fr);
+        align-items: start;
+      }
     }
   }
 }
