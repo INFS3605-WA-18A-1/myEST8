@@ -4448,9 +4448,12 @@
 
     /* ----- Links to records (ui.ts entityLink, rowLink, contactLink): what they lead to
        shows in their shape, not in an underline. */
+    /* An icon that leads text which may wrap (an address chip, a contact, a card's address)
+       sits on the first line, not between the lines: the row aligns to the top and the 16px
+       icon moves down by half of what the line is taller than it. */
     .entity-link {
       display: inline-flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 5px;
       max-width: 100%;
       padding: 2px 9px 2px 7px;
@@ -4463,6 +4466,11 @@
       line-height: 1.35;
       text-decoration: none;
       vertical-align: middle;
+    }
+    .entity-link > svg,
+    .contact-link > svg,
+    .tk-card-address > svg {
+      margin-block-start: calc((1lh - 16px) / 2);
     }
     .entity-link > svg {
       flex: none;
@@ -4489,7 +4497,7 @@
     }
     .contact-link {
       display: inline-flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 6px;
       color: var(--action);
       text-decoration: none;
@@ -5342,10 +5350,12 @@
       color: var(--action);
       text-decoration: underline;
     }
+    /* The 20px mark centres on the name's first line (14px at 1.3), so it sits 0.9px above it. */
     .setup-area-mark {
-      display: inline-flex;
+      display: flex;
+      align-self: start;
       grid-row: span 2;
-      padding-top: 1px;
+      margin-top: calc((14px * 1.3 - 20px) / 2);
     }
     .setup-area.is-done .setup-area-mark {
       color: var(--done);
@@ -7660,8 +7670,12 @@
       display: none !important;
     }
     /* The address in the Properties table: a house in a rounded square, coloured by the worst Urgency. */
+    .dispatch-stack .dispatch-address .entity-link {
+      align-items: center;
+    }
     .dispatch-stack .dispatch-address .entity-link svg {
       flex: none;
+      margin-block-start: 0;
       width: 34px !important;
       height: 34px !important;
       padding: 8px;
@@ -7883,6 +7897,7 @@
       background: transparent;
       font: inherit;
       font-size: 13px;
+      white-space: nowrap;
       color: var(--muted);
       cursor: pointer;
     }
@@ -8194,9 +8209,13 @@
       height: 28px;
       font-size: 11px;
       font-weight: 700;
+      line-height: 1;
       color: var(--surface);
       background: var(--ink);
       border-radius: 50%;
+      /* Initials are capitals: centre the cap height, not the line box, whose descender
+         space would leave them 1px high. Without text-box the 1px stays. */
+      text-box: trim-both cap alphabetic;
     }
     .ticket-sub-link {
       color: inherit;
@@ -8869,7 +8888,7 @@
     .tk-request-address,
     .tk-card-address {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 4px;
       margin: 0;
       font-size: 13px;
@@ -9466,36 +9485,102 @@
     }
 
     /* Profiles: households on the left, Tradies in their own box. The owner tab sits on the card's top edge. */
+
+    /* Search: one field with a magnifier inside, sent with Enter; Clear appears while a search is on. */
     .profiles-search {
       display: flex;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
       align-items: center;
       gap: 8px;
       min-width: 0;
       max-width: 100%;
     }
-    .profiles-search label {
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--muted);
-    }
-    .profiles-search input {
-      flex: 1 1 10rem;
-      width: auto;
+    .profiles-search-field {
+      display: flex;
+      flex: 1 1 13rem;
+      align-items: center;
+      gap: 8px;
       min-width: 0;
       min-height: 36px;
-      padding: 6px 10px;
+      padding: 0 10px;
       border: 1px solid var(--control);
       border-radius: 6px;
       background: var(--surface);
+      color: var(--muted);
+      cursor: text;
+    }
+    .profiles-search-field:focus-within {
+      outline: 2px solid var(--action);
+      outline-offset: 2px;
+    }
+    .profiles-search-field input {
+      flex: 1;
+      width: 100%;
+      min-width: 0;
+      padding: 0;
+      border: 0;
+      background: transparent;
       color: var(--ink);
       font: inherit;
+      font-size: 14px;
+    }
+    .profiles-search-field input:focus {
+      outline: none;
     }
     @media (max-width: 40rem), (pointer: coarse) {
-      .profiles-search input {
+      .profiles-search-field {
         min-height: 44px;
       }
+      .profiles-search-field input {
+        font-size: 16px;
+      }
     }
+
+    /* Hover and press fills on this page are squircles, inset from the card's edges: a row
+       reads as one target without becoming a full-bleed stripe. Where corner-shape is not
+       supported the same box is a 10px rounded rectangle. Cards keep their 8px radius, so
+       shape still says what a thing is. */
+    .add-menu-panel a,
+    .household-owner > a:not(.household-waiting),
+    .household-person,
+    .household-ticket,
+    .tradie-rows > li,
+    .unlinked-list > li {
+      border-radius: 10px;
+      transition: background-color var(--dur-fast) var(--ease-out);
+    }
+    @supports (corner-shape: squircle) {
+      .add-menu-panel a,
+      .household-owner > a:not(.household-waiting),
+      .household-person,
+      .household-ticket,
+      .tradie-rows > li,
+      .unlinked-list > li {
+        border-radius: 14px;
+        corner-shape: squircle;
+      }
+    }
+    .add-menu-panel a:hover,
+    .household-owner > a:not(.household-waiting):hover,
+    .household-person:hover,
+    .household-ticket:hover,
+    .tradie-rows > li:hover,
+    .unlinked-list > li:hover {
+      background: var(--page);
+    }
+    .add-menu-panel a:active,
+    .household-owner > a:not(.household-waiting):active,
+    .household-person:has(> a:active),
+    .household-ticket:active,
+    .tradie-rows > li:has(> a:active),
+    .unlinked-list > li:has(> a:active) {
+      background: var(--line);
+    }
+    .household-people > li.is-quiet .household-person:hover {
+      background: transparent;
+    }
+
+    /* Add profile: one target that looks split, the label with a plus, then a chevron behind a hairline. */
     .add-menu {
       position: relative;
     }
@@ -9505,7 +9590,6 @@
     .add-menu > summary::-webkit-details-marker {
       display: none;
     }
-    /* One target that looks split: the label with a plus, then a chevron behind a hairline. */
     .add-menu-button {
       padding-inline: 0;
       gap: 0;
@@ -9529,6 +9613,9 @@
     .add-menu[open] .add-menu-caret svg {
       rotate: 180deg;
     }
+    .add-menu-caret svg {
+      transition: rotate var(--dur-base) var(--ease-spring);
+    }
     .add-menu-panel {
       position: absolute;
       top: calc(100% + 4px);
@@ -9536,38 +9623,34 @@
       z-index: 30;
       display: flex;
       flex-direction: column;
+      gap: 2px;
       min-width: 12rem;
-      padding: 8px;
+      padding: 6px;
       background: var(--surface);
       border: 1px solid var(--line);
       border-radius: 8px;
       box-shadow: var(--shadow-lift);
-    }
-    .add-menu-caret svg {
-      transition: rotate var(--dur-base) var(--ease-spring);
     }
     .add-menu-panel a {
       display: flex;
       align-items: center;
       min-height: 36px;
       padding: 8px 12px;
-      border-radius: 4px;
+      color: var(--ink);
       font-weight: 500;
       text-decoration: none;
-      transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
     }
     @media (max-width: 40rem), (pointer: coarse) {
       .add-menu-panel a {
         min-height: 44px;
       }
     }
-    .add-menu-panel a:hover {
-      background: var(--page);
-    }
+
+    /* The board: households take two thirds from 1024px, Tradies the rest. */
     .profiles-board {
       display: flex;
       flex-direction: column;
-      gap: 24px;
+      gap: 32px;
       min-width: 0;
     }
     @media (min-width: 1024px) {
@@ -9580,20 +9663,30 @@
     }
     .profiles-main,
     .profiles-households,
-    .profiles-tradies,
-    .household-list {
+    .profiles-tradies {
       display: flex;
       flex-direction: column;
       gap: 16px;
       min-width: 0;
     }
-    .profiles-households {
-      padding-top: 14px;
+    .profiles-main {
+      gap: 32px;
     }
+    /* 28px between cards leaves the next Owner tab, which rises 12px above its card, clear air. */
+    .household-list {
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+      min-width: 0;
+      padding-top: 12px;
+    }
+
+    /* A household: the Owner's tab, then the place and its people beside what is wrong there. */
     .household {
       position: relative;
+      container-type: inline-size;
       min-width: 0;
-      padding: 22px 16px 12px;
+      padding: 24px 12px 12px;
       background: var(--surface);
       border-radius: 8px;
       box-shadow: var(--shadow-soft);
@@ -9601,14 +9694,14 @@
     .household-owner {
       position: absolute;
       top: 0;
-      left: 16px;
+      left: 20px;
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 8px;
-      max-width: calc(100% - 32px);
+      gap: 6px;
+      max-width: calc(100% - 40px);
       margin: 0;
-      padding: 2px 10px;
+      padding: 2px 4px 2px 10px;
       background: var(--surface);
       border: 1px solid var(--line);
       border-radius: 4px;
@@ -9616,11 +9709,11 @@
       font-weight: 500;
       transform: translateY(-50%);
     }
-    .household-count {
-      color: var(--muted);
-      font-size: 12px;
+    .household-owner > a:not(.household-waiting) {
+      padding: 1px 6px;
     }
     .household-waiting {
+      margin-right: 2px;
       padding: 1px 6px;
       border-radius: 4px;
       background: var(--hivis);
@@ -9633,16 +9726,27 @@
       color: var(--ink);
       text-decoration: underline;
     }
-    .household-title {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: baseline;
-      justify-content: space-between;
-      gap: 4px 12px;
+    .household-body {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 12px;
+      min-width: 0;
+    }
+    /* Wide enough for both: the people on the left, the open Tickets in a column on the right. */
+    @container (min-width: 36rem) {
+      .household-body {
+        grid-template-columns: minmax(0, 5fr) minmax(16rem, 6fr);
+        align-items: start;
+        gap: 24px;
+      }
+    }
+    .household-place,
+    .household-tickets {
       min-width: 0;
     }
     .household-address {
       margin: 0;
+      padding: 0 8px;
       min-width: 0;
       font-family: var(--font-head);
       font-size: 16px;
@@ -9652,7 +9756,7 @@
     /* Record links are Night. Harbour stays on actions: the count sentence, See all, Add a Tenant, Add profile. */
     .household-address a,
     .household-owner > a:not(.household-waiting),
-    .household-people a:not(.btn),
+    .household-person > a,
     .household-manager a,
     .tradie-rows > li > a,
     .unlinked-list a {
@@ -9665,14 +9769,19 @@
       font-family: inherit;
       font-weight: inherit;
     }
+    /* A link that is the whole row's target fills the row on hover (above); the address and
+       the Building Manager are links in a line, so they underline. */
     .household-address a:hover,
+    .household-manager a:hover {
+      color: var(--ink);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
     .household-owner > a:not(.household-waiting):hover,
-    .household-people a:not(.btn):hover,
-    .household-manager a:hover,
+    .household-person > a:hover,
     .tradie-rows > li > a:hover,
     .unlinked-list a:hover {
       color: var(--ink);
-      text-decoration: underline;
     }
     .household-suburb {
       font-family: var(--font-body);
@@ -9680,28 +9789,18 @@
       font-weight: 400;
       color: var(--muted);
     }
-    .household-meta {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 8px;
-      margin: 0;
-      color: var(--muted);
-      font-size: 13px;
-    }
+
+    /* Tenants hang off the address on 1px Line connectors drawn as borders. The stub runs
+       into the row's fill, so the branch leads to the person. */
     .household-people {
       list-style: none;
-      margin: 4px 0 0;
-      padding: 0 0 0 4px;
+      margin: 6px 0 0 16px;
+      padding: 0;
     }
     .household-people > li {
       position: relative;
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 8px;
       min-width: 0;
-      padding: 6px 0 6px 16px;
+      padding-left: 12px;
     }
     .household-people > li::before {
       content: '';
@@ -9723,17 +9822,29 @@
       bottom: auto;
       height: 50%;
     }
-    .household-people > li:hover,
-    .tradie-rows > li:hover {
-      background: var(--page);
+    .household-person {
+      position: relative;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px 8px;
+      min-width: 0;
+      min-height: 34px;
+      padding: 4px 8px;
+    }
+    .household-count,
+    .household-calm,
+    .household-more {
+      color: var(--muted);
+      font-size: 13px;
     }
     .household-manager {
       display: flex;
       flex-wrap: wrap;
       align-items: baseline;
       gap: 8px;
-      margin: 8px 0 0;
-      padding-top: 8px;
+      margin: 8px 8px 0;
+      padding-top: 10px;
       border-top: 1px solid var(--line);
       font-size: 14px;
     }
@@ -9743,6 +9854,60 @@
     }
     .household-role {
       font-size: 13px;
+    }
+
+    /* The open Tickets: one row each, the Ticket's words then its Urgency at the end. */
+    .household-tickets ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .household-ticket {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      min-width: 0;
+      min-height: 34px;
+      padding: 4px 8px;
+      color: var(--ink);
+      font-size: 13px;
+      text-decoration: none;
+    }
+    /* The icon and the badge sit on the first line of words that may take two. */
+    .household-ticket > svg {
+      margin-block-start: calc((1lh - 16px) / 2);
+      color: var(--action);
+    }
+    .household-ticket-title {
+      flex: 1;
+      min-width: 0;
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      overflow: hidden;
+      line-height: 1.45;
+    }
+    .household-ticket .badge {
+      flex: none;
+    }
+    .household-calm {
+      margin: 0;
+      padding: 7px 8px;
+    }
+    .household-more {
+      display: inline-block;
+      margin: 2px 8px 0;
+      color: var(--action);
+    }
+
+    /* Tradies: grouped by their first Trade, one row each, the rating at the end. */
+    .tradies-note {
+      margin: -4px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .profiles-tradies .section-body {
+      gap: 16px;
     }
     .tradie-group-title,
     .unlinked-title {
@@ -9754,32 +9919,27 @@
     .tradie-rows,
     .unlinked-list {
       list-style: none;
-      margin: 8px 0 0;
+      margin: 4px -8px 0;
       padding: 0;
     }
     .tradie-rows > li {
+      position: relative;
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
       column-gap: 12px;
       row-gap: 2px;
       align-items: baseline;
       min-width: 0;
-      padding: 8px 0;
-      border-top: 1px solid var(--line);
+      padding: 7px 8px;
     }
     .unlinked-list > li {
+      position: relative;
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       gap: 8px;
       min-width: 0;
-      padding: 8px 0;
-      border-top: 1px solid var(--line);
-    }
-    .tradie-rows > li:first-child,
-    .unlinked-list > li:first-child {
-      border-top: 0;
-      padding-top: 0;
+      padding: 7px 8px;
     }
     .tradie-rows > li > a {
       grid-column: 1;
@@ -9806,40 +9966,78 @@
     .profiles-unlinked .section-body {
       gap: 16px;
     }
+
+    /* The name is the row's link and covers the row, so the whole fill is one target; the
+       other things in the row (a count, a chip, Add a Tenant) sit above it. */
+    .household-person > a::after,
+    .tradie-rows > li > a::after,
+    .unlinked-list > li > a::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+    }
+    .household-person > :not(a),
+    .tradie-rows > li > :not(a) {
+      position: relative;
+      z-index: 1;
+    }
+    .household-person > a:focus-visible,
+    .tradie-rows > li > a:focus-visible,
+    .unlinked-list > li > a:focus-visible {
+      outline: none;
+    }
+    .household-person > a:focus-visible::after,
+    .tradie-rows > li > a:focus-visible::after,
+    .unlinked-list > li > a:focus-visible::after {
+      outline: 2px solid var(--action);
+      outline-offset: 0;
+    }
+
+    /* Phones: the Owner is the card's first row, every row is 44px, the Tickets follow the people. */
     @media (max-width: 40rem), (pointer: coarse) {
       .household {
-        padding-top: 12px;
+        padding-top: 8px;
+      }
+      .household-list {
+        gap: 16px;
+        padding-top: 0;
       }
       .household-owner {
         position: static;
         transform: none;
         max-width: none;
-        padding: 0;
+        margin: 0 0 4px;
+        padding: 0 0 0 8px;
         background: transparent;
         border: 0;
       }
-      .household-owner > a:not(.household-waiting),
+      .household-owner > a:not(.household-waiting) {
+        display: inline-flex;
+        align-items: center;
+        min-height: 44px;
+        padding-inline: 8px;
+      }
       .household-address a,
       .household-manager a {
         display: inline-flex;
         align-items: center;
         min-height: 44px;
       }
-      .household-people > li,
-      .tradie-rows > li {
+      .household-person,
+      .household-ticket,
+      .tradie-rows > li,
+      .unlinked-list > li {
         min-height: 44px;
-        position: relative;
       }
-      .household-people > li > a::after,
-      .tradie-rows > li > a::after {
-        content: '';
-        position: absolute;
-        inset: 0;
+      .household-tickets,
+      .household-calm {
+        padding-top: 4px;
+        border-top: 1px solid var(--line);
+        margin-inline: 8px;
       }
-      .household-people > li > :not(a),
-      .tradie-rows > li > :not(a) {
-        position: relative;
-        z-index: 1;
+      .household-tickets ul {
+        margin-inline: -8px;
       }
     }
   }

@@ -809,6 +809,8 @@ export function createViews(ctx: Context) {
       const managerById = new Map(buildingManagers.map((manager) => [manager.id, manager]));
       const waitingByOwner = new Map(waiting.map((row) => [row.owner_id, Number(row.n)]));
       const urgencyRank = (urgency: Urgency | null) => (urgency === null ? URGENCIES.length : URGENCIES.indexOf(urgency));
+      const shownIds = new Set(shown.map((property) => property.id));
+      const openIssues = await tickets.issuesWithUnread(openTickets.filter((ticket) => shownIds.has(ticket.propertyId)).map((ticket) => ticket.issueId));
 
       const households = shown
         .map((property) => {
@@ -820,6 +822,11 @@ export function createViews(ctx: Context) {
             suburb: property.suburb,
             openTickets: propertyTickets.length,
             worstUrgency: URGENCIES.find((urgency) => propertyTickets.some((ticket) => ticket.urgency === urgency)) ?? null,
+            // What the open Tickets are about, High first, so the household shows what is wrong there.
+            tickets: propertyTickets.map((ticket) => {
+              const issue = openIssues.get(ticket.issueId);
+              return { id: ticket.id, title: issue ? (issue.summary ?? issue.description) : `Ticket #${ticket.id}`, urgency: ticket.urgency };
+            }),
             owner: {
               id: property.ownerId,
               name: ownerById.get(property.ownerId)?.name ?? '',

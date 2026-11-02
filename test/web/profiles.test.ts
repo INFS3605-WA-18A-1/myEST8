@@ -37,6 +37,10 @@ describe('Profiles', () => {
     expect(king).toContain('href="/approvals"');
     expect(king).toContain('household-waiting');
     expect(king).toContain('1 open Ticket');
+    // The household lists its open Tickets, each a row to the Ticket with its Urgency.
+    expect(king).toContain(`class="household-ticket" href="/tickets/${tap.ticketId}"`);
+    expect(king).toContain('urgency-badge');
+    expect(ocean).not.toContain('No open Tickets');
     expect(king).toContain(`href="/tenants/${w.ids.tom}"`);
     expect(king).toContain(`href="/tenants/${w.ids.hana}"`);
     expect(king.indexOf(`href="/tenants/${w.ids.hana}"`)).toBeLessThan(king.indexOf(`href="/tenants/${w.ids.tom}"`));
@@ -79,6 +83,8 @@ describe('Profiles', () => {
     const searched = await (await w.get('/profiles?filter=all&q=Bondi', cookie)).text();
     const subtitle = searched.slice(searched.indexOf('page-subtitle'), searched.indexOf('</p>', searched.indexOf('page-subtitle')));
     expect(subtitle).not.toContain('<a ');
+    expect(subtitle).toContain('Matching “Bondi”');
+    expect(visible(await (await w.get('/profiles?q=zzzz', cookie)).text())).toContain('Nothing matches “zzzz”');
     const byAddress = visible(searched);
     expect(byAddress).toContain(OCEAN_AVE);
     expect(byAddress).not.toContain(KING_ST);
