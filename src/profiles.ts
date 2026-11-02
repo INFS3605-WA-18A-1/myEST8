@@ -80,7 +80,10 @@ export const MIN_PASSWORD_LENGTH = 10;
 
 const CHANNEL_ORDER: ChannelType[] = ['sms', 'whatsapp', 'email'];
 
-/** How many Properties, and how many Tradies, one geocodeMissing call looks up. */
+/**
+ * How many Properties, and how many Tradies, one geocodeMissing call looks up.
+ * A Tradie with a Google listing and no address also costs one Places details call.
+ */
 const MAX_GEOCODES_AT_ONCE = 10;
 
 /** Letters and digits that can't be mistaken for each other when read off a screen. */
@@ -322,6 +325,15 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
   async function locate(input: Pick<NewProperty, 'address' | 'location'>) {
     const given = input.location;
     return given && inAustralia(given) ? given : given === null ? null : await geocode(input.address);
+  }
+
+  /**
+   * Where an address sits, kept only when the point is in Australia, as a Property's pin is.
+   * A miss, a failed lookup or a point outside the country is null, so it can be tried again.
+   */
+  async function placeAddress(address: string) {
+    const point = await locate({ address });
+    return point && inAustralia(point) ? point : null;
   }
 
   return {
@@ -676,22 +688,24 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
     },
 
     /**
-     * Sets where a Tradie works from and looks it up on the map. The address is kept
-     * even when the lookup finds nothing or fails: geocodeMissing tries it again.
-     * A blank address clears the address and the location.
+     * Sets where a Tradie works from and looks it up on the map, the same way a Property's
+     * address is. The address is kept even when the lookup finds nothing, fails, or lands
+     * outside Australia: geocodeMissing tries it again. A blank address clears both.
      */
     async setTradieAddress(agencyId: number, tradieId: number, address: string) {
       await this.personInAgency(agencyId, tradieId, 'tradie');
       const trimmed = address.trim();
-      const location = trimmed ? await geocode(trimmed) : null;
+      const location = trimmed ? await placeAddress(trimmed) : null;
       await run(db, 'UPDATE people SET business_address = ?, lat = ?, lng = ? WHERE id = ?', trimmed || null, location?.lat ?? null, location?.lng ?? null, tradieId);
     },
 
     /**
-     * Tries the map lookup again for the Agency's Properties without a location and
-     * its Tradies with an address but no location, at most MAX_GEOCODES_AT_ONCE of
-     * each so opening a page stays quick. A lookup that finds nothing or fails leaves
-     * the record as it was. Returns how many were placed.
+     * Tries the map lookup again for the Agency's Properties without a location, and for
+     * its Tradies who have an address but no location or a Google listing and no address,
+     * at most MAX_GEOCODES_AT_ONCE of each so a press stays quick. A Tradie with a listing
+     * and no address is filled from that listing first, then geocoded; a Places failure is
+     * skipped and tried next time. A lookup that finds nothing or fails leaves a record
+     * that already had an address as it was. Returns how many were placed.
      */
     async geocodeMissing(agencyId: number): Promise<number> {
       const properties = await all<{ id: number; address: string }>(
@@ -700,21 +714,46 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
         agencyId,
         MAX_GEOCODES_AT_ONCE,
       );
-      const tradies = await all<{ id: number; address: string }>(
+      const tradies = await all<{ id: number; address: string | null; google_place_id: string | null }>(
         db,
-        `SELECT id, business_address AS address FROM people
-         WHERE agency_id = ? AND role = 'tradie' AND removed_at IS NULL AND business_address IS NOT NULL AND (lat IS NULL OR lng IS NULL) ORDER BY id LIMIT ?`,
+        `SELECT id, business_address AS address, google_place_id FROM people
+         WHERE agency_id = ? AND role = 'tradie' AND removed_at IS NULL AND (lat IS NULL OR lng IS NULL)
+           AND (business_address IS NOT NULL OR google_place_id IS NOT NULL)
+         ORDER BY id LIMIT ?`,
         agencyId,
         MAX_GEOCODES_AT_ONCE,
       );
-      const found = await Promise.all([
-        ...properties.map(async ({ id, address }) => ({ table: 'properties', id, location: await geocode(address) })),
-        ...tradies.map(async ({ id, address }) => ({ table: 'people', id, location: await geocode(address) })),
-      ]);
+      const propertyPoints = await Promise.all(properties.map(async ({ id, address }) => ({ id, location: await geocode(address) })));
+      const tradiePoints = await Promise.all(
+        tradies.map(async (row) => {
+          const hadAddress = !!row.address?.trim();
+          let address = row.address?.trim() ?? '';
+          if (!address && row.google_place_id) {
+            try {
+              address = (await ports.places.listingDetails(row.google_place_id)).address.trim();
+            } catch {
+              return null;
+            }
+            if (!address) return null;
+          }
+          if (!address) return null;
+          return { id: row.id, address, hadAddress, location: await placeAddress(address) };
+        }),
+      );
       let placed = 0;
-      for (const { table, id, location } of found) {
+      for (const { id, location } of propertyPoints) {
         if (!location) continue;
-        await run(db, `UPDATE ${table} SET lat = ?, lng = ? WHERE id = ?`, location.lat, location.lng, id);
+        await run(db, 'UPDATE properties SET lat = ?, lng = ? WHERE id = ?', location.lat, location.lng, id);
+        placed++;
+      }
+      for (const row of tradiePoints) {
+        if (!row) continue;
+        if (!row.location) {
+          // The listing's address is worth keeping even when the map lookup misses, so the next press only geocodes.
+          if (!row.hadAddress) await run(db, 'UPDATE people SET business_address = ? WHERE id = ?', row.address, row.id);
+          continue;
+        }
+        await run(db, 'UPDATE people SET business_address = ?, lat = ?, lng = ? WHERE id = ?', row.address, row.location.lat, row.location.lng, row.id);
         placed++;
       }
       return placed;
@@ -777,11 +816,15 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
       await run(db, 'UPDATE people SET google_rating = ?, google_review_count = ? WHERE id = ?', rating, reviewCount, tradieId);
     },
 
-    /** Reads a newly linked Tradie's listing: its rating, as refreshGoogleRating does, and what it says they do (for job fit, ADR 0016). */
-    async readGoogleListing(tradieId: number) {
+    /**
+     * Reads a newly linked Tradie's listing: its rating, as refreshGoogleRating does, and what it
+     * says they do (for job fit, ADR 0016). Returns the listing's address, for the map, or null
+     * when there is no listing or it names no address.
+     */
+    async readGoogleListing(tradieId: number): Promise<string | null> {
       const tradie = await person(tradieId);
-      if (!tradie.googlePlaceId) return;
-      const { rating, reviewCount, types, summary } = await ports.places.listingDetails(tradie.googlePlaceId);
+      if (!tradie.googlePlaceId) return null;
+      const { rating, reviewCount, types, summary, address } = await ports.places.listingDetails(tradie.googlePlaceId);
       await run(
         db,
         'UPDATE people SET google_rating = ?, google_review_count = ?, google_types = ?, google_summary = ? WHERE id = ?',
@@ -791,6 +834,7 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
         summary,
         tradieId,
       );
+      return address.trim() || null;
     },
 
     /** The Trades of a Property's past Tickets, most frequent first. */

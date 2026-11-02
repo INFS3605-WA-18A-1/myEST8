@@ -28,8 +28,9 @@ describe('Property Owners and Building Managers', () => {
     expect(oscar).toContain('No way to reach');
     expect(olivia).not.toContain('No way to reach');
     expect(visible(olivia)).toContain(KING_ST);
-    expect(owners).toContain('action="/setup/owners?from=list"');
-    expect(owners).toContain('id="add-owner"');
+    expect(owners).toContain('href="/owners/new"');
+    expect(owners).not.toContain('id="add-owner"');
+    expect(owners).not.toContain('action="/setup/owners?from=list"');
 
     const managers = await (await w.get('/building-managers', cookie)).text();
     expect(managers).toMatch(/<a href="\/building-managers" class="[^"]*" aria-current="page"/);
@@ -42,7 +43,8 @@ describe('Property Owners and Building Managers', () => {
     expect(barry).not.toContain('No way to reach');
     expect(casey).toContain('No way to reach');
     expect(casey).not.toContain(`href="/properties/`);
-    expect(managers).toContain('action="/setup/building-managers?from=list"');
+    expect(managers).toContain('href="/building-managers/new"');
+    expect(managers).not.toContain('action="/setup/building-managers?from=list"');
   });
 
   test('adding one from the list comes back to the list', async () => {

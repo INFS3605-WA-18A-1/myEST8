@@ -1,6 +1,7 @@
-// Property Owners (/owners) and Building Managers (/building-managers): the lists, each
-// with the Add form Setup uses, and a profile at /:id with a pen to edit the name,
-// mobile and email. Removing one is refused while they own or look after a Property.
+// Property Owners (/owners) and Building Managers (/building-managers): the lists,
+// an Add page at /new (the form still posts to /setup), and a profile at /:id with
+// a pen to edit the name, mobile and email. Above the facts, a read says what their
+// record adds up to. Removing one is refused while they own or look after a Property.
 
 import { Hono, type Context } from 'hono';
 import { html } from 'hono/html';
@@ -25,6 +26,7 @@ import {
   linkButton,
   page,
   postButton,
+  profileRead,
   rowLink,
   section,
   statusBadge,
@@ -32,7 +34,7 @@ import {
   type Html,
   type NavKey,
 } from '../ui.ts';
-import { addPersonForm, contactFields, contactFrom, fieldGrid, saveDetails, type DetailsEdit } from './onboarding-forms.ts';
+import { addPersonForm, contactFields, contactFrom, fieldGrid, saveDetails, type DetailsEdit, type Errors, type Values } from './onboarding-forms.ts';
 
 type Person = Awaited<ReturnType<PropertyManagerActions['people']>>[number];
 type Property = Awaited<ReturnType<PropertyManagerActions['properties']>>[number];
@@ -47,7 +49,6 @@ type Kind = {
   column: string;
   formId: string;
   formKey: 'owner' | 'building-manager';
-  anchor: string;
   submit: string;
   empty: string;
   removeLabel: string;
@@ -69,7 +70,6 @@ const OWNER: Kind = {
   column: 'Property Owner',
   formId: 'owner',
   formKey: 'owner',
-  anchor: 'add-owner',
   submit: 'Add Property Owner',
   empty: 'No Property Owners yet. Add the people who own your Properties.',
   removeLabel: 'Remove Property Owner',
@@ -89,7 +89,6 @@ const BUILDING_MANAGER: Kind = {
   column: 'Building Manager',
   formId: 'building-manager',
   formKey: 'building-manager',
-  anchor: 'add-building-manager',
   submit: 'Add Building Manager',
   empty: 'No Building Managers yet. Add one for each strata Property.',
   removeLabel: 'Remove Building Manager',
@@ -116,7 +115,6 @@ function listPages(kind: Kind) {
   pages.get('/', async (c) => {
     const { actions, pm } = c.var;
     const flash = flashFrom(c.req.url);
-    const refused = flash?.kind === 'error' && c.req.query('form') === kind.formKey ? alert(flash.message, 'error') : html``;
     const [people, properties, channels] = await Promise.all([actions.people(kind.role), actions.properties(), actions.channels()]);
     const sms = channels.some((ch) => ch.type === 'sms');
     return c.html(
@@ -127,11 +125,13 @@ function listPages(kind: Kind) {
         flash,
         shell: shellInfo(c),
         subtitle: people.length ? `${people.length} ${people.length === 1 ? kind.singular : kind.title}, by name.` : undefined,
-        actions: linkButton(`Add a ${kind.singular}`, `#${kind.anchor}`, { variant: 'primary', size: 'sm' }),
-        body: html`${list(kind, people, properties, sms)} ${addForm(kind, refused)}`,
+        actions: linkButton(`Add a ${kind.singular}`, `${kind.path}/new`, { variant: 'primary', size: 'sm' }),
+        body: list(kind, people, properties, sms),
       }),
     );
   });
+
+  pages.get('/new', (c) => addPersonPage(c, kind));
 
   // Refused, the reason shows on the profile, naming the Properties still in their name.
   pages.post('/:id{[0-9]+}/remove', (c) => {
@@ -162,7 +162,7 @@ function unreachable(person: Person, sms: boolean) {
 }
 
 function list(kind: Kind, people: Person[], properties: Property[], sms: boolean): Html {
-  if (!people.length) return emptyState(kind.empty, linkButton(`Add a ${kind.singular}`, `#${kind.anchor}`));
+  if (!people.length) return emptyState(kind.empty, linkButton(`Add a ${kind.singular}`, `${kind.path}/new`));
   return table(
     [kind.column, 'Mobile', 'Email', 'Properties'],
     people.map((person) => {
@@ -180,14 +180,37 @@ function list(kind: Kind, people: Person[], properties: Property[], sms: boolean
   );
 }
 
-function addForm(kind: Kind, refused: Html): Html {
+export type AddPersonRefusal = { message: string; values: Values; errors: Errors };
+
+/** The Add a Property Owner page. */
+export function addOwnerPage(c: Context<WebEnv>, refused?: AddPersonRefusal) {
+  return addPersonPage(c, OWNER, refused);
+}
+
+/** The Add a Building Manager page. */
+export function addBuildingManagerPage(c: Context<WebEnv>, refused?: AddPersonRefusal) {
+  return addPersonPage(c, BUILDING_MANAGER, refused);
+}
+
+/** The Add page. A refused save is this same page, with what was typed and why. */
+function addPersonPage(c: Context<WebEnv>, kind: Kind, refused?: AddPersonRefusal) {
+  const { pm } = c.var;
   const post = kind.role === 'owner' ? '/setup/owners?from=list' : '/setup/building-managers?from=list';
-  return section({
-    id: kind.anchor,
-    title: `Add a ${kind.singular}`,
-    body: html`${refused}
-      ${addPersonForm({ id: kind.formId, action: post, submit: kind.submit })}`,
-  });
+  return c.html(
+    page({
+      title: `Add a ${kind.singular}`,
+      pm,
+      active: kind.nav,
+      shell: shellInfo(c),
+      actions: linkButton(`Back to ${kind.title}`, kind.path, { variant: 'ghost', size: 'sm' }),
+      body: section({
+        title: `Add a ${kind.singular}`,
+        body: html`${refused ? alert(refused.message, 'error') : ''}
+          ${addPersonForm({ id: kind.formId, action: post, submit: kind.submit, values: refused?.values, errors: refused?.errors })}`,
+      }),
+    }),
+    refused ? 400 : 200,
+  );
 }
 
 /** A profile; `refused` is a save of the details that was refused, shown with the form open. */
@@ -225,7 +248,7 @@ async function profilePage(c: Context<WebEnv>, kind: Kind, id: number, refused?:
       flash: flashFrom(c.req.url),
       shell: shellInfo(c),
       actions: html`${removed ? '' : removeButton(kind, person)}${linkButton(`Back to ${kind.title}`, kind.path, { variant: 'ghost', size: 'sm' })}`,
-      body: html`${notice}${facts(kind, person, editing, refused, people)} ${propertiesSection(kind, person)} ${kind.role === 'owner' ? approvalsSection(person, timeZone) : ''}`,
+      body: html`${notice}${profileRead(person.read)}${facts(kind, person, editing, refused, people)} ${propertiesSection(kind, person)} ${kind.role === 'owner' ? approvalsSection(person, timeZone) : ''}`,
     }),
     refused ? 400 : 200,
   );

@@ -103,7 +103,7 @@ describe('Tenants', () => {
 
   test('signed out, the Tenant pages send you to sign in', async () => {
     const w = await webWorld();
-    for (const path of ['/tenants', `/tenants/${w.ids.tom}`]) {
+    for (const path of ['/tenants', '/tenants/new', `/tenants/${w.ids.tom}`]) {
       const res = await w.get(path);
       expect(res.status).toBe(303);
       expect(res.headers.get('location')).toBe(`/login?next=${encodeURIComponent(path)}`);
@@ -150,10 +150,14 @@ describe('adding and removing Tenants', () => {
     const cookie = await w.signIn();
 
     const list = await (await w.get('/tenants', cookie)).text();
-    expect(list).toContain('href="#add-tenant"');
-    expect(list).toContain('id="add-tenant"');
-    expect(list).toContain('action="/setup/tenants"');
-    expect(list).toMatch(new RegExp(`<option value="${w.ids.kingSt}"[^>]*>${KING_ST}</option>`));
+    expect(list).toContain('href="/tenants/new"');
+    expect(list).not.toContain('id="add-tenant"');
+    expect(list).not.toContain('action="/setup/tenants"');
+    const form = await (await w.get('/tenants/new', cookie)).text();
+    expect(form).toContain('Add a Tenant');
+    expect(form).toContain('action="/setup/tenants"');
+    expect(form).toContain('Back to Tenants');
+    expect(form).toMatch(new RegExp(`<option value="${w.ids.kingSt}"[^>]*>${KING_ST}</option>`));
 
     const res = await w.post('/setup/tenants', { name: 'Tina Test', mobile: '0412 000 111', propertyId: w.ids.kingSt, tenancyStart: '2026-09-01' }, cookie);
     expect(res.status).toBe(303);
@@ -168,10 +172,12 @@ describe('adding and removing Tenants', () => {
     const cookie = await w.signIn();
 
     const res = await w.post('/setup/tenants', { name: 'Tina Test', propertyId: w.ids.kingSt, tenancyStart: '2026-09-01' }, cookie);
-    expect(res.headers.get('location')).toMatch(/^\/tenants\?form=tenant&error=/);
-    const page = await (await w.get(res.headers.get('location')!, cookie)).text();
-    const form = page.slice(page.indexOf('id="add-tenant"'));
-    expect(form).toContain('Enter a mobile number or email address');
+    expect(res.status).toBe(400);
+    const page = await res.text();
+    expect(page).toContain('Enter a mobile number or email address');
+    expect(page).toContain('value="Tina Test"');
+    expect(page).toContain('value="2026-09-01"');
+    expect(page).toContain('Back to Tenants');
   });
 
   test('removing a Tenant takes them off the list and their Property, keeps their profile, and frees their mobile', async () => {

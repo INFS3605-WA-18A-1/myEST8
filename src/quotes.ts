@@ -86,7 +86,17 @@ type QuoteRow = {
 };
 type JobFitRow = { job_id: number; tradie_id: number; score: number; confidence: number; evidence_key: string; judged_at: string };
 type CancelledVisit = { id: number; ticket_id: number; job_id: number; tradie_id: number; start: string; end: string };
-type ApprovalRow = { id: number; agency_id: number; quote_id: number; job_id: number; ticket_id: number; owner_id: number; status: ApprovalStatus; requested_at: string };
+type ApprovalRow = {
+  id: number;
+  agency_id: number;
+  quote_id: number;
+  job_id: number;
+  ticket_id: number;
+  owner_id: number;
+  status: ApprovalStatus;
+  requested_at: string;
+  answered_at: string | null;
+};
 
 /** Waiting on the Tradie's Estimate. */
 const AWAITING_ESTIMATE: QuoteRequestStatus[] = ['sent', 'reminded'];
@@ -1402,7 +1412,7 @@ function prefillStarts(timeZone: string, proposedTime: string | null, dateTimes:
       return Promise.all(
         rows.map(async (a) => {
           const issue = await tickets.issue((await tickets.ticket(a.ticket_id)).issueId);
-          return { ticketId: a.ticket_id, status: a.status, requestedAt: a.requested_at, description: issue.summary ?? issue.description };
+          return { ticketId: a.ticket_id, status: a.status, requestedAt: a.requested_at, answeredAt: a.answered_at, description: issue.summary ?? issue.description };
         }),
       );
     },

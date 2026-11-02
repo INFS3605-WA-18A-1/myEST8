@@ -3,10 +3,11 @@
 // usually home, the Tickets they raised, their Maintenance Requests still waiting and
 // their Reimbursement Requests. Each Property's page links its Tenants here.
 //
-// The list adds a Tenant to a Property (the form posts to /setup/tenants, which comes
-// back here) and removes one: they leave their Property, but their profile and the
-// Tickets they raised stay. The profile's pen opens the name, mobile and email in a
-// form (?edit=details) that posts to /tenants/:id/details.
+// Adding a Tenant is /tenants/new (the form still posts to /setup/tenants). Removing
+// one takes them off their Property, but their profile and the Tickets they raised
+// stay. The profile's pen opens the name, mobile and email in a form (?edit=details)
+// that posts to /tenants/:id/details. Above the facts, a read says what their
+// history adds up to.
 
 import { Hono, type Context } from 'hono';
 import { html } from 'hono/html';
@@ -32,6 +33,7 @@ import {
   othersUsing,
   page,
   postButton,
+  profileRead,
   sharedAddressNote,
   rowLink,
   section,
@@ -43,7 +45,7 @@ import {
   urgencyBadge,
   type Html,
 } from '../ui.ts';
-import { contactFields, contactFrom, fieldGrid, propertyOptions, saveDetails, type DetailsEdit } from './onboarding-forms.ts';
+import { contactFields, contactFrom, fieldGrid, propertyOptions, saveDetails, type DetailsEdit, type Errors, type Values } from './onboarding-forms.ts';
 import { formatDate } from './properties.ts';
 
 type TenantList = Awaited<ReturnType<PropertyManagerActions['tenants']>>;
@@ -61,8 +63,7 @@ export function tenantProfilePages() {
     const { actions, pm } = c.var;
     const filter: Filter = c.req.query('filter') === 'all' ? 'all' : 'mine';
     const flash = flashFrom(c.req.url);
-    const refused = flash?.kind === 'error' && c.req.query('form') === 'tenant' ? alert(flash.message, 'error') : html``;
-    const [tenants, properties] = await Promise.all([actions.tenants({ filter }), actions.properties()]);
+    const tenants = await actions.tenants({ filter });
     return c.html(
       page({
         title: 'Tenants',
@@ -71,15 +72,17 @@ export function tenantProfilePages() {
         flash,
         shell: shellInfo(c),
         subtitle: tenants.length ? `${tenants.length} ${tenants.length === 1 ? 'Tenant' : 'Tenants'}${filter === 'mine' ? ' on your Properties' : ' in the Agency'}, by name.` : undefined,
-        actions: linkButton('Add a Tenant', '#add-tenant', { variant: 'primary', size: 'sm' }),
+        actions: linkButton('Add a Tenant', '/tenants/new', { variant: 'primary', size: 'sm' }),
         controls: segmented([
           { label: 'Mine', href: hrefFor('mine'), active: filter === 'mine' },
           { label: 'All', href: hrefFor('all'), active: filter === 'all' },
         ]),
-        body: html`${list(tenants, filter)} ${addForm(properties, refused)}`,
+        body: list(tenants, filter),
       }),
     );
   });
+
+  pages.get('/new', (c) => addTenantPage(c));
 
   // Refused, the reason shows on the Tenant's profile, beside the open Tickets it names.
   pages.post('/:id{[0-9]+}/remove', (c) => {
@@ -134,7 +137,7 @@ async function profilePage(c: Context<WebEnv>, id: number, refused?: DetailsEdit
         ? html`Tenant at ${entityLink('property', tenant.property.address, `/properties/${tenant.property.propertyId}`)}`
         : 'Former Tenant: no longer at a Property',
       actions: html`${tenant.property ? removeButton(tenant.tenantId, tenant.name, tenant.property.address) : ''}${linkButton('Back to Tenants', '/tenants', { variant: 'ghost', size: 'sm' })}`,
-      body: html`${refused && !editing ? alert(refused.message, 'error') : ''}${facts(tenant, editing, refused, people)} ${ticketsSection(tenant, timeZone)} ${requestsSection(tenant, timeZone)} ${reimbursementsSection(tenant, timeZone)}`,
+      body: html`${profileRead(tenant.read)}${refused && !editing ? alert(refused.message, 'error') : ''}${facts(tenant, editing, refused, people)} ${ticketsSection(tenant, timeZone)} ${requestsSection(tenant, timeZone)} ${reimbursementsSection(tenant, timeZone)}`,
     }),
     refused ? 400 : 200,
   );
@@ -159,7 +162,7 @@ function list(tenants: TenantList, filter: Filter): Html {
   if (!tenants.length) {
     return filter === 'mine'
       ? emptyState('No Tenants on your Properties.', linkButton('Show all Tenants', hrefFor('all')))
-      : emptyState('No Tenants yet. Add the people who live in your Properties so they can report repairs.', linkButton('Add a Tenant', '#add-tenant'));
+      : emptyState('No Tenants yet. Add the people who live in your Properties so they can report repairs.', linkButton('Add a Tenant', '/tenants/new'));
   }
   const all = filter === 'all';
   return table(
@@ -185,17 +188,38 @@ function removeButton(tenantId: number, name: string, address: string): Html {
   });
 }
 
+export type AddRefusal = { message: string; values: Values; errors: Errors };
+
+/** The Add a Tenant page. A refused save is this same page, with what was typed and why. */
+export async function addTenantPage(c: Context<WebEnv>, refused?: AddRefusal) {
+  const { actions, pm } = c.var;
+  const properties = await actions.properties();
+  return c.html(
+    page({
+      title: 'Add a Tenant',
+      pm,
+      active: 'tenants',
+      shell: shellInfo(c),
+      actions: linkButton('Back to Tenants', '/tenants', { variant: 'ghost', size: 'sm' }),
+      body: addForm(properties, refused),
+    }),
+    refused ? 400 : 200,
+  );
+}
+
 /** Adds a Tenant to a Property the Property Manager chooses. */
-function addForm(properties: Property[], refused: Html): Html {
+function addForm(properties: Property[], refused: AddRefusal | undefined): Html {
+  const values = refused?.values;
+  const errors = refused?.errors;
   return section({
     id: 'add-tenant',
     title: 'Add a Tenant',
     body: html`
       ${properties.length ? '' : html`<p class="mb-3 text-sm text-high">Add a Property on the Properties page first.</p>`}
+      ${refused ? alert(refused.message, 'error') : ''}
       <form method="post" action="/setup/tenants">
-        ${refused}
         ${fieldGrid(html`
-          ${contactFields('tenant')}
+          ${contactFields('tenant', { values, errors })}
           ${field({
             label: 'Property',
             name: 'propertyId',
@@ -204,9 +228,20 @@ function addForm(properties: Property[], refused: Html): Html {
             required: true,
             placeholder: 'Search by street, suburb or postcode',
             search: true,
+            value: typeof values?.propertyId === 'string' ? values.propertyId : '',
+            error: errors?.propertyId,
             options: propertyOptions(properties),
           })}
-          ${field({ label: 'Tenancy start date', name: 'tenancyStart', id: 'tenant-start', type: 'date', required: true, hint: 'Photos taken before this date are flagged.' })}
+          ${field({
+            label: 'Tenancy start date',
+            name: 'tenancyStart',
+            id: 'tenant-start',
+            type: 'date',
+            required: true,
+            value: typeof values?.tenancyStart === 'string' ? values.tenancyStart : '',
+            error: errors?.tenancyStart,
+            hint: 'Photos taken before this date are flagged.',
+          })}
         `)}
         <div class="mt-3">${button('Add Tenant', { variant: 'primary' })}</div>
       </form>`,

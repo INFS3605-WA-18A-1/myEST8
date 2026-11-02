@@ -1,11 +1,12 @@
-// The Agency's Tradies: the directory at /tradies, and a Tradie's profile at
-// /tradies/:id with contact details, Trades, the myEST8 rating next to the Google
-// rating, upcoming bookings, previous Quotes (each with its Ticket and whether it was
-// chosen) and every rating given, Property Managers' and Tenants' apart. The profile's
-// pen opens the business name, contact name, mobile, email and Trades in a form
-// (?edit=details) that posts to /tradies/:id/details. A Tradie is removed from the Agency
-// from their profile: they leave the lists and pickers, but the profile still opens, with
-// their past Quotes and ratings, and without the pen, Remove or the address form.
+// The Agency's Tradies: the directory at /tradies, adding one at /tradies/new, and a
+// Tradie's profile at /tradies/:id with contact details, Trades, the myEST8 rating next
+// to the Google rating, upcoming bookings, previous Quotes (each with its Ticket and
+// whether it was chosen) and every rating given, Property Managers' and Tenants' apart.
+// Above the facts, a read says what their work adds up to. The profile's pen opens the
+// business name, contact name, mobile, email and Trades in a form (?edit=details) that
+// posts to /tradies/:id/details. A Tradie is removed from the Agency from their profile:
+// they leave the lists and pickers, but the profile still opens, with their past Quotes
+// and ratings, and without the pen, Remove or the address form.
 
 import { Hono, type Context } from 'hono';
 import { html } from 'hono/html';
@@ -15,9 +16,9 @@ import type { WebEnv } from '../env.ts';
 import { formAction, list, text } from '../forms.ts';
 import { icon } from '../icons.ts';
 import { shellInfo } from '../shell.ts';
-import { alert, badge, button, contactLink, detailsForm, editPen, emptyState, field, flashFrom, formatMoney, formatWhen, humanise, linkButton, othersUsing, page, postButton, ratingChip, rowLink, section, sectionHeader, sharedAddressNote, stat, statGroup, table, ticketCell, type Html } from '../ui.ts';
+import { alert, badge, button, contactLink, detailsForm, editPen, emptyState, field, flashFrom, formatMoney, formatWhen, humanise, linkButton, othersUsing, page, postButton, profileRead, ratingChip, rowLink, section, sectionHeader, sharedAddressNote, stat, statGroup, table, ticketCell, type Html } from '../ui.ts';
 import { timeRange } from './calendar.ts';
-import { addTradieSection, contactFrom, importPanel, listingChoice, saveDetails, tradieFields, type DetailsEdit } from './onboarding-forms.ts';
+import { addTradieSection, contactFrom, importPanel, listingChoice, saveDetails, tradieFields, type DetailsEdit, type Errors, type Values } from './onboarding-forms.ts';
 
 type TradieView = Awaited<ReturnType<PropertyManagerActions['tradie']>>;
 type DirectoryEntry = Awaited<ReturnType<PropertyManagerActions['tradieDirectory']>>[number];
@@ -30,9 +31,6 @@ export function tradiePages() {
     const { actions, pm } = c.var;
     const trade = TRADES.find((t) => t === c.req.query('trade')) ?? null;
     const flash = flashFrom(c.req.url);
-    const refused = flash?.kind === 'error' ? c.req.query('form') : undefined;
-    const errorFor = (key: string): Html => (refused === key && flash ? alert(flash.message, 'error') : html``);
-    const choice = listingChoice((name) => c.req.query(name));
     const everyone = await actions.tradieDirectory();
     const tradies = trade ? everyone.filter((t) => t.trades.includes(trade)) : everyone;
     return c.html(
@@ -43,30 +41,13 @@ export function tradiePages() {
         flash,
         shell: shellInfo(c),
         subtitle: 'Best myEST8 rating first. The two ratings are shown side by side, never combined.',
-        actions: linkButton('Add a Tradie', '#add-tradie', { variant: 'primary', size: 'sm' }),
-        body: html`${tradeFilter(everyone, trade)}${directory(tradies, trade)}
-          ${section({
-            id: 'add-tradie',
-            title: 'Add a Tradie',
-            body: html`
-              ${await addTradieSection({
-                actions,
-                choice,
-                path: '/tradies',
-                anchor: '#add-tradie',
-                postTo: '/setup/tradies',
-                submit: button('Add Tradie', { variant: 'primary' }),
-                refusal: errorFor('tradie'),
-              })}
-              <details class="import-details mt-4 border-t border-line pt-3" id="import-tradies" ${refused === 'import-tradies' ? 'open' : ''}>
-                <summary class="cursor-pointer font-semibold text-action">${icon('file-xls', { size: 'size-4' })}<span>Add many from a spreadsheet</span></summary>
-                <div class="mt-3">${importPanel('tradies', { error: errorFor('import-tradies') })}</div>
-              </details>
-            `,
-          })}`,
+        actions: linkButton('Add a Tradie', '/tradies/new', { variant: 'primary', size: 'sm' }),
+        body: html`${tradeFilter(everyone, trade)}${directory(tradies, trade)}`,
       }),
     );
   });
+
+  pages.get('/new', (c) => addTradiePage(c));
 
   pages.post('/:id{[0-9]+}/details', (c) => {
     const id = Number(c.req.param('id'));
@@ -99,6 +80,48 @@ export function tradiePages() {
   });
 
   return pages;
+}
+
+export type AddTradieRefusal = { message: string; values: Values; errors: Errors };
+
+/** The Add a Tradie page. A refused save is this same page, with what was typed and why. */
+export async function addTradiePage(c: Context<WebEnv>, refused?: AddTradieRefusal) {
+  const { actions, pm } = c.var;
+  const flash = flashFrom(c.req.url);
+  const form = flash?.kind === 'error' ? c.req.query('form') : undefined;
+  const errorFor = (key: string): Html => (form === key && flash ? alert(flash.message, 'error') : html``);
+  const choice = listingChoice((name) => c.req.query(name));
+  return c.html(
+    page({
+      title: 'Add a Tradie',
+      pm,
+      active: 'tradies',
+      shell: shellInfo(c),
+      flash,
+      actions: linkButton('Back to Tradies', '/tradies', { variant: 'ghost', size: 'sm' }),
+      body: section({
+        title: 'Add a Tradie',
+        body: html`
+          ${refused ? alert(refused.message, 'error') : ''}
+          ${await addTradieSection({
+            actions,
+            choice,
+            path: '/tradies/new',
+            anchor: '',
+            postTo: '/setup/tradies',
+            submit: button('Add Tradie', { variant: 'primary' }),
+            values: refused?.values,
+            errors: refused?.errors,
+          })}
+          <details class="import-details mt-4 border-t border-line pt-3" id="import-tradies" ${form === 'import-tradies' ? 'open' : ''}>
+            <summary class="cursor-pointer font-semibold text-action">${icon('file-xls', { size: 'size-4' })}<span>Add many from a spreadsheet</span></summary>
+            <div class="mt-3">${importPanel('tradies', { error: errorFor('import-tradies') })}</div>
+          </details>
+        `,
+      }),
+    }),
+    refused ? 400 : 200,
+  );
 }
 
 /** A Tradie's profile; `refused` is a save of their details that was refused, shown with the form open. */
@@ -138,7 +161,7 @@ async function profilePage(c: Context<WebEnv>, id: number, refused?: DetailsEdit
       flash,
       subtitle: tradie.businessName ? tradie.name : undefined,
       actions: html`${removed ? '' : removeButton(tradie)}${linkButton('Back to Tradies', '/tradies', { variant: 'ghost', size: 'sm' })}`,
-      body: html`${notice}
+      body: html`${notice}${profileRead(tradie.read)}
         ${editing ? editForm(tradie, refused) : header(tradie, people)} ${quotes(tradie, timeZone)} ${bookings(tradie, timeZone)} ${ratings(tradie, timeZone)}
         ${removed ? '' : addressForm(tradie, flash, c.req.query('form'))}`,
     }),
@@ -203,7 +226,7 @@ function tradeFilter(everyone: DirectoryEntry[], selected: Trade | null): Html {
 /** Every Tradie with both ratings next to each other and the number of Quotes they have given. */
 function directory(tradies: DirectoryEntry[], trade: Trade | null): Html {
   if (!tradies.length) {
-    return emptyState(trade ? `No Tradie does ${humanise(trade).toLowerCase()}.` : 'No Tradies yet. Add the Tradies you already use.', linkButton('Add a Tradie', '#add-tradie', { variant: 'primary', size: 'sm' }));
+    return emptyState(trade ? `No Tradie does ${humanise(trade).toLowerCase()}.` : 'No Tradies yet. Add the Tradies you already use.', linkButton('Add a Tradie', '/tradies/new', { variant: 'primary', size: 'sm' }));
   }
   return table(
     ['Tradie', 'Trades', 'myEST8 rating', 'Google rating', 'Previous Quotes'],

@@ -144,11 +144,13 @@ describe('the onboarding guide', () => {
     w.h.places.listings.set('place-lucky', { name: 'Lucky Locks', address: 'Surry Hills', rating: 4.6, reviewCount: 22 });
     const tradie = { businessName: 'Lucky Locks', name: 'Lou Lucky', mobile: '0412 999 000', trades: ['locksmith'], startingRating: 4 };
 
-    const refused = await submit(w, '/setup/tradies?google=lucky', tradie, cookie);
-    expect(refused.location).toMatch(/^\/tradies\?form=tradie&google=lucky&error=/);
-    expect(refused.page).toContain('Link the Tradie to their Google listing, or mark them as not on Google');
-    expect(refused.page).toContain('/tradies?google=lucky&amp;place=place-lucky#add-tradie');
-    expect(refused.page).toContain('Surry Hills');
+    const res = await w.post('/setup/tradies?google=lucky', tradie, cookie);
+    expect(res.status).toBe(400);
+    const refusedPage = await res.text();
+    expect(refusedPage).toContain('Link the Tradie to their Google listing, or mark them as not on Google');
+    expect(refusedPage).toContain('/tradies/new?google=lucky&amp;place=place-lucky');
+    expect(refusedPage).not.toContain('#add-tradie');
+    expect(refusedPage).toContain('Surry Hills');
 
     const added = await submit(w, '/setup/tradies?google=lucky', { ...tradie, placeId: 'place-lucky' }, cookie);
     expect(added.page).toContain('Lucky Locks added as a Tradie');

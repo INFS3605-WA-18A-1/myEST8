@@ -9,7 +9,7 @@ type Web = Awaited<ReturnType<typeof webWorld>>;
 const PAGES = [
   { name: 'the welcome wizard', path: '/welcome/tradies', post: '/welcome/tradies' },
   { name: 'Setup', path: '/setup', post: '/setup/tradies?from=setup' },
-  { name: 'the Tradies page', path: '/tradies', post: '/setup/tradies' },
+  { name: 'the Tradies page', path: '/tradies/new', post: '/setup/tradies' },
 ];
 
 const LUCKY = {
@@ -94,6 +94,7 @@ describe.each(PAGES)('adding a Tradie from their Google listing on $name', ({ pa
     const text = visible(html);
     for (const shown of ['Lucky Locks', '12 Crown St, Surry Hills NSW 2010', '+61 412 555 018', 'https://luckylocks.example', '4.6', '22', 'Locksmith']) expect(text).toContain(shown);
     expect(valueOf(html, 'businessName')).toBe('Lucky Locks');
+    expect(valueOf(html, 'businessAddress')).toBe('12 Crown St, Surry Hills NSW 2010');
     expect(valueOf(html, 'mobile')).toBe('+61 412 555 018');
     expect(valueOf(html, 'name')).toBe('');
     expect(tickedTrades(html)).toEqual(['locksmith']);
@@ -163,6 +164,7 @@ describe.each(PAGES)('adding a Tradie from their Google listing on $name', ({ pa
 
     const html = await page(w, href.replace(/#.*/, ''), cookie);
     expect(valueOf(html, 'businessName')).toBe('');
+    expect(valueOf(html, 'businessAddress')).toBe('');
     expect(valueOf(html, 'mobile')).toBe('');
     expect(tickedTrades(html)).toEqual([]);
     expect(valueOf(html, 'placeId')).toBe('none');
@@ -233,22 +235,33 @@ describe('a refused Tradie form keeps the listing', () => {
     expect(valueOf(html, 'placeId')).toBe('none');
   });
 
-  test.each([
-    { name: 'Setup', post: '/setup/tradies?from=setup', back: '/setup' },
-    { name: 'the Tradies page', post: '/setup/tradies', back: '/tradies' },
-  ])('on $name it goes back to the page with the listing still chosen', async ({ post, back }) => {
+  test('on Setup it goes back to the page with the listing still chosen', async () => {
     const { w, cookie } = await luckyWorld();
-    const url = `${post}${post.includes('?') ? '&' : '?'}${listing.slice(1)}`;
 
-    const refused = await w.post(url, { ...posted, name: 'Lou Lucky' }, cookie);
+    const refused = await w.post(`/setup/tradies?from=setup&${listing.slice(1)}`, { ...posted, name: 'Lou Lucky' }, cookie);
     expect(refused.status).toBe(303);
     const location = refused.headers.get('location')!;
-    expect(location).toContain(`${back}?form=tradie&google=lucky&place=place-lucky&error=`);
+    expect(location).toContain('/setup?form=tradie&google=lucky&place=place-lucky&error=');
 
     const html = await page(w, location.replace(/#.*/, ''), cookie);
     expect(visible(html)).toContain('Choose a starting rating');
     expect(valueOf(html, 'placeId')).toBe('place-lucky');
     expect(valueOf(html, 'businessName')).toBe('Lucky Locks');
+    expect(results(html).map((r) => r.tag.includes('aria-current="true"'))).toEqual([true, false]);
+  });
+
+  test('on the Tradies page a refused save is the Add page, with what was typed', async () => {
+    const { w, cookie } = await luckyWorld();
+
+    const refused = await w.post(`/setup/tradies?${listing.slice(1)}`, { ...posted, name: 'Lou Lucky' }, cookie);
+    expect(refused.status).toBe(400);
+    const html = await refused.text();
+    expect(visible(html)).toContain('Choose a starting rating');
+    expect(valueOf(html, 'name')).toBe('Lou Lucky');
+    expect(valueOf(html, 'placeId')).toBe('place-lucky');
+    expect(valueOf(html, 'businessName')).toBe('Lucky Locks');
+    expect(html).toContain('/tradies/new?google=lucky&amp;place=place-lucky');
+    expect(html).not.toContain('#add-tradie');
     expect(results(html).map((r) => r.tag.includes('aria-current="true"'))).toEqual([true, false]);
   });
 
@@ -268,12 +281,28 @@ describe('adding the Tradie from the filled-in form', () => {
     const { w, cookie } = await luckyWorld();
 
     const html = await page(w, '/welcome/tradies?google=lucky&place=place-lucky', cookie);
+    const address = '12 Crown St, Surry Hills NSW 2010';
+    w.h.geocoder.locations.set(address, { lat: -33.881, lng: 151.213 });
     const added = await w.post(
       '/welcome/tradies?google=lucky&place=place-lucky',
-      { businessName: valueOf(html, 'businessName')!, name: 'Lou Lucky', mobile: valueOf(html, 'mobile')!, email: '', trades: tickedTrades(html) as string[], startingRating: 4, placeId: valueOf(html, 'placeId')! },
+      {
+        businessName: valueOf(html, 'businessName')!,
+        businessAddress: valueOf(html, 'businessAddress')!,
+        name: 'Lou Lucky',
+        mobile: valueOf(html, 'mobile')!,
+        email: '',
+        trades: tickedTrades(html) as string[],
+        startingRating: 4,
+        placeId: valueOf(html, 'placeId')!,
+      },
       cookie,
     );
     expect(added.status).toBe(303);
+    expect((await w.alice.people('tradie')).find((t) => t.businessName === 'Lucky Locks')).toMatchObject({
+      businessAddress: address,
+      location: { lat: -33.881, lng: 151.213 },
+      googlePlaceId: 'place-lucky',
+    });
 
     const shown = await page(w, added.headers.get('location')!, cookie);
     expect(visible(shown)).toContain('Lucky Locks added as a Tradie');
@@ -284,7 +313,7 @@ describe('adding the Tradie from the filled-in form', () => {
     const { w, cookie } = await luckyWorld();
     const before = (await w.alice.tradieDirectory()).length;
 
-    await page(w, '/tradies?google=lucky&place=place-lucky', cookie);
+    await page(w, '/tradies/new?google=lucky&place=place-lucky', cookie);
     expect((await w.alice.tradieDirectory()).length).toBe(before);
   });
 });

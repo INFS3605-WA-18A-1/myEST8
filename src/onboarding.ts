@@ -7,10 +7,13 @@ type Contact = { name: string; mobile?: string; email?: string };
 
 export type TenantInput = Contact & { propertyId: number; tenancyStart: string };
 
-export type TradieInput = Contact & { businessName: string; trades: Trade[]; startingRating: number } & (
-    | { googlePlaceId: string; notOnGoogle?: never }
-    | { notOnGoogle: true; googlePlaceId?: never }
-  );
+export type TradieInput = Contact & {
+  businessName: string;
+  trades: Trade[];
+  startingRating: number;
+  /** Where they work from, when the form already has one. Otherwise a Google listing's address is used. */
+  businessAddress?: string;
+} & ({ googlePlaceId: string; notOnGoogle?: never } | { notOnGoogle: true; googlePlaceId?: never });
 
 export type PropertyInput = {
   address: string;
@@ -272,12 +275,19 @@ export function createOnboarding({ ports, modules }: Context) {
       }
     },
 
-    /** Adds a Tradie linked to their Google listing, or marked as not on Google. */
+    /**
+     * Adds a Tradie linked to their Google listing, or marked as not on Google.
+     * A listing's address, or one the form already corrected, is stored and geocoded
+     * like a Property's. A geocode miss or failure still adds them, with no point,
+     * so geocodeMissing can try again.
+     */
     async addTradie(agencyId: number, input: TradieInput) {
       checkTradie(input);
-      const { notOnGoogle: _, ...person } = input;
+      const { notOnGoogle: _, businessAddress, ...person } = input;
       const id = await profiles.addPerson(agencyId, { role: 'tradie', ...person });
-      await profiles.readGoogleListing(id);
+      const fromListing = await profiles.readGoogleListing(id);
+      const address = businessAddress?.trim() || fromListing || '';
+      if (address) await profiles.setTradieAddress(agencyId, id, address);
       return id;
     },
 

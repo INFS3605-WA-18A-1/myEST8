@@ -1,4 +1,6 @@
 import type { Context } from './context.ts';
+import { commonAreaIssues, tenantProfileRead, tradieProfileRead } from './profile-glance.ts';
+import { buildingManagerRead, ownerRead } from './profile-reads.ts';
 import { URGENT_REPAIR_LIMIT_CENTS } from './intake.ts';
 import { MIN_QUOTE_REQUESTS, MIN_QUOTES } from './quotes.ts';
 import { addMs, HOUR_MS, iso, URGENCIES, type Trade, type Urgency } from './shared.ts';
@@ -9,8 +11,20 @@ import type { Issue, Job, JobStatus, Ticket, UrgentRepairStatus } from './ticket
 const REIMBURSEMENT_ORDER: UrgentRepairStatus[] = ['receipt_received', 'reminder_sent', 'receipt_forwarded', 'reimbursed'];
 
 /** What the Property Manager's screens show, composed from each module's queries. */
-/** How far ahead the dashboard's calendar looks. */
+/** How far ahead the dashboard's calendar looks, from the start of today. */
 const CALENDAR_DAYS = 14;
+
+/**
+ * The window the dashboard's Next 7 days reads. The strip shows seven days; the
+ * query runs further so a visit that starts this week and runs past it still counts.
+ * Mine and All do not narrow this list: the dashboard returns every booking in the window.
+ */
+export function dashboardCalendarRange(now: Date, timeZone: string): { from: string; to: string } {
+  return {
+    from: iso(startOfDay(dayOf(now, timeZone), timeZone)),
+    to: iso(addMs(now, CALENDAR_DAYS * 24 * HOUR_MS)),
+  };
+}
 
 /** A lane of the dashboard's board: the Job status that puts a Ticket in it. */
 export type Stage = Exclude<JobStatus, 'cancelled'>;
@@ -70,7 +84,8 @@ function cached<K, V>(lookup: (key: K) => Promise<V>) {
   };
 }
 
-export function createViews({ clock, modules }: Context) {
+export function createViews(ctx: Context) {
+  const { clock, modules } = ctx;
   const { profiles, tickets, intake } = modules;
 
   const propertyLabel = async (propertyId: number) => {
@@ -226,7 +241,7 @@ export function createViews({ clock, modules }: Context) {
         modules.quotes.alerts(agencyId, propertyIds),
         modules.scheduling.alerts(agencyId, propertyIds),
         tickets.alerts(agencyId, propertyIds),
-        modules.scheduling.calendar(agencyId, { from: iso(startOfDay(dayOf(now, timeZone), timeZone)), to: iso(addMs(now, CALENDAR_DAYS * 24 * HOUR_MS)) }),
+        modules.scheduling.calendar(agencyId, dashboardCalendarRange(now, timeZone)),
       ]);
       const [boardTickets, repairs] = await Promise.all([
         board(openTickets),
@@ -562,6 +577,7 @@ export function createViews({ clock, modules }: Context) {
               };
             }),
         ),
+        read: await tradieProfileRead(ctx.db, tradie.id),
         // Upcoming visits from the same Work Orders as `scheduling.bookings`, with the
         // Ticket each is for. Five years ahead stands in for "every future booking".
         bookings: await Promise.all(
@@ -676,6 +692,7 @@ export function createViews({ clock, modules }: Context) {
               reportedAt: u.createdAt,
             })),
         ),
+        read: await tenantProfileRead(ctx, agencyId, tenant.id),
       };
     },
 
@@ -687,6 +704,7 @@ export function createViews({ clock, modules }: Context) {
     async contactProfile(agencyId: number, personId: number, role: 'owner' | 'building_manager') {
       const person = await profiles.personInAgency(agencyId, personId, role);
       const properties = (await profiles.properties(agencyId)).filter((p) => (role === 'owner' ? p.ownerId === personId : p.buildingManagerId === personId));
+      const approvals = role === 'owner' ? await modules.quotes.approvalsFor(personId) : [];
       return {
         personId: person.id,
         name: person.name,
@@ -694,7 +712,11 @@ export function createViews({ clock, modules }: Context) {
         email: person.email,
         removedAt: person.removedAt,
         properties: properties.map((p) => ({ propertyId: p.id, address: p.address })),
-        approvals: role === 'owner' ? await modules.quotes.approvalsFor(personId) : [],
+        approvals,
+        read:
+          role === 'owner'
+            ? ownerRead(approvals.map((approval) => ({ status: approval.status, requestedAt: approval.requestedAt, answeredAt: approval.answeredAt })))
+            : buildingManagerRead({ commonAreaIssues: await commonAreaIssues(ctx.db, agencyId, personId) }),
       };
     },
 

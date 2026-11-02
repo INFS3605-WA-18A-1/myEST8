@@ -126,6 +126,25 @@ async function tapTicket() {
 }
 
 describe('the Ticket view', () => {
+  test('leads with the Summary and stage ring, lists who is on the Ticket, and shows the costs as tiles', async () => {
+    const { open } = await tapTicket();
+
+    const { html, text } = await open();
+
+    expect(html).toContain('class="page-back" href="/tickets"');
+    expect(html).toContain('aria-label="Alerts"');
+    expect(html).toContain('class="ticket-hero"');
+    for (const tab of ['Timeline', 'Costs']) expect(html).toMatch(new RegExp(`role="tab"[^>]*>${tab}</button>`));
+    expect(html).toContain('class="tl-board"');
+    expect(text).toContain('stages done');
+    expect(text).toContain('Add another Job');
+    expect(text).toContain('People on this Ticket');
+    expect(text).toContain('Tom Tran, Tenant');
+    expect(html).toContain('class="ticket-cost is-max"');
+    expect(html).toContain(`href="/properties/`);
+    expect(text).toContain('Progress');
+  });
+
   test('shows the Ticket, what the Tenant reported, the Repair Cost against the Max Repair Cost, and ranked Tradies with both ratings', async () => {
     const { open } = await tapTicket();
 

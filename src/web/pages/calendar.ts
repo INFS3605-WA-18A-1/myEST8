@@ -258,7 +258,7 @@ function freeTodayPanel(free: FreeTradie[], tradieCount: number): Html {
     ? html`<ul class="tradie-entries schedule-free-list">${free.map((t) => freeEntry(t))}</ul>`
     : tradieCount
       ? html`<p class="schedule-free-note">Every Tradie has a visit today.</p>`
-      : html`<p class="schedule-free-note">No Tradies yet. <a class="link" href="/tradies#add-tradie">Add a Tradie</a></p>`;
+      : html`<p class="schedule-free-note">No Tradies yet. <a class="link" href="/tradies/new">Add a Tradie</a></p>`;
   return html`<aside class="schedule-free" aria-labelledby="free-today">
     <a href="#schedule" class="skip-link">Skip to the schedule</a>
     <h2 id="free-today" class="schedule-free-title">Free today${tradieCount ? html` <span class="num">(${free.length})</span>` : ''}</h2>

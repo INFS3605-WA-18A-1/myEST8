@@ -890,6 +890,66 @@ onContent((root) => {
   });
 })();
 
+// === glance dialogs ===
+// Inbox and Alerts open over the dashboard. Without this file those bubbles are
+// anchors on the page. The listener stays on the document, so a dashboard swapped
+// in by in-page navigation (myest8:content replaces #main) still opens them.
+(() => {
+  let opener = null;
+  // Closing one dialog to open another must not send focus back in between.
+  let restoring = true;
+
+  document.addEventListener('click', (event) => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target) return;
+
+    const close = target.closest('[data-dialog-close]');
+    if (close) {
+      const dialog = close.closest('dialog');
+      if (dialog instanceof HTMLDialogElement) {
+        event.preventDefault();
+        dialog.close();
+      }
+      return;
+    }
+
+    if (target instanceof HTMLDialogElement && target.classList.contains('glance-dialog') && target.open) {
+      const box = target.getBoundingClientRect();
+      const outside = event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom;
+      if (outside) target.close();
+      return;
+    }
+
+    const link = target.closest('[data-dialog]');
+    if (!(link instanceof HTMLElement)) return;
+    const dialog = document.getElementById(link.getAttribute('data-dialog') ?? '');
+    if (!(dialog instanceof HTMLDialogElement)) return;
+    event.preventDefault();
+    opener = link;
+    restoring = false;
+    for (const open of document.querySelectorAll('dialog.glance-dialog[open]')) {
+      if (open !== dialog) open.close();
+    }
+    restoring = true;
+    if (!dialog.open) dialog.showModal();
+  });
+
+  // close does not bubble; capture hears it from the dialog.
+  document.addEventListener(
+    'close',
+    (event) => {
+      if (!restoring) return;
+      const dialog = event.target;
+      if (!(dialog instanceof HTMLDialogElement) || !dialog.classList.contains('glance-dialog')) return;
+      const back = opener;
+      opener = null;
+      if (back instanceof HTMLElement && back.isConnected) back.focus();
+    },
+    true,
+  );
+})();
+
 // === loading and in-page navigation ===
 // A thin bar along the top shows while a page or a form's reply is on its way.
 // A link or GET form that stays on the same page and only changes the query (the
@@ -970,6 +1030,63 @@ onContent((root) => {
     }
   }
 
+  // A day chip refreshes only Next 7 days. Its href is still the whole dashboard, so
+  // Back and Forward load the page the usual way. A failure follows that href.
+  // Registered before the generic swapper, which leaves a click alone once prevented.
+  let dayLoad = 0;
+  let dayController;
+  document.addEventListener('click', (event) => {
+    const link = event.target instanceof Element ? event.target.closest('a[data-fragment]') : null;
+    if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const fragment = link.getAttribute('data-fragment');
+    const section = document.getElementById('next-7-days');
+    if (!fragment || !(section instanceof HTMLElement)) return;
+    event.preventDefault();
+    const href = link.href;
+    const loadId = ++dayLoad;
+    dayController?.abort();
+    dayController = new AbortController();
+    section.setAttribute('aria-busy', 'true');
+    start();
+    fetch(fragment, { signal: dayController.signal, headers: { accept: 'text/html' } })
+      .then(async (response) => {
+        const type = response.headers.get('content-type') ?? '';
+        const arrived = new URL(response.url, location.origin);
+        if (!response.ok || !type.includes('text/html') || arrived.pathname !== '/next-7-days') throw new Error('not the day');
+        const doc = new DOMParser().parseFromString(await response.text(), 'text/html');
+        const next = doc.getElementById('next-7-days');
+        if (!next || doc.getElementById('main')) throw new Error('not the day');
+        if (loadId !== dayLoad) return;
+        const live = document.getElementById('next-7-days');
+        if (!live) throw new Error('not the day');
+        const imported = document.importNode(next, true);
+        live.replaceWith(imported);
+        const url = new URL(href);
+        history.pushState(null, '', url);
+        current = pageOf(url);
+        const day = url.searchParams.get('day');
+        const scope = document.querySelector('#main .page-header-controls .segmented');
+        if (scope && day) {
+          for (const item of scope.querySelectorAll('a[href]')) {
+            const nextHref = new URL(item.getAttribute('href'), location.origin);
+            if (nextHref.pathname !== '/') continue;
+            nextHref.searchParams.set('day', day);
+            nextHref.hash = 'next-7-days';
+            item.setAttribute('href', `${nextHref.pathname}${nextHref.search}${nextHref.hash}`);
+          }
+        }
+        const chosen = imported.querySelector('[aria-current="date"]');
+        if (chosen instanceof HTMLElement) chosen.focus({ preventScroll: true });
+        const heading = imported.querySelector('.visit-heading');
+        status.textContent = `Loaded ${heading?.textContent?.trim() || 'the day'}`;
+        stop();
+      })
+      .catch((error) => {
+        if (error?.name === 'AbortError' || loadId !== dayLoad) return;
+        location.assign(href);
+      });
+  });
+
   // Registered last, so the confirm, photo viewer and upload handlers above have had their say.
   document.addEventListener('click', (event) => {
     const link = event.target instanceof Element ? event.target.closest('a[href]') : null;
@@ -1010,3 +1127,153 @@ onContent((root) => {
     load(url, false);
   });
 })();
+
+// === Ticket page: Progress tabs, tools and the message log ===
+// The Progress card's three views (Timeline, the Job, Costs) show one at a time, with its
+// tab buttons; without this file they show one under another. Its tools print the page,
+// open the Summary's editor and fill the screen; the message log is kept short with a
+// button that shows all of it.
+onContent((root) => {
+  for (const tabs of root.querySelectorAll('[data-tabs]')) {
+    const selected = tabs.querySelector('[role="tab"][aria-selected="true"]') || tabs.querySelector('[role="tab"]');
+    if (selected) selectTab(selected);
+  }
+  for (const msgs of root.querySelectorAll('[data-msgs]')) {
+    const body = msgs.querySelector('.section-body');
+    const toggle = msgs.querySelector('[data-msgs-toggle]');
+    if (!body || !toggle) continue;
+    // The short view ends at the newest message; the button is only for a log longer than it.
+    body.scrollTop = body.scrollHeight;
+    toggle.hidden = body.scrollHeight <= body.clientHeight + 4;
+  }
+  // A slider under the Timeline board that scrolls it sideways (and follows it), shown
+  // only while the board is wider than the card. Dragging the board itself works too.
+  for (const board of root.querySelectorAll('.tl-board')) {
+    if (board.dataset.slider) continue;
+    board.dataset.slider = '1';
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.className = 'tl-slider';
+    slider.min = '0';
+    slider.step = '1';
+    slider.value = '0';
+    slider.setAttribute('aria-label', 'Scroll the Timeline sideways');
+    board.after(slider);
+    const sync = () => {
+      const max = board.scrollWidth - board.clientWidth;
+      slider.hidden = max <= 4;
+      slider.max = String(Math.max(0, Math.round(max)));
+      slider.value = String(Math.round(board.scrollLeft));
+    };
+    slider.addEventListener('input', () => {
+      board.scrollLeft = Number(slider.value);
+    });
+    board.addEventListener('scroll', sync, { passive: true });
+    if ('ResizeObserver' in window) new ResizeObserver(sync).observe(board);
+    window.addEventListener('resize', sync);
+    sync();
+  }
+});
+
+function selectTab(tab) {
+  const tabs = tab.closest('[data-tabs]');
+  if (!tabs) return;
+  for (const other of tabs.querySelectorAll('[role="tab"]')) {
+    const on = other === tab;
+    other.setAttribute('aria-selected', String(on));
+    const pane = document.getElementById(other.getAttribute('aria-controls'));
+    if (pane) pane.hidden = !on;
+  }
+}
+
+document.addEventListener('click', (event) => {
+  const target = event.target instanceof Element ? event.target : null;
+  if (!target) return;
+  const tab = target.closest('[data-tabs] [role="tab"]');
+  if (tab) return selectTab(tab);
+  const link = target.closest('[data-tab-link]');
+  if (link) {
+    const pane = document.getElementById(link.getAttribute('data-tab-link'));
+    const own = pane && document.getElementById(`tab-${pane.id}`);
+    if (own) {
+      selectTab(own);
+      event.preventDefault();
+      pane.closest('[data-tabs]')?.scrollIntoView({ block: 'start' });
+    }
+    return;
+  }
+  if (target.closest('[data-print]')) return window.print();
+  const summary = target.closest('[data-open-summary]');
+  if (summary) {
+    const editor = document.getElementById('edit-summary');
+    if (editor) {
+      event.preventDefault();
+      editor.open = true;
+      editor.scrollIntoView({ block: 'center' });
+      editor.querySelector('textarea')?.focus();
+    }
+    return;
+  }
+  const expand = target.closest('[data-expand]');
+  if (expand) {
+    const card = expand.closest('[data-tabs]');
+    const on = card?.classList.toggle('is-expanded');
+    expand.setAttribute('aria-pressed', String(Boolean(on)));
+    document.documentElement.classList.toggle('has-expanded', Boolean(on));
+    return;
+  }
+  const toggle = target.closest('[data-msgs-toggle]');
+  if (toggle) {
+    const msgs = toggle.closest('[data-msgs]');
+    const open = msgs?.classList.toggle('is-open');
+    toggle.setAttribute('aria-expanded', String(Boolean(open)));
+    if (!open) msgs.querySelector('.section-body')?.scrollTo({ top: 1e9 });
+    toggle.textContent = open ? 'Show fewer messages' : 'Show the whole conversation';
+  }
+});
+
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') return;
+  const open = document.querySelector('[data-tabs].is-expanded');
+  if (!open) return;
+  open.classList.remove('is-expanded');
+  open.querySelector('[data-expand]')?.setAttribute('aria-pressed', 'false');
+  document.documentElement.classList.remove('has-expanded');
+});
+
+// The Progress timeline: drag it sideways with the mouse (touch scrolls it natively).
+// A drag is not a click, so a link under the pointer isn't followed when it ends.
+{
+  let drag = null;
+  document.addEventListener('dragstart', (event) => {
+    if (event.target instanceof Element && event.target.closest('.tl-board')) event.preventDefault();
+  });
+  document.addEventListener('pointerdown', (event) => {
+    if (event.pointerType !== 'mouse' || event.button !== 0) return;
+    const board = event.target instanceof Element ? event.target.closest('.tl-board') : null;
+    if (!board || board.scrollWidth <= board.clientWidth) return;
+    drag = { board, x: event.clientX, left: board.scrollLeft, moved: false };
+  });
+  document.addEventListener('pointermove', (event) => {
+    if (!drag) return;
+    const dx = event.clientX - drag.x;
+    if (!drag.moved && Math.abs(dx) < 5) return;
+    drag.moved = true;
+    drag.board.classList.add('is-dragging');
+    drag.board.scrollLeft = drag.left - dx;
+    event.preventDefault();
+  });
+  const end = () => {
+    if (!drag) return;
+    const { board, moved } = drag;
+    drag = null;
+    board.classList.remove('is-dragging');
+    if (moved) {
+      const stop = (e) => e.stopPropagation();
+      board.addEventListener('click', stop, { capture: true, once: true });
+      setTimeout(() => board.removeEventListener('click', stop, true), 0);
+    }
+  };
+  document.addEventListener('pointerup', end);
+  document.addEventListener('pointercancel', end);
+}

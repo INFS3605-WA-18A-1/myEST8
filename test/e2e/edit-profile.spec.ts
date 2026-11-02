@@ -18,7 +18,7 @@ test('on a phone, the pen opens the Tradie\'s details, a new mobile is saved and
   const business = `Edit Plumbing ${unique()}`;
   const before = mobile();
   const after = mobile();
-  await page.goto('/tradies?manual=1#add-tradie');
+  await page.goto('/tradies/new?manual=1');
   await page.getByRole('textbox', { name: 'Business name' }).fill(business);
   await page.getByRole('textbox', { name: 'Contact name' }).fill(`Edie ${unique()}`);
   await page.getByRole('textbox', { name: 'Mobile' }).fill(before);

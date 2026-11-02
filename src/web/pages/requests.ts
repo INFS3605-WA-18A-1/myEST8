@@ -17,7 +17,7 @@ import { doubtsPhotos, passedChecks, photoCaption, requestFlags, type Check } fr
 import { formAction, text, type FormValues } from '../forms.ts';
 import { COLLEAGUES_ONLY, shareButton, shareUrl } from '../share.ts';
 import { shellInfo } from '../shell.ts';
-import { aiFilled, alert, badge, button, emptyState, entityLink, field, flashFrom, formatWhen, humanise, linkButton, page, photoGrid, section, withFlash, type Html } from '../ui.ts';
+import { aiFilled, alert, button, emptyState, entityLink, field, flashFrom, formatAge, formatWhen, humanise, linkButton, page, photoGrid, section, urgencyBadge, withFlash, type Html } from '../ui.ts';
 
 type MaintenanceRequest = Awaited<ReturnType<PropertyManagerActions['requests']>>[number];
 
@@ -95,12 +95,15 @@ async function reviewPage(c: Context<WebEnv>, issueId: number, o: { followUp?: F
       active: 'tickets',
       flash,
       shell: await shellInfo(c),
-      actions: html`${linkButton('Back to Tickets', '/tickets', { variant: 'ghost', size: 'sm' })}${shareButton({
+      back: { label: 'Tickets', href: '/tickets' },
+      titleExtra: urgencyBadge(request.urgency),
+      subtitle: `${humanise(request.trade)} at ${request.propertyAddress} · reported ${formatAge(request.reportedAt, actions.now())} by ${request.tenantName}`,
+      actions: shareButton({
         title: `Maintenance Request: ${lead}`,
         text: `Maintenance Request at ${request.propertyAddress}, waiting for review: ${lead}`,
         url: shareUrl(c, `/requests/${issueId}`),
         note: COLLEAGUES_ONLY,
-      })}`,
+      }),
       body: review(request, timeZone, c.req.query('edit') === 'summary', o.followUp),
     }),
     o.status ?? 200,
@@ -133,11 +136,22 @@ export function byUrgency<T extends { urgency: string; reportedAt: string }>(req
 function review(r: MaintenanceRequest, timeZone: string, editing: boolean, followUp?: FollowUp): Html {
   const toCheck = sideChecks(r);
   return html`<div class="request-review">
-    <section class="section request-lead" id="summary" aria-labelledby="summary-title">
-      <h2 class="section-title" id="summary-title">Summary</h2>
-      ${summary(r, editing)}
-      <p class="request-address">${entityLink('property', r.propertyAddress, `/properties/${r.propertyId}`)}</p>
-      ${facts(
+    <section class="ticket-hero request-lead" id="summary" aria-labelledby="summary-title">
+      <div class="ticket-hero-card request-lead-card">
+        <div class="ticket-hero-text">
+          <h2 class="sr-only" id="summary-title">Summary</h2>
+          ${summary(r, editing)}
+          <p class="ticket-hero-meta">
+            <span class="ticket-chip">${entityLink('property', r.propertyAddress, `/properties/${r.propertyId}`)}</span>
+            <span class="ticket-state is-waiting">Waiting for you</span>
+          </p>
+        </div>
+        <div class="ticket-ring-wrap">
+          <div class="ticket-ring" style="--pct:0"><span class="ticket-ring-label">To confirm</span></div>
+          <p class="ticket-ring-note">Step 1 of 2<br />Then it opens as a Ticket</p>
+        </div>
+      </div>
+      ${tiles(
         [
           ['Tenant', entityLink('tenant', r.tenantName, `/tenants/${r.tenantId}`)],
           ['Reported', formatWhen(r.reportedAt, timeZone)],
@@ -147,8 +161,9 @@ function review(r: MaintenanceRequest, timeZone: string, editing: boolean, follo
       )}
     </section>
     <div class="request-side">
+      ${peopleCard(r)}
       ${toCheck ? section({ title: 'To check', id: 'checks', body: toCheck }) : ''}
-      ${section({ title: 'Decide', id: 'decide', body: decide(r, editing) })}
+      ${section({ title: 'Decide', id: 'decide', actions: html`<span class="request-needs">Needs you</span>`, body: decide(r, editing) })}
       ${section({ title: `Follow up with ${firstName(r.tenantName)}`, id: 'follow-up', body: followUpForm(r, followUp) })}
     </div>
     <div class="request-details">
@@ -156,6 +171,23 @@ function review(r: MaintenanceRequest, timeZone: string, editing: boolean, follo
       ${section({ title: "The Tenant's answers", id: 'answers', body: answers(r) })}
     </div>
   </div>`;
+}
+
+/** Two letters for an avatar: the first letters of the first two words ("Lena Le" is LL). */
+const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('');
+
+/** Who is on the request: the Tenant who reported it and the Property Manager who decides. */
+function peopleCard(r: MaintenanceRequest): Html {
+  const people = [
+    { name: r.tenantName, role: 'Tenant' },
+    { name: r.propertyManager, role: 'Property Manager' },
+  ];
+  return html`<section class="ticket-people-card" aria-label="People on this Maintenance Request">
+    <h2 class="ticket-people-title">People on this request</h2>
+    <ul class="ticket-avatars" role="list">
+      ${people.map((p) => html`<li class="ticket-avatar" title="${p.name}, ${p.role}"><span aria-hidden="true">${initials(p.name)}</span><span class="sr-only">${p.name}, ${p.role}</span></li>`)}
+    </ul>
+  </section>`;
 }
 
 /**
@@ -189,8 +221,8 @@ function summary(r: MaintenanceRequest, editing: boolean): Html {
 
 const summaryFormId = (r: Pick<MaintenanceRequest, 'issueId'>) => `summary-form-${r.issueId}`;
 
-/** Short label and value pairs, the value right beside its label. */
-function facts(items: [string, Html | string][], className = ''): Html {
+/** Label and value pairs as small tiles, the label quiet above its value. */
+function tiles(items: [string, Html | string][], className = ''): Html {
   return html`<dl class="request-facts ${className}">
     ${items.map(([term, value]) => html`<div><dt>${term}</dt><dd>${value}</dd></div>`)}
   </dl>`;
@@ -198,7 +230,7 @@ function facts(items: [string, Html | string][], className = ''): Html {
 
 function answers(r: MaintenanceRequest): Html {
   const answer = (value: string | null, word = (v: string) => v) => (value ? word(value) : html`<span class="text-muted">Not answered</span>`);
-  return facts([
+  return tiles([
     // The Summary leads, so the Tenant's own words are kept here.
     ...(r.summary ? ([['In their words', r.description]] as [string, string][]) : []),
     ['Where', answer(r.answers.location)],
@@ -289,7 +321,7 @@ function decide(r: MaintenanceRequest, editing: boolean): Html {
       </div>
       <p id="${hintId}" class="field-hint">Urgent makes this an Urgent Repair, not a Ticket: the Tenant is reminded to call a Nominated Tradie.</p>
     </form>
-    ${facts([['Trade', badge(humanise(r.trade))]])}
+    ${tiles([['Trade', humanise(r.trade)]], 'request-trade')}
     ${confirm}
     <details class="request-reject">
       <summary>Reject this Maintenance Request…</summary>

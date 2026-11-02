@@ -10,7 +10,7 @@ const results = (page: Page) => page.getByRole('list', { name: 'Google listings'
 
 test('search, pick a listing, fill in the contact name and rating, and the Tradie is added with their Trades', async ({ page }) => {
   await signIn(page);
-  await page.goto('/tradies#add-tradie');
+  await page.goto('/tradies/new');
   await expect(page.getByRole('textbox', { name: 'Business name' })).toHaveCount(0);
 
   await search(page).fill('handy');
@@ -38,7 +38,7 @@ test('search, pick a listing, fill in the contact name and rating, and the Tradi
 
 test('a listing with a mobile fills it in, and a refused form comes back to the same listing', async ({ page }) => {
   await signIn(page);
-  await page.goto('/tradies?google=pete');
+  await page.goto('/tradies/new?google=pete');
   await results(page).getByRole('link', { name: /Pete's Plumbing/ }).click();
 
   await expect(page.getByRole('textbox', { name: 'Mobile' })).toHaveValue('+61 412 555 018');
@@ -56,7 +56,7 @@ test('a listing with a mobile fills it in, and a refused form comes back to the 
 
 test('a Tradie that is not on Google is added from the empty form', async ({ page }) => {
   await signIn(page);
-  await page.goto('/tradies#add-tradie');
+  await page.goto('/tradies/new');
 
   await page.getByRole('link', { name: 'Not on Google? Enter their details yourself' }).click();
   await expect(page.getByRole('textbox', { name: 'Business name' })).toHaveValue('');
@@ -75,7 +75,7 @@ test('a Tradie that is not on Google is added from the empty form', async ({ pag
 test('on a phone nothing scrolls sideways, and a listing can be picked with the keyboard alone', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await signIn(page);
-  await page.goto('/tradies?google=plumbing');
+  await page.goto('/tradies/new?google=plumbing');
   const overflow = () => page.evaluate<number>('document.documentElement.scrollWidth - document.documentElement.clientWidth');
   expect(await overflow()).toBeLessThanOrEqual(0);
 

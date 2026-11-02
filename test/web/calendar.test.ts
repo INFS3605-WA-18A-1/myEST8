@@ -317,7 +317,7 @@ describe('Schedule: Site Inspections and who is free', () => {
 
     const panel = freePanel(await page(w, '/calendar', cookie));
 
-    expect(panel).toContain('href="/tradies#add-tradie"');
+    expect(panel).toContain('href="/tradies/new"');
     expect(visible(panel)).toContain('Add a Tradie');
     expect(visible(panel)).not.toContain('Every Tradie has a visit today.');
   });

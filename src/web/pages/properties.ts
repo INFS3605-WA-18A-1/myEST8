@@ -263,7 +263,7 @@ function tenants(p: PropertyView): Html {
           ]),
           { caption: 'Tenants', stack: 'labelled' },
         )
-      : emptyState('No Tenants yet. Add the people who live here so they can report repairs.', linkButton('Add a Tenant', '/tenants#add-tenant'))}
+      : emptyState('No Tenants yet. Add the people who live here so they can report repairs.', linkButton('Add a Tenant', '/tenants/new'))}
   </section>`;
 }
 

@@ -20,6 +20,25 @@ async function demoWorldWith(extra: Record<string, string> = {}) {
 describe('the demo', () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  test('every seeded Tradie is on the map, from their listing or from the address set for one not on Google', async () => {
+    const { app, seed } = await demoWorld();
+    const alice = await app.asPropertyManager(seed!.ids.aliceId);
+    const tradies = await alice.people('tradie');
+    expect(tradies.length).toBeGreaterThan(0);
+    for (const tradie of tradies) {
+      expect(tradie.businessAddress, tradie.businessName ?? tradie.name).toBeTruthy();
+      expect(tradie.location, tradie.businessName ?? tradie.name).not.toBeNull();
+    }
+    expect(tradies.find((t) => t.googlePlaceId === 'demo-petes-plumbing')).toMatchObject({
+      businessAddress: '4 Illawarra Rd, Marrickville NSW 2204',
+      location: { lat: -33.906, lng: 151.158 },
+    });
+    expect(tradies.find((t) => t.businessName === 'Drip Doctors')).toMatchObject({
+      googlePlaceId: null,
+      businessAddress: '8 Crystal St, Petersham NSW 2049',
+    });
+  });
+
   test('ANTHROPIC_API_KEY counts the classifier as real without a Jev URL', async () => {
     const { apis } = await demoWorldWith({ ANTHROPIC_API_KEY: 'test-anthropic-key' });
     expect(apis.classifier).toBe('real');
@@ -140,6 +159,7 @@ describe('the demo', () => {
       classifier: 'mock',
       tradeSuggester: 'mock',
       jobFitJudge: 'mock',
+      requestJudge: 'mock',
       imageMatcher: 'mock',
       quoteReader: 'mock',
       places: 'mock',

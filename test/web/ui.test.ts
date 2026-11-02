@@ -571,8 +571,8 @@ describe('ui', () => {
   it('draws the rail, menu and message icons from Phosphor', async () => {
     const out = await render(page({ title: 'Dashboard', pm: { name: 'Alice' }, active: 'dashboard', body: alert('Check the photo', 'warning'), demo: true }));
     const phosphor = /<svg (?![^>]*logo-mark)[^>]*viewBox="0 0 256 256"/g;
-    // thirteen rail links (twelve places and the Phone simulator), Collapse menu, the menu button, the user menu caret, the alert (the logo's key tag is our own)
-    expect(out.match(phosphor)).toHaveLength(17);
+    // thirteen rail links (twelve places and the Phone simulator), Collapse menu, the menu button, the alerts bell, the user menu caret, the alert (the logo's key tag is our own)
+    expect(out.match(phosphor)).toHaveLength(18);
     expect(out).not.toContain('viewBox="0 0 24 24"');
     expect(out).toMatch(/class="rail-link" aria-current="page"><svg [^>]*class="size-\[18px\] shrink-0"/);
     expect(await render(flashMessage({ kind: 'ok', message: 'Saved' }))).toMatch(/<svg [^>]*viewBox="0 0 256 256"/);

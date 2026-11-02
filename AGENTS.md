@@ -41,7 +41,7 @@ your branch ──PR──▶ dev ──release PR──▶ master (deploys to p
 
 ### Hotfixes
 
-For an urgent production fix, branch from `master` and open the PR into `master`. Once it is merged, merge `master` back into `dev` straight away so the two don't drift apart.
+For an urgent production fix, branch from `master` and open the PR into `master`. Name the branch `hotfix/<name>`. CI rejects a pull request into `master` unless the head branch is `dev` or starts with `hotfix/`. Once it is merged, merge `master` back into `dev` straight away so the two don't drift apart.
 
 ### Dependabot
 

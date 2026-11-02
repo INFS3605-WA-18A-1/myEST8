@@ -14,16 +14,21 @@ import type { PropertyManagerActions } from '../../app.ts';
 import type { ImportKind } from '../../imports.ts';
 import { ActionError, normalizeAddress } from '../../shared.ts';
 import type { ChannelType } from '../../ports.ts';
+import { ProviderRefusedError, UndeliverableError } from '../../ports.ts';
 import { NO_CONNECTORS, type ChannelConnectors } from '../connectors.ts';
 import type { WebEnv } from '../env.ts';
 import { gmailControls } from './oauth-google.ts';
-import { cents, formAction, text } from '../forms.ts';
+import { cents, formAction, text, type FormValues } from '../forms.ts';
+import { withFlash } from '../ui.ts';
 import { icon } from '../icons.ts';
 import { shellInfo } from '../shell.ts';
 import { importPages } from './import.ts';
 import { serverSmsPanel } from './server-sms.ts';
 import { smsNumberPanel, smsNumbersOffered } from './sms-number.ts';
 import { alert, button, emptyState, field, flashFrom, formatMoney, linkButton, page, section, table, type Flash, type Html } from '../ui.ts';
+import { addBuildingManagerPage, addOwnerPage, type AddPersonRefusal } from './owners.ts';
+import { addTenantPage, type AddRefusal } from './tenants.ts';
+import { addTradiePage, type AddTradieRefusal } from './tradie.ts';
 import {
   addPersonForm,
   addTradieFrom,
@@ -158,20 +163,24 @@ export function setupPages(o: { connectors?: ChannelConnectors } = {}) {
 
   pages.post('/owners', (c) => {
     const here = listHome(c, '/owners');
-    return formAction(c, `${here}?form=owner`, async (form) => {
+    const save = async (form: FormValues) => {
       const contact = contactFrom(form);
       await c.var.actions.addOwner(contact);
-      return { ok: `${contact.name} added as a Property Owner`, ...(here === '/owners' ? { redirect: here } : {}) };
-    });
+      return { ok: `${contact.name} added as a Property Owner`, redirect: here };
+    };
+    if (here === '/owners') return refusedOnPage(c, save, addOwnerPage);
+    return formAction(c, `${here}?form=owner`, save);
   });
 
   pages.post('/building-managers', (c) => {
     const here = listHome(c, '/building-managers');
-    return formAction(c, `${here}?form=building-manager`, async (form) => {
+    const save = async (form: FormValues) => {
       const contact = contactFrom(form);
       await c.var.actions.addBuildingManager(contact);
-      return { ok: `${contact.name} added as a Building Manager`, ...(here === '/building-managers' ? { redirect: here } : {}) };
-    });
+      return { ok: `${contact.name} added as a Building Manager`, redirect: here };
+    };
+    if (here === '/building-managers') return refusedOnPage(c, save, addBuildingManagerPage);
+    return formAction(c, `${here}?form=building-manager`, save);
   });
 
   // The Tradies, Properties and Tenants pages post here too and come back to themselves; this page's forms add `from=setup`.
@@ -180,11 +189,13 @@ export function setupPages(o: { connectors?: ChannelConnectors } = {}) {
   pages.post('/tradies', (c) => {
     const chosen = listingParams(listingChoice((name) => c.req.query(name)));
     const here = home(c, '/tradies');
-    const back = `${here}?form=tradie${chosen ? `&${chosen}` : ''}`;
-    return formAction(c, back, async (form) => {
+    const save = async (form: FormValues) => {
       const businessName = await addTradieFrom(c.var.actions, form);
       return { ok: `${businessName} added as a Tradie`, redirect: here };
-    });
+    };
+    if (here === '/tradies') return refusedOnPage(c, save, addTradiePage);
+    const back = `${here}?form=tradie${chosen ? `&${chosen}` : ''}`;
+    return formAction(c, back, save);
   });
 
   pages.post('/properties', (c) =>
@@ -207,19 +218,60 @@ export function setupPages(o: { connectors?: ChannelConnectors } = {}) {
     }),
   );
 
-  pages.post('/tenants', (c) =>
-    formAction(c, `${home(c, '/tenants')}?form=tenant`, async (form) => {
+  pages.post('/tenants', (c) => {
+    const here = home(c, '/tenants');
+    const save = async (form: FormValues) => {
       const contact = contactFrom(form);
       await c.var.actions.addTenant({
         ...contact,
         propertyId: chosenId(form, 'propertyId', 'the Property'),
         tenancyStart: text(form, 'tenancyStart'),
       });
-      return { ok: `${contact.name} added as a Tenant`, redirect: home(c, '/tenants') };
-    }),
-  );
+      return { ok: `${contact.name} added as a Tenant`, redirect: here };
+    };
+    if (here === '/tenants') return refusedOnPage(c, save, addTenantPage);
+    return formAction(c, `${here}?form=tenant`, save);
+  });
 
   return pages;
+}
+
+type PageRefusal = AddRefusal | AddPersonRefusal | AddTradieRefusal;
+
+/**
+ * A save that came from an Add page. Success still redirects. A refusal is the
+ * Add page again, with the reason and what was typed, rather than the list.
+ */
+async function refusedOnPage(
+  c: Context<WebEnv>,
+  save: (form: FormValues) => Promise<{ ok: string; redirect: string }>,
+  show: (c: Context<WebEnv>, refused: PageRefusal) => Promise<Response> | Response,
+) {
+  const form = (await c.req.parseBody({ all: true })) as FormValues;
+  try {
+    const done = await save(form);
+    return c.redirect(withFlash(done.redirect, 'ok', done.ok), 303);
+  } catch (error) {
+    if (error instanceof ActionError) return show(c, { message: error.message, values: valuesOf(form), errors: { ...error.fields } });
+    if (error instanceof UndeliverableError || error instanceof ProviderRefusedError) {
+      return show(c, { message: `Couldn't send the message: ${error.userReason}.`, values: valuesOf(form), errors: {} });
+    }
+    throw error;
+  }
+}
+
+/** Posted text, including a checkbox group. Files are dropped: these forms have none. */
+function valuesOf(form: FormValues): PageRefusal['values'] {
+  const values: PageRefusal['values'] = {};
+  for (const [key, value] of Object.entries(form)) {
+    if (typeof value === 'string') values[key] = value;
+    else if (Array.isArray(value)) {
+      const strings = value.filter((item): item is string => typeof item === 'string');
+      if (strings.length === 1) values[key] = strings[0]!;
+      else if (strings.length > 1) values[key] = strings;
+    }
+  }
+  return values;
 }
 
 // Areas
