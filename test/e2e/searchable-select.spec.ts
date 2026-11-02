@@ -29,7 +29,7 @@ test('the Property dropdown finds a Property by its postcode and the Tenant is a
 
 test('Nominated Tradies are added with Add Tradie, each found by typing, and removed again', async ({ page }) => {
   await signIn(page);
-  await page.goto('/properties#add-property');
+  await page.goto('/properties/new');
   const nominated = page.getByRole('group', { name: 'Nominated Tradies' });
   await expect(nominated.getByRole('checkbox')).toHaveCount(0);
 

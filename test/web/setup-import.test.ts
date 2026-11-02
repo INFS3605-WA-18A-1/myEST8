@@ -46,7 +46,7 @@ describe('spreadsheet templates', () => {
     const cookie = await w.signIn();
     const pages: Record<string, string> = {
       setup: await (await w.get('/setup', cookie)).text(),
-      properties: await (await w.get('/properties', cookie)).text(),
+      properties: await (await w.get('/properties/new', cookie)).text(),
       tradies: await (await w.get('/tradies/new', cookie)).text(),
     };
     const home = { owners: 'setup', 'building-managers': 'setup', tenants: 'setup', tradies: 'tradies', properties: 'properties' } as const;

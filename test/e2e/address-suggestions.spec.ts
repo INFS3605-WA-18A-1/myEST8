@@ -8,7 +8,7 @@ test.use({ viewport: { width: 1366, height: 768 } });
 
 test('typing a demo address offers it, and choosing it by keyboard places the Property', async ({ page }) => {
   await signIn(page);
-  await page.goto('/properties#add-property');
+  await page.goto('/properties/new');
 
   const address = page.getByRole('combobox', { name: 'Address' });
   await address.fill('Parramatta');
@@ -76,7 +76,7 @@ async function holdSuggestions(page: Page) {
 
 test('a suggestion that arrives after you have moved on stays closed', async ({ page }) => {
   await signIn(page);
-  await page.goto('/properties#add-property');
+  await page.goto('/properties/new');
   const address = page.getByRole('combobox', { name: 'Address' });
 
   // Shortening below 3 characters closes the list before the reply.
@@ -121,7 +121,7 @@ test('a suggestion that arrives after you have moved on stays closed', async ({ 
 
 test('the highlighted address suggestion is selected for a screen reader', async ({ page }) => {
   await signIn(page);
-  await page.goto('/properties#add-property');
+  await page.goto('/properties/new');
   const address = page.getByRole('combobox', { name: 'Address' });
   await address.fill('Newtown');
 
