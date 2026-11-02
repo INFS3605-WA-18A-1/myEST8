@@ -504,7 +504,7 @@ function australianMobile(phone: string | null): string | null {
 
 /** What a listing fills the Tradie form in with. The contact, email and rating are the Property Manager's to give. */
 function listingValues(listing: ListingDetails): Values {
-  return { businessName: listing.name, mobile: australianMobile(listing.phone) ?? '', trades: listing.suggestedTrades };
+  return { businessName: listing.name, mobile: australianMobile(listing.phone) ?? '', businessAddress: listing.address, trades: listing.suggestedTrades };
 }
 
 /** What Google and Jev say about the picked listing, above the form it fills in. */
@@ -586,20 +586,33 @@ export async function addTradieSection(o: {
           ${o.refusal ?? ''}
           ${errors?.placeId ? alert(errors.placeId, 'error') : ''}
           <input type="hidden" name="placeId" value="${placeId}" />
-          ${tradieFields({ values: values ?? (listing ? listingValues(listing) : undefined), errors, tradesHint })}
+          ${tradieFields({ values: values ?? (listing ? listingValues(listing) : undefined), errors, tradesHint, businessAddress: true })}
           <div>${o.submit}</div>
         </form>`
       : (o.refusal ?? '')}
   `;
 }
 
-/** The fields of the Tradie form: business, contact, Trades and starting rating (left out when editing a Tradie, whose rating is built from the Jobs they do). */
-export function tradieFields(o: { values?: Values; errors?: Errors; tradesHint?: string; startingRating?: boolean }): Html {
+/** The fields of the Tradie form: business, contact, Trades and starting rating (left out when editing a Tradie, whose rating is built from the Jobs they do). The business address is only on the add form; editing keeps the address form on the profile. */
+export function tradieFields(o: { values?: Values; errors?: Errors; tradesHint?: string; startingRating?: boolean; businessAddress?: boolean }): Html {
   const { values, errors } = o;
   const trades = values?.trades;
   return fieldGrid(html`
     ${field({ label: 'Business name', name: 'businessName', id: 'tradie-business', required: true, value: valueOf(values, 'businessName'), error: errors?.businessName })}
     ${contactFields('tradie', { values, errors, nameLabel: 'Contact name' })}
+    ${o.businessAddress
+      ? html`<div class="md:col-span-2">
+          ${field({
+            label: 'Business address',
+            name: 'businessAddress',
+            id: 'tradie-business-address',
+            value: valueOf(values, 'businessAddress'),
+            placeholder: '5 Depot Rd, Marrickville NSW 2204',
+            hint: 'Where they work from. It puts them on the Dispatch map.',
+            error: errors?.businessAddress,
+          })}
+        </div>`
+      : ''}
     <div class="md:col-span-2">
       ${choiceGroup({
         legend: 'Trades',
@@ -639,6 +652,8 @@ export async function addTradieFrom(actions: PropertyManagerActions, form: FormV
     businessName,
     trades: list(form, 'trades') as Trade[],
     startingRating: int(form, 'startingRating', 'the starting rating'),
+    // Empty leaves a listing's own address to be stored. A correction is what gets saved.
+    businessAddress: text(form, 'businessAddress'),
   };
   const listing = text(form, 'placeId');
   try {
