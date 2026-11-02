@@ -125,6 +125,20 @@ function tenantSentence(total: number, signals: { minorShare: number | null; cau
   return 'A steady run of requests';
 }
 
+/**
+ * Whether judgments already stored support a concern for this Tenant: most of the
+ * judged requests were minor, or a repair was possibly Tenant-caused. A rejected
+ * request, a repeat or an urgent repair is a fact, not a judgment, so it does not
+ * set this. Callers pass only the judgments they already have; nothing is asked of a model.
+ */
+export function tenantHasConcern(requests: TenantRequest[], judgments: ReadonlyMap<number, RequestJudgment>): boolean {
+  const judged = requests.filter((request) => judgments.has(request.issueId));
+  if (!judged.length) return false;
+  const minorCount = judged.filter((request) => judgments.get(request.issueId)!.minor >= MINOR_AT).length;
+  const caused = judged.filter((request) => judgments.get(request.issueId)!.tenantCaused >= TENANT_CAUSED_AT).length;
+  return caused > 0 || minorCount / judged.length >= MOSTLY_MINOR_SHARE;
+}
+
 /** Same Trade and the same summary (or the same description, when there is no summary) at one Property. */
 function repeats(requests: TenantRequest[]): { label: string; count: number }[] {
   const groups = new Map<string, { label: string; count: number }>();

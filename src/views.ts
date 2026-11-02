@@ -1,9 +1,10 @@
 import type { Context } from './context.ts';
+import { all } from './db.ts';
 import { commonAreaIssues, tenantProfileRead, tradieProfileRead } from './profile-glance.ts';
-import { buildingManagerRead, ownerRead } from './profile-reads.ts';
+import { buildingManagerRead, ownerRead, tenantHasConcern, type RequestJudgment, type TenantRequest } from './profile-reads.ts';
 import { URGENT_REPAIR_LIMIT_CENTS } from './intake.ts';
 import { MIN_QUOTE_REQUESTS, MIN_QUOTES } from './quotes.ts';
-import { addMs, HOUR_MS, iso, URGENCIES, type Trade, type Urgency } from './shared.ts';
+import { addMs, HOUR_MS, iso, TRADES, URGENCIES, type Trade, type Urgency } from './shared.ts';
 import { dayOf, startOfDay } from './zoned-time.ts';
 import type { Issue, Job, JobStatus, Ticket, UrgentRepairStatus } from './tickets.ts';
 
@@ -717,6 +718,187 @@ export function createViews(ctx: Context) {
           role === 'owner'
             ? ownerRead(approvals.map((approval) => ({ status: approval.status, requestedAt: approval.requestedAt, answeredAt: approval.answeredAt })))
             : buildingManagerRead({ commonAreaIssues: await commonAreaIssues(ctx.db, agencyId, personId) }),
+      };
+    },
+
+    /**
+     * The Profiles page. One household per Property: its address, open Tickets and worst
+     * Urgency, its Property Owner and how many approvals are waiting, its Building Manager
+     * and its current Tenants. Tradies sit apart, grouped by their first Trade. People with
+     * no Property are listed on their own. Mine keeps the Properties of this Property Manager;
+     * Tradies, and people linked to none, are the Agency's. A Tenant's concern is set only
+     * when judgments already stored support one: this never calls Jev.
+     */
+    async profilesOverview(agencyId: number, propertyManagerId: number, filter: 'mine' | 'all') {
+      const since = new Date(clock.now().getTime() - 365 * 24 * 60 * 60 * 1000).toISOString();
+      const [properties, tenants, owners, buildingManagers, tradies, openTickets, ratings, jobs, waiting, issues, former] = await Promise.all([
+        profiles.properties(agencyId),
+        profiles.people(agencyId, 'tenant'),
+        profiles.people(agencyId, 'owner'),
+        profiles.people(agencyId, 'building_manager'),
+        profiles.people(agencyId, 'tradie'),
+        tickets.openTickets(agencyId, null),
+        all<{ tradie_id: number; score: number }>(
+          ctx.db,
+          'SELECT r.tradie_id, r.score FROM ratings r JOIN people p ON p.id = r.tradie_id WHERE p.agency_id = ?',
+          agencyId,
+        ),
+        all<{ tradie_id: number; open: number }>(
+          ctx.db,
+          `SELECT q.tradie_id, count(DISTINCT j.id) FILTER (WHERE j.status NOT IN ('done', 'cancelled')) AS open
+           FROM quotes q JOIN jobs j ON j.id = q.job_id
+           WHERE q.agency_id = ? AND q.status = 'approved' GROUP BY q.tradie_id`,
+          agencyId,
+        ),
+        all<{ owner_id: number; n: number }>(
+          ctx.db,
+          `SELECT owner_id, count(*) AS n FROM approvals WHERE agency_id = ? AND status IN ('requested', 'reminded') GROUP BY owner_id`,
+          agencyId,
+        ),
+        all<{
+          id: number;
+          tenant_id: number;
+          property_id: number;
+          trade: string;
+          summary: string | null;
+          description: string;
+          urgency: string;
+          status: string;
+          minor: number | null;
+          tenant_caused: number | null;
+        }>(
+          ctx.db,
+          `SELECT i.id, i.tenant_id, i.property_id, i.trade, i.summary, i.description, i.urgency, i.status, j.minor, j.tenant_caused
+           FROM issues i LEFT JOIN issue_judgments j ON j.issue_id = i.id
+           WHERE i.agency_id = ? AND i.reported_at >= ? AND i.status IN ('maintenance_request', 'confirmed', 'rejected', 'urgent')`,
+          agencyId,
+          since,
+        ),
+        all<{ id: number; name: string }>(
+          ctx.db,
+          `SELECT id, name FROM people WHERE agency_id = ? AND role = 'tenant' AND property_id IS NULL AND removed_at IS NULL ORDER BY name, id`,
+          agencyId,
+        ),
+      ]);
+
+      const shown = filter === 'mine' ? properties.filter((property) => property.propertyManagerId === propertyManagerId) : properties;
+      const ticketsByProperty = new Map<number, typeof openTickets>();
+      const openByTenant = new Map<number, number>();
+      for (const ticket of openTickets) {
+        const list = ticketsByProperty.get(ticket.propertyId) ?? [];
+        list.push(ticket);
+        ticketsByProperty.set(ticket.propertyId, list);
+        openByTenant.set(ticket.tenantId, (openByTenant.get(ticket.tenantId) ?? 0) + 1);
+      }
+      const history = new Map<number, { requests: TenantRequest[]; judgments: Map<number, RequestJudgment> }>();
+      for (const row of issues) {
+        const bucket = history.get(row.tenant_id) ?? { requests: [], judgments: new Map<number, RequestJudgment>() };
+        bucket.requests.push({
+          issueId: row.id,
+          propertyId: row.property_id,
+          trade: row.trade,
+          summary: row.summary,
+          description: row.description,
+          urgency: row.urgency,
+          status: row.status,
+        });
+        if (row.minor !== null && row.tenant_caused !== null) bucket.judgments.set(row.id, { minor: Number(row.minor), tenantCaused: Number(row.tenant_caused) });
+        history.set(row.tenant_id, bucket);
+      }
+      const ownerById = new Map(owners.map((owner) => [owner.id, owner]));
+      const managerById = new Map(buildingManagers.map((manager) => [manager.id, manager]));
+      const waitingByOwner = new Map(waiting.map((row) => [row.owner_id, Number(row.n)]));
+      const urgencyRank = (urgency: Urgency | null) => (urgency === null ? URGENCIES.length : URGENCIES.indexOf(urgency));
+
+      const households = shown
+        .map((property) => {
+          const propertyTickets = ticketsByProperty.get(property.id) ?? [];
+          const manager = property.buildingManagerId ? managerById.get(property.buildingManagerId) : undefined;
+          return {
+            propertyId: property.id,
+            address: property.address,
+            suburb: property.suburb,
+            openTickets: propertyTickets.length,
+            worstUrgency: URGENCIES.find((urgency) => propertyTickets.some((ticket) => ticket.urgency === urgency)) ?? null,
+            owner: {
+              id: property.ownerId,
+              name: ownerById.get(property.ownerId)?.name ?? '',
+              approvalsWaiting: waitingByOwner.get(property.ownerId) ?? 0,
+            },
+            buildingManager: manager ? { id: manager.id, name: manager.name } : null,
+            tenants: tenants
+              .filter((tenant) => tenant.propertyId === property.id)
+              .sort((a, b) => a.name.localeCompare(b.name) || a.id - b.id)
+              .map((tenant) => {
+                const bucket = history.get(tenant.id);
+                return {
+                  id: tenant.id,
+                  name: tenant.name,
+                  openTickets: openByTenant.get(tenant.id) ?? 0,
+                  concern: bucket ? tenantHasConcern(bucket.requests, bucket.judgments) : false,
+                };
+              }),
+          };
+        })
+        .sort((a, b) => urgencyRank(a.worstUrgency) - urgencyRank(b.worstUrgency) || a.address.localeCompare(b.address) || a.propertyId - b.propertyId);
+
+      const scores = new Map<number, number[]>();
+      for (const rating of ratings) {
+        const list = scores.get(rating.tradie_id) ?? [];
+        list.push(rating.score);
+        scores.set(rating.tradie_id, list);
+      }
+      const openByTradie = new Map(jobs.map((row) => [row.tradie_id, Number(row.open)]));
+      const byTrade = new Map<Trade, { id: number; name: string; businessName: string; trades: Trade[]; myEst8Rating: { average: number; count: number }; googleRating: { rating: number | null; reviewCount: number | null } | null; openJobs: number; onMap: boolean }[]>();
+      for (const tradie of tradies) {
+        const trade = tradie.trades[0];
+        if (!trade) continue;
+        const given = scores.get(tradie.id) ?? [];
+        const allScores = [tradie.startingRating ?? 0, ...given];
+        const row = {
+          id: tradie.id,
+          name: tradie.name,
+          businessName: tradie.businessName ?? tradie.name,
+          trades: tradie.trades,
+          myEst8Rating: { average: allScores.reduce((sum, score) => sum + score, 0) / allScores.length, count: allScores.length },
+          googleRating: tradie.googlePlaceId ? { rating: tradie.googleRating, reviewCount: tradie.googleReviewCount } : null,
+          openJobs: openByTradie.get(tradie.id) ?? 0,
+          onMap: tradie.location !== null,
+        };
+        byTrade.set(trade, [...(byTrade.get(trade) ?? []), row]);
+      }
+      const tradieGroups = TRADES.filter((trade) => byTrade.has(trade)).map((trade) => ({
+        trade,
+        tradies: byTrade.get(trade)!.sort((a, b) => a.businessName.localeCompare(b.businessName) || a.id - b.id),
+      }));
+
+      const linkedOwners = new Set(properties.map((property) => property.ownerId));
+      const linkedManagers = new Set(properties.flatMap((property) => (property.buildingManagerId === null ? [] : [property.buildingManagerId])));
+      const byName = (a: { name: string; id: number }, b: { name: string; id: number }) => a.name.localeCompare(b.name) || a.id - b.id;
+      const unlinked = {
+        tenants: former.map((tenant) => ({ id: tenant.id, name: tenant.name })),
+        owners: owners.filter((owner) => !linkedOwners.has(owner.id)).map((owner) => ({ id: owner.id, name: owner.name })).sort(byName),
+        buildingManagers: buildingManagers
+          .filter((manager) => !linkedManagers.has(manager.id))
+          .map((manager) => ({ id: manager.id, name: manager.name }))
+          .sort(byName),
+      };
+      const ownerIds = new Set([...households.map((household) => household.owner.id), ...unlinked.owners.map((owner) => owner.id)]);
+      const managerIds = new Set([
+        ...households.flatMap((household) => (household.buildingManager ? [household.buildingManager.id] : [])),
+        ...unlinked.buildingManagers.map((manager) => manager.id),
+      ]);
+      return {
+        households,
+        tradies: tradieGroups,
+        unlinked,
+        counts: {
+          properties: households.length,
+          tenants: households.reduce((sum, household) => sum + household.tenants.length, 0) + unlinked.tenants.length,
+          owners: ownerIds.size,
+          buildingManagers: managerIds.size,
+          tradies: tradies.length,
+        },
       };
     },
 
