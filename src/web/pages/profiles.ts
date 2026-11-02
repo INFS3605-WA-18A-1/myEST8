@@ -59,7 +59,7 @@ export function profilePages() {
             ${householdsBlock(households, q, filter)}
             ${unlinkedBlock(unlinked)}
           </div>
-          ${tradiesBlock(tradies, q)}
+          ${tradiesBlock(tradies, q, filter)}
         </div>`,
       }),
     );
@@ -76,12 +76,19 @@ function hrefFor(filter: Filter, q: string): string {
   return query ? `/profiles?${query}` : '/profiles';
 }
 
+/**
+ * Search: one field with a magnifier, sent with Enter (a form with one text field submits
+ * without a button). While a search is on, a Clear link puts the whole page back.
+ */
 function search(filter: Filter, q: string): Html {
   return html`<form method="get" action="/profiles" class="profiles-search" role="search">
-    <label class="sr-only" for="profiles-q">Search</label>
-    <input id="profiles-q" name="q" value="${q}" placeholder="Address, name or Trade" />
+    <label class="profiles-search-field">
+      <span class="sr-only">Search Profiles</span>
+      ${icon('magnifying-glass', { size: 'size-4' })}
+      <input type="search" name="q" value="${q}" placeholder="Address, name or Trade" autocomplete="off" />
+    </label>
     ${filter === 'all' ? html`<input type="hidden" name="filter" value="all" />` : ''}
-    <button type="submit" class="btn btn-ghost btn-sm">Search</button>
+    ${q ? html`<a class="btn btn-ghost btn-sm" href="${hrefFor(filter, '')}">Clear</a>` : ''}
   </form>`;
 }
 
@@ -104,7 +111,7 @@ function householdsBlock(households: Household[], q: string, filter: Filter): Ht
     ${households.length
       ? html`<div class="household-list">${households.map(householdCard)}</div>`
       : q
-        ? emptyState('No households match that search.')
+        ? emptyState('No households match that search.', linkButton('Clear search', hrefFor(filter, ''), { variant: 'ghost', size: 'sm' }))
         : filter === 'mine'
           ? emptyState('No Properties of yours yet. Add a Property to start a household.', html`${linkButton('Add a Property', '/properties/new', { variant: 'primary' })}${linkButton('Show all', hrefFor('all', q), { variant: 'ghost' })}`)
           : emptyState('No Properties yet. Add a Property to start a household.', linkButton('Add a Property', '/properties/new', { variant: 'primary' }))}
@@ -117,6 +124,14 @@ function suburbOf(household: Household): Html {
   return html` <span class="household-suburb">${household.suburb}</span>`;
 }
 
+/** How many open Tickets a household lists before it sends you to the Property for the rest. */
+const TICKETS_SHOWN = 3;
+
+/**
+ * One household: the Owner's tab on the card's top edge, then two columns. On the left
+ * the address with its Tenants hanging off it and the Building Manager; on the right
+ * what is wrong there, the open Tickets, High first. On a phone the Tickets follow the people.
+ */
 function householdCard(household: Household): Html {
   const waiting = household.owner.approvalsWaiting;
   return html`<article class="household">
@@ -125,30 +140,50 @@ function householdCard(household: Household): Html {
       <a href="/owners/${household.owner.id}">${household.owner.name}</a>
       ${waiting ? html`<a class="household-waiting" href="/approvals">${waiting === 1 ? '1 approval waiting' : `${waiting} approvals waiting`}</a>` : ''}
     </p>
-    <div class="household-title">
-      <h3 class="household-address"><a href="/properties/${household.propertyId}">${household.address}</a>${suburbOf(household)}</h3>
-      ${household.openTickets
-        ? html`<p class="household-meta"><span>${household.openTickets === 1 ? '1 open Ticket' : `${household.openTickets} open Tickets`}</span>${household.worstUrgency ? urgencyBadge(household.worstUrgency) : ''}</p>`
-        : ''}
+    <div class="household-body">
+      <div class="household-place">
+        <h3 class="household-address"><a href="/properties/${household.propertyId}">${household.address}</a>${suburbOf(household)}</h3>
+        <ul class="household-people">
+          ${household.tenants.length
+            ? household.tenants.map(
+                (tenant) => html`<li>
+                  <div class="household-person">
+                    <a href="/tenants/${tenant.id}">${tenant.name}</a>
+                    ${tenant.openTickets ? html`<span class="household-count">${tenant.openTickets === 1 ? '1 open Ticket' : `${tenant.openTickets} open Tickets`}</span>` : ''}
+                    ${tenant.concern ? badge('Concern', 'warning') : ''}
+                  </div>
+                </li>`,
+              )
+            : html`<li class="is-quiet"><div class="household-person"><span>No Tenants</span> ${linkButton('Add a Tenant', '/tenants/new', { variant: 'ghost', size: 'sm' })}</div></li>`}
+        </ul>
+        ${household.buildingManager
+          ? html`<p class="household-manager"><span class="household-role">Building Manager</span> <a href="/building-managers/${household.buildingManager.id}">${household.buildingManager.name}</a></p>`
+          : ''}
+      </div>
+      ${householdTickets(household)}
     </div>
-    <ul class="household-people">
-      ${household.tenants.length
-        ? household.tenants.map(
-            (tenant) => html`<li>
-              <a href="/tenants/${tenant.id}">${tenant.name}</a>
-              ${tenant.openTickets ? html`<span class="household-count">${tenant.openTickets === 1 ? '1 open Ticket' : `${tenant.openTickets} open Tickets`}</span>` : ''}
-              ${tenant.concern ? badge('Concern', 'warning') : ''}
-            </li>`,
-          )
-        : html`<li class="is-quiet"><span>No Tenants</span> ${linkButton('Add a Tenant', '/tenants/new', { variant: 'ghost', size: 'sm' })}</li>`}
-    </ul>
-    ${household.buildingManager
-      ? html`<p class="household-manager"><span class="household-role">Building Manager</span> <a href="/building-managers/${household.buildingManager.id}">${household.buildingManager.name}</a></p>`
-      : ''}
   </article>`;
 }
 
-function tradiesBlock(groups: TradieGroup[], q: string): Html {
+/** The household's open Tickets, each a row to the Ticket with its Urgency; one quiet line when there are none. */
+function householdTickets(household: Household): Html {
+  if (!household.tickets.length) return html`<p class="household-calm">No open Tickets</p>`;
+  const more = household.tickets.length - TICKETS_SHOWN;
+  return html`<div class="household-tickets">
+    <ul aria-label="Open Tickets">
+      ${household.tickets.slice(0, TICKETS_SHOWN).map(
+        (ticket) => html`<li>
+          <a class="household-ticket" href="/tickets/${ticket.id}" title="${ticket.title}">
+            ${icon('ticket', { size: 'size-4' })}<span class="household-ticket-title">${ticket.title}</span>${urgencyBadge(ticket.urgency)}
+          </a>
+        </li>`,
+      )}
+    </ul>
+    ${more > 0 ? html`<a class="household-more" href="/properties/${household.propertyId}">${more === 1 ? '1 more open Ticket' : `${more} more open Tickets`}</a>` : ''}
+  </div>`;
+}
+
+function tradiesBlock(groups: TradieGroup[], q: string, filter: Filter): Html {
   return html`<div class="profiles-tradies">
     <section class="section" aria-labelledby="profiles-tradies">
       <div class="section-head">
@@ -156,6 +191,7 @@ function tradiesBlock(groups: TradieGroup[], q: string): Html {
         <div class="section-actions">${linkButton('See all Tradies', '/tradies', { variant: 'ghost', size: 'sm' })}</div>
       </div>
       <div class="section-body">
+        ${groups.length ? html`<p class="tradies-note">By their first Trade, with their myEST8 rating.</p>` : ''}
         ${groups.length
           ? groups.map(
               (group) => html`<section class="tradie-group" aria-label="${humanise(group.trade)}">
@@ -166,7 +202,7 @@ function tradiesBlock(groups: TradieGroup[], q: string): Html {
               </section>`,
             )
           : q
-            ? emptyState('No Tradies match that search.')
+            ? emptyState('No Tradies match that search.', linkButton('Clear search', hrefFor(filter, ''), { variant: 'ghost', size: 'sm' }))
             : emptyState('No Tradies yet. Add a Tradie to send them work.', linkButton('Add a Tradie', '/tradies/new', { variant: 'primary' }))}
       </div>
     </section>
@@ -179,7 +215,7 @@ function tradieRow(tradie: TradieRow): Html {
   const offMap = tradie.onMap ? '' : badge('Not on the map', 'warning');
   return html`<li>
     <a href="/tradies/${tradie.id}" title="${tradie.businessName}">${tradie.businessName}</a>
-    <span class="tradie-rating"><span class="tradie-source">myEST8</span>${icon('star', { weight: 'fill', size: 'size-3.5' })}<strong class="num">${tradie.myEst8Rating.average.toFixed(1)}</strong><span class="num" aria-hidden="true">(${tradie.myEst8Rating.count})</span><span class="sr-only">from ${tradie.myEst8Rating.count} ${noun}</span></span>
+    <span class="tradie-rating"><span class="sr-only">myEST8</span>${icon('star', { weight: 'fill', size: 'size-3.5' })}<strong class="num">${tradie.myEst8Rating.average.toFixed(1)}</strong><span class="num" aria-hidden="true">(${tradie.myEst8Rating.count})</span><span class="sr-only">from ${tradie.myEst8Rating.count} ${noun}</span></span>
     ${jobs || offMap ? html`<span class="tradie-extra">${jobs}${offMap}</span>` : ''}
   </li>`;
 }
@@ -213,8 +249,8 @@ function summary(counts: Counts, filter: Filter, q: string): Html | string {
     countItem(counts.buildingManagers, 'Building Manager', 'Building Managers', '/building-managers'),
     countItem(counts.tradies, 'Tradie', 'Tradies', '/tradies'),
   ].filter((item): item is CountItem => item !== null);
+  if (q) return items.length ? `Matching “${q}”: ${sentence(items.map((item) => item.label))}` : `Nothing matches “${q}”`;
   if (!items.length) return '';
-  if (q) return sentence(items.map((item) => item.label));
   const parts = items.map((item, i) => {
     const sep = i === 0 ? '' : i === items.length - 1 ? ' and ' : ', ';
     return html`${sep}<a href="${item.href}">${item.label}</a>`;
