@@ -5826,26 +5826,9 @@
     .booking-kind {
       margin: 0 0 2px;
     }
-    /* Free today (pages/calendar.ts): the same bounded Tradie entry as Dispatch, with
-       initials in a Harbour circle instead of the wrench, and only the myEST8 rating. */
-    .schedule-free {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      min-width: 0;
-    }
-    .schedule-free-title {
-      margin: 0;
-      font-family: var(--font-head);
-      font-size: 16px;
-      font-weight: 600;
-      line-height: 1.2;
-      color: var(--ink);
-    }
     .tradie-initials {
-      grid-column: 1;
-      grid-row: 1;
       display: grid;
+      flex: none;
       place-items: center;
       width: 28px;
       height: 28px;
@@ -5861,52 +5844,8 @@
       font-size: 14px;
       color: var(--muted);
     }
-    /* Beside the grid from 1024px. Under that, the panel is first, so it sits above
-       the Week, and its entries scroll sideways inside the panel rather than the page. */
-    .schedule-board {
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-      min-width: 0;
-    }
     .schedule-main {
       min-width: 0;
-    }
-    @media (max-width: 63.99rem) {
-      .schedule-free .tradie-entries {
-        display: flex;
-        flex-wrap: nowrap;
-        gap: 8px;
-        width: 100%;
-        min-width: 0;
-        overflow-x: auto;
-        overscroll-behavior-x: contain;
-        padding-bottom: 4px;
-      }
-      .schedule-free .tradie-entry {
-        flex: 0 0 17rem;
-      }
-    }
-    @media (min-width: 64rem) {
-      .schedule-board:has(.schedule-free) {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) 20rem;
-        align-items: start;
-        column-gap: 16px;
-      }
-      .schedule-free {
-        grid-column: 2;
-        grid-row: 1;
-        max-height: min(40rem, calc(100dvh - 16rem));
-      }
-      .schedule-free .tradie-entries {
-        min-height: 0;
-        overflow-y: auto;
-      }
-      .schedule-main {
-        grid-column: 1;
-        grid-row: 1;
-      }
     }
     .booking-reschedule {
       font-weight: 600;
@@ -5920,16 +5859,360 @@
       border-radius: 2px;
     }
 
-    /* The Schedule's toolbar: Today, the arrows and the period on the left; the view
-       switch and Mine or All on the right. One row on a laptop. Under 768px the switch
-       and filter wrap onto a second row, so a phone never scrolls sideways for them. */
+    /* The Schedule as one white card (pages/calendar.ts): a Paper rail on the left with
+       the small month, the visit types and the Tradies; the toolbar and time grid in the
+       middle; the Picked visit panel on the right from 1280px. Under 1024px the rail
+       drops below the grid. */
+    .schedule-shell {
+      display: grid;
+      grid-template-columns: 17rem minmax(0, 1fr);
+      align-items: stretch;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: var(--surface);
+      box-shadow: var(--shadow-soft);
+      overflow: hidden;
+    }
+    /* The Picked visit panel opens when a visit is picked. On a very wide screen it is
+       always there, with a line saying so. */
+    .schedule-shell.has-pick:not(.is-open) .schedule-pick {
+      display: none;
+    }
+    .schedule-shell.has-pick.is-open {
+      grid-template-columns: 17rem minmax(0, 1fr) 19.5rem;
+    }
+    @media (min-width: 100rem) {
+      .schedule-shell.has-pick {
+        grid-template-columns: 17rem minmax(0, 1fr) 19.5rem;
+      }
+      .schedule-shell.has-pick:not(.is-open) .schedule-pick {
+        display: flex;
+      }
+    }
+    .schedule-rail {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      min-width: 0;
+      padding: 16px;
+      background: #ebe8e2;
+      border-right: 1px solid var(--line);
+    }
+    .schedule-rail h2 {
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 16px;
+      font-weight: 600;
+      line-height: 1.2;
+      color: var(--ink);
+    }
+    .schedule-center {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .schedule-center > .schedule-main {
+      padding: 12px 16px 16px;
+    }
+    .schedule-center > .schedule-summary {
+      padding: 10px 16px 0;
+    }
+    @media (max-width: 79.99rem) {
+      .schedule-shell.has-pick .schedule-pick {
+        display: none !important;
+      }
+      .schedule-shell.has-pick,
+      .schedule-shell.has-pick.is-open {
+        grid-template-columns: 17rem minmax(0, 1fr);
+      }
+    }
+    @media (max-width: 63.99rem) {
+      .schedule-shell,
+      .schedule-shell.has-pick {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .schedule-center {
+        order: 1;
+      }
+      .schedule-rail {
+        order: 2;
+        border-right: 0;
+        border-top: 1px solid var(--line);
+      }
+    }
+
+    /* The page header's filters: Tradie, Property and Status beside the title. */
+    .schedule-filters {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    .schedule-filter .select {
+      min-width: 7.5rem;
+      border-radius: 999px;
+    }
+    .schedule-clear {
+      font-size: 13px;
+    }
+    /* Under 640px the filters take a row of their own under the title, so the title keeps its width. */
+    @media (max-width: 39.99rem) {
+      .page-header-lead:has(.schedule-filters) {
+        flex-wrap: wrap;
+        flex-basis: 100%;
+      }
+      .page-header-lead:has(.schedule-filters) .schedule-filters {
+        flex: 1 1 100%;
+      }
+      .schedule-filter {
+        flex: 1 1 6rem;
+      }
+      .schedule-filter .select {
+        width: 100%;
+        min-width: 0;
+      }
+    }
+    .schedule-block a {
+      text-decoration: none;
+    }
+    .schedule-block a:hover {
+      text-decoration: underline;
+    }
+    .schedule-block[data-state='not_confirmed']:not(.is-cluster) {
+      background-image: repeating-linear-gradient(135deg, rgb(141 150 158 / 0.14) 0 6px, transparent 6px 12px);
+    }
+
+    /* The small month. */
+    .schedule-mini-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .schedule-mini-nav {
+      display: inline-flex;
+      gap: 4px;
+    }
+    .schedule-mini-arrow {
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--surface);
+      color: var(--ink);
+    }
+    .schedule-mini-arrow:hover {
+      background: var(--info-bg);
+    }
+    .schedule-mini-days {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 2px 0;
+      margin: 0;
+      padding: 8px 4px;
+      list-style: none;
+      border-radius: 12px;
+      background: var(--surface);
+      text-align: center;
+    }
+    .schedule-mini-week {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      padding-bottom: 4px;
+    }
+    .schedule-mini-day {
+      position: relative;
+      display: grid;
+      place-items: center;
+      width: 100%;
+      max-width: 30px;
+      height: 30px;
+      margin-inline: auto;
+      border-radius: 50%;
+      font-size: 13px;
+      color: var(--ink);
+      text-decoration: none;
+    }
+    .schedule-mini-day:hover {
+      background: var(--info-bg);
+    }
+    .schedule-mini-day.is-outside {
+      color: #a3a8ad;
+    }
+    .schedule-mini-day.is-shown {
+      background: var(--info-bg);
+    }
+    .schedule-mini-day.is-today {
+      background: var(--action);
+      color: var(--surface);
+      font-weight: 700;
+    }
+    .schedule-mini-day.has-visits::after {
+      content: '';
+      position: absolute;
+      bottom: 3px;
+      left: 50%;
+      width: 4px;
+      height: 4px;
+      margin-left: -2px;
+      border-radius: 50%;
+      background: var(--hivis);
+    }
+    .schedule-mini-day.is-today.has-visits::after {
+      background: var(--surface);
+    }
+
+    /* Showing and Visits. */
+    .schedule-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin: 0;
+    }
+    .schedule-stat {
+      min-width: 0;
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: var(--surface);
+    }
+    .schedule-stat.is-showing {
+      background: var(--info-bg);
+    }
+    .schedule-stat dt {
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .schedule-stat dd {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink);
+    }
+
+    /* Visit types. */
+    .schedule-types {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .schedule-types[hidden] {
+      display: none;
+    }
+    .schedule-type {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 28px;
+      font-size: 14px;
+      color: var(--ink);
+      cursor: pointer;
+    }
+    .schedule-swatch {
+      width: 9px;
+      height: 9px;
+      border-radius: 2px;
+      background: var(--action);
+    }
+    .schedule-swatch.is-inspection {
+      background: #a8531a;
+    }
+    .schedule-swatch.is-unconfirmed {
+      background: repeating-linear-gradient(135deg, #8d969e 0 2px, #fff 2px 4px);
+      outline: 1px solid #8d969e;
+    }
+    .schedule-swatch.is-reschedule {
+      background: var(--hivis);
+    }
+    .schedule-shell[data-hide~='work-order'] [data-type='work-order'],
+    .schedule-shell[data-hide~='inspection'] [data-type='inspection'],
+    .schedule-shell[data-hide~='not_confirmed'] [data-state='not_confirmed'],
+    .schedule-shell[data-hide~='reschedule_requested'] [data-state='reschedule_requested'] {
+      display: none;
+    }
+
+    /* The Tradies. */
+    .schedule-tradies {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .schedule-tradies h2 .num {
+      font-family: var(--font-body);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--muted);
+    }
+    .schedule-tradie-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 19rem;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .schedule-tradie {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      border-radius: 12px;
+      background: var(--surface);
+      color: var(--ink);
+      text-decoration: none;
+      border: 1px solid transparent;
+    }
+    .schedule-tradie:hover {
+      border-color: var(--line);
+    }
+    .schedule-tradie.is-on {
+      border-color: var(--action);
+      box-shadow: inset 3px 0 0 var(--action);
+    }
+    .schedule-tradie-text {
+      display: flex;
+      flex: 1 1 auto;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .schedule-tradie-name {
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+    .schedule-tradie-sub {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .schedule-free-tag {
+      flex: none;
+      padding: 1px 8px;
+      border-radius: 999px;
+      background: #dcebe0;
+      color: #2d6a45;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    /* The toolbar across the card: Today and the view switch, the period and its arrows. */
     .schedule-toolbar {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       justify-content: space-between;
       gap: 8px 16px;
+      padding: 12px 16px;
+      background: #ebe8e2;
+      border-bottom: 1px solid var(--line);
     }
+    .schedule-toolbar-start,
     .schedule-nav {
       display: flex;
       align-items: center;
@@ -5940,17 +6223,10 @@
       margin: 0;
       min-width: 0;
       font-family: var(--font-head);
-      font-size: 20px;
+      font-size: 16px;
       font-weight: 600;
       line-height: 1.1;
       color: var(--ink);
-    }
-    .schedule-toolbar-end {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 8px;
-      margin-left: auto;
     }
     /* Day, Week and Month read as a switch, the same shape as Mine and All. */
     .schedule-toolbar .tabs-border {
@@ -5959,14 +6235,14 @@
       gap: 2px;
       padding: 3px;
       border: 1px solid var(--control);
-      border-radius: 6px;
+      border-radius: 999px;
       background: var(--surface);
     }
     .schedule-toolbar .tabs-border > .tab {
       min-height: 28px;
       padding-inline: 12px;
       border: 0;
-      border-radius: 4px;
+      border-radius: 999px;
     }
     .schedule-toolbar .tabs-border > .tab.tab-active {
       background: var(--action);
@@ -5979,25 +6255,184 @@
         padding-inline: 16px;
       }
     }
-    /* Under 768px the switch and filter wrap onto a second row. The period drops to
-       16px so the date stays on one line, and the tabs tighten so Share can sit
-       with them. The switch itself never breaks onto two lines. */
     @media (max-width: 767.98px) {
-      .schedule-toolbar-end {
-        flex-basis: 100%;
-        margin-left: 0;
+      .schedule-toolbar {
+        padding: 10px 12px;
       }
       .schedule-nav {
         gap: 4px;
-      }
-      .schedule-period {
-        font-size: 16px;
       }
       .schedule-toolbar .tabs-border > .tab {
         padding-inline: 10px;
       }
     }
 
+    /* The Picked visit panel. */
+    .schedule-pick {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      border-left: 1px solid var(--line);
+      background: var(--surface);
+    }
+    .schedule-pick[hidden] {
+      display: none;
+    }
+    .schedule-pick-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 12px 16px;
+      background: #ebe8e2;
+      border-bottom: 1px solid var(--line);
+      min-height: 3.5rem;
+    }
+    .schedule-pick-head h2 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .schedule-pick-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--hivis);
+    }
+    .schedule-pick-close {
+      display: grid;
+      place-items: center;
+      width: 30px;
+      height: 30px;
+      border: 0;
+      border-radius: 50%;
+      background: var(--surface);
+      color: var(--ink);
+      cursor: pointer;
+    }
+    .schedule-pick-close[hidden] {
+      display: none;
+    }
+    .schedule-pick-empty {
+      margin: 0;
+      padding: 24px 16px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+    .schedule-pick-empty[hidden] {
+      display: none;
+    }
+    .schedule-pick-card {
+      display: flex;
+      flex-direction: column;
+    }
+    .schedule-pick-card[hidden] {
+      display: none;
+    }
+    .schedule-pick-card > * {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+    .schedule-pick-status {
+      display: inline-block;
+      margin: 0 0 8px;
+      padding: 1px 10px;
+      border-radius: 999px;
+      background: var(--info-bg);
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .schedule-pick-status.is-not_confirmed {
+      background: #ebe8e2;
+    }
+    .schedule-pick-status.is-reschedule_requested {
+      background: #fbefc7;
+    }
+    .schedule-pick-status.is-done {
+      background: #dcebe0;
+    }
+    .schedule-pick-card .schedule-pick-top > p:first-child {
+      padding: 1px 10px;
+    }
+    .schedule-pick-title {
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 20px;
+      font-weight: 600;
+      line-height: 1.2;
+      overflow-wrap: anywhere;
+    }
+    .schedule-pick-sub {
+      display: block;
+      margin: 2px 0 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .schedule-pick-when p {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 6px;
+      font-size: 14px;
+    }
+    .schedule-pick-len {
+      margin-left: auto;
+      color: var(--muted);
+    }
+    .schedule-pick-act {
+      width: 100%;
+      margin-top: 4px;
+    }
+    .schedule-pick-label {
+      margin: 0 0 6px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .schedule-pick-tradie {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0;
+    }
+    .schedule-pick-tradie .tradie-initials {
+      width: 36px;
+      height: 36px;
+      font-size: 13px;
+    }
+    .schedule-pick-tradie .tradie-name {
+      font-weight: 600;
+    }
+    .schedule-pick-facts {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin: 0;
+    }
+    .schedule-pick-facts dt {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .schedule-pick-facts dd {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .schedule-pick-open {
+      margin: 12px 16px 16px;
+      padding: 0;
+      border-bottom: 0;
+      width: auto;
+    }
+    .schedule-block.is-picked,
+    .schedule-chip.is-picked {
+      outline: 2px solid var(--action);
+      outline-offset: 1px;
+    }
     /* The Schedule's week in one line: the count of visits, then flags for how they
        stand. A reschedule request waiting on you carries the Wattle stripe; a
        colleague's the warning stripe; not confirmed yet is plain. */
@@ -6522,24 +6957,92 @@
     }
     .schedule-chips {
       display: grid;
-      gap: 2px;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 3px;
       margin: 4px 0 0;
       padding: 0;
       list-style: none;
     }
     .schedule-chip a {
-      display: block;
-      padding: 1px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      padding: 4px 8px;
       border: 1px solid var(--line);
       border-left: 4px solid var(--action);
-      border-radius: 999px;
+      border-radius: 10px;
       background: var(--surface);
       font-size: 12px;
+      line-height: 1.3;
       color: var(--ink);
       text-decoration: none;
+      overflow: hidden;
+    }
+    .schedule-chip {
+      min-width: 0;
+    }
+    .schedule-chip-head {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-wrap: wrap;
+      font-weight: 600;
+    }
+    .schedule-chip-head .num {
       white-space: nowrap;
+    }
+    .schedule-chip-issue {
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      overflow: hidden;
+      overflow-wrap: anywhere;
+    }
+    .schedule-chip-tradie {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .schedule-chip-name {
+      flex: 1 1 auto;
+      min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .visit-icon {
+      display: inline-flex;
+      flex: none;
+      color: var(--action);
+    }
+    .visit-icon.is-standing {
+      margin-left: auto;
+      color: var(--muted);
+    }
+    .schedule-chip a {
+      padding-inline: 6px;
+    }
+    .schedule-chip.is-reschedule .visit-icon.is-standing {
+      color: var(--high);
+    }
+    .schedule-chip.is-inspection a {
+      border-left-color: #a8531a;
+    }
+    .schedule-chip.is-inspection .visit-icon:not(.is-standing) {
+      color: #a8531a;
+    }
+    .schedule-block-time .visit-icon {
+      margin-right: 4px;
+      vertical-align: -2px;
+    }
+    /* daisyUI's bar under the current tab was white, which vanished on the Harbour pill: Wattle shows. */
+    .schedule-toolbar .tabs-border > .tab::before {
+      background: #b7bec5;
+    }
+    .schedule-toolbar .tabs-border > .tab.tab-active::before {
+      background: var(--hivis);
     }
     .schedule-chip a:hover {
       border-color: var(--action);
@@ -9243,4 +9746,416 @@
       }
     }
   }
+}
+
+/* === Approvals: soft cards (pages/approvals.ts) ===
+   One white panel: the stages as a chevron bar, the counts, then each approval as a card
+   with its status in a tinted panel on the left and its figures as small tiles. */
+@layer utilities {
+  @layer app {
+    .appr-panel {
+      display: grid;
+      gap: 16px;
+      padding: 16px 20px 20px;
+      background: var(--surface);
+      border-radius: 28px;
+      box-shadow: var(--shadow-soft);
+    }
+
+    /* The stages: a chevron for each, with one line under it. */
+    .appr-stages {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 0;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .appr-stage-item {
+      flex: 0 1 22rem;
+      min-width: 0;
+    }
+    .appr-stage-item + .appr-stage-item {
+      margin-left: -8px;
+    }
+    .appr-stage {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      min-height: 52px;
+      padding: 0 30px;
+      font-size: 15px;
+      font-weight: 600;
+      text-decoration: none;
+      color: var(--ink);
+      clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 50%, calc(100% - 18px) 100%, 0 100%, 18px 50%);
+    }
+    .appr-stage-item:first-child .appr-stage {
+      clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 50%, calc(100% - 18px) 100%, 0 100%);
+      border-radius: 10px 0 0 10px;
+    }
+    .appr-stage-item:last-child .appr-stage {
+      clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 18px 50%);
+      border-radius: 0 10px 10px 0;
+    }
+    .appr-stage-item:only-child .appr-stage {
+      clip-path: none;
+      border-radius: 10px;
+    }
+    .appr-stage.is-owners {
+      color: #fff;
+      background: linear-gradient(135deg, #184d75, #2a74ad);
+    }
+    .appr-stage.is-silent {
+      background: linear-gradient(135deg, #ffbb1f, #ffd770);
+    }
+    .appr-stage.is-claims {
+      background: linear-gradient(135deg, #cfe2f3, #eaf3fb);
+    }
+    /* The stage that needs the Property Manager has a count that pulses softly. */
+    .appr-stage.is-silent .appr-stage-count {
+      animation: appr-pulse 2.4s ease-out infinite;
+    }
+    @keyframes appr-pulse {
+      0% { box-shadow: 0 0 0 0 rgb(19 33 46 / 0.45); }
+      70%, 100% { box-shadow: 0 0 0 9px rgb(19 33 46 / 0); }
+    }
+    /* The motion says what the page is: work moving through stages. The bar draws itself
+       left to right, one stage after another, the way work moves along it; the cards then
+       settle in; and a red ring fills to how far over its limit a Quote is. */
+    @keyframes appr-draw {
+      from { clip-path: inset(0 100% 0 0); }
+      to { clip-path: inset(0 0 0 0); }
+    }
+    @keyframes appr-in {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: none; }
+    }
+    @keyframes appr-fill {
+      from { --fill: 0; }
+      to { --fill: var(--pct); }
+    }
+    .appr-stage-item {
+      animation: appr-draw 0.55s cubic-bezier(0.3, 0.7, 0.3, 1) backwards;
+    }
+    .appr-stage-item:nth-child(2) { animation-delay: 0.35s; }
+    .appr-stage-item:nth-child(3) { animation-delay: 0.7s; }
+    .appr-card {
+      animation: appr-in 0.42s ease-out backwards;
+      animation-delay: 0.3s;
+    }
+    .appr-card:nth-child(2) { animation-delay: 0.38s; }
+    .appr-card:nth-child(3) { animation-delay: 0.46s; }
+    .appr-card:nth-child(n + 4) { animation-delay: 0.54s; }
+    .appr-ring {
+      animation: appr-fill 0.9s ease-out 0.5s backwards;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .appr-stage-item,
+      .appr-card,
+      .appr-ring,
+      .appr-stage.is-silent .appr-stage-count {
+        animation: none;
+      }
+    }
+    .appr-stage-count {
+      display: grid;
+      place-items: center;
+      min-width: 22px;
+      height: 22px;
+      padding: 0 6px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #fff;
+      background: var(--ink);
+      border-radius: 999px;
+    }
+    .appr-stage.is-owners .appr-stage-count {
+      color: var(--action);
+      background: #fff;
+    }
+    .appr-stage-note {
+      margin: 6px 0 0;
+      font-size: 13px;
+      text-align: center;
+      color: var(--muted);
+    }
+    /* A list's heading: a sand band with a coloured edge and its count in a chip. */
+    .appr-list-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0;
+      padding: 10px 16px;
+      font-family: var(--font-head);
+      font-size: 20px;
+      font-weight: 700;
+      background: #e6e4df;
+      border-left: 5px solid #8d969e;
+      border-radius: 4px 14px 14px 4px;
+    }
+    /* The line that would be under a stage, when there is no stage bar: a white pill at the heading's right. */
+    .appr-list-note {
+      margin-left: auto;
+      padding: 3px 12px;
+      font-family: var(--font-body, inherit);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink);
+      background: #fff;
+      border-radius: 999px;
+    }
+    .appr-list-count {
+      display: grid;
+      place-items: center;
+      min-width: 26px;
+      height: 26px;
+      padding: 0 8px;
+      font-family: var(--font-body, inherit);
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+      background: var(--ink);
+      border-radius: 999px;
+    }
+    .appr-list {
+      display: grid;
+      gap: 10px;
+    }
+    .appr-cards {
+      display: grid;
+      gap: 8px;
+    }
+    /* A card: the status panel, the main block, then the figures. */
+    .appr-card {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      overflow: hidden;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+    }
+    .appr-status {
+      display: grid;
+      align-content: center;
+      gap: 2px;
+      padding: 10px 16px;
+      font-size: 13px;
+      background: var(--info-bg);
+    }
+    .appr-status p {
+      margin: 0;
+    }
+    .appr-status-main {
+      font-weight: 700;
+    }
+    .appr-card.is-silent .appr-status {
+      background: #fde8e4;
+      color: #a32020;
+    }
+    .appr-card.is-silent .appr-status-age {
+      color: var(--ink);
+    }
+    .appr-card.is-waiting .appr-status {
+      background: #f6ecd2;
+      color: #7a5200;
+    }
+    .appr-card.is-review .appr-status {
+      background: #fff1cc;
+      color: #7a5200;
+    }
+    .appr-card.is-receipt .appr-status,
+    .appr-card.is-forwarded .appr-status {
+      color: var(--action);
+    }
+    .appr-status-age {
+      color: var(--ink);
+    }
+    .appr-main {
+      display: grid;
+      align-content: center;
+      gap: 6px;
+      min-width: 0;
+      padding: 10px 16px;
+    }
+    .appr-main p {
+      margin: 0;
+    }
+    .appr-title {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--font-head);
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .appr-pill {
+      padding: 1px 10px;
+      font-family: var(--font-body, inherit);
+      font-size: 13px;
+      font-weight: 400;
+      background: var(--page);
+      border-radius: 999px;
+    }
+    .appr-address .entity-link {
+      padding: 2px 10px;
+      font-size: 13px;
+      background: var(--info-bg);
+      border-radius: 999px;
+    }
+    .appr-more > summary {
+      width: fit-content;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--ink);
+      cursor: pointer;
+    }
+    .appr-more > p {
+      margin-top: 6px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .appr-action {
+      min-width: 0;
+    }
+    .appr-action .reimbursement-forward {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      gap: 8px;
+    }
+    .appr-action .reimbursement-forward > div {
+      flex: 0 1 7rem;
+      min-width: 0;
+    }
+    .appr-action .reimbursement-forward > .btn {
+      margin-top: 0;
+    }
+    .appr-col {
+      display: grid;
+      align-content: center;
+      gap: 4px;
+      min-width: 0;
+      padding: 0 16px 10px;
+    }
+    .appr-label {
+      margin: 0;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .appr-person {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .appr-person p {
+      margin: 0;
+    }
+    .appr-person-name {
+      font-weight: 600;
+    }
+    .appr-person-contact {
+      font-size: 13px;
+    }
+    .appr-avatar {
+      flex: none;
+      display: grid;
+      place-items: center;
+      width: 32px;
+      height: 32px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #fff;
+      background: var(--ink);
+      border-radius: 50%;
+    }
+    .appr-avatar.is-tenant {
+      color: var(--ink);
+      background: #ecd48f;
+    }
+    .appr-tile {
+      padding: 8px 12px;
+      background: var(--page);
+      border-radius: 12px;
+    }
+    .appr-tile p {
+      margin: 0;
+    }
+    .appr-tile.is-empty {
+      background: transparent;
+      border: 1px dashed #c8c0b0;
+    }
+    .appr-amount {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 700;
+    }
+    .appr-amount.is-over {
+      color: #b3261e;
+    }
+    .appr-amount.is-quiet {
+      font-size: 15px;
+      font-weight: 600;
+    }
+    .appr-tile-note {
+      margin: 0;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .appr-over {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .appr-ring {
+      --fill: var(--pct);
+      flex: none;
+      display: grid;
+      place-items: center;
+      width: 44px;
+      height: 44px;
+      background: radial-gradient(closest-side, var(--surface) 72%, transparent 74%), conic-gradient(#b3261e calc(var(--fill) * 1%), #f2c9c4 0);
+      border-radius: 50%;
+    }
+    .appr-ring > span {
+      font-size: 10px;
+      font-weight: 700;
+      color: #b3261e;
+    }
+    .appr-done {
+      display: grid;
+      justify-items: center;
+      gap: 6px;
+      margin: 4px 0 0;
+      font-size: 14px;
+      color: var(--muted);
+    }
+    .appr-done .size-8 {
+      width: 24px;
+      height: 24px;
+    }
+    @media (min-width: 64rem) {
+      .appr-card {
+        grid-template-columns: 9.5rem minmax(0, 2.4fr) repeat(3, minmax(0, 1fr));
+        align-items: stretch;
+      }
+      .appr-col {
+        padding: 10px 12px 10px 0;
+      }
+    }
+  }
+}
+
+/* The ring on the Approvals page fills by animating this number. */
+@property --fill {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
 }

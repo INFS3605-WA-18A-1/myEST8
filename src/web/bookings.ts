@@ -5,6 +5,7 @@
 import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../app.ts';
 import { dayOf } from '../zoned-time.ts';
+import { icon } from './icons.ts';
 import { badge, clip, formatDay, formatTime, type Html } from './ui.ts';
 
 /** One booking as the core's calendar returns it. */
@@ -15,6 +16,29 @@ export type Booking = Awaited<ReturnType<PropertyManagerActions['calendar']>>[nu
  * Inspection before a Firm Quote. Read loosely, so the older name for the kind reads the same.
  */
 const VISIT_KINDS: Record<string, string> = { inspection: 'Site inspection' };
+
+/** The icon for each Trade, so a visit says what it is for at a glance. */
+const TRADE_ICONS: Record<string, string> = {
+  plumbing: 'drop',
+  electrical: 'lightning',
+  carpentry: 'hammer',
+  roofing: 'house-line',
+  appliances: 'fan',
+  locksmith: 'key',
+  pest_control: 'bug',
+  general_handyman: 'toolbox',
+};
+
+/** The Trade's icon, a wrench for one it doesn't know. Decorative: the words beside it say the same. */
+export function tradeIcon(trade: string, size = 'size-3.5'): Html {
+  return html`<span class="visit-icon">${icon(TRADE_ICONS[trade] ?? 'wrench', { size })}</span>`;
+}
+
+/** A small icon for how a visit stands, or nothing for a confirmed one. */
+export function standingIcon(visit: Booking['visit'], size = 'size-3.5'): Html | '' {
+  const name = visit === 'reschedule_requested' ? 'arrows-clockwise' : visit === 'not_confirmed' ? 'clock' : visit === 'done' ? 'check-circle' : null;
+  return name ? html`<span class="visit-icon is-standing">${icon(name, { size })}</span>` : '';
+}
 
 /** "Site inspection" for a visit that isn't the repair, or null for the repair itself. */
 export function visitKind(b: Pick<Booking, 'kind'>): string | null {

@@ -58,31 +58,53 @@ test('the toolbar is one row on a laptop, Next then Today returns to this week, 
   expect(await overflow(page)).toBe(0);
   const todayPhone = (await page.getByRole('link', { name: 'Today', exact: true }).boundingBox())!;
   const weekPhone = (await page.getByRole('navigation', { name: 'Calendar views' }).getByRole('link', { name: 'Week' }).boundingBox())!;
-  expect(weekPhone.y).toBeGreaterThan(todayPhone.y + todayPhone.height - 4);
+  // Today and the switch share a row; the period and its arrows wrap under them.
+  expect(Math.abs(weekPhone.y - todayPhone.y)).toBeLessThan(12);
+  expect((await period.boundingBox())!.y).toBeGreaterThan(weekPhone.y + weekPhone.height - 4);
 });
 
-test('the Free today panel sits beside the Week on a laptop and above it on a phone', async ({ page }) => {
+test('the Tradies rail sits beside the Week on a laptop and under it on a phone', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 900 });
   await signIn(page);
   await page.goto('/calendar?filter=all');
 
-  const panel = page.getByRole('complementary', { name: /^Free today/ });
+  const rail = page.getByRole('region', { name: /^Tradies/ });
   const grid = page.getByRole('region', { name: 'The week, hour by hour' });
-  await expect(panel).toBeVisible();
-  const panelBox = (await panel.boundingBox())!;
+  await expect(rail).toBeVisible();
+  const railBox = (await rail.boundingBox())!;
   const gridBox = (await grid.boundingBox())!;
-  // Beside: the panel's left edge is the grid's right edge, and they share a top.
-  expect(panelBox.x).toBeGreaterThan(gridBox.x + gridBox.width - 2);
-  expect(Math.abs(panelBox.y - gridBox.y)).toBeLessThan(8);
+  // Beside: the rail's right edge is left of the grid.
+  expect(railBox.x + railBox.width).toBeLessThanOrEqual(gridBox.x + 2);
   expect(await overflow(page)).toBe(0);
 
   await page.setViewportSize({ width: 390, height: 844 });
-  const panelPhone = (await panel.boundingBox())!;
-  // Under 768px the Week is the list of days; the hour grid is not on screen.
+  const railPhone = (await rail.boundingBox())!;
   const list = page.getByRole('list', { name: 'The week, Monday to Sunday' });
   const listBox = (await list.boundingBox())!;
-  expect(panelPhone.y + panelPhone.height).toBeLessThanOrEqual(listBox.y + 4);
+  expect(railPhone.y).toBeGreaterThanOrEqual(listBox.y + listBox.height - 4);
   expect(await overflow(page)).toBe(0);
+});
+
+test('on a wide screen a visit opens in the Picked visit panel, and Open Ticket goes to its Ticket', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await signIn(page);
+  await page.goto('/calendar?view=month&filter=all');
+
+  const panel = page.getByRole('complementary', { name: 'Picked visit' });
+  await expect(panel).toBeVisible();
+  const chip = page.locator('.schedule-chip[data-pick] a').first();
+  test.skip((await chip.count()) === 0, 'no visit this month in the demo');
+  await chip.click();
+  await expect(page).toHaveURL(/\/calendar/);
+  const open = panel.getByRole('link', { name: /^Open Ticket #/ });
+  await expect(open).toBeVisible();
+  await open.click();
+  await expect(page).toHaveURL(/\/tickets\/\d+/);
+
+  // Under 1280px there is no panel, and a visit goes straight to its Ticket.
+  await page.setViewportSize({ width: 1100, height: 900 });
+  await page.goto('/calendar?view=month&filter=all');
+  await expect(panel).toBeHidden();
 });
 
 test('the current-time line moves after a minute and hides the next day', async ({ page }) => {

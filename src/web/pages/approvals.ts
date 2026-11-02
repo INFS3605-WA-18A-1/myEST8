@@ -12,8 +12,9 @@ import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
 import type { WebEnv } from '../env.ts';
 import { shellInfo } from '../shell.ts';
-import { badge, contactLink, countSentence, emptyState, entityLink, flashFrom, formatAge, formatMoney, formatWhen, humanise, linkButton, page, postButton, rowLink, section, segmented, table, type Html } from '../ui.ts';
-import { reimbursementBadge, reimbursementForwardForm } from './reimbursement.ts';
+import { icon } from '../icons.ts';
+import { contactLink, emptyState, entityLink, flashFrom, formatAge, formatMoney, formatWhen, humanise, linkButton, page, postButton, rowLink, segmented, type Html } from '../ui.ts';
+import { reimbursementForwardForm, reimbursementLabel } from './reimbursement.ts';
 
 type Approvals = Awaited<ReturnType<PropertyManagerActions['approvals']>>;
 
@@ -48,8 +49,9 @@ export function approvalPages() {
 }
 
 /**
- * The counts, then each list that has rows. With nothing waiting anywhere the page is
- * one sentence: three zeros and two empty lists would only be noise.
+ * A white panel: the stages as a chevron bar (each with a line under it), then each list
+ * that has rows, as cards, and a closing line. With nothing waiting anywhere the
+ * page is one sentence: three zeros and two empty lists would only be noise.
  */
 function body(waiting: Approvals, all: boolean, timeZone: string, now: Date): Html {
   const owners = waiting.waitingOnOwner;
@@ -62,61 +64,109 @@ function body(waiting: Approvals, all: boolean, timeZone: string, now: Date): Ht
   }
   const silent = owners.filter((w) => w.silent).length;
   const toReview = claims.filter((r) => r.status === 'receipt_received').length;
-  const others = claims.length - toReview;
-  return html`
-    ${countSentence([
-      // Only a silent Property Owner or a receipt to check needs the Property Manager; the rest wait on someone else.
-      ...(toReview ? [{ label: 'Reimbursement Requests to review', one: 'Reimbursement Request to review', count: toReview, href: '#reimbursements', decision: true }] : []),
-      ...(owners.length ? [{ label: 'Quotes waiting on a Property Owner', one: 'Quote waiting on a Property Owner', count: owners.length, href: '#owners' }] : []),
-      ...(silent ? [{ label: 'Property Owners with no reply for 48 hours', one: 'Property Owner with no reply for 48 hours', count: silent, href: '#owners', decision: true }] : []),
-      ...(others ? [{ label: 'Reimbursement Requests waiting on a Tenant or Property Owner', one: 'Reimbursement Request waiting on a Tenant or Property Owner', count: others, href: '#reimbursements' }] : []),
-    ])}
-    ${owners.length ? section({ title: 'Waiting on a Property Owner', id: 'owners', body: ownerTable(owners, now) }) : ''}
-    ${claims.length ? section({ title: 'Reimbursement Requests', id: 'reimbursements', body: reimbursementTable(claims, all, timeZone, now) }) : ''}
-  `;
+  // One list alone is already named by its heading, so the bar is left out and its line moves to the heading's right.
+  const barShown = [owners.length > 0, silent > 0, claims.length > 0].filter(Boolean).length > 1;
+  return html`<div class="appr-panel">
+    ${stageBar(owners, silent, claims, toReview, now)}
+    ${owners.length ? list('Waiting on a Property Owner', 'owners', owners.length, 'owners', barShown ? '' : ownersNote(owners, now), owners.map((w) => ownerCard(w, timeZone, now))) : ''}
+    ${claims.length ? list('Reimbursement Requests', 'reimbursements', claims.length, 'claims', barShown ? '' : claimsNote(claims, toReview, now), claims.map((u) => claimCard(u, all, timeZone, now))) : ''}
+    <p class="appr-done">${icon('seal-check', { size: 'size-8' })}<span>That's everything waiting on approval.</span></p>
+  </div>`;
 }
 
-/** Where the Owner's reminder stands: sent after 24 hours, and the Property Manager is alerted after 48. */
-function reminder(w: Approvals['waitingOnOwner'][number]): Html {
-  const sent = w.reminded ? badge('Reminder sent', 'warning') : badge('Reminder not due yet', 'neutral');
-  return w.silent ? html`<div class="flex flex-wrap gap-1">${sent}${badge('No reply for 48 hours', 'error')}</div>` : sent;
+const days = (iso: string, now: Date) => formatAge(iso, now).replace(' ago', '');
+
+/** What each list says under its heading: the Quotes' total and how long the oldest has waited. */
+const ownersNote = (owners: Approvals['waitingOnOwner'], now: Date) => `${formatMoney(owners.reduce((sum, w) => sum + w.quotePriceCents, 0))} in Quotes · waiting ${days(owners[0]!.requestedAt, now)}`;
+
+/** The claims to review, and how long the oldest has waited. */
+const claimsNote = (claims: Approvals['reimbursements'], toReview: number, now: Date) =>
+  `${toReview ? `${toReview} to review` : 'Awaiting receipt'} · oldest ${days(claims.reduce((oldest, u) => (u.reportedAt < oldest ? u.reportedAt : oldest), claims[0]!.reportedAt), now)}`;
+
+/**
+ * The stages as a chevron bar: a summary to read, each stage saying how many and one line
+ * about them. Not links: nothing in it reacts to the pointer. With one stage alone the list's
+ * heading already names it, so the bar is left out and its line moves to the heading's right.
+ */
+function stageBar(owners: Approvals['waitingOnOwner'], silent: number, claims: Approvals['reimbursements'], toReview: number, now: Date): Html {
+  const stage = (kind: string, label: string, count: number, note: string) =>
+    html`<li class="appr-stage-item"><div class="appr-stage is-${kind}"><span class="appr-stage-label">${label}</span><span class="appr-stage-count">${count}</span></div><p class="appr-stage-note">${note}</p></li>`;
+  const stages = [
+    ...(owners.length ? [stage('owners', 'Waiting on a Property Owner', owners.length, ownersNote(owners, now))] : []),
+    ...(silent ? [stage('silent', 'No reply for 48 hours', silent, 'Reminder sent · needs you')] : []),
+    ...(claims.length ? [stage('claims', 'Reimbursement Requests', claims.length, claimsNote(claims, toReview, now))] : []),
+  ];
+  return stages.length > 1 ? html`<ul class="appr-stages" role="list" aria-label="Approvals by stage">${stages}</ul>` : html``;
 }
 
-function ownerTable(waiting: Approvals['waitingOnOwner'], now: Date): Html {
-  return table(
-    ['Ticket', 'Property Owner', 'Quote', 'Over the limit', 'Waiting', 'Reminder'],
-    waiting.map((w) => [
-      html`<p>${rowLink(`Ticket #${w.ticketId}`, `/tickets/${w.ticketId}`)} <span class="text-muted">${humanise(w.trade)}</span></p>
-        <p class="mt-1">${entityLink('property', w.propertyAddress, `/properties/${w.propertyId}`)}</p>`,
-      // One element per labelled cell, so its lines stay together beside the label on phones.
-      html`<div><p>${w.ownerName}</p>${w.ownerMobile ? html`<p class="text-xs">${contactLink('mobile', w.ownerMobile)}</p>` : ''}</div>`,
-      html`<div><p>${formatMoney(w.quotePriceCents)}</p><p class="text-xs text-muted">${w.tradieBusinessName}</p></div>`,
-      html`<div><p class="font-semibold">${formatMoney(w.overByCents)}</p><p class="text-xs text-muted whitespace-nowrap">${formatMoney(w.repairCostCents)} of ${formatMoney(w.maxRepairCostCents)}</p></div>`,
-      html`<span class="whitespace-nowrap">${formatAge(w.requestedAt, now).replace(' ago', '')}</span>`,
-      reminder(w),
-    ]),
-    { stack: 'labelled', caption: 'Quotes waiting on a Property Owner, longest waiting first', align: ['left', 'left', 'right', 'right', 'left', 'left'] },
-  );
+/** A list's heading with its count, then its cards. */
+function list(title: string, id: string, count: number, kind: 'owners' | 'claims', note: string, cards: Html[]): Html {
+  return html`<section class="appr-list is-${kind}" id="${id}" aria-labelledby="${id}-title">
+    <h2 class="appr-list-title" id="${id}-title">${title}<span class="appr-list-count">${count}</span>${note ? html`<span class="appr-list-note">${note}</span>` : ''}</h2>
+    <div class="appr-cards">${cards}</div>
+  </section>`;
 }
 
-/** Every open Reimbursement Request, each opening its page: the ones to review first, then oldest first. */
-function reimbursementTable(claims: Approvals['reimbursements'], all: boolean, timeZone: string, now: Date): Html {
-  return table(
-    ['Reimbursement Request', 'Tenant', 'Property Owner', 'Status', 'Amount', 'Reported', ''],
-    claims.map((u) => [
-      html`<p>${rowLink(u.description, `/reimbursements/${u.urgentRepairId}`)}</p>
-        <p class="mt-1">${entityLink('property', u.propertyAddress, `/properties/${u.propertyId}`)}</p>`,
-      html`${u.tenantName}`,
-      html`${u.ownerName}`,
-      reimbursementBadge(u.status, { wrap: true }),
-      u.amountCents === null
-        ? html`<span class="text-muted">Not given</span>`
-        : html`<div><p class="num">${formatMoney(u.amountCents)}</p>${u.amountCents > u.limitCents ? html`<p class="text-xs text-high">Over the ${formatMoney(u.limitCents)} limit</p>` : ''}</div>`,
-      html`<span class="whitespace-nowrap" title="${formatWhen(u.reportedAt, timeZone)}">${formatAge(u.reportedAt, now)}</span>`,
-      reimbursementAction(u, all),
-    ]),
-    { stack: 'labelled', caption: 'Reimbursement Requests not yet reimbursed, the ones to review first, each with the action it needs', align: ['left', 'left', 'left', 'left', 'right', 'left', 'left'] },
-  );
+/** Two letters for an avatar: the first letters of the first two words. */
+const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('');
+
+function person(label: string, name: string, tone: 'owner' | 'tenant', contact?: Html): Html {
+  return html`<div class="appr-col"><p class="appr-label">${label}</p>
+    <div class="appr-person"><span class="appr-avatar is-${tone}" aria-hidden="true">${initials(name)}</span><div class="min-w-0"><p class="appr-person-name">${name}</p>${contact ?? ''}</div></div>
+  </div>`;
+}
+
+/** A Quote held up for a Property Owner: where its reminder stands, the Ticket and Property, who, how much, and how far over the limit. */
+function ownerCard(w: Approvals['waitingOnOwner'][number], timeZone: string, now: Date): Html {
+  const over = Math.round((w.repairCostCents / w.maxRepairCostCents) * 100);
+  return html`<article class="appr-card ${w.silent ? 'is-silent' : 'is-waiting'}">
+    <div class="appr-status">
+      <p class="appr-status-main">${w.silent ? 'No reply for 48 hours' : 'Waiting for the Owner'}</p>
+      <p class="appr-status-sub">${w.reminded ? 'Reminder sent' : 'Reminder not due yet'}</p>
+      <p class="appr-status-age">Waiting ${days(w.requestedAt, now)}</p>
+    </div>
+    <div class="appr-main">
+      <p class="appr-title">${rowLink(`Ticket #${w.ticketId}`, `/tickets/${w.ticketId}`)}<span class="appr-pill">${humanise(w.trade)}</span></p>
+      <p class="appr-address">${entityLink('property', w.propertyAddress, `/properties/${w.propertyId}`)}</p>
+      <details class="appr-more">
+        <summary>Show more</summary>
+        <p>Asked ${formatWhen(w.requestedAt, timeZone)}. The Property's Max Repair Cost is ${formatMoney(w.maxRepairCostCents)}.</p>
+      </details>
+    </div>
+    ${person('Property Owner', w.ownerName, 'owner', w.ownerMobile ? html`<p class="appr-person-contact">${contactLink('mobile', w.ownerMobile)}</p>` : undefined)}
+    <div class="appr-col"><p class="appr-label">Quote</p>
+      <div class="appr-tile"><p class="appr-amount">${formatMoney(w.quotePriceCents)}</p><p class="appr-tile-note">${w.tradieBusinessName}</p></div></div>
+    <div class="appr-col"><p class="appr-label">Over the limit</p>
+      <div class="appr-over">
+        <span class="appr-ring" style="--pct:${Math.min(100, over)}"><span>${over}%</span></span>
+        <div><p class="appr-amount is-over">${formatMoney(w.overByCents)}</p><p class="appr-tile-note whitespace-nowrap">${formatMoney(w.repairCostCents)} of ${formatMoney(w.maxRepairCostCents)}</p></div>
+      </div></div>
+  </article>`;
+}
+
+/** A Tenant's claim for an Urgent Repair they arranged: its status, the claim, who, the amount, and the action it needs. */
+function claimCard(u: Approvals['reimbursements'][number], all: boolean, timeZone: string, now: Date): Html {
+  const tone = u.status === 'receipt_received' ? 'review' : u.status === 'receipt_forwarded' ? 'forwarded' : 'receipt';
+  return html`<article class="appr-card is-${tone}">
+    <div class="appr-status">
+      <p class="appr-status-main">${reimbursementLabel(u.status)}</p>
+      <p class="appr-status-age" title="${formatWhen(u.reportedAt, timeZone)}">Reported ${formatAge(u.reportedAt, now)}</p>
+    </div>
+    <div class="appr-main">
+      <p class="appr-title">${rowLink(u.description, `/reimbursements/${u.urgentRepairId}`)}</p>
+      <p class="appr-address">${entityLink('property', u.propertyAddress, `/properties/${u.propertyId}`)}</p>
+      <div class="appr-action">${reimbursementAction(u, all)}</div>
+    </div>
+    ${person('Tenant', u.tenantName, 'tenant')}
+    ${person('Property Owner', u.ownerName, 'owner')}
+    <div class="appr-col"><p class="appr-label">Amount</p>
+      ${
+        u.amountCents === null
+          ? html`<div class="appr-tile is-empty"><p class="appr-amount is-quiet">Not given</p><p class="appr-tile-note">Waiting for the receipt</p></div>`
+          : html`<div class="appr-tile"><p class="appr-amount">${formatMoney(u.amountCents)}</p>${u.amountCents > u.limitCents ? html`<p class="appr-tile-note text-high">Over the ${formatMoney(u.limitCents)} limit</p>` : ''}</div>`
+      }
+    </div>
+  </article>`;
 }
 
 /** Forward a checked receipt to the Property Owner, or mark it reimbursed once they have paid the Tenant. */
