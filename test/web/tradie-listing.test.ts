@@ -94,6 +94,7 @@ describe.each(PAGES)('adding a Tradie from their Google listing on $name', ({ pa
     const text = visible(html);
     for (const shown of ['Lucky Locks', '12 Crown St, Surry Hills NSW 2010', '+61 412 555 018', 'https://luckylocks.example', '4.6', '22', 'Locksmith']) expect(text).toContain(shown);
     expect(valueOf(html, 'businessName')).toBe('Lucky Locks');
+    expect(valueOf(html, 'businessAddress')).toBe('12 Crown St, Surry Hills NSW 2010');
     expect(valueOf(html, 'mobile')).toBe('+61 412 555 018');
     expect(valueOf(html, 'name')).toBe('');
     expect(tickedTrades(html)).toEqual(['locksmith']);
@@ -163,6 +164,7 @@ describe.each(PAGES)('adding a Tradie from their Google listing on $name', ({ pa
 
     const html = await page(w, href.replace(/#.*/, ''), cookie);
     expect(valueOf(html, 'businessName')).toBe('');
+    expect(valueOf(html, 'businessAddress')).toBe('');
     expect(valueOf(html, 'mobile')).toBe('');
     expect(tickedTrades(html)).toEqual([]);
     expect(valueOf(html, 'placeId')).toBe('none');
@@ -279,12 +281,28 @@ describe('adding the Tradie from the filled-in form', () => {
     const { w, cookie } = await luckyWorld();
 
     const html = await page(w, '/welcome/tradies?google=lucky&place=place-lucky', cookie);
+    const address = '12 Crown St, Surry Hills NSW 2010';
+    w.h.geocoder.locations.set(address, { lat: -33.881, lng: 151.213 });
     const added = await w.post(
       '/welcome/tradies?google=lucky&place=place-lucky',
-      { businessName: valueOf(html, 'businessName')!, name: 'Lou Lucky', mobile: valueOf(html, 'mobile')!, email: '', trades: tickedTrades(html) as string[], startingRating: 4, placeId: valueOf(html, 'placeId')! },
+      {
+        businessName: valueOf(html, 'businessName')!,
+        businessAddress: valueOf(html, 'businessAddress')!,
+        name: 'Lou Lucky',
+        mobile: valueOf(html, 'mobile')!,
+        email: '',
+        trades: tickedTrades(html) as string[],
+        startingRating: 4,
+        placeId: valueOf(html, 'placeId')!,
+      },
       cookie,
     );
     expect(added.status).toBe(303);
+    expect((await w.alice.people('tradie')).find((t) => t.businessName === 'Lucky Locks')).toMatchObject({
+      businessAddress: address,
+      location: { lat: -33.881, lng: 151.213 },
+      googlePlaceId: 'place-lucky',
+    });
 
     const shown = await page(w, added.headers.get('location')!, cookie);
     expect(visible(shown)).toContain('Lucky Locks added as a Tradie');

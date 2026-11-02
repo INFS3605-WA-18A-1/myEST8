@@ -88,8 +88,8 @@ export function dispatchPages() {
       actions.calendar({ from: startOfDay(today, timeZone).toISOString(), to: startOfDay(addDays(today, BOOKED_DAYS), timeZone).toISOString() }),
       actions.people('tradie'),
     ]);
-    // A Tradie without a business address isn't missing from the map, just not on it.
-    const missing = everyProperty.some((p) => !p.location) || people.some((t) => t.businessAddress && !t.location);
+    // A Tradie with neither an address nor a Google listing isn't missing, just not on the map.
+    const missing = everyProperty.some((p) => !p.location) || people.some((t) => !t.location && (t.businessAddress || t.googlePlaceId));
 
     // The header's search, Region (the state in a Property's address) and Trade narrow the map, the queue and the table together.
     const search = (c.req.query('q') ?? '').trim();
