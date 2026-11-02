@@ -131,9 +131,9 @@ describe('ui', () => {
   it('lists every place in the rail in three groups, Profiles under its heading, with the Phone simulator at its foot only in the demo', async () => {
     const out = await render(page({ title: 'Dashboard', pm: { name: 'Alice' }, active: 'dashboard', body: html`<p>x</p>`, demo: true }));
     const links = [...out.matchAll(/<a href="([^"]+)" class="rail-link[^"]*"/g)].map((m) => m[1]);
-    expect(links).toEqual(['/', '/dispatch', '/tickets', '/archive', '/approvals', '/calendar', '/properties', '/tradies', '/tenants', '/owners', '/building-managers', '/settings', '/demo']);
+    expect(links).toEqual(['/', '/dispatch', '/tickets', '/archive', '/approvals', '/calendar', '/profiles', '/settings', '/demo']);
     expect(out.match(/<ul class="rail-nav[ "]/g)).toHaveLength(4);
-    expect(out).toMatch(/<p class="rail-group" id="rail-group-1">Profiles<\/p><ul class="rail-nav" aria-labelledby="rail-group-1">\s*<li><a href="\/properties"/);
+    expect(out).toMatch(/<p class="rail-group" id="rail-group-1">Profiles<\/p><ul class="rail-nav" aria-labelledby="rail-group-1">\s*<li><a href="\/profiles"/);
     expect(out.match(/<ul class="rail-nav rail-gap"/g)).toHaveLength(1);
     expect(out).toMatch(/<ul class="rail-nav rail-foot"><li><a href="\/demo" class="rail-link is-quiet"/);
     expect(out).toContain('Phone simulator (demo)');
@@ -571,8 +571,8 @@ describe('ui', () => {
   it('draws the rail, menu and message icons from Phosphor', async () => {
     const out = await render(page({ title: 'Dashboard', pm: { name: 'Alice' }, active: 'dashboard', body: alert('Check the photo', 'warning'), demo: true }));
     const phosphor = /<svg (?![^>]*logo-mark)[^>]*viewBox="0 0 256 256"/g;
-    // thirteen rail links (twelve places and the Phone simulator), Collapse menu, the menu button, the alerts bell, the user menu caret, the alert (the logo's key tag is our own)
-    expect(out.match(phosphor)).toHaveLength(18);
+    // eight places and the Phone simulator, Collapse menu, the menu button, the alerts bell, the user menu caret, the alert (the logo's key tag is our own)
+    expect(out.match(phosphor)).toHaveLength(14);
     expect(out).not.toContain('viewBox="0 0 24 24"');
     expect(out).toMatch(/class="rail-link" aria-current="page"><svg [^>]*class="size-\[18px\] shrink-0"/);
     expect(await render(flashMessage({ kind: 'ok', message: 'Saved' }))).toMatch(/<svg [^>]*viewBox="0 0 256 256"/);

@@ -1,8 +1,9 @@
-// The Agency's Properties: the list at /properties and one Property's profile at
+// The Agency's Properties: the list at /properties, adding one at /properties/new
+// (the form still posts to /setup/properties), and one Property's profile at
 // /properties/:id: its open Tickets first, then the Max Repair Cost, Property Owner
 // and Property Manager, its Tenants, nominated Tradies, frequent issues and closed
-// Tickets. Adding a Property is the form in Setup. The profile's pen opens its details
-// in a form (?edit=details) that posts to /properties/:id/details.
+// Tickets. The profile's pen opens its details in a form (?edit=details) that posts
+// to /properties/:id/details.
 
 import { Hono, type Context } from 'hono';
 import { html } from 'hono/html';
@@ -13,7 +14,7 @@ import { icon } from '../icons.ts';
 import type { WebEnv } from '../env.ts';
 import { shellInfo } from '../shell.ts';
 import { alert, badge, button, contactLink, detailsForm, editPen, emptyState, entityLink, flashFrom, formatAge, formatMoney, humanise, linkButton, page, rowLink, section, sectionHeader, statusBadge, table, ticketCell, urgencyBadge, type Html } from '../ui.ts';
-import { chosenId, importPanel, nominatedFrom, postedLocation, propertyFields, saveDetails, type DetailsEdit, type Values } from './onboarding-forms.ts';
+import { chosenId, importPanel, nominatedFrom, postedLocation, propertyFields, saveDetails, type DetailsEdit, type Errors, type Values } from './onboarding-forms.ts';
 
 type Overview = Awaited<ReturnType<PropertyManagerActions['propertyOverviews']>>[number];
 type PropertyView = Awaited<ReturnType<PropertyManagerActions['property']>>;
@@ -33,46 +34,22 @@ export function propertyPages() {
 
   pages.get('/', async (c) => {
     const { actions, pm } = c.var;
-    const flash = flashFrom(c.req.url);
-    const refused = flash?.kind === 'error' ? c.req.query('form') : undefined;
-    const errorFor = (key: string): Html => (refused === key && flash ? alert(flash.message, 'error') : html``);
-    const [properties, owners, buildingManagers, tradies, propertyManagers] = await Promise.all([
-      actions.propertyOverviews(),
-      actions.people('owner'),
-      actions.people('building_manager'),
-      actions.people('tradie'),
-      actions.propertyManagers(),
-    ]);
+    const properties = await actions.propertyOverviews();
     return c.html(
       page({
         title: 'Properties',
         pm,
-        active: 'properties',
-        flash,
+        active: 'profiles',
+        flash: flashFrom(c.req.url),
         shell: shellInfo(c),
         subtitle: `${properties.length} ${properties.length === 1 ? 'Property' : 'Properties'} managed by the Agency.`,
-        actions: linkButton('Add a Property', '#add-property', { variant: 'primary', size: 'sm' }),
-        body: html`${list(properties)}
-          ${section({
-            id: 'add-property',
-            title: 'Add a Property',
-            body: html`
-              ${owners.length ? '' : html`<p class="mb-3 text-sm text-high">Add a Property Owner on the Setup page first.</p>`}
-              <form method="post" action="/setup/properties">
-                ${errorFor('property')}
-                ${propertyFields({ owners, buildingManagers, propertyManagers, tradies, manager: pm.id })}
-                <div class="mt-3">${button('Add Property', { variant: 'primary' })}</div>
-              </form>
-              <details class="import-details mt-4 border-t border-line pt-3" id="import-properties" ${refused === 'import-properties' ? 'open' : ''}>
-                <summary class="cursor-pointer font-semibold text-action">${icon('file-xls', { size: 'size-4' })}<span>Add many from a spreadsheet</span></summary>
-                <div class="mt-3">${importPanel('properties', { error: errorFor('import-properties') })}</div>
-              </details>
-            `,
-          })}
-`,
+        actions: linkButton('Add a Property', '/properties/new', { variant: 'primary', size: 'sm' }),
+        body: list(properties),
       }),
     );
   });
+
+  pages.get('/new', (c) => addPropertyPage(c));
 
   pages.post('/:id{[0-9]+}/details', (c) => {
     const id = Number(c.req.param('id'));
@@ -126,7 +103,7 @@ async function profilePage(c: Context<WebEnv>, id: number, refused?: DetailsEdit
       page({
         title: 'Property not found',
         pm,
-        active: 'properties',
+        active: 'profiles',
         shell: shellInfo(c),
         body: emptyState('There is no such Property in your Agency.', linkButton('Back to Properties', '/properties')),
       }),
@@ -139,7 +116,7 @@ async function profilePage(c: Context<WebEnv>, id: number, refused?: DetailsEdit
     page({
       title: property.address,
       pm,
-      active: 'properties',
+      active: 'profiles',
       flash: flashFrom(c.req.url),
       shell: shellInfo(c),
       actions: linkButton('Back to Properties', '/properties', { variant: 'ghost', size: 'sm' }),
@@ -153,8 +130,51 @@ async function profilePage(c: Context<WebEnv>, id: number, refused?: DetailsEdit
   );
 }
 
+export type AddPropertyRefusal = { message: string; values: Values; errors: Errors };
+
+/** The Add a Property page. A refused save is this same page, with what was typed and why. */
+export async function addPropertyPage(c: Context<WebEnv>, refused?: AddPropertyRefusal) {
+  const { actions, pm } = c.var;
+  const flash = flashFrom(c.req.url);
+  const form = flash?.kind === 'error' ? c.req.query('form') : undefined;
+  const errorFor = (key: string): Html => (form === key && flash ? alert(flash.message, 'error') : html``);
+  const [owners, buildingManagers, tradies, propertyManagers] = await Promise.all([
+    actions.people('owner'),
+    actions.people('building_manager'),
+    actions.people('tradie'),
+    actions.propertyManagers(),
+  ]);
+  return c.html(
+    page({
+      title: 'Add a Property',
+      pm,
+      active: 'profiles',
+      flash,
+      shell: shellInfo(c),
+      actions: linkButton('Back to Properties', '/properties', { variant: 'ghost', size: 'sm' }),
+      body: section({
+        id: 'add-property',
+        title: 'Add a Property',
+        body: html`
+          ${owners.length ? '' : html`<p class="mb-3 text-sm text-high">Add a Property Owner on the Setup page first.</p>`}
+          ${refused ? alert(refused.message, 'error') : ''}
+          <form method="post" action="/setup/properties">
+            ${propertyFields({ owners, buildingManagers, propertyManagers, tradies, manager: pm.id, values: refused?.values, errors: refused?.errors })}
+            <div class="mt-3">${button('Add Property', { variant: 'primary' })}</div>
+          </form>
+          <details class="import-details mt-4 border-t border-line pt-3" id="import-properties" ${form === 'import-properties' ? 'open' : ''}>
+            <summary class="cursor-pointer font-semibold text-action">${icon('file-xls', { size: 'size-4' })}<span>Add many from a spreadsheet</span></summary>
+            <div class="mt-3">${importPanel('properties', { error: errorFor('import-properties') })}</div>
+          </details>
+        `,
+      }),
+    }),
+    refused ? 400 : 200,
+  );
+}
+
 function list(properties: Overview[]): Html {
-  if (!properties.length) return emptyState('No Properties yet. Add the first one to start taking reports.', linkButton('Add a Property', '#add-property', { variant: 'primary' }));
+  if (!properties.length) return emptyState('No Properties yet. Add the first one to start taking reports.', linkButton('Add a Property', '/properties/new', { variant: 'primary' }));
   return table(
     ['Property', 'Open Tickets', 'Max Repair Cost', 'Property Owner', 'Tenants', 'Property Manager'],
     properties.map((p) => [

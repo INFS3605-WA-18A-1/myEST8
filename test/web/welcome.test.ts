@@ -334,7 +334,7 @@ describe('the onboarding wizard', () => {
     const another = await page(w, '/welcome/property?another', sam);
     expect(another).toContain('action="/welcome/property"');
     await submit(w, '/welcome/property', propertyFields({ address: '5 Sun St, Newtown NSW 2042', ownerName: 'Omar', tenantName: 'Uma Ung', tenantMobile: '0400 000 996' }), sam);
-    expect((await page(w, '/properties', sam)).match(/>Omar Owen<\/option>/g)).toHaveLength(1);
+    expect((await page(w, '/properties/new', sam)).match(/>Omar Owen<\/option>/g)).toHaveLength(1);
 
     const shared = await submit(
       w,

@@ -70,7 +70,7 @@ describe('Tenants', () => {
     expect(text).toContain('Reminder sent');
     expect(text).toContain('No Maintenance Requests waiting.');
     expect(page).toContain('href="/tenants"');
-    expect(page).toMatch(/<a href="\/tenants" class="[^"]*" aria-current="page"/);
+    expect(page).toMatch(/<a href="\/profiles" class="rail-link" aria-current="page"/);
   });
 
   test('a profile links each Maintenance Request still waiting', async () => {

@@ -68,7 +68,7 @@ export function tenantProfilePages() {
       page({
         title: 'Tenants',
         pm,
-        active: 'tenants',
+        active: 'profiles',
         flash,
         shell: shellInfo(c),
         subtitle: tenants.length ? `${tenants.length} ${tenants.length === 1 ? 'Tenant' : 'Tenants'}${filter === 'mine' ? ' on your Properties' : ' in the Agency'}, by name.` : undefined,
@@ -115,7 +115,7 @@ async function profilePage(c: Context<WebEnv>, id: number, refused?: DetailsEdit
       page({
         title: 'Tenant not found',
         pm,
-        active: 'tenants',
+        active: 'profiles',
         shell: shellInfo(c),
         body: emptyState("There's no such Tenant in your Agency.", linkButton('Back to Tenants', '/tenants')),
       }),
@@ -130,7 +130,7 @@ async function profilePage(c: Context<WebEnv>, id: number, refused?: DetailsEdit
     page({
       title: tenant.name,
       pm,
-      active: 'tenants',
+      active: 'profiles',
       flash: flashFrom(c.req.url),
       shell: shellInfo(c),
       subtitle: tenant.property
@@ -198,7 +198,7 @@ export async function addTenantPage(c: Context<WebEnv>, refused?: AddRefusal) {
     page({
       title: 'Add a Tenant',
       pm,
-      active: 'tenants',
+      active: 'profiles',
       shell: shellInfo(c),
       actions: linkButton('Back to Tenants', '/tenants', { variant: 'ghost', size: 'sm' }),
       body: addForm(properties, refused),

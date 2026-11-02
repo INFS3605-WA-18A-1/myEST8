@@ -116,7 +116,7 @@ describe('the onboarding guide', () => {
 
     const owner = await submit(w, '/setup/owners', { name: 'Priya Patel', email: 'priya@example.com' }, cookie);
     expect(owner.page).toContain('Priya Patel added as a Property Owner');
-    const ownerId = /<option value="(\d+)"[^>]*>Priya Patel<\/option>/.exec(await page(w, '/properties', cookie))?.[1];
+    const ownerId = /<option value="(\d+)"[^>]*>Priya Patel<\/option>/.exec(await page(w, '/properties/new', cookie))?.[1];
     expect(ownerId).toBeDefined();
 
     const property = await submit(
@@ -135,7 +135,8 @@ describe('the onboarding guide', () => {
 
     expect(property.page).toContain('3 Wattle Rd, Glebe NSW 2037 added');
     expect(property.page).toContain('$650.00');
-    expect(property.page).toContain('Sparky Sam');
+    const propertyId = /href="\/properties\/(\d+)"[^>]*>3 Wattle Rd, Glebe NSW 2037/.exec(property.page)?.[1];
+    expect(await page(w, `/properties/${propertyId}`, cookie)).toContain('Sparky Sam');
   });
 
   test('a Tradie needs their Google listing or "Not on Google", and the search offers listings to choose from', async () => {

@@ -8,7 +8,7 @@ import { BELLA, confirmedQuotes, HANA, STRANGER, TOM } from '../support/world.ts
 
 type Web = Awaited<ReturnType<typeof webWorld>>;
 
-const RAIL = ['/', '/dispatch', '/tickets', '/archive', '/approvals', '/calendar', '/properties', '/tradies', '/tenants', '/owners', '/building-managers', '/settings'];
+const RAIL = ['/', '/dispatch', '/tickets', '/archive', '/approvals', '/calendar', '/profiles', '/settings'];
 
 /** The page as the Property Manager sees it; signs in afresh, as the scenarios move the clock past a session's life. */
 async function text(w: Web, path: string, cookie?: string) {
@@ -120,21 +120,22 @@ describe('the rail', () => {
       '/archive': '/archive',
       '/approvals': '/approvals',
       '/calendar': '/calendar',
-      '/properties': '/properties',
-      '/tradies': '/tradies',
-      '/tenants': '/tenants',
+      '/profiles': '/profiles',
+      '/properties': '/profiles',
+      '/tradies': '/profiles',
+      '/tenants': '/profiles',
       '/settings': '/settings',
       '/setup': '/settings',
     };
     for (const [path, href] of Object.entries(expected)) expect(current(await text(w, path)), path).toEqual([href]);
   });
 
-  test('keeps the Ticket and Tradie pages under their own entries', async () => {
+  test('keeps a Ticket under Tickets and a Tradie profile under Profiles', async () => {
     const w = await webWorld();
     const ids = await threeTickets(w);
     const current = (html: string) => [...html.matchAll(/<a href="([^"]+)" class="rail-link[^"]*" aria-current="page"/g)].map((m) => m[1]);
     expect(current(await text(w, `/tickets/${ids.tap}`))).toEqual(['/tickets']);
-    expect(current(await text(w, `/tradies/${w.ids.pete}`))).toEqual(['/tradies']);
+    expect(current(await text(w, `/tradies/${w.ids.pete}`))).toEqual(['/profiles']);
   });
 });
 

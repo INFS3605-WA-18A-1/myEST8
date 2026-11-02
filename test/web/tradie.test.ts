@@ -241,7 +241,7 @@ describe('removing a Tradie', () => {
     const everywhere = async () => ({
       list: await (await w.get('/tradies', cookie)).text(),
       dispatch: await (await w.get('/dispatch', cookie)).text(),
-      properties: await (await w.get('/properties', cookie)).text(),
+      properties: await (await w.get('/properties/new', cookie)).text(),
       property: await (await w.get(`/properties/${w.ids.kingSt}`, cookie)).text(),
     });
     const before = await everywhere();
