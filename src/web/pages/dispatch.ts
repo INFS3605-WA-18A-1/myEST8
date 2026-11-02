@@ -90,8 +90,8 @@ export function dispatchPages() {
       actions.calendar({ from: startOfDay(today, timeZone).toISOString(), to: startOfDay(addDays(today, BOOKED_DAYS), timeZone).toISOString() }),
       actions.people('tradie'),
     ]);
-    // A Tradie without a business address isn't missing from the map, just not on it.
-    const missing = properties.some((p) => !p.location) || people.some((t) => t.businessAddress && !t.location);
+    // A Tradie with neither an address nor a Google listing isn't missing, just not on the map.
+    const missing = properties.some((p) => !p.location) || people.some((t) => !t.location && (t.businessAddress || t.googlePlaceId));
 
     const ordered = [...properties].sort(
       (a, b) => (URGENCY_RANK[a.worstUrgency ?? ''] ?? 3) - (URGENCY_RANK[b.worstUrgency ?? ''] ?? 3) || a.address.localeCompare(b.address),

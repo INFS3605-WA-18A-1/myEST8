@@ -327,6 +327,9 @@ describe('Dispatch: finding addresses again', () => {
       return geocode(address);
     };
     w.h.geocoder.locations.set(UNKNOWN_ADDRESS, { lat: -33.89, lng: 151.18 });
+    // Tradies added from a listing already have an address and no point, so the same press places them too.
+    const unplaced = (await w.alice.people('tradie')).filter((t) => t.businessAddress && !t.location);
+    for (const tradie of unplaced) w.h.geocoder.locations.set(tradie.businessAddress!, { lat: -33.9, lng: 151.18 });
 
     const before = await dispatch(w, cookie);
     expect(lookups).toBe(0);
@@ -337,7 +340,8 @@ describe('Dispatch: finding addresses again', () => {
     expect(res.status).toBe(303);
     const after = await dispatch(w, cookie, res.headers.get('location')!);
 
-    expect(visible(after)).toContain('Found 1 address and put it on the map');
+    expect(unplaced.length).toBeGreaterThan(0);
+    expect(visible(after)).toContain(`Found ${unplaced.length + 1} addresses and put them on the map`);
     expect(pinData(after).properties.find((p) => p.id === id)).toMatchObject({ lat: -33.89, lng: 151.18 });
     expect(after).not.toContain('Address not found');
     expect(after).not.toContain('action="/dispatch/addresses"');

@@ -174,6 +174,92 @@ describe('Requests view', () => {
   });
 });
 
+const LUCKY_ADDRESS = '12 Crown St, Surry Hills NSW 2010';
+const LUCKY_LOCATION = { lat: -33.881, lng: 151.213 };
+const LUCKY = {
+  name: 'Lou Lucky',
+  businessName: 'Lucky Locks',
+  mobile: '+61400000991',
+  trades: ['locksmith' as const],
+  startingRating: 4 as const,
+  googlePlaceId: 'place-lucky',
+};
+
+async function person(w: World, id: number) {
+  return (await w.alice.people('tradie')).find((t) => t.id === id);
+}
+
+describe('adding a Tradie from a Google listing', () => {
+  test('stores the listing address and geocodes it, and a corrected address wins', async () => {
+    const w = await world();
+    w.h.places.listings.set('place-lucky', { name: 'Lucky Locks', address: LUCKY_ADDRESS, rating: 4.6, reviewCount: 22 });
+    w.h.geocoder.locations.set(LUCKY_ADDRESS, LUCKY_LOCATION);
+    const id = await w.alice.addTradie(LUCKY);
+    expect(await person(w, id)).toMatchObject({ businessAddress: LUCKY_ADDRESS, location: LUCKY_LOCATION, googlePlaceId: 'place-lucky' });
+
+    const corrected = '9 Bay St, Glebe NSW 2037';
+    const correctedLocation = { lat: -33.879, lng: 151.185 };
+    w.h.places.listings.set('place-keys', { name: 'Lucky Locks and Keys', address: LUCKY_ADDRESS, rating: 4.4, reviewCount: 8 });
+    w.h.geocoder.locations.set(corrected, correctedLocation);
+    const other = await w.alice.addTradie({ ...LUCKY, mobile: '+61400000992', businessName: 'Lucky Locks and Keys', googlePlaceId: 'place-keys', businessAddress: corrected });
+    expect(await person(w, other)).toMatchObject({ businessAddress: corrected, location: correctedLocation });
+  });
+
+  test('a geocode failure still adds the Tradie, with no point', async () => {
+    const w = await world();
+    w.h.places.listings.set('place-lucky', { name: 'Lucky Locks', address: LUCKY_ADDRESS, rating: 4.6, reviewCount: 22 });
+    w.h.geocoder.geocode = async () => {
+      throw new Error('Nominatim returned 429: Too many requests');
+    };
+    const id = await w.alice.addTradie(LUCKY);
+    expect(await person(w, id)).toMatchObject({ businessAddress: LUCKY_ADDRESS, location: null });
+  });
+
+  test('a point outside Australia is not kept', async () => {
+    const w = await world();
+    w.h.places.listings.set('place-lucky', { name: 'Lucky Locks', address: LUCKY_ADDRESS, rating: 4.6, reviewCount: 22 });
+    w.h.geocoder.locations.set(LUCKY_ADDRESS, { lat: 51.5, lng: -0.12 });
+    const id = await w.alice.addTradie(LUCKY);
+    expect(await person(w, id)).toMatchObject({ businessAddress: LUCKY_ADDRESS, location: null });
+  });
+
+  test('geocodeMissing fills in a Tradie who has a place id and no address, then geocodes it', async () => {
+    const w = await world();
+    w.h.places.listings.set('place-lucky', { name: 'Lucky Locks', address: LUCKY_ADDRESS, rating: 4.6, reviewCount: 22 });
+    const id = await w.alice.addTradie(LUCKY);
+    await w.alice.setTradieAddress(id, ' ');
+    expect(await person(w, id)).toMatchObject({ businessAddress: null, location: null, googlePlaceId: 'place-lucky' });
+
+    w.h.geocoder.geocode = async () => {
+      throw new Error('Nominatim returned 429: Too many requests');
+    };
+    expect(await w.alice.geocodeMissing()).toBe(0);
+    expect(await person(w, id)).toMatchObject({ businessAddress: LUCKY_ADDRESS, location: null });
+
+    w.h.geocoder.geocode = async (address) => w.h.geocoder.locations.get(address) ?? null;
+    w.h.places.listingDetails = async () => {
+      throw new Error('Google returned 503');
+    };
+    w.h.geocoder.locations.set(LUCKY_ADDRESS, LUCKY_LOCATION);
+    expect(await w.alice.geocodeMissing()).toBe(1);
+    expect(await person(w, id)).toMatchObject({ businessAddress: LUCKY_ADDRESS, location: LUCKY_LOCATION });
+  });
+
+  test('a Places failure while filling in a missing address is skipped', async () => {
+    const w = await world();
+    w.h.places.listings.set('place-lucky', { name: 'Lucky Locks', address: LUCKY_ADDRESS, rating: 4.6, reviewCount: 22 });
+    const id = await w.alice.addTradie(LUCKY);
+    await w.alice.setTradieAddress(id, ' ');
+    w.h.places.listingDetails = async () => {
+      throw new Error('Google returned 503');
+    };
+    w.h.geocoder.locations.set(LUCKY_ADDRESS, LUCKY_LOCATION);
+
+    expect(await w.alice.geocodeMissing()).toBe(0);
+    expect(await person(w, id)).toMatchObject({ businessAddress: null, location: null });
+  });
+});
+
 describe('Tradie locations and Dispatch', () => {
   test('a Tradie address is kept, geocoded when known, and retried by geocodeMissing', async () => {
     const w = await world();
