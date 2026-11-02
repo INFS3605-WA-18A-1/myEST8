@@ -16,7 +16,8 @@ describe('Properties', () => {
     expect(visible(page)).toContain('Open Tickets');
     expect(visible(page)).toContain(OCEAN_AVE);
     // The add form still posts to Setup.
-    expect(page).toContain('action="/setup/properties"');
+    expect(page).toContain('href="/properties/new"');
+    expect(page).not.toContain('action="/setup/properties"');
   });
 
   test('each row leads with the address and its open Tickets, and labels its values for phones', async () => {
@@ -197,7 +198,7 @@ describe('Properties', () => {
     const w = await webWorld();
     const cookie = await w.signIn();
 
-    for (const path of ['/properties', '/setup', '/welcome/property?another']) {
+    for (const path of ['/properties/new', '/setup', '/welcome/property?another']) {
       const page = await (await w.get(path, cookie)).text();
       expect(page, path).toContain('data-address-suggest');
       expect(page, path).toContain('name="address"');

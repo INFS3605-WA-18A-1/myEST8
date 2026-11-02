@@ -27,6 +27,7 @@ import { serverSmsPanel } from './server-sms.ts';
 import { smsNumberPanel, smsNumbersOffered } from './sms-number.ts';
 import { alert, button, emptyState, field, flashFrom, formatMoney, linkButton, page, section, table, type Flash, type Html } from '../ui.ts';
 import { addBuildingManagerPage, addOwnerPage, type AddPersonRefusal } from './owners.ts';
+import { addPropertyPage, type AddPropertyRefusal } from './properties.ts';
 import { addTenantPage, type AddRefusal } from './tenants.ts';
 import { addTradiePage, type AddTradieRefusal } from './tradie.ts';
 import {
@@ -198,9 +199,17 @@ export function setupPages(o: { connectors?: ChannelConnectors } = {}) {
     return formAction(c, back, save);
   });
 
-  pages.post('/properties', (c) =>
-    formAction(c, `${home(c, '/properties')}?form=property`, async (form) => {
-      if (!text(form, 'maxRepairCost')) throw new ActionError('invalid', 'Enter the Max Repair Cost');
+  pages.post('/properties', (c) => {
+    const here = home(c, '/properties');
+    const save = async (form: FormValues) => {
+      if (!text(form, 'maxRepairCost')) throw new ActionError('invalid', 'Enter the Max Repair Cost', { maxRepairCost: 'Enter the Max Repair Cost' });
+      let maxRepairCostCents: number;
+      try {
+        maxRepairCostCents = cents(form, 'maxRepairCost', 'the Max Repair Cost');
+      } catch (error) {
+        if (error instanceof ActionError) throw new ActionError(error.code, error.message, { maxRepairCost: error.message, ...error.fields });
+        throw error;
+      }
       const buildingManager = text(form, 'buildingManagerId');
       const address = text(form, 'address');
       const location = postedLocation(form);
@@ -209,14 +218,17 @@ export function setupPages(o: { connectors?: ChannelConnectors } = {}) {
         suburb: text(form, 'suburb'),
         ownerId: chosenId(form, 'ownerId', 'the Property Owner'),
         propertyManagerId: chosenId(form, 'propertyManagerId', 'the Property Manager'),
-        maxRepairCostCents: cents(form, 'maxRepairCost', 'the Max Repair Cost'),
+        maxRepairCostCents,
         nominatedTradieIds: nominatedFrom(form),
         buildingManagerId: buildingManager ? Number(buildingManager) : undefined,
         ...(location ? { location } : {}),
       });
-      return { ok: `${address} added. Now add its Tenants.` };
-    }),
-  );
+      return { ok: `${address} added. Now add its Tenants.`, redirect: here };
+    };
+    // From the Add a Property page, a refusal is that page again. Setup still comes back to itself.
+    if (here === '/properties') return refusedOnPage(c, save, addPropertyPage);
+    return formAction(c, `${here}?form=property`, save);
+  });
 
   pages.post('/tenants', (c) => {
     const here = home(c, '/tenants');
@@ -236,7 +248,7 @@ export function setupPages(o: { connectors?: ChannelConnectors } = {}) {
   return pages;
 }
 
-type PageRefusal = AddRefusal | AddPersonRefusal | AddTradieRefusal;
+type PageRefusal = AddRefusal | AddPersonRefusal | AddTradieRefusal | AddPropertyRefusal;
 
 /**
  * A save that came from an Add page. Success still redirects. A refusal is the

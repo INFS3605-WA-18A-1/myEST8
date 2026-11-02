@@ -13,7 +13,7 @@ describe('Property Owners and Building Managers', () => {
     const cookie = await w.signIn();
 
     const owners = await (await w.get('/owners', cookie)).text();
-    expect(owners).toMatch(/<a href="\/owners" class="[^"]*" aria-current="page"/);
+    expect(owners).toMatch(/<a href="\/profiles" class="rail-link" aria-current="page"/);
     for (const heading of ['Property Owner', 'Mobile', 'Email', 'Properties']) expect(owners).toContain(`>${heading}</th>`);
     expect(owners).toContain(`href="/owners/${w.ids.olivia}"`);
     expect(owners).toContain(`href="/owners/${w.ids.oscar}"`);
@@ -33,7 +33,7 @@ describe('Property Owners and Building Managers', () => {
     expect(owners).not.toContain('action="/setup/owners?from=list"');
 
     const managers = await (await w.get('/building-managers', cookie)).text();
-    expect(managers).toMatch(/<a href="\/building-managers" class="[^"]*" aria-current="page"/);
+    expect(managers).toMatch(/<a href="\/profiles" class="rail-link" aria-current="page"/);
     expect(managers).toContain(`href="/building-managers/${w.ids.barry}"`);
     expect(managers).toContain(`href="mailto:${BARRY}"`);
     expect(managers).toContain(`href="/properties/${w.ids.oceanAve}"`);

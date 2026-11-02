@@ -37,8 +37,6 @@ test('on a laptop and a tablet the count bubbles sit inside their card, and none
 });
 
 test('the Inbox bubble opens a dialog, and Escape returns focus to the bubble', async ({ page }) => {
-  // The bubble floats until it is asked not to, so a click waits forever for it to sit still.
-  await page.emulateMedia({ reducedMotion: 'reduce' });
   await signIn(page);
   await page.setViewportSize({ width: 1366, height: 900 });
   await page.goto('/');

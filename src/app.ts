@@ -226,6 +226,8 @@ export function createApp(
         /** One Reimbursement Request (by its Urgent Repair's id) with its receipts, timeline and messages. Refuses (not_found) one outside the Agency. */
         reimbursement: (urgentRepairId: number) => views.reimbursement(agencyId, urgentRepairId),
         propertyOverviews: () => views.propertyOverviews(agencyId),
+        /** Households, Tradies and people linked to no Property. Mine is this Property Manager's Properties; Tradies are the Agency's. */
+        profilesOverview: ({ filter = 'mine' }: { filter?: 'mine' | 'all' } = {}) => views.profilesOverview(agencyId, propertyManagerId, filter),
         property: (propertyId: number) => views.property(agencyId, propertyId),
         tradieDirectory: () => views.tradies(agencyId),
         /** The Dispatch map: the Agency's Properties with their open Tickets and its Tradies, each with where they are. */

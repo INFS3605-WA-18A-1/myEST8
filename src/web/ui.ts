@@ -24,11 +24,7 @@ export type NavKey =
   | 'archive'
   | 'approvals'
   | 'schedule'
-  | 'properties'
-  | 'tradies'
-  | 'tenants'
-  | 'owners'
-  | 'building-managers'
+  | 'profiles'
   | 'settings'
   | 'simulator';
 export type Variant = 'primary' | 'secondary' | 'danger' | 'ghost';
@@ -59,7 +55,7 @@ export function head(title: string, o: { css?: string[]; runtime?: boolean } = {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${title} - myEST8</title>
     <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
-    <script>document.documentElement.classList.add('js');try{if(localStorage.getItem('rail')==='collapsed')document.documentElement.classList.add('rail-collapsed')}catch(e){}</script>
+    <script>document.documentElement.classList.add('js');try{if(localStorage.getItem('rail')==='collapsed')document.documentElement.classList.add('rail-collapsed')}catch(e){}try{if(sessionStorage.getItem('glance'))document.documentElement.classList.add('glance-seen')}catch(e){}</script>
     <link rel="preload" href="/assets/fonts/public-sans-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/assets/fonts/bricolage-grotesque-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="/assets/daisyui.css" />
@@ -70,11 +66,10 @@ export function head(title: string, o: { css?: string[]; runtime?: boolean } = {
 }
 
 /**
- * The places a Property Manager works, in three groups with a gap between them: the
- * day's work (Dashboard to Schedule), the Profiles of who and what the Agency looks
- * after (Properties, Tradies, Tenants, Property Owners and Building Managers, under a quiet heading), then Settings.
+ * The places a Property Manager works. The day's work runs Dashboard to Schedule,
+ * then Profiles (one page, so it needs no group heading), then Settings after a 12px gap.
  */
-const NAV: { label?: string; items: { key: NavKey; label: string; href: string }[] }[] = [
+const NAV: { gap?: boolean; items: { key: NavKey; label: string; href: string }[] }[] = [
   {
     items: [
       { key: 'dashboard', label: 'Dashboard', href: '/' },
@@ -85,17 +80,8 @@ const NAV: { label?: string; items: { key: NavKey; label: string; href: string }
       { key: 'schedule', label: 'Schedule', href: '/calendar' },
     ],
   },
-  {
-    label: 'Profiles',
-    items: [
-      { key: 'properties', label: 'Properties', href: '/properties' },
-      { key: 'tradies', label: 'Tradies', href: '/tradies' },
-      { key: 'tenants', label: 'Tenants', href: '/tenants' },
-      { key: 'owners', label: 'Property Owners', href: '/owners' },
-      { key: 'building-managers', label: 'Building Managers', href: '/building-managers' },
-    ],
-  },
-  { items: [{ key: 'settings', label: 'Settings', href: '/settings' }] },
+  { items: [{ key: 'profiles', label: 'Profiles', href: '/profiles' }] },
+  { gap: true, items: [{ key: 'settings', label: 'Settings', href: '/settings' }] },
 ];
 
 /** The demo's Phone simulator: not a place to work, so it sits quietly at the bottom of the rail. */
@@ -105,7 +91,8 @@ const SIMULATOR = { key: 'simulator', label: 'Phone simulator (demo)', href: '/d
 function railLink(item: { key: NavKey; label: string; href: string }, active: NavKey | undefined, count: number | undefined, cls = 'rail-link'): Html {
   // Only the counts that mean "needs you" (Tickets' new Maintenance Requests, Approvals) are a Wattle chip; any other count is a plain numeral.
   const decision = item.key === 'tickets' || item.key === 'approvals' ? html` data-decision` : '';
-  return html`<a href="${item.href}" class="${cls}" ${item.key === active ? html`aria-current="page"` : ''}${decision}>${NAV_ICON[item.key]}<span class="rail-label">${item.label}${count ? html`<span class="rail-count num">${count}<span class="sr-only"> waiting</span></span>` : ''}</span></a>`;
+  const indicator = item.key === active ? html`<span class="rail-indicator" aria-hidden="true"></span>` : '';
+  return html`<a href="${item.href}" class="${cls}" ${item.key === active ? html`aria-current="page"` : ''}${decision}>${indicator}${NAV_ICON[item.key]}<span class="rail-label">${item.label}${count ? html`<span class="rail-count num">${count}<span class="sr-only"> waiting</span></span>` : ''}</span></a>`;
 }
 
 /**
@@ -122,7 +109,7 @@ function rail(active: NavKey | undefined, agencyName: string | undefined, counts
     <a href="/" class="rail-logo">${logo()}</a>
     <nav aria-label="Main" class="rail-menu">
       ${NAV.map(
-        (group, i) => html`${group.label ? html`<p class="rail-group" id="rail-group-${i}">${group.label}</p>` : ''}<ul class="rail-nav${i > 0 && !group.label ? ' rail-gap' : ''}" ${group.label ? html`aria-labelledby="rail-group-${i}"` : ''}>
+        (group) => html`<ul class="rail-nav${group.gap ? ' rail-gap' : ''}">
           ${group.items.map((item) => html`<li>${railLink(item, active, counts[item.key])}</li>`)}
         </ul>`,
       )}
@@ -1323,11 +1310,7 @@ const NAV_ICON: Record<NavKey, Html> = {
   archive: icon('archive', { size: 'size-[18px]' }),
   approvals: icon('seal-check', { size: 'size-[18px]' }),
   schedule: icon('calendar-blank', { size: 'size-[18px]' }),
-  properties: icon('house-line', { size: 'size-[18px]' }),
-  tradies: icon('wrench', { size: 'size-[18px]' }),
-  tenants: icon('users', { size: 'size-[18px]' }),
-  owners: icon('key', { size: 'size-[18px]' }),
-  'building-managers': icon('buildings', { size: 'size-[18px]' }),
+  profiles: icon('address-book', { size: 'size-[18px]' }),
   settings: icon('gear-six', { size: 'size-[18px]' }),
   simulator: icon('device-mobile', { size: 'size-4' }),
 };

@@ -7,6 +7,7 @@ import { calendarPages } from './pages/calendar.ts';
 import { googleOAuthPages } from './pages/oauth-google.ts';
 import { dashboardPages } from './pages/dashboard.ts';
 import { dispatchPages } from './pages/dispatch.ts';
+import { profilePages } from './pages/profiles.ts';
 import { propertyPages } from './pages/properties.ts';
 import { reimbursementPages } from './pages/reimbursement.ts';
 import { requestPages } from './pages/requests.ts';
@@ -37,6 +38,7 @@ export function pmPages(o: { demo: boolean; connectors: ChannelConnectors } = { 
   pages.route('/calendar', calendarPages());
   pages.route('/dispatch', dispatchPages());
   pages.get('/schedule', (c) => c.redirect(`/calendar${new URL(c.req.url).search}`, 303));
+  pages.route('/profiles', profilePages());
   pages.route('/properties', propertyPages());
   pages.route('/tradies', tradiePages());
   pages.route('/tenants', tenantProfilePages());
