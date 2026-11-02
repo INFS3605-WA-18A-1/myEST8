@@ -52,7 +52,11 @@ const MORE_TRADIES = {
   kev: { name: 'Kev Keyes', businessName: 'Keystone Locksmiths', mobile: '+61400000215', trades: ['locksmith'], startingRating: 3, googlePlaceId: null },
 } satisfies Record<string, TradieSeed>;
 
-/** Where each demo Tradie works from, by seed key: Inner West and Eastern Suburbs streets, so the Dispatch map has Tradies near the Properties. */
+/**
+ * Where a Tradie works from when they are not added from a listing: Inner West and Eastern
+ * Suburbs streets, so the Dispatch map has them near the Properties. A listing's address
+ * comes from the listing itself, through the same add a Property Manager uses.
+ */
 const TRADIE_ADDRESSES: Record<string, string> = {
   pete: '31 Illawarra Rd, Marrickville NSW 2204',
   quinn: '12 Cleveland St, Redfern NSW 2016',
@@ -98,11 +102,19 @@ export async function seedDemo(app: App, options: { googleListings?: boolean } =
     await alice.connectChannel(channelType, address);
   }
 
-  /** Adds each Tradie, linked to their mock Google listing when there is one, and returns their ids by key. */
+  /**
+   * Adds each Tradie and returns their ids by key. One linked to a listing takes that
+   * listing's address. One not on Google (and every Tradie, when listings are off) is
+   * placed with setTradieAddress, the same way a Property Manager would.
+   */
   async function addTradies<K extends string>(list: Record<K, TradieSeed>) {
     const ids = {} as Record<K, number>;
     for (const [key, { googlePlaceId, ...tradie }] of Object.entries(list) as [K, TradieSeed][]) {
-      ids[key] = await alice.addTradie(googlePlaceId && googleListings ? { ...tradie, googlePlaceId } : { ...tradie, notOnGoogle: true });
+      if (googlePlaceId && googleListings) {
+        ids[key] = await alice.addTradie({ ...tradie, googlePlaceId });
+        continue;
+      }
+      ids[key] = await alice.addTradie({ ...tradie, notOnGoogle: true });
       const address = TRADIE_ADDRESSES[key];
       if (address) await alice.setTradieAddress(ids[key], address);
     }
