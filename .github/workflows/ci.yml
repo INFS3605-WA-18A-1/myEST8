@@ -31,6 +31,28 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # A pull request into master is a release from dev, or a hotfix. Feature work
+  # opens against dev. This is what kept Dispatch and the Tickets list on master
+  # without ever landing on dev.
+  master-pr-source:
+    if: github.event_name == 'pull_request' && github.base_ref == 'master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Only dev or a hotfix may open a pull request into master
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          case "$HEAD_REF" in
+            dev|hotfix/*)
+              exit 0
+              ;;
+            *)
+              echo "PRs into master come from dev (release) or hotfix/* only. Open this PR against dev."
+              exit 1
+              ;;
+          esac
+
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 20
