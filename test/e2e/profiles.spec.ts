@@ -15,7 +15,8 @@ test('Profiles opens from the side menu, and Add profile leads to a new Tenant',
   await expect(page.getByRole('heading', { level: 1, name: 'Profiles' })).toBeVisible();
   expect(await overflow(page)).toBeLessThanOrEqual(0);
 
-  await page.getByRole('button', { name: 'Add profile' }).click();
+  // The summary is a disclosure, like the user menu, so it is not a button role.
+  await page.locator('summary', { hasText: 'Add profile' }).click();
   await page.getByRole('link', { name: 'Tenant', exact: true }).click();
   await expect(page).toHaveURL(/\/tenants\/new$/);
   await expect(page.getByRole('heading', { level: 1, name: 'Add a Tenant' })).toBeVisible();

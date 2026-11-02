@@ -40,6 +40,7 @@
   --control: #7d8a95; /* input, select, checkbox and secondary button borders (3.5:1 on white) */
   --action: #1f5c8b; /* Harbour: primary buttons, links, focus, selected (white on it 7.1:1) */
   --action-hover: #174a70; /* Harbour, pressed darker: primary hover, link hover */
+  --action-divider: rgb(255 255 255 / 0.4); /* the line in a split primary button (decorative, no contrast target) */
   --hivis: #ffc233; /* Wattle: the decision stripe, the current rail item, decision chips (Night on it 10.1:1). Never text, never a button */
   --info-bg: #e8f0f7; /* Harbour's tint: info badges and alerts, "Filled in by AI" */
   --urgent: #b42318; /* urgent, errors, destructive actions */
@@ -2437,7 +2438,7 @@
     .rail-gap {
       margin-top: 12px;
     }
-    /* A group's quiet heading (Profiles): the gap above it, small caps-weight label. */
+    /* A group's quiet heading, when a group has one. Profiles does not: its only item is already called Profiles. */
     .rail-group {
       margin: 12px 0 0;
       padding: 0 12px;
@@ -8726,6 +8727,30 @@
     .add-menu > summary::-webkit-details-marker {
       display: none;
     }
+    /* One target that looks split: the label with a plus, then a chevron behind a hairline. */
+    .add-menu-button {
+      padding-inline: 0;
+      gap: 0;
+      align-items: stretch;
+    }
+    .add-menu-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 10px 0 12px;
+    }
+    .add-menu-caret {
+      display: inline-flex;
+      align-items: center;
+      padding: 0 8px;
+      border-left: 1px solid var(--action-divider);
+    }
+    .add-menu[open] > summary {
+      background: var(--action-hover);
+    }
+    .add-menu[open] .add-menu-caret svg {
+      rotate: 180deg;
+    }
     .add-menu-panel {
       position: absolute;
       top: calc(100% + 4px);
@@ -8772,10 +8797,6 @@
         grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
         align-items: start;
         gap: 24px;
-      }
-      .profiles-tradies {
-        position: sticky;
-        top: 16px;
       }
     }
     .profiles-main,
@@ -8827,6 +8848,11 @@
       color: var(--ink);
       font-size: 12px;
       font-weight: 500;
+      text-decoration: none;
+    }
+    a.household-waiting:hover {
+      color: var(--ink);
+      text-decoration: underline;
     }
     .household-title {
       display: flex;
@@ -8844,10 +8870,29 @@
       font-weight: 600;
       line-height: 1.3;
     }
-    .household-address a {
+    /* Record links are Night. Harbour stays on actions: the count sentence, See all, Add a Tenant, Add profile. */
+    .household-address a,
+    .household-owner > a:not(.household-waiting),
+    .household-people a:not(.btn),
+    .household-manager a,
+    .tradie-rows > li > a,
+    .unlinked-list a {
+      color: var(--ink);
+      font-family: var(--font-body);
+      font-weight: 500;
       text-decoration: none;
     }
-    .household-address a:hover {
+    .household-address a {
+      font-family: inherit;
+      font-weight: inherit;
+    }
+    .household-address a:hover,
+    .household-owner > a:not(.household-waiting):hover,
+    .household-people a:not(.btn):hover,
+    .household-manager a:hover,
+    .tradie-rows > li > a:hover,
+    .unlinked-list a:hover {
+      color: var(--ink);
       text-decoration: underline;
     }
     .household-suburb {
@@ -8899,6 +8944,20 @@
       bottom: auto;
       height: 50%;
     }
+    .household-people > li:hover,
+    .tradie-rows > li:hover {
+      background: var(--page);
+    }
+    .household-manager {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 8px;
+      margin: 8px 0 0;
+      padding-top: 8px;
+      border-top: 1px solid var(--line);
+      font-size: 14px;
+    }
     .household-people .is-quiet,
     .household-role {
       color: var(--muted);
@@ -8919,7 +8978,16 @@
       margin: 8px 0 0;
       padding: 0;
     }
-    .tradie-rows > li,
+    .tradie-rows > li {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      column-gap: 12px;
+      row-gap: 2px;
+      align-items: baseline;
+      min-width: 0;
+      padding: 8px 0;
+      border-top: 1px solid var(--line);
+    }
     .unlinked-list > li {
       display: flex;
       flex-wrap: wrap;
@@ -8934,12 +9002,66 @@
       border-top: 0;
       padding-top: 0;
     }
+    .tradie-rows > li > a {
+      grid-column: 1;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .tradie-rows .tradie-rating {
+      grid-column: 2;
+      justify-self: end;
+    }
+    .tradie-extra {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      grid-column: 1 / -1;
+    }
     .tradie-jobs {
       color: var(--muted);
       font-size: 13px;
     }
     .profiles-unlinked .section-body {
       gap: 16px;
+    }
+    @media (max-width: 40rem), (pointer: coarse) {
+      .household {
+        padding-top: 12px;
+      }
+      .household-owner {
+        position: static;
+        transform: none;
+        max-width: none;
+        padding: 0;
+        background: transparent;
+        border: 0;
+      }
+      .household-owner > a:not(.household-waiting),
+      .household-address a,
+      .household-manager a {
+        display: inline-flex;
+        align-items: center;
+        min-height: 44px;
+      }
+      .household-people > li,
+      .tradie-rows > li {
+        min-height: 44px;
+        position: relative;
+      }
+      .household-people > li > a::after,
+      .tradie-rows > li > a::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+      }
+      .household-people > li > :not(a),
+      .tradie-rows > li > :not(a) {
+        position: relative;
+        z-index: 1;
+      }
     }
   }
 }

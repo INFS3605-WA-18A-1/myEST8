@@ -8,7 +8,8 @@ import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
 import type { WebEnv } from '../env.ts';
 import { shellInfo } from '../shell.ts';
-import { badge, emptyState, humanise, linkButton, page, ratingChip, segmented, urgencyBadge, type Html } from '../ui.ts';
+import { icon } from '../icons.ts';
+import { badge, emptyState, humanise, linkButton, page, segmented, urgencyBadge, type Html } from '../ui.ts';
 
 type Overview = Awaited<ReturnType<PropertyManagerActions['profilesOverview']>>;
 type Household = Overview['households'][number];
@@ -45,7 +46,7 @@ export function profilePages() {
         pm,
         active: 'profiles',
         shell: shellInfo(c),
-        subtitle: summary(counts),
+        subtitle: summary(counts, filter, q),
         controls: html`${search(filter, q)}${segmented(
           [
             { label: 'Mine', href: hrefFor('mine', q), active: filter === 'mine' },
@@ -84,10 +85,13 @@ function search(filter: Filter, q: string): Html {
   </form>`;
 }
 
-/** Add profile: the same disclosure as the user menu, so a click elsewhere or Escape closes it. */
+/** Add profile: one control, a plus and a chevron, opening the same disclosure as the user menu. */
 function addMenu(): Html {
   return html`<details class="add-menu" data-menu>
-    <summary class="btn btn-primary btn-sm" role="button">Add profile</summary>
+    <summary class="btn btn-primary btn-sm add-menu-button">
+      <span class="add-menu-label">${icon('plus', { size: 'size-4' })}Add profile</span>
+      <span class="add-menu-caret">${icon('caret-down', { size: 'size-4' })}</span>
+    </summary>
     <nav class="add-menu-panel" aria-label="Add profile">
       ${ADD.map((item) => html`<a href="${item.href}">${item.label}</a>`)}
     </nav>
@@ -95,12 +99,8 @@ function addMenu(): Html {
 }
 
 function householdsBlock(households: Household[], q: string, filter: Filter): Html {
-  const see = html`${linkButton('See all Properties', '/properties', { variant: 'ghost', size: 'sm' })}${linkButton('See all Tenants', '/tenants', { variant: 'ghost', size: 'sm' })}${linkButton('See all Property Owners', '/owners', { variant: 'ghost', size: 'sm' })}${linkButton('See all Building Managers', '/building-managers', { variant: 'ghost', size: 'sm' })}`;
   return html`<section class="profiles-households" aria-labelledby="profiles-households">
-    <div class="section-head">
-      <h2 class="section-title" id="profiles-households">Households</h2>
-      <div class="section-actions">${see}</div>
-    </div>
+    <h2 class="section-title" id="profiles-households">Households</h2>
     ${households.length
       ? html`<div class="household-list">${households.map(householdCard)}</div>`
       : q
@@ -123,7 +123,7 @@ function householdCard(household: Household): Html {
     <p class="household-owner">
       <span class="household-role">Owner</span>
       <a href="/owners/${household.owner.id}">${household.owner.name}</a>
-      ${waiting ? html`<span class="household-waiting">${waiting === 1 ? '1 approval waiting' : `${waiting} approvals waiting`}</span>` : ''}
+      ${waiting ? html`<a class="household-waiting" href="/approvals">${waiting === 1 ? '1 approval waiting' : `${waiting} approvals waiting`}</a>` : ''}
     </p>
     <div class="household-title">
       <h3 class="household-address"><a href="/properties/${household.propertyId}">${household.address}</a>${suburbOf(household)}</h3>
@@ -141,10 +141,10 @@ function householdCard(household: Household): Html {
             </li>`,
           )
         : html`<li class="is-quiet"><span>No Tenants</span> ${linkButton('Add a Tenant', '/tenants/new', { variant: 'ghost', size: 'sm' })}</li>`}
-      ${household.buildingManager
-        ? html`<li class="is-manager"><span class="household-role">Building Manager</span> <a href="/building-managers/${household.buildingManager.id}">${household.buildingManager.name}</a></li>`
-        : ''}
     </ul>
+    ${household.buildingManager
+      ? html`<p class="household-manager"><span class="household-role">Building Manager</span> <a href="/building-managers/${household.buildingManager.id}">${household.buildingManager.name}</a></p>`
+      : ''}
   </article>`;
 }
 
@@ -174,13 +174,13 @@ function tradiesBlock(groups: TradieGroup[], q: string): Html {
 }
 
 function tradieRow(tradie: TradieRow): Html {
-  const google = tradie.googleRating?.rating;
+  const noun = tradie.myEst8Rating.count === 1 ? 'rating' : 'ratings';
+  const jobs = tradie.openJobs ? html`<span class="tradie-jobs">${tradie.openJobs === 1 ? '1 open Job' : `${tradie.openJobs} open Jobs`}</span>` : '';
+  const offMap = tradie.onMap ? '' : badge('Not on the map', 'warning');
   return html`<li>
-    <a href="/tradies/${tradie.id}">${tradie.businessName}</a>
-    ${ratingChip({ source: 'myEST8', rating: tradie.myEst8Rating.average, count: tradie.myEst8Rating.count })}
-    ${typeof google === 'number' ? ratingChip({ source: 'Google', rating: google, count: tradie.googleRating?.reviewCount ?? 0 }) : ''}
-    ${tradie.openJobs ? html`<span class="tradie-jobs">${tradie.openJobs === 1 ? '1 open Job' : `${tradie.openJobs} open Jobs`}</span>` : ''}
-    ${tradie.onMap ? '' : badge('Not on the map', 'warning')}
+    <a href="/tradies/${tradie.id}" title="${tradie.businessName}">${tradie.businessName}</a>
+    <span class="tradie-rating"><span class="tradie-source">myEST8</span>${icon('star', { weight: 'fill', size: 'size-3.5' })}<strong class="num">${tradie.myEst8Rating.average.toFixed(1)}</strong><span class="num" aria-hidden="true">(${tradie.myEst8Rating.count})</span><span class="sr-only">from ${tradie.myEst8Rating.count} ${noun}</span></span>
+    ${jobs || offMap ? html`<span class="tradie-extra">${jobs}${offMap}</span>` : ''}
   </li>`;
 }
 
@@ -204,17 +204,34 @@ function unlinkedBlock(unlinked: Unlinked): Html {
   </section>`;
 }
 
-function summary(counts: Counts): string {
-  const part = (n: number, one: string, many: string) => (n > 0 ? `${n} ${n === 1 ? one : many}` : '');
-  const parts = [
-    part(counts.properties, 'Property', 'Properties'),
-    part(counts.tenants, 'Tenant', 'Tenants'),
-    part(counts.owners, 'Property Owner', 'Property Owners'),
-    part(counts.buildingManagers, 'Building Manager', 'Building Managers'),
-    part(counts.tradies, 'Tradie', 'Tradies'),
-  ].filter(Boolean);
-  if (parts.length <= 1) return parts[0] ?? '';
-  return `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}`;
+/** The sentence under the title. Each count links to its list, except while a search is on, when the numbers are matches. */
+function summary(counts: Counts, filter: Filter, q: string): Html | string {
+  const items = [
+    countItem(counts.properties, 'Property', 'Properties', '/properties'),
+    countItem(counts.tenants, 'Tenant', 'Tenants', filter === 'all' ? '/tenants?filter=all' : '/tenants'),
+    countItem(counts.owners, 'Property Owner', 'Property Owners', '/owners'),
+    countItem(counts.buildingManagers, 'Building Manager', 'Building Managers', '/building-managers'),
+    countItem(counts.tradies, 'Tradie', 'Tradies', '/tradies'),
+  ].filter((item): item is CountItem => item !== null);
+  if (!items.length) return '';
+  if (q) return sentence(items.map((item) => item.label));
+  const parts = items.map((item, i) => {
+    const sep = i === 0 ? '' : i === items.length - 1 ? ' and ' : ', ';
+    return html`${sep}<a href="${item.href}">${item.label}</a>`;
+  });
+  return html`${parts}`;
+}
+
+type CountItem = { label: string; href: string };
+
+function countItem(n: number, one: string, many: string, href: string): CountItem | null {
+  if (n <= 0) return null;
+  return { label: `${n} ${n === 1 ? one : many}`, href };
+}
+
+function sentence(labels: string[]): string {
+  if (labels.length <= 1) return labels[0] ?? '';
+  return `${labels.slice(0, -1).join(', ')} and ${labels.at(-1)}`;
 }
 
 function countsOf(households: Household[], groups: TradieGroup[], unlinked: Unlinked): Counts {
