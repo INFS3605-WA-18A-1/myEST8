@@ -66,10 +66,10 @@ export function head(title: string, o: { css?: string[]; runtime?: boolean } = {
 }
 
 /**
- * The places a Property Manager works, in three groups with a gap between them: the
- * day's work (Dashboard to Schedule), Profiles (one page for households and Tradies, under a quiet heading), then Settings.
+ * The places a Property Manager works. The day's work runs Dashboard to Schedule,
+ * then Profiles (one page, so it needs no group heading), then Settings after a 12px gap.
  */
-const NAV: { label?: string; items: { key: NavKey; label: string; href: string }[] }[] = [
+const NAV: { gap?: boolean; items: { key: NavKey; label: string; href: string }[] }[] = [
   {
     items: [
       { key: 'dashboard', label: 'Dashboard', href: '/' },
@@ -80,11 +80,8 @@ const NAV: { label?: string; items: { key: NavKey; label: string; href: string }
       { key: 'schedule', label: 'Schedule', href: '/calendar' },
     ],
   },
-  {
-    label: 'Profiles',
-    items: [{ key: 'profiles', label: 'Profiles', href: '/profiles' }],
-  },
-  { items: [{ key: 'settings', label: 'Settings', href: '/settings' }] },
+  { items: [{ key: 'profiles', label: 'Profiles', href: '/profiles' }] },
+  { gap: true, items: [{ key: 'settings', label: 'Settings', href: '/settings' }] },
 ];
 
 /** The demo's Phone simulator: not a place to work, so it sits quietly at the bottom of the rail. */
@@ -111,7 +108,7 @@ function rail(active: NavKey | undefined, agencyName: string | undefined, counts
     <a href="/" class="rail-logo">${logo()}</a>
     <nav aria-label="Main" class="rail-menu">
       ${NAV.map(
-        (group, i) => html`${group.label ? html`<p class="rail-group" id="rail-group-${i}">${group.label}</p>` : ''}<ul class="rail-nav${i > 0 && !group.label ? ' rail-gap' : ''}" ${group.label ? html`aria-labelledby="rail-group-${i}"` : ''}>
+        (group) => html`<ul class="rail-nav${group.gap ? ' rail-gap' : ''}">
           ${group.items.map((item) => html`<li>${railLink(item, active, counts[item.key])}</li>`)}
         </ul>`,
       )}
