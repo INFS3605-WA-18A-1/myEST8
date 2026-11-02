@@ -2,28 +2,30 @@
 // Tradie, by Day, Week or Month in the Agency's time zone. Mine shows the visits on the
 // Property Manager's own Properties, All everyone's.
 //
-// The toolbar is one row: Today, the previous and next arrows, and the period as the
-// title, with Day / Week / Month and Mine / All on the right. Week is an hour-by-hour
-// grid, Monday to Sunday, each day a small weekday over a large date. A visit sits on
-// its time; visits that overlap fold into one "N Jobs booked" block that opens that
-// Day. Day is the same grid for one day, with overlapping visits side by side in lanes
-// that scroll sideways when a busy day needs more room. A Day block is wide enough to
-// name the street and suburb, link the Tradie, and (under All) the Property Manager.
-// Month is a table of days, each
-// with up to two visits or "N Jobs booked". src/web/schedule-layout.ts works out where
-// everything goes. A current-time line is drawn on today from the Agency's clock.
+// The page is one white card. Beside the title sit the Tradie, Property and Status
+// filters; Mine / All and Share are in the page header. On the left (a Paper rail) are a
+// small month, Showing and Visits, the Visit types boxes and the Tradies; in the middle
+// the toolbar (Today, Day / Week / Month, the period and its arrows) over the grid; on
+// the right the Picked visit panel, which app.js fills when a visit is clicked. Week is
+// an hour-by-hour grid, Monday to Sunday, each day a small weekday over a large date. A
+// visit sits on its time; visits that overlap fold into one "N Jobs booked" block that
+// opens that Day. Day is the same grid for one day, with overlapping visits side by side
+// in lanes that scroll sideways when a busy day needs more room. Month is a table of
+// days, each with up to two visits or "N Jobs booked". src/web/schedule-layout.ts works
+// out where everything goes. A current-time line is drawn on today from the Agency's clock.
 //
 // Under 768 px the Week is a list of days instead, where a run of empty days folds into
 // one line ("Nothing booked Tue 13 – Wed 14"). Every visit on the grid is a list item
 // whose link names its time, what it is for and the Tradie, so the grid reads as text.
-// When today is in the period, Free today lists the Tradies with no visit today, beside
-// the grid from 1024 px and as a sideways row of entries under that.
+// The rail sits left of the grid from 1024 px and under it below that. The Picked visit
+// panel opens from 1280 px, and is always shown from 1600 px; below 1280 px a visit is a
+// link to its Ticket.
 
 import { Hono } from 'hono';
 import { html } from 'hono/html';
 import { TRADES, type Trade } from '../../shared.ts';
 import { addDays, dayOf, daysFrom, mondayOf, parseDay, startOfDay, wallClock } from '../../zoned-time.ts';
-import { bookingCard, bookingFlags, bookingsByDay, dayRange, longDay, shortDay, streetOf, ticketHref, visitKind, visitWords, type Booking } from '../bookings.ts';
+import { bookingCard, bookingFlags, bookingsByDay, dayRange, longDay, shortDay, standingIcon, streetOf, tradeIcon, ticketHref, visitKind, visitWords, type Booking } from '../bookings.ts';
 import type { WebEnv } from '../env.ts';
 import { icon } from '../icons.ts';
 import { layoutDay, hourRange, minuteOfDay, type DayLayout, type HourRange } from '../schedule-layout.ts';
@@ -36,6 +38,19 @@ export type { Booking } from '../bookings.ts';
 type Filter = 'mine' | 'all';
 type View = 'day' | 'week' | 'month';
 const VIEWS: View[] = ['day', 'week', 'month'];
+
+/** The filters beside the title: a Tradie, a Property, how the visit stands. */
+interface Query {
+  tradie: number | null;
+  property: number | null;
+  status: Booking['visit'] | null;
+}
+const STATUSES = [
+  ['confirmed', 'Booked'],
+  ['not_confirmed', 'Not confirmed yet'],
+  ['reschedule_requested', 'Reschedule requested'],
+  ['done', 'Done'],
+] as const;
 
 /** How many visits a Month day lists before it says "N Jobs booked" instead. */
 const MONTH_CHIPS = 2;
@@ -50,6 +65,8 @@ interface Period {
   next: string;
   /** "Tuesday 13 October 2026", "12 – 18 October 2026", "October 2026". */
   label: string;
+  /** "Mon 2 Nov", "2 – 8 Nov", "Nov 2026": the period in a tile. */
+  short: string;
   /** How the summary speaks of it: "on this day", "this week", "this month". */
   noun: string;
   current: boolean;
@@ -69,14 +86,26 @@ export function calendarPages() {
     const view: View = VIEWS.find((v) => v === c.req.query('view')) ?? 'week';
     const period = periodOf(view, parseDay(c.req.query('date')) ?? legacyWeek ?? today, today);
     const { first, days } = period;
+    const q: Query = {
+      tradie: Number(c.req.query('tradie')) || null,
+      property: Number(c.req.query('property')) || null,
+      status: STATUSES.find(([v]) => v === c.req.query('status'))?.[0] ?? null,
+    };
     const every = await actions.calendar({ from: startOfDay(first, timeZone).toISOString(), to: startOfDay(addDays(days.at(-1)!, 1), timeZone).toISOString() });
-    const bookings = filter === 'mine' ? every.filter((b) => b.propertyManagerId === pm.id) : every;
-    const hidden = every.length - bookings.length;
+    const scoped = filter === 'mine' ? every.filter((b) => b.propertyManagerId === pm.id) : every;
+    const bookings = scoped.filter((b) => (!q.tradie || b.tradieId === q.tradie) && (!q.property || b.propertyId === q.property) && (!q.status || b.visit === q.status));
+    const hidden = every.length - scoped.length;
     const byDay = bookingsByDay(bookings, first, timeZone);
-    const ctx: Ctx = { timeZone, filter, meId: pm.id, today, now: actions.now() };
-    // Ratings come from the directory. Only when today is on show: another period has no panel.
-    const directory = days.includes(today) ? await actions.tradieDirectory() : null;
+    const ctx: Ctx = { timeZone, filter, meId: pm.id, today, now: actions.now(), q };
+    const directory = await actions.tradieDirectory();
     const focus = days.includes(today) ? today : first;
+    // The small month: the one around the middle of the period, with a dot on each day that has a visit.
+    const anchor = days.includes(today) ? today : days[Math.floor(days.length / 2)]!;
+    const monthFirst = `${anchor.slice(0, 7)}-01`;
+    const monthNext = `${addDays(monthFirst, 32).slice(0, 7)}-01`;
+    const monthEvery = view === 'month' ? every : await actions.calendar({ from: startOfDay(monthFirst, timeZone).toISOString(), to: startOfDay(monthNext, timeZone).toISOString() });
+    const visitDays = new Set((filter === 'mine' ? monthEvery.filter((b) => b.propertyManagerId === pm.id) : monthEvery).map((b) => dayOf(b.start, timeZone)));
+    const properties = [...new Map(scoped.map((b) => [b.propertyId, streetOf(b.propertyAddress)])).entries()].sort((a, b) => a[1].localeCompare(b[1], 'en'));
 
     return c.html(
       page({
@@ -85,22 +114,36 @@ export function calendarPages() {
         active: 'schedule',
         shell: shellInfo(c),
         flash: flashFrom(c.req.url),
+        titleExtra: filterForm(period, filter, q, directory, properties),
+        controls: html`${segmented(
+            [
+              { label: 'Mine', href: hrefFor(view, first, 'mine', q), active: filter === 'mine' },
+              { label: 'All', href: hrefFor(view, first, 'all', q), active: filter === 'all' },
+            ],
+            'Whose visits',
+          )}
+          ${shareButton({ ...shareWords(period, every.length), url: shareUrl(c, hrefFor(view, first, 'mine')), note: COLLEAGUES_ONLY })}`,
         body: html`
-          ${scheduleToolbar(
-            period,
-            filter,
-            focus,
-            shareButton({ ...shareWords(period, every.length), url: shareUrl(c, hrefFor(view, first, 'mine')), note: COLLEAGUES_ONLY }),
-          )}
-          ${summary(
-            bookings,
-            pm.id,
-            period.noun,
-            hidden ? html`${hidden} more ${hidden === 1 ? 'visit' : 'visits'} ${period.noun} on other Property Managers’ Properties. <a class="link" href="${hrefFor(view, first, 'all')}">Show all</a>` : '',
-          )}
-          <div class="schedule-board">
-            ${directory ? freeTodayPanel(freeToday(directory, every, today, timeZone), directory.length) : ''}
-            <div class="schedule-main" id="schedule" tabindex="-1">${view === 'day' ? dayView(first, byDay.get(first) ?? [], ctx) : view === 'week' ? weekView(days, byDay, ctx) : monthView(period, byDay, ctx)}</div>
+          <div class="schedule-shell" data-schedule-shell>
+            <div class="schedule-rail">
+              ${miniMonth(monthFirst, period, visitDays, ctx)}
+              <dl class="schedule-stats">
+                <div class="schedule-stat is-showing"><dt>Showing</dt><dd>${period.short}</dd></div>
+                <div class="schedule-stat"><dt>Visits</dt><dd class="num">${bookings.length} booked</dd></div>
+              </dl>
+              ${visitTypes()}
+              ${tradieList(directory, every, bookings, period, today, ctx)}
+            </div>
+            <div class="schedule-center">
+              ${scheduleToolbar(period, filter, focus, q)}
+              ${summary(
+                bookings,
+                pm.id,
+                hidden ? html`${hidden} more ${hidden === 1 ? 'visit' : 'visits'} ${period.noun} on other Property Managers’ Properties. <a class="link" href="${hrefFor(view, first, 'all', q)}">Show all</a>` : '',
+              )}
+              <div class="schedule-main" id="schedule" tabindex="-1">${view === 'day' ? dayView(first, byDay.get(first) ?? [], ctx) : view === 'week' ? weekView(days, byDay, ctx) : monthView(period, byDay, ctx)}</div>
+            </div>
+            ${pickPanel(bookings, directory, ctx)}
           </div>
         `,
       }),
@@ -117,6 +160,7 @@ interface Ctx {
   meId: number;
   today: string;
   now: Date;
+  q: Query;
 }
 
 /** "Tue 13 Oct, 9:00 am – 11:00 am": the start in full, then the end's time of day. */
@@ -130,18 +174,23 @@ const jobsBooked = (n: number) => `${plural(n, 'Job', 'Jobs')} booked`;
 /** The days a view shows around `date`, and the days before and after it. */
 function periodOf(view: View, date: string, today: string): Period {
   if (view === 'day') {
-    return { view, first: date, days: [date], prev: addDays(date, -1), next: addDays(date, 1), label: dayTitle(date), noun: 'on this day', current: date === today };
+    return { view, first: date, days: [date], prev: addDays(date, -1), next: addDays(date, 1), label: dayTitle(date), short: shortDay(date, { month: true }), noun: 'on this day', current: date === today };
   }
   if (view === 'week') {
     const monday = mondayOf(date);
     const days = daysFrom(monday, 7);
-    return { view, first: monday, days, prev: addDays(monday, -7), next: addDays(monday, 7), label: weekTitle(days), noun: 'this week', current: mondayOf(today) === monday };
+    return { view, first: monday, days, prev: addDays(monday, -7), next: addDays(monday, 7), label: weekTitle(days), short: `${Number(days[0]!.slice(8))} – ${Number(days.at(-1)!.slice(8))} ${monthShort(days.at(-1)!)}`, noun: 'this week', current: mondayOf(today) === monday };
   }
   const first = `${date.slice(0, 7)}-01`;
   const next = `${addDays(first, 32).slice(0, 7)}-01`;
   const days: string[] = [];
   for (let d = first; d < next; d = addDays(d, 1)) days.push(d);
-  return { view, first, days, prev: `${addDays(first, -1).slice(0, 7)}-01`, next, label: monthName(first), noun: 'this month', current: today.slice(0, 7) === first.slice(0, 7) };
+  return { view, first, days, prev: `${addDays(first, -1).slice(0, 7)}-01`, next, label: monthName(first), short: `${monthShort(first)} ${first.slice(0, 4)}`, noun: 'this month', current: today.slice(0, 7) === first.slice(0, 7) };
+}
+
+/** "Nov" */
+function monthShort(day: string): string {
+  return new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', month: 'short' }).format(new Date(`${day}T00:00:00Z`));
 }
 
 /** "October 2026" */
@@ -178,104 +227,24 @@ function shareWords(p: Period, count: number): { title: string; text: string } {
 }
 
 /**
- * The period in one line: how many visits are booked, then how they stand. A reschedule
+ * The flags over the grid: how the visits stand, when any need a look. A reschedule
  * request on the Property Manager's own Property waits on them, so it carries the
  * Wattle stripe; a colleague's only stands out. `more` says what Mine leaves out.
  */
-function summary(bookings: Booking[], meId: number, noun: string, more: Html | ''): Html {
+function summary(bookings: Booking[], meId: number, more: Html | ''): Html | '' {
   const reschedules = bookings.filter((b) => b.visit === 'reschedule_requested');
   const mine = reschedules.filter((b) => b.propertyManagerId === meId).length;
   const others = reschedules.length - mine;
   const unconfirmed = bookings.filter((b) => b.visit === 'not_confirmed').length;
+  if (!mine && !others && !unconfirmed && !more) return '';
   return html`<div class="schedule-summary">
     <p class="schedule-tally">
-      <span class="schedule-count num">${bookings.length ? `${plural(bookings.length, 'visit', 'visits')} booked` : `Nothing booked ${noun}`}</span>
       ${mine ? html`<span class="schedule-flag is-decision">${plural(mine, 'reschedule request', 'reschedule requests')} waiting on you</span>` : ''}
       ${others ? html`<span class="schedule-flag is-reschedule">${plural(others, 'reschedule', 'reschedules')} requested</span>` : ''}
       ${unconfirmed ? html`<span class="schedule-flag">${unconfirmed} not confirmed yet</span>` : ''}
     </p>
     ${more ? html`<p class="schedule-more">${more}</p>` : ''}
   </div>`;
-}
-
-/** A Tradie with no visit today: who they are, the Trades they do, and their myEST8 rating. */
-interface FreeTradie {
-  id: number;
-  businessName: string;
-  trades: Trade[];
-  rating: { average: number; count: number };
-}
-
-/** What `tradieDirectory` gives `freeToday`. The panel only needs a few of its fields. */
-type DirectoryTradie = {
-  tradieId: number;
-  name: string;
-  businessName: string | null;
-  trades: Trade[];
-  myEst8Rating: { average: number; count: number };
-};
-
-/**
- * The Agency's Tradies with no visit starting or running today (the calendar returns
- * all Agency visits, not only Mine), in Trade order and then by business name.
- */
-function freeToday(tradies: DirectoryTradie[], every: Booking[], today: string, timeZone: string): FreeTradie[] {
-  const busy = new Set(every.filter((b) => dayOf(b.start, timeZone) <= today && dayOf(new Date(Date.parse(b.end) - 1).toISOString(), timeZone) >= today).map((b) => b.tradieId));
-  return tradies
-    .filter((t) => !busy.has(t.tradieId))
-    .map((t) => ({ id: t.tradieId, businessName: t.businessName ?? t.name, trades: t.trades, rating: t.myEst8Rating }))
-    .sort((a, b) => tradeRank(a.trades) - tradeRank(b.trades) || a.businessName.localeCompare(b.businessName, 'en'));
-}
-
-/** Where a Tradie's Trades sit in the fixed list. Several Trades count as the earliest. */
-function tradeRank(trades: Trade[]): number {
-  const ranks = trades.map((t) => TRADES.indexOf(t)).filter((i) => i >= 0);
-  return ranks.length ? Math.min(...ranks) : TRADES.length;
-}
-
-/** "Drip Doctors" is DD; a single word gives its first two letters. */
-function initials(name: string): string {
-  const words = name.split(/\s+/).filter(Boolean);
-  if (words.length > 1) {
-    return words
-      .slice(0, 2)
-      .map((word) => word.replace(/^[^A-Za-z0-9]+/, '')[0] ?? '')
-      .join('')
-      .toUpperCase();
-  }
-  return (words[0] ?? name).slice(0, 2).toUpperCase();
-}
-
-/**
- * Who is free today, when today is in the period. One bounded entry per Tradie, the
- * same block as Dispatch's Tradie entry: initials, the business name, their Trades,
- * their myEST8 rating. No distance and no Google rating, which that entry also shows.
- * The first item is a skip link: from 1024 px the panel is painted on the right but
- * comes first in the page, so the keyboard would otherwise walk every Tradie before the grid.
- */
-function freeTodayPanel(free: FreeTradie[], tradieCount: number): Html {
-  const body = free.length
-    ? html`<ul class="tradie-entries schedule-free-list">${free.map((t) => freeEntry(t))}</ul>`
-    : tradieCount
-      ? html`<p class="schedule-free-note">Every Tradie has a visit today.</p>`
-      : html`<p class="schedule-free-note">No Tradies yet. <a class="link" href="/tradies/new">Add a Tradie</a></p>`;
-  return html`<aside class="schedule-free" aria-labelledby="free-today">
-    <a href="#schedule" class="skip-link">Skip to the schedule</a>
-    <h2 id="free-today" class="schedule-free-title">Free today${tradieCount ? html` <span class="num">(${free.length})</span>` : ''}</h2>
-    ${body}
-  </aside>`;
-}
-
-/** One free Tradie. The circle's letters repeat the business name, so they are hidden from assistive tech. */
-function freeEntry(t: FreeTradie): Html {
-  const noun = t.rating.count === 1 ? 'rating' : 'ratings';
-  const trades = [...t.trades].sort((a, b) => TRADES.indexOf(a) - TRADES.indexOf(b)).map((trade) => humanise(trade)).join(', ');
-  return html`<li class="tradie-entry" data-tradie="${t.id}">
-    <span class="tradie-initials" aria-hidden="true">${initials(t.businessName)}</span>
-    <span class="tradie-line"><a class="tradie-name" href="/tradies/${t.id}">${t.businessName}</a></span>
-    <span class="tradie-trades">${trades}</span>
-    <span class="tradie-scores"><span class="tradie-rating"><span class="tradie-source">myEST8</span>${icon('star', { weight: 'fill', size: 'size-3.5' })}<strong class="num">${t.rating.average.toFixed(1)}</strong><span class="num" aria-hidden="true">(${t.rating.count})</span><span class="sr-only">from ${t.rating.count} ${noun}</span></span></span>
-  </li>`;
 }
 
 /** "Mon", for the small weekday over a date. */
@@ -295,7 +264,7 @@ function weekend(day: string): boolean {
  */
 function dateLink(day: string, ctx: Ctx): Html {
   const isToday = day === ctx.today;
-  return html`<a class="schedule-date" href="${hrefFor('day', day, ctx.filter)}" ${isToday ? html`aria-current="date"` : ''}>
+  return html`<a class="schedule-date" href="${hrefFor('day', day, ctx.filter, ctx.q)}" ${isToday ? html`aria-current="date"` : ''}>
     <time datetime="${day}">
       <span class="schedule-weekday" aria-hidden="true">${weekdayOf(day)}</span>
       <span class="schedule-num num" aria-hidden="true">${Number(day.slice(8))}</span>
@@ -405,9 +374,9 @@ function visitBlock(b: Booking, style: string, rows: number, ctx: Ctx): Html {
   const kind = visitKind(b);
   const words = visitWords(b);
   const flags = [rows <= 4 ? 'is-short' : '', ...bookingFlags(b, b.propertyManagerId === ctx.meId)].filter(Boolean).join(' ');
-  return html`<li class="schedule-block ${flags}" style="${style}">
+  return html`<li class="schedule-block ${flags}" style="${style}" ${pickData(b)}>
     <a class="schedule-block-link" href="${ticketHref(b)}" aria-label="${blockName(b, ctx)}">
-      <span class="schedule-block-time num"><time datetime="${b.start}">${formatTime(b.start, ctx.timeZone)}</time><span class="schedule-block-end"> – <time datetime="${b.end}">${formatTime(b.end, ctx.timeZone)}</time></span></span>
+      <span class="schedule-block-time num">${tradeIcon(b.trade)}<time datetime="${b.start}">${formatTime(b.start, ctx.timeZone)}</time><span class="schedule-block-end"> – <time datetime="${b.end}">${formatTime(b.end, ctx.timeZone)}</time></span></span>
       ${kind ? html`<span class="schedule-marker">${kind}</span>` : ''}
       <span class="schedule-block-issue">${clip(b.issue, { lines: 2 })}</span>
       <span class="schedule-block-tradie">${b.businessName}</span>
@@ -434,9 +403,9 @@ function dayBlock(b: Booking, style: string, ctx: Ctx): Html {
   const flags = bookingFlags(b, b.propertyManagerId === ctx.meId).join(' ');
   const time = `${formatTime(b.start, ctx.timeZone)} – ${formatTime(b.end, ctx.timeZone)}`;
   const name = [time, kind, b.issue, b.businessName, place, visitWords(b)].filter((part) => part).join(', ');
-  return html`<li class="schedule-block ${flags}" style="${style}">
+  return html`<li class="schedule-block ${flags}" style="${style}" ${pickData(b)}>
     <div class="schedule-block-link">
-      <span class="schedule-block-time num"><time datetime="${b.start}">${formatTime(b.start, ctx.timeZone)}</time><span class="schedule-block-end"> – <time datetime="${b.end}">${formatTime(b.end, ctx.timeZone)}</time></span></span>
+      <span class="schedule-block-time num">${tradeIcon(b.trade)}<time datetime="${b.start}">${formatTime(b.start, ctx.timeZone)}</time><span class="schedule-block-end"> – <time datetime="${b.end}">${formatTime(b.end, ctx.timeZone)}</time></span></span>
       ${kind ? html`<span class="schedule-marker">${kind}</span>` : ''}
       <a class="schedule-block-issue" href="${ticketHref(b)}" aria-label="${name}">${clip(b.issue, { lines: 2 })}</a>
       <a class="schedule-block-tradie" href="/tradies/${b.tradieId}">${b.businessName}</a>
@@ -467,7 +436,7 @@ function clusterBlock(day: string, bookings: Booking[], style: string, ctx: Ctx)
   const end = bookings.reduce((a, b) => (a.end >= b.end ? a : b)).end;
   const flags = new Set(bookings.flatMap((b) => bookingFlags(b, b.propertyManagerId === ctx.meId)).filter((f) => f === 'is-reschedule' || f === 'is-decision'));
   return html`<li class="schedule-block is-cluster ${[...flags].join(' ')}" style="${style}">
-    <a class="schedule-block-link" href="${hrefFor('day', day, ctx.filter)}">
+    <a class="schedule-block-link" href="${hrefFor('day', day, ctx.filter, ctx.q)}">
       <span class="schedule-block-count">${jobsBooked(bookings.length)}</span>
       <span class="schedule-block-time num"><time datetime="${start}">${formatTime(start, ctx.timeZone)}</time> – <time datetime="${end}">${formatTime(end, ctx.timeZone)}</time></span>
       <span class="sr-only">at the same time. Open the day to see them side by side.</span>
@@ -531,7 +500,7 @@ function monthView(p: Period, byDay: Map<string, Booking[]>, ctx: Ctx): Html {
 function monthDay(day: string, bookings: Booking[] | null, ctx: Ctx): Html {
   const isToday = day === ctx.today;
   const classes = ['schedule-mday', bookings === null ? 'is-outside' : '', bookings?.length ? 'is-booked' : '', isToday ? 'is-today' : ''].filter(Boolean).join(' ');
-  const dayHref = hrefFor('day', day, ctx.filter);
+  const dayHref = hrefFor('day', day, ctx.filter, ctx.q);
   const number = html`<a class="schedule-mday-num num" href="${dayHref}"${isToday ? html` aria-current="date"` : ''}><span aria-hidden="true">${Number(day.slice(8))}</span><span class="sr-only">${longDay(day)}</span></a>`;
   if (!bookings?.length) return html`<td class="${classes}">${number}</td>`;
   const overlaps = layoutDay(bookings, day, ctx.timeZone).clusters.some((cl) => cl.items.length > 1);
@@ -543,8 +512,12 @@ function monthDay(day: string, bookings: Booking[] | null, ctx: Ctx): Html {
       ? ''
       : html`<ul class="schedule-chips">
           ${sorted.map(
-            (b) => html`<li class="schedule-chip ${bookingFlags(b, b.propertyManagerId === ctx.meId).join(' ')}">
-              <a href="${ticketHref(b)}" title="${formatTime(b.start, ctx.timeZone)}, ${b.issue}, ${b.businessName}"><span class="num">${formatTime(b.start, ctx.timeZone)}</span> ${b.issue}<span class="sr-only">, ${b.businessName}</span></a>
+            (b) => html`<li class="schedule-chip ${bookingFlags(b, b.propertyManagerId === ctx.meId).join(' ')}" ${pickData(b)}>
+              <a href="${ticketHref(b)}" title="${formatTime(b.start, ctx.timeZone)}, ${b.issue}, ${b.businessName}">
+                <span class="schedule-chip-head">${tradeIcon(b.trade)}<span class="num">${formatTime(b.start, ctx.timeZone)}</span></span>
+                <span class="schedule-chip-issue">${b.issue}</span>
+                <span class="schedule-chip-tradie"><span class="schedule-chip-name">${b.businessName}</span>${standingIcon(b.visit)}</span>
+              </a>
             </li>`,
           )}
         </ul>`}
@@ -592,46 +565,229 @@ function dayItem(day: string, bookings: Booking[], ctx: Ctx): Html {
   </li>`;
 }
 
+/** What a block carries so the Picked visit panel and the Visit types boxes can find it. */
+function pickData(b: Booking): Html {
+  return html`data-pick="${b.workOrderId}" data-type="${visitKind(b) ? 'inspection' : 'work-order'}" data-state="${b.visit}"`;
+}
+
 /**
- * One row: Today, the previous and next arrows, and the period as the title. The view
- * switch and Mine or All sit on the right. On a phone the switch and filter wrap to a
- * second row. Today is always there, outlined, even when this period is already today.
+ * The bar inside the Schedule card: Today, Day / Week / Month, and the period with
+ * its previous and next arrows. Mine / All and Share sit in the page header, the
+ * filters beside the title. On a phone the bar wraps to a second row. Today is
+ * always there, outlined, even when this period is already today.
  */
-function scheduleToolbar(p: Period, filter: Filter, focus: string, share: Html): Html {
+function scheduleToolbar(p: Period, filter: Filter, focus: string, q: Query): Html {
   const unit = p.view === 'day' ? 'day' : p.view === 'week' ? 'week' : 'month';
   return html`<div class="schedule-toolbar">
-    <nav class="schedule-nav" aria-label="${unit === 'day' ? 'Days' : unit === 'week' ? 'Weeks' : 'Months'}">
-      ${linkButton('Today', hrefFor(p.view, null, filter), { size: 'sm' })}
-      <a class="btn btn-ghost btn-sm btn-square" href="${hrefFor(p.view, p.prev, filter)}" aria-label="Previous ${unit}">${icon('caret-left', { size: 'size-4' })}</a>
-      <a class="btn btn-ghost btn-sm btn-square" href="${hrefFor(p.view, p.next, filter)}" aria-label="Next ${unit}">${icon('caret-right', { size: 'size-4' })}</a>
-      <h2 class="schedule-period">${p.label}</h2>
-    </nav>
-    <div class="schedule-toolbar-end">
+    <div class="schedule-toolbar-start">
+      ${linkButton('Today', hrefFor(p.view, null, filter, q), { size: 'sm' })}
       ${tabs(
-        VIEWS.map((v) => ({ label: v === 'day' ? 'Day' : v === 'week' ? 'Week' : 'Month', href: hrefFor(v, focus, filter), active: v === p.view })),
+        VIEWS.map((v) => ({ label: v === 'day' ? 'Day' : v === 'week' ? 'Week' : 'Month', href: hrefFor(v, focus, filter, q), active: v === p.view })),
         'Calendar views',
       )}
-      ${segmented(
-        [
-          { label: 'Mine', href: hrefFor(p.view, p.first, 'mine'), active: filter === 'mine' },
-          { label: 'All', href: hrefFor(p.view, p.first, 'all'), active: filter === 'all' },
-        ],
-        'Whose visits',
-      )}
-      ${share}
     </div>
+    <nav class="schedule-nav" aria-label="${unit === 'day' ? 'Days' : unit === 'week' ? 'Weeks' : 'Months'}">
+      <a class="btn btn-ghost btn-sm btn-square" href="${hrefFor(p.view, p.prev, filter, q)}" aria-label="Previous ${unit}">${icon('caret-left', { size: 'size-4' })}</a>
+      <h2 class="schedule-period">${p.label}</h2>
+      <a class="btn btn-ghost btn-sm btn-square" href="${hrefFor(p.view, p.next, filter, q)}" aria-label="Next ${unit}">${icon('caret-right', { size: 'size-4' })}</a>
+    </nav>
   </div>`;
 }
 
 /**
- * /calendar for a view on a date (always by its date, so the link keeps showing that
- * period; no date is today's) and filter. The plain /calendar is this week, Mine.
+ * Beside the title: Tradie, Property and Status. A GET form that keeps the view, the
+ * date and Mine / All, and applies when one changes (app.js); the Apply button is for
+ * a page without it.
  */
-function hrefFor(view: View, date: string | null, filter: Filter) {
+function filterForm(p: Period, filter: Filter, q: Query, tradies: DirectoryTradie[], properties: [number, string][]): Html {
+  const select = (name: string, label: string, all: string, options: [string | number, string][], value: string | number | null) => html`<label class="schedule-filter">
+    <span class="sr-only">${label}</span>
+    <select name="${name}" class="select select-sm" aria-label="${label}">
+      <option value="">${all}</option>
+      ${options.map(([v, text]) => html`<option value="${v}" ${String(v) === String(value ?? '') ? 'selected' : ''}>${text}</option>`)}
+    </select>
+  </label>`;
+  const names: [number, string][] = tradies.map((t) => [t.tradieId, t.businessName ?? t.name]);
+  names.sort((a, b) => a[1].localeCompare(b[1], 'en'));
+  return html`<form method="get" action="/calendar" class="schedule-filters" data-autosubmit role="search" aria-label="Filter the schedule">
+    <input type="hidden" name="view" value="${p.view}" />
+    <input type="hidden" name="date" value="${p.first}" />
+    ${filter === 'all' ? html`<input type="hidden" name="filter" value="all" />` : ''}
+    ${select('tradie', 'Tradie', 'Tradie', names, q.tradie)}
+    ${select('property', 'Property', 'Property', properties, q.property)}
+    ${select('status', 'Status', 'Status', STATUSES.map(([v, text]) => [v, text]), q.status)}
+    <button type="submit" class="btn btn-sm filter-bar-apply">Apply</button>
+    ${q.tradie || q.property || q.status ? html`<a class="link schedule-clear" href="${hrefFor(p.view, p.first, filter)}">Clear</a>` : ''}
+  </form>`;
+}
+
+/**
+ * A small month on the left: each day links to its Day, the days in the period on show
+ * are tinted, and a dot marks a day with a visit. Monday first, like the grid.
+ */
+function miniMonth(monthFirst: string, p: Period, visitDays: Set<string>, ctx: Ctx): Html {
+  const start = mondayOf(monthFirst);
+  const end = addDays(mondayOf(addDays(monthFirst, 32).slice(0, 7) + '-01'), 0);
+  const cells: string[] = [];
+  for (let d = start; d < end || cells.length % 7; d = addDays(d, 1)) cells.push(d);
+  const previous = `${addDays(monthFirst, -1).slice(0, 7)}-15`;
+  const next = `${addDays(monthFirst, 32).slice(0, 7)}-15`;
+  const shown = new Set(p.days);
+  return html`<section class="schedule-mini" aria-labelledby="mini-title">
+    <header class="schedule-mini-head">
+      <h2 id="mini-title">${monthName(monthFirst)}</h2>
+      <span class="schedule-mini-nav">
+        <a class="schedule-mini-arrow" href="${hrefFor(p.view, previous, ctx.filter, ctx.q)}" aria-label="Previous month">${icon('arrow-left', { size: 'size-4' })}</a>
+        <a class="schedule-mini-arrow" href="${hrefFor(p.view, next, ctx.filter, ctx.q)}" aria-label="Next month">${icon('arrow-right', { size: 'size-4' })}</a>
+      </span>
+    </header>
+    <ol class="schedule-mini-days">
+      ${['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map((w) => html`<li class="schedule-mini-week" aria-hidden="true">${w}</li>`)}
+      ${cells.map((d) => {
+        const classes = ['schedule-mini-day', d.slice(0, 7) !== monthFirst.slice(0, 7) ? 'is-outside' : '', d === ctx.today ? 'is-today' : '', shown.has(d) ? 'is-shown' : '', visitDays.has(d) ? 'has-visits' : ''].filter(Boolean).join(' ');
+        return html`<li><a class="${classes}" href="${hrefFor('day', d, ctx.filter, ctx.q)}" ${d === ctx.today ? html`aria-current="date"` : ''}><span aria-hidden="true">${Number(d.slice(8))}</span><span class="sr-only">${longDay(d)}${visitDays.has(d) ? ', has visits' : ''}</span></a></li>`;
+      })}
+    </ol>
+  </section>`;
+}
+
+/**
+ * The boxes under the month: which kinds of visit the grid shows. They work in the
+ * browser (app.js hides the blocks); a box with no script behind it would be a
+ * promise, so the whole group is hidden until app.js unhides it.
+ */
+function visitTypes(): Html {
+  const box = (key: string, label: string, swatch: string) => html`<label class="schedule-type"><input type="checkbox" data-hide-key="${key}" checked /><span class="schedule-swatch ${swatch}" aria-hidden="true"></span>${label}</label>`;
+  return html`<section class="schedule-types" aria-labelledby="types-title" data-needs-script hidden>
+    <h2 id="types-title">Visit types</h2>
+    <label class="schedule-type"><input type="checkbox" data-hide-all checked />Select all</label>
+    ${box('work-order', 'Work Orders', 'is-work')}
+    ${box('inspection', 'Site Inspections', 'is-inspection')}
+    ${box('not_confirmed', 'Not confirmed yet', 'is-unconfirmed')}
+    ${box('reschedule_requested', 'Reschedule requested', 'is-reschedule')}
+  </section>`;
+}
+
+/** What `tradieDirectory` gives the panels. They only need a few of its fields. */
+type DirectoryTradie = {
+  tradieId: number;
+  name: string;
+  businessName: string | null;
+  trades: Trade[];
+  myEst8Rating: { average: number; count: number };
+};
+
+/** "Drip Doctors" is DD; a single word gives its first two letters. */
+function initials(name: string): string {
+  const words = name.split(/\s+/).filter(Boolean);
+  if (words.length > 1) {
+    return words
+      .slice(0, 2)
+      .map((word) => word.replace(/^[^A-Za-z0-9]+/, '')[0] ?? '')
+      .join('')
+      .toUpperCase();
+  }
+  return (words[0] ?? name).slice(0, 2).toUpperCase();
+}
+
+/**
+ * The Agency's Tradies on the left: initials, the business name, how many visits they
+ * have in the period shown, and a Free tag when they have none today (the calendar
+ * returns all Agency visits, not only Mine). Each is a link that filters the grid to
+ * that Tradie; the one filtered to links back to all. Busy Tradies first.
+ */
+function tradieList(tradies: DirectoryTradie[], every: Booking[], shown: Booking[], p: Period, today: string, ctx: Ctx): Html {
+  const todayOn = p.days.includes(today);
+  const busyToday = new Set(every.filter((b) => dayOf(b.start, ctx.timeZone) <= today && dayOf(new Date(Date.parse(b.end) - 1).toISOString(), ctx.timeZone) >= today).map((b) => b.tradieId));
+  const entries = tradies
+    .map((t) => ({ id: t.tradieId, name: t.businessName ?? t.name, count: shown.filter((b) => b.tradieId === t.tradieId).length, free: todayOn && !busyToday.has(t.tradieId), trades: t.trades }))
+    .sort((a, b) => Number(a.free) - Number(b.free) || a.name.localeCompare(b.name, 'en'));
+  const when = p.view === 'day' ? (p.current ? 'today' : 'that day') : p.noun;
+  return html`<section class="schedule-tradies" aria-labelledby="tradies-title">
+    <h2 id="tradies-title">Tradies${todayOn && tradies.length ? html` <span class="num">(${entries.filter((e) => e.free).length} free today)</span>` : ''}</h2>
+    ${entries.length
+      ? html`<ul class="schedule-tradie-list">
+          ${entries.map((e) => {
+            const on = ctx.q.tradie === e.id;
+            return html`<li><a class="schedule-tradie${on ? ' is-on' : ''}" href="${hrefFor(p.view, p.first, ctx.filter, { ...ctx.q, tradie: on ? null : e.id })}" ${on ? html`aria-current="true"` : ''}>
+              <span class="tradie-initials" aria-hidden="true">${initials(e.name)}</span>
+              <span class="schedule-tradie-text"><span class="schedule-tradie-name">${e.name}</span><span class="schedule-tradie-sub">${e.count ? plural(e.count, 'visit', 'visits') : 'No visits'} ${when}</span></span>
+              ${e.free ? html`<span class="schedule-free-tag">Free</span>` : ''}
+            </a></li>`;
+          })}
+        </ul>`
+      : html`<p class="schedule-free-note">No Tradies yet. <a class="link" href="/tradies/new">Add a Tradie</a></p>`}
+  </section>`;
+}
+
+/** How long a visit lasts: "30m", "2h", "1h 30m". */
+function lasting(start: string, end: string): string {
+  const mins = Math.round((Date.parse(end) - Date.parse(start)) / 60_000);
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return [h ? `${h}h` : '', m ? `${m}m` : ''].filter(Boolean).join(' ') || '0m';
+}
+
+/**
+ * The Picked visit panel on the right. Every visit on the page has its details written
+ * here, hidden; app.js shows the one picked on the grid. With no script the panel stays
+ * hidden and each block is still a link to its Ticket.
+ */
+function pickPanel(bookings: Booking[], directory: DirectoryTradie[], ctx: Ctx): Html {
+  return html`<aside class="schedule-pick" aria-label="Picked visit" data-pick-panel hidden>
+    <header class="schedule-pick-head">
+      <h2><span class="schedule-pick-dot" aria-hidden="true"></span>Picked visit</h2>
+      <button type="button" class="schedule-pick-close" data-pick-close aria-label="Close" hidden>${icon('x', { size: 'size-4' })}</button>
+    </header>
+    <p class="schedule-pick-empty" data-pick-empty>Pick a visit on the grid to see it here.</p>
+    ${bookings.map((b) => pickCard(b, directory.find((t) => t.tradieId === b.tradieId), ctx))}
+  </aside>`;
+}
+
+/** One visit's details: how it stands, what for, when, who, where, and the way to its Ticket. */
+function pickCard(b: Booking, tradie: DirectoryTradie | undefined, ctx: Ctx): Html {
+  const kind = visitKind(b);
+  const standing = STATUSES.find(([v]) => v === b.visit)![1];
+  const rating = tradie?.myEst8Rating;
+  const trades = tradie ? [...tradie.trades].sort((x, y) => TRADES.indexOf(x) - TRADES.indexOf(y)).map((t) => humanise(t)).join(', ') : humanise(b.trade);
+  return html`<article class="schedule-pick-card" data-pick-card="${b.workOrderId}" hidden>
+    <div class="schedule-pick-top">
+      <p class="schedule-pick-status ${bookingFlags(b, b.propertyManagerId === ctx.meId).join(' ')} is-${b.visit}">${standing}</p>
+      <h3 class="schedule-pick-title">${b.issue}</h3>
+      <p class="schedule-pick-sub">${kind ?? 'Work Order'} · Ticket #${b.ticketId}</p>
+    </div>
+    <div class="schedule-pick-when">
+      <p>${icon('clock', { size: 'size-4' })}<span class="num"><time datetime="${b.start}">${formatTime(b.start, ctx.timeZone)}</time> – <time datetime="${b.end}">${formatTime(b.end, ctx.timeZone)}</time></span><span class="schedule-pick-len num">${lasting(b.start, b.end)}</span></p>
+      <p>${icon('calendar-blank', { size: 'size-4' })}<span>${dayTitle(dayOf(b.start, ctx.timeZone))}</span></p>
+      ${b.visit === 'reschedule_requested' ? html`<a class="btn btn-sm btn-secondary schedule-pick-act" href="/tickets/${b.ticketId}?suggest=${b.workOrderId}">Suggest new times</a>` : ''}
+    </div>
+    <div class="schedule-pick-who">
+      <p class="schedule-pick-label">Tradie</p>
+      <p class="schedule-pick-tradie"><span class="tradie-initials" aria-hidden="true">${initials(b.businessName)}</span><span><a class="tradie-name" href="/tradies/${b.tradieId}">${b.businessName}</a><span class="schedule-pick-sub">${trades}${rating ? html` · <span class="num">★ ${rating.average.toFixed(1)} (${rating.count})</span>` : ''}</span></span></p>
+    </div>
+    <dl class="schedule-pick-facts">
+      <div><dt>Property</dt><dd><a class="link" href="/properties/${b.propertyId}">${placeLine(b)}</a></dd></div>
+      ${ctx.filter === 'all' ? html`<div><dt>Property Manager</dt><dd>${b.propertyManager}</dd></div>` : ''}
+      <div><dt>Job</dt><dd>${humanise(b.trade)} · ${kind ?? 'Work Order'}</dd></div>
+      <div><dt>Time zone</dt><dd>${ctx.timeZone.replace(/_/g, ' ')}</dd></div>
+    </dl>
+    <a class="btn btn-primary schedule-pick-open" href="${ticketHref(b)}">Open Ticket #${b.ticketId}</a>
+  </article>`;
+}
+
+/**
+ * /calendar for a view on a date (always by its date, so the link keeps showing that
+ * period; no date is today's), filter and the Tradie, Property and Status filters.
+ * The plain /calendar is this week, Mine.
+ */
+function hrefFor(view: View, date: string | null, filter: Filter, q?: Query) {
   const params = new URLSearchParams();
   if (date || view !== 'week') params.set('view', view);
   if (date) params.set('date', date);
   if (filter === 'all') params.set('filter', 'all');
+  if (q?.tradie) params.set('tradie', String(q.tradie));
+  if (q?.property) params.set('property', String(q.property));
+  if (q?.status) params.set('status', q.status);
   const query = params.toString();
   return query ? `/calendar?${query}` : '/calendar';
 }

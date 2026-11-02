@@ -598,9 +598,11 @@ describe('the Next 7 days and Tradie profiles', () => {
     expect(week).toContain('12 – 18 October 2026');
     expect(week).toContain('/calendar?view=week&amp;date=2026-10-05');
     expect(week).toContain('/calendar?view=week&amp;date=2026-10-19');
-    const booking = week.indexOf(`href="/tickets/${job.ticketId}"`);
-    expect(week.indexOf('Tuesday 13 October')).toBeLessThan(booking);
-    expect(week.indexOf('Wednesday 14 October')).toBeGreaterThan(booking);
+    // The week's days, not the small month beside them, which names every day too.
+    const days = week.slice(week.indexOf('id="schedule"'));
+    const booking = days.indexOf(`href="/tickets/${job.ticketId}"`);
+    expect(days.indexOf('Tuesday 13 October')).toBeLessThan(booking);
+    expect(days.indexOf('Wednesday 14 October')).toBeGreaterThan(booking);
     expect(week).toContain(`href="/tradies/${w.tradies.pete.id}"`);
     expect(week).toContain(KING_ST);
     expect(week).toContain('Plumbing');
