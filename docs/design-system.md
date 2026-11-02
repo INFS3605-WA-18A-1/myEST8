@@ -171,6 +171,16 @@ After sign-up the onboarding wizard (`/welcome`) also fills the page, with no ra
 - **Side column** (from 1024 px, a square-cornered grey panel `#D9D6D0` as tall as the Summary band and the Jobs and report cards beside it, which stretch to match): People on this Ticket (initials: Tenant, Property Manager, each Tradie with a Work Order), two cost tiles with an icon chip (Repair Cost on light blue, Max Repair Cost on Sand; Rust-tinted when over the Max; "Costs" opens the Costs tab, "Change" goes to the Property), Call-out Fees owed under them, the Next card ("Needs you" and a Wattle edge when it waits on the Property Manager; when the Next step is rating the Tradie, the 1 to 5 round buttons are in it), the messages (kept to about 12 rem, scrolled to the newest, with "Show the whole conversation") and Ticket details as four small tiles. The Progress under both columns runs the full width; its Timeline board scrolls sideways with a visible slider.
 - **Phones**: one column in the order Summary, Next, the Job and what the Tenant reported, Progress, messages, people, costs, details.
 
+### Maintenance Request page: soft cards
+
+`/requests/:id` (`pages/requests.ts`) has the Ticket page's look, built from the same pieces.
+
+- **Header**: "‹ Tickets" above the title, the Urgency badge beside it, one line under it (the Trade, the address, when it was reported and by whom) and Share as a pill.
+- **Summary band**: inside the 2 px dark-yellow outline, a white Summary card ("Filled in by AI", the issue large with its pencil, the address chip and "Waiting for you" as an amber dot and a word, not a pill) with a stage ring on its right that says "To confirm" ("Step 1 of 2, then it opens as a Ticket"; hidden on phones). Under it, three small tiles: Tenant, Reported and Property Manager.
+- **Cards**: Photos (120 px thumbnails, the flagged line and the match result) beside The Tenant's answers (their words, then four answer tiles) from 1280 px; stacked below that.
+- **Side column** (from 1024 px, a square-cornered grey panel `#D9D6D0`, as tall as the cards beside it): People on this request (initials for the Tenant and the Property Manager), To check when there is one, Decide (a Wattle edge and a "Needs you" chip; Urgency, Trade tile, Confirm as the one primary action, Reject folded away) and Follow up.
+- **Phones**: one column in the order Summary, People, Decide, Follow up, Photos, answers.
+
 ### The docket (Tickets only)
 
 ```
