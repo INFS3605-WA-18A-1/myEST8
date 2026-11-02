@@ -90,7 +90,7 @@ myEST8 is where a Property Manager at a small Australian Agency sees every repai
 
 ### Count strip, count sentence and filters
 
-- `filterBar({ action, filter, urgencies, trades, properties })` is the one filter over a list (Tickets, Archive): a GET form of small labelled selects in a wrapping row that keeps Mine/All in a hidden field. `app.js` submits it on change and hides its Apply button; a Clear filters link shows once a filter is set. Pages read it with `listFilterOf(c)` (`src/web/list-filter.ts`), which drops unknown values.
+- `filterBar({ action, filter, urgencies, trades, properties, hidden?, compact? })` is the one filter over a list (Tickets, Archive): a GET form of small labelled selects in a wrapping row that keeps Mine/All in a hidden field. `app.js` submits it on change and hides its Apply button; a Clear filters link shows once a filter is set. Pages read it with `listFilterOf(c)` (`src/web/list-filter.ts`), which drops unknown values.
 - `countStrip(items)` is the dashboard's row of counts: each a tile linking into its queue, the number in Lexend 26px 600 under a 3px Harbour line, plain type with no underline; a zero turns Slate. Items take `{ label, count, href, decision?, tone? }`; a `tone` above zero adds a small dot beside the label: `attention` Wattle, `urgent` red (and a red number). Two tiles per row under 640 px, three from 640 px, and one row of six from 1024 px.
 - `countSentence(items, { empty })` is the other pages' counts (Approvals and the desk pages). One sentence under the title in 16px: "2 Maintenance Requests to confirm, 1 Quote to choose and 1 Tradie to rate." Each count is a link into its queue. Items take `{ label, one?, count, href, decision? }`; `one` is the wording for a count of 1. Counts of zero are left out. A count that needs a decision is Night on a Wattle chip; the rest are Harbour links. When nothing is left the sentence says so ("Nothing needs you right now.").
 - `aiFilled(content, { label?, edit? })` is the "Filled in by AI" style: `--info-bg` tint, 4px radius, a quiet label after the `sparkle` icon (14px, `aria-hidden`; "Filled in by AI" unless `label` says more), and an optional edit control. The sparkle is the one mark on every AI-written thing: the Summary, a drafted follow-up, an import's AI values, an email Haiku wrote in a message log. Use it only for text the AI wrote; text a person wrote or edited, and the Tenant's own words, are not tinted. A profile read that used a model puts the same label beside the sentence (`profileRead`), not above it.
@@ -119,6 +119,14 @@ One screen on a window at least 928 px tall (shorter ones scroll a little rather
 - **Tickets by stage**: a segmented bar and five counts (Quoting, With owner, Ready, Booked, Done) show where the open Tickets are, then one soft row per Ticket in workflow order: its number, the issue, the street, the age, what it waits on and Urgency when High or Urgent, and a five-segment progress marker filled up to its stage with the stage's name. Stage colours step from Harbour to a pale blue, then green for Done. The core works out the stage, Quote counts and decisions (`views.dashboard`); the page only draws them. With no open Tickets it is one empty state.
 - Setup is not on the dashboard. While the Agency is unfinished the rail shows an outlined "Setup guide" link above Collapse menu, pointing at the next step still to do.
 - Phone and narrow windows: one column, in the order Your day at a glance, Do next, Inbox, Next 7 days, Tickets by stage; nothing scrolls inside a card except the open message list.
+
+### Tickets: soft cards
+
+`/tickets` is one bar and two cards. The Archive keeps its table (`ticketTable`).
+
+- **The bar**: stage tabs on the left (All open, then each stage that has a Ticket, with its count; Ready to close has a Wattle count) and the compact Urgency, Trade and Property selects (`filterBar` with `compact`, labels read by screen readers only). A tab is a link (`?stage=quoting`) that keeps Mine/All and the other filters; the selects keep the tab in a hidden field. A Clear link shows once a tab or filter is set. The filters sit under the tabs when the window is too narrow for one row.
+- **New Maintenance Requests**: one light-blue card (`--info-bg`) per request: up to three photos (Flagged tag where a photo's metadata was flagged, then "+n"), the Summary, the address, Urgency, Trade and any flags, who reported it and when; Review and Confirm on the right (under the text on phones).
+- **Open Tickets**: a grid of cards (four across on a wide window), most urgent first and then oldest: photo, number, unread and Urgency, Trade and Reported boxes, the issue, the address, a five-segment stage bar with the stage's name (the colours of the dashboard's Tickets by stage), and View ticket. A Ticket whose Jobs are all done or cancelled reads "Done · ready to close" and also has Close ticket, which asks first. A "Stages" legend sits under the grid.
 
 ### Dispatch: the map
 
@@ -210,15 +218,15 @@ After sign-up the onboarding wizard (`/welcome`) also fills the page, with no ra
 `/dispatch` (`src/web/pages/dispatch.ts`, `static/dispatch-map.js`) shows where the Agency's Properties and Tradies are, so a Property Manager can see which Tradies are near a Property with work waiting. MapLibre GL JS (6.x) draws a light grey vector basemap and works out which pins overlap; the pins and groups are HTML buttons laid over it. MapLibre's module, worker and stylesheet are served from `/assets` (`assets.ts` allowlists each file by name, `vercel.json` ships them from `node_modules/maplibre-gl/dist/`), so only the basemap's style, tiles and fonts come from the network.
 
 ```
-┌ Need Tradies │ Ready to book │ High or Urgent │ Visits today ───────┐
-├ To dispatch: a card per Job waiting, most urgent first ────────────┤
-├──────────────────────────────────────────────┬────────────────────┤
-│ map  (55vh on phones, 32rem from 1024px)     │ panel: the picked  │
-│                                              │ Property or Tradie │
-├──────────────────────────────────────────────┴────────────────────┤
-│ Properties: Address  Suburb  Open Tickets  Worst urgency           │
-└────────────────────────────────────────────────────────────────────┘
+┌ map card (43rem from 1024px, 55vh on phones) ─┬ Today at a glance (4 soft tiles) ─┐
+│  count chip; the picked Property or Tradie    ├ To dispatch (count, View queue)   │
+│  floats over the map                          │  a soft card per Job, most urgent │
+├───────────────────────────────────────────────┴───────────────────────────────────┤
+│ Properties (count, All / Open tickets / High & urgent tabs, address search)       │
+└────────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+Cards are soft: white, 1px `--line`, 16px radius. The glance tiles are Paper-tinted (Ochre-tinted when Tradies are needed, Harbour-tinted when Jobs are ready to book, a red number for High or urgent). Each Job card has a Ticket box (number) beside what it needs. The tabs and search over the Properties table are JavaScript only (`dispatch-map.js`); without it the whole table shows. A row's arrow opens the Property's details over the map.
 
 - **At a glance.** Four stats: Jobs that need Tradies to quote, Jobs ready to book (a Quote approved, no Work Order), open High or Urgent Tickets, and today's visits.
 - **To dispatch.** A card per Job waiting on the Property Manager, most urgent then oldest first, with a Wattle edge: what it needs (Needs Tradies to quote, Ready to book), the Ticket's issue, its Urgency, Trade and Property (the Property's chip picks it on the map). A Job with fewer than two Quote Requests lists up to six Tradies of its Trade not asked yet, nominated first then nearest, each as a Tradie entry (below) with its checkbox, the first ones ticked, and **Send Quote Requests**. A Job with an approved Quote names the Tradie and price, offers their next three free times (each fills the start) and **Send Work Order**. Both post to `/dispatch/jobs/:id/…` and refuse as the Ticket page does.
