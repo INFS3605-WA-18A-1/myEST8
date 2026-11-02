@@ -49,6 +49,9 @@ const REIMBURSEMENT_STATUS: Record<UrgentRepairStatus, [string, Tone]> = {
   reimbursed: ['Reimbursed', 'success'],
 };
 
+/** A Reimbursement Request's status in words. */
+export const reimbursementLabel = (status: UrgentRepairStatus): string => REIMBURSEMENT_STATUS[status][0];
+
 /** A Reimbursement Request's status as a badge. */
 export function reimbursementBadge(status: UrgentRepairStatus, o: { wrap?: boolean } = {}): Html {
   const [label, tone] = REIMBURSEMENT_STATUS[status];

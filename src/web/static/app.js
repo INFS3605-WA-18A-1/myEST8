@@ -719,6 +719,55 @@ onContent((root) => {
   });
 })();
 
+// === schedule: picked visit and visit types ===
+// Clicking a visit on the grid shows its details in the Picked visit panel instead of
+// opening its Ticket, when the screen is 1280px or wider. The panel's Open Ticket
+// button, a modified click and a narrow screen all still go to the Ticket. The Visit types
+// boxes hide the blocks of a kind by setting data-hide on the Schedule; both are hidden
+// until this file runs, since neither does anything without it.
+onContent((root) => {
+  const shell = root.querySelector('[data-schedule-shell]');
+  if (!shell) return;
+  const panel = shell.querySelector('[data-pick-panel]');
+  if (panel) {
+    panel.hidden = false;
+    shell.classList.add('has-pick');
+    const wide = matchMedia('(min-width: 80rem)');
+    const empty = panel.querySelector('[data-pick-empty]');
+    const close = panel.querySelector('[data-pick-close]');
+    const show = (id) => {
+      for (const card of panel.querySelectorAll('[data-pick-card]')) card.hidden = card.dataset.pickCard !== id;
+      for (const block of shell.querySelectorAll('[data-pick]')) block.classList.toggle('is-picked', block.dataset.pick === id);
+      empty.hidden = id !== null;
+      close.hidden = id === null;
+      shell.classList.toggle('is-open', id !== null);
+    };
+    shell.addEventListener('click', (event) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const block = event.target.closest('[data-pick]');
+      if (!block || !wide.matches) return;
+      if (event.target.closest('.schedule-block-tradie, .booking-reschedule')) return;
+      event.preventDefault();
+      show(block.dataset.pick);
+    });
+    close.addEventListener('click', () => show(null));
+  }
+  const boxes = [...shell.querySelectorAll('[data-hide-key]')];
+  const all = shell.querySelector('[data-hide-all]');
+  if (all) {
+    for (const group of shell.querySelectorAll('[data-needs-script]')) group.hidden = false;
+    const apply = () => {
+      shell.dataset.hide = boxes.filter((box) => !box.checked).map((box) => box.dataset.hideKey).join(' ');
+      all.checked = boxes.every((box) => box.checked);
+    };
+    all.addEventListener('change', () => {
+      for (const box of boxes) box.checked = all.checked;
+      apply();
+    });
+    for (const box of boxes) box.addEventListener('change', apply);
+  }
+});
+
 // === photo viewer ===
 // A photoGrid ([data-photo-grid]) is a list of links to full images, which open in
 // the same tab without this file. Here a click on one opens that grid's photos in

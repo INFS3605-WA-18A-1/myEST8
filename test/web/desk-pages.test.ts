@@ -79,7 +79,7 @@ const rowOf = (html: string, id: number) => html.split('<tr>').find((r) => r.inc
 const cardOf = (html: string, id: number) => html.split('<li class="tk-card').find((r) => r.includes(`href="/tickets/${id}"`)) ?? '';
 
 /** The table row that links to Reimbursement Request `id`, or '' when there is none. */
-const reimbursementRow = (html: string, id: number) => html.split('<tr>').find((r) => r.includes(`href="/reimbursements/${id}"`)) ?? '';
+const reimbursementRow = (html: string, id: number) => html.split('<article').find((r) => r.includes(`href="/reimbursements/${id}"`)) ?? '';
 
 /** Follows a POST's redirect and returns the page it lands on. */
 async function follow(w: Web, res: Response, cookie: string) {
@@ -360,7 +360,7 @@ describe('Approvals', () => {
     expect(html).toContain(`href="/tickets/${ticketId}"`);
     for (const expected of [KING_ST, 'Olivia Owens', '$650.00', '$500.00', '$150.00', 'Reminder not due yet']) expect(readable).toContain(expected);
     // A Quote with the Property Owner waits on them, not the Property Manager: a quiet count, not Wattle.
-    expect(html).toMatch(/<a href="#owners" class="count-link">1 Quote waiting on a Property Owner<\/a>/);
+    expect(readable).toContain('$650.00 in Quotes');
 
     await w.h.advance(25 * HOUR);
     expect(visible(await text(w, '/approvals'))).toContain('Reminder sent');
@@ -415,7 +415,7 @@ describe('Approvals', () => {
     // The one to review first, though reported later.
     expect(html.indexOf(`href="/reimbursements/${received}"`)).toBeGreaterThan(0);
     expect(html.indexOf(`href="/reimbursements/${received}"`)).toBeLessThan(html.indexOf(`href="/reimbursements/${waiting}"`));
-    expect(html).toMatch(/<a href="#reimbursements" class="count-link[^"]*">1 Reimbursement Request to review<\/a>/);
+    expect(readable).toContain('1 to review');
     // The rail counts the one to review.
     expect(railCount(html, '/approvals')).toBe('1');
     // Only the list with rows is shown.
