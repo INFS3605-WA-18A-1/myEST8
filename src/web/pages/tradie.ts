@@ -37,7 +37,7 @@ export function tradiePages() {
       page({
         title: 'Tradies',
         pm,
-        active: 'tradies',
+        active: 'profiles',
         flash,
         shell: shellInfo(c),
         subtitle: 'Best myEST8 rating first. The two ratings are shown side by side, never combined.',
@@ -95,7 +95,7 @@ export async function addTradiePage(c: Context<WebEnv>, refused?: AddTradieRefus
     page({
       title: 'Add a Tradie',
       pm,
-      active: 'tradies',
+      active: 'profiles',
       shell: shellInfo(c),
       flash,
       actions: linkButton('Back to Tradies', '/tradies', { variant: 'ghost', size: 'sm' }),
@@ -136,7 +136,7 @@ async function profilePage(c: Context<WebEnv>, id: number, refused?: DetailsEdit
       page({
         title: 'Tradie not found',
         pm,
-        active: 'tradies',
+        active: 'profiles',
         shell: shellInfo(c),
         body: emptyState("There's no such Tradie in your Agency.", linkButton('Back to Tradies', '/tradies')),
       }),
@@ -156,7 +156,7 @@ async function profilePage(c: Context<WebEnv>, id: number, refused?: DetailsEdit
     page({
       title: tradie.businessName ?? tradie.name,
       pm,
-      active: 'tradies',
+      active: 'profiles',
       shell: shellInfo(c),
       flash,
       subtitle: tradie.businessName ? tradie.name : undefined,

@@ -64,7 +64,7 @@ type Kind = {
 const OWNER: Kind = {
   role: 'owner',
   path: '/owners',
-  nav: 'owners',
+  nav: 'profiles',
   title: 'Property Owners',
   singular: 'Property Owner',
   column: 'Property Owner',
@@ -83,7 +83,7 @@ const OWNER: Kind = {
 const BUILDING_MANAGER: Kind = {
   role: 'building_manager',
   path: '/building-managers',
-  nav: 'building-managers',
+  nav: 'profiles',
   title: 'Building Managers',
   singular: 'Building Manager',
   column: 'Building Manager',
