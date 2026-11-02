@@ -8816,6 +8816,10 @@
       font-weight: 500;
       transform: translateY(-50%);
     }
+    .household-count {
+      color: var(--muted);
+      font-size: 12px;
+    }
     .household-waiting {
       padding: 1px 6px;
       border-radius: 4px;

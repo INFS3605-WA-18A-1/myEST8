@@ -121,6 +121,7 @@ function householdCard(household: Household): Html {
   const waiting = household.owner.approvalsWaiting;
   return html`<article class="household">
     <p class="household-owner">
+      <span class="household-role">Owner</span>
       <a href="/owners/${household.owner.id}">${household.owner.name}</a>
       ${waiting ? html`<span class="household-waiting">${waiting === 1 ? '1 approval waiting' : `${waiting} approvals waiting`}</span>` : ''}
     </p>
@@ -135,7 +136,7 @@ function householdCard(household: Household): Html {
         ? household.tenants.map(
             (tenant) => html`<li>
               <a href="/tenants/${tenant.id}">${tenant.name}</a>
-              ${tenant.openTickets ? badge(tenant.openTickets === 1 ? '1 open Ticket' : `${tenant.openTickets} open Tickets`, 'neutral', { outline: true }) : ''}
+              ${tenant.openTickets ? html`<span class="household-count">${tenant.openTickets === 1 ? '1 open Ticket' : `${tenant.openTickets} open Tickets`}</span>` : ''}
               ${tenant.concern ? badge('Concern', 'warning') : ''}
             </li>`,
           )
