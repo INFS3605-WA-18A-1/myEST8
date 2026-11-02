@@ -3,11 +3,120 @@
 // the drawer that opens the rail under 1024px, collapsing the rail from 1024px,
 // closing the user menu, a loading bar, and in-page navigation (at the end).
 
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+const motionMs = (token) => (reduceMotion.matches ? 0 : parseFloat(getComputedStyle(document.documentElement).getPropertyValue(token)) || 0);
+const motionEase = (token) => getComputedStyle(document.documentElement).getPropertyValue(token).trim() || 'cubic-bezier(0.25, 1, 0.5, 1)';
+
+/** Closes a disclosure after its panel has left, so the close is quicker than the open. */
+function closeDisclosure(details, { focusSummary = false } = {}) {
+  if (!details.open || details.classList.contains('is-closing')) return;
+  if (focusSummary) details.querySelector(':scope > summary')?.focus();
+  details.classList.add('is-closing');
+  // Flush so the close animation is running before we wait on it.
+  void details.offsetWidth;
+  const anims = [...details.querySelectorAll(':scope > :not(summary), .share-panel')].flatMap((el) => el.getAnimations());
+  Promise.allSettled(anims.map((a) => a.finished)).then(() => {
+    details.classList.remove('is-closing');
+    details.open = false;
+  });
+}
+
+/** Collapses a flash, then removes it. With no motion it goes at once. */
+function dismissFlash(flash) {
+  const ms = motionMs('--dur-base');
+  if (!ms || !flash.animate) return flash.remove();
+  const gap = parseFloat(getComputedStyle(flash.parentElement).rowGap) || 0;
+  flash.style.overflow = 'hidden';
+  flash
+    .animate(
+      [
+        { opacity: 1, height: `${flash.offsetHeight}px` },
+        { opacity: 0, height: '0px', paddingBlock: '0px', borderWidth: '0px', marginBlockEnd: `${-gap}px` },
+      ],
+      { duration: ms, easing: motionEase('--ease-exit'), fill: 'forwards' },
+    )
+    .finished.finally(() => flash.remove());
+}
+
+let viewTransition;
+/** Cross-fades a DOM update. Skipped when the browser can't, motion is reduced, or the tab is hidden. */
+function swapView(update) {
+  if (!document.startViewTransition || reduceMotion.matches || document.hidden) {
+    update();
+    return Promise.resolve();
+  }
+  viewTransition?.skipTransition();
+  viewTransition = document.startViewTransition(update);
+  return viewTransition.updateCallbackDone;
+}
+
+if (document.querySelector('.glance-bubbles')) {
+  try {
+    sessionStorage.setItem('glance', '1');
+  } catch {
+    // Storage blocked: the bubbles may settle in again next time.
+  }
+}
+
 // Setup for elements in the page goes through onContent: it runs on the document
 // now, and again on #main's new content after an in-page navigation.
 function onContent(setup) {
   setup(document);
   document.addEventListener('myest8:content', (event) => setup(event.detail));
+}
+
+// The Mine/All thumb. Without this the current item stays filled, as the page drew it.
+onContent((root) => {
+  for (const nav of root.querySelectorAll('.segmented')) {
+    if (nav.querySelector('.segmented-thumb')) continue;
+    const thumb = document.createElement('span');
+    thumb.className = 'segmented-thumb';
+    thumb.setAttribute('aria-hidden', 'true');
+    nav.prepend(thumb);
+    nav.classList.add('has-thumb');
+    const place = (item) => {
+      nav.style.setProperty('--thumb-x', `${item.offsetLeft}px`);
+      nav.style.setProperty('--thumb-w', `${item.offsetWidth}px`);
+    };
+    const current = () => nav.querySelector("[aria-current='page']");
+    const now = current();
+    if (now) place(now);
+    document.fonts.ready.then(() => {
+      const item = current();
+      if (item && nav.isConnected) place(item);
+    });
+    if ('ResizeObserver' in window) {
+      new ResizeObserver(() => {
+        const item = current();
+        if (item) place(item);
+      }).observe(nav);
+    }
+    requestAnimationFrame(() => nav.classList.add('is-ready'));
+    nav.addEventListener('click', (event) => {
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const item = event.target instanceof Element ? event.target.closest('.segmented-item') : null;
+      if (!(item instanceof HTMLElement) || item.getAttribute('aria-current') === 'page') return;
+      item.classList.add('is-target');
+      nav.classList.add('is-moving');
+      place(item);
+    });
+  }
+});
+
+// A rail count that changed since the last page in this tab pops once.
+try {
+  const previous = JSON.parse(sessionStorage.getItem('rail-counts') || '{}');
+  const next = {};
+  for (const count of document.querySelectorAll('.rail-count')) {
+    const href = count.closest('a')?.getAttribute('href');
+    if (!href) continue;
+    const value = count.textContent.replace(/\s+/g, ' ').trim();
+    next[href] = value;
+    if (href in previous && previous[href] !== value) count.classList.add('is-changed');
+  }
+  sessionStorage.setItem('rail-counts', JSON.stringify(next));
+} catch {
+  // Storage blocked: the counts stay still.
 }
 
 (() => {
@@ -75,10 +184,10 @@ function onContent(setup) {
       close.className = 'btn btn-ghost btn-sm btn-square flash-close';
       close.setAttribute('aria-label', 'Dismiss message');
       close.innerHTML = X_ICON;
-      close.addEventListener('click', () => flash.remove());
+      close.addEventListener('click', () => dismissFlash(flash));
       flash.append(close);
       if (flash.dataset.flash === 'ok') {
-        const fade = () => (flash.matches(':hover, :focus-within') ? setTimeout(fade, 2000) : flash.remove());
+        const fade = () => (flash.matches(':hover, :focus-within') ? setTimeout(fade, 2000) : dismissFlash(flash));
         setTimeout(fade, 8000);
       }
     }
@@ -148,18 +257,25 @@ function onContent(setup) {
   // The Property Manager's menu (<details data-menu>) closes on a click elsewhere or Escape.
   const openMenus = () => document.querySelectorAll('details[data-menu][open]');
   document.addEventListener('click', (event) => {
-    for (const menu of openMenus()) if (!menu.contains(event.target)) menu.open = false;
+    for (const menu of openMenus()) if (!menu.contains(event.target)) closeDisclosure(menu);
   });
+  document.addEventListener(
+    'click',
+    (event) => {
+      const summary = event.target instanceof Element ? event.target.closest('details[data-menu][open] > summary, details[data-share][open] > summary') : null;
+      if (!summary) return;
+      event.preventDefault();
+      closeDisclosure(summary.parentElement);
+    },
+    true,
+  );
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
     if (shell?.classList.contains('drawer-open')) {
       setDrawer(false, true);
       return;
     }
-    for (const menu of openMenus()) {
-      menu.open = false;
-      menu.querySelector('summary')?.focus();
-    }
+    for (const menu of openMenus()) closeDisclosure(menu, { focusSummary: true });
   });
 })();
 
@@ -171,10 +287,7 @@ function onContent(setup) {
 (() => {
   const allShares = () => document.querySelectorAll('details[data-share]');
 
-  const close = (share, returnFocus = false) => {
-    share.open = false;
-    if (returnFocus) share.querySelector('summary')?.focus();
-  };
+  const close = (share, returnFocus = false) => closeDisclosure(share, { focusSummary: returnFocus });
 
   onContent((root) => {
     for (const share of root.querySelectorAll('details[data-share]')) {
@@ -234,7 +347,7 @@ function onContent(setup) {
           status.textContent = '';
           return;
         }
-        for (const other of allShares()) if (other !== share) other.open = false;
+        for (const other of allShares()) if (other !== share) closeDisclosure(other);
         // A panel opened near the bottom of a long page is brought into view.
         if (!window.matchMedia('(max-width: 39.99rem)').matches) share.querySelector('.share-panel')?.scrollIntoView({ block: 'nearest' });
       });
@@ -932,7 +1045,12 @@ onContent((root) => {
       if (open !== dialog) open.close();
     }
     restoring = true;
-    if (!dialog.open) dialog.showModal();
+    if (!dialog.open) {
+      dialog.showModal();
+      const from = link.getBoundingClientRect();
+      const box = dialog.getBoundingClientRect();
+      if (box.width && box.height) dialog.style.transformOrigin = `${from.left + from.width / 2 - box.left}px ${from.top + from.height / 2 - box.top}px`;
+    }
   });
 
   // close does not bubble; capture hears it from the dialog.
@@ -1007,22 +1125,24 @@ onContent((root) => {
       if (push) history.pushState(null, '', arrived);
       current = pageOf(arrived);
       const focused = main.contains(document.activeElement) ? document.activeElement.id : null;
-      document.title = doc.title;
-      main.replaceChildren(...[...next.childNodes].map((node) => document.importNode(node, true)));
-      document.dispatchEvent(new CustomEvent('myest8:content', { detail: main }));
-      // Focus goes back to the control that was used (a filter, the tab picked), or to the content.
-      const target =
-        (focused && document.getElementById(focused)) ||
-        (focusHref && [...main.querySelectorAll('a[href]')].find((a) => a.href === focusHref)) ||
-        null;
-      if (target) target.focus({ preventScroll: true });
-      else if (focused !== null || focusHref) {
-        main.tabIndex = -1;
-        main.focus({ preventScroll: true });
-      }
-      if (url.hash) document.getElementById(decodeURIComponent(url.hash.slice(1)))?.scrollIntoView();
-      status.textContent = `Loaded ${doc.title}`;
-      main.removeAttribute('aria-busy');
+      await swapView(() => {
+        document.title = doc.title;
+        main.replaceChildren(...[...next.childNodes].map((node) => document.importNode(node, true)));
+        document.dispatchEvent(new CustomEvent('myest8:content', { detail: main }));
+        // Focus goes back to the control that was used (a filter, the tab picked), or to the content.
+        const target =
+          (focused && document.getElementById(focused)) ||
+          (focusHref && [...main.querySelectorAll('a[href]')].find((a) => a.href === focusHref)) ||
+          null;
+        if (target) target.focus({ preventScroll: true });
+        else if (focused !== null || focusHref) {
+          main.tabIndex = -1;
+          main.focus({ preventScroll: true });
+        }
+        if (url.hash) document.getElementById(decodeURIComponent(url.hash.slice(1)))?.scrollIntoView();
+        status.textContent = `Loaded ${doc.title}`;
+        main.removeAttribute('aria-busy');
+      });
       stop();
     } catch (error) {
       if (error?.name === 'AbortError') return;
@@ -1060,25 +1180,27 @@ onContent((root) => {
         const live = document.getElementById('next-7-days');
         if (!live) throw new Error('not the day');
         const imported = document.importNode(next, true);
-        live.replaceWith(imported);
-        const url = new URL(href);
-        history.pushState(null, '', url);
-        current = pageOf(url);
-        const day = url.searchParams.get('day');
-        const scope = document.querySelector('#main .page-header-controls .segmented');
-        if (scope && day) {
-          for (const item of scope.querySelectorAll('a[href]')) {
-            const nextHref = new URL(item.getAttribute('href'), location.origin);
-            if (nextHref.pathname !== '/') continue;
-            nextHref.searchParams.set('day', day);
-            nextHref.hash = 'next-7-days';
-            item.setAttribute('href', `${nextHref.pathname}${nextHref.search}${nextHref.hash}`);
+        swapView(() => {
+          live.replaceWith(imported);
+          const url = new URL(href);
+          history.pushState(null, '', url);
+          current = pageOf(url);
+          const day = url.searchParams.get('day');
+          const scope = document.querySelector('#main .page-header-controls .segmented');
+          if (scope && day) {
+            for (const item of scope.querySelectorAll('a[href]')) {
+              const nextHref = new URL(item.getAttribute('href'), location.origin);
+              if (nextHref.pathname !== '/') continue;
+              nextHref.searchParams.set('day', day);
+              nextHref.hash = 'next-7-days';
+              item.setAttribute('href', `${nextHref.pathname}${nextHref.search}${nextHref.hash}`);
+            }
           }
-        }
-        const chosen = imported.querySelector('[aria-current="date"]');
-        if (chosen instanceof HTMLElement) chosen.focus({ preventScroll: true });
-        const heading = imported.querySelector('.visit-heading');
-        status.textContent = `Loaded ${heading?.textContent?.trim() || 'the day'}`;
+          const chosen = imported.querySelector('[aria-current="date"]');
+          if (chosen instanceof HTMLElement) chosen.focus({ preventScroll: true });
+          const heading = imported.querySelector('.visit-heading');
+          status.textContent = `Loaded ${heading?.textContent?.trim() || 'the day'}`;
+        });
         stop();
       })
       .catch((error) => {
