@@ -120,12 +120,14 @@ describe('ui', () => {
     expect(out).toContain('<span class="rail-label">Dashboard</span>');
     // The folded state is set before the first paint, from this browser's choice.
     expect(out).toContain("localStorage.getItem('rail')==='collapsed'");
+    expect(out).toContain("sessionStorage.getItem('glance')");
   });
 
   it('marks only the active rail link with aria-current', async () => {
     const out = await render(page({ title: 'Dispatch', pm: { name: 'Alice' }, active: 'dispatch', body: html`<p>x</p>` }));
-    expect(out).toMatch(/<a href="\/dispatch" class="rail-link" aria-current="page">/);
+    expect(out).toMatch(/<a href="\/dispatch" class="rail-link" aria-current="page"><span class="rail-indicator" aria-hidden="true"><\/span>/);
     expect(out.match(/aria-current="page"/g)).toHaveLength(1);
+    expect(out.match(/class="rail-indicator"/g)).toHaveLength(1);
   });
 
   it('lists every place in the rail, Profiles with no group heading, and Settings after the gap, with the Phone simulator at its foot only in the demo', async () => {
@@ -576,7 +578,7 @@ describe('ui', () => {
     // eight places and the Phone simulator, Collapse menu, the menu button, the alerts bell, the user menu caret, the alert (the logo's key tag is our own)
     expect(out.match(phosphor)).toHaveLength(14);
     expect(out).not.toContain('viewBox="0 0 24 24"');
-    expect(out).toMatch(/class="rail-link" aria-current="page"><svg [^>]*class="size-\[18px\] shrink-0"/);
+    expect(out).toMatch(/class="rail-link" aria-current="page"><span class="rail-indicator" aria-hidden="true"><\/span><svg [^>]*class="size-\[18px\] shrink-0"/);
     expect(await render(flashMessage({ kind: 'ok', message: 'Saved' }))).toMatch(/<svg [^>]*viewBox="0 0 256 256"/);
   });
 });

@@ -64,6 +64,37 @@
   --shadow-lift: 0 8px 24px rgb(19 33 46 / 0.18); /* the one shadow: menus, dialogs, the phone frame */
   --font-body: 'Public Sans', system-ui, sans-serif;
   --font-head: 'Bricolage Grotesque', system-ui, sans-serif;
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 360ms;
+  --ease-out: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-emphasis: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  /* A spring with damping 0.7 (about 4.6% overshoot): press release, menus, dialogs, the thumb. */
+  --ease-spring: linear(0, 0.057, 0.191, 0.356, 0.523, 0.672, 0.796, 0.891, 0.959, 1.004, 1.031, 1.043, 1.046, 1.043, 1.036, 1.029, 1.021, 1.014, 1.009, 1.005, 1.002, 1, 0.999, 0.998, 1);
+  /* Damping 0.6 (about 9.5% overshoot): only the glance bubbles' entrance and a changed count. */
+  --ease-bounce: linear(0, 0.078, 0.256, 0.469, 0.672, 0.839, 0.962, 1.041, 1.082, 1.095, 1.089, 1.072, 1.052, 1.033, 1.017, 1.005, 0.997, 0.992, 0.991, 0.991, 0.993, 0.995, 0.997, 0.998, 1);
+}
+
+@supports not (transition-timing-function: linear(0, 1)) {
+  :root {
+    --ease-spring: cubic-bezier(0.34, 1.3, 0.64, 1);
+    --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 1ms;
+    --dur-base: 1ms;
+    --dur-slow: 1ms;
+    --ease-spring: linear;
+    --ease-bounce: linear;
+  }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
 }
 
 /*
@@ -141,6 +172,7 @@
     /* Ordinary links are Harbour. Links styled as buttons (.btn) keep their variant's text colour. :where keeps this at zero specificity, so any class (rail, docket, segmented, a chat bubble) still wins. */
     :where(a:not(.btn)) {
       color: var(--action);
+      transition: color var(--dur-fast) var(--ease-out), text-decoration-color var(--dur-fast) var(--ease-out);
     }
     :where(a:not(.btn)):hover {
       color: var(--action-hover);
@@ -154,7 +186,12 @@
       font-variant-numeric: tabular-nums;
     }
 
-    /* One visible focus ring for every control, offset so it shows on filled buttons too. */
+    /* One visible focus ring for every control, offset so it shows on filled buttons too.
+       At rest the offset sits a little further out and settles to 2px. The outline is never a transparent colour. */
+    :where(a, button, summary, input, select, textarea, [tabindex]) {
+      outline-offset: 4px;
+      transition: outline-offset var(--dur-fast) var(--ease-out);
+    }
     :focus-visible {
       outline: 2px solid var(--action);
       outline-offset: 2px;
@@ -239,6 +276,9 @@
       text-transform: none;
       text-decoration: none;
       box-shadow: none;
+      transition-property: color, background-color, border-color, box-shadow, scale;
+      transition-duration: var(--dur-fast), var(--dur-fast), var(--dur-fast), var(--dur-fast), var(--dur-slow);
+      transition-timing-function: var(--ease-out), var(--ease-out), var(--ease-out), var(--ease-out), var(--ease-spring);
     }
     .btn-sm {
       --size: 2rem;
@@ -259,6 +299,41 @@
     .btn:focus-visible {
       outline: 2px solid var(--action);
       outline-offset: 2px;
+    }
+    .btn:active:not(:disabled, [disabled], [aria-disabled='true']) {
+      translate: none;
+      scale: 0.97;
+      transition-duration: var(--dur-fast);
+      transition-timing-function: var(--ease-out);
+    }
+    .btn-block:active:not(:disabled, [disabled], [aria-disabled='true']),
+    .user-menu-panel .btn:active:not(:disabled, [disabled], [aria-disabled='true']) {
+      scale: 0.985;
+    }
+    form[aria-busy='true'] .btn {
+      scale: none;
+    }
+    .glance-dialog-close,
+    .menu-button,
+    .photo-viewer-button,
+    .flash-close,
+    .rail-toggle,
+    .user-menu > summary {
+      transition: background-color var(--dur-fast) var(--ease-out), scale var(--dur-slow) var(--ease-spring);
+    }
+    .glance-dialog-close:active,
+    .menu-button:active,
+    .photo-viewer-button:active,
+    .flash-close:active,
+    .rail-toggle:active {
+      scale: 0.94;
+      transition-duration: var(--dur-fast);
+      transition-timing-function: var(--ease-out);
+    }
+    .user-menu > summary:active {
+      scale: 0.97;
+      transition-duration: var(--dur-fast);
+      transition-timing-function: var(--ease-out);
     }
     /* Primary: white on Harbour, darker Harbour on hover, whatever the link colour. */
     .btn-primary {
@@ -469,6 +544,29 @@
       font-weight: 500;
       line-height: 1.45;
       color: var(--urgent);
+      animation: fade-in var(--dur-base) var(--ease-out);
+    }
+    @keyframes fade-in {
+      from {
+        opacity: 0;
+      }
+    }
+    :is(.input, .select, .textarea, .combobox-input)[aria-invalid='true'] {
+      animation: nudge 320ms var(--ease-out) 1;
+    }
+    @keyframes nudge {
+      20% {
+        translate: -4px 0;
+      }
+      40% {
+        translate: 4px 0;
+      }
+      60% {
+        translate: -2px 0;
+      }
+      80% {
+        translate: 2px 0;
+      }
     }
     .input,
     .select,
@@ -848,6 +946,7 @@
       border-radius: 4px;
       color: var(--ink);
       text-decoration: none;
+      transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
     }
     a.docket:hover {
       border-color: var(--control);
@@ -1016,6 +1115,7 @@
       padding: 10px 16px;
       color: var(--ink);
       text-decoration: none;
+      transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
     }
     .count-item:hover {
       color: var(--ink);
@@ -1317,6 +1417,7 @@
       border-radius: 6px;
       color: inherit;
       text-decoration: none;
+      transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
     }
     .glance-legend-link:hover {
       color: var(--ink);
@@ -1357,15 +1458,23 @@
       text-align: center;
       text-decoration: none;
       box-shadow: 0 14px 30px color-mix(in srgb, var(--c) 35%, transparent);
-      animation: bubble-in 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) backwards, bubble-float 7s ease-in-out infinite;
-      animation-delay: calc(var(--i) * 0.14s + 0.1s), calc(var(--i) * -1.4s);
-      transition: transform 0.2s;
+      animation: bubble-in 520ms var(--ease-bounce) backwards;
+      animation-delay: calc(var(--i) * 40ms + 60ms);
+      transition: scale var(--dur-slow) var(--ease-spring), box-shadow var(--dur-base) var(--ease-out);
+    }
+    html.glance-seen .bubble {
+      animation: none;
     }
     .bubble:hover {
       color: var(--fg);
-      transform: scale(1.06);
+      scale: 1.05;
       box-shadow: var(--shadow-lift);
       z-index: 1;
+    }
+    .bubble:active {
+      scale: 0.97;
+      transition-duration: var(--dur-fast);
+      transition-timing-function: var(--ease-out);
     }
     .bubble:focus-visible {
       outline: 2px solid var(--action);
@@ -1399,12 +1508,10 @@
       line-height: 1.2;
     }
     @keyframes bubble-in {
-      from { opacity: 0; transform: scale(0.4); }
-      to { opacity: 1; transform: scale(1); }
-    }
-    @keyframes bubble-float {
-      0%, 100% { translate: 0 0; }
-      50% { translate: 0 -6px; }
+      from {
+        opacity: 0;
+        scale: 0.6;
+      }
     }
 
     /* Do next: soft rows, one clear action each. */
@@ -1548,7 +1655,12 @@
       text-decoration: none;
       background: rgba(255, 255, 255, 0.07);
       border-radius: 14px;
-      transition: background 0.15s;
+      transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), scale var(--dur-slow) var(--ease-spring);
+    }
+    .inbox-preview:active {
+      scale: 0.985;
+      transition-duration: var(--dur-fast);
+      transition-timing-function: var(--ease-out);
     }
     .inbox-preview:hover {
       color: #fff;
@@ -1705,10 +1817,16 @@
       text-decoration: none;
       background: #f4efe6;
       border-radius: 14px;
+      transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), scale var(--dur-slow) var(--ease-spring);
     }
     .ticket-row:hover {
       color: var(--ink);
       background: #ece5d7;
+    }
+    .ticket-row:active {
+      scale: 0.985;
+      transition-duration: var(--dur-fast);
+      transition-timing-function: var(--ease-out);
     }
     .ticket-row-id {
       display: flex;
@@ -1820,12 +1938,6 @@
         min-height: 44px;
       }
     }
-    @media (prefers-reduced-motion: reduce) {
-      .bubble {
-        animation: none;
-        transition: none;
-      }
-    }
 
     /* Inbox and Alerts, opened from a glance bubble: a dialog over the dashboard. */
     .glance-dialog {
@@ -1840,13 +1952,46 @@
       border: 0;
       border-radius: 8px;
       box-shadow: var(--shadow-lift);
+      opacity: 0;
+      scale: 0.96;
+      translate: 0 8px;
+      transition:
+        opacity var(--dur-fast) var(--ease-exit),
+        scale var(--dur-fast) var(--ease-exit),
+        translate var(--dur-fast) var(--ease-exit),
+        display var(--dur-fast) allow-discrete,
+        overlay var(--dur-fast) allow-discrete;
     }
     .glance-dialog[open] {
       display: flex;
       flex-direction: column;
+      opacity: 1;
+      scale: 1;
+      translate: 0 0;
+      transition-duration: var(--dur-base), var(--dur-slow), var(--dur-slow), var(--dur-slow), var(--dur-slow);
+      transition-timing-function: var(--ease-out), var(--ease-spring), var(--ease-emphasis);
+    }
+    @starting-style {
+      .glance-dialog[open] {
+        opacity: 0;
+        scale: 0.96;
+        translate: 0 8px;
+      }
     }
     .glance-dialog::backdrop {
-      background: var(--scrim);
+      background-color: transparent;
+      transition:
+        background-color var(--dur-base) var(--ease-out),
+        display var(--dur-base) allow-discrete,
+        overlay var(--dur-base) allow-discrete;
+    }
+    .glance-dialog[open]::backdrop {
+      background-color: var(--scrim);
+    }
+    @starting-style {
+      .glance-dialog[open]::backdrop {
+        background-color: transparent;
+      }
     }
     .glance-dialog-head {
       display: flex;
@@ -1888,6 +2033,14 @@
         max-height: none;
         margin: 0;
         border-radius: 0;
+        scale: 1;
+        translate: 0 32px;
+      }
+      @starting-style {
+        .glance-dialog[open] {
+          scale: 1;
+          translate: 0 32px;
+        }
       }
     }
 
@@ -1911,9 +2064,15 @@
       font-size: 12px;
       color: var(--muted);
       text-decoration: none;
+      transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), scale var(--dur-slow) var(--ease-spring);
     }
     a.day-chip:hover {
       color: var(--ink);
+    }
+    a.day-chip:active {
+      scale: 0.985;
+      transition-duration: var(--dur-fast);
+      transition-timing-function: var(--ease-out);
     }
     .day-chip time {
       display: grid;
@@ -2177,6 +2336,24 @@
       border: 1px solid var(--control);
       border-radius: 6px;
     }
+    .segmented.has-thumb {
+      position: relative;
+      isolation: isolate;
+    }
+    .segmented-thumb {
+      position: absolute;
+      top: 3px;
+      bottom: 3px;
+      left: 0;
+      z-index: -1;
+      width: var(--thumb-w, 0);
+      translate: var(--thumb-x, 0) 0;
+      border-radius: 4px;
+      background: var(--action);
+    }
+    .segmented.is-ready .segmented-thumb {
+      transition: translate var(--dur-slow) var(--ease-spring), width var(--dur-slow) var(--ease-spring);
+    }
     .segmented-item {
       display: inline-flex;
       align-items: center;
@@ -2188,6 +2365,17 @@
       font-weight: 600;
       color: var(--ink);
       text-decoration: none;
+      transition: color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
+    }
+    .segmented.has-thumb .segmented-item[aria-current='page'] {
+      background: transparent;
+    }
+    .segmented.is-moving .segmented-item[aria-current='page'] {
+      color: var(--ink);
+    }
+    .segmented.is-moving .segmented-item.is-target {
+      color: var(--surface);
+      background: transparent;
     }
     .segmented-item:hover {
       background: var(--page);
@@ -2262,10 +2450,19 @@
        its tint fills the box; the actions and other links sit above it. */
     .queue-row:has(a.queue-title) {
       position: relative;
+      transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
     }
     .queue-row:has(a.queue-title):hover {
       background: var(--page);
       border-color: var(--control);
+    }
+    .do-next .queue-row:has(a.queue-title) {
+      transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), scale var(--dur-slow) var(--ease-spring);
+    }
+    .do-next .queue-row:has(a.queue-title):active {
+      scale: 0.985;
+      transition-duration: var(--dur-fast);
+      transition-timing-function: var(--ease-out);
     }
     .queue-row:has(details[open]) {
       z-index: 2;
@@ -2378,7 +2575,7 @@
       .app-shell.has-rail {
         display: grid;
         grid-template-columns: var(--rail-width) minmax(0, 1fr);
-        transition: grid-template-columns 150ms ease-out;
+        transition: grid-template-columns var(--dur-base) var(--ease-emphasis);
       }
     }
     .app-main {
@@ -2455,6 +2652,8 @@
       padding-top: 16px;
     }
     .rail-link {
+      position: relative;
+      isolation: isolate;
       display: flex;
       align-items: center;
       gap: 10px;
@@ -2466,17 +2665,33 @@
       font-weight: 500;
       color: var(--rail-text);
       text-decoration: none;
+      transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
     }
-    .rail-link:hover {
+    .rail-link:hover:not([aria-current='page']) {
       background: var(--rail-hover);
       color: var(--rail-text);
     }
-    /* The current place: a lighter band, weight 600, white, and the 4px Wattle bar on its left edge. */
+    /* The current place: weight 600, white. The band and the 4px Wattle bar sit on .rail-indicator so they can move between pages. */
     .rail-link[aria-current='page'] {
-      background: var(--rail-current);
-      box-shadow: inset 4px 0 0 var(--hivis);
       font-weight: 600;
       color: var(--surface);
+    }
+    .rail-indicator {
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      border-radius: 6px;
+      background: var(--rail-current);
+      box-shadow: inset 4px 0 0 var(--hivis);
+    }
+    .rail-count.is-changed {
+      animation: count-pop var(--dur-slow) var(--ease-bounce);
+    }
+    @keyframes count-pop {
+      from {
+        scale: 0.6;
+        opacity: 0.4;
+      }
     }
     /* Setup guide: an outlined, quiet link above Collapse menu while setup is unfinished. */
     .rail-setup {
@@ -2791,18 +3006,36 @@
     .user-menu-panel > form > .btn {
       justify-content: flex-start;
     }
-    .user-menu[open] > .user-menu-panel {
-      animation: menu-in 150ms ease-out;
-    }
     @keyframes menu-in {
       from {
         opacity: 0;
-        transform: translateY(-4px);
+        scale: 0.96;
+        translate: 0 -4px;
       }
+    }
+    @keyframes menu-out {
       to {
-        opacity: 1;
-        transform: none;
+        opacity: 0;
+        scale: 0.98;
       }
+    }
+    .user-menu-panel,
+    .add-menu-panel,
+    .share-panel {
+      transform-origin: top right;
+    }
+    .share.is-start .share-panel {
+      transform-origin: top left;
+    }
+    .user-menu[open] > .user-menu-panel,
+    .add-menu[open] > .add-menu-panel,
+    .share[open] .share-panel {
+      animation: menu-in var(--dur-slow) var(--ease-spring);
+    }
+    .user-menu[open].is-closing > .user-menu-panel,
+    .add-menu[open].is-closing > .add-menu-panel,
+    .share[open].is-closing .share-panel {
+      animation: menu-out var(--dur-fast) var(--ease-exit) forwards;
     }
 
     .public-bar {
@@ -2955,20 +3188,29 @@
         max-width: 85vw;
         overflow-y: auto;
         transform: translateX(-100%);
-        transition: transform 150ms ease-out;
+        transition: transform var(--dur-base) var(--ease-exit);
       }
       html.js .app-shell.drawer-open .rail {
         transform: none;
+        transition: transform var(--dur-slow) var(--ease-emphasis);
       }
       .drawer-scrim {
-        display: none;
-      }
-      html.js .app-shell.drawer-open .drawer-scrim {
-        display: block;
         position: fixed;
         inset: 0;
         z-index: 35;
         background: var(--scrim);
+        display: none;
+        opacity: 0;
+        transition: opacity var(--dur-base) var(--ease-out), display var(--dur-base) allow-discrete;
+      }
+      html.js .app-shell.drawer-open .drawer-scrim {
+        display: block;
+        opacity: 1;
+      }
+      @starting-style {
+        html.js .app-shell.drawer-open .drawer-scrim {
+          opacity: 0;
+        }
       }
     }
     @media (min-width: 64rem) {
@@ -3090,15 +3332,6 @@
       right: auto;
       left: 0;
     }
-    .share[open] .share-panel {
-      animation: share-in 150ms ease-out;
-    }
-    @keyframes share-in {
-      from {
-        opacity: 0;
-        transform: translateY(-4px);
-      }
-    }
     .share-head {
       display: flex;
       align-items: flex-start;
@@ -3215,12 +3448,6 @@
         min-height: 44px;
       }
     }
-    @media (prefers-reduced-motion: reduce) {
-      .share[open] .share-panel {
-        animation: none;
-      }
-    }
-
     /* The invitation around a Share button on the Tenant's tracker. */
     .tracker-share {
       display: flex;
@@ -7272,11 +7499,16 @@
       background: #f6f1e8;
       color: var(--ink);
       text-decoration: none;
-      transition: transform 0.15s;
+      transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), scale var(--dur-slow) var(--ease-spring), translate var(--dur-base) var(--ease-out);
     }
     .glance-tile:hover {
-      transform: translateY(-1px);
+      translate: 0 -1px;
       color: var(--ink);
+    }
+    .glance-tile:active {
+      scale: 0.985;
+      transition-duration: var(--dur-fast);
+      transition-timing-function: var(--ease-out);
     }
     .glance-tile.is-warm {
       background: #fbeede;
@@ -7396,6 +7628,12 @@
     .dispatch-tab[aria-pressed='true'] {
       background: #13212e;
       color: #fff;
+      transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), scale var(--dur-slow) var(--ease-spring);
+    }
+    .dispatch-tab[aria-pressed='true']:active {
+      scale: 0.96;
+      transition-duration: var(--dur-fast);
+      transition-timing-function: var(--ease-out);
     }
     .dispatch-search input {
       min-height: 38px;
@@ -7488,6 +7726,12 @@
       border-color: var(--action);
       background: var(--info-bg);
       font-weight: 600;
+      transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), scale var(--dur-slow) var(--ease-spring);
+    }
+    .free-time[aria-pressed='true']:active {
+      scale: 0.96;
+      transition-duration: var(--dur-fast);
+      transition-timing-function: var(--ease-out);
     }
     .dispatch-go-cell {
       width: 56px;
@@ -7501,6 +7745,12 @@
       border: 1px solid var(--line);
       border-radius: 50%;
       color: var(--ink);
+      transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), scale var(--dur-slow) var(--ease-spring);
+    }
+    .dispatch-go:active {
+      scale: 0.96;
+      transition-duration: var(--dur-fast);
+      transition-timing-function: var(--ease-out);
     }
     .dispatch-go:hover {
       background: var(--info-bg);
@@ -8486,6 +8736,7 @@
       color: var(--muted);
       text-decoration: none;
       border-radius: 999px;
+      transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
     }
     .tk-tab:hover {
       background: var(--page);
@@ -8665,6 +8916,10 @@
       background: var(--surface);
       border: 1px solid var(--line);
       border-radius: 12px;
+      transition: border-color var(--dur-fast) var(--ease-out);
+    }
+    .tk-card:hover {
+      border-color: var(--control);
     }
     .tk-card-photo {
       display: block;
@@ -9051,7 +9306,8 @@
     /* The photo viewer (app.js): one <dialog> over the whole page, in Night at 85%.
        A grid, so the arrows sit beside the photo and nothing floats over it; under
        640px the arrows move to a footer row with the counter. The focus ring is rail
-       text, as on the rail: Harbour is 1.4:1 here. No motion. */
+       text, as on the rail: Harbour is 1.4:1 here. The dialog fades in and the photo
+       scales in. Previous and Next stay instant. */
     .photo-viewer {
       box-sizing: border-box;
       container-type: inline-size;
@@ -9069,6 +9325,18 @@
       border: 0;
       border-radius: 0;
       box-shadow: none;
+      opacity: 0;
+      transition: opacity var(--dur-fast) var(--ease-exit), display var(--dur-fast) allow-discrete, overlay var(--dur-fast) allow-discrete;
+    }
+    .photo-viewer[open] {
+      opacity: 1;
+      transition-duration: var(--dur-base);
+      transition-timing-function: var(--ease-out);
+    }
+    @starting-style {
+      .photo-viewer[open] {
+        opacity: 0;
+      }
     }
     /* The tint is the dialog's own fill. The top layer's backdrop stays clear, so the page is dimmed once. */
     .photo-viewer::backdrop {
@@ -9135,6 +9403,13 @@
       gap: 12px;
       min-width: 0;
       margin: 0;
+      transition: scale var(--dur-slow) var(--ease-spring), opacity var(--dur-base) var(--ease-out);
+    }
+    @starting-style {
+      .photo-viewer[open] .photo-viewer-figure {
+        scale: 0.96;
+        opacity: 0;
+      }
     }
     /* As large as the room allows, in proportion: app.js sets --photo-ratio (width over height) when the image loads. 12rem is the close row, the caption and the counter with their gaps. 8rem is the two arrows and the gaps beside the photo. 100cqw is the dialog's content box, so the padding is already out. */
     .photo-viewer-photo {
@@ -9268,8 +9543,8 @@
       border-radius: 8px;
       box-shadow: var(--shadow-lift);
     }
-    .add-menu[open] > .add-menu-panel {
-      animation: menu-in 150ms ease-out;
+    .add-menu-caret svg {
+      transition: rotate var(--dur-base) var(--ease-spring);
     }
     .add-menu-panel a {
       display: flex;
@@ -9279,6 +9554,7 @@
       border-radius: 4px;
       font-weight: 500;
       text-decoration: none;
+      transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
     }
     @media (max-width: 40rem), (pointer: coarse) {
       .add-menu-panel a {
@@ -9602,6 +9878,16 @@
       opacity: 0.6;
     }
   }
+  [data-flash] {
+    animation: flash-in var(--dur-slow) var(--ease-spring) both;
+  }
+  @keyframes flash-in {
+    from {
+      opacity: 0;
+      translate: 0 -6px;
+      scale: 0.98;
+    }
+  }
   /* Content being replaced in place fades back a little, only after a moment so a quick reply doesn't flicker. */
   #main[aria-busy='true'] {
     opacity: 0.55;
@@ -9617,11 +9903,31 @@
   }
 }
 
-/* Moving to another page cross-fades where the browser can (same origin only). */
+/* Moving to another page, and a swap in place, cross-fades where the browser can. */
 @media (prefers-reduced-motion: no-preference) {
   @view-transition {
     navigation: auto;
   }
+}
+::view-transition-old(root) {
+  animation-duration: var(--dur-fast);
+  animation-timing-function: var(--ease-exit);
+}
+::view-transition-new(root) {
+  animation-duration: var(--dur-base);
+  animation-timing-function: var(--ease-out);
+}
+::view-transition {
+  pointer-events: none;
+}
+@media (min-width: 64rem) {
+  .rail-indicator {
+    view-transition-name: rail-current;
+  }
+}
+::view-transition-group(rail-current) {
+  animation-duration: var(--dur-slow);
+  animation-timing-function: var(--ease-emphasis);
 }
 
 /* === Maintenance Request: soft cards (pages/requests.ts) ===
