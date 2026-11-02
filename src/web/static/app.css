@@ -4448,9 +4448,12 @@
 
     /* ----- Links to records (ui.ts entityLink, rowLink, contactLink): what they lead to
        shows in their shape, not in an underline. */
+    /* An icon that leads text which may wrap (an address chip, a contact, a card's address)
+       sits on the first line, not between the lines: the row aligns to the top and the 16px
+       icon moves down by half of what the line is taller than it. */
     .entity-link {
       display: inline-flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 5px;
       max-width: 100%;
       padding: 2px 9px 2px 7px;
@@ -4463,6 +4466,11 @@
       line-height: 1.35;
       text-decoration: none;
       vertical-align: middle;
+    }
+    .entity-link > svg,
+    .contact-link > svg,
+    .tk-card-address > svg {
+      margin-block-start: calc((1lh - 16px) / 2);
     }
     .entity-link > svg {
       flex: none;
@@ -4489,7 +4497,7 @@
     }
     .contact-link {
       display: inline-flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 6px;
       color: var(--action);
       text-decoration: none;
@@ -5342,10 +5350,12 @@
       color: var(--action);
       text-decoration: underline;
     }
+    /* The 20px mark centres on the name's first line (14px at 1.3), so it sits 0.9px above it. */
     .setup-area-mark {
-      display: inline-flex;
+      display: flex;
+      align-self: start;
       grid-row: span 2;
-      padding-top: 1px;
+      margin-top: calc((14px * 1.3 - 20px) / 2);
     }
     .setup-area.is-done .setup-area-mark {
       color: var(--done);
@@ -7660,8 +7670,12 @@
       display: none !important;
     }
     /* The address in the Properties table: a house in a rounded square, coloured by the worst Urgency. */
+    .dispatch-stack .dispatch-address .entity-link {
+      align-items: center;
+    }
     .dispatch-stack .dispatch-address .entity-link svg {
       flex: none;
+      margin-block-start: 0;
       width: 34px !important;
       height: 34px !important;
       padding: 8px;
@@ -7883,6 +7897,7 @@
       background: transparent;
       font: inherit;
       font-size: 13px;
+      white-space: nowrap;
       color: var(--muted);
       cursor: pointer;
     }
@@ -8194,9 +8209,13 @@
       height: 28px;
       font-size: 11px;
       font-weight: 700;
+      line-height: 1;
       color: var(--surface);
       background: var(--ink);
       border-radius: 50%;
+      /* Initials are capitals: centre the cap height, not the line box, whose descender
+         space would leave them 1px high. Without text-box the 1px stays. */
+      text-box: trim-both cap alphabetic;
     }
     .ticket-sub-link {
       color: inherit;
@@ -8869,7 +8888,7 @@
     .tk-request-address,
     .tk-card-address {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 4px;
       margin: 0;
       font-size: 13px;
