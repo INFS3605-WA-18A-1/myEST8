@@ -27,14 +27,15 @@ describe('Profiles', () => {
     const cookie = await w.signIn();
 
     const page = await (await w.get('/profiles?filter=all', cookie)).text();
-    const text = visible(page);
-    expect(text).toContain('2 Properties, 3 Tenants, 2 Property Owners, 1 Building Manager and 6 Tradies');
+    expect(page).toContain('>2 Properties</a>, <a href="/tenants?filter=all">3 Tenants</a>, <a href="/owners">2 Property Owners</a>, <a href="/building-managers">1 Building Manager</a> and <a href="/tradies">6 Tradies</a>');
     const cards = page.split('<article class="household">').slice(1);
     const king = cards.find((card) => card.includes(KING_ST)) ?? '';
     const ocean = cards.find((card) => card.includes(OCEAN_AVE)) ?? '';
     expect(king).toContain(`href="/properties/${w.ids.kingSt}"`);
     expect(king).toContain(`href="/owners/${w.ids.olivia}"`);
     expect(king).toContain('1 approval waiting');
+    expect(king).toContain('href="/approvals"');
+    expect(king).toContain('household-waiting');
     expect(king).toContain('1 open Ticket');
     expect(king).toContain(`href="/tenants/${w.ids.tom}"`);
     expect(king).toContain(`href="/tenants/${w.ids.hana}"`);
@@ -42,8 +43,10 @@ describe('Profiles', () => {
     expect(king).not.toContain('Building Manager');
     expect(ocean).toContain(`href="/owners/${w.ids.oscar}"`);
     expect(ocean).toContain(`href="/tenants/${w.ids.bella}"`);
+    expect(ocean).toContain('household-manager');
     expect(ocean).toContain('Building Manager');
     expect(ocean).toContain(`href="/building-managers/${w.ids.barry}"`);
+    expect(ocean).not.toContain('is-manager');
     // High at Ocean Ave sorts ahead of the routine Ticket at King St.
     expect(page.indexOf(OCEAN_AVE)).toBeLessThan(page.indexOf(KING_ST));
   });
@@ -62,16 +65,21 @@ describe('Profiles', () => {
     expect(tradies).toContain('href="/tradies"');
     expect(text).toContain('Not on the map');
     const start = tradies.indexOf(`href="/tradies/${w.ids.pete}"`);
-    const pete = visible(tradies.slice(start, tradies.indexOf('</li>', start)));
-    expect(pete).toContain('Google');
-    expect(pete).toContain("Pete's Plumbing");
+    const pete = tradies.slice(start, tradies.indexOf('</li>', start));
+    expect(pete).toContain('title="Pete&#39;s Plumbing"');
+    expect(pete).not.toContain('Google');
+    expect(visible(pete)).toContain('myEST8');
+    expect(visible(pete)).toContain("Pete's Plumbing");
   });
 
   test('search filters households and Tradies', async () => {
     const w = await webWorld();
     const cookie = await w.signIn();
 
-    const byAddress = visible(await (await w.get('/profiles?filter=all&q=Bondi', cookie)).text());
+    const searched = await (await w.get('/profiles?filter=all&q=Bondi', cookie)).text();
+    const subtitle = searched.slice(searched.indexOf('page-subtitle'), searched.indexOf('</p>', searched.indexOf('page-subtitle')));
+    expect(subtitle).not.toContain('<a ');
+    const byAddress = visible(searched);
     expect(byAddress).toContain(OCEAN_AVE);
     expect(byAddress).not.toContain(KING_ST);
     expect(byAddress).not.toContain("Pete's Plumbing");
@@ -94,12 +102,24 @@ describe('Profiles', () => {
     expect(mine).toContain(KING_ST);
     expect(mine).not.toContain(OCEAN_AVE);
     expect(visible(mine)).toContain("Pete's Plumbing");
-    expect(visible(mine)).toContain('1 Property, 2 Tenants, 1 Property Owner and 6 Tradies');
+    expect(mine).toContain('>1 Property</a>, <a href="/tenants">2 Tenants</a>, <a href="/owners">1 Property Owner</a> and <a href="/tradies">6 Tradies</a>');
+    expect(mine).toContain('href="/properties"');
+    expect(mine).toContain('href="/tenants"');
+    expect(mine).not.toContain('href="/tenants?filter=all"');
+    expect(mine).not.toContain('See all Properties');
+    expect(mine).not.toContain('See all Tenants');
+    expect(mine).toContain('See all Tradies');
 
     const all = await (await w.get('/profiles?filter=all', cookie)).text();
     expect(all).toContain(OCEAN_AVE);
     expect(all).toContain('Bella Bui');
-    expect(visible(all)).toContain('2 Properties, 3 Tenants, 2 Property Owners, 1 Building Manager and 6 Tradies');
+    expect(all).toContain('>2 Properties</a>, <a href="/tenants?filter=all">3 Tenants</a>, <a href="/owners">2 Property Owners</a>, <a href="/building-managers">1 Building Manager</a> and <a href="/tradies">6 Tradies</a>');
+    expect(all).toContain('href="/tenants?filter=all"');
+    expect(all).toContain('href="/properties"');
+    expect(all).not.toContain('href="/properties?filter=all"');
+    expect(all).not.toContain('href="/owners?filter=all"');
+    expect(all).not.toContain('href="/building-managers?filter=all"');
+    expect(all).not.toContain('href="/tradies?filter=all"');
   });
 
   test('lists former Tenants and people with no Property', async () => {
@@ -141,6 +161,10 @@ describe('Profiles', () => {
     const page = await (await w.get('/profiles', cookie)).text();
     const menu = page.slice(page.indexOf('class="add-menu"'), page.indexOf('</details>', page.indexOf('class="add-menu"')));
     expect(menu).toContain('data-menu');
+    expect(menu).toContain('add-menu-button');
+    expect(menu).toContain('add-menu-label');
+    expect(menu).toContain('add-menu-caret');
+    expect(menu).not.toContain('role="button"');
     expect(menu).toContain('Add profile');
     for (const href of ADD) expect(menu).toContain(`href="${href}"`);
   });

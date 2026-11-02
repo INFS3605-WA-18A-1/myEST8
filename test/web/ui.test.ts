@@ -128,12 +128,14 @@ describe('ui', () => {
     expect(out.match(/aria-current="page"/g)).toHaveLength(1);
   });
 
-  it('lists every place in the rail in three groups, Profiles under its heading, with the Phone simulator at its foot only in the demo', async () => {
+  it('lists every place in the rail, Profiles with no group heading, and Settings after the gap, with the Phone simulator at its foot only in the demo', async () => {
     const out = await render(page({ title: 'Dashboard', pm: { name: 'Alice' }, active: 'dashboard', body: html`<p>x</p>`, demo: true }));
     const links = [...out.matchAll(/<a href="([^"]+)" class="rail-link[^"]*"/g)].map((m) => m[1]);
     expect(links).toEqual(['/', '/dispatch', '/tickets', '/archive', '/approvals', '/calendar', '/profiles', '/settings', '/demo']);
     expect(out.match(/<ul class="rail-nav[ "]/g)).toHaveLength(4);
-    expect(out).toMatch(/<p class="rail-group" id="rail-group-1">Profiles<\/p><ul class="rail-nav" aria-labelledby="rail-group-1">\s*<li><a href="\/profiles"/);
+    expect(out).not.toContain('rail-group');
+    expect(out).not.toContain('aria-labelledby="rail-group');
+    expect(out).toMatch(/<ul class="rail-nav">\s*<li><a href="\/profiles"/);
     expect(out.match(/<ul class="rail-nav rail-gap"/g)).toHaveLength(1);
     expect(out).toMatch(/<ul class="rail-nav rail-foot"><li><a href="\/demo" class="rail-link is-quiet"/);
     expect(out).toContain('Phone simulator (demo)');
