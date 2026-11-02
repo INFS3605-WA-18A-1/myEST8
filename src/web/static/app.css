@@ -9369,3 +9369,415 @@
     }
   }
 }
+
+/* === Approvals: soft cards (pages/approvals.ts) ===
+   One white panel: the stages as a chevron bar, the counts, then each approval as a card
+   with its status in a tinted panel on the left and its figures as small tiles. */
+@layer utilities {
+  @layer app {
+    .appr-panel {
+      display: grid;
+      gap: 16px;
+      padding: 16px 20px 20px;
+      background: var(--surface);
+      border-radius: 28px;
+      box-shadow: var(--shadow-soft);
+    }
+
+    /* The stages: a chevron for each, with one line under it. */
+    .appr-stages {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 0;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .appr-stage-item {
+      flex: 0 1 22rem;
+      min-width: 0;
+    }
+    .appr-stage-item + .appr-stage-item {
+      margin-left: -8px;
+    }
+    .appr-stage {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      min-height: 52px;
+      padding: 0 30px;
+      font-size: 15px;
+      font-weight: 600;
+      text-decoration: none;
+      color: var(--ink);
+      clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 50%, calc(100% - 18px) 100%, 0 100%, 18px 50%);
+    }
+    .appr-stage-item:first-child .appr-stage {
+      clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 50%, calc(100% - 18px) 100%, 0 100%);
+      border-radius: 10px 0 0 10px;
+    }
+    .appr-stage-item:last-child .appr-stage {
+      clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 18px 50%);
+      border-radius: 0 10px 10px 0;
+    }
+    .appr-stage-item:only-child .appr-stage {
+      clip-path: none;
+      border-radius: 10px;
+    }
+    .appr-stage.is-owners {
+      color: #fff;
+      background: linear-gradient(135deg, #184d75, #2a74ad);
+    }
+    .appr-stage.is-silent {
+      background: linear-gradient(135deg, #ffbb1f, #ffd770);
+    }
+    .appr-stage.is-claims {
+      background: linear-gradient(135deg, #cfe2f3, #eaf3fb);
+    }
+    /* The stage that needs the Property Manager has a count that pulses softly. */
+    .appr-stage.is-silent .appr-stage-count {
+      animation: appr-pulse 2.4s ease-out infinite;
+    }
+    @keyframes appr-pulse {
+      0% { box-shadow: 0 0 0 0 rgb(19 33 46 / 0.45); }
+      70%, 100% { box-shadow: 0 0 0 9px rgb(19 33 46 / 0); }
+    }
+    /* The motion says what the page is: work moving through stages. The bar draws itself
+       left to right, one stage after another, the way work moves along it; the cards then
+       settle in; and a red ring fills to how far over its limit a Quote is. */
+    @keyframes appr-draw {
+      from { clip-path: inset(0 100% 0 0); }
+      to { clip-path: inset(0 0 0 0); }
+    }
+    @keyframes appr-in {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: none; }
+    }
+    @keyframes appr-fill {
+      from { --fill: 0; }
+      to { --fill: var(--pct); }
+    }
+    .appr-stage-item {
+      animation: appr-draw 0.55s cubic-bezier(0.3, 0.7, 0.3, 1) backwards;
+    }
+    .appr-stage-item:nth-child(2) { animation-delay: 0.35s; }
+    .appr-stage-item:nth-child(3) { animation-delay: 0.7s; }
+    .appr-card {
+      animation: appr-in 0.42s ease-out backwards;
+      animation-delay: 0.3s;
+    }
+    .appr-card:nth-child(2) { animation-delay: 0.38s; }
+    .appr-card:nth-child(3) { animation-delay: 0.46s; }
+    .appr-card:nth-child(n + 4) { animation-delay: 0.54s; }
+    .appr-ring {
+      animation: appr-fill 0.9s ease-out 0.5s backwards;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .appr-stage-item,
+      .appr-card,
+      .appr-ring,
+      .appr-stage.is-silent .appr-stage-count {
+        animation: none;
+      }
+    }
+    .appr-stage-count {
+      display: grid;
+      place-items: center;
+      min-width: 22px;
+      height: 22px;
+      padding: 0 6px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #fff;
+      background: var(--ink);
+      border-radius: 999px;
+    }
+    .appr-stage.is-owners .appr-stage-count {
+      color: var(--action);
+      background: #fff;
+    }
+    .appr-stage-note {
+      margin: 6px 0 0;
+      font-size: 13px;
+      text-align: center;
+      color: var(--muted);
+    }
+    /* A list's heading: a sand band with a coloured edge and its count in a chip. */
+    .appr-list-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0;
+      padding: 10px 16px;
+      font-family: var(--font-head);
+      font-size: 20px;
+      font-weight: 700;
+      background: #e6e4df;
+      border-left: 5px solid #8d969e;
+      border-radius: 4px 14px 14px 4px;
+    }
+    /* The line that would be under a stage, when there is no stage bar: a white pill at the heading's right. */
+    .appr-list-note {
+      margin-left: auto;
+      padding: 3px 12px;
+      font-family: var(--font-body, inherit);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink);
+      background: #fff;
+      border-radius: 999px;
+    }
+    .appr-list-count {
+      display: grid;
+      place-items: center;
+      min-width: 26px;
+      height: 26px;
+      padding: 0 8px;
+      font-family: var(--font-body, inherit);
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+      background: var(--ink);
+      border-radius: 999px;
+    }
+    .appr-list {
+      display: grid;
+      gap: 10px;
+    }
+    .appr-cards {
+      display: grid;
+      gap: 8px;
+    }
+    /* A card: the status panel, the main block, then the figures. */
+    .appr-card {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      overflow: hidden;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+    }
+    .appr-status {
+      display: grid;
+      align-content: center;
+      gap: 2px;
+      padding: 10px 16px;
+      font-size: 13px;
+      background: var(--info-bg);
+    }
+    .appr-status p {
+      margin: 0;
+    }
+    .appr-status-main {
+      font-weight: 700;
+    }
+    .appr-card.is-silent .appr-status {
+      background: #fde8e4;
+      color: #a32020;
+    }
+    .appr-card.is-silent .appr-status-age {
+      color: var(--ink);
+    }
+    .appr-card.is-waiting .appr-status {
+      background: #f6ecd2;
+      color: #7a5200;
+    }
+    .appr-card.is-review .appr-status {
+      background: #fff1cc;
+      color: #7a5200;
+    }
+    .appr-card.is-receipt .appr-status,
+    .appr-card.is-forwarded .appr-status {
+      color: var(--action);
+    }
+    .appr-status-age {
+      color: var(--ink);
+    }
+    .appr-main {
+      display: grid;
+      align-content: center;
+      gap: 6px;
+      min-width: 0;
+      padding: 10px 16px;
+    }
+    .appr-main p {
+      margin: 0;
+    }
+    .appr-title {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--font-head);
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .appr-pill {
+      padding: 1px 10px;
+      font-family: var(--font-body, inherit);
+      font-size: 13px;
+      font-weight: 400;
+      background: var(--page);
+      border-radius: 999px;
+    }
+    .appr-address .entity-link {
+      padding: 2px 10px;
+      font-size: 13px;
+      background: var(--info-bg);
+      border-radius: 999px;
+    }
+    .appr-more > summary {
+      width: fit-content;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--ink);
+      cursor: pointer;
+    }
+    .appr-more > p {
+      margin-top: 6px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .appr-action {
+      min-width: 0;
+    }
+    .appr-action .reimbursement-forward {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      gap: 8px;
+    }
+    .appr-action .reimbursement-forward > div {
+      flex: 0 1 7rem;
+      min-width: 0;
+    }
+    .appr-action .reimbursement-forward > .btn {
+      margin-top: 0;
+    }
+    .appr-col {
+      display: grid;
+      align-content: center;
+      gap: 4px;
+      min-width: 0;
+      padding: 0 16px 10px;
+    }
+    .appr-label {
+      margin: 0;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .appr-person {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .appr-person p {
+      margin: 0;
+    }
+    .appr-person-name {
+      font-weight: 600;
+    }
+    .appr-person-contact {
+      font-size: 13px;
+    }
+    .appr-avatar {
+      flex: none;
+      display: grid;
+      place-items: center;
+      width: 32px;
+      height: 32px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #fff;
+      background: var(--ink);
+      border-radius: 50%;
+    }
+    .appr-avatar.is-tenant {
+      color: var(--ink);
+      background: #ecd48f;
+    }
+    .appr-tile {
+      padding: 8px 12px;
+      background: var(--page);
+      border-radius: 12px;
+    }
+    .appr-tile p {
+      margin: 0;
+    }
+    .appr-tile.is-empty {
+      background: transparent;
+      border: 1px dashed #c8c0b0;
+    }
+    .appr-amount {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 700;
+    }
+    .appr-amount.is-over {
+      color: #b3261e;
+    }
+    .appr-amount.is-quiet {
+      font-size: 15px;
+      font-weight: 600;
+    }
+    .appr-tile-note {
+      margin: 0;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .appr-over {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .appr-ring {
+      --fill: var(--pct);
+      flex: none;
+      display: grid;
+      place-items: center;
+      width: 44px;
+      height: 44px;
+      background: radial-gradient(closest-side, var(--surface) 72%, transparent 74%), conic-gradient(#b3261e calc(var(--fill) * 1%), #f2c9c4 0);
+      border-radius: 50%;
+    }
+    .appr-ring > span {
+      font-size: 10px;
+      font-weight: 700;
+      color: #b3261e;
+    }
+    .appr-done {
+      display: grid;
+      justify-items: center;
+      gap: 6px;
+      margin: 4px 0 0;
+      font-size: 14px;
+      color: var(--muted);
+    }
+    .appr-done .size-8 {
+      width: 24px;
+      height: 24px;
+    }
+    @media (min-width: 64rem) {
+      .appr-card {
+        grid-template-columns: 9.5rem minmax(0, 2.4fr) repeat(3, minmax(0, 1fr));
+        align-items: stretch;
+      }
+      .appr-col {
+        padding: 10px 12px 10px 0;
+      }
+    }
+  }
+}
+
+/* The ring on the Approvals page fills by animating this number. */
+@property --fill {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
