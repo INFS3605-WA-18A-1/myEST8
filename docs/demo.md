@@ -10,6 +10,19 @@
 
 The data lives in Postgres: a local one in Docker that `npm run demo` starts for you (see [The database](#the-database)). `npm run demo` keeps everything in a fresh throwaway schema. **Stopping it throws all data away**; the next start is a fresh copy of the seed and stories. To keep your data between restarts, use `npm run dev` or set `DATABASE_SCHEMA` (see [Keep your data](#keep-your-data)).
 
+## How the demo differs from production
+
+To run production's code path on this machine, use `npm run prod:local` (see [testing.md](testing.md)).
+
+| | Demo | Production | Why |
+| --- | --- | --- | --- |
+| Agency and stories | Harbour Realty is seeded, and ten days of stories are already played | A new Agency signs up; nothing is seeded | The demo has to open with work on every screen |
+| AI | The classifier, the Jev judges and the quote reader are in-process mocks | Jev classifies and judges; Haiku writes summaries and emails | The stories have to be read the same way every time, and the demo makes no model call unless you set the env vars |
+| Places and geocoding | A mock geocoder and mock Places | Nominatim places addresses; Google Places finds Tradies | Nothing leaves the machine |
+| Messages | The phone simulator, and a "Phone simulator (demo)" link in the rail | No simulator. Email goes through the Agency's own Gmail | The seeded numbers are made up, and the demo has to show both sides of a thread |
+| Clock | The simulator can move the demo clock forward | The real clock | Reminders and deadlines can be shown without waiting |
+| Which code | The `dev` branch | The `master` branch (https://myest8.vercel.app) | Finished work is checked on `dev` before a release. Before comparing the two, see what `dev` has that production does not: `git log origin/master..origin/dev` |
+
 ## Start it
 
 ```sh
