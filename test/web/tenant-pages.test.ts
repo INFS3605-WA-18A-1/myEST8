@@ -224,7 +224,8 @@ describe("the Tenant's progress tracker", () => {
     expect(page).toContain(KING_ST);
     expect(page).not.toContain('Sydney time');
     expect(page).not.toMatch(/\$\s?\d/);
-    expect(page).not.toContain('180');
+    // Text only: the tracker link's random token can contain these digits.
+    expect(page.replace(/<[^>]*>/g, ' ')).not.toContain('180');
     expect(page).not.toMatch(/rating/i);
   });
 
