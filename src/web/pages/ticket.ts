@@ -1,9 +1,10 @@
 // The Ticket view under /tickets/:id: one Ticket's Jobs from Quote Requests to
 // Work Order, Property Owner approval, rescheduling, completion and closing, with
-// the timeline and message log. Reads and changes go only through c.var.actions,
-// and every POST goes through formAction back to the Ticket.
+// the timeline and message log. Reads and changes go only through c.var.actions.
+// The Summary is an inline edit (saveDetails, so a refusal stays under the field);
+// every other POST goes through formAction back to the Ticket.
 
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
@@ -23,6 +24,7 @@ import {
   button,
   card,
   dl,
+  editSwap,
   emptyState,
   entityLink,
   field,
@@ -32,6 +34,7 @@ import {
   formatMoney,
   formatWhen,
   humanise,
+  inlineEdit,
   JOB_TRACKER_STAGES,
   linkButton,
   page,
@@ -48,6 +51,7 @@ import {
   type Html,
   type StepState,
 } from '../ui.ts';
+import { saveDetails, valueOf, type DetailsEdit } from './onboarding-forms.ts';
 
 type TicketView = Awaited<ReturnType<PropertyManagerActions['ticket']>>;
 type JobView = TicketView['jobs'][number];
@@ -85,50 +89,26 @@ const nothing = html``;
 export function ticketPages() {
   const pages = new Hono<WebEnv>();
 
-  pages.get('/:id', async (c) => {
-    const { actions, pm } = c.var;
-    const flash = flashFrom(c.req.url);
-    const ticket = await findTicket(actions, c.req.param('id'));
-    if (!ticket) {
-      const body = emptyState('There is no such Ticket in your Agency.', linkButton('Back to Tickets', '/tickets'));
-      return c.html(page({ title: 'Ticket not found', pm, active: 'tickets', flash, body, shell: await shellInfo(c) }), 404);
-    }
-    const { timeZone } = actions.agency();
-    const [suggest, freeSlots, ownerUnreached] = await Promise.all([
-      suggestionsFor(actions, ticket, c.req.query('suggest')),
-      freeSlotsFor(actions, ticket),
-      actions.unreachedReason(ticket.owner.personId),
-    ]);
-    const extras: Extras = { timeZone, suggest, freeSlots, now: actions.now(), ownerUnreached };
-    return c.html(
-      page({
-        title: `Ticket #${ticket.ticketId}`,
-        shell: await shellInfo(c),
-        pm,
-        active: 'tickets',
-        flash,
-        back: { label: 'Tickets', href: '/tickets' },
-        titleExtra: urgencyBadge(ticket.urgency),
-        subtitle: ticketSubtitle(ticket, extras),
-        body: ticketBody(ticket, extras, shareButton({
-          title: `Ticket #${ticket.ticketId}: ${ticket.description}`,
-          text: `Ticket #${ticket.ticketId} at ${ticket.propertyAddress}: ${ticket.description}`,
-          url: shareUrl(c, `/tickets/${ticket.ticketId}`),
-          note: COLLEAGUES_ONLY,
-        })),
-      }),
-    );
+  pages.get('/:id', (c) => showTicket(c, c.req.param('id')));
+
+  // A blank or over-long Summary comes back on this page, open, with the reason under the field.
+  pages.post('/:id/summary', (c) => {
+    const id = c.req.param('id');
+    return saveDetails(c, {
+      profile: `/tickets/${encodeURIComponent(id)}`,
+      ok: 'Summary saved',
+      save: async (form) => {
+        const ticket = await loadTicket(c.var.actions, id);
+        await c.var.actions.editSummary({ ticketId: ticket.ticketId }, text(form, 'summary'));
+      },
+      show: (refused) => showTicket(c, id, refused),
+    });
   });
 
   onPost(pages, '/:id/urgency', async ({ actions, ticket, form }) => {
     const urgency = text(form, 'urgency') as Urgency;
     await actions.changeUrgency({ ticketId: ticket.ticketId }, urgency);
     return `Urgency changed to ${humanise(urgency)}`;
-  });
-
-  onPost(pages, '/:id/summary', async ({ actions, ticket, form }) => {
-    await actions.editSummary({ ticketId: ticket.ticketId }, text(form, 'summary'));
-    return 'Summary saved';
   });
 
   onPost(pages, '/:id/close', async ({ actions, ticket }) => {
@@ -331,6 +311,47 @@ async function loadTicket(actions: PropertyManagerActions, raw: string | undefin
   return actions.ticket(ticketId);
 }
 
+/** Whether the Summary's editor is open, and a refused save to show again under the field. */
+type SummaryEdit = { editing: boolean; refused?: DetailsEdit };
+
+/** The Ticket page. `refused` is a Summary save that was turned down, shown with the editor open. */
+async function showTicket(c: Context<WebEnv>, raw: string, refused?: DetailsEdit) {
+  const { actions, pm } = c.var;
+  const flash = flashFrom(c.req.url);
+  const ticket = await findTicket(actions, raw);
+  if (!ticket) {
+    const body = emptyState('There is no such Ticket in your Agency.', linkButton('Back to Tickets', '/tickets'));
+    return c.html(page({ title: 'Ticket not found', pm, active: 'tickets', flash, body, shell: await shellInfo(c) }), 404);
+  }
+  const { timeZone } = actions.agency();
+  const [suggest, freeSlots, ownerUnreached] = await Promise.all([
+    suggestionsFor(actions, ticket, c.req.query('suggest')),
+    freeSlotsFor(actions, ticket),
+    actions.unreachedReason(ticket.owner.personId),
+  ]);
+  const extras: Extras = { timeZone, suggest, freeSlots, now: actions.now(), ownerUnreached };
+  const edit: SummaryEdit = { editing: ticket.status === 'open' && (!!refused || c.req.query('edit') === 'summary'), refused };
+  return c.html(
+    page({
+      title: `Ticket #${ticket.ticketId}`,
+      shell: await shellInfo(c),
+      pm,
+      active: 'tickets',
+      flash,
+      back: { label: 'Tickets', href: '/tickets' },
+      titleExtra: urgencyBadge(ticket.urgency),
+      subtitle: ticketSubtitle(ticket, extras),
+      body: html`${!edit.editing && refused ? alert(refused.message, 'error') : ''}${ticketBody(ticket, extras, shareButton({
+        title: `Ticket #${ticket.ticketId}: ${ticket.description}`,
+        text: `Ticket #${ticket.ticketId} at ${ticket.propertyAddress}: ${ticket.description}`,
+        url: shareUrl(c, `/tickets/${ticket.ticketId}`),
+        note: COLLEAGUES_ONLY,
+      }), edit)}`,
+    }),
+    refused ? 400 : 200,
+  );
+}
+
 async function findTicket(actions: PropertyManagerActions, raw: string | undefined): Promise<TicketView | null> {
   try {
     return await loadTicket(actions, raw);
@@ -428,12 +449,12 @@ async function freeSlotsFor(actions: PropertyManagerActions, ticket: TicketView)
  * work is read: the Summary, Next, the Jobs, what the Tenant reported, the Progress, the
  * messages, the people, the costs, the details.
  */
-function ticketBody(t: TicketView, x: Extras, share: Html): Html {
+function ticketBody(t: TicketView, x: Extras, share: Html, edit: SummaryEdit): Html {
   const paired = t.jobs.every((j) => !isOpen(j));
   return html`<div class="ticket-tools">${share}${urgencyMenu(t)}${closeControl(t)}</div>
     <div class="ticket-layout">
       <div class="ticket-main">
-        ${heroCard(t, x)}
+        ${heroCard(t, x, edit)}
         <div class="ticket-pair${paired ? ' is-paired' : ''}">
           <div class="ticket-jobs">
             ${t.jobs.map((job) => jobCard(t, job, x))}
@@ -466,15 +487,14 @@ function focusJob(t: TicketView, x: Extras): JobView | undefined {
 }
 
 /** The Summary, its address and status, the stage ring, and (open Tickets) the tile that adds another Job. */
-function heroCard(t: TicketView, x: Extras): Html {
+function heroCard(t: TicketView, x: Extras, edit: SummaryEdit): Html {
   return html`<section class="ticket-hero" id="ticket-hero" aria-label="Summary">
     <div class="ticket-hero-card">
       <div class="ticket-hero-text">
-        ${summaryBlock(t)}
+        ${summaryBlock(t, edit)}
         <p class="ticket-hero-meta">
           <span class="ticket-chip">${entityLink('property', t.propertyAddress, `/properties/${t.propertyId}`)}</span>
           <span class="ticket-state${t.status === 'open' ? '' : ' is-closed'}">${humanise(t.status)}</span>
-          ${summaryEdit(t)}
           ${t.checkUrgency ? html`<span class="text-sm text-muted">The intake agent wasn't sure of the Urgency.</span>` : nothing}
         </p>
       </div>
@@ -663,7 +683,7 @@ function costsPane(t: TicketView): Html {
 /**
  * Progress: a strip of how it is going (stages done, when it finished and how long it took),
  * then tabs: the Timeline as a board by stage, the Job's stage tracker, and the Costs. Without
- * JavaScript the three show one under another. The tools: photos, print, edit the Summary and expand.
+ * JavaScript the three show one under another. The tools: print and expand. The Summary's pencil is on the Summary.
  */
 function progressCard(t: TicketView, x: Extras): Html {
   const job = focusJob(t, x);
@@ -686,7 +706,6 @@ function progressCard(t: TicketView, x: Extras): Html {
         <h2 class="section-title">Progress</h2>
         <div class="ticket-progress-tools">
           <button type="button" class="icon-btn js-only" data-print aria-label="Print this Ticket" title="Print">${icon('clipboard-text', { size: 'size-[18px]' })}</button>
-          ${t.status === 'open' ? html`<a href="#edit-summary" class="icon-btn" data-open-summary aria-label="Edit the Summary" title="Edit the Summary">${icon('pencil-simple', { size: 'size-[18px]' })}</a>` : nothing}
           <button type="button" class="icon-btn js-only" data-expand aria-pressed="false" aria-label="Expand the Progress" title="Expand">${icon('arrows-out-simple', { size: 'size-[18px]' })}</button>
         </div>
       </div>
@@ -700,26 +719,48 @@ function progressCard(t: TicketView, x: Extras): Html {
   </section>`;
 }
 
-/** The Summary (else the Tenant's words), with a "Filled in by AI" label when AI wrote it. */
-function summaryBlock(t: TicketView): Html {
-  const words = t.summary ?? t.description;
-  return html`<div class="ticket-summary">
-    ${t.summaryBy === 'ai' ? html`<span class="ticket-ai-chip">${icon('sparkle', { size: 'size-3.5', weight: 'fill' })}<span>Filled in by AI</span></span>` : nothing}
-    <h2 class="ticket-issue">${words}</h2>
-  </div>`;
-}
+const summaryChip = () => html`<span class="ticket-ai-chip">${icon('sparkle', { size: 'size-3.5', weight: 'fill' })}<span>Filled in by AI</span></span>`;
 
-/** "Edit summary", folded: a small form to change the Summary while the Ticket is open. */
-function summaryEdit(t: TicketView): Html {
-  if (t.status !== 'open') return nothing;
+/**
+ * The Summary (else the Tenant's words). While the Ticket is open the pencil turns that line
+ * into a textarea in the same type; a closed Ticket has no pencil. "Filled in by AI" only while
+ * the AI wrote it.
+ */
+function summaryBlock(t: TicketView, edit: SummaryEdit): Html {
   const words = t.summary ?? t.description;
-  return html`<details class="ticket-summary-edit" id="edit-summary">
-    <summary aria-label="Edit the Summary">Edit summary</summary>
-    <form method="post" action="/tickets/${t.ticketId}/summary" class="space-y-2">
-      ${field({ id: 'ticket-summary', label: 'Summary', name: 'summary', type: 'textarea', rows: 2, value: words, required: true, hint: 'One line, 160 characters at most.' })}
-      ${button('Save Summary', { size: 'sm' })}
-    </form>
-  </details>`;
+  const chip = t.summaryBy === 'ai' ? summaryChip() : nothing;
+  if (t.status !== 'open') {
+    return html`<div class="ticket-summary">${chip}<h2 class="ticket-issue">${words}</h2></div>`;
+  }
+  const id = `ticket-summary-${t.ticketId}`;
+  const error = edit.refused ? (edit.refused.errors.summary ?? edit.refused.message) : undefined;
+  const control = field({
+    label: 'Summary',
+    name: 'summary',
+    id,
+    type: 'textarea',
+    rows: 2,
+    required: true,
+    bare: true,
+    className: 'inline-edit-headline',
+    value: edit.refused ? valueOf(edit.refused.values, 'summary') : words,
+    hint: 'One line, 160 characters at most.',
+    error,
+  });
+  const line = html`<label class="sr-only" for="${id}">Summary</label>${editSwap(html`<h2 class="ticket-issue">${words}</h2>`, control)}`;
+  return inlineEdit({
+    id: 'ticket-summary',
+    tag: 'div',
+    className: 'ticket-summary',
+    label: 'Summary',
+    action: `/tickets/${t.ticketId}/summary`,
+    edit: { label: 'Edit the Summary', href: `/tickets/${t.ticketId}?edit=summary#ticket-summary` },
+    cancel: `/tickets/${t.ticketId}#ticket-summary`,
+    save: 'Save Summary',
+    editing: edit.editing,
+    refresh: ['ticket-report'],
+    view: (tools) => html`${chip}<div class="request-summary-plain"><div class="min-w-0 flex-1">${line}</div>${tools}</div>`,
+  });
 }
 
 type NextStep = { text: string; href: string; decision: boolean; job?: JobView };

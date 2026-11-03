@@ -141,8 +141,8 @@ describe('editing a Tradie from their profile', () => {
     const cookie = await w.signIn();
 
     const page = await (await w.get(`/tradies/${w.ids.pete}`, cookie)).text();
-    expect(detailsOf(page)).toContain(`<a ${PEN(w.ids.pete)} class="icon-btn" aria-label="Edit details" title="Edit details">`);
-    expect(page).not.toContain(`action="/tradies/${w.ids.pete}/details"`);
+    expect(detailsOf(page)).toContain(`<a ${PEN(w.ids.pete)} class="icon-btn inline-edit-open" data-inline-open aria-label="Edit details" title="Edit details">`);
+    expect(detailsOf(page)).toContain('<fieldset class="inline-edit-fields" disabled>');
     expect(visible(detailsOf(page))).toContain('Mobile');
   });
 
@@ -161,8 +161,9 @@ describe('editing a Tradie from their profile', () => {
     expect(form).not.toMatch(/value="plumbing"[^>]*\schecked/);
     expect(form).not.toContain('name="startingRating"');
     expect(form).not.toContain('placeId');
-    expect(form).toMatch(/<button type="submit"[^>]*>Save<\/button>/);
-    expect(form).toContain(`<a href="/tradies/${w.ids.sam}" class="btn btn-ghost">Cancel</a>`);
+    expect(form).toContain('aria-label="Save details"');
+    expect(form).toContain(`<a href="/tradies/${w.ids.sam}#details" class="icon-btn inline-edit-cancel" data-inline-cancel aria-label="Cancel editing" title="Cancel">`);
+    expect(form).toContain('is-editing');
     // The ratings and the business address form stay on the page.
     expect(visible(page)).toContain('myEST8 rating');
     expect(page).toContain(`action="/tradies/${w.ids.sam}/address"`);
@@ -183,7 +184,7 @@ describe('editing a Tradie from their profile', () => {
     expect(detailsOf(page)).toContain('href="tel:+61412345678"');
     expect(detailsOf(page)).toContain('href="mailto:pete@parkplumbing.example"');
     expect(visible(detailsOf(page))).toContain('General handyman');
-    expect(page).not.toContain(`action="/tradies/${w.ids.pete}/details"`);
+    expect(detailsOf(page)).toContain('<fieldset class="inline-edit-fields" disabled>');
   });
 
   test('a refused save keeps what was typed and shows the reason under its field', async () => {
