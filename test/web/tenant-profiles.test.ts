@@ -236,8 +236,8 @@ describe('editing a Tenant from their profile', () => {
     const cookie = await w.signIn();
 
     const page = await (await w.get(`/tenants/${w.ids.tom}`, cookie)).text();
-    expect(detailsOf(page)).toContain(`<a ${PEN(w.ids.tom)} class="icon-btn" aria-label="Edit details" title="Edit details">`);
-    expect(page).not.toContain(`action="/tenants/${w.ids.tom}/details"`);
+    expect(detailsOf(page)).toContain(`<a ${PEN(w.ids.tom)} class="icon-btn inline-edit-open" data-inline-open aria-label="Edit details" title="Edit details">`);
+    expect(detailsOf(page)).toContain('<fieldset class="inline-edit-fields" disabled>');
     expect(visible(detailsOf(page))).toContain('Property Manager');
   });
 
@@ -251,10 +251,9 @@ describe('editing a Tenant from their profile', () => {
     expect(form).toMatch(/<input[^>]* name="name"[^>]* value="Hana Ho"/);
     expect(form).toMatch(/<input[^>]* name="mobile"[^>]* value="\+61400000002"/);
     expect(form).toMatch(/<input[^>]* name="email"[^>]* value="hana@example.com"/);
-    expect(form).toMatch(/<button type="submit"[^>]*>Save<\/button>/);
-    expect(form).toContain(`<a href="/tenants/${w.ids.hana}" class="btn btn-ghost">Cancel</a>`);
-    expect(form).not.toContain('aria-label="Edit details"');
-    expect(visible(form)).not.toContain('Property Manager');
+    expect(form).toContain('aria-label="Save details"');
+    expect(form).toContain(`<a href="/tenants/${w.ids.hana}#details" class="icon-btn inline-edit-cancel" data-inline-cancel aria-label="Cancel editing" title="Cancel">`);
+    expect(form).toContain('is-editing');
   });
 
   test('Save shows the change with "Details saved." and the new mobile is the one linked', async () => {
@@ -269,7 +268,7 @@ describe('editing a Tenant from their profile', () => {
     expect(visible(page)).toContain('Thomas Tran');
     expect(page).toContain('href="tel:+61412345678"');
     expect(page).not.toContain(`href="tel:${TOM}"`);
-    expect(page).not.toContain(`action="/tenants/${w.ids.tom}/details"`);
+    expect(detailsOf(page)).toContain('<fieldset class="inline-edit-fields" disabled>');
   });
 
   test("saving another Tenant's mobile keeps it for both", async () => {

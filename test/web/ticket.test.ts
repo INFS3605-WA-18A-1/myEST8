@@ -668,13 +668,18 @@ describe('Site Inspections, per Tradie', () => {
 
 describe('the Summary and comparison prices', () => {
   test('the Summary is edited from the header', async () => {
-    const { open, submit } = await tapTicket();
+    const { w, open, submit, cookie } = await tapTicket();
 
     const saved = await submit(formPosting((await open()).html, /\/summary$/), { summary: 'Kitchen tap drips overnight' });
 
     expect(saved.ok).toBe('Summary saved');
     expect(saved.page.text).toContain('Kitchen tap drips overnight');
-    expect((await submit(formPosting(saved.page.html, /\/summary$/), { summary: ' ' })).error).toBeTruthy();
+    const blank = await w.post(formPosting(saved.page.html, /\/summary$/), { summary: ' ' }, cookie);
+    expect(blank.status).toBe(400);
+    const html = await blank.text();
+    expect(html).toContain('is-editing');
+    expect(html).toContain('Write a Summary');
+    expect(html).toContain('class="field-error"');
   });
 
   test('Estimates and Firm Quotes sit in their own tables, never one price column', async () => {

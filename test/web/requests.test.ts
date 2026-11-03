@@ -151,7 +151,8 @@ describe('the Maintenance Request review', () => {
 
     const review = html.slice(html.indexOf('class="request-review"'));
     expect(review.match(/btn-primary/g)).toHaveLength(1);
-    expect(html).toMatch(new RegExp(`<form method="post" action="/requests/${r.issueId}/confirm"`));
+    expect(html).toMatch(new RegExp(`<form method="post" action="/requests/${r.issueId}/summary"`));
+    expect(html).toMatch(new RegExp(`<button type="submit" form="summary-form-${r.issueId}" formaction="/requests/${r.issueId}/confirm"`));
     expect(html).toMatch(/<details class="request-reject">\s*<summary>Reject this Maintenance Request…<\/summary>[\s\S]*name="return" value="\/tickets"[\s\S]*name="reason"/);
     expect(html).toMatch(new RegExp(`action="/requests/${r.issueId}/urgency"[^>]*>\\s*<input type="hidden" name="return" value="/requests/${r.issueId}"`));
     expect(visible(html)).toContain('No photos');
@@ -216,7 +217,11 @@ describe('the Summary on a Maintenance Request', () => {
     expect((await onlyRequest(w)).summaryBy).toBe('property_manager');
 
     const blank = await w.post(`/requests/${r.issueId}/summary`, { summary: '   ' }, cookie);
-    expect(blank.headers.get('location')).toMatch(/error=/);
+    expect(blank.status).toBe(400);
+    const refused = await blank.text();
+    expect(refused).toContain('is-editing');
+    expect(refused).toContain('Write a Summary');
+    expect(refused).toContain('class="field-error"');
   });
 
   test('Confirm posts an edited Summary with it', async () => {

@@ -178,7 +178,9 @@ try {
   const X_ICON =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" width="16" height="16" aria-hidden="true" focusable="false"><path d="M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z"/></svg>';
   onContent((root) => {
-    for (const flash of root.querySelectorAll('[data-flash]')) {
+    const flashes = root instanceof Element && root.matches('[data-flash]') ? [root] : [...root.querySelectorAll('[data-flash]')];
+    for (const flash of flashes) {
+      if (flash.querySelector('.flash-close')) continue;
       const close = document.createElement('button');
       close.type = 'button';
       close.className = 'btn btn-ghost btn-sm btn-square flash-close';
@@ -1154,6 +1156,270 @@ onContent((root) => {
   let current = pageOf(new URL(location.href));
   let controller;
 
+  // === Inline edit ===
+  // A pen (data-inline-open) turns a block's values into its inputs where they
+  // sit. The tick posts the form that was already there and swaps the block (and
+  // any ids in data-inline-refresh) from the reply. The cross and Escape put the
+  // original values back. One block edits at a time: a clean one gives way, a
+  // dirty one stays and takes focus. Nothing here changes the page.
+  const originals = new WeakMap();
+
+  function namedControls(form) {
+    return [...form.querySelectorAll('input[name], textarea[name], select[name]')];
+  }
+
+  function capture(form) {
+    return namedControls(form).map((el) => ({ name: el.name, value: el.value, checked: !!el.checked }));
+  }
+
+  function restore(form, saved) {
+    const els = namedControls(form);
+    saved.forEach((item, i) => {
+      const el = els[i];
+      if (!el || el.name !== item.name) return;
+      if (el.type === 'checkbox' || el.type === 'radio') el.checked = item.checked;
+      else el.value = item.value;
+    });
+    for (const select of form.querySelectorAll('select')) {
+      const input = select.parentElement?.querySelector(':scope > input.combobox-input');
+      if (!(input instanceof HTMLInputElement)) continue;
+      const option = [...select.options].find((o) => o.value === select.value);
+      input.value = option && select.value ? option.textContent.trim() : '';
+    }
+  }
+
+  function dirty(block) {
+    const saved = originals.get(block);
+    const form = block.querySelector('form');
+    if (!saved || !form) return false;
+    const now = capture(form);
+    return saved.length !== now.length || saved.some((item, i) => item.name !== now[i]?.name || item.value !== now[i]?.value || item.checked !== now[i]?.checked);
+  }
+
+  function clearErrors(block) {
+    block.querySelector('.inline-edit-refusal')?.remove();
+    for (const el of block.querySelectorAll('.field-error')) el.remove();
+    for (const el of block.querySelectorAll('[aria-invalid]')) el.removeAttribute('aria-invalid');
+    for (const el of block.querySelectorAll('.input-error, .textarea-error, .select-error')) {
+      el.classList.remove('input-error', 'textarea-error', 'select-error');
+    }
+  }
+
+  function firstField(block) {
+    const fieldset = block.querySelector('fieldset');
+    const was = fieldset?.disabled;
+    if (fieldset) fieldset.disabled = false;
+    const field = [...block.querySelectorAll('input, textarea, select')].find((el) => {
+      if (el.closest('.inline-edit-tools, .inline-edit-read')) return false;
+      if (el.type === 'hidden' || el.hidden || el.disabled) return false;
+      return el.getClientRects().length > 0;
+    });
+    if (fieldset && was && !block.classList.contains('is-editing')) fieldset.disabled = true;
+    return field ?? null;
+  }
+
+  function focusPen(block) {
+    const pen = block.querySelector('[data-inline-open]');
+    if (pen instanceof HTMLElement) pen.focus();
+  }
+
+  function closeEdit(block, { restoreValues }) {
+    const form = block.querySelector('form');
+    if (restoreValues && form) {
+      const saved = originals.get(block);
+      if (saved) restore(form, saved);
+      clearErrors(block);
+    }
+    const fieldset = form?.querySelector('fieldset');
+    if (fieldset) fieldset.disabled = true;
+    block.classList.remove('is-editing');
+    focusPen(block);
+  }
+
+  function openEdit(block) {
+    if (!(block instanceof HTMLElement)) return;
+    const other = document.querySelector('[data-inline-edit].is-editing');
+    if (other && other !== block) {
+      if (dirty(other)) {
+        firstField(other)?.focus();
+        return;
+      }
+      closeEdit(other, { restoreValues: true });
+    }
+    const form = block.querySelector('form');
+    if (!form) return;
+    if (!originals.has(block)) originals.set(block, capture(form));
+    const fieldset = form.querySelector('fieldset');
+    if (fieldset) fieldset.disabled = false;
+    block.classList.add('is-editing');
+    firstField(block)?.focus();
+  }
+
+  function editingBlock(node) {
+    return node instanceof Element ? node.closest('[data-inline-edit]') : null;
+  }
+
+  function releaseForm(form) {
+    delete form.dataset.submitting;
+    form.removeAttribute('aria-busy');
+  }
+
+  function showFlash(doc) {
+    const incoming = doc.querySelector('[data-flash]');
+    const main = document.getElementById('main');
+    if (!main) return;
+    const existing = main.querySelector(':scope > [data-flash]');
+    if (!incoming) {
+      existing?.remove();
+      return;
+    }
+    const node = document.importNode(incoming, true);
+    if (existing) existing.replaceWith(node);
+    else main.querySelector('.page-header')?.after(node);
+    document.dispatchEvent(new CustomEvent('myest8:content', { detail: node }));
+  }
+
+  function applyChrome(doc) {
+    document.title = doc.title;
+    const title = doc.querySelector('h1.page-title');
+    const liveTitle = document.querySelector('h1.page-title');
+    if (title && liveTitle) liveTitle.textContent = title.textContent;
+    const subtitle = doc.querySelector('.page-subtitle');
+    const liveSubtitle = document.querySelector('.page-subtitle');
+    if (subtitle && liveSubtitle) liveSubtitle.replaceWith(document.importNode(subtitle, true));
+  }
+
+  function inlineError(block, message) {
+    const field = block.querySelector('.inline-edit-control textarea, .inline-edit-control input, .inline-edit-extra textarea, .inline-edit-extra input');
+    if (!(field instanceof HTMLElement)) return;
+    field.setAttribute('aria-invalid', 'true');
+    field.classList.add(field.tagName === 'TEXTAREA' ? 'textarea-error' : 'input-error');
+    let error = field.parentElement?.querySelector('.field-error');
+    if (!error) {
+      error = document.createElement('p');
+      error.className = 'field-error';
+      if (field.id) error.id = `${field.id}-error`;
+      field.after(error);
+    }
+    error.textContent = message;
+    if (field.id && error.id) field.setAttribute('aria-describedby', [error.id, field.getAttribute('aria-describedby')].filter(Boolean).join(' '));
+    field.focus();
+  }
+
+  async function saveEdit(block) {
+    const form = block.querySelector('form');
+    if (!form || form.dataset.inlineSaving) return;
+    const fieldset = form.querySelector('fieldset');
+    if (fieldset) fieldset.disabled = false;
+    form.dataset.inlineSaving = 'true';
+    start();
+    try {
+      const response = await fetch(form.action, { method: 'POST', body: new FormData(form), headers: { accept: 'text/html' } });
+      const html = await response.text();
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      const next = doc.getElementById(block.id);
+      if (!next) throw new Error('missing block');
+      const kept = originals.get(block);
+      const refused = next.classList.contains('is-editing') || next.querySelector('.field-error, .inline-edit-refusal');
+      const flashError = doc.querySelector('[data-flash="error"]');
+      if (!refused && flashError) {
+        const message = flashError.textContent.replace(/^Error:\s*/, '').replace(/\s+/g, ' ').trim();
+        inlineError(block, message);
+        return;
+      }
+      const imported = document.importNode(next, true);
+      if (refused && kept) originals.set(imported, kept);
+      const refresh = (block.dataset.inlineRefresh || '').split(/\s+/).filter(Boolean);
+      const refreshed = refresh.flatMap((id) => {
+        const live = document.getElementById(id);
+        const fresh = doc.getElementById(id);
+        if (!live || !fresh || live === block) return [];
+        const node = document.importNode(fresh, true);
+        return [{ live, node }];
+      });
+      await swapView(() => {
+        block.replaceWith(imported);
+        for (const item of refreshed) item.live.replaceWith(item.node);
+        if (!refused) {
+          applyChrome(doc);
+          showFlash(doc);
+          focusPen(imported);
+        }
+        document.dispatchEvent(new CustomEvent('myest8:content', { detail: imported }));
+        for (const item of refreshed) document.dispatchEvent(new CustomEvent('myest8:content', { detail: item.node }));
+        if (refused) {
+          const invalid = imported.querySelector('[aria-invalid="true"]');
+          if (invalid instanceof HTMLElement) invalid.focus();
+          else firstField(imported)?.focus();
+        }
+      });
+    } catch {
+      form.submit();
+    } finally {
+      delete form.dataset.inlineSaving;
+      releaseForm(form);
+      stop();
+    }
+  }
+
+  onContent((root) => {
+    for (const block of root.querySelectorAll('[data-inline-edit].is-editing')) {
+      if (!originals.has(block)) {
+        const form = block.querySelector('form');
+        if (form) originals.set(block, capture(form));
+      }
+    }
+  });
+
+  document.addEventListener('click', (event) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const opener = event.target instanceof Element ? event.target.closest('[data-inline-open]') : null;
+    if (opener) {
+      const block = editingBlock(opener) || document.getElementById(opener.getAttribute('data-inline-target') || '');
+      if (!block) return;
+      event.preventDefault();
+      openEdit(block);
+      return;
+    }
+    const cancel = event.target instanceof Element ? event.target.closest('[data-inline-cancel]') : null;
+    if (!cancel) return;
+    const block = editingBlock(cancel);
+    if (!block) return;
+    event.preventDefault();
+    closeEdit(block, { restoreValues: true });
+  });
+
+  document.addEventListener('submit', (event) => {
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement) || !form.classList.contains('inline-edit-form') || event.defaultPrevented) return;
+    // Confirm on a Maintenance Request submits this form to another action. That post stays a normal navigation.
+    const submitter = event.submitter;
+    const posted = new URL(submitter?.getAttribute('formaction') || form.action, location.href);
+    const own = new URL(form.action, location.href);
+    if (posted.pathname !== own.pathname) return;
+    event.preventDefault();
+    const block = editingBlock(form);
+    if (block) saveEdit(block);
+  });
+
+  document.addEventListener('keydown', (event) => {
+    const block = event.target instanceof Element ? event.target.closest('[data-inline-edit].is-editing') : null;
+    if (!block) return;
+    if (event.key === 'Escape') {
+      if (event.defaultPrevented) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      closeEdit(block, { restoreValues: true });
+      return;
+    }
+    if (event.key !== 'Enter' || event.defaultPrevented || event.shiftKey || event.altKey) return;
+    const area = event.target instanceof HTMLTextAreaElement;
+    if (area && !(event.metaKey || event.ctrlKey)) return;
+    if (!area && !(event.target instanceof HTMLInputElement)) return;
+    event.preventDefault();
+    saveEdit(block);
+  });
+
   // The same page, maybe another query; a jump to an anchor on this page stays with the browser.
   const samePage = (url) =>
     swappable && url.origin === location.origin && url.pathname === location.pathname && !(url.search === location.search && url.hash);
@@ -1301,9 +1567,8 @@ onContent((root) => {
 
 // === Ticket page: Progress tabs, tools and the message log ===
 // The Progress card's three views (Timeline, the Job, Costs) show one at a time, with its
-// tab buttons; without this file they show one under another. Its tools print the page,
-// open the Summary's editor and fill the screen; the message log is kept short with a
-// button that shows all of it.
+// tab buttons; without this file they show one under another. Its tools print the page
+// and fill the screen; the message log is kept short with a button that shows all of it.
 onContent((root) => {
   for (const tabs of root.querySelectorAll('[data-tabs]')) {
     const selected = tabs.querySelector('[role="tab"][aria-selected="true"]') || tabs.querySelector('[role="tab"]');
@@ -1374,17 +1639,6 @@ document.addEventListener('click', (event) => {
     return;
   }
   if (target.closest('[data-print]')) return window.print();
-  const summary = target.closest('[data-open-summary]');
-  if (summary) {
-    const editor = document.getElementById('edit-summary');
-    if (editor) {
-      event.preventDefault();
-      editor.open = true;
-      editor.scrollIntoView({ block: 'center' });
-      editor.querySelector('textarea')?.focus();
-    }
-    return;
-  }
   const expand = target.closest('[data-expand]');
   if (expand) {
     const card = expand.closest('[data-tabs]');
