@@ -5198,7 +5198,7 @@
 
     /* Settings (pages/settings.ts): side tabs, then the tab's sections in a column no
        wider than 52rem so a row's name and its button stay within reach. Each list is
-       rows of a name (linked when it has a page), a muted hint, and actions at the end. */
+       rows of a name, a muted hint, and actions at the end. */
     .settings-layout {
       display: grid;
       align-items: start;
@@ -5263,6 +5263,48 @@
       flex-wrap: wrap;
       align-items: center;
       gap: 8px 16px;
+    }
+    /* Settings' own pages (pages/settings.ts, settings-shell.ts): the import review keeps the
+       side tabs but gives its table the rest of the row; removing a colleague is a short
+       form whose select stays a readable width; each Team row's Remove sits at its end.
+       The side tabs are a nowrap row on a phone. A grid cell's minimum is the width of
+       its content, so without a minimum of zero that row widens the whole page. */
+    .settings-layout {
+      min-width: 0;
+    }
+    .settings-layout > .side-tabs {
+      min-width: 0;
+      max-width: 100%;
+    }
+    @media (min-width: 1024px) {
+      .settings-layout.is-wide {
+        grid-template-columns: 13rem minmax(0, 1fr);
+      }
+    }
+    @media (max-width: 40rem) {
+      .settings-row-actions .import-template {
+        min-height: 44px;
+      }
+    }
+    .settings-remove-form {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      max-width: 72ch;
+    }
+    .settings-remove-form p {
+      margin: 0;
+    }
+    .settings-field {
+      max-width: 24rem;
+    }
+    .settings-remove {
+      color: var(--action);
+    }
+    @media (min-width: 640px) {
+      td:has(> .settings-remove) {
+        text-align: right;
+      }
     }
 
     /* ----- Channels (pages/channel-options.ts): the welcome wizard's Channels step, Setup

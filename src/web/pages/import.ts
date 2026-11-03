@@ -1,14 +1,16 @@
-// Importing from a spreadsheet, under /setup: the CSV templates, the upload, and
-// the review page where the Property Manager checks each row before it's added.
+// Importing from a spreadsheet: the CSV templates, the upload, and the review page
+// where the Property Manager checks each row before it's added. Mounted under
+// /setup (for Setup and the step-by-step guide) and under /settings (Settings'
+// Import tab), so an import started in Settings stays in Settings throughout.
 //
-//   GET  /setup/templates/<kind>.csv     the template: our headings and an example row
-//   POST /setup/import/<kind>            upload an .xlsx or .csv, then go to its review
-//   GET  /setup/imports/<token>          the review: columns, then every row and its status
-//   POST /setup/imports/<token>/columns  change what a column holds
-//   POST /setup/imports/<token>          "Check changes" (intent=check) or add the ticked rows (intent=add)
-//   POST /setup/imports/<token>/discard  throw the upload away
+//   GET  <base>/templates/<kind>.csv     the template: our headings and an example row
+//   POST <base>/import/<kind>            upload an .xlsx or .csv, then go to its review
+//   GET  <base>/imports/<token>          the review: columns, then every row and its status
+//   POST <base>/imports/<token>/columns  change what a column holds
+//   POST <base>/imports/<token>          "Check changes" (intent=check) or add the ticked rows (intent=add)
+//   POST <base>/imports/<token>/discard  throw the upload away
 //
-// `from=welcome` keeps the step-by-step guide's place, so the review goes back to it.
+// Under /setup, `from=welcome` keeps the step-by-step guide's place, so the review goes back to it.
 
 import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
@@ -22,7 +24,8 @@ import { files, list, text, type FormValues } from '../forms.ts';
 import { icon } from '../icons.ts';
 import { shellInfo } from '../shell.ts';
 import { alert, badge, button, flashFrom, humanise, linkButton, page, section, type Html, type Tone } from '../ui.ts';
-import { IMPORT_NOUNS, templatePath, type ImportFrom } from './onboarding-forms.ts';
+import { IMPORT_NOUNS, importBase, templatePath, type ImportFrom } from './onboarding-forms.ts';
+import { settingsLayout, settingsTabHref } from './settings-shell.ts';
 
 const SETUP_AREA: Record<ImportKind, string> = {
   owners: 'people',
@@ -47,11 +50,24 @@ const STATUS: Record<ImportRow['status'], { label: string; tone: Tone }> = {
 };
 
 const isKind = (value: string): value is ImportKind => (IMPORT_KINDS as readonly string[]).includes(value);
-const fromOf = (value: string | undefined): ImportFrom => (value === 'welcome' ? 'welcome' : 'setup');
 
-/** Where an upload starts and ends: its area of /setup, or its step of the guide. */
+/** Settings' own upload page for one kind of import. */
+export const settingsImportPath = (kind: ImportKind) => `/settings/import/${kind}`;
+
+/** Where an upload starts and ends: its area of /setup, its step of the guide, or its upload page in Settings. */
 function homeOf(kind: ImportKind, from: ImportFrom) {
+  if (from === 'settings') return settingsImportPath(kind);
   return from === 'welcome' ? `${WELCOME_STEP[kind]}?form=import-${kind}` : `/setup?form=import-${kind}`;
+}
+
+/** Where to go when the upload itself is gone: the start of where it came from. */
+function startOf(from: ImportFrom) {
+  return from === 'settings' ? settingsTabHref('import') : from === 'welcome' ? '/welcome' : '/setup';
+}
+
+/** The review page's address, keeping where it came from. */
+function reviewPath(token: string, from: ImportFrom) {
+  return `${importBase(from)}/imports/${token}${from === 'welcome' ? '?from=welcome' : ''}`;
 }
 
 /** `path` showing a flash message, keeping any #fragment at the end. */
@@ -61,9 +77,10 @@ function flashTo(path: string, kind: 'ok' | 'error', message: string, fragment =
 
 const count = (n: number, kind: ImportKind) => `${n} ${n === 1 ? IMPORT_NOUNS[kind].one : IMPORT_NOUNS[kind].many}`;
 
-/** Spreadsheet import routes, mounted under /setup. */
-export function importPages() {
+/** Spreadsheet import routes. `home: 'settings'` is the copy mounted under /settings: every redirect stays there. */
+export function importPages(o: { home?: 'setup' | 'settings' } = {}) {
   const pages = new Hono<WebEnv>();
+  const fromOf = (value: string | undefined): ImportFrom => (o.home === 'settings' ? 'settings' : value === 'welcome' ? 'welcome' : 'setup');
 
   pages.get('/templates/:file', (c) => {
     const kind = c.req.param('file').replace(/\.csv$/, '');
@@ -97,10 +114,10 @@ export function importPages() {
           contentType: file.type,
           content: new Uint8Array(await file.arrayBuffer()),
         });
-        return c.redirect(`/setup/imports/${token}${from === 'welcome' ? '?from=welcome' : ''}`, 303);
+        return c.redirect(reviewPath(token, from), 303);
       } catch (error) {
         if (!(error instanceof ActionError)) throw error;
-        return c.redirect(flashTo(homeOf(kind, from), 'error', error.message, `#import-${kind}`), 303);
+        return c.redirect(flashTo(homeOf(kind, from), 'error', error.message, from === 'settings' ? '' : `#import-${kind}`), 303);
       }
     },
   );
@@ -112,7 +129,7 @@ export function importPages() {
       return c.html(reviewPage(c, preview, from));
     } catch (error) {
       if (!(error instanceof ActionError)) throw error;
-      return c.redirect(flashTo(from === 'welcome' ? '/welcome' : '/setup', 'error', error.message), 303);
+      return c.redirect(flashTo(startOf(from), 'error', error.message), 303);
     }
   });
 
@@ -120,7 +137,7 @@ export function importPages() {
     const token = c.req.param('token');
     const form = (await c.req.parseBody({ all: true })) as FormValues;
     const from = fromOf(text(form, 'from'));
-    const back = `/setup/imports/${token}${from === 'welcome' ? '?from=welcome' : ''}`;
+    const back = reviewPath(token, from);
     try {
       const { columns } = await c.var.actions.importPreview(token);
       await c.var.actions.remapImport(
@@ -130,7 +147,7 @@ export function importPages() {
       return c.redirect(flashTo(back, 'ok', 'Columns updated. Check the rows again.'), 303);
     } catch (error) {
       if (!(error instanceof ActionError)) throw error;
-      return c.redirect(flashTo(from === 'welcome' ? '/welcome' : '/setup', 'error', error.message), 303);
+      return c.redirect(flashTo(startOf(from), 'error', error.message), 303);
     }
   });
 
@@ -141,10 +158,10 @@ export function importPages() {
     try {
       const { kind } = await c.var.actions.importPreview(token);
       await c.var.actions.discardImport(token);
-      return c.redirect(flashTo(homeOf(kind, from), 'ok', 'Upload discarded. Nothing was added.', `#import-${kind}`), 303);
+      return c.redirect(flashTo(homeOf(kind, from), 'ok', 'Upload discarded. Nothing was added.', from === 'settings' ? '' : `#import-${kind}`), 303);
     } catch (error) {
       if (!(error instanceof ActionError)) throw error;
-      return c.redirect(flashTo(from === 'welcome' ? '/welcome' : '/setup', 'error', error.message), 303);
+      return c.redirect(flashTo(startOf(from), 'error', error.message), 303);
     }
   });
 
@@ -152,7 +169,7 @@ export function importPages() {
     const token = c.req.param('token');
     const form = (await c.req.parseBody({ all: true })) as FormValues;
     const from = fromOf(text(form, 'from'));
-    const back = `/setup/imports/${token}${from === 'welcome' ? '?from=welcome' : ''}`;
+    const back = reviewPath(token, from);
     try {
       const changes = changesFrom(form);
       if (text(form, 'intent') !== 'add') {
@@ -164,6 +181,7 @@ export function importPages() {
       // Imported Properties are not geocoded. Dispatch places them, a few at a time.
       if (result.kind === 'properties' && result.added) added += ' Look up missing addresses on Dispatch places them, at most 10 a press.';
       if (result.finished) {
+        if (from === 'settings') return c.redirect(flashTo(settingsTabHref('import'), 'ok', added), 303);
         const home = from === 'welcome' ? WELCOME_STEP[result.kind] : '/setup';
         return c.redirect(flashTo(home, 'ok', added, from === 'welcome' ? '' : `#${SETUP_AREA[result.kind]}`), 303);
       }
@@ -172,7 +190,7 @@ export function importPages() {
       return c.redirect(flashTo(back, result.added ? 'ok' : 'error', message, '#rows'), 303);
     } catch (error) {
       if (!(error instanceof ActionError)) throw error;
-      return c.redirect(flashTo(from === 'welcome' ? '/welcome' : '/setup', 'error', error.message), 303);
+      return c.redirect(flashTo(startOf(from), 'error', error.message), 303);
     }
   });
 
@@ -201,7 +219,18 @@ function reviewPage(c: Context<WebEnv>, preview: ImportPreview, from: ImportFrom
     duplicate: rows.filter((r) => r.status === 'duplicate').length,
   };
   const adding = rows.filter((r) => r.included && r.status !== 'needs_fix').length;
-  const home = from === 'welcome' ? WELCOME_STEP[kind] : `/setup#${SETUP_AREA[kind]}`;
+  const home = from === 'settings' ? settingsImportPath(kind) : from === 'welcome' ? WELCOME_STEP[kind] : `/setup#${SETUP_AREA[kind]}`;
+  // The upload page, not the Import tab: that page's own control is "Back to Import".
+  const backLabel = from === 'settings' ? 'Back to the upload' : `Back to ${from === 'welcome' ? 'the guide' : 'Setup'}`;
+  const body = html`
+    <p class="import-summary" role="status">
+      <span>${rows.length} ${rows.length === 1 ? 'row' : 'rows'} to review:</span>
+      ${badge(`${counts.ready} ready`, 'success')} ${badge(`${counts.needsFix} ${counts.needsFix === 1 ? 'needs' : 'need'} a fix`, counts.needsFix ? 'warning' : 'neutral')}
+      ${badge(`${counts.duplicate} ${counts.duplicate === 1 ? 'duplicate' : 'duplicates'}`, 'neutral')}
+    </p>
+    ${columnsSection(preview, from)}
+    ${rowsSection(preview, from, adding)}
+  `;
 
   return page({
     title: `Review ${nouns.many}`,
@@ -212,16 +241,9 @@ function reviewPage(c: Context<WebEnv>, preview: ImportPreview, from: ImportFrom
     subtitle: html`<span class="flex flex-wrap gap-x-4"><span>From ${preview.filename}</span>${preview.added
         ? html`<span>${count(preview.added, kind)} added so far</span>`
         : ''}</span>`,
-    actions: linkButton(`Back to ${from === 'welcome' ? 'the guide' : 'Setup'}`, home, { variant: 'ghost', size: 'sm' }),
-    body: html`
-      <p class="import-summary" role="status">
-        <span>${rows.length} ${rows.length === 1 ? 'row' : 'rows'} to review:</span>
-        ${badge(`${counts.ready} ready`, 'success')} ${badge(`${counts.needsFix} ${counts.needsFix === 1 ? 'needs' : 'need'} a fix`, counts.needsFix ? 'warning' : 'neutral')}
-        ${badge(`${counts.duplicate} ${counts.duplicate === 1 ? 'duplicate' : 'duplicates'}`, 'neutral')}
-      </p>
-      ${columnsSection(preview, from)}
-      ${rowsSection(preview, from, adding)}
-    `,
+    actions: linkButton(backLabel, home, { variant: 'ghost', size: 'sm' }),
+    // In Settings the review keeps the side tabs, with the table given the rest of the row.
+    body: from === 'settings' ? settingsLayout('import', body, { wide: true }) : body,
   });
 }
 
@@ -251,7 +273,7 @@ function columnsSection(preview: ImportPreview, from: ImportFrom): Html {
         : html`<p class="text-sm text-muted">Each column of your sheet and where it goes. Change one if it's wrong.</p>`}
       <details class="import-columns" ${unsure ? 'open' : ''}>
         <summary class="cursor-pointer font-semibold text-action">${unsure ? 'Choose columns' : `Show the ${preview.columns.length} columns`}</summary>
-        <form method="post" action="/setup/imports/${preview.token}/columns" class="mt-3 flex flex-col gap-3">
+        <form method="post" action="${importBase(from)}/imports/${preview.token}/columns" class="mt-3 flex flex-col gap-3">
           <input type="hidden" name="from" value="${from}" />
           <div class="table-frame import-stack">
             <table class="table table-sm">
@@ -315,9 +337,9 @@ function rowsSection(preview: ImportPreview, from: ImportFrom, adding: number): 
     body: html`
       <p class="text-sm text-muted">
         Ticked rows are added. Fix the flagged cells here, or untick a row to leave it out. Duplicates start unticked.
-        <a class="link" href="${templatePath(kind)}" download>Download the template</a> to see the columns myEST8 expects.
+        <a class="link" href="${templatePath(kind, from)}" download>Download the template</a> to see the columns myEST8 expects.
       </p>
-      <form method="post" action="/setup/imports/${preview.token}" class="flex flex-col gap-3" data-import-rows data-noun-one="${nouns.one}" data-noun-many="${nouns.many}">
+      <form method="post" action="${importBase(from)}/imports/${preview.token}" class="flex flex-col gap-3" data-import-rows data-noun-one="${nouns.one}" data-noun-many="${nouns.many}">
         <input type="hidden" name="from" value="${from}" />
         ${rows.length
           ? html`<div class="table-frame import-stack">
@@ -341,7 +363,7 @@ function rowsSection(preview: ImportPreview, from: ImportFrom, adding: number): 
         <div class="import-actions">
           <button type="submit" name="intent" value="add" class="btn btn-primary" data-import-add>${addLabel}</button>
           ${button('Check changes', { variant: 'secondary', name: 'intent', value: 'check' })}
-          <button type="submit" class="btn btn-ghost" formaction="/setup/imports/${preview.token}/discard" formnovalidate>Discard upload</button>
+          <button type="submit" class="btn btn-ghost" formaction="${importBase(from)}/imports/${preview.token}/discard" formnovalidate>Discard upload</button>
           <span class="text-sm text-muted" aria-live="polite" data-import-count>${fixing
             ? `Plus ${fixing} ticked ${fixing === 1 ? 'row that needs' : 'rows that need'} a fix: fill in the flagged cells to add ${fixing === 1 ? 'it' : 'them'} too.`
             : ''}</span>

@@ -465,7 +465,7 @@ SMS, WhatsApp and email headings use `channelName()` from the same list: the Pho
 Each setup step that creates many records (Property Owners, Building Managers, Tradies, Properties, Tenants) has "Add many from a spreadsheet" on `/setup`, folded like the "Add" forms, and the guide's Tradies and Properties steps have the same uploads (`importPanel()` in `onboarding-forms.ts`). The guide lists them in the order they must happen: Property Owners, then Properties, then Tenants.
 
 - **Panel:** one sentence on what happens, a file field (`.xlsx` or `.csv`, with the row and size limits as its hint), "Upload and review", and "Download template" with the `download-simple` icon. In the guide's stack of three, the upload buttons are secondary so "Continue" stays the one primary button.
-- **Review page** (`/setup/imports/<token>`, `pages/import.ts`), titled "Review Properties":
+- **Review page** (`/setup/imports/<token>`, and the same review at `/settings/imports/<token>` when the upload started in Settings, `pages/import.ts`), titled "Review Properties". The Settings copy keeps the Settings side tabs. Once the rows are added it returns to the Import tab with a flash; discarding the upload returns to that kind's upload page.
   - A summary line of badges with their words: "3 ready", "1 needs a fix", "1 duplicate".
   - **Columns**: each column of the sheet, sample values, a "Goes to" select, and how it was matched: "Matched by name", "Matched by AI", "You chose", "Empty, ignored", or "AI not sure" with its guess. An unsure column is ignored until the Property Manager chooses, and a warning alert says so; the section is open only then.
   - **Rows**: Add (checkbox), Row (the spreadsheet's row number), Status ("Ready", "Needs a fix", "Duplicate" as badges), Notes ("Already added: …", "Adds … as a new Property Owner"), then the fields. A flagged cell is an input on `--high-bg` with its problem under it in `--high`; a cell that links to a record (Property Owner, Property, Property Manager, Building Manager) is a select of the Agency's records. Duplicates start unticked and are muted.
@@ -647,6 +647,7 @@ A machine check never stands in for what a person said:
 - **One-Quote rule.** The rule is visible on the Ticket page next to Choose: "Choose once two Quotes are confirmed, or give a reason to go ahead with one." Choose stays enabled. Without a reason, the server's message explains what's missing.
 - **Phone gutters.** 16 px below 1024 px.
 - **Literal colours.** No literal colour values outside the token block in `app.css`, including white. Use `var(--surface)`.
+- **Settings stays in Settings (2026-11-03).** A control in Settings no longer opens Setup, the welcome guide, or a list. Agency details, the team and spreadsheet import are pages under `/settings` that keep the side tabs. Properties, Tradies, Tenants, Property Owners and Building Managers are everyday records on Profiles, so Settings does not list them. See Settings below.
 - **Navigation (2026-11-02).** The five lists leave the rail. One Profiles item (`/profiles`, icon `address-book`) opens the households and Tradies. The lists stay, linked from that page. See Profiles below.
 - **Navigation (2026-10-24).** Property Owners (`/owners`, icon `key`) and Building Managers (`/building-managers`, icon `buildings`) join Profiles, after Tenants. Each has the list, the pen and Remove that Tenants and Tradies already have.
 - **Navigation (2026-10-19).** Requests folds into Tickets (new Maintenance Requests above open Tickets, one filter bar over both), closed Tickets move to Archive, and Properties, Tradies and the new Tenants sit under a Profiles heading. The rail's decision count moves from Requests to Tickets.
@@ -686,6 +687,28 @@ One page for the people and places, in place of the five lists in the rail. Thos
 - **Add profile.** A `<details data-menu>` in the page header, the same disclosure as the user menu (it closes on a click elsewhere and on Escape). The summary is one Harbour button that looks split: a plus and "Add profile", then a chevron behind `--action-divider`. The whole control opens the menu, and the chevron turns while it is open. Hover darkens the whole control. Focus is one 2px Harbour ring. Property, Tenant, Property Owner, Building Manager and Tradie, each to its own `/new` page; the items take the squircle fill on hover. Adding a Property is `/properties/new`; the list's button goes there, and a refused save is that page again.
 - **Mine and All** narrow the Properties, as on the other lists. Tradies, and people linked to no Property, are the Agency's either way. Search (`q`) keeps households whose address, suburb or anyone in them matches, and Tradies whose business name, contact name or Trade matches.
 - **The rail** has one Profiles item (`address-book`), with no group heading. A Property, Tenant, Property Owner, Building Manager or Tradie page, including each `/new` page, keeps it current.
+
+## Settings (`/settings`)
+
+The Agency's own details, in four side tabs: Agency, Channels, Team, Import. A Property Manager who is changing a setting stays here. Nothing in the tabs, or on the pages they open, links to Setup, the welcome guide, Profiles, or a list. The rail is how they leave, as on every other page.
+
+```
+┌ Settings                                                                     ┐
+│ Agency          ┌ Agency                                      Edit details ┐ │
+│ Channels        │ Name              Harbour Realty                          │ │
+│ Team            │ Time zone         Sydney and Canberra (NSW, ACT)          │ │
+│ Import          │ Property Managers 2                                       │ │
+│                 │ Urgent Repair limit  $1,000, set by NSW law               │ │
+│                 └───────────────────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+- **Side tabs** stay on every Settings page, including Edit details, Remove a colleague, each import's upload and the review. The current tab is the white one with the Wattle bar. On a phone they are one sideways-scrolling row, and that row does not widen the page. The panel beside them is at most 52rem, except the import review, which gives its table the rest of the row.
+- **Agency.** The name, the time zone in words ("Sydney and Canberra (NSW, ACT)"), the number of Property Managers (a link to the Team tab) and the Urgent Repair limit, which is the law's and is not editable. "Edit details" opens `/settings/agency/edit` in the same tabs: Agency name, Time zone, then Save and Cancel. Save returns to the Agency tab with "Agency details saved." A blank name or an unknown time zone stays on the form, with the error under the field. "Quote reminders, approval delays and message wording are not editable yet."
+- **Channels.** The connected Channels, and the shared SMS panel when this server has one (`smsNumberPanel` or `serverSmsPanel`). That panel's buttons post to `/sms-number` and `/server-sms`, and those handlers come back to this tab with a flash. The panel is the same component the welcome guide and Setup use, so Settings does not keep a second copy. With nothing connected, the empty line is "No channels connected yet. Tenants, Tradies and Property Owners reach you once one is."
+- **Team.** Each Property Manager, their email, how many Properties they look after, and Remove on everyone except yourself. "Add a colleague" is the form under the list (name and work email). Adding them stays on this tab and shows the temporary password once, with a share of the sign-in link that leaves the password out. Remove opens `/settings/team/<id>/remove`: they can no longer sign in, and when they look after Properties the form asks who takes those over. Removing returns to this tab with a flash ("Bob Baker removed. Their Property is now Alice Archer's.").
+- **Import.** Five rows, in the order they must happen: Property Owners, Building Managers, Properties, Tenants, Tradies. Each has a template download (`/settings/templates/<kind>.csv`) and a button such as "Import Property Owners", which opens that kind's upload at `/settings/import/<kind>`. The review keeps these tabs. Adding the rows, or discarding the upload, comes back into Settings with a flash: the Import tab when the rows are in, the upload page when the file is thrown away.
+- **Not here.** Properties, Tradies, Tenants, Property Owners and Building Managers are everyday records. Profiles is where they are added and opened. Settings used to repeat those lists and point each one at Setup; that block is gone, so the same records are not edited in two places.
 
 ## Copy
 
