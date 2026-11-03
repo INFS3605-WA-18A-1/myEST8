@@ -229,8 +229,8 @@ describe('editing a Property from its profile', () => {
     const cookie = await w.signIn();
 
     const page = await (await w.get(`/properties/${w.ids.kingSt}`, cookie)).text();
-    expect(detailsOf(page)).toContain(`<a ${PEN(w.ids.kingSt)} class="icon-btn" aria-label="Edit details" title="Edit details">`);
-    expect(page).not.toContain(`action="/properties/${w.ids.kingSt}/details"`);
+    expect(detailsOf(page)).toContain(`<a ${PEN(w.ids.kingSt)} class="icon-btn inline-edit-open" data-inline-open aria-label="Edit details" title="Edit details">`);
+    expect(detailsOf(page)).toContain('<fieldset class="inline-edit-fields" disabled>');
     expect(visible(detailsOf(page))).toContain('$500.00');
   });
 
@@ -253,9 +253,9 @@ describe('editing a Property from its profile', () => {
     expect(form).toMatch(new RegExp(`<option value="${w.ids.sam}" selected `));
     // One select each for Nina and Sam (the template for "Add Tradie" comes after them).
     expect(form.slice(form.indexOf('data-picker-rows'), form.indexOf('<template')).match(/name="nominatedTradieIds"/g)).toHaveLength(2);
-    expect(form).toMatch(/<button type="submit"[^>]*>Save<\/button>/);
-    expect(form).toContain(`<a href="/properties/${w.ids.kingSt}" class="btn btn-ghost">Cancel</a>`);
-    expect(form).not.toContain('aria-label="Edit details"');
+    expect(form).toContain('aria-label="Save details"');
+    expect(form).toContain(`<a href="/properties/${w.ids.kingSt}#details" class="icon-btn inline-edit-cancel" data-inline-cancel aria-label="Cancel editing" title="Cancel">`);
+    expect(form).toContain('is-editing');
     // The page's other sections stay.
     expect(page).toContain('aria-label="Open Tickets"');
     expect(page).toContain('aria-label="Tenants"');
@@ -286,7 +286,7 @@ describe('editing a Property from its profile', () => {
     expect(visible(detailsOf(page))).toContain('Bob Baker');
     expect(visible(detailsOf(page))).toContain('Barry Strata');
     expect(page).toContain(`href="/tradies/${w.ids.pete}"`);
-    expect(page).not.toContain(`action="/properties/${w.ids.kingSt}/details"`);
+    expect(detailsOf(page)).toContain('<fieldset class="inline-edit-fields" disabled>');
     expect((await w.alice.properties()).find((p) => p.id === w.ids.kingSt)!.location).toEqual({ lat: -33.8975, lng: 151.1795 });
   });
 

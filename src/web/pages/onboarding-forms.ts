@@ -50,15 +50,15 @@ export function unavailableNote(type: ChannelType, unavailable: readonly Channel
 export type DetailsEdit = { values: Values; errors: Errors; message: string };
 
 /**
- * Saves a profile's edited details (`save` is given the posted form). Saved, it goes back to the profile
- * with "Details saved." Refused, `show` renders the profile again with the form open, as it was posted
+ * Saves a profile's edited details, or any `inlineEdit` block (`save` is given the posted form). Saved, it
+ * goes back to the profile with "Details saved." (or `ok`). Refused, `show` renders the profile again with the form open, as it was posted
  * and with the reason; it is also what shows a record that isn't the Agency's, as a 404.
  */
-export async function saveDetails(c: Context<WebEnv>, o: { profile: string; save: (form: FormValues) => Promise<unknown>; show: (refused: DetailsEdit) => Promise<Response> }) {
+export async function saveDetails(c: Context<WebEnv>, o: { profile: string; save: (form: FormValues) => Promise<unknown>; show: (refused: DetailsEdit) => Promise<Response>; ok?: string }) {
   const form = (await c.req.parseBody({ all: true })) as FormValues;
   try {
     await o.save(form);
-    return c.redirect(withFlash(o.profile, 'ok', 'Details saved.'), 303);
+    return c.redirect(withFlash(o.profile, 'ok', o.ok ?? 'Details saved.'), 303);
   } catch (error) {
     if (!(error instanceof ActionError)) throw error;
     return o.show({ values: valuesOf(form), errors: { ...error.fields }, message: error.message });
@@ -354,6 +354,18 @@ export function contactFields(
 }
 
 /**
+ * Name, mobile and email as bare controls for an `inlineEdit` block's rows (the row's term labels
+ * each), with the same ids and names as `contactFields`, so a refusal lands under the right one.
+ */
+export function contactControls(id: string, o: { values?: Values; errors?: Errors } = {}) {
+  const control = (name: 'name' | 'mobile' | 'email', type: 'text' | 'tel' | 'email', label: string, required = false) => ({
+    for: `${id}-${name}`,
+    control: field({ label, name, id: `${id}-${name}`, type, required, bare: true, autocomplete: 'off', value: valueOf(o.values, name), error: o.errors?.[name] }),
+  });
+  return { name: control('name', 'text', 'Name', true), mobile: control('mobile', 'tel', 'Mobile'), email: control('email', 'email', 'Email') };
+}
+
+/**
  * The Add form for a Property Owner or Building Manager: name, mobile and email, posting to `action`.
  * Setup and the two profile lists share it, so they can't drift.
  */
@@ -427,11 +439,13 @@ function choiceGroup(o: {
   hint?: string;
   checked?: string[];
   error?: string;
+  /** Keeps the legend for screen readers only, where a label beside the group already names it (an inlineEdit row). */
+  legendHidden?: boolean;
 }): Html {
   const control = o.type === 'checkbox' ? 'checkbox checkbox-primary checkbox-sm' : 'radio radio-primary radio-sm';
   const layout = o.type === 'checkbox' ? (o.columns === 4 ? 'grid gap-x-4 md:grid-cols-4' : 'grid gap-x-4 md:grid-cols-2') : 'flex flex-col';
   return html`<fieldset class="min-w-0" ${o.error ? html`aria-invalid="true"` : ''}>
-    <legend class="field-label mb-1">${o.legend}</legend>
+    <legend class="${o.legendHidden ? 'sr-only' : 'field-label mb-1'}">${o.legend}</legend>
     <div class="${layout}">
       ${o.options.map(
         (opt) => html`<label class="flex cursor-pointer items-start gap-2 py-1 text-sm">
@@ -591,6 +605,21 @@ export async function addTradieSection(o: {
         </form>`
       : (o.refusal ?? '')}
   `;
+}
+
+/** The Trades checkboxes for a Tradie's inlineEdit row: the row's term names them, so the legend is for screen readers. */
+export function tradesControl(o: { values?: Values; errors?: Errors }): Html {
+  const trades = o.values?.trades;
+  return choiceGroup({
+    legend: 'Trades',
+    legendHidden: true,
+    name: 'trades',
+    type: 'checkbox',
+    options: TRADES.map((trade) => ({ value: trade, label: humanise(trade) })),
+    columns: 2,
+    checked: Array.isArray(trades) ? trades : trades ? [trades] : [],
+    error: o.errors?.trades,
+  });
 }
 
 /** The fields of the Tradie form: business, contact, Trades and starting rating (left out when editing a Tradie, whose rating is built from the Jobs they do). The business address is only on the add form; editing keeps the address form on the profile. */

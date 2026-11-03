@@ -114,8 +114,7 @@ export function calendarPages() {
         active: 'schedule',
         shell: shellInfo(c),
         flash: flashFrom(c.req.url),
-        titleExtra: filterForm(period, filter, q, directory, properties),
-        controls: html`${segmented(
+        controls: html`${filterForm(period, filter, q, directory, properties)}${segmented(
             [
               { label: 'Mine', href: hrefFor(view, first, 'mine', q), active: filter === 'mine' },
               { label: 'All', href: hrefFor(view, first, 'all', q), active: filter === 'all' },
