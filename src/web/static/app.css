@@ -4977,16 +4977,6 @@
       justify-content: space-between;
       gap: 12px;
     }
-    .request-summary-form {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-    .request-summary-actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
     /* The pen: an icon button that opens a block's edit form in the page (the Summary, a profile's details). */
     .icon-btn {
       display: inline-flex;
@@ -5005,27 +4995,139 @@
       outline: 2px solid var(--action);
       outline-offset: 2px;
     }
-    /* A profile's details (pages/tenants.ts, properties.ts, tradie.ts): the facts with their pen at the side,
-       and the form that takes their place. */
-    .details-head {
+    /* Inline edit (inlineEdit in ui.ts, "Inline edit" in app.js).
+       The pen, the tick and the cross share one slot, and each value shares a cell with its input,
+       so opening an edit does not shove the line sideways. The tick is a Harbour icon button;
+       the cross is a quiet ghost. Without JavaScript the pen is the ?edit= link and CSS shows
+       the inputs because the block has .is-editing. */
+    .inline-edit-form,
+    .inline-edit-fields,
+    .inline-edit-body,
+    .inline-edit-slot,
+    .inline-edit-control .fieldset,
+    .inline-edit-extra .fieldset {
+      min-width: 0;
+    }
+    .inline-edit-control :is(.input, .textarea, .select),
+    .inline-edit-extra :is(.input, .textarea, .select) {
+      min-width: 0;
+      max-width: 100%;
+    }
+    .inline-edit-fields {
+      margin: 0;
+      padding: 0;
+      border: 0;
+    }
+    .inline-edit-fields:disabled {
+      opacity: 1;
+      color: inherit;
+      pointer-events: none;
+    }
+    .inline-edit-fields:disabled .inline-edit-open {
+      pointer-events: auto;
+    }
+    .inline-edit-head {
       display: flex;
       align-items: flex-start;
       justify-content: space-between;
       gap: 12px;
     }
-    .details-body {
+    .inline-edit-body {
       flex: 1;
+    }
+    .inline-edit-tools {
+      display: flex;
+      flex: none;
+      gap: 4px;
+      justify-content: flex-end;
+      width: calc(36px * 2 + 4px);
+    }
+    .inline-edit .icon-btn {
+      border: 0;
+      padding: 0;
+      background: transparent;
+      cursor: pointer;
+    }
+    .inline-edit .icon-btn:active {
+      scale: 0.94;
+      transition: scale var(--dur-fast) var(--ease-out);
+    }
+    .inline-edit .inline-edit-save {
+      border-radius: 6px;
+      background: var(--action);
+      color: var(--surface);
+    }
+    .inline-edit .inline-edit-save:hover {
+      background: var(--action-hover);
+      color: var(--surface);
+    }
+    .inline-edit .inline-edit-cancel {
+      color: var(--muted);
+    }
+    .inline-edit .inline-edit-cancel:hover {
+      background: var(--page);
+      color: var(--ink);
+    }
+    .inline-edit-slot {
+      display: grid;
+      position: relative;
+    }
+    .inline-edit-slot > .inline-edit-read,
+    .inline-edit-slot > .inline-edit-control {
+      grid-area: 1 / 1;
       min-width: 0;
     }
-    .details-form {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
+    .inline-edit:not(.is-editing) .inline-edit-only,
+    .inline-edit:not(.is-editing) .inline-edit-extra,
+    .inline-edit:not(.is-editing) .inline-edit-refusal,
+    .inline-edit:not(.is-editing) .inline-edit-save,
+    .inline-edit:not(.is-editing) .inline-edit-cancel,
+    .inline-edit.is-editing .inline-edit-open {
+      display: none;
     }
-    .details-actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
+    .inline-edit:not(.is-editing) .inline-edit-control,
+    .inline-edit.is-editing .inline-edit-read {
+      visibility: hidden;
+      position: absolute;
+      width: 100%;
+      inset-inline: 0;
+      top: 0;
+      pointer-events: none;
+    }
+    .inline-edit.is-editing .inline-edit-control {
+      animation: fade-in var(--dur-fast) var(--ease-out);
+    }
+    .inline-edit-wide {
+      grid-column: 1 / -1;
+    }
+    .textarea.inline-edit-headline {
+      min-height: 2.75rem;
+      height: auto;
+      field-sizing: content;
+      padding: 4px 8px;
+      font-family: var(--font-head);
+      font-size: 22px;
+      font-weight: 600;
+      line-height: 1.35;
+    }
+    .input.inline-edit-money {
+      height: auto;
+      min-height: 2.75rem;
+      padding-block: 4px;
+      font-family: var(--font-head);
+      font-size: 26px;
+      font-weight: 600;
+      line-height: 1.15;
+      font-variant-numeric: tabular-nums;
+    }
+    @media (max-width: 40rem), (pointer: coarse) {
+      .inline-edit-tools {
+        width: calc(44px * 2 + 4px);
+      }
+      .inline-edit .icon-btn {
+        width: 44px;
+        height: 44px;
+      }
     }
     /* Photos: sent with the message first, then uploaded, each group labelled. */
     .request-photos {
@@ -5055,7 +5157,7 @@
        Repair Cost first and large; a contact's mobile and email on lines of their own. */
     .property-facts {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr));
       gap: 16px 24px;
       margin: 0;
     }
@@ -5165,37 +5267,34 @@
 
     /* A Tradie's profile (pages/tradie.ts): the Trades and contact details beside the
        four ratings (myEST8, Property Managers', Tenants', Google) from 1024px. */
-    .tradie-head .section-body,
     .tradie-head {
       display: grid;
       gap: 16px;
     }
-    .tradie-contact {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
+    .tradie-head > .inline-edit-form {
       min-width: 0;
     }
-    .tradie-contact dl {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px 24px;
+    .tradie-facts {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr));
+      gap: 12px 24px;
       margin: 0;
     }
-    .tradie-contact dl > div {
+    .tradie-facts > div {
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      gap: 4px;
       min-width: 0;
     }
-    .tradie-contact dt {
+    .tradie-facts dt {
       font-size: 12px;
       font-weight: 500;
       color: var(--muted);
     }
-    .tradie-contact dd {
+    .tradie-facts dd {
       margin: 0;
       font-size: 14px;
+      min-width: 0;
     }
     @media (min-width: 1024px) {
       .tradie-head {
@@ -5874,35 +5973,20 @@
       font-size: 18px;
       overflow-wrap: anywhere;
     }
-    /* The Summary: the issue at the top of the header, an Edit button beside it that opens a small form below. */
-    .ticket-summary,
+    /* The Summary: the issue, with its pencil in the same row. */
     .ai-filled .flex:has(> .min-w-0 > .ticket-issue) {
       flex-wrap: wrap;
     }
-    .ticket-summary {
+    .ticket-summary,
+    .ticket-summary .inline-edit-fields {
       display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 8px;
-    }
-    .ticket-summary > .ticket-issue {
-      flex: 1 1 16rem;
+      flex-direction: column;
+      gap: 10px;
       min-width: 0;
     }
-    .ticket-summary-edit[open] {
-      flex-basis: 100%;
-      padding: 12px;
-      background: var(--page);
-      border-radius: 4px;
-    }
-    .ticket-summary-edit > summary {
-      list-style: none;
-    }
-    .ticket-summary-edit > summary::-webkit-details-marker {
-      display: none;
-    }
-    .ticket-summary-edit[open] > summary {
-      margin-bottom: 8px;
+    .ticket-summary > .ticket-issue,
+    .ticket-summary .ticket-issue {
+      min-width: 0;
     }
     /* The stage tracker, at the top of the Progress card. */
     .ticket-stages {
@@ -8291,7 +8375,7 @@
     .ticket-tools .btn-primary {
       gap: 6px;
     }
-    /* The Summary card: the AI label as a small pill, the issue large, then the address, the status and Edit summary. */
+    /* The Summary card: the AI label as a small pill, the issue large with its pencil, then the address and the status. */
     .ticket-summary {
       display: grid;
       gap: 10px;
@@ -8328,21 +8412,6 @@
     }
     .ticket-state.is-closed::before {
       background: #8a8374;
-    }
-    .ticket-summary-edit > summary {
-      list-style: none;
-      cursor: pointer;
-      font-size: 14px;
-      text-decoration: underline;
-    }
-    .ticket-summary-edit > summary::-webkit-details-marker {
-      display: none;
-    }
-    .ticket-summary-edit[open] {
-      flex-basis: 100%;
-      padding: 12px;
-      background: var(--page);
-      border-radius: 12px;
     }
     /* The Jobs beside what the Tenant reported (stacked while a Job is open: its tables need the room). */
     .ticket-pair {

@@ -2,19 +2,19 @@
 // (the form still posts to /setup/properties), and one Property's profile at
 // /properties/:id: its open Tickets first, then the Max Repair Cost, Property Owner
 // and Property Manager, its Tenants, nominated Tradies, frequent issues and closed
-// Tickets. The profile's pen opens its details in a form (?edit=details) that posts
-// to /properties/:id/details.
+// Tickets. The profile's pen edits its details in place (inlineEdit; without JavaScript
+// ?edit=details opens it) and posts to /properties/:id/details.
 
 import { Hono, type Context } from 'hono';
 import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
 import { ActionError } from '../../shared.ts';
-import { cents, text } from '../forms.ts';
+import { cents, list as listOf, text } from '../forms.ts';
 import { icon } from '../icons.ts';
 import type { WebEnv } from '../env.ts';
 import { shellInfo } from '../shell.ts';
-import { alert, badge, button, contactLink, detailsForm, editPen, emptyState, entityLink, flashFrom, formatAge, formatMoney, humanise, linkButton, page, rowLink, section, sectionHeader, statusBadge, table, ticketCell, urgencyBadge, type Html } from '../ui.ts';
-import { chosenId, importPanel, nominatedFrom, postedLocation, propertyFields, saveDetails, type DetailsEdit, type Errors, type Values } from './onboarding-forms.ts';
+import { alert, badge, button, contactLink, emptyState, entityLink, field, inlineEdit, flashFrom, formatAge, formatMoney, humanise, linkButton, page, rowLink, section, sectionHeader, statusBadge, table, ticketCell, urgencyBadge, type Html } from '../ui.ts';
+import { chosenId, importPanel, nominatedFrom, postedLocation, propertyFields, propertyPlaceFields, saveDetails, tradiePicker, valueOf, type DetailsEdit, type Errors, type Values } from './onboarding-forms.ts';
 
 type Overview = Awaited<ReturnType<PropertyManagerActions['propertyOverviews']>>[number];
 type PropertyView = Awaited<ReturnType<PropertyManagerActions['property']>>;
@@ -121,7 +121,7 @@ async function profilePage(c: Context<WebEnv>, id: number, refused?: DetailsEdit
       shell: shellInfo(c),
       actions: linkButton('Back to Properties', '/properties', { variant: 'ghost', size: 'sm' }),
       body: html`
-        ${openTickets(property, now)} ${editing ? await editForm(c, property, refused) : facts(property)}
+        ${openTickets(property, now)} ${await facts(c, property, editing, refused)}
         <div class="grid gap-6 lg:grid-cols-2">${tenants(property)}${nominated(property)}</div>
         ${frequent(property)} ${closedTickets(property, now)}
       `,
@@ -200,41 +200,14 @@ function contact(person: { name: string; mobile: string | null; email: string | 
   </span>`;
 }
 
-/** The headline facts: the Max Repair Cost first and large, then who owns and who manages the Property, with a pen to edit them. */
-function facts(p: PropertyView): Html {
-  return html`<section class="section" id="details" aria-label="Property details">
-    <div class="details-head">
-      <dl class="property-facts details-body">
-        <div>
-          <dt>Max Repair Cost</dt>
-          <dd class="property-facts-money num">${formatMoney(p.maxRepairCostCents)}</dd>
-        </div>
-        <div>
-          <dt>Property Owner</dt>
-          <dd>${contact(p.owner, `/owners/${p.owner.personId}`)}</dd>
-        </div>
-        <div>
-          <dt>Property Manager</dt>
-          <dd>${p.propertyManager}</dd>
-        </div>
-        ${p.buildingManager
-          ? html`<div>
-              <dt>Building Manager</dt>
-              <dd>${contact(p.buildingManager, `/building-managers/${p.buildingManager.personId}`)}</dd>
-            </div>`
-          : ''}
-      </dl>
-      ${editPen('Edit details', `/properties/${p.propertyId}?edit=details#details`)}
-    </div>
-  </section>`;
-}
-
 /**
- * The form to edit the address, suburb, Max Repair Cost, Property Owner, Property Manager, Building Manager and
- * Nominated Tradies, in place of the facts: the fields and the Tradie picker of adding a Property, filled in
- * from the Property or from what was posted. The pin stays hidden and empty: only a picked suggestion fills it.
+ * The headline facts: the Max Repair Cost first and large, then who owns, manages and looks after the
+ * Property, editing in place. The pen turns each into its input (the money as a number, the people as
+ * selects) and adds the address, suburb and Nominated Tradies picker under them, as adding a Property
+ * has them, filled in from the Property or from what was posted. The pin stays hidden and empty: only a
+ * picked suggestion fills it. A save swaps the Nominated Tradies section too.
  */
-async function editForm(c: Context<WebEnv>, p: PropertyView, refused?: DetailsEdit): Promise<Html> {
+async function facts(c: Context<WebEnv>, p: PropertyView, editing: boolean, refused?: DetailsEdit): Promise<Html> {
   const { actions } = c.var;
   const [properties, owners, buildingManagers, tradies, propertyManagers] = await Promise.all([
     actions.properties(),
@@ -253,14 +226,67 @@ async function editForm(c: Context<WebEnv>, p: PropertyView, refused?: DetailsEd
     buildingManagerId: now.buildingManagerId === null ? '' : String(now.buildingManagerId),
     nominatedTradieIds: now.nominatedTradieIds.map(String),
   };
-  return html`<section class="section" id="details" aria-label="Property details">
-    ${detailsForm({
-      action: `/properties/${p.propertyId}/details`,
-      cancel: `/properties/${p.propertyId}`,
-      refusal: refused && !Object.keys(refused.errors).length ? refused.message : undefined,
-      fields: propertyFields({ owners, buildingManagers, propertyManagers, tradies, values, errors: refused?.errors }),
-    })}
-  </section>`;
+  const errors = refused?.errors;
+  const select = (name: string, id: string, label: string, options: { value: string; label: string }[], placeholder?: string) =>
+    field({ label, name, id, type: 'select', required: name !== 'buildingManagerId', bare: true, placeholder, value: valueOf(values, name), options, error: errors?.[name] });
+  return inlineEdit({
+    id: 'details',
+    label: 'Property details',
+    action: `/properties/${p.propertyId}/details`,
+    edit: { label: 'Edit details', href: `/properties/${p.propertyId}?edit=details#details` },
+    cancel: `/properties/${p.propertyId}#details`,
+    save: 'Save details',
+    editing,
+    className: 'section',
+    refresh: ['nominated-tradies'],
+    refusal: refused && !Object.keys(refused.errors).length ? refused.message : undefined,
+    layout: 'grid',
+    listClass: 'property-facts',
+    rows: [
+      {
+        label: 'Max Repair Cost',
+        read: html`<span class="property-facts-money num">${formatMoney(p.maxRepairCostCents)}</span>`,
+        for: 'property-max',
+        control: field({
+          label: 'Max Repair Cost ($)',
+          name: 'maxRepairCost',
+          id: 'property-max',
+          type: 'number',
+          step: '0.01',
+          min: 0,
+          required: true,
+          bare: true,
+          className: 'inline-edit-money',
+          value: valueOf(values, 'maxRepairCost'),
+          error: errors?.maxRepairCost,
+        }),
+      },
+      {
+        label: 'Property Owner',
+        read: contact(p.owner, `/owners/${p.owner.personId}`),
+        for: 'property-owner',
+        control: select('ownerId', 'property-owner', 'Property Owner', owners.map((x) => ({ value: String(x.id), label: x.name })), 'Choose the Property Owner'),
+      },
+      {
+        label: 'Property Manager',
+        read: p.propertyManager,
+        for: 'property-manager',
+        control: select('propertyManagerId', 'property-manager', 'Property Manager', propertyManagers.map((m) => ({ value: String(m.id), label: m.name }))),
+      },
+      {
+        label: 'Building Manager',
+        read: p.buildingManager ? contact(p.buildingManager, `/building-managers/${p.buildingManager.personId}`) : html`<span class="text-muted">None</span>`,
+        for: 'property-building-manager',
+        control: select('buildingManagerId', 'property-building-manager', 'Building Manager', [{ value: '', label: 'None' }, ...buildingManagers.map((b) => ({ value: String(b.id), label: b.name }))]),
+      },
+    ],
+    extra: html`<div class="grid gap-x-4 gap-y-3 md:grid-cols-2">${propertyPlaceFields({ values, errors })}</div>
+      <div class="mt-3">
+        ${tradies.length
+          ? tradiePicker({ id: 'property', tradies, chosen: listOf(values, 'nominatedTradieIds'), error: errors?.nominatedTradieIds })
+          : html`<p class="text-sm text-muted">Add Tradies on the Tradies page to nominate them for Urgent Repairs.</p>`}
+      </div>`,
+  });
 }
 
 /** "1 Jan 2025" from a date like 2025-01-01. */
@@ -288,7 +314,7 @@ function tenants(p: PropertyView): Html {
 }
 
 function nominated(p: PropertyView): Html {
-  return html`<section class="section min-w-0" aria-label="Nominated Tradies">
+  return html`<section class="section min-w-0" id="nominated-tradies" aria-label="Nominated Tradies">
     ${sectionHeader('Nominated Tradies')}
     ${p.nominatedTradies.length
       ? table(

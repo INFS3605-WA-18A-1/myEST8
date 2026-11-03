@@ -5,8 +5,8 @@
 //
 // Adding a Tenant is /tenants/new (the form still posts to /setup/tenants). Removing
 // one takes them off their Property, but their profile and the Tickets they raised
-// stay. The profile's pen opens the name, mobile and email in a form (?edit=details)
-// that posts to /tenants/:id/details. Above the facts, a read says what their
+// stay. The profile's pen edits the name, mobile and email in place (inlineEdit; without
+// JavaScript ?edit=details opens it) and posts to /tenants/:id/details. Above the facts, a read says what their
 // history adds up to.
 
 import { Hono, type Context } from 'hono';
@@ -20,9 +20,8 @@ import {
   alert,
   button,
   contactLink,
-  detailsForm,
   dl,
-  editPen,
+  inlineEdit,
   emptyState,
   entityLink,
   field,
@@ -45,7 +44,7 @@ import {
   urgencyBadge,
   type Html,
 } from '../ui.ts';
-import { contactFields, contactFrom, fieldGrid, propertyOptions, saveDetails, type DetailsEdit, type Errors, type Values } from './onboarding-forms.ts';
+import { contactControls, contactFields, contactFrom, fieldGrid, propertyOptions, saveDetails, type DetailsEdit, type Errors, type Values } from './onboarding-forms.ts';
 import { formatDate } from './properties.ts';
 
 type TenantList = Awaited<ReturnType<PropertyManagerActions['tenants']>>;
@@ -125,7 +124,7 @@ async function profilePage(c: Context<WebEnv>, id: number, refused?: DetailsEdit
   const { timeZone } = actions.agency();
   // Someone who has left their Property has no details to edit: their addresses are free for others.
   const editing = tenant.property !== null && (!!refused || c.req.query('edit') === 'details');
-  const people = editing ? [] : await actions.people();
+  const people = await actions.people();
   return c.html(
     page({
       title: tenant.name,
@@ -249,36 +248,34 @@ function addForm(properties: Property[], refused: AddRefusal | undefined): Html 
 }
 
 /**
- * Where they live, who manages it, and how and when to reach them, with a pen to edit the name, mobile and
- * email. Editing, the form takes the facts' place, filled in from the Tenant or from what was posted.
+ * Where they live, who manages it, and how and when to reach them, editing in place: the pen turns the
+ * mobile and email into inputs and adds the name. Refused, the block is open as posted, with the reasons.
+ * Someone who has left their Property has no pen: their addresses are free for others.
  */
 function facts(t: TenantView, editing: boolean, refused: DetailsEdit | undefined, people: Parameters<typeof othersUsing>[0]): Html {
-  if (editing) {
-    const values = refused?.values ?? { name: t.name, mobile: t.mobile ?? '', email: t.email ?? '' };
-    return html`<section class="section" id="details" aria-label="Tenant details">
-      ${detailsForm({
-        action: `/tenants/${t.tenantId}/details`,
-        cancel: `/tenants/${t.tenantId}`,
-        refusal: refused && !Object.keys(refused.errors).length ? refused.message : undefined,
-        fields: fieldGrid(contactFields('tenant', { values, errors: refused?.errors })),
-      })}
-    </section>`;
-  }
-  return html`<section class="section" id="details" aria-label="Tenant details">
-    <div class="details-head">
-      <div class="details-body">
-        ${dl([
-          ['Property', t.property ? entityLink('property', t.property.address, `/properties/${t.property.propertyId}`) : html`<span class="text-muted">No Property</span>`],
-          ['Property Manager', t.propertyManager ?? '—'],
-          ['Tenant since', t.tenancyStart ? formatDate(t.tenancyStart) : '—'],
-          ['Mobile', contactDetail('mobile', t.mobile, people, t.tenantId)],
-          ['Email', contactDetail('email', t.email, people, t.tenantId)],
-          ['Usually home', t.availability ? humanise(t.availability) : html`<span class="text-muted">Not asked yet</span>`],
-        ])}
-      </div>
-      ${t.property ? editPen('Edit details', `/tenants/${t.tenantId}?edit=details#details`) : ''}
-    </div>
-  </section>`;
+  const values = refused?.values ?? { name: t.name, mobile: t.mobile ?? '', email: t.email ?? '' };
+  const controls = contactControls('tenant', { values, errors: refused?.errors });
+  return inlineEdit({
+    id: 'details',
+    label: 'Tenant details',
+    action: `/tenants/${t.tenantId}/details`,
+    edit: { label: 'Edit details', href: `/tenants/${t.tenantId}?edit=details#details` },
+    cancel: `/tenants/${t.tenantId}#details`,
+    save: 'Save details',
+    editing,
+    canEdit: t.property !== null,
+    className: 'section',
+    refusal: refused && !Object.keys(refused.errors).length ? refused.message : undefined,
+    rows: [
+      { label: 'Property', read: t.property ? entityLink('property', t.property.address, `/properties/${t.property.propertyId}`) : html`<span class="text-muted">No Property</span>` },
+      { label: 'Property Manager', read: t.propertyManager ?? '—' },
+      { label: 'Tenant since', read: t.tenancyStart ? formatDate(t.tenancyStart) : '—' },
+      { label: 'Mobile', read: contactDetail('mobile', t.mobile, people, t.tenantId), ...controls.mobile },
+      { label: 'Email', read: contactDetail('email', t.email, people, t.tenantId), ...controls.email },
+      { label: 'Usually home', read: t.availability ? humanise(t.availability) : html`<span class="text-muted">Not asked yet</span>` },
+      { label: 'Name', ...controls.name },
+    ],
+  });
 }
 
 /** The address under an item, only when it isn't the Tenant's own Property (a Ticket from an earlier tenancy). */

@@ -17,7 +17,8 @@ import { doubtsPhotos, passedChecks, photoCaption, requestFlags, type Check } fr
 import { formAction, text, type FormValues } from '../forms.ts';
 import { COLLEAGUES_ONLY, shareButton, shareUrl } from '../share.ts';
 import { shellInfo } from '../shell.ts';
-import { aiFilled, alert, button, emptyState, entityLink, field, flashFrom, formatAge, formatWhen, humanise, linkButton, page, photoGrid, section, urgencyBadge, withFlash, type Html } from '../ui.ts';
+import { aiFilled, alert, button, editSwap, emptyState, entityLink, field, flashFrom, formatAge, formatWhen, humanise, inlineEdit, linkButton, page, photoGrid, section, urgencyBadge, withFlash, type Html } from '../ui.ts';
+import { saveDetails, valueOf, type DetailsEdit } from './onboarding-forms.ts';
 
 type MaintenanceRequest = Awaited<ReturnType<PropertyManagerActions['requests']>>[number];
 
@@ -39,12 +40,15 @@ export function requestPages() {
 
   pages.get('/:issueId{[0-9]+}', (c) => reviewPage(c, Number(c.req.param('issueId'))));
 
-  // Edit the Summary without confirming. Blank or over 160 characters is refused with the reason.
+  // Edit the Summary without confirming. Blank or over 160 characters is refused: the page comes
+  // back with the Summary open as typed and the reason under it.
   pages.post('/:issueId{[0-9]+}/summary', async (c) => {
     const issueId = Number(c.req.param('issueId'));
-    return formAction(c, `/requests/${issueId}?edit=summary`, async (form) => {
-      await c.var.actions.editSummary({ issueId }, text(form, 'summary'));
-      return { ok: 'Summary saved.', redirect: `/requests/${issueId}` };
+    return saveDetails(c, {
+      profile: `/requests/${issueId}`,
+      ok: 'Summary saved.',
+      save: (form) => c.var.actions.editSummary({ issueId }, text(form, 'summary')),
+      show: (refused) => reviewPage(c, issueId, { summary: refused, status: 400 }),
     });
   });
 
@@ -78,7 +82,7 @@ export function requestPages() {
 }
 
 /** The review page itself, with the follow-up panel in the state a post left it in. */
-async function reviewPage(c: Context<WebEnv>, issueId: number, o: { followUp?: FollowUp; status?: 200 | 400 } = {}) {
+async function reviewPage(c: Context<WebEnv>, issueId: number, o: { followUp?: FollowUp; summary?: DetailsEdit; status?: 200 | 400 } = {}) {
   const { actions, pm } = c.var;
   const request = await actions.request(issueId);
   const flash = flashFrom(c.req.url);
@@ -104,7 +108,7 @@ async function reviewPage(c: Context<WebEnv>, issueId: number, o: { followUp?: F
         url: shareUrl(c, `/requests/${issueId}`),
         note: COLLEAGUES_ONLY,
       }),
-      body: review(request, timeZone, c.req.query('edit') === 'summary', o.followUp),
+      body: review(request, timeZone, { editing: !!o.summary || c.req.query('edit') === 'summary', refused: o.summary }, o.followUp),
     }),
     o.status ?? 200,
   );
@@ -133,14 +137,14 @@ export function byUrgency<T extends { urgency: string; reportedAt: string }>(req
  * (with any Urgency or Trade to check) and the follow-up panel sit beside them from
  * 1024px and under the Summary on phones.
  */
-function review(r: MaintenanceRequest, timeZone: string, editing: boolean, followUp?: FollowUp): Html {
+function review(r: MaintenanceRequest, timeZone: string, edit: SummaryEdit, followUp?: FollowUp): Html {
   const toCheck = sideChecks(r);
   return html`<div class="request-review">
     <section class="ticket-hero request-lead" id="summary" aria-labelledby="summary-title">
       <div class="ticket-hero-card request-lead-card">
         <div class="ticket-hero-text">
           <h2 class="sr-only" id="summary-title">Summary</h2>
-          ${summary(r, editing)}
+          ${summary(r, edit)}
           <p class="ticket-hero-meta">
             <span class="ticket-chip">${entityLink('property', r.propertyAddress, `/properties/${r.propertyId}`)}</span>
             <span class="ticket-state is-waiting">Waiting for you</span>
@@ -163,7 +167,7 @@ function review(r: MaintenanceRequest, timeZone: string, editing: boolean, follo
     <div class="request-side">
       ${peopleCard(r)}
       ${toCheck ? section({ title: 'To check', id: 'checks', body: toCheck }) : ''}
-      ${section({ title: 'Decide', id: 'decide', actions: html`<span class="request-needs">Needs you</span>`, body: decide(r, editing) })}
+      ${section({ title: 'Decide', id: 'decide', actions: html`<span class="request-needs">Needs you</span>`, body: decide(r) })}
       ${section({ title: `Follow up with ${firstName(r.tenantName)}`, id: 'follow-up', body: followUpForm(r, followUp) })}
     </div>
     <div class="request-details">
@@ -190,35 +194,55 @@ function peopleCard(r: MaintenanceRequest): Html {
   </section>`;
 }
 
+/** Whether the Summary's editor is open, and the refused save it shows again. */
+type SummaryEdit = { editing: boolean; refused?: DetailsEdit };
+
 /**
- * The Summary, or the Tenant's description until there is one. Tinted "Filled in by AI"
- * only while the AI wrote it. The pencil opens the edit form in the page (no JavaScript).
+ * The Summary, or the Tenant's description until there is one, editing in place: the pen turns the
+ * line into a textarea in the same type. Tinted "Filled in by AI" only while the AI wrote it. The form
+ * is also the one Confirm sends, so an edited Summary goes with it; while it is closed its textarea is
+ * disabled and Confirm sends no Summary. A save swaps "The Tenant's answers" too (their own words move
+ * there once a Summary leads).
  */
-function summary(r: MaintenanceRequest, editing: boolean): Html {
-  const id = summaryFormId(r);
-  if (editing) {
-    return html`<form method="post" action="/requests/${r.issueId}/summary" id="${id}" class="request-summary-form">
-      ${field({
-        label: 'Summary',
-        name: 'summary',
-        id: `summary-${r.issueId}`,
-        type: 'textarea',
-        rows: 3,
-        required: true,
-        value: r.summary ?? '',
-        placeholder: r.description,
-        hint: 'One plain line, up to 160 characters. Say only what the Tenant told us.',
-      })}
-      <div class="request-summary-actions">${button('Save Summary')}${linkButton('Cancel', `/requests/${r.issueId}`, { variant: 'ghost' })}</div>
-    </form>`;
-  }
-  const pencil = html`<a href="/requests/${r.issueId}?edit=summary#summary" class="icon-btn" aria-label="Edit Summary" title="Edit Summary">${icon('pencil-simple', { size: 'size-[18px]' })}</a>`;
-  const line = html`<p class="request-issue">${headline(r)}</p>`;
-  if (r.summary && r.summaryBy === 'ai') return aiFilled(line, { edit: pencil });
-  return html`<div class="request-summary-plain">${line}${pencil}</div>
-    ${r.summary ? '' : html`<p class="field-hint">The Tenant's own words. No Summary has been written yet.</p>`}`;
+function summary(r: MaintenanceRequest, edit: SummaryEdit): Html {
+  const id = `summary-${r.issueId}`;
+  const error = edit.refused ? (edit.refused.errors.summary ?? edit.refused.message) : undefined;
+  const control = field({
+    label: 'Summary',
+    name: 'summary',
+    id,
+    type: 'textarea',
+    rows: 2,
+    required: true,
+    bare: true,
+    className: 'inline-edit-headline',
+    value: edit.refused ? valueOf(edit.refused.values, 'summary') : (r.summary ?? ''),
+    placeholder: r.description,
+    hint: 'One plain line, up to 160 characters. Say only what the Tenant told us.',
+    error,
+  });
+  const line = html`<label class="sr-only" for="${id}">Summary</label>${editSwap(html`<p class="request-issue">${headline(r)}</p>`, control)}`;
+  const ai = r.summary && r.summaryBy === 'ai';
+  return inlineEdit({
+    id: summaryBlockId(r),
+    tag: 'div',
+    label: 'Summary',
+    formId: summaryFormId(r),
+    action: `/requests/${r.issueId}/summary`,
+    edit: { label: 'Edit Summary', href: `/requests/${r.issueId}?edit=summary#summary` },
+    cancel: `/requests/${r.issueId}#summary`,
+    save: 'Save Summary',
+    editing: edit.editing,
+    refresh: ['answers'],
+    view: (tools) =>
+      ai
+        ? aiFilled(line, { edit: tools })
+        : html`<div class="request-summary-plain"><div class="min-w-0 flex-1">${line}</div>${tools}</div>
+            ${r.summary ? '' : html`<p class="field-hint inline-edit-read">The Tenant's own words. No Summary has been written yet.</p>`}`,
+  });
 }
 
+const summaryBlockId = (r: Pick<MaintenanceRequest, 'issueId'>) => `summary-edit-${r.issueId}`;
 const summaryFormId = (r: Pick<MaintenanceRequest, 'issueId'>) => `summary-form-${r.issueId}`;
 
 /** Label and value pairs as small tiles, the label quiet above its value. */
@@ -293,13 +317,12 @@ function checkLine(c: Check, passed: boolean): Html {
  * the edit with it. When the photos are in doubt, Confirm asks first in a disclosure,
  * so it works without JavaScript. Reject, with its reason, is folded away below.
  */
-function decide(r: MaintenanceRequest, editing: boolean): Html {
+function decide(r: MaintenanceRequest): Html {
   const base = `/requests/${r.issueId}`;
   const hintId = `urgency-${r.issueId}-hint`;
+  // Confirm sends the Summary's form, so a Summary being edited goes with it (closed, it sends none).
   const confirmButton = (label: string, block: boolean) =>
-    editing
-      ? html`<button type="submit" form="${summaryFormId(r)}" formaction="${base}/confirm" class="btn btn-primary${block ? ' btn-block' : ''}">${label}</button>`
-      : html`<form method="post" action="${base}/confirm" class="${block ? 'block' : 'inline-flex'}">${button(label, { block })}</form>`;
+    html`<button type="submit" form="${summaryFormId(r)}" formaction="${base}/confirm" class="btn btn-primary${block ? ' btn-block' : ''}">${label}</button>`;
   const confirm = doubtsPhotos(r)
     ? html`<details class="request-confirm-check">
         <summary class="btn btn-primary btn-block">Confirm</summary>
