@@ -2866,39 +2866,100 @@
       }
     }
 
-    /* ----- The page header: the first row of the content column. The title (Bricolage 28px) on
-       the left; the page's controls, the date and the user menu on the right of the same row.
-       On phones the row wraps: the title, then the controls. */
+    /* ----- The page header: the first row of the content column. One grid for every page:
+       the title on the left and the date, bell and user menu on the right of the top row. The
+       page's controls sit between them when they fit, else on a row of their own underneath,
+       so the title never wraps and the user menu never drops onto a line by itself.
+       A Mine/All switch alone fits beside the title from 40rem of content width; controls
+       with a search or a select (Dispatch, Profiles, Schedule) need 68rem. */
+    .app-content {
+      container: content / inline-size;
+    }
     .page-header {
-      display: flex;
-      flex-wrap: wrap;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-areas:
+        'lead end'
+        'controls controls';
       align-items: center;
-      justify-content: space-between;
-      gap: 8px 16px;
+      gap: 12px 16px;
       min-width: 0;
     }
+    .page-header.has-back {
+      grid-template-areas:
+        'back back'
+        'lead end'
+        'controls controls';
+    }
+    .page-back {
+      grid-area: back;
+    }
+    /* On a phone the user menu shows only the initials (the name stays for screen readers), so the title keeps its room. */
+    @container content (max-width: 39.99rem) {
+      .page-header .user-menu-name {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+    }
     .page-header-lead {
+      grid-area: lead;
       display: flex;
-      flex: 1 1 14rem;
       align-items: center;
       gap: 12px;
       min-width: 0;
     }
     .page-header-end {
+      grid-area: end;
       display: flex;
-      flex-wrap: wrap;
       align-items: center;
       justify-content: flex-end;
-      gap: 8px 16px;
+      gap: 16px;
       min-width: 0;
-      max-width: 100%;
     }
     .page-header-controls {
+      grid-area: controls;
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 12px;
+      gap: 8px 12px;
       min-width: 0;
+    }
+    @container content (min-width: 40rem) {
+      .page-header:has(.page-header-controls):not(:has(.page-header-controls :is(input, select))) {
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        grid-template-areas:
+          'lead controls end';
+      }
+      .page-header.has-back:has(.page-header-controls):not(:has(.page-header-controls :is(input, select))) {
+        grid-template-areas:
+          'back back back'
+          'lead controls end';
+      }
+      .page-header:not(:has(.page-header-controls :is(input, select))) .page-header-controls {
+        flex-wrap: nowrap;
+        justify-content: flex-end;
+      }
+    }
+    @container content (min-width: 68rem) {
+      .page-header:has(.page-header-controls) {
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        grid-template-areas:
+          'lead controls end';
+      }
+      .page-header.has-back:has(.page-header-controls) {
+        grid-template-areas:
+          'back back back'
+          'lead controls end';
+      }
+      .page-header-controls,
+      .dispatch-controls {
+        flex-wrap: nowrap;
+        justify-content: flex-end;
+      }
     }
     .page-header-date {
       display: none;
@@ -2910,15 +2971,6 @@
     @media (min-width: 40rem) {
       .page-header-date {
         display: inline;
-      }
-    }
-    @media (max-width: 39.99rem) {
-      .page-header-lead {
-        flex-basis: 9rem;
-      }
-      .page-header-end:has(.page-header-controls) {
-        flex: 1 1 100%;
-        justify-content: space-between;
       }
     }
 
@@ -3146,7 +3198,8 @@
       line-height: 1.1;
       letter-spacing: -0.01em;
       color: var(--ink);
-      overflow-wrap: anywhere;
+      /* Not "anywhere": that lets a squeezed header break "Schedule" mid-word. break-word only splits a word too long for the whole row. */
+      overflow-wrap: break-word;
     }
     @media (max-width: 40rem) {
       .page-title {
@@ -6178,7 +6231,7 @@
       }
     }
 
-    /* The page header's filters: Tradie, Property and Status beside the title. */
+    /* The page header's filters: Tradie, Property and Status, first among the header's controls. */
     .schedule-filters {
       display: flex;
       flex-wrap: wrap;
@@ -6192,13 +6245,9 @@
     .schedule-clear {
       font-size: 13px;
     }
-    /* Under 640px the filters take a row of their own under the title, so the title keeps its width. */
+    /* Under 640px the filters fill the controls row, each select an equal share. */
     @media (max-width: 39.99rem) {
-      .page-header-lead:has(.schedule-filters) {
-        flex-wrap: wrap;
-        flex-basis: 100%;
-      }
-      .page-header-lead:has(.schedule-filters) .schedule-filters {
+      .schedule-filters {
         flex: 1 1 100%;
       }
       .schedule-filter {
@@ -6783,7 +6832,9 @@
        least --slot tall and grow to fit what is on them, and the hours, days and lanes are
        subgrids of the one grid, so everything on a row lines up. The grid scrolls sideways
        inside its frame (a focusable region) and never the page. */
+    /* Positioned, so screen-reader text in a column scrolled out of view is clipped here rather than widening the page. */
     .schedule-scroll {
+      position: relative;
       min-width: 0;
       max-height: min(40rem, calc(100dvh - 16rem));
       overflow: auto;
@@ -7411,6 +7462,14 @@
       border-radius: 16px;
       background: var(--page);
     }
+    /* The map with its buttons. On a phone it is a block of its own and the panel opens under it; from 64rem the panel floats over it. */
+    .dispatch-stage {
+      position: relative;
+      height: 55vh;
+      min-height: 20rem;
+      max-height: 34rem;
+    }
+    /* From 64rem the card sets the height and the stage fills it. This comes after the rule above so it wins. */
     @media (min-width: 64rem) {
       .dispatch-mapcard {
         height: 43rem;
@@ -7425,13 +7484,6 @@
         min-height: 0;
         max-height: none;
       }
-    }
-    /* The map with its buttons. On a phone it is a block of its own and the panel opens under it; from 64rem the panel floats over it. */
-    .dispatch-stage {
-      position: relative;
-      height: 55vh;
-      min-height: 20rem;
-      max-height: 34rem;
     }
     .dispatch-mapcard .dispatch-map-section {
       position: absolute;
@@ -7825,46 +7877,29 @@
       font-weight: 600;
       color: var(--ink);
     }
-    /* From 1024px the search and filters stay on one line beside the title: the search takes what room is left. */
-    @media (min-width: 64rem) {
-      .page-header-end:has(.dispatch-controls),
-      .page-header-controls:has(.dispatch-controls),
-      .dispatch-controls {
-        flex-wrap: nowrap;
-      }
-      .page-header:has(.dispatch-controls) .page-header-lead {
-        flex: 0 0 auto;
-      }
-      .page-header-end:has(.dispatch-controls) {
-        flex: 1 1 0%;
-      }
-      .page-header-controls:has(.dispatch-controls) {
-        flex: 1 1 auto;
-        justify-content: flex-end;
-      }
-      .dispatch-controls {
-        flex: 1 1 auto;
-        justify-content: flex-end;
-        min-width: 0;
-      }
-      .dispatch-q {
-        flex: 1 1 8rem;
-        width: auto;
-        min-width: 7rem;
-        max-width: 20rem;
-      }
-      .dispatch-pick {
-        flex: none;
-      }
+    /* The search takes what room is left in the controls (up to 20rem); Region and Trade keep their size. */
+    .dispatch-controls {
+      flex: 1 1 auto;
+      flex-wrap: nowrap;
+      min-width: 0;
     }
-    /* Phones and tablets: the controls get their own row under the title. */
-    @media (max-width: 63.98rem) {
+    .dispatch-q {
+      flex: 1 1 8rem;
+      width: auto;
+      min-width: 7rem;
+      max-width: 20rem;
+    }
+    .dispatch-pick {
+      flex: none;
+    }
+    /* Phones: the search takes a line of its own above Region and Trade. */
+    @media (max-width: 39.99rem) {
       .dispatch-controls {
-        width: 100%;
+        flex-wrap: wrap;
       }
       .dispatch-q {
         flex: 1 1 100%;
-        width: auto;
+        max-width: none;
       }
     }
 
@@ -8163,7 +8198,7 @@
     }
     .page-back {
       display: inline-flex;
-      flex: 0 0 100%;
+      justify-self: start;
       align-items: center;
       gap: 2px;
       margin-bottom: 4px;

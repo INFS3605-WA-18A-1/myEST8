@@ -147,8 +147,8 @@ function pageHeader(
       <h1 class="page-title">${title}</h1>
       ${o.titleExtra ?? ''}
     </div>
+    ${o.controls ? html`<div class="page-header-controls">${o.controls}</div>` : ''}
     <div class="page-header-end">
-      ${o.controls ? html`<div class="page-header-controls">${o.controls}</div>` : ''}
       ${o.today ? html`<time class="page-header-date">${icon('calendar-blank', { size: 'size-4' })}${o.today}</time>` : ''}
       ${o.pm ? html`<a class="page-header-bell" href="/#alerts" aria-label="Alerts" title="Alerts">${icon('bell', { size: 'size-5' })}</a>${userMenu(o.pm.name)}` : ''}
     </div>
