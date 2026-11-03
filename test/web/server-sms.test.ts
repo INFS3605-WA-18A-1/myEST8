@@ -14,7 +14,7 @@ async function page(w: Web, path: string, cookie: string) {
 
 /** A server whose SMS phone is this one number. The pages read it from connectors, not the environment. */
 function withServerPhone() {
-  return webWorld({ connectors: { gmail: null, unavailable: [], smsInbound: 'none', smsPhone: PHONE } });
+  return webWorld({ connectors: { gmail: null, unavailable: [], smsInbound: 'none', smsPhone: PHONE, whatsappNumber: null } });
 }
 
 /** The unconnected offer: the phone's number, Connect SMS, and neither the code form nor the Twilio panel. */

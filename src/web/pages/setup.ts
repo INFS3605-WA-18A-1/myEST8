@@ -24,6 +24,8 @@ import { icon } from '../icons.ts';
 import { shellInfo } from '../shell.ts';
 import { importPages } from './import.ts';
 import { serverSmsPanel } from './server-sms.ts';
+import { serverWhatsappPanel, whatsappChip } from './server-whatsapp.ts';
+import { channelName, laterChannelList, LATER_CHANNELS_NOTE, WORKING_CHANNELS } from './channel-options.ts';
 import { smsNumberPanel, smsNumbersOffered } from './sms-number.ts';
 import { alert, button, emptyState, field, flashFrom, formatMoney, linkButton, page, section, table, type Flash, type Html } from '../ui.ts';
 import { addBuildingManagerPage, addOwnerPage, type AddPersonRefusal } from './owners.ts';
@@ -137,8 +139,11 @@ export function setupPages(o: { connectors?: ChannelConnectors } = {}) {
     );
   });
 
+  // Settings' Channels tab posts its SMS code forms here with ?from=settings, and comes back to itself.
+  const channelsHome = (c: Context<WebEnv>) => (c.req.query('from') === 'settings' ? '/settings?tab=channels' : '/setup?form=channels');
+
   pages.post('/channels', (c) =>
-    formAction(c, '/setup?form=channels', async (form) => {
+    formAction(c, channelsHome(c), async (form) => {
       const channel = channelOf(form);
       if (channel.type === 'email') return { ok: 'Forward the Agency inbox to the inbound address on this page.' };
       const address = text(form, 'address');
@@ -149,7 +154,7 @@ export function setupPages(o: { connectors?: ChannelConnectors } = {}) {
   );
 
   pages.post('/channels/confirm', (c) =>
-    formAction(c, '/setup?form=channels', async (form) => {
+    formAction(c, channelsHome(c), async (form) => {
       const channel = channelOf(form);
       const address = text(form, 'address');
       const code = text(form, 'code');
@@ -297,13 +302,14 @@ const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? on
  */
 function areasNav(agency: Agency, channels: AgencyChannel[], unavailable: readonly ChannelType[]): Html {
   const offered = CHANNELS.filter((ch) => !unavailable.includes(ch.type));
-  const connected = offered.filter((ch) => channels.some((c) => c.type === ch.type)).map((ch) => (ch.type === 'email' ? 'email' : ch.name));
+  const connected = WORKING_CHANNELS.filter((ch) => channels.some((c) => c.type === ch.key)).map((ch) => (ch.key === 'email' ? 'email' : ch.name));
+  const said = connected.length > 1 ? `${connected.slice(0, -1).join(', ')} and ${connected.at(-1)}` : (connected[0] ?? '');
   const people = [
     ...(agency.owners.length ? [count(agency.owners.length, 'Property Owner')] : []),
     ...(agency.buildingManagers.length ? [count(agency.buildingManagers.length, 'Building Manager')] : []),
   ];
   const state: Record<(typeof AREAS)[number][0], string | null> = {
-    channels: !offered.length ? 'Not available here' : connected.length ? `${connected.join(' and ').replace(/^./, (c) => c.toUpperCase())} connected` : null,
+    channels: !offered.length ? 'Not available here' : connected.length ? `${said.replace(/^./, (c) => c.toUpperCase())} connected` : null,
     people: people.length ? people.join(', ') : null,
     tradies: agency.tradies.length ? count(agency.tradies.length, 'Tradie') : null,
     properties: agency.properties.length ? count(agency.properties.length, 'Property', 'Properties') : null,
@@ -326,7 +332,7 @@ function areasNav(agency: Agency, channels: AgencyChannel[], unavailable: readon
 }
 
 /** A group inside an area: a surface with its own heading, an optional chip and its body. */
-function subsection(o: { title: string; id?: string; actions?: Html; body: Html }): Html {
+function subsection(o: { title: string | Html; id?: string; actions?: Html; body: Html }): Html {
   return html`<div class="section" ${o.id ? html`id="${o.id}"` : ''}>
     <div class="section-head">
       <h3 class="section-title">${o.title}</h3>
@@ -365,10 +371,27 @@ async function channelsArea(
 ): Promise<Html> {
   const gmailBlock = connectors.gmail ? await gmailControls(connectors.gmail, agencyId, 'setup') : null;
   return html`
-    <p class="text-sm">Tenants, Tradies and Property Owners reach the Agency by SMS and email. ${connectors.smsPhone ? "Connect the server's SMS phone." : smsPanel ? 'Set up the number Tenants will text.' : 'Verify a phone number with a code.'} Forward the Agency inbox to the email address below.</p>
+    <p class="text-sm">Tenants, Tradies and Property Owners reach the Agency by SMS, WhatsApp and email. ${connectors.smsPhone ? "Connect the server's SMS phone." : smsPanel ? 'Set up the number Tenants will text.' : 'Verify a phone number with a code.'} Forward the Agency inbox to the email address below.</p>
     ${shown.error}
-    <div class="mt-4 grid gap-4 ${smsPanel ? '' : 'md:grid-cols-2'}">
-      ${CHANNELS.map((channel) => channelCard(channel, connected.find((c) => c.type === channel.type), timeZone, origin, { gmailBlock, unavailable: connectors.unavailable, smsInbound: connectors.smsInbound, smsPanel }, email, pending.find((row) => row.channelType === channel.type)))}
+    <div class="mt-4 grid gap-4 ${smsPanel ? '' : 'md:grid-cols-2 xl:grid-cols-3'}">
+      ${WORKING_CHANNELS.map(({ key }) => {
+        if (key === 'whatsapp') {
+          const current = connected.find((c) => c.type === 'whatsapp');
+          return subsection({
+            id: 'whatsapp',
+            title: channelName('whatsapp'),
+            actions: whatsappChip(connectors.whatsappNumber, current),
+            body: serverWhatsappPanel({ from: 'setup', number: connectors.whatsappNumber, current: current?.address }),
+          });
+        }
+        const channel = CHANNELS.find((ch) => ch.type === key)!;
+        return channelCard(channel, connected.find((c) => c.type === channel.type), timeZone, origin, { gmailBlock, unavailable: connectors.unavailable, smsInbound: connectors.smsInbound, smsPanel }, email, pending.find((row) => row.channelType === channel.type));
+      })}
+    </div>
+    <div id="later-channels" class="channel-later-group">
+      <h3 class="channel-later-title">More channels</h3>
+      <p class="text-sm text-muted">${LATER_CHANNELS_NOTE}</p>
+      ${laterChannelList()}
     </div>
   `;
 }
@@ -387,11 +410,11 @@ function channelCard(
   const emailVerified = channel.type === 'email' && email.state === 'verified';
   const rowForm = 'grid items-end gap-3 sm:grid-cols-[minmax(0,1fr)_auto]';
   if (via.unavailable.includes(channel.type)) {
-    return subsection({ id: channel.type, title: channel.name, actions: unavailableChip(), body: html`<div class="mt-2">${unavailableNote(channel.type, via.unavailable)}</div>` });
+    return subsection({ id: channel.type, title: channelName(channel.type), actions: unavailableChip(), body: html`<div class="mt-2">${unavailableNote(channel.type, via.unavailable)}</div>` });
   }
   return subsection({
     id: channel.type,
-    title: channel.name,
+    title: channelName(channel.type),
     actions: channelChip(connected, { waiting, verified: emailVerified }),
     body: html`
       ${connected && !(channel.type === 'sms' && via.smsPanel) ? channelLine(connected, timeZone, { waiting, smsInbound: via.smsInbound }) : ''}
