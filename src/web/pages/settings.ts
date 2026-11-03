@@ -1,50 +1,63 @@
 // Settings: the Agency, its channels, its team and importing from a spreadsheet, in
-// side tabs. Each tab shows what is set today and links straight to the Setup section
-// whose form changes it. The rest of the Agency's settings (Quote and approval timings, messages) are
-// not editable yet.
+// side tabs. Everything that changes a setting happens here, under /settings: no
+// control sends the Property Manager to Setup, the welcome guide or another page.
+// Records (Properties, Tradies, Tenants, Property Owners) are not settings; they
+// live on Profiles.
+//
+//   GET  /settings[?tab=…]                  a tab: agency (the default), channels, team, import
+//   GET  /settings/agency/edit              the Agency tab with its details as a form
+//   POST /settings/agency                   save the Agency's name and time zone
+//   POST /settings/team                     add a colleague; shows their temporary password once
+//   GET  /settings/team/<id>/remove         who takes over their Properties, then remove
+//   POST /settings/team/<id>/remove         remove the colleague
+//   GET  /settings/import/<kind>            upload a spreadsheet of one kind
+//   …    /settings/import…, /imports…, /templates…   the upload, review and templates (import.ts)
 
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
-import { normalizeAddress } from '../../shared.ts';
+import { IMPORT_KINDS, type ImportKind } from '../../imports.ts';
+import { ActionError, normalizeAddress } from '../../shared.ts';
 import { NO_CONNECTORS, type ChannelConnectors } from '../connectors.ts';
 import type { WebEnv } from '../env.ts';
-import { shellInfo } from '../shell.ts';
-import type { ImportKind } from '../../imports.ts';
+import { text, type FormValues } from '../forms.ts';
 import { icon } from '../icons.ts';
-import { contactLink, dl, emptyState, flashFrom, formatWhen, linkButton, page, section, sideTabs, table, type Html } from '../ui.ts';
-import { IMPORT_NOUNS, templatePath } from './onboarding-forms.ts';
+import { shellInfo } from '../shell.ts';
+import {
+  button,
+  contactLink,
+  detailsForm,
+  dl,
+  emptyState,
+  field,
+  flashFrom,
+  formatWhen,
+  linkButton,
+  page,
+  section,
+  table,
+  withFlash,
+  type Flash,
+  type Html,
+} from '../ui.ts';
+import { importPages, settingsImportPath } from './import.ts';
+import { colleagueAdded, colleagueForm, fieldGrid, IMPORT_NOUNS, importPanel, templatePath, valueOf, valuesOf, type Errors, type Values } from './onboarding-forms.ts';
 import { serverSmsPanel } from './server-sms.ts';
+import { SETTINGS_TABS, settingsLayout, settingsTabHref, type SettingsTab } from './settings-shell.ts';
+import { TIME_ZONES } from './signup.ts';
 import { smsNumberPanel } from './sms-number.ts';
 
 type AgencyChannel = Awaited<ReturnType<PropertyManagerActions['channels']>>[number];
-
-const TABS = [
-  ['agency', 'Agency'],
-  ['channels', 'Channels'],
-  ['team', 'Team'],
-  ['import', 'Import'],
-] as const;
-type Tab = (typeof TABS)[number][0];
+type Agency = ReturnType<PropertyManagerActions['agency']>;
+type Colleague = Awaited<ReturnType<PropertyManagerActions['propertyManagers']>>[number];
 
 const CHANNEL_NAME: Record<AgencyChannel['type'], string> = { sms: 'SMS', whatsapp: 'WhatsApp', email: 'Email' };
 
-/**
- * The Agency's Properties and the people around them: where each list is (if it has a
- * page) and the Setup section that adds to it.
- */
-const SETUP_AREAS: { label: string; hint: string; list?: string; add: string; href: string }[] = [
-  { label: 'Properties', hint: 'Each with its Property Owner and Max Repair Cost.', list: '/properties', add: 'Add a Property', href: '/setup#properties' },
-  { label: 'Tradies', hint: 'Who you send Quote Requests and Work Orders to.', list: '/tradies', add: 'Add a Tradie', href: '/setup#tradies' },
-  { label: 'Tenants', hint: 'Each with their Property, contact details and Tickets.', list: '/tenants', add: 'Add a Tenant', href: '/setup#tenants' },
-  { label: 'Property Owners and Building Managers', hint: 'Listed on each Property’s page.', add: 'Add an Owner or Building Manager', href: '/setup#people' },
-];
-
-/** One line of a Settings list: what it is (linked when it has a page), a muted hint, and its actions at the end. */
-function settingsRow(o: { label: string; href?: string; hint?: string; actions: Html }): Html {
+/** One line of a Settings list: what it is, a muted hint, and its actions at the end. */
+function settingsRow(o: { label: string; hint?: string; actions: Html }): Html {
   return html`<li class="settings-row">
     <div class="settings-row-text">
-      ${o.href ? html`<a class="settings-row-label link" href="${o.href}">${o.label}</a>` : html`<span class="settings-row-label">${o.label}</span>`}
+      <span class="settings-row-label">${o.label}</span>
       ${o.hint ? html`<span class="settings-row-hint">${o.hint}</span>` : ''}
     </div>
     <div class="settings-row-actions">${o.actions}</div>
@@ -63,63 +76,156 @@ const IMPORTS: { kind: ImportKind; hint: string }[] = [
   { kind: 'tradies', hint: 'Business, Trades and a starting rating.' },
 ];
 
+const isKind = (value: string): value is ImportKind => (IMPORT_KINDS as readonly string[]).includes(value);
+
+/** A Settings page: the side tabs with `tab` current, and `body` beside them. */
+function settingsPage(c: Context<WebEnv>, tab: SettingsTab, body: Html, o: { flash?: Flash | null } = {}): Html {
+  return page({
+    title: 'Settings',
+    pm: c.var.pm,
+    active: 'settings',
+    shell: shellInfo(c),
+    flash: o.flash === undefined ? flashFrom(c.req.url) : o.flash,
+    body: settingsLayout(tab, body),
+  });
+}
+
 /** Settings under /settings. */
 export function settingsPages(o: { connectors?: ChannelConnectors } = {}) {
   const connectors = o.connectors ?? NO_CONNECTORS;
   const pages = new Hono<WebEnv>();
+
   pages.get('/', async (c) => {
-    const { actions, pm } = c.var;
-    const tab: Tab = TABS.find(([key]) => key === c.req.query('tab'))?.[0] ?? 'agency';
-    const { timeZone } = actions.agency();
+    const { actions } = c.var;
+    const tab: SettingsTab = SETTINGS_TABS.find(([key]) => key === c.req.query('tab'))?.[0] ?? 'agency';
     const body: Html =
       tab === 'channels'
-        ? await channelsTab(actions, timeZone, connectors)
+        ? await channelsTab(actions, actions.agency().timeZone, connectors)
         : tab === 'team'
-          ? teamTab(await actions.propertyManagers(), pm.id)
+          ? await teamTab(c, {})
           : tab === 'import'
             ? importTab()
             : agencyTab(actions.agency(), (await actions.propertyManagers()).length);
-    return c.html(
-      page({
-        title: 'Settings',
-        pm,
-        active: 'settings',
-        shell: shellInfo(c),
-        flash: flashFrom(c.req.url),
-        body: html`<div class="settings-layout">
-          ${sideTabs(TABS.map(([key, label]) => ({ label, href: key === 'agency' ? '/settings' : `/settings?tab=${key}`, active: key === tab })), 'Settings')}
-          <div class="settings-panel">${body}</div>
-        </div>`,
-      }),
-    );
+    return c.html(settingsPage(c, tab, body));
   });
+
+  // The Agency's details
+
+  pages.get('/agency/edit', (c) => c.html(settingsPage(c, 'agency', agencyForm(c.var.actions.agency(), {}))));
+  pages.post('/agency', async (c) => {
+    const form = (await c.req.parseBody({ all: true })) as FormValues;
+    try {
+      await c.var.actions.editAgency({ name: text(form, 'name'), timeZone: text(form, 'timeZone') });
+      return c.redirect(withFlash('/settings', 'ok', 'Agency details saved.'), 303);
+    } catch (error) {
+      if (!(error instanceof ActionError)) throw error;
+      return c.html(settingsPage(c, 'agency', agencyForm(c.var.actions.agency(), { values: valuesOf(form), errors: { ...error.fields } }), { flash: null }), 400);
+    }
+  });
+
+  // The team
+
+  pages.post('/team', async (c) => {
+    const form = (await c.req.parseBody({ all: true })) as FormValues;
+    const colleague = { name: text(form, 'name'), email: text(form, 'email') };
+    try {
+      const { temporaryPassword } = await c.var.actions.addColleague(colleague);
+      // The page shows a password: keep it out of every cache, and out of the address bar.
+      c.header('Cache-Control', 'no-store');
+      return c.html(settingsPage(c, 'team', await teamTab(c, { added: { ...colleague, temporaryPassword } }), { flash: null }));
+    } catch (error) {
+      if (!(error instanceof ActionError)) throw error;
+      const errors = Object.keys(error.fields).length ? { ...error.fields } : { email: error.message };
+      return c.html(settingsPage(c, 'team', await teamTab(c, { values: valuesOf(form), errors }), { flash: null }), 400);
+    }
+  });
+
+  pages.get('/team/:id/remove', async (c) => {
+    const shown = await removePage(c, {});
+    return shown ?? c.redirect(withFlash(settingsTabHref('team'), 'error', 'Property Manager not found'), 303);
+  });
+  pages.post('/team/:id/remove', async (c) => {
+    const form = (await c.req.parseBody({ all: true })) as FormValues;
+    const handTo = Number(text(form, 'handTo')) || null;
+    try {
+      const { name, moved } = await c.var.actions.removePropertyManager(Number(c.req.param('id')), { handTo });
+      const to = moved ? (await c.var.actions.propertyManagers()).find((m) => m.id === handTo)?.name : undefined;
+      const message = to ? `${name} removed. ${moved === 1 ? 'Their Property is' : `Their ${moved} Properties are`} now ${to}'s.` : `${name} removed.`;
+      return c.redirect(withFlash(settingsTabHref('team'), 'ok', message), 303);
+    } catch (error) {
+      if (!(error instanceof ActionError)) throw error;
+      if (error.fields.handTo) {
+        const shown = await removePage(c, { error: error.fields.handTo }, 400);
+        if (shown) return shown;
+      }
+      return c.redirect(withFlash(settingsTabHref('team'), 'error', error.message), 303);
+    }
+  });
+
+  // Importing from a spreadsheet: each kind's upload page, then import.ts's upload, review and templates.
+
+  pages.get('/import/:kind', (c) => {
+    const kind = c.req.param('kind');
+    if (!isKind(kind)) return c.notFound();
+    return c.html(settingsPage(c, 'import', importKindPanel(kind)));
+  });
+  pages.route('/', importPages({ home: 'settings' }));
+
   return pages;
 }
 
-function agencyTab(agency: { name: string; timeZone: string }, team: number): Html {
-  return html`${section({
+// Agency
+
+function timeZoneLabel(timeZone: string) {
+  return TIME_ZONES.find((z) => z.value === timeZone)?.label ?? timeZone;
+}
+
+function agencyTab(agency: Agency, team: number): Html {
+  return section({
     title: 'Agency',
+    actions: linkButton('Edit details', '/settings/agency/edit', { size: 'sm' }),
     body: html`${dl([
         ['Name', agency.name],
-        ['Time zone', agency.timeZone],
-        ['Property Managers', String(team)],
+        ['Time zone', timeZoneLabel(agency.timeZone)],
+        ['Property Managers', html`<a class="link" href="${settingsTabHref('team')}">${String(team)}<span class="sr-only"> Property Managers, see Team</span></a>`],
         ['Urgent Repair limit', '$1,000, set by NSW law'],
       ])}
       <p class="text-sm text-muted">Quote reminders, approval delays and message wording are not editable yet.</p>`,
-  })}${section({
-    title: 'Properties and people',
-    body: html`<ul class="settings-list" role="list">
-      ${SETUP_AREAS.map((area) => settingsRow({ label: area.label, href: area.list, hint: area.hint, actions: linkButton(area.add, area.href, { size: 'sm' }) }))}
-    </ul>`,
-  })}`;
+  });
 }
+
+/** The Agency tab with its details as a form, as posted when refused. */
+function agencyForm(agency: Agency, o: { values?: Values; errors?: Errors }): Html {
+  const zones = TIME_ZONES.some((z) => z.value === agency.timeZone) ? TIME_ZONES : [...TIME_ZONES, { value: agency.timeZone, label: agency.timeZone }];
+  return section({
+    title: 'Edit Agency details',
+    body: detailsForm({
+      action: '/settings/agency',
+      cancel: '/settings',
+      fields: fieldGrid(html`
+        ${field({ label: 'Agency name', name: 'name', id: 'agency-name', required: true, autocomplete: 'organization', value: o.values ? valueOf(o.values, 'name') : agency.name, error: o.errors?.name })}
+        ${field({
+          label: 'Time zone',
+          name: 'timeZone',
+          id: 'agency-time-zone',
+          type: 'select',
+          options: zones,
+          value: o.values ? valueOf(o.values, 'timeZone') : agency.timeZone,
+          hint: 'Visit times, reminders and the Schedule follow it.',
+          error: o.errors?.timeZone,
+        })}
+      `),
+    }),
+  });
+}
+
+// Channels
 
 async function channelsTab(actions: PropertyManagerActions, timeZone: string, connectors: ChannelConnectors): Promise<Html> {
   const channels = await actions.channels();
   const sms = await actions.smsNumber();
   const channelsSection = section({
     title: 'Channels',
-    actions: linkButton('Manage channels', '/setup#channels', { size: 'sm' }),
     body: channels.length
       ? table(
           ['Channel', 'Address', 'Last test message'],
@@ -135,7 +241,7 @@ async function channelsTab(actions: PropertyManagerActions, timeZone: string, co
           }),
           { caption: 'Channels', stack: 'labelled' },
         )
-      : emptyState('No channels connected. Connect SMS or email so Tenants can reach you.', linkButton('Connect a channel', '/setup#channels', { variant: 'primary', size: 'sm' })),
+      : emptyState('No channels connected yet. Tenants, Tradies and Property Owners reach you once one is.'),
   });
   const current = channels.find((ch) => ch.type === 'sms')?.address;
   // The server's phone replaces the Twilio panel. A typed number is not offered here either way.
@@ -146,17 +252,72 @@ async function channelsTab(actions: PropertyManagerActions, timeZone: string, co
   return html`${channelsSection}${section({ id: 'sms', title: 'SMS number', body: await smsNumberPanel(actions, { from: 'settings', current }) })}`;
 }
 
-function teamTab(team: Awaited<ReturnType<PropertyManagerActions['propertyManagers']>>, meId: number): Html {
-  return section({
-    title: 'Team',
-    actions: linkButton('Add a colleague', '/welcome/team', { size: 'sm' }),
-    body: table(
-      ['Name', 'Email'],
-      team.map((m) => [html`<span class="font-medium">${m.name}</span>${m.id === meId ? html` <span class="text-muted">(you)</span>` : ''}`, contactLink('email', m.email)]),
-      { caption: 'Property Managers in the Agency', stack: 'labelled' },
-    ),
-  });
+// Team
+
+async function teamTab(c: Context<WebEnv>, o: { added?: { name: string; email: string; temporaryPassword: string }; values?: Values; errors?: Errors }): Promise<Html> {
+  const { actions, pm } = c.var;
+  const team = await actions.propertyManagers();
+  const properties = await actions.properties();
+  const managed = (m: Colleague) => properties.filter((p) => p.propertyManagerId === m.id).length;
+  return html`${o.added ? colleagueAdded(o.added, { origin: new URL(c.req.url).origin, agencyName: actions.agency().name }) : ''}
+    ${section({
+      title: 'Team',
+      body: table(
+        ['Name', 'Email', 'Properties', ''],
+        team.map((m) => [
+          html`<span class="font-medium">${m.name}</span>${m.id === pm.id ? html` <span class="text-muted">(you)</span>` : ''}`,
+          contactLink('email', m.email),
+          html`<span class="num">${String(managed(m))}</span>`,
+          m.id === pm.id
+            ? html``
+            : html`<a class="btn btn-ghost btn-sm settings-remove" href="/settings/team/${m.id}/remove">Remove<span class="sr-only"> ${m.name}</span></a>`,
+        ]),
+        { caption: 'Property Managers in the Agency', stack: 'labelled' },
+      ),
+    })}
+    ${section({
+      id: 'add-colleague',
+      title: 'Add a colleague',
+      body: html`<p class="settings-intro">They get their own sign-in and see their own Properties first. Tenants, Tradies and Property Owners never need an account.</p>
+        ${colleagueForm({ action: '/settings/team', values: o.values, errors: o.errors })}`,
+    })}`;
 }
+
+/** Removing a colleague: what happens, and who takes over their Properties. Null when they aren't a colleague who can be removed. */
+async function removePage(c: Context<WebEnv>, o: { error?: string }, status: 200 | 400 = 200) {
+  const { actions, pm } = c.var;
+  const id = Number(c.req.param('id'));
+  const team = await actions.propertyManagers();
+  const colleague = team.find((m) => m.id === id);
+  if (!colleague || colleague.id === pm.id) return null;
+  const managed = (await actions.properties()).filter((p) => p.propertyManagerId === id).length;
+  const others = team.filter((m) => m.id !== id);
+  const body = section({
+    title: `Remove ${colleague.name}`,
+    body: html`<form method="post" action="/settings/team/${id}/remove" class="settings-remove-form">
+      <p>${colleague.name} will no longer be able to sign in to myEST8. Any spreadsheet they uploaded and haven't added yet is discarded. Their past work on Tickets stays.</p>
+      ${managed
+        ? html`<p>They look after ${managed === 1 ? 'one Property' : `${managed} Properties`}. Choose who takes ${managed === 1 ? 'it' : 'them'} over.</p>
+            <div class="settings-field">
+              ${field({
+                label: 'Hand their Properties to',
+                name: 'handTo',
+                id: 'hand-to',
+                type: 'select',
+                required: true,
+                options: others.map((m) => ({ value: String(m.id), label: m.id === pm.id ? `${m.name} (you)` : m.name })),
+                value: String(pm.id),
+                error: o.error,
+              })}
+            </div>`
+        : ''}
+      <div class="details-actions">${button(`Remove ${colleague.name}`, { variant: 'danger' })}${linkButton('Cancel', settingsTabHref('team'), { variant: 'ghost' })}</div>
+    </form>`,
+  });
+  return c.html(settingsPage(c, 'team', body, { flash: null }), status);
+}
+
+// Import
 
 function importTab(): Html {
   return section({
@@ -167,10 +328,22 @@ function importTab(): Html {
           settingsRow({
             label: IMPORT_NOUNS[kind].many,
             hint,
-            actions: html`<a class="link import-template" href="${templatePath(kind)}" download>${icon('download-simple', { size: 'size-4' })}<span>Template<span class="sr-only"> for ${IMPORT_NOUNS[kind].many}</span></span></a>
-              ${linkButton(`Import ${IMPORT_NOUNS[kind].many}`, `/setup#import-${kind}`, { size: 'sm' })}`,
+            actions: html`<a class="link import-template" href="${templatePath(kind, 'settings')}" download>${icon('download-simple', { size: 'size-4' })}<span>Template<span class="sr-only"> for ${IMPORT_NOUNS[kind].many}</span></span></a>
+              ${linkButton(`Import ${IMPORT_NOUNS[kind].many}`, settingsImportPath(kind), { size: 'sm' })}`,
           }),
         )}
       </ul>`,
   });
 }
+
+/** One kind's upload, in the Import tab. */
+function importKindPanel(kind: ImportKind): Html {
+  const { many } = IMPORT_NOUNS[kind];
+  const hint = IMPORTS.find((i) => i.kind === kind)?.hint;
+  return section({
+    title: `Import ${many}`,
+    actions: linkButton('Back to Import', settingsTabHref('import'), { variant: 'ghost', size: 'sm' }),
+    body: html`${hint ? html`<p class="settings-intro">${hint}</p>` : ''}${importPanel(kind, { from: 'settings' })}`,
+  });
+}
+

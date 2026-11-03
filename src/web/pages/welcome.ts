@@ -23,7 +23,6 @@ import type { WebEnv } from '../env.ts';
 import { gmailControls } from './oauth-google.ts';
 import { icon } from '../icons.ts';
 import { cents, text, type FormValues } from '../forms.ts';
-import { shareButton } from '../share.ts';
 import { shellInfo } from '../shell.ts';
 import {
   alert,
@@ -47,6 +46,8 @@ import {
   addTradieFrom,
   addTradieSection,
   CHANNELS,
+  colleagueAdded,
+  colleagueForm,
   channelBadge,
   channelGuide,
   channelLine,
@@ -298,32 +299,7 @@ async function teamStep(c: WizardContext, o: { added?: { name: string; email: st
         Add the other Property Managers at ${actions.agency().name}. Each gets their own sign-in and sees their own Properties first, and can cover for
         colleagues when needed. Tenants, Tradies and Property Owners never need an account.
       </p>
-      ${o.added
-        ? alert(
-            html`<p>Pass these on to ${o.added.name}. The password is shown only this once, so copy it now.</p>
-              <dl class="my-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
-                <dt>Sign in at</dt>
-                <dd class="break-all">${origin}/login</dd>
-                <dt>Email</dt>
-                <dd class="break-all">${o.added.email}</dd>
-                <dt>Temporary password</dt>
-                <dd><code class="rounded bg-page px-2 py-0.5 text-base font-semibold tracking-wider" data-temporary-password>${o.added.temporaryPassword}</code></dd>
-              </dl>`,
-            'success',
-            { title: `${o.added.name} added as a Property Manager` },
-          )
-        : ''}
-      ${o.added
-        ? shareButton({
-            title: `Send ${o.added.name} their sign-in link`,
-            label: `Send ${o.added.name} their sign-in link`,
-            // The temporary password never goes in a share: the link and the text end up in message histories.
-            text: `You're on myEST8 for ${actions.agency().name}. Sign in with ${o.added.email}. I'll give you your temporary password separately.`,
-            url: `${origin}/login`,
-            note: 'Give them the temporary password another way, in person or by phone.',
-            align: 'start',
-          })
-        : ''}
+      ${o.added ? colleagueAdded(o.added, { origin, agencyName: actions.agency().name }) : ''}
       ${table(
         ['Name', 'Email'],
         team.map((m) => [html`${m.name}${m.id === pm.id ? html` ${badge('You')}` : ''}`, html`${m.email}`]),
@@ -331,23 +307,7 @@ async function teamStep(c: WizardContext, o: { added?: { name: string; email: st
       )}
       ${card({
         title: 'Add a colleague',
-        body: html`<form method="post" action="/welcome/team" class="space-y-3">
-          ${fieldGrid(html`
-            ${field({ label: 'Name', name: 'name', id: 'colleague-name', required: true, autocomplete: 'off', value: valueOf(o.values, 'name'), error: o.errors?.name })}
-            ${field({
-              label: 'Work email',
-              name: 'email',
-              id: 'colleague-email',
-              type: 'email',
-              required: true,
-              autocomplete: 'off',
-              value: valueOf(o.values, 'email'),
-              hint: 'They sign in with this. myEST8 makes them a temporary password.',
-              error: o.errors?.email,
-            })}
-          `)}
-          <div>${button('Add colleague', { variant: team.length > 1 ? 'secondary' : 'primary' })}</div>
-        </form>`,
+        body: colleagueForm({ action: '/welcome/team', values: o.values, errors: o.errors, primary: team.length <= 1 }),
       })}
     `,
   });

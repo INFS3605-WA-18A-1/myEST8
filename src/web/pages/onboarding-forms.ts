@@ -13,6 +13,7 @@ import { ActionError, TRADES, type Trade } from '../../shared.ts';
 import type { WebEnv } from '../env.ts';
 import { int, list, optional, text, type FormValues } from '../forms.ts';
 import { icon } from '../icons.ts';
+import { shareButton } from '../share.ts';
 import { alert, badge, button, contactLink, dl, emptyState, field, formatWhen, humanise, ratingChip, rowLink, table, withFlash, type Html, type Option } from '../ui.ts';
 
 type Person = Awaited<ReturnType<PropertyManagerActions['people']>>[number];
@@ -685,6 +686,59 @@ export async function tradiesTable(actions: PropertyManagerActions, tradies: Per
   return table(['Business', 'Name', 'Trades', 'myEST8 rating', 'Google rating'], rows, { stack: 'labelled', caption: 'Tradies' });
 }
 
+// Adding a colleague (the guide's Your team step and Settings' Team tab)
+
+/** The name and work email of a colleague to add as a Property Manager, posted to `action`. */
+export function colleagueForm(o: { action: string; values?: Values; errors?: Errors; primary?: boolean }): Html {
+  return html`<form method="post" action="${o.action}" class="space-y-3">
+    ${fieldGrid(html`
+      ${field({ label: 'Name', name: 'name', id: 'colleague-name', required: true, autocomplete: 'off', value: valueOf(o.values, 'name'), error: o.errors?.name })}
+      ${field({
+        label: 'Work email',
+        name: 'email',
+        id: 'colleague-email',
+        type: 'email',
+        required: true,
+        autocomplete: 'off',
+        value: valueOf(o.values, 'email'),
+        hint: 'They sign in with this. myEST8 makes them a temporary password.',
+        error: o.errors?.email,
+      })}
+    `)}
+    <div>${button('Add colleague', { variant: o.primary ? 'primary' : 'secondary' })}</div>
+  </form>`;
+}
+
+/**
+ * The colleague just added, with their sign-in details and temporary password to pass on
+ * (shown only this once, so the page that shows it is never cached), and a share of the
+ * sign-in link that leaves the password out.
+ */
+export function colleagueAdded(added: { name: string; email: string; temporaryPassword: string }, o: { origin: string; agencyName: string }): Html {
+  return html`${alert(
+    html`<p>Pass these on to ${added.name}. The password is shown only this once, so copy it now.</p>
+      <dl class="my-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
+        <dt>Sign in at</dt>
+        <dd class="break-all">${o.origin}/login</dd>
+        <dt>Email</dt>
+        <dd class="break-all">${added.email}</dd>
+        <dt>Temporary password</dt>
+        <dd><code class="rounded bg-page px-2 py-0.5 text-base font-semibold tracking-wider" data-temporary-password>${added.temporaryPassword}</code></dd>
+      </dl>`,
+    'success',
+    { title: `${added.name} added as a Property Manager` },
+  )}
+  ${shareButton({
+    title: `Send ${added.name} their sign-in link`,
+    label: `Send ${added.name} their sign-in link`,
+    // The temporary password never goes in a share: the link and the text end up in message histories.
+    text: `You're on myEST8 for ${o.agencyName}. Sign in with ${added.email}. I'll give you your temporary password separately.`,
+    url: `${o.origin}/login`,
+    note: 'Give them the temporary password another way, in person or by phone.',
+    align: 'start',
+  })}`;
+}
+
 // Importing from a spreadsheet
 
 /** Each kind of import as the pages name it: one and many. */
@@ -696,11 +750,14 @@ export const IMPORT_NOUNS: Record<ImportKind, { one: string; many: string }> = {
   tenants: { one: 'Tenant', many: 'Tenants' },
 };
 
-/** Where the guide came from, so the review goes back there. */
-export type ImportFrom = 'setup' | 'welcome';
+/** Where the import started, so the review goes back there: Setup, the step-by-step guide, or Settings. */
+export type ImportFrom = 'setup' | 'welcome' | 'settings';
+
+/** Where the import routes are mounted for an import that started at `from`: Settings has its own, so it never leaves /settings. */
+export const importBase = (from: ImportFrom = 'setup') => (from === 'settings' ? '/settings' : '/setup');
 
 /** The template's address: a CSV with our headings and an example row. */
-export const templatePath = (kind: ImportKind) => `/setup/templates/${kind}.csv`;
+export const templatePath = (kind: ImportKind, from?: ImportFrom) => `${importBase(from)}/templates/${kind}.csv`;
 
 /**
  * Adding many records at once: download the template, then upload a filled-in
@@ -717,7 +774,7 @@ export function importPanel(kind: ImportKind, o: { from?: ImportFrom; error?: Ht
           missing. You check every row before anything is added.
         </p>`}
     ${o.error ?? ''}
-    <form method="post" action="/setup/import/${kind}${from === 'welcome' ? '?from=welcome' : ''}" enctype="multipart/form-data" class="import-upload">
+    <form method="post" action="${importBase(from)}/import/${kind}${from === 'welcome' ? '?from=welcome' : ''}" enctype="multipart/form-data" class="import-upload">
       ${field({
         label: `Spreadsheet of ${many}`,
         name: 'file',
@@ -729,7 +786,7 @@ export function importPanel(kind: ImportKind, o: { from?: ImportFrom; error?: Ht
       })}
       <div class="import-upload-actions">
         ${button('Upload and review', { size: 'sm', variant: o.compact ? 'secondary' : 'primary' })}
-        <a class="link import-template" href="${templatePath(kind)}" download>${icon('download-simple', { size: 'size-4' })}<span>Download template</span></a>
+        <a class="link import-template" href="${templatePath(kind, from)}" download>${icon('download-simple', { size: 'size-4' })}<span>Download template</span></a>
       </div>
     </form>
   </div>`;
