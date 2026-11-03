@@ -384,6 +384,42 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
       });
     },
 
+    /** Renames the Agency and changes its time zone. Refuses a blank name and an unknown time zone, each against its field. */
+    async editAgency(agencyId: number, input: { name: string; timeZone: string }): Promise<Agency> {
+      const problems: Record<string, string> = {};
+      if (!input.name.trim()) problems.name = "Enter your Agency's name";
+      if (!isTimeZone(input.timeZone)) problems.timeZone = 'Choose a time zone';
+      refuse(problems);
+      await run(db, 'UPDATE agencies SET name = ?, time_zone = ? WHERE id = ?', input.name.trim(), input.timeZone, agencyId);
+      return { id: agencyId, name: input.name.trim(), timeZone: input.timeZone };
+    },
+
+    /**
+     * Takes a colleague out of the Agency: they can no longer sign in, and their uploads
+     * waiting for review go. Their Properties move to `handTo`, another of the Agency's
+     * Property Managers, which is required while they manage any. Refuses removing
+     * yourself (`by`). Returns their name and how many Properties moved.
+     */
+    async removePropertyManager(agencyId: number, propertyManagerId: number, o: { by: number; handTo?: number | null }) {
+      return transaction(db, async () => {
+        const row = await one<{ name: string }>(db, 'SELECT name FROM property_managers WHERE id = ? AND agency_id = ?', propertyManagerId, agencyId);
+        if (!row) notFound('Property Manager');
+        if (propertyManagerId === o.by) invalid("You can't remove yourself. Ask a colleague to remove you.");
+        const managed = (await all<{ id: number }>(db, 'SELECT id FROM properties WHERE property_manager_id = ?', propertyManagerId)).length;
+        if (managed) {
+          const to = o.handTo
+            ? await one<{ id: number }>(db, 'SELECT id FROM property_managers WHERE id = ? AND agency_id = ? AND id <> ?', o.handTo, agencyId, propertyManagerId)
+            : null;
+          if (!to) invalid(`Choose who looks after ${row.name}'s Properties`, 'handTo');
+          await run(db, 'UPDATE properties SET property_manager_id = ? WHERE property_manager_id = ?', to.id, propertyManagerId);
+        }
+        await run(db, 'DELETE FROM imports WHERE property_manager_id = ?', propertyManagerId);
+        await run(db, 'DELETE FROM sessions WHERE property_manager_id = ?', propertyManagerId);
+        await run(db, 'DELETE FROM property_managers WHERE id = ?', propertyManagerId);
+        return { name: row.name, moved: managed };
+      });
+    },
+
     /** The Property Manager with this email and password, or null. */
     async verifyLogin(email: string, password: string): Promise<number | null> {
       const row = await one<{ id: number; password_hash: string | null }>(

@@ -267,6 +267,13 @@ export function createApp(
         },
         /** Adds a colleague as a Property Manager. Returns their id and a temporary password to pass on, shown once. */
         addColleague: (input: { name: string; email: string }) => profiles.addColleague(agencyId, input),
+        /** Renames the Agency and changes its time zone. Refuses field by field. Pages read the new values on the next request. */
+        editAgency: (input: { name: string; timeZone: string }) => profiles.editAgency(agencyId, input),
+        /**
+         * Takes a colleague out of the Agency, ending their sign-in. Their Properties move to `handTo`,
+         * required while they manage any (field `handTo`). Refuses removing yourself. Returns their name and how many Properties moved.
+         */
+        removePropertyManager: (id: number, o: { handTo?: number | null } = {}) => profiles.removePropertyManager(agencyId, id, { by: propertyManagerId, handTo: o.handTo }),
         /** Stores an address the caller has already proved: the demo seed, Gmail OAuth, or a confirmed code. */
         connectChannel: (channelType: ChannelType, address: string) => onboarding.connectChannel(agencyId, channelType, address),
         /** Connects the server's SMS phone as this Agency's SMS channel. The phone is already the server's, so no code is sent. */
