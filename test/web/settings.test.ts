@@ -13,16 +13,16 @@ import { visible, webWorld } from '../support/web.ts';
  *   A template is also under /settings, so it passes the path check on its own.
  * - Contact and share. A colleague's email (mailto) and the share panel's Email
  *   and SMS links open the person's own mail or messages app.
- * - Channel panels. `sms-number.ts` and `server-sms.ts` are owned on another branch
- *   and are not rewritten here. Their buttons post to /sms-number and /server-sms
- *   (and the release page is /sms-number/release). Those handlers redirect back to
- *   the Channels tab.
+ * - Channel panels. Connect and disconnect post to /sms-number, /server-sms and
+ *   /server-whatsapp (and the release page is /sms-number/release). A typed SMS
+ *   number is proved at /setup/channels, which comes back to the Channels tab
+ *   when the form says from=settings.
  */
 const OUTSIDE: { name: string; ok: (value: string) => boolean }[] = [
   { name: 'sign-out', ok: (value) => value === '/logout' },
   { name: 'external docs and help', ok: (value) => /^https?:\/\//i.test(value) },
   { name: 'contact and share', ok: (value) => /^(mailto:|tel:|sms:)/i.test(value) },
-  { name: 'channel panels', ok: (value) => value.startsWith('/sms-number') || value.startsWith('/server-sms') },
+  { name: 'channel panels', ok: (value) => value.startsWith('/sms-number') || value.startsWith('/server-sms') || value.startsWith('/server-whatsapp') || value.startsWith('/setup/channels') },
 ];
 
 /** href, action and formaction values in `html`. */
@@ -61,6 +61,8 @@ describe('Settings', () => {
     expect(visible(agency)).not.toContain('Add a Property');
 
     const channels = visible(await (await w.get('/settings?tab=channels', cookie)).text());
+    expect(channels).toContain('Connect WhatsApp');
+    expect(channels).toContain('Coming later');
     expect(channels).toContain('Not tested');
     expect(channels).not.toContain('Manage channels');
     expect(channels).not.toContain('Connect a channel');

@@ -289,6 +289,23 @@ export function createApp(
         },
         /** Forgets the Agency's SMS channel when it is still the server's phone. */
         disconnectServerSms: (number: string) => onboarding.disconnectChannel(agencyId, 'sms', number),
+        /**
+         * Connects the server's WhatsApp Cloud API number as this Agency's WhatsApp channel (ADR 0019).
+         * The number is the server's own, so no code is sent: a code sent to it would only come back
+         * to the server (Meta refuses it, error 131021). One Agency holds it at a time.
+         */
+        connectServerWhatsapp: async (number: string) => {
+          try {
+            await onboarding.connectChannel(agencyId, 'whatsapp', number, { verified: true });
+          } catch (error) {
+            if (error instanceof ActionError && error.message.endsWith('is connected to another Agency')) {
+              invalid("This server's WhatsApp number is connected to another Agency.");
+            }
+            throw error;
+          }
+        },
+        /** Forgets the Agency's WhatsApp channel when it is still the server's number. */
+        disconnectServerWhatsapp: (number: string) => onboarding.disconnectChannel(agencyId, 'whatsapp', number),
         /** Sends a 6-digit code. The typed address is not stored until confirmChannelVerification. */
         startChannelVerification: (channelType: ChannelType, address: string) => verification.start(agencyId, channelType, address),
         confirmChannelVerification: (channelType: ChannelType, address: string, code: string) => verification.confirm(agencyId, channelType, address, code),

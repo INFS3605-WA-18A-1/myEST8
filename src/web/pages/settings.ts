@@ -1,8 +1,8 @@
 // Settings: the Agency, its channels, its team and importing from a spreadsheet, in
 // side tabs. Everything that changes a setting happens here, under /settings: no
 // control sends the Property Manager to Setup, the welcome guide or another page.
-// Records (Properties, Tradies, Tenants, Property Owners) are not settings; they
-// live on Profiles.
+// Channels connect on the Channels tab. Records (Properties, Tradies, Tenants,
+// Property Owners) are not settings; they live on Profiles.
 //
 //   GET  /settings[?tab=…]                  a tab: agency (the default), channels, team, import
 //   GET  /settings/agency/edit              the Agency tab with its details as a form
@@ -26,7 +26,6 @@ import { shellInfo } from '../shell.ts';
 import {
   button,
   contactLink,
-  detailsForm,
   dl,
   emptyState,
   field,
@@ -40,9 +39,28 @@ import {
   type Flash,
   type Html,
 } from '../ui.ts';
+import { channelName, laterChannelList, LATER_CHANNELS_NOTE, WORKING_CHANNELS } from './channel-options.ts';
 import { importPages, settingsImportPath } from './import.ts';
-import { colleagueAdded, colleagueForm, fieldGrid, IMPORT_NOUNS, importPanel, templatePath, valueOf, valuesOf, type Errors, type Values } from './onboarding-forms.ts';
+import {
+  CHANNELS,
+  channelChip,
+  colleagueAdded,
+  colleagueForm,
+  fieldGrid,
+  IMPORT_NOUNS,
+  importPanel,
+  inboundEmailField,
+  phoneChannelForm,
+  templatePath,
+  unavailableChip,
+  unavailableNote,
+  valueOf,
+  valuesOf,
+  type Errors,
+  type Values,
+} from './onboarding-forms.ts';
 import { serverSmsPanel } from './server-sms.ts';
+import { serverWhatsappPanel, whatsappChip } from './server-whatsapp.ts';
 import { SETTINGS_TABS, settingsLayout, settingsTabHref, type SettingsTab } from './settings-shell.ts';
 import { TIME_ZONES } from './signup.ts';
 import { smsNumberPanel } from './sms-number.ts';
@@ -51,7 +69,7 @@ type AgencyChannel = Awaited<ReturnType<PropertyManagerActions['channels']>>[num
 type Agency = ReturnType<PropertyManagerActions['agency']>;
 type Colleague = Awaited<ReturnType<PropertyManagerActions['propertyManagers']>>[number];
 
-const CHANNEL_NAME: Record<AgencyChannel['type'], string> = { sms: 'SMS', whatsapp: 'WhatsApp', email: 'Email' };
+const CHANNEL_NAME = Object.fromEntries(WORKING_CHANNELS.map((ch) => [ch.key, ch.name])) as Record<AgencyChannel['type'], string>;
 
 /** One line of a Settings list: what it is, a muted hint, and its actions at the end. */
 function settingsRow(o: { label: string; hint?: string; actions: Html }): Html {
@@ -199,10 +217,8 @@ function agencyForm(agency: Agency, o: { values?: Values; errors?: Errors }): Ht
   const zones = TIME_ZONES.some((z) => z.value === agency.timeZone) ? TIME_ZONES : [...TIME_ZONES, { value: agency.timeZone, label: agency.timeZone }];
   return section({
     title: 'Edit Agency details',
-    body: detailsForm({
-      action: '/settings/agency',
-      cancel: '/settings',
-      fields: fieldGrid(html`
+    body: html`<form method="post" action="/settings/agency" class="details-form">
+      ${fieldGrid(html`
         ${field({ label: 'Agency name', name: 'name', id: 'agency-name', required: true, autocomplete: 'organization', value: o.values ? valueOf(o.values, 'name') : agency.name, error: o.errors?.name })}
         ${field({
           label: 'Time zone',
@@ -214,8 +230,9 @@ function agencyForm(agency: Agency, o: { values?: Values; errors?: Errors }): Ht
           hint: 'Visit times, reminders and the Schedule follow it.',
           error: o.errors?.timeZone,
         })}
-      `),
-    }),
+      `)}
+      <div class="details-actions">${button('Save')}${linkButton('Cancel', '/settings', { variant: 'ghost' })}</div>
+    </form>`,
   });
 }
 
@@ -230,9 +247,10 @@ async function channelsTab(actions: PropertyManagerActions, timeZone: string, co
       ? table(
           ['Channel', 'Address', 'Last test message'],
           channels.map((ch) => {
-            // A number myEST8 set up (Twilio, or the server's own phone) was proved when it was connected, so it has no test message.
+            // A number myEST8 set up (Twilio, or the server's own SMS phone or WhatsApp number) was proved when it was connected, so it has no test message.
             const viaTwilio = ch.type === 'sms' && sms?.number?.phoneNumber === ch.address;
-            const viaServer = ch.type === 'sms' && connectors.smsPhone !== null && normalizeAddress(connectors.smsPhone) === normalizeAddress(ch.address);
+            const server = ch.type === 'sms' ? connectors.smsPhone : ch.type === 'whatsapp' ? connectors.whatsappNumber : null;
+            const viaServer = server !== null && normalizeAddress(server) === normalizeAddress(ch.address);
             return [
               html`<span class="font-medium">${CHANNEL_NAME[ch.type]}</span>`,
               html`<span class="break-all">${ch.address}</span>${viaTwilio ? html` <span class="text-muted">${sms.number!.kind === 'created' ? 'Created by myEST8' : 'Your Twilio number'}</span>` : ''}`,
@@ -241,15 +259,56 @@ async function channelsTab(actions: PropertyManagerActions, timeZone: string, co
           }),
           { caption: 'Channels', stack: 'labelled' },
         )
-      : emptyState('No channels connected yet. Tenants, Tradies and Property Owners reach you once one is.'),
+      : emptyState('No channels connected yet. Connect one below so Tenants can reach you.'),
   });
-  const current = channels.find((ch) => ch.type === 'sms')?.address;
-  // The server's phone replaces the Twilio panel. A typed number is not offered here either way.
-  if (connectors.smsPhone) {
-    return html`${channelsSection}${section({ id: 'sms', title: 'SMS number', body: serverSmsPanel({ from: 'settings', number: connectors.smsPhone, current }) })}`;
-  }
-  if (!sms) return channelsSection;
-  return html`${channelsSection}${section({ id: 'sms', title: 'SMS number', body: await smsNumberPanel(actions, { from: 'settings', current }) })}`;
+  // Each channel connects in its own section here: nothing links out to Setup.
+  const panels = await Promise.all(
+    WORKING_CHANNELS.map(async ({ key }) => {
+      const current = channels.find((ch) => ch.type === key);
+      if (key === 'whatsapp') {
+        return section({
+          id: 'whatsapp',
+          title: channelName('whatsapp'),
+          actions: whatsappChip(connectors.whatsappNumber, current),
+          body: serverWhatsappPanel({ from: 'settings', number: connectors.whatsappNumber, current: current?.address }),
+        });
+      }
+      if (connectors.unavailable.includes(key)) {
+        return section({ id: key, title: channelName(key), actions: unavailableChip(), body: unavailableNote(key, connectors.unavailable) });
+      }
+      if (key === 'email') {
+        const email = await actions.ensureInboundEmail();
+        return section({
+          id: 'email',
+          title: channelName('email'),
+          actions: channelChip(current, { waiting: email.state === 'waiting', verified: email.state === 'verified' }),
+          body: html`<p class="text-sm">Forward the Agency inbox to this address. Mail sent there reaches myEST8.</p>
+            <div class="mt-3">${inboundEmailField(email.address)}</div>`,
+        });
+      }
+      // SMS: the server's phone, else the Twilio panel, else a typed number proved with a code.
+      const body = connectors.smsPhone
+        ? serverSmsPanel({ from: 'settings', number: connectors.smsPhone, current: current?.address })
+        : sms
+          ? await smsNumberPanel(actions, { from: 'settings', current: current?.address })
+          : phoneChannelForm({
+              channel: CHANNELS.find((ch) => ch.type === 'sms')!,
+              postTo: '/setup/channels?from=settings',
+              confirmTo: '/setup/channels/confirm?from=settings',
+              pending: (await actions.pendingChannelVerifications()).find((row) => row.channelType === 'sms'),
+              current: current?.address,
+              className: 'grid items-end gap-3 sm:grid-cols-[minmax(0,1fr)_auto]',
+            });
+      return section({ id: 'sms', title: channelName('sms'), actions: connectors.smsPhone || sms ? undefined : channelChip(current), body });
+    }),
+  );
+  // Quieter than the working channels: a muted heading and disabled tiles, not another section card.
+  const later = html`<div id="later-channels" class="channel-later-group">
+    <h2 class="channel-later-title">More channels</h2>
+    <p class="text-sm text-muted">${LATER_CHANNELS_NOTE}</p>
+    ${laterChannelList()}
+  </div>`;
+  return html`${channelsSection}${panels}${later}`;
 }
 
 // Team

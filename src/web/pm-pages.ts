@@ -13,6 +13,7 @@ import { reimbursementPages } from './pages/reimbursement.ts';
 import { requestPages } from './pages/requests.ts';
 import { settingsPages } from './pages/settings.ts';
 import { serverSmsPages } from './pages/server-sms.ts';
+import { serverWhatsappPages } from './pages/server-whatsapp.ts';
 import { smsNumberPages } from './pages/sms-number.ts';
 import { setupPages } from './pages/setup.ts';
 import { buildingManagerPages, ownerPages } from './pages/owners.ts';
@@ -48,6 +49,7 @@ export function pmPages(o: { demo: boolean; connectors: ChannelConnectors } = { 
   if (o.connectors.gmail) pages.route('/oauth/google', googleOAuthPages(o.connectors.gmail));
   pages.route('/sms-number', smsNumberPages());
   if (o.connectors.smsPhone) pages.route('/server-sms', serverSmsPages(o.connectors.smsPhone));
+  if (o.connectors.whatsappNumber) pages.route('/server-whatsapp', serverWhatsappPages(o.connectors.whatsappNumber));
   pages.route('/settings', settingsPages(o));
   pages.route('/requests', requestPages());
   pages.route('/', dashboardPages());
