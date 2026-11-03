@@ -7,8 +7,8 @@ import { signIn } from './support/actions.ts';
 // - External docs and help: https links, such as Twilio's console.
 // - Downloads: spreadsheet templates under /settings/templates, with the download attribute.
 // - Contact and share: mailto, tel and sms links open the person's own mail or messages app.
-// - Channel panels: /sms-number and /server-sms belong to sms-number.ts and server-sms.ts,
-//   which another branch owns. Their handlers redirect back to the Channels tab.
+// - Channel panels: connect and disconnect post to /sms-number, /server-sms and /server-whatsapp.
+//   A typed SMS number is proved at /setup/channels?from=settings. Each comes back to the Channels tab.
 
 const overflow = (page: Page) => page.evaluate<number>('document.documentElement.scrollWidth - document.documentElement.clientWidth');
 
@@ -18,7 +18,7 @@ function allowed(value: string, download: boolean): boolean {
   if (/^https?:\/\//i.test(value)) return true;
   if (/^(mailto:|tel:|sms:)/i.test(value)) return true;
   if (download && value.startsWith('/settings/templates/')) return true;
-  if (value.startsWith('/sms-number') || value.startsWith('/server-sms')) return true;
+  if (['/sms-number', '/server-sms', '/server-whatsapp', '/setup/channels'].some((path) => value.startsWith(path))) return true;
   return false;
 }
 
