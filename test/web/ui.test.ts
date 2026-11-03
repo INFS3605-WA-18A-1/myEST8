@@ -1,6 +1,6 @@
 import { html } from 'hono/html';
 import { describe, expect, it } from 'vitest';
-import { assetRoutes } from '../../src/web/assets.ts';
+import { assetRoutes, assetUrl } from '../../src/web/assets.ts';
 import { shellInfo } from '../../src/web/shell.ts';
 import {
   alert,
@@ -14,6 +14,7 @@ import {
   formatAge,
   flashMessage,
   formatWhen,
+  head,
   jobStageLabel,
   linkButton,
   logo,
@@ -51,6 +52,25 @@ describe('assets', () => {
 
     expect((await assets.request('/assets/app.css')).headers.get('content-type')).toMatch(/^text\/css/);
     expect((await assets.request('/assets/app.js')).headers.get('content-type')).toMatch(/^text\/javascript/);
+  });
+
+  it('links the stylesheets and script at a content hash, kept a year by browsers and the CDN', async () => {
+    const page = await render(head('Test', { css: ['landing.css'] }));
+    for (const name of ['daisyui.css', 'app.css', 'landing.css', 'tw.css', 'app.js']) expect(page).toContain(`"${assetUrl(name)}"`);
+    expect(assetUrl('app.css')).toMatch(/^\/assets\/app\.css\?v=[0-9a-f]{10}$/);
+    const fresh = await assets.request(assetUrl('app.css'));
+    expect(fresh.headers.get('cache-control')).toBe('public, max-age=31536000, s-maxage=31536000, immutable');
+    const stale = await assets.request('/assets/app.css?v=0000000000');
+    expect(stale.headers.get('cache-control')).toBe('public, max-age=3600');
+  });
+
+  it('prefetches same-origin pages on hover, never files, downloads or the OAuth hand-off', async () => {
+    const page = await render(head('Test'));
+    const rules = JSON.parse(page.match(/<script type="speculationrules">(.*?)<\/script>/s)![1]!);
+    const [rule] = rules.prefetch;
+    expect(rule.eagerness).toBe('moderate');
+    expect(JSON.stringify(rule.where)).toContain('/oauth/*');
+    expect(JSON.stringify(rule.where)).toContain('[download]');
   });
 
   it('serves the favicon as SVG: the key tag in Night, Wattle in dark mode', async () => {
