@@ -1,6 +1,6 @@
 # Landing page says only what the app does
 
-Status: needs-triage
+Status: done
 Priority: P3
 DesignDoc: —
 
@@ -10,6 +10,6 @@ The landing page claims owners approve 'with a reply or a link' (`src/web/pages/
 
 ## Acceptance criteria
 
-- [ ] Remove the link claim.
-- [ ] Use the real questions and the upload link in the demo thread.
-- [ ] The animation is paused by default without JS, or has a CSS-only pause.
+- [x] Remove the link claim. Property Owners approve by replying YES or NO.
+- [x] Use the real questions and the upload link in the demo thread (the words `templates.ts` sends).
+- [x] Nothing loops any more: the workflow animation and its Pause button are gone, replaced by entrances that run once.

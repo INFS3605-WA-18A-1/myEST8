@@ -1,6 +1,6 @@
 // The design system's static files, served from this server so the demo works
 // offline: the prebuilt Tailwind utilities (static/tw.css, from `npm run css`), daisyUI and MapLibre GL JS (the Dispatch map) from
-// node_modules, the app's own CSS, JS and favicon from ./static, and the
+// node_modules, the app's own CSS, JS, favicon and landing photographs from ./static, and the
 // self-hosted Bricolage Grotesque and Public Sans variable fonts. Each file is read once, on first request.
 
 import { readFileSync } from 'node:fs';
@@ -14,6 +14,7 @@ const JS = 'text/javascript; charset=utf-8';
 const CSS = 'text/css; charset=utf-8';
 const WOFF2 = 'font/woff2';
 const SVG = 'image/svg+xml';
+const JPEG = 'image/jpeg';
 
 /** MapLibre GL JS's built files, in its package's dist/ folder. It is published as ES modules only. */
 const maplibre = (name: string) => join(dirname(require.resolve('maplibre-gl/package.json')), 'dist', name);
@@ -32,6 +33,18 @@ const ASSETS: Record<string, { file: () => string; type: string }> = {
   'maplibre-gl.css': { file: () => maplibre('maplibre-gl.css'), type: CSS },
   'dispatch-map.js': { file: () => fileURLToPath(new URL('./static/dispatch-map.js', import.meta.url)), type: JS },
   'favicon.svg': { file: () => fileURLToPath(new URL('./static/favicon.svg', import.meta.url)), type: SVG },
+  // The landing page's photographs, found in Wikimedia Commons and credited in its footer (pages/landing.ts).
+  ...Object.fromEntries(
+    [
+      'newtown-terraces.jpg',
+      'dripping-tap.jpg',
+      'plumber-under-sink.jpg',
+      'plumber-wrenches.jpg',
+      'wattle-street.jpg',
+      'king-street.jpg',
+      'ultimo-terrace.jpg',
+    ].map((name) => [`landing-${name}`, { file: () => fileURLToPath(new URL(`./static/landing/${name}`, import.meta.url)), type: JPEG }]),
+  ),
 };
 
 /** The fonts the design uses, by package and file name. Only these are served under /assets/fonts/. */
