@@ -366,21 +366,32 @@ try {
 })();
 
 // === landing ===
-// The landing page's workflow loops, so it gets a pause button (WCAG 2.2.2). The
-// button is hidden in the markup and only shown here, where it can work; with
-// less motion asked for there is nothing moving, so it stays hidden.
+// The landing page's sections rise into view as they reach the screen, their parts
+// in reading order. landing.css only hides [data-rise] when this file has run
+// (html.js), and anyone who asks for less motion sees them in place.
 (() => {
-  const flow = document.querySelector('[data-flow]');
-  const pause = flow?.querySelector('[data-flow-pause]');
-  if (!flow || !pause) return;
-  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  const label = pause.querySelector('[data-flow-pause-label]');
-  pause.hidden = false;
-  pause.addEventListener('click', () => {
-    const paused = !flow.hasAttribute('data-paused');
-    flow.toggleAttribute('data-paused', paused);
-    if (label) label.textContent = paused ? 'Play' : 'Pause';
-  });
+  const parts = [...document.querySelectorAll('.lp [data-rise]')];
+  if (!parts.length) return;
+  const show = (el) => el.classList.add('is-in');
+  if (!('IntersectionObserver' in window) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    parts.forEach(show);
+    return;
+  }
+  // Number each part within its section, so the parts of one section stagger.
+  for (const section of new Set(parts.map((el) => el.closest('section, aside') ?? document.body))) {
+    parts.filter((el) => (el.closest('section, aside') ?? document.body) === section).forEach((el, i) => el.style.setProperty('--rise-i', String(i)));
+  }
+  const seen = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        show(entry.target);
+        seen.unobserve(entry.target);
+      }
+    },
+    { rootMargin: '0px 0px -10% 0px' },
+  );
+  parts.forEach((el) => seen.observe(el));
 })();
 
 // === import ===
