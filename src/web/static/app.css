@@ -2871,7 +2871,7 @@
        page's controls sit between them when they fit, else on a row of their own underneath,
        so the title never wraps and the user menu never drops onto a line by itself.
        A Mine/All switch alone fits beside the title from 40rem of content width; controls
-       with a search or a select (Dispatch, Profiles, Schedule) need 68rem. */
+       with a search or a select (Dispatch, Profiles, Schedule) need 62rem. */
     .app-content {
       container: content / inline-size;
     }
@@ -2944,7 +2944,7 @@
         justify-content: flex-end;
       }
     }
-    @container content (min-width: 68rem) {
+    @container content (min-width: 62rem) {
       .page-header:has(.page-header-controls) {
         grid-template-columns: auto minmax(0, 1fr) auto;
         grid-template-areas:
@@ -6241,6 +6241,22 @@
     .schedule-filter .select {
       min-width: 7.5rem;
       border-radius: 999px;
+    }
+    /* Beside the title the three filters stay on one line, 7rem each and shrinking to 5.5rem, so they fit between "Schedule" and the date. */
+    @container content (min-width: 62rem) {
+      .schedule-filters {
+        flex: 0 1 auto;
+        flex-wrap: nowrap;
+        min-width: 0;
+      }
+      .schedule-filter {
+        flex: 0 1 7rem;
+        min-width: 5.5rem;
+      }
+      .schedule-filter .select {
+        width: 100%;
+        min-width: 0;
+      }
     }
     .schedule-clear {
       font-size: 13px;
