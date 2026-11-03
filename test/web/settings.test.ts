@@ -13,8 +13,10 @@ describe('Settings', () => {
     expect(visible(agency)).toContain('Add a Property');
 
     const channels = visible(await (await w.get('/settings?tab=channels', cookie)).text());
-    expect(channels).toContain('Manage channels');
+    expect(channels).toContain('Connect WhatsApp');
+    expect(channels).toContain('Coming later');
     expect(channels).toContain('Not tested');
+    expect(channels).not.toContain('Manage channels');
 
     const team = visible(await (await w.get('/settings?tab=team', cookie)).text());
     expect(team).toContain('Alice Archer');

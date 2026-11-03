@@ -5265,6 +5265,84 @@
       gap: 8px 16px;
     }
 
+    /* ----- Channels (pages/channel-options.ts): the welcome wizard's Channels step, Setup
+       and Settings. A channel's heading carries its Phosphor icon. The later channels
+       (Messenger, Telegram, WeChat, LINE) are disabled buttons, drawn like a disabled
+       .btn (Sand fill, hairline, Slate text) so they read as not yet, and sit after the
+       working ones. A disabled control is not a link; the badge says why in words. */
+    .channel-name {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .channel-later-group {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid var(--line);
+    }
+    /* In Settings the panel already separates the cards, so the group doesn't draw a second line. */
+    .settings-panel > .channel-later-group {
+      margin-top: 0;
+      padding-top: 0;
+      border-top: 0;
+    }
+    .channel-later-group > .text-sm {
+      margin-top: 4px;
+    }
+    .channel-later-title {
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 16px;
+      font-weight: 600;
+      line-height: 1.25;
+      color: var(--muted);
+    }
+    /* Four equal tiles where they fit, two by two on a phone. */
+    .channel-later-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(9rem, 100%), 1fr));
+      gap: 8px;
+      margin: 8px 0 0;
+      padding: 0;
+      min-width: 0;
+      list-style: none;
+    }
+    .channel-later {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: center;
+      gap: 4px 8px;
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
+      min-height: 44px;
+      padding: 8px 12px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: var(--page);
+      color: var(--muted);
+      font: inherit;
+      font-size: 14px;
+      font-weight: 500;
+      text-align: left;
+      cursor: not-allowed;
+    }
+    .channel-later:focus-visible {
+      outline: 2px solid var(--action);
+      outline-offset: 2px;
+    }
+    .channel-later-name {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+    .channel-later .badge {
+      grid-column: 2;
+      justify-self: start;
+      border: 1px solid var(--line);
+      background: var(--surface);
+      color: var(--muted);
+    }
+
     /* A Tradie's profile (pages/tradie.ts): the Trades and contact details beside the
        four ratings (myEST8, Property Managers', Tenants', Google) from 1024px. */
     .tradie-head {

@@ -63,13 +63,16 @@ At [developers.facebook.com](https://developers.facebook.com):
    META_WHATSAPP_NUMBER=+15550000000
    ```
 
-   `META_WHATSAPP_PHONE_NUMBER_ID` and `META_WHATSAPP_ACCESS_TOKEN` are both set, or neither: a half pair refuses to start. `META_APP_SECRET` and `META_WEBHOOK_VERIFY_TOKEN` are both set or the webhook route is off (a half pair does not throw; the route is absent). `META_WHATSAPP_NUMBER` is the E.164 number shown on the channels page.
+   `META_WHATSAPP_PHONE_NUMBER_ID` and `META_WHATSAPP_ACCESS_TOKEN` are both set, or neither: a half pair refuses to start. `META_APP_SECRET` and `META_WEBHOOK_VERIFY_TOKEN` are both set or the webhook route is off (a half pair does not throw; the route is absent).    `META_WHATSAPP_NUMBER` is the E.164 number shown on the channels page.
+
+On the welcome wizard's Channels step, on Setup, and in Settings → Channels, **Connect WhatsApp** gives that number to the Agency. There is no code: the number is the server's, and a code sent to it would only come back to the server (Meta refuses that, error 131021). **Disconnect** unlinks it from the Agency. The number stays the server's. With these variables unset, Connect WhatsApp stays on those same pages, disabled, with one line that WhatsApp isn't set up on this server yet.
 
 Limits:
 
-- Tenants must message first. myEST8 can reply freely for 24 hours after their last message; after that WhatsApp allows only approved templates, so myEST8 uses SMS or email instead.
-- One WhatsApp number belongs to one Agency. The first Agency to press Connect WhatsApp gets it. A number for every Agency (Embedded Signup) is not built.
+- Tenants must message first. myEST8 can reply freely for 24 hours after their last message; after that WhatsApp allows only approved templates, so myEST8 uses SMS or email instead. The channels pages say so in one line.
+- One WhatsApp number belongs to one Agency. The first Agency to press Connect WhatsApp gets it. A second Agency is told the number is connected to another Agency. A number for every Agency (Embedded Signup) is not built.
 - A Meta app in Development mode may not receive some webhooks.
+- Messenger, Telegram, WeChat and LINE are shown on those same pages, disabled, with "Coming later". They have no form and no setup.
 
 ## 3. SMS (simulated, or textbee)
 
@@ -129,7 +132,7 @@ Redirect URI, if you ever turn it on: `https://myest8.yourdomain.com/oauth/googl
 ## Checking it works
 
 1. Restart: `systemctl --user restart myest8`, then `journalctl --user -u myest8 -n 20`. A half-set group (for example only `GOOGLE_CLIENT_ID`, or only `META_WHATSAPP_ACCESS_TOKEN`) refuses to start and names what is missing. Mocked APIs do the same unless `ALLOW_MOCKS=1`.
-2. Sign up a new Agency. Leave `GOOGLE_CLIENT_ID` unset so email stays off the dormant Gmail button. WhatsApp is paused: the setup pages offer SMS and email only, and the WhatsApp backend below stays dormant. With the four `TEXTBEE_*` variables set, the Channels step offers **Connect SMS**. Press it, text the phone's number, and the message reaches the Agency. Replies come from that phone. Without textbee, SMS is an address you type. Twilio's **Create a new number** and **Register a Twilio number** appear only when textbee is unset and `TOKEN_ENCRYPTION_KEY` plus the Twilio pair are set.
+2. Sign up a new Agency. Leave `GOOGLE_CLIENT_ID` unset so email stays off the dormant Gmail button. With the `META_WHATSAPP_*` values from section 2 set, the Channels step offers **Connect WhatsApp**. Press it. The page shows the server's number. Ask someone to message that number. A reply inside 24 hours is free-form text; after that myEST8 uses SMS or email. **Disconnect** unlinks the number. Without those variables, Connect WhatsApp is on the page and disabled. With the four `TEXTBEE_*` variables set, the Channels step offers **Connect SMS**. Press it, text the phone's number, and the message reaches the Agency. Replies come from that phone. Without textbee, SMS is an address you type. Twilio's **Create a new number** and **Register a Twilio number** appear only when textbee is unset and `TOKEN_ENCRYPTION_KEY` plus the Twilio pair are set.
 3. Send mail to an address on `RESEND_INBOUND_DOMAIN`, or forward a message there. Resend posts `email.received` to `/webhooks/resend`; the event has no body, and myEST8 fetches it.
-4. WhatsApp (paused; only if it is turned back on): **Send a test message** to a phone on the test number's allowed list (WhatsApp, API Setup). The text is `This is a test message from <Agency name> on myEST8. This channel is working.` Meta delivers that free-form text only within 24 hours of that phone's last message to the test number. A later failure is a warning in the log, `WhatsApp message to … failed`, so the webhook has to be subscribed to **messages** (delivery statuses come on that field too): `journalctl --user -u myest8 | grep "WhatsApp message to"`.
-5. WhatsApp (paused): message the test number from an allowed phone. The message reaches the Agency, and a reply inside 24 hours is free-form text.
+4. WhatsApp: **Send a test message** to a phone on the test number's allowed list (WhatsApp, API Setup). The text is `This is a test message from <Agency name> on myEST8. This channel is working.` Meta delivers that free-form text only within 24 hours of that phone's last message to the test number. A later failure is a warning in the log, `WhatsApp message to … failed`, so the webhook has to be subscribed to **messages** (delivery statuses come on that field too): `journalctl --user -u myest8 | grep "WhatsApp message to"`.
+5. WhatsApp: message the test number from an allowed phone. The message reaches the Agency, and a reply inside 24 hours is free-form text.

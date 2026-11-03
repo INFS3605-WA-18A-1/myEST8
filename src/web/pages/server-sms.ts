@@ -18,11 +18,17 @@ const originOf = (value: unknown): Origin => (value === 'welcome' || value === '
 const backTo = (from: Origin) => (from === 'welcome' ? '/welcome/channels?channel=sms' : from === 'settings' ? '/settings?tab=channels' : '/setup?form=channels');
 const anchor = '#sms';
 
-/** "+61412345678" as "+61 412 345 678". Any other number is shown as stored. */
-function spokenSmsNumber(number: string): string {
+/**
+ * A server number as people read it: "+61412345678" as "+61 412 345 678", and a North
+ * American one (Meta's WhatsApp test numbers) "+15551234567" as "+1 555 123 4567".
+ * Any other number is shown as stored.
+ */
+export function spokenNumber(number: string): string {
   const e164 = normalizeAddress(number);
-  const match = /^\+61(\d{3})(\d{3})(\d{3})$/.exec(e164);
-  return match ? `+61 ${match[1]} ${match[2]} ${match[3]}` : e164;
+  const au = /^\+61(\d{3})(\d{3})(\d{3})$/.exec(e164);
+  if (au) return `+61 ${au[1]} ${au[2]} ${au[3]}`;
+  const nanp = /^\+1(\d{3})(\d{3})(\d{4})$/.exec(e164);
+  return nanp ? `+1 ${nanp[1]} ${nanp[2]} ${nanp[3]}` : e164;
 }
 
 /** True when the Agency's SMS channel is already this server's phone. */
@@ -35,7 +41,7 @@ function holds(current: string | undefined, number: string): boolean {
  * `current` is the Agency's SMS address on file, if it has one.
  */
 export function serverSmsPanel(o: { from: Origin; number: string; current?: string | undefined }): Html {
-  const shown = spokenSmsNumber(o.number);
+  const shown = spokenNumber(o.number);
   if (holds(o.current, o.number)) {
     return html`<div data-server-sms="connected">
       <p class="text-sm"><strong class="break-all">${shown}</strong> is the Agency's SMS number. Tenants text it, and myEST8 replies from it.</p>
@@ -73,7 +79,7 @@ export function serverSmsPages(number: string) {
   pages.post('/connect', (c) =>
     act(c, async (actions) => {
       await actions.connectServerSms(number);
-      return `${spokenSmsNumber(number)} is now the Agency's SMS number. Tenants can text it.`;
+      return `${spokenNumber(number)} is now the Agency's SMS number. Tenants can text it.`;
     }),
   );
 

@@ -436,6 +436,30 @@ The **Follow up with <first name>** panel is a `section` (`#follow-up`) on the M
 - A second Agency is told "This server's SMS number is connected to another Agency."
 - Results come back as the page's flash, and the page returns to the anchor `#sms`.
 
+### Server WhatsApp number
+
+`serverWhatsappPanel({ from, number, current })` in `src/web/pages/server-whatsapp.ts` is the one component for the server's WhatsApp number (Meta's Cloud API, ADR 0019). The welcome wizard's Channels step, the Setup page and Settings all render it, so the three can't drift. The pages don't read the environment. `number` is null when `META_WHATSAPP_*` is not set; the row stays on the page.
+
+- **Not set up** (`number` is null): **Connect WhatsApp** is a disabled secondary small button (`disabled`, not a link). One muted line says "WhatsApp isn't set up on this server yet, so it can't be connected." The 24-hour hint is under it. The chip is "Not available here".
+- **Not connected:** "Tenants message +1 555 123 4567 on WhatsApp. This is the server's WhatsApp number." The number is bold. **Connect WhatsApp** is a primary small button. There is no code: the number is the server's. A code sent to it would only reach the server.
+- **Connected** (`current` is that number): the number in bold, one line that it is the Agency's WhatsApp number, and **Disconnect**, a secondary small button. Disconnect posts straight away. There is no confirmation page, because the number stays the server's. The chip is "Connected".
+- **The hint**, on every state: "Tenants message first; replies are free for 24 hours, then myEST8 uses SMS or email."
+- A second Agency is told "This server's WhatsApp number is connected to another Agency."
+- Results come back as the page's flash, and the page returns to the anchor `#whatsapp`. The panel does not link to another page.
+
+### Later channels
+
+`laterChannelList()` in `src/web/pages/channel-options.ts` is the one list of Messenger, Telegram, WeChat and LINE. The welcome wizard, Setup and Settings all render it under "More channels", after SMS, WhatsApp and email. `CHANNEL_OPTIONS` is the only list, so the three pages can't drift.
+
+- Each is a disabled `<button>` (`disabled` and `aria-disabled="true"`), not a link and not a form. The name is the channel, with its Phosphor icon (`messenger-logo`, `telegram-logo`, `wechat-logo`; LINE uses `chat-circle-dots` because Phosphor has no LINE logo). A neutral badge says "Coming later".
+- Quieter than the working channels: Sand fill, a hairline, Slate text, a muted heading. No hover that looks clickable.
+- One line above the tiles: "These can't be connected yet."
+- Nothing is stored and no route answers for them.
+
+### Channel headings
+
+SMS, WhatsApp and email headings use `channelName()` from the same list: the Phosphor icon (`chat-text`, `whatsapp-logo`, `envelope-simple`) then the name, in the heading colour. The later channels do not use that heading.
+
 ### Importing from a spreadsheet
 
 Each setup step that creates many records (Property Owners, Building Managers, Tradies, Properties, Tenants) has "Add many from a spreadsheet" on `/setup`, folded like the "Add" forms, and the guide's Tradies and Properties steps have the same uploads (`importPanel()` in `onboarding-forms.ts`). The guide lists them in the order they must happen: Property Owners, then Properties, then Tenants.

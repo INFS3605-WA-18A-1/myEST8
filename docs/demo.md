@@ -270,11 +270,12 @@ Manual checklist with real providers:
    - Create an OAuth client (Web application) with the redirect URI `https://<hostname>/oauth/google/callback`.
    - Keep the consent screen in Testing, and add each Gmail account that will connect as a test user.
    - Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `TOKEN_ENCRYPTION_KEY`.
-4. **WhatsApp (paused).** Not offered in the app for now; skip this step.
+4. **WhatsApp.** One number for the server. See [channels-setup.md](channels-setup.md).
    - In Meta for Developers, create an app with WhatsApp.
    - On API Setup, note the test number and its Phone number ID, and add your phone as a recipient.
-   - Set the four `META_*` values.
+   - Set `META_WHATSAPP_ACCESS_TOKEN`, `META_WHATSAPP_PHONE_NUMBER_ID`, `META_WHATSAPP_NUMBER`, `META_APP_SECRET` and `META_WEBHOOK_VERIFY_TOKEN`.
    - Add the webhook `https://<hostname>/webhooks/whatsapp` with your verify token, and subscribe to `messages`.
+   - Sign in and press **Connect WhatsApp**. Without those variables the button stays on the page, disabled.
 5. **Classifier.** Set `JEV_API_URL` and `JEV_API_KEY`. Anything else left on a mock needs `ALLOW_MOCKS=1`.
 6. **Start.** Export the variables, run `npm start`, then sign up at the public address. On the channels step, connect Gmail, then send a test message.
 

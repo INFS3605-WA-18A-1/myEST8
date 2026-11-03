@@ -46,7 +46,7 @@ function propertyFields(changes: Fields = {}): Fields {
 const TRADIE: Fields = { businessName: 'Sunny Plumbing', name: 'Sunny Sun', mobile: '0400 000 997', email: '', trades: ['plumbing'], startingRating: 4, placeId: 'none' };
 
 describe('a channel this server cannot deliver on', () => {
-  const connectors = (unavailable: ('sms' | 'email')[]) => ({ gmail: null, smsInbound: 'none' as const, unavailable, smsPhone: null });
+  const connectors = (unavailable: ('sms' | 'email')[]) => ({ gmail: null, smsInbound: 'none' as const, unavailable, smsPhone: null, whatsappNumber: null });
 
   test('is not offered on the wizard or /setup, with a plain note instead, and does not hold setup back', async () => {
     const w = await webWorld({ connectors: connectors(['sms']) });
@@ -95,23 +95,19 @@ describe('channel status badges', () => {
   });
 });
 
-describe('WhatsApp is not on the channel pages', () => {
-  test('neither the wizard nor /setup offers it, counts it or names it, and a posted WhatsApp number is refused', async () => {
+describe('a posted WhatsApp address still cannot skip the server number', () => {
+  test('the typed-channel form refuses WhatsApp, so no code is sent to a number', async () => {
     const w = await webWorld();
     const sam = await w.signUp();
-    for (const path of ['/welcome/channels', '/setup']) {
-      const html = await page(w, path, sam);
-      expect(visible(html), path).not.toMatch(/whatsapp/i);
-      expect(html, path).not.toContain('id="whatsapp"');
-    }
     const refused = await w.post('/welcome/channels', { type: 'whatsapp', address: '+61 2 9100 0002' }, sam);
     expect(decodeURIComponent(refused.headers.get('location')!)).toContain('Choose SMS or email');
+    expect(w.h.messenger.last('+61291000002')).toBeUndefined();
   });
 });
 
 describe('what a verified SMS number promises', () => {
   async function verifiedSms(smsInbound: 'simulator' | 'none') {
-    const w = await webWorld({ connectors: { gmail: null, unavailable: [], smsInbound, smsPhone: null } });
+    const w = await webWorld({ connectors: { gmail: null, unavailable: [], smsInbound, smsPhone: null, whatsappNumber: null } });
     const sam = await w.signUp();
     await submit(w, '/welcome/channels', { type: 'sms', address: '+61 2 9100 0002' }, sam);
     const code = String(w.h.messenger.last('+61291000002')?.data.code);

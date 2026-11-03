@@ -371,7 +371,7 @@ export function postButton(
 }
 
 /** The section box shared by card() and section(). */
-function panel(o: { title?: string; actions?: Html; body: Html; id?: string }): Html {
+function panel(o: { title?: string | Html; actions?: Html; body: Html; id?: string }): Html {
   return html`<section class="section" ${o.id ? html`id="${o.id}"` : ''}>
     ${o.title || o.actions
       ? html`<div class="section-head">
@@ -384,12 +384,12 @@ function panel(o: { title?: string; actions?: Html; body: Html; id?: string }): 
 }
 
 /** A surface with a hairline border and an optional <h2> title and actions (a section, not a card). */
-export function card(o: { title?: string; actions?: Html; body: Html; id?: string }): Html {
+export function card(o: { title?: string | Html; actions?: Html; body: Html; id?: string }): Html {
   return panel(o);
 }
 
 /** A titled section: a surface with a hairline, the heading on the left and actions on the right. */
-export function section(o: { title: string; actions?: Html; body: Html; id?: string }): Html {
+export function section(o: { title: string | Html; actions?: Html; body: Html; id?: string }): Html {
   return panel(o);
 }
 
