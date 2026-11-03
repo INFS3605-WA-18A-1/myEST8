@@ -9,6 +9,7 @@
 import { html, raw } from 'hono/html';
 import type { HtmlEscapedString } from 'hono/utils/html';
 import type { Role } from '../shared.ts';
+import { assetUrl } from './assets.ts';
 import { icon } from './icons.ts';
 import type { ShellInfo } from './shell.ts';
 
@@ -58,12 +59,35 @@ export function head(title: string, o: { css?: string[]; runtime?: boolean } = {
     <script>document.documentElement.classList.add('js');try{if(localStorage.getItem('rail')==='collapsed')document.documentElement.classList.add('rail-collapsed')}catch(e){}try{if(sessionStorage.getItem('glance'))document.documentElement.classList.add('glance-seen')}catch(e){}</script>
     <link rel="preload" href="/assets/fonts/public-sans-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/assets/fonts/bricolage-grotesque-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="stylesheet" href="/assets/daisyui.css" />
-    <link rel="stylesheet" href="/assets/app.css" />
-    ${(o.css ?? []).map((file) => html`<link rel="stylesheet" href="/assets/${file}" />`)}
-    ${o.runtime === false ? '' : html`<link rel="stylesheet" href="/assets/tw.css" />`}
-    <script src="/assets/app.js" defer></script>`;
+    <link rel="stylesheet" href="${assetUrl('daisyui.css')}" />
+    <link rel="stylesheet" href="${assetUrl('app.css')}" />
+    ${(o.css ?? []).map((file) => html`<link rel="stylesheet" href="${assetUrl(file)}" />`)}
+    ${o.runtime === false ? '' : html`<link rel="stylesheet" href="${assetUrl('tw.css')}" />`}
+    <script src="${assetUrl('app.js')}" defer></script>
+    <script type="speculationrules">${raw(SPECULATION_RULES)}</script>`;
 }
+
+/**
+ * Pages are rendered in Seoul, next to the database, so each one is a long round trip from
+ * Australia. Browsers that support speculation rules fetch a page while the pointer rests on
+ * its link (or as it is pressed), so most clicks find the page already here. Only same-origin
+ * pages: never files, downloads, links that open elsewhere, the OAuth hand-off or a link marked data-no-prefetch.
+ * Every GET here is safe to fetch early; signing out and every change is a POST.
+ */
+const SPECULATION_RULES = JSON.stringify({
+  prefetch: [
+    {
+      where: {
+        and: [
+          { href_matches: '/*' },
+          { not: { href_matches: ['/assets/*', '/media/*', '/api/*', '/oauth/*', '/*/files/*', '/files/*'] } },
+          { not: { selector_matches: '[download], [target], [data-no-prefetch]' } },
+        ],
+      },
+      eagerness: 'moderate',
+    },
+  ],
+});
 
 /**
  * The places a Property Manager works. The day's work runs Dashboard to Schedule,

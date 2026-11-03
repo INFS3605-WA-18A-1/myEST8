@@ -1157,7 +1157,27 @@ onContent((root) => {
   };
   const stop = () => {
     clearTimeout(stopTimer);
-    root.classList.remove('is-navigating');
+    root.classList.remove('is-navigating', 'is-leaving');
+    for (const el of document.querySelectorAll('[data-pending]')) el.removeAttribute('data-pending');
+  };
+  // Following a link to another page: the old one fades back while the new one is on its way
+  // (from Seoul, so it can take a moment), and the link pressed keeps looking pressed.
+  const leave = (link) => {
+    start();
+    root.classList.add('is-leaving');
+    link.setAttribute('data-pending', '');
+  };
+  // A change made by fetch (inline edit) can make a page prefetched earlier out of date:
+  // putting the speculation rules back drops what was fetched, and hovering fetches it again.
+  const refreshSpeculation = () => {
+    const rules = document.querySelector('script[type="speculationrules"]');
+    if (!rules) return;
+    const fresh = document.createElement('script');
+    fresh.type = 'speculationrules';
+    fresh.textContent = rules.textContent;
+    // Removed in one task and added back in the next, so the browser sees the rules go.
+    rules.remove();
+    setTimeout(() => document.head.append(fresh));
   };
   window.addEventListener('pageshow', stop);
 
@@ -1338,6 +1358,7 @@ onContent((root) => {
         inlineError(block, message);
         return;
       }
+      if (!refused) refreshSpeculation();
       const imported = document.importNode(next, true);
       if (refused && kept) originals.set(imported, kept);
       const refresh = (block.dataset.inlineRefresh || '').split(/\s+/).filter(Boolean);
@@ -1546,7 +1567,7 @@ onContent((root) => {
       event.preventDefault();
       load(url, true, link.href);
     } else if (!(url.pathname === location.pathname && url.search === location.search && url.hash)) {
-      start();
+      leave(link);
     }
   });
 
