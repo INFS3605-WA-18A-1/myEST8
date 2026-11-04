@@ -102,10 +102,12 @@ describe('Dispatch: the map data', () => {
     expect(block).not.toMatch(/[<>&\u2028\u2029]/);
     expect(pinData(html).properties.map((p) => p.address)).toContain(hostile);
     expect(html).not.toContain('<img src=x');
-    // Every script on the page is a file, the data block or the shell's one-line marker: nothing the Property's address could add.
+    // Every script on the page is a file, the data block, the shell's one-line marker or the fixed
+    // speculation rules: nothing the Property's address could add.
     const scripts = [...html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)];
     for (const [, attributes, body] of scripts) {
-      expect(attributes!.includes('src=') || attributes!.includes('application/json') || body!.startsWith('document.documentElement')).toBe(true);
+      const speculation = attributes!.includes('speculationrules') && !body!.includes('Quote');
+      expect(attributes!.includes('src=') || attributes!.includes('application/json') || body!.startsWith('document.documentElement') || speculation).toBe(true);
     }
   });
 

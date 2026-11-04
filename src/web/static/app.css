@@ -10326,10 +10326,17 @@
       scale: 0.98;
     }
   }
-  /* Content being replaced in place fades back a little, only after a moment so a quick reply doesn't flicker. */
-  #main[aria-busy='true'] {
+  /* Content being replaced in place, or the page being left for another, fades back a little,
+     only after a moment so a quick (prefetched) reply doesn't flicker. */
+  #main[aria-busy='true'],
+  html.is-leaving #main {
     opacity: 0.55;
-    transition: opacity 150ms ease 150ms;
+    transition: opacity var(--dur-base) var(--ease-out) 150ms;
+  }
+  /* The rail link that was pressed holds its hover band until the next page arrives. */
+  .rail-link[data-pending]:not([aria-current='page']) {
+    background: var(--rail-hover);
+    color: var(--rail-text);
   }
   /* A form on its way: its buttons look and act busy. */
   form[aria-busy='true'] :is(button, .btn) {

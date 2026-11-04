@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { signIn } from './support/actions.ts';
+import { signIn, signUp, unique } from './support/actions.ts';
 
 // Settings must not send a Property Manager to another part of the app.
 // Allowed outside /settings, and listed here so a new one has to be named:
@@ -7,8 +7,8 @@ import { signIn } from './support/actions.ts';
 // - External docs and help: https links, such as Twilio's console.
 // - Downloads: spreadsheet templates under /settings/templates, with the download attribute.
 // - Contact and share: mailto, tel and sms links open the person's own mail or messages app.
-// - Channel panels: /sms-number and /server-sms belong to sms-number.ts and server-sms.ts,
-//   which another branch owns. Their handlers redirect back to the Channels tab.
+// - Channel panels: connect and disconnect post to /sms-number, /server-sms and /server-whatsapp.
+//   A typed SMS number is proved at /setup/channels?from=settings. Each comes back to the Channels tab.
 
 const overflow = (page: Page) => page.evaluate<number>('document.documentElement.scrollWidth - document.documentElement.clientWidth');
 
@@ -18,7 +18,7 @@ function allowed(value: string, download: boolean): boolean {
   if (/^https?:\/\//i.test(value)) return true;
   if (/^(mailto:|tel:|sms:)/i.test(value)) return true;
   if (download && value.startsWith('/settings/templates/')) return true;
-  if (value.startsWith('/sms-number') || value.startsWith('/server-sms')) return true;
+  if (['/sms-number', '/server-sms', '/server-whatsapp', '/setup/channels'].some((path) => value.startsWith(path))) return true;
   return false;
 }
 
@@ -39,7 +39,7 @@ async function leaving(page: Page): Promise<string[]> {
   return found.filter((item) => !allowed(item.value, item.download)).map((item) => item.value);
 }
 
-test('nothing in Settings leaves Settings, and saving the Agency comes back with a flash', async ({ page }) => {
+test('nothing in Settings leaves Settings', async ({ page }) => {
   await signIn(page);
 
   const paths = ['/settings', '/settings?tab=channels', '/settings?tab=team', '/settings?tab=import', '/settings/agency/edit'];
@@ -61,15 +61,23 @@ test('nothing in Settings leaves Settings, and saving the Agency comes back with
   // Sign-out is the one header form, and it is the listed exception.
   await page.goto('/settings');
   await expect(page.locator('header.page-header form')).toHaveAttribute('action', '/logout');
+});
+
+// On an Agency of its own: the seeded one is shared by every test, and the others book
+// visits in its Sydney time, so moving it to Perth would put their visits hours out.
+test('saving the Agency comes back to Settings with a flash', async ({ page }) => {
+  const id = unique();
+  await signUp(page, { agencyName: `Settings Realty ${id}`, name: 'Sam Setting', email: `sam-${id}@settings.example`, password: 'settings-2026' });
+  await expect(page).not.toHaveURL(/\/signup/);
 
   await page.goto('/settings/agency/edit');
-  await page.getByRole('textbox', { name: 'Agency name' }).fill('Harbour Realty Group');
+  await page.getByRole('textbox', { name: 'Agency name' }).fill(`Harbour Realty Group ${id}`);
   await page.getByLabel('Time zone').selectOption('Australia/Perth');
   await page.getByRole('button', { name: 'Save' }).click();
   // The page drops ?ok= from the address bar once the flash is showing, so a reload does not repeat it.
   await expect(page).toHaveURL(/\/settings(\?ok=|$)/);
   await expect(page.getByRole('status')).toContainText('Agency details saved.');
-  await expect(page.getByText('Harbour Realty Group').first()).toBeVisible();
+  await expect(page.getByText(`Harbour Realty Group ${id}`).first()).toBeVisible();
   await expect(page.getByText('Perth (WA)')).toBeVisible();
   expect(await leaving(page)).toEqual([]);
 });
