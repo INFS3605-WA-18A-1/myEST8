@@ -7,7 +7,7 @@
 //
 //   1 Welcome          what we'll set up, and the Agency's details
 //   2 Your team        colleagues as Property Managers (optional)
-//   3 Channels         SMS by a code or the server's phone, email at the inbound address
+//   3 Channels         SMS, the server's WhatsApp number when it is set up, email at the inbound address
 //   4 Tradies          the Tradies the Agency already uses, so a Property can nominate them
 //   5 First Property   address, Max Repair Cost, Property Owner, Tenant, Building Manager
 //   6 Done             what's set up, and where to go next
@@ -23,7 +23,6 @@ import type { WebEnv } from '../env.ts';
 import { gmailControls } from './oauth-google.ts';
 import { icon } from '../icons.ts';
 import { cents, text, type FormValues } from '../forms.ts';
-import { shareButton } from '../share.ts';
 import { shellInfo } from '../shell.ts';
 import {
   alert,
@@ -47,6 +46,8 @@ import {
   addTradieFrom,
   addTradieSection,
   CHANNELS,
+  colleagueAdded,
+  colleagueForm,
   channelBadge,
   channelGuide,
   channelLine,
@@ -74,6 +75,8 @@ import {
   type Values,
 } from './onboarding-forms.ts';
 import { serverSmsPanel } from './server-sms.ts';
+import { serverWhatsappPanel, whatsappChip } from './server-whatsapp.ts';
+import { channelName, laterChannelList, LATER_CHANNELS_NOTE, WORKING_CHANNELS, type ChannelOption } from './channel-options.ts';
 import { smsNumberPanel, smsNumbersOffered } from './sms-number.ts';
 import { TIME_ZONES } from './signup.ts';
 
@@ -298,32 +301,7 @@ async function teamStep(c: WizardContext, o: { added?: { name: string; email: st
         Add the other Property Managers at ${actions.agency().name}. Each gets their own sign-in and sees their own Properties first, and can cover for
         colleagues when needed. Tenants, Tradies and Property Owners never need an account.
       </p>
-      ${o.added
-        ? alert(
-            html`<p>Pass these on to ${o.added.name}. The password is shown only this once, so copy it now.</p>
-              <dl class="my-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
-                <dt>Sign in at</dt>
-                <dd class="break-all">${origin}/login</dd>
-                <dt>Email</dt>
-                <dd class="break-all">${o.added.email}</dd>
-                <dt>Temporary password</dt>
-                <dd><code class="rounded bg-page px-2 py-0.5 text-base font-semibold tracking-wider" data-temporary-password>${o.added.temporaryPassword}</code></dd>
-              </dl>`,
-            'success',
-            { title: `${o.added.name} added as a Property Manager` },
-          )
-        : ''}
-      ${o.added
-        ? shareButton({
-            title: `Send ${o.added.name} their sign-in link`,
-            label: `Send ${o.added.name} their sign-in link`,
-            // The temporary password never goes in a share: the link and the text end up in message histories.
-            text: `You're on myEST8 for ${actions.agency().name}. Sign in with ${o.added.email}. I'll give you your temporary password separately.`,
-            url: `${origin}/login`,
-            note: 'Give them the temporary password another way, in person or by phone.',
-            align: 'start',
-          })
-        : ''}
+      ${o.added ? colleagueAdded(o.added, { origin, agencyName: actions.agency().name }) : ''}
       ${table(
         ['Name', 'Email'],
         team.map((m) => [html`${m.name}${m.id === pm.id ? html` ${badge('You')}` : ''}`, html`${m.email}`]),
@@ -331,23 +309,7 @@ async function teamStep(c: WizardContext, o: { added?: { name: string; email: st
       )}
       ${card({
         title: 'Add a colleague',
-        body: html`<form method="post" action="/welcome/team" class="space-y-3">
-          ${fieldGrid(html`
-            ${field({ label: 'Name', name: 'name', id: 'colleague-name', required: true, autocomplete: 'off', value: valueOf(o.values, 'name'), error: o.errors?.name })}
-            ${field({
-              label: 'Work email',
-              name: 'email',
-              id: 'colleague-email',
-              type: 'email',
-              required: true,
-              autocomplete: 'off',
-              value: valueOf(o.values, 'email'),
-              hint: 'They sign in with this. myEST8 makes them a temporary password.',
-              error: o.errors?.email,
-            })}
-          `)}
-          <div>${button('Add colleague', { variant: team.length > 1 ? 'secondary' : 'primary' })}</div>
-        </form>`,
+        body: colleagueForm({ action: '/welcome/team', values: o.values, errors: o.errors, primary: team.length <= 1 }),
       })}
     `,
   });
@@ -397,10 +359,10 @@ async function channelsStep(c: WizardContext, demo: boolean, connectors: Channel
     step: 'channels',
     title: 'Channels',
     // A channel's own result shows in its row; anything else at the top.
-    flash: flash && !CHANNELS.some((ch) => ch.type === flashChannel) ? flash : null,
+    flash: flash && !WORKING_CHANNELS.some((ch) => ch.key === flashChannel) ? flash : null,
     body: html`
       <p>
-        Tenants, Tradies and Property Owners reach ${agency.name} by SMS and email.
+        Tenants, Tradies and Property Owners reach ${agency.name} by SMS, WhatsApp and email.
         ${serverPhone ? "Connect the server's SMS phone." : smsNumbers ? 'Set up the number Tenants will text.' : 'Verify SMS with a code sent to the number.'}
         Email arrives at the address below once you forward the Agency inbox to it.${demo ? ' In the demo nothing is really sent, and the addresses work with the phone simulator.' : ''}
       </p>
@@ -409,19 +371,26 @@ async function channelsStep(c: WizardContext, demo: boolean, connectors: Channel
         serverPhone ? 'server' : smsNumbers ? 'twilio' : 'code',
       )}</p>
       <div class="flex flex-col gap-4">
-        ${CHANNELS.map((channel) => {
+        ${WORKING_CHANNELS.map(({ key }) => {
+          if (key === 'whatsapp') {
+            const current = connected.find((ch) => ch.type === 'whatsapp');
+            return wizardChannelRow({
+              key,
+              chip: whatsappChip(connectors.whatsappNumber, current, { outline: true }),
+              body: html`${flash && flashChannel === key ? flashMessage(flash) : ''}<div class="mt-1">${serverWhatsappPanel({ from: 'welcome', number: connectors.whatsappNumber, current: current?.address })}</div>`,
+            });
+          }
+          const channel = CHANNELS.find((ch) => ch.type === key)!;
           const current = connected.find((ch) => ch.type === channel.type);
           const suggestion = demo && channel.type !== 'email' ? demoAddress(channel.type, agency) : '';
           const waiting = channel.type === 'email' && email.state === 'waiting';
           const emailVerified = channel.type === 'email' && email.state === 'verified';
           const open = pending.find((row) => row.channelType === channel.type);
           const unavailable = connectors.unavailable.includes(channel.type);
-          return html`<div id="${channel.type}" class="grid gap-2 border-t border-line pt-4 first:border-t-0 first:pt-0 md:grid-cols-[9rem_minmax(0,1fr)]">
-            <div>
-              <h2 class="section-title">${channel.name}</h2>
-              <p class="mt-1">${unavailable ? unavailableChip() : channelBadge(current, { waiting, verified: emailVerified })}</p>
-            </div>
-            <div class="min-w-0">
+          return wizardChannelRow({
+            key: channel.type,
+            chip: unavailable ? unavailableChip() : channelBadge(current, { waiting, verified: emailVerified }),
+            body: html`
               ${flash && flashChannel === channel.type ? flashMessage(flash) : ''}
               ${unavailable ? unavailableNote(channel.type, connectors.unavailable) : ''}
               ${unavailable || (channel.type === 'sms' && smsPanel) ? '' : current ? channelLine(current, agency.timeZone, { waiting, smsInbound: connectors.smsInbound }) : ''}
@@ -437,13 +406,32 @@ async function channelsStep(c: WizardContext, demo: boolean, connectors: Channel
                       suggestion,
                       current: current?.address,
                       className: rowForm,
-                    })}<div class="mt-2">${channelGuide(channel.type, origin)}</div>`}
-            </div>
-          </div>`;
+                    })}<div class="mt-2">${channelGuide(channel.type, origin)}</div>`}`,
+          });
         })}
+        <div id="later-channels" class="${WIZARD_CHANNEL_ROW}">
+          <div><h2 class="channel-later-title">More channels</h2></div>
+          <div class="min-w-0">
+            <p class="text-sm text-muted">${LATER_CHANNELS_NOTE}</p>
+            <div class="mt-2">${laterChannelList()}</div>
+          </div>
+        </div>
       </div>
     `,
   });
+}
+
+/** One channel on the Channels step: its name, icon and chip on the left from 768px, what it needs on the right. */
+const WIZARD_CHANNEL_ROW = 'grid gap-2 border-t border-line pt-4 first:border-t-0 first:pt-0 md:grid-cols-[9rem_minmax(0,1fr)]';
+
+function wizardChannelRow(o: { key: ChannelOption['key']; chip: Html; body: Html }): Html {
+  return html`<div id="${o.key}" class="${WIZARD_CHANNEL_ROW}">
+    <div>
+      <h2 class="section-title">${channelName(o.key)}</h2>
+      <p class="mt-1">${o.chip}</p>
+    </div>
+    <div class="min-w-0">${o.body}</div>
+  </div>`;
 }
 
 /** What the channels still need, as one sentence: what's next rather than a count. */

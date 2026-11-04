@@ -29,7 +29,7 @@ test('on a phone, an Owner gets an email from the pen and nothing scrolls sidewa
   await page.getByRole('link', { name: 'Edit details' }).click();
   await page.getByRole('textbox', { name: 'Email' }).fill(email);
   expect(await overflow(page)).toBeLessThanOrEqual(0);
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByRole('button', { name: 'Save details' }).click();
 
   await expect(page.getByText('Details saved.')).toBeVisible();
   await expect(page.getByRole('link', { name: email })).toBeVisible();

@@ -507,6 +507,7 @@ export async function createDemo<Seeded extends boolean = true>(
       smsInbound: hosted ? 'none' : 'simulator',
       // The phone's number is read in textbeeFromEnv. The pages only see it here.
       smsPhone: providers.textbee?.number ?? null,
+      whatsappNumber: serverWhatsappNumber(env, hosted),
       unavailable: [
         // The demo simulates SMS; a hosted server needs a real provider, or a code can only fail.
         ...(hosted && !providers.channels.sms && !smsNumbers ? (['sms'] as const) : []),
@@ -607,3 +608,18 @@ function mediaFetcher(env: Env, smsNumbers: SmsNumbers | null): (url: string) =>
 }
 
 export type Demo = Awaited<ReturnType<typeof createDemo<true>>>;
+
+/**
+ * The server's WhatsApp number (ADR 0019) when Meta's WhatsApp Cloud API is set up: the number
+ * (META_WHATSAPP_NUMBER) and the sending pair (META_WHATSAPP_PHONE_NUMBER_ID and
+ * META_WHATSAPP_ACCESS_TOKEN). Hosted, Tenants' messages only arrive through the webhook, so
+ * META_APP_SECRET and META_WEBHOOK_VERIFY_TOKEN are needed too; locally the phone simulator stands
+ * in for it. Null otherwise, and the Channels pages say WhatsApp isn't available on this server.
+ */
+export function serverWhatsappNumber(env: Env, hosted: boolean): string | null {
+  const set = (value: string | undefined) => value?.trim() || null;
+  const number = set(env.META_WHATSAPP_NUMBER);
+  if (!number || !set(env.META_WHATSAPP_PHONE_NUMBER_ID) || !set(env.META_WHATSAPP_ACCESS_TOKEN)) return null;
+  if (hosted && (!set(env.META_APP_SECRET) || !set(env.META_WEBHOOK_VERIFY_TOKEN))) return null;
+  return normalizeAddress(number);
+}

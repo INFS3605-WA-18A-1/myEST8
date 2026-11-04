@@ -60,12 +60,23 @@ export type DemoServer = { url: string; stop(): Promise<void> };
  * (the dashboard then has visits); otherwise the Agency is empty. `stop()` sends
  * SIGTERM, as Ctrl+C would, so the database is closed cleanly before the process exits.
  */
-export async function startDemo({ port, schema, stories = false }: { port: number; schema: string; stories?: boolean }): Promise<DemoServer> {
+export async function startDemo({
+  port,
+  schema,
+  stories = false,
+  env: extra = {},
+}: {
+  port: number;
+  schema: string;
+  stories?: boolean;
+  /** Overrides the mocked API blanks. Tests pass fake META_WHATSAPP_* here and never call Meta. */
+  env?: Record<string, string>;
+}): Promise<DemoServer> {
   const url = `http://localhost:${port}`;
   const databaseUrl = process.env.E2E_DATABASE_URL;
   if (!databaseUrl) throw new Error('E2E_DATABASE_URL is not set: run the browser tests with `npm run test:e2e`');
   const child = spawn(DEMO_COMMAND[0], DEMO_COMMAND.slice(1), {
-    env: { ...process.env, ...MOCKED_APIS, PORT: String(port), PUBLIC_URL: url, SUPABASE_DB_URL: databaseUrl, DATABASE_SCHEMA: schema, DEMO_DATA: stories ? 'stories' : 'empty' },
+    env: { ...process.env, ...MOCKED_APIS, ...extra, PORT: String(port), PUBLIC_URL: url, SUPABASE_DB_URL: databaseUrl, DATABASE_SCHEMA: schema, DEMO_DATA: stories ? 'stories' : 'empty' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let output = '';

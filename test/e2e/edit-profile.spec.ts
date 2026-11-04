@@ -46,7 +46,7 @@ test('on a phone, the pen opens the Tradie\'s details, a new mobile is saved and
 
   // A new mobile is saved, and the profile shows it.
   await page.getByRole('textbox', { name: 'Mobile' }).fill(after);
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByRole('button', { name: 'Save details' }).click();
   await expect(page.getByText('Details saved.')).toBeVisible();
   await expect(page.getByRole('link', { name: `+61${after.slice(1)}` })).toBeVisible();
   await expect(page.getByRole('link', { name: `+61${before.slice(1)}` })).toHaveCount(0);

@@ -11,19 +11,18 @@ const noDemo = (): DemoControls => ({
   now: () => new Date(),
 });
 
-/** The workflow's ordered list, from its <ol> to the end of its section. */
-function workflowList(page: string): string {
-  const list = page.match(/<ol[^>]*aria-labelledby="workflow"[^>]*>[\s\S]*?<\/ol>\s*<\/section>/);
-  if (!list) throw new Error('No workflow list on the page');
-  return list[0];
+/** The section with this id, from its opening tag to its closing tag. */
+function section(page: string, id: string): string {
+  const found = page.match(new RegExp(`<section[^>]*id="${id}"[\\s\\S]*?</section>`));
+  if (!found) throw new Error(`No section #${id} on the page`);
+  return found[0];
 }
 
-/** The workflow's stages (the list's own items), each as its visible text, in page order. */
-function workflowStages(page: string): string[] {
-  return workflowList(page)
-    .split(/<li class="flow-stage/)
-    .slice(1)
-    .map((item) => visible(`<li ${item}`).trim());
+/** The repair's stages (the inner list items of the #repair section), each as its visible text, in page order. */
+function repairStages(page: string): string[] {
+  return [...section(page, 'repair').matchAll(/<ol class="lp-stages">([\s\S]*?)<\/ol>/g)]
+    .flatMap((list) => list[1]!.split(/<li>/).slice(1))
+    .map((item) => visible(`<li>${item}`).replace(/\s+/g, ' ').trim());
 }
 
 describe('the landing page', () => {
@@ -37,25 +36,35 @@ describe('the landing page', () => {
     const text = visible(page);
     const h1 = page.match(/<h1[^>]*>([\s\S]*?)<\/h1>/g) ?? [];
     expect(h1).toHaveLength(1);
-    expect(visible(h1[0]!).trim()).toBe('Tenants text the problem. You decide. myEST8 does the chasing.');
+    expect(visible(h1[0]!).replace(/\s+/g, ' ').trim()).toBe('Tenants text. You decide.');
     expect(text).toContain('small Agencies');
     expect(page).toMatch(/<a href="\/signup"[^>]*>Create your Agency’s account<\/a>/);
     expect(page).toMatch(/<a href="\/login"[^>]*>Sign in<\/a>/);
     expect(text).not.toContain('demo1234');
   });
 
-  test('the hero shows a Tenant’s text becoming a Maintenance Request, then a Ticket, with nothing in it to tab to', async () => {
+  test('the example shows what a Tenant texts, myEST8’s real replies, and what the Property Manager gets', async () => {
     const w = await webWorld();
 
     const page = await (await w.get('/')).text();
 
-    const hero = page.match(/<section class="lp-hero"[\s\S]*?<\/section>/)?.[0] ?? '';
-    const scene = hero.match(/<figure[\s\S]*?<\/figure>/)?.[0] ?? '';
-    const text = visible(scene).replace(/\s+/g, ' ');
-    const order = ['tap under the kitchen sink', 'Maintenance Request', 'Waiting for you', 'Confirmed', '#12'].map((words) => text.indexOf(words));
+    const example = section(page, 'example');
+    const text = visible(example).replace(/\s+/g, ' ');
+    // The follow-up questions and the upload link are the words src/templates.ts sends.
+    expect(text).toContain('To get this sorted we just need:');
+    expect(text).toContain('When did it start?');
+    expect(text).toContain('Is it getting worse? (yes or no)');
+    expect(text).toContain('Please upload a few photos of the issue here, straight from your phone');
+    expect(text).toContain('This sounds urgent.');
+    // A leak is High, by the Urgency the classifier is given; no hot water is an Urgent Repair.
+    const order = ['tap under the kitchen sink', 'Maintenance Request', 'Waiting for you', 'High'].map((words) => text.indexOf(words));
     expect(order.every((at) => at >= 0), text).toBe(true);
-    expect([...order].sort((a, b) => a - b)).toEqual(order);
-    expect(scene).not.toMatch(/<(a|button|input|select|textarea)[\s>]/);
+    expect(text).toContain('Urgent Repair');
+    // The three messages are radio buttons; the Maintenance Requests are pictures, with nothing in them to tab to.
+    expect(example.match(/<input type="radio" name="lp-example"/g)).toHaveLength(3);
+    for (const fragment of example.match(/<div class="lp-request[\s\S]*?<\/div>\s*<\/div>/g) ?? []) {
+      expect(fragment).not.toMatch(/<(a|button|input|select|textarea)[\s>]/);
+    }
   });
 
   test('plays one repair through myEST8, stage by stage, as an ordered list', async () => {
@@ -63,39 +72,63 @@ describe('the landing page', () => {
 
     const page = await (await w.get('/')).text();
 
-    const stages = workflowStages(page);
-    expect(stages).toHaveLength(8);
+    const stages = repairStages(page);
+    expect(stages).toHaveLength(9);
     const expected = [
-      ['A Tenant texts the problem', 'The kitchen tap is dripping'],
-      ['Photos are checked and a summary is written', 'Routine', 'Plumbing', 'Summary filled in by AI'],
-      ['The Property Manager confirms', 'Confirm'],
-      ['It becomes a Ticket', '#12'],
-      ['Quote Requests go to at least two Tradies', '3 Tradies'],
-      ['A Quote comes back', '$180'],
-      ['The Work Order goes out', 'Work Order sent'],
-      ['The Job is done, and the Tenant sees it', 'Done'],
+      ['Mon 7:42 am', 'kitchen tap is dripping'],
+      ['Mon 7:43 am', 'upload link'],
+      ['Mon 7:46 am', 'summary, Trade and Urgency'],
+      ['Mon 9:10 am', 'You confirm', 'Ticket #12'],
+      ['Mon 9:11 am', 'Quote Requests', '48 hours'],
+      ['Mon 3:20 pm', '$180', '$240', '$500 Max Repair Cost'],
+      ['Mon 3:24 pm', 'You choose', 'Work Order'],
+      ['Wed 8:00 am', 'plumber arrives'],
+      ['Wed 9:35 am', 'Done'],
     ];
     expected.forEach((words, i) => {
       for (const word of words) expect(stages[i]).toContain(word);
     });
+    // The bar over the list is a picture: screen readers read the list instead.
+    expect(section(page, 'repair')).toMatch(/<div class="lp-bar-chart"[^>]*aria-hidden="true"/);
+    expect(section(page, 'repair')).not.toMatch(/<(a|button|input|select|textarea)[\s>]/);
   });
 
-  test('the workflow is a picture to read, with nothing in it to tab to, and a control to pause it', async () => {
+  test('says how each person who never signs in takes part, as the app really reaches them', async () => {
+    const w = await webWorld();
+
+    const text = visible(await (await w.get('/')).text()).replace(/\s+/g, ' ');
+
+    expect(text).toContain('Nobody else needs an account');
+    expect(text).toContain('Approve a Quote over the Max Repair Cost by replying YES or NO.');
+    expect(text).not.toContain('with a reply or a link');
+  });
+
+  test('nothing on the page loops, and its entrances stand still for anyone who asks for less motion', async () => {
+    const w = await webWorld();
+
+    const page = await (await w.get('/')).text();
+    const landing = await (await w.get('/assets/landing.css')).text();
+
+    expect(page).not.toContain('data-flow-pause');
+    expect(landing).not.toMatch(/animation:[^;]*infinite/);
+    expect(landing).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*\.lp-line > span[\s\S]*animation: none/);
+  });
+
+  test('every photograph is served, and credited in the footer with its licence', async () => {
     const w = await webWorld();
 
     const page = await (await w.get('/')).text();
 
-    expect(workflowList(page)).not.toMatch(/<(a|button|input|select|textarea)[\s>]/);
-    const pause = page.match(/<button type="button"[^>]*data-flow-pause[^>]*>[\s\S]*?<\/button>/);
-    expect(visible(pause?.[0] ?? '')).toContain('Pause the animation');
-  });
-
-  test('the workflow stands still for anyone who asks for less motion', async () => {
-    const w = await webWorld();
-
-    const landing = await (await w.get('/assets/landing.css')).text();
-
-    expect(landing).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*\.flow[\s\S]*animation: none/);
+    const photos = [...new Set([...page.matchAll(/src="\/assets\/(landing-[a-z-]+\.jpg)"/g)].map((m) => m[1]!))];
+    expect(photos.length).toBeGreaterThanOrEqual(6);
+    for (const name of photos) {
+      const res = await w.get(`/assets/${name}`);
+      expect(res.status, name).toBe(200);
+      expect(res.headers.get('content-type')).toBe('image/jpeg');
+    }
+    const footer = visible(page.match(/<footer class="lp-footer">[\s\S]*?<\/footer>/)?.[0] ?? '');
+    expect(footer).toContain('From Wikimedia Commons');
+    expect(footer.match(/CC BY|CC0/g)?.length).toBeGreaterThanOrEqual(photos.length);
   });
 
   test('when the app runs as the demo, it gives the demo sign-ins', async () => {
@@ -118,6 +151,6 @@ describe('the landing page', () => {
     expect(res.status).toBe(200);
     const page = await res.text();
     expect(visible(page)).toContain('Dashboard');
-    expect(page).not.toContain('aria-labelledby="workflow"');
+    expect(page).not.toContain('id="repair"');
   });
 });

@@ -1,7 +1,7 @@
 import type { ChannelType } from '../ports.ts';
 
 // What the onboarding pages can connect, as configured on this server (ADR 0004):
-// an Agency's Gmail by OAuth. Built in the runtime from environment variables and passed down
+// an Agency's Gmail by OAuth, the server's SMS phone and its WhatsApp number. Built in the runtime from environment variables and passed down
 // to the pages; null where the provider isn't configured.
 
 /** Connecting an Agency's Gmail: the OAuth round trip and the connection's state. */
@@ -35,7 +35,13 @@ export interface ChannelConnectors {
    * While it is set, the typed number and code and the Twilio panel are not offered.
    */
   smsPhone: string | null;
+  /**
+   * The server's one WhatsApp number (Meta's WhatsApp Cloud API, ADR 0019), E.164, or null
+   * when the META_WHATSAPP_* settings aren't all set. Like `smsPhone`, the Channels pages offer
+   * Connect WhatsApp for it, and show WhatsApp as not available on this server when it is null.
+   */
+  whatsappNumber: string | null;
 }
 
 /** Nothing connectable, and every channel assumed deliverable: the default for tests and the plain web app. */
-export const NO_CONNECTORS: ChannelConnectors = { gmail: null, unavailable: [], smsInbound: 'simulator', smsPhone: null };
+export const NO_CONNECTORS: ChannelConnectors = { gmail: null, unavailable: [], smsInbound: 'simulator', smsPhone: null, whatsappNumber: null };

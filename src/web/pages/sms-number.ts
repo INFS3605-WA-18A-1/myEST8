@@ -1,5 +1,5 @@
 // An Agency's SMS number on Twilio (ADR 0005): the one component the welcome wizard's
-// Channels step, Settings' Channels tab and Setup (where Settings' "Manage channels" goes)
+// Channels step, Settings' Channels tab and Setup
 // all show, and the routes its buttons post to.
 // Two separate paths: create a new number (myEST8 buys it), or register a number from the
 // Agency's own Twilio account. Both end with the number connected as the Agency's SMS channel.

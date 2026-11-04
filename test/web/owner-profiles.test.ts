@@ -77,7 +77,7 @@ describe('a Property Owner profile', () => {
     const page = await (await w.get(`/owners/${w.ids.olivia}`, cookie)).text();
     expect(page).toContain('<h1');
     expect(visible(page)).toContain('Olivia Owens');
-    expect(detailsOf(page)).toContain(`<a ${PEN(w.ids.olivia)} class="icon-btn" aria-label="Edit details" title="Edit details">`);
+    expect(detailsOf(page)).toContain(`<a ${PEN(w.ids.olivia)} class="icon-btn inline-edit-open" data-inline-open aria-label="Edit details" title="Edit details">`);
     expect(page).toContain(`href="tel:${OLIVIA}"`);
     expect(page).toContain(`href="mailto:${OLIVIA_EMAIL}"`);
     expect(page).toContain(`href="/properties/${w.ids.kingSt}"`);
@@ -97,12 +97,12 @@ describe('a Property Owner profile', () => {
     expect(form).toContain(`<form method="post" action="/owners/${w.ids.olivia}/details"`);
     expect(form).toMatch(/<input[^>]* name="name"[^>]* value="Olivia Owens"/);
     expect(form).toMatch(/<input[^>]* name="email"[^>]* value="olivia@example.com"/);
-    expect(form).toMatch(/<button type="submit"[^>]*>Save<\/button>/);
-    expect(form).toContain(`<a href="/owners/${w.ids.olivia}" class="btn btn-ghost">Cancel</a>`);
-    expect(form).not.toContain('aria-label="Edit details"');
+    expect(form).toContain('aria-label="Save details"');
+    expect(form).toContain(`<a href="/owners/${w.ids.olivia}#details" class="icon-btn inline-edit-cancel" data-inline-cancel aria-label="Cancel editing" title="Cancel">`);
+    expect(form).toContain('is-editing');
 
     const cancel = await (await w.get(`/owners/${w.ids.olivia}`, cookie)).text();
-    expect(cancel).not.toContain(`action="/owners/${w.ids.olivia}/details"`);
+    expect(detailsOf(cancel)).toContain('<fieldset class="inline-edit-fields" disabled>');
 
     const saved = await w.post(`/owners/${w.ids.olivia}/details`, { name: 'Olivia Owen', mobile: OLIVIA, email: 'Olivia.Owen@example.com' }, cookie);
     expect(saved.status).toBe(303);
@@ -150,7 +150,7 @@ describe('a Building Manager profile', () => {
     expect(plain).not.toContain('<h2 class="section-title">Approvals</h2>');
 
     const editing = await (await w.get(`/building-managers/${w.ids.barry}?edit=details`, cookie)).text();
-    expect(editing).toContain(`<a href="/building-managers/${w.ids.barry}" class="btn btn-ghost">Cancel</a>`);
+    expect(editing).toContain(`<a href="/building-managers/${w.ids.barry}#details" class="icon-btn inline-edit-cancel" data-inline-cancel aria-label="Cancel editing" title="Cancel">`);
 
     const saved = await w.post(`/building-managers/${w.ids.barry}/details`, { name: 'Barry Strata', mobile: '0412 000 880', email: BARRY }, cookie);
     expect(saved.headers.get('location')).toMatch(new RegExp(`^/building-managers/${w.ids.barry}\\?ok=`));

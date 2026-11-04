@@ -9,6 +9,7 @@
 import { html, raw } from 'hono/html';
 import type { HtmlEscapedString } from 'hono/utils/html';
 import type { Role } from '../shared.ts';
+import { assetUrl } from './assets.ts';
 import { icon } from './icons.ts';
 import type { ShellInfo } from './shell.ts';
 
@@ -58,12 +59,35 @@ export function head(title: string, o: { css?: string[]; runtime?: boolean } = {
     <script>document.documentElement.classList.add('js');try{if(localStorage.getItem('rail')==='collapsed')document.documentElement.classList.add('rail-collapsed')}catch(e){}try{if(sessionStorage.getItem('glance'))document.documentElement.classList.add('glance-seen')}catch(e){}</script>
     <link rel="preload" href="/assets/fonts/public-sans-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/assets/fonts/bricolage-grotesque-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="stylesheet" href="/assets/daisyui.css" />
-    <link rel="stylesheet" href="/assets/app.css" />
-    ${(o.css ?? []).map((file) => html`<link rel="stylesheet" href="/assets/${file}" />`)}
-    ${o.runtime === false ? '' : html`<link rel="stylesheet" href="/assets/tw.css" />`}
-    <script src="/assets/app.js" defer></script>`;
+    <link rel="stylesheet" href="${assetUrl('daisyui.css')}" />
+    <link rel="stylesheet" href="${assetUrl('app.css')}" />
+    ${(o.css ?? []).map((file) => html`<link rel="stylesheet" href="${assetUrl(file)}" />`)}
+    ${o.runtime === false ? '' : html`<link rel="stylesheet" href="${assetUrl('tw.css')}" />`}
+    <script src="${assetUrl('app.js')}" defer></script>
+    <script type="speculationrules">${raw(SPECULATION_RULES)}</script>`;
 }
+
+/**
+ * Pages are rendered in Seoul, next to the database, so each one is a long round trip from
+ * Australia. Browsers that support speculation rules fetch a page while the pointer rests on
+ * its link (or as it is pressed), so most clicks find the page already here. Only same-origin
+ * pages: never files, downloads, links that open elsewhere, the OAuth hand-off or a link marked data-no-prefetch.
+ * Every GET here is safe to fetch early; signing out and every change is a POST.
+ */
+const SPECULATION_RULES = JSON.stringify({
+  prefetch: [
+    {
+      where: {
+        and: [
+          { href_matches: '/*' },
+          { not: { href_matches: ['/assets/*', '/media/*', '/api/*', '/oauth/*', '/*/files/*', '/files/*'] } },
+          { not: { selector_matches: '[download], [target], [data-no-prefetch]' } },
+        ],
+      },
+      eagerness: 'moderate',
+    },
+  ],
+});
 
 /**
  * The places a Property Manager works. The day's work runs Dashboard to Schedule,
@@ -147,8 +171,8 @@ function pageHeader(
       <h1 class="page-title">${title}</h1>
       ${o.titleExtra ?? ''}
     </div>
+    ${o.controls ? html`<div class="page-header-controls">${o.controls}</div>` : ''}
     <div class="page-header-end">
-      ${o.controls ? html`<div class="page-header-controls">${o.controls}</div>` : ''}
       ${o.today ? html`<time class="page-header-date">${icon('calendar-blank', { size: 'size-4' })}${o.today}</time>` : ''}
       ${o.pm ? html`<a class="page-header-bell" href="/#alerts" aria-label="Alerts" title="Alerts">${icon('bell', { size: 'size-5' })}</a>${userMenu(o.pm.name)}` : ''}
     </div>
@@ -371,7 +395,7 @@ export function postButton(
 }
 
 /** The section box shared by card() and section(). */
-function panel(o: { title?: string; actions?: Html; body: Html; id?: string }): Html {
+function panel(o: { title?: string | Html; actions?: Html; body: Html; id?: string }): Html {
   return html`<section class="section" ${o.id ? html`id="${o.id}"` : ''}>
     ${o.title || o.actions
       ? html`<div class="section-head">
@@ -384,27 +408,115 @@ function panel(o: { title?: string; actions?: Html; body: Html; id?: string }): 
 }
 
 /** A surface with a hairline border and an optional <h2> title and actions (a section, not a card). */
-export function card(o: { title?: string; actions?: Html; body: Html; id?: string }): Html {
+export function card(o: { title?: string | Html; actions?: Html; body: Html; id?: string }): Html {
   return panel(o);
 }
 
 /** A titled section: a surface with a hairline, the heading on the left and actions on the right. */
-export function section(o: { title: string; actions?: Html; body: Html; id?: string }): Html {
+export function section(o: { title: string | Html; actions?: Html; body: Html; id?: string }): Html {
   return panel(o);
 }
 
-/** The pen at the side of a details block: a link that opens its edit form in the page (`?edit=details`), with no JavaScript. `label` names it. */
-export function editPen(label: string, href: string): Html {
-  return html`<a href="${href}" class="icon-btn" aria-label="${label}" title="${label}">${icon('pencil-simple', { size: 'size-[18px]' })}</a>`;
+/**
+ * One row of an `inlineEdit` block. `read` is what it shows; `control` (a `field({ bare: true })`
+ * whose id is `for`) takes the value's place while editing. A row with no `read` shows only while
+ * editing (a name that is otherwise the page's title); one with no `control` is never edited.
+ */
+export type EditRow = { label: string; read?: Html | string; control?: Html; for?: string; wide?: boolean };
+
+/**
+ * A block that edits in place: the values with a pen beside them; the pen turns each value into
+ * its input, and a tick (Save) and a cross (Cancel) take the pen's place. One markup serves both
+ * states, so nothing moves but the values themselves.
+ *
+ * Without JavaScript the pen is a link to `edit.href` (`?edit=details`), which renders the block
+ * with `editing` on: the tick posts the form to `action`, the cross is a link to `cancel`. With
+ * JavaScript (app.js, "Inline edit") the pen opens it where it is, the tick posts by fetch and the
+ * block is swapped for the one in the server's reply (`refresh` names other ids to swap with it),
+ * Escape and the cross put the values back. A refused save re-renders the page with the block open,
+ * as posted, with the reason under its field; `refusal` is a reason that names no field.
+ *
+ * `rows` lay out as a `facts` list (label beside value) or a `grid` (`listClass`, label above);
+ * `view` replaces the rows for a block of its own shape (a Summary), and is given the tools to place.
+ * `extra` shows under the rows only while editing; `after` sits in the block, outside the form.
+ */
+export function inlineEdit(o: {
+  id: string;
+  label: string;
+  action: string;
+  edit: { label: string; href: string };
+  cancel: string;
+  save?: string;
+  editing: boolean;
+  canEdit?: boolean;
+  rows?: EditRow[];
+  layout?: 'facts' | 'grid';
+  listClass?: string;
+  view?: (tools: Html) => Html;
+  extra?: Html;
+  after?: Html;
+  refusal?: string;
+  refresh?: string[];
+  tag?: 'section' | 'div';
+  className?: string;
+  formId?: string;
+}): Html {
+  const canEdit = o.canEdit !== false;
+  const editing = canEdit && o.editing;
+  const tools = canEdit ? inlineEditTools(o.edit, o.cancel, o.save ?? 'Save changes') : html``;
+  const rows = o.rows ? editRows(canEdit ? o.rows : o.rows.filter((r) => r.read !== undefined), o.layout ?? 'facts', o.listClass) : html``;
+  const body = o.view
+    ? o.view(tools)
+    : html`<div class="inline-edit-head">
+        <div class="inline-edit-body">${rows}${canEdit && o.extra ? html`<div class="inline-edit-extra">${o.extra}</div>` : ''}</div>
+        ${tools}
+      </div>`;
+  const tag = o.tag ?? 'section';
+  const open = html`${tag === 'section' ? html`<section` : html`<div`} id="${o.id}" class="inline-edit${editing ? ' is-editing' : ''}${o.className ? ` ${o.className}` : ''}" aria-label="${o.label}"
+    ${canEdit ? html`data-inline-edit` : ''} ${o.refresh?.length ? html`data-inline-refresh="${o.refresh.join(' ')}"` : ''}>`;
+  const fields = editing ? html`<fieldset class="inline-edit-fields">` : html`<fieldset class="inline-edit-fields" disabled>`;
+  const inner = canEdit
+    ? html`<form method="post" action="${o.action}" class="inline-edit-form" ${o.formId ? html`id="${o.formId}"` : ''}>
+        ${fields}
+          ${editing && o.refusal ? html`<div class="inline-edit-refusal">${alert(o.refusal, 'error')}</div>` : ''}
+          ${body}
+        </fieldset>
+      </form>`
+    : body;
+  return html`${open}${inner}${o.after ?? ''}${tag === 'section' ? html`</section>` : html`</div>`}`;
 }
 
-/** The form that takes a details block's place: its fields, a refusal that isn't about one field, then Save and a Cancel back to the plain view. */
-export function detailsForm(o: { action: string; cancel: string; fields: Html; refusal?: string }): Html {
-  return html`<form method="post" action="${o.action}" class="details-form">
-    ${o.refusal ? alert(o.refusal, 'error') : ''}
-    ${o.fields}
-    <div class="details-actions">${button('Save')}${linkButton('Cancel', o.cancel, { variant: 'ghost' })}</div>
-  </form>`;
+/** The pen, and the tick and cross that take its place while editing. CSS shows the ones for the state. */
+function inlineEditTools(edit: { label: string; href: string }, cancel: string, save: string): Html {
+  return html`<div class="inline-edit-tools">
+    <a href="${edit.href}" class="icon-btn inline-edit-open" data-inline-open aria-label="${edit.label}" title="${edit.label}">${icon('pencil-simple', { size: 'size-[18px]' })}</a>
+    <button type="submit" class="icon-btn inline-edit-save" data-inline-save aria-label="${save}" title="${save}">${icon('check', { size: 'size-[18px]', weight: 'bold' })}</button>
+    <a href="${cancel}" class="icon-btn inline-edit-cancel" data-inline-cancel aria-label="Cancel editing" title="Cancel">${icon('x', { size: 'size-[18px]' })}</a>
+  </div>`;
+}
+
+/** The value, and the control that takes its place while editing. One grid cell, so either can fill it. */
+export function editSwap(read: Html | string, control?: Html): Html {
+  return control
+    ? html`<div class="inline-edit-slot">
+        <div class="inline-edit-read">${read}</div>
+        <div class="inline-edit-control">${control}</div>
+      </div>`
+    : html`${read}`;
+}
+
+function editRows(rows: EditRow[], layout: 'facts' | 'grid', listClass = ''): Html {
+  const facts = layout === 'facts';
+  return html`<dl class="${facts ? 'facts' : listClass}">
+    ${rows.map((r) => {
+      const term = r.control && r.for ? html`<label for="${r.for}">${r.label}</label>` : r.label;
+      const classes = [facts ? 'facts-row' : '', r.read === undefined ? 'inline-edit-only' : '', r.wide ? 'inline-edit-wide' : ''].filter(Boolean).join(' ');
+      return html`<div${classes ? html` class="${classes}"` : ''}>
+        <dt${facts ? html` class="facts-term"` : ''}>${term}</dt>
+        <dd${facts ? html` class="facts-value"` : ''}>${r.read === undefined ? html`<div class="inline-edit-control">${r.control}</div>` : editSwap(r.read, r.control)}</dd>
+      </div>`;
+    })}
+  </dl>`;
 }
 
 /** A heading for a group of cards or a list, with actions on the right. */
@@ -742,6 +854,10 @@ export function field(o: {
   error?: string;
   /** Address suggestions as you type (app.js). The field stays a plain text box without JavaScript. */
   suggest?: boolean;
+  /** Just the control, its error and hint, with no label: for an `inlineEdit` row, whose term labels it. */
+  bare?: boolean;
+  /** Extra classes on the control itself. */
+  className?: string;
 }): Html {
   const id = o.id ?? `field-${o.name}`;
   const type = o.type ?? 'text';
@@ -751,7 +867,7 @@ export function field(o: {
   const error = o.error ? html`<p id="${errorId}" class="field-error">${o.error}</p>` : '';
   const describedBy = [o.error ? errorId : '', o.hint ? hintId : ''].filter(Boolean).join(' ');
   const common = html`id="${id}" name="${o.name}" ${o.required ? 'required' : ''} ${o.multiple ? 'multiple' : ''} ${describedBy ? html`aria-describedby="${describedBy}"` : ''} ${o.error ? html`aria-invalid="true"` : ''}`;
-  const invalid = o.error ? ' input-error' : '';
+  const invalid = (o.error ? ' input-error' : '') + (o.className ? ` ${o.className}` : '');
 
   if (type === 'checkbox') {
     return html`<div class="fieldset">
@@ -774,6 +890,7 @@ export function field(o: {
         : type === 'file'
           ? html`<input ${common} type="file" class="file-input w-full${invalid.replace('input', 'file-input')}" ${o.accept ? html`accept="${o.accept}"` : ''} />`
           : html`<input ${common} type="${type}" class="input w-full${invalid}" value="${o.value ?? ''}" placeholder="${o.placeholder ?? ''}" ${o.suggest ? 'data-address-suggest' : ''} ${o.autocomplete || o.suggest ? html`autocomplete="${o.suggest ? 'off' : o.autocomplete}"` : ''} ${o.step ? html`step="${o.step}"` : ''} ${o.min !== undefined ? html`min="${o.min}"` : ''} ${o.max !== undefined ? html`max="${o.max}"` : ''} />`;
+  if (o.bare) return html`<div class="fieldset">${control} ${error} ${hint}</div>`;
   return html`<div class="fieldset">
     <label for="${id}" class="field-label">${o.label}</label>
     ${control} ${error} ${hint}

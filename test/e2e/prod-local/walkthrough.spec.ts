@@ -49,10 +49,11 @@ test('signing up lands in the welcome wizard, and the setup sections open in ord
   await expect(page.getByRole('heading', { level: 1, name: 'Your team' })).toBeVisible();
   await page.getByRole('link', { name: 'Skip for now' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Channels' })).toBeVisible();
-  // No real channel is connected: the SMS and email sections are the only way in. WhatsApp is not offered.
+  // No real channel is connected. WhatsApp stays on the page, disabled, until META_WHATSAPP_* is set.
   await expect(page.getByRole('heading', { name: 'SMS' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Email' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'WhatsApp' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'WhatsApp' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Connect WhatsApp' })).toBeDisabled();
   // Neither channel can work on this server, so nothing is left to wait for: the step reads as done.
   await page.getByRole('link', { name: 'Continue' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Tradies' })).toBeVisible();

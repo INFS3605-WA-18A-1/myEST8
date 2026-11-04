@@ -14,9 +14,8 @@ import {
   alert,
   badge,
   contactLink,
-  detailsForm,
   dl,
-  editPen,
+  inlineEdit,
   emptyState,
   entityLink,
   flashFrom,
@@ -34,7 +33,7 @@ import {
   type Html,
   type NavKey,
 } from '../ui.ts';
-import { addPersonForm, contactFields, contactFrom, fieldGrid, saveDetails, type DetailsEdit, type Errors, type Values } from './onboarding-forms.ts';
+import { addPersonForm, contactControls, contactFields, contactFrom, fieldGrid, saveDetails, type DetailsEdit, type Errors, type Values } from './onboarding-forms.ts';
 
 type Person = Awaited<ReturnType<PropertyManagerActions['people']>>[number];
 type Property = Awaited<ReturnType<PropertyManagerActions['properties']>>[number];
@@ -236,7 +235,7 @@ async function profilePage(c: Context<WebEnv>, kind: Kind, id: number, refused?:
   const removed = !!person.removedAt;
   // A removed person can't be edited: no form, even if one is asked for or a save is refused.
   const editing = !removed && (!!refused || c.req.query('edit') === 'details');
-  const people = editing ? [] : await actions.people();
+  const people = await actions.people();
   const notice = removed
     ? html`${alert(`Removed from the Agency on ${longDate(person.removedAt!, timeZone)}.`, 'info')}${refused ? alert(refused.message, 'error') : ''}`
     : '';
@@ -273,30 +272,28 @@ function contactDetail(kind: 'mobile' | 'email', value: string | null, people: P
   return html`${contactLink(kind, value)}${sharedAddressNote('Also', othersUsing(people, value, selfId))}`;
 }
 
-/** Name, mobile and email, with a pen. Editing, the form takes their place. */
+/** Mobile and email, editing in place with the name (the page's title) added while editing. A removed person has no pen. */
 function facts(kind: Kind, person: Profile, editing: boolean, refused: DetailsEdit | undefined, people: Parameters<typeof othersUsing>[0]): Html {
-  if (editing) {
-    const values = refused?.values ?? { name: person.name, mobile: person.mobile ?? '', email: person.email ?? '' };
-    return html`<section class="section" id="details" aria-label="${kind.singular} details">
-      ${detailsForm({
-        action: `${kind.path}/${person.personId}/details`,
-        cancel: `${kind.path}/${person.personId}`,
-        refusal: refused && !Object.keys(refused.errors).length ? refused.message : undefined,
-        fields: fieldGrid(contactFields(kind.formId, { values, errors: refused?.errors })),
-      })}
-    </section>`;
-  }
-  return html`<section class="section" id="details" aria-label="${kind.singular} details">
-    <div class="details-head">
-      <div class="details-body">
-        ${dl([
-          ['Mobile', contactDetail('mobile', person.mobile, people, person.personId)],
-          ['Email', contactDetail('email', person.email, people, person.personId)],
-        ])}
-      </div>
-      ${person.removedAt ? '' : editPen('Edit details', `${kind.path}/${person.personId}?edit=details#details`)}
-    </div>
-  </section>`;
+  const values = refused?.values ?? { name: person.name, mobile: person.mobile ?? '', email: person.email ?? '' };
+  const controls = contactControls(kind.formId, { values, errors: refused?.errors });
+  const path = `${kind.path}/${person.personId}`;
+  return inlineEdit({
+    id: 'details',
+    label: `${kind.singular} details`,
+    action: `${path}/details`,
+    edit: { label: 'Edit details', href: `${path}?edit=details#details` },
+    cancel: `${path}#details`,
+    save: 'Save details',
+    editing,
+    canEdit: !person.removedAt,
+    className: 'section',
+    refusal: refused && !Object.keys(refused.errors).length ? refused.message : undefined,
+    rows: [
+      { label: 'Mobile', read: contactDetail('mobile', person.mobile, people, person.personId), ...controls.mobile },
+      { label: 'Email', read: contactDetail('email', person.email, people, person.personId), ...controls.email },
+      { label: 'Name', ...controls.name },
+    ],
+  });
 }
 
 function propertiesSection(kind: Kind, person: Profile): Html {
