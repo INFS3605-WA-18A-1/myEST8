@@ -579,8 +579,8 @@ export function rowLink(label: string, href: string): Html {
 /** A phone number or email address that calls or writes, with its icon. */
 export function contactLink(kind: 'mobile' | 'email', value: string): Html {
   return kind === 'mobile'
-    ? html`<a class="contact-link num" href="tel:${value}">${icon('phone', { size: 'size-4' })}<span>${value}</span></a>`
-    : html`<a class="contact-link is-email" href="mailto:${value}">${icon('envelope-simple', { size: 'size-4' })}<span>${value}</span></a>`;
+    ? html`<a class="contact-link num" href="tel:${value}" title="${value}">${icon('phone', { size: 'size-4' })}<span>${value}</span></a>`
+    : html`<a class="contact-link is-email" href="mailto:${value}" title="${value}">${icon('envelope-simple', { size: 'size-4' })}<span>${value}</span></a>`;
 }
 
 const PROFILE_PATH: Record<Role, string> = {

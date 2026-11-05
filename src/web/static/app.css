@@ -10708,10 +10708,13 @@
       display: grid;
       gap: 8px;
     }
-    /* A card: the status panel, the main block, then the figures. */
+    /* A card: the status panel, the main block, then the figures. From 64rem each is a
+       column with its own min-width, and the figures wrap under one another rather than
+       crossing into the main block. */
     .appr-card {
       display: grid;
       grid-template-columns: minmax(0, 1fr);
+      min-width: 0;
       overflow: hidden;
       background: var(--surface);
       border: 1px solid var(--line);
@@ -10721,6 +10724,7 @@
       display: grid;
       align-content: center;
       gap: 2px;
+      min-width: 0;
       padding: 10px 16px;
       font-size: 13px;
       background: var(--info-bg);
@@ -10768,9 +10772,24 @@
       flex-wrap: wrap;
       align-items: center;
       gap: 8px;
+      min-width: 0;
+      overflow-wrap: anywhere;
       font-family: var(--font-head);
       font-size: 16px;
       font-weight: 600;
+    }
+    /* The person, quote and over-limit columns share the card's right side and wrap
+       onto another line when the card is too narrow, instead of overlapping. */
+    .appr-figures {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0 12px;
+      min-width: 0;
+      padding: 0 16px;
+    }
+    .appr-figures .appr-col {
+      flex: 1 1 11rem;
+      padding: 0 0 10px;
     }
     .appr-pill {
       padding: 1px 10px;
@@ -10835,6 +10854,7 @@
       display: flex;
       align-items: center;
       gap: 10px;
+      min-width: 0;
     }
     .appr-person p {
       margin: 0;
@@ -10844,6 +10864,16 @@
     }
     .appr-person-contact {
       font-size: 13px;
+    }
+    .appr-person-contact .contact-link {
+      max-width: 100%;
+      min-width: 0;
+    }
+    .appr-person-contact .contact-link span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .appr-avatar {
       flex: none;
@@ -10862,6 +10892,7 @@
       background: #ecd48f;
     }
     .appr-tile {
+      min-width: 0;
       padding: 8px 12px;
       background: var(--page);
       border-radius: 12px;
@@ -10887,6 +10918,7 @@
     }
     .appr-tile-note {
       margin: 0;
+      overflow-wrap: anywhere;
       font-size: 12px;
       color: var(--muted);
     }
@@ -10894,6 +10926,10 @@
       display: flex;
       align-items: center;
       gap: 10px;
+      min-width: 0;
+    }
+    .appr-over > div {
+      min-width: 0;
     }
     .appr-ring {
       --fill: var(--pct);
@@ -10924,10 +10960,15 @@
     }
     @media (min-width: 64rem) {
       .appr-card {
-        grid-template-columns: 9.5rem minmax(0, 2.4fr) repeat(3, minmax(0, 1fr));
+        grid-template-columns: 11rem minmax(0, 1.8fr) minmax(0, 3.6fr);
         align-items: stretch;
       }
-      .appr-col {
+      .appr-figures {
+        align-content: center;
+        padding: 0;
+      }
+      .appr-figures .appr-col {
+        flex: 1 1 11rem;
         padding: 10px 12px 10px 0;
       }
     }
