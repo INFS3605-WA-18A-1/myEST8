@@ -7854,6 +7854,49 @@
       display: grid;
       gap: 16px;
     }
+    /* From 64rem the right column fills the window: Today at a glance keeps its natural
+       height and To dispatch takes the rest, its header fixed while its cards scroll. */
+    @media (min-width: 64rem) {
+      .dispatch-right {
+        display: flex;
+        flex-direction: column;
+        height: calc(100dvh - 9.5rem);
+        min-height: 30rem;
+      }
+      .dispatch-right > .soft-card:first-child {
+        flex: none;
+      }
+      #to-dispatch {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        flex: 1 1 0;
+        min-height: 0;
+      }
+      #to-dispatch > .dispatch-queue,
+      #to-dispatch > .empty-state {
+        min-height: 0;
+        overflow-y: auto;
+        padding-right: 4px;
+        scrollbar-width: thin;
+      }
+      #to-dispatch > .dispatch-queue {
+        align-content: start;
+      }
+    }
+    /* A short window scrolls the page instead of squeezing the queue, but the list still
+       stops at a fixed height so the page can't run on. */
+    @media (min-width: 64rem) and (max-height: 47.99rem) {
+      .dispatch-right {
+        height: auto;
+      }
+      #to-dispatch {
+        flex: none;
+      }
+      #to-dispatch > .dispatch-queue,
+      #to-dispatch > .empty-state {
+        max-height: 36rem;
+      }
+    }
     .dispatch-stack .dispatch-address .entity-link {
       border: 0;
       background: transparent;
