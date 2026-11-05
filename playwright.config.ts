@@ -25,9 +25,7 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: CI,
   retries: CI ? 1 : 0,
-  // Four browsers on a 4-vCPU CI runner (the job has one Postgres service and
-  // one demo server between them); 2 left the runner half idle for three minutes.
-  workers: CI ? 4 : undefined,
+  workers: CI ? 2 : undefined,
   timeout: 30_000,
   reporter: CI ? [['list'], ['html', { open: 'never' }]] : [['list']],
   use: {
