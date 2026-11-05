@@ -3,6 +3,12 @@
 #   pull request   ->  test, build
 #   push to master -> test, build -> migrate-prod -> deploy-prod -> smoke
 #
+# `test` is only a gate: the work happens in `test-unit` (vitest, sharded over
+# four runners) and `e2e` (Playwright), which run side by side. Vitest takes
+# about nine minutes and the browser suite three, so splitting them is what
+# makes a pull request finish in about four minutes instead of thirteen. The
+# gate keeps the required `test` check on master's branch protection stable.
+#
 # There are no preview deployments: the one Supabase project is production, and a
 # preview would run on its data. Add a staging project and a preview job to bring them back.
 # Instead `build` runs production's `vercel build` on every change, without deploying it.
@@ -53,9 +59,21 @@ jobs:
               ;;
           esac
 
-  test:
+  # Vitest, split four ways. `--shard` has vitest hash the file paths and deal
+  # the files out, so the shards hold roughly the same work without anyone
+  # maintaining a list of them; a few of the biggest files (test/web/ticket,
+  # test/web/calendar, test/inspections) always make one shard the longest, so
+  # more shards past four buy little. Each shard makes its own database on its
+  # own Postgres service, so the shards share nothing.
+  test-unit:
+    name: test-unit (${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
+    strategy:
+      # Every shard's failure is worth seeing, not just the first.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     services:
       # The same Postgres as `npm run db:start` runs locally. The tests make their own
       # database on it and apply supabase/migrations themselves. Docker picks a free
@@ -90,7 +108,38 @@ jobs:
         run: npm run typecheck
 
       - name: Unit and integration tests
-        run: npm run test:unit
+        run: npm run test:unit -- --shard=${{ matrix.shard }}/4
+
+  # Playwright, in its own job so the three-minute browser suite runs beside the
+  # vitest shards rather than after them.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17-alpine
+        ports:
+          - 5432
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_INITDB_ARGS: --locale-provider=builtin --locale=C.UTF-8
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    steps:
+      - name: Point the tests at the Postgres service
+        run: echo "TEST_DATABASE_URL=postgres://postgres:postgres@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/postgres" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.x
+          cache: npm
+
+      - run: npm ci
 
       - name: Cache Playwright's Chromium
         id: playwright
@@ -114,6 +163,24 @@ jobs:
             playwright-report/
             test-results/
           retention-days: 14
+
+  # The check master's branch protection requires. It does no work of its own:
+  # it fails when a shard or the browser suite did, so a red e2e run still stops
+  # a merge. Renaming it would mean updating branch protection.
+  test:
+    needs: [test-unit, e2e]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Fail when a test job failed or was cancelled
+        if: needs.test-unit.result != 'success' || needs.e2e.result != 'success'
+        env:
+          UNIT: ${{ needs.test-unit.result }}
+          E2E: ${{ needs.e2e.result }}
+        run: |
+          echo "Unit shards: $UNIT, browser suite: $E2E"
+          exit 1
 
   # The same `vercel build` as deploy-prod, so a vercel.json Vercel refuses, or a function
   # missing a file the app reads at run time, fails here rather than after master's

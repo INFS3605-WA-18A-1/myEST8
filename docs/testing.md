@@ -82,7 +82,7 @@ Manager or Tenant can't do without, or for behaviour only a browser shows
 | --- | --- | --- | --- | --- |
 | Unit / integration tests | Local Postgres: a database per run, a schema per test, dropped afterwards | Fakes at the ports | `FakeMessenger` | `npm test` |
 | Browser tests (local and CI) | Local Postgres: a database per run (`SUPABASE_DB_URL` and `DATABASE_SCHEMA` set by `playwright.config.ts`), dropped afterwards | In-process mocks (`src/demo/mock-apis.ts`); real-API env vars are blanked | Simulated | `npm run test:e2e` |
-| CI | A `postgres:17` service container (`.github/workflows/ci.yml`), the same as local; no hosted credentials | As above | As above | every push |
+| CI | A `postgres:17` service container (`.github/workflows/ci.yml`), the same as local; no hosted credentials. Vitest is sharded over four runners and Playwright runs in its own job beside them | As above | As above | every push |
 | Local dev | Local Postgres, schema `dev` in the `myest8` database, kept across restarts (`npm run dev:reset` to start again) | Mocks, or real ones you opt into with env vars (`.env.example`) | Simulated | `npm run dev` |
 | Demo / presenting | Local Postgres, a throwaway schema, fresh seed and stories every start | Mocks | Simulated | `npm run demo` |
 | Staging (planned) | Its own Supabase Postgres database, never production's | Real: Twilio test credentials or sandbox numbers, Jev/Places test keys, SendGrid to a test domain | Real, to team phones only | the production entry point with staging env vars |
