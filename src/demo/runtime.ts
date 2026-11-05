@@ -40,6 +40,7 @@ import { mockApis, mockComposer, mockExtractor, mockSummariser } from './mock-ap
 import { seedDemo, type DemoSeed } from './seed.ts';
 import { SimulatedMessenger } from './simulated-messenger.ts';
 import { seedStories, storiesStart } from './stories.ts';
+import { isMadeUpAddress, seedSignedUpAgency } from './uat.ts';
 
 const HOUR_MS = 3_600_000;
 const MOCK = 'http://mock.local';
@@ -340,13 +341,16 @@ export async function createDemo<Seeded extends boolean = true>(
       // An Agency's own number sends through the Twilio account that owns it; any other SMS through the shared number.
       const own = message.channelType === 'sms' && smsNumbers && (await smsNumbers.owns(message.from));
       const provider = own ? smsNumbers.messenger : providers.channels[message.channelType];
-      if (provider && reallySends(message.to)) await provider.send({ ...message, cc: message.cc.filter(reallySends) });
+      // UAT (src/demo/uat.ts): a message to or from a made-up address is dropped as if sent.
+      const madeUp = isMadeUpAddress(message.to) || isMadeUpAddress(message.from);
+      if (provider && !madeUp && reallySends(message.to)) await provider.send({ ...message, cc: message.cc.filter((a) => reallySends(a) && !isMadeUpAddress(a)) });
       // Hosted, nothing records into the phone simulator: no provider means it can't be sent.
-      else if (hosted) throw new UndeliverableError(message.channelType, message.to, `no ${message.channelType} provider is configured`, `${message.channelType === 'sms' ? 'SMS' : message.channelType === 'whatsapp' ? 'WhatsApp' : 'email'} isn't set up on this server yet`);
+      else if (hosted && !madeUp) throw new UndeliverableError(message.channelType, message.to, `no ${message.channelType} provider is configured`, `${message.channelType === 'sms' ? 'SMS' : message.channelType === 'whatsapp' ? 'WhatsApp' : 'email'} isn't set up on this server yet`);
       if (!hosted) await messenger.send(message);
     },
   };
   const twilioAuthToken = env.TWILIO_AUTH_TOKEN?.trim();
+  const blobs = storageFromEnv(env);
   const haiku = anthropicKey ? createClaudeComposer({ apiKey: anthropicKey, fetch }) : null;
   const app = createApp({
     db,
@@ -376,9 +380,10 @@ export async function createDemo<Seeded extends boolean = true>(
         : createJevRequestJudge({ ...jev, apiKey: env.JEV_API_KEY ?? 'demo' }),
     fetchMedia: mediaFetcher(env, smsNumbers),
     settings: { baseUrl },
-    blobs: storageFromEnv(env),
+    blobs,
     smsNumbers,
   });
+
 
   // Worker runs never overlap: each call waits for the one before.
   let tail: Promise<void> = Promise.resolve();
@@ -403,6 +408,29 @@ export async function createDemo<Seeded extends boolean = true>(
     });
     tail = next;
     return next;
+  }
+
+  // UAT only (src/demo/uat.ts): hosted, every Agency that signs up starts with the demo's people and work in it.
+  // UAT_SEED_SIGNUPS=1 does the same on a local start, and =0 turns it off hosted. The seed takes a minute or so
+  // on production, so it runs after the sign-up's response, queued with the worker: api/index.ts keeps the function
+  // going for that after every POST. A seed that fails is logged; the sign-up still stands.
+  if (hosted ? env.UAT_SEED_SIGNUPS !== '0' : env.UAT_SEED_SIGNUPS === '1') {
+    const signUp = app.signUp;
+    const log = options.log ?? ((line: string) => console.log(line));
+    app.signUp = async (input) => {
+      const propertyManagerId = await signUp(input);
+      const agencyId = (await app.asPropertyManager(propertyManagerId)).agency().id;
+      tail = tail.then(async () => {
+        const started = Date.now();
+        try {
+          const seeded = await seedSignedUpAgency({ db, blobs, baseUrl, agencyId, propertyManagerId });
+          log(`[uat] Seeded Agency ${agencyId} in ${Math.round((Date.now() - started) / 1000)} s. ${seeded}`);
+        } catch (error) {
+          logError(new Error(`[uat] Seeding Agency ${agencyId} stopped part-way`, { cause: error }));
+        }
+      });
+      return propertyManagerId;
+    };
   }
 
   /** Runs the worker every `intervalMs`, skipping a tick while a run is still going. Returns a function that stops it. */

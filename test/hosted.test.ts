@@ -6,9 +6,10 @@ import { signUpFields } from './support/web.ts';
 
 // A migrated schema stands in for the hosted database, which `supabase db push` migrates.
 // ALLOW_MOCKS=1: these tests have no provider keys, and the missing ones run on mocks.
+// UAT_SEED_SIGNUPS=0: a sign-up here isn't seeded with the demo's work (test/demo/uat.test.ts covers that).
 async function hostedEnv(extra: Record<string, string> = {}) {
   const db = await testDb();
-  return { ...demoEnv({ DATABASE_SCHEMA: db.schema, PUBLIC_URL: 'https://myest8.test', ALLOW_MOCKS: '1', ...extra }) };
+  return { ...demoEnv({ DATABASE_SCHEMA: db.schema, PUBLIC_URL: 'https://myest8.test', ALLOW_MOCKS: '1', UAT_SEED_SIGNUPS: '0', ...extra }) };
 }
 
 /** Every setting hosted mode requires, as fake values: nothing here reaches a provider. */

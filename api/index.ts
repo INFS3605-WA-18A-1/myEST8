@@ -8,7 +8,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { waitUntil } from '@vercel/functions';
 import { hostedApp, type Hosted } from '../src/hosted.ts';
 
-/** Real time a worker run may spend starting tasks; vercel.json gives the function 60 s. */
+/** Real time a worker run may spend starting tasks; vercel.json gives the function 300 s, room for a UAT seed (src/demo/uat.ts) first. */
 const WORKER_BUDGET_MS = 45_000;
 
 // Built once per function instance. A failed start isn't kept, so the next request tries again.

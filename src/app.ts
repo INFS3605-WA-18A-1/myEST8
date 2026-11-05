@@ -31,11 +31,13 @@ export function createApp(
     blobs?: BlobStore | null;
     /** Setting up an Agency's own Twilio SMS number (ADR 0005). Null where this server doesn't offer it. */
     smsNumbers?: SmsNumbers | null;
+    /** Keeps this app's background tasks to its own worker under this status, until `releaseHeldTasks` (UAT seeding, src/demo/uat.ts). */
+    heldTasks?: string;
   },
 ) {
   const { db, clock } = deps;
   const settings: Settings = { ...DEFAULT_SETTINGS, ...deps.settings };
-  const worker = createWorker(db, clock);
+  const worker = createWorker(db, clock, deps.heldTasks ? { held: deps.heldTasks } : {});
   const files = createFiles(db, clock, deps.blobs ?? null);
   const modules = {} as Modules;
   const ctx: Context = {
@@ -188,6 +190,9 @@ export function createApp(
 
     /** Runs every background task that is due. */
     runWorker: (options?: { budgetMs?: number }) => worker.runDue(options),
+
+    /** With `heldTasks`: hands the tasks still waiting, such as reminders not yet due, to every worker. */
+    releaseHeldTasks: () => worker.release(),
 
     /** A stored file, for a signed file link (src/file-links.ts): the checked signature is the access control. */
     linkedFile: (fileId: number) => files.get(fileId),
