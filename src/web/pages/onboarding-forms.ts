@@ -130,7 +130,7 @@ export function channelChip(channel: AgencyChannel | undefined, o: { waiting?: b
     case 'verified':
       return badge('Verified', 'success', { wrap: true });
     case 'connected':
-      return badge('Connected', 'info', { wrap: true });
+      return badge('Connected', 'success', { wrap: true });
   }
 }
 

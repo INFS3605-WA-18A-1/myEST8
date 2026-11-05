@@ -49,9 +49,6 @@ export function signupRoutes(app: App, sessions: Sessions) {
 
     const timeZone = text(form, 'timeZone');
     if (!TIME_ZONES.some((z) => z.value === timeZone)) return refused({ timeZone: 'Choose a time zone' });
-    if (password && password !== rawText(form, 'confirmPassword')) {
-      return refused({ confirmPassword: "The passwords don't match. Type the same password twice." });
-    }
 
     let propertyManagerId: number;
     try {
@@ -104,7 +101,7 @@ function signUpPage(o: { values?: Values; errors?: Errors; flash?: Flash; shareL
               error: errors.email,
             })}
           </div>
-          <div class="au-pair">
+          <div class="au-pair is-single">
             ${field({
               label: 'Password',
               name: 'password',
@@ -113,8 +110,8 @@ function signUpPage(o: { values?: Values; errors?: Errors; flash?: Flash; shareL
               autocomplete: 'new-password',
               hint: `At least ${MIN_PASSWORD_LENGTH} characters.`,
               error: errors.password,
+              suffix: html`<button type="button" class="password-toggle" data-reveal="field-password" aria-pressed="false" aria-label="Show password">Show</button>`,
             })}
-            ${field({ label: 'Confirm password', name: 'confirmPassword', type: 'password', required: true, autocomplete: 'new-password', error: errors.confirmPassword })}
           </div>
         </fieldset>
         <fieldset class="au-fieldset">
@@ -142,7 +139,7 @@ function signUpPage(o: { values?: Values; errors?: Errors; flash?: Flash; shareL
         </fieldset>
         ${button('Create account', { size: 'lg', block: true })}
       </form>
-      ${otherWay({ text: 'Already have an account?', button: linkButton('Sign in', '/login', { variant: 'secondary', size: 'lg', block: true }) })}
+      ${otherWay({ text: 'Already have an account?', button: linkButton('Sign in', '/login', { variant: 'secondary', size: 'sm' }) })}
       <aside class="au-share" aria-label="Someone else setting up the Agency">
         <p class="au-other-text">One Property Manager creates the account, then adds the rest of the Agency from the setup guide. Is someone else doing that?</p>
         ${shareButton({
@@ -155,8 +152,11 @@ function signUpPage(o: { values?: Values; errors?: Errors; flash?: Flash; shareL
       </aside>`,
     steps: [
       { text: 'Your account and your Agency are created, and you are signed in.' },
-      { text: 'The setup guide adds your team, connects SMS and email, then adds your Tradies and your first Property.' },
+      {
+        text: "First, connect the Agency's email. It is required and takes about 2 minutes: myEST8 reads the mail Tenants send. Then add your team, your Tradies and your first Property.",
+      },
       { text: 'Tenants can then text in a repair, and it reaches you as a Maintenance Request to confirm.', request: true },
     ],
+    stepsNote: 'The whole setup guide takes about 10 minutes.',
   });
 }

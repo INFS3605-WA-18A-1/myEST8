@@ -116,7 +116,7 @@ describe('Maintenance Requests on the dashboard', () => {
 
     expect(after).toContain('Now an Urgent Repair');
     expect(after).toContain('No Maintenance Requests waiting for you.');
-    expect(after).toContain('Awaiting receipt');
+    expect(after).toContain('Receipts awaited');
   });
 
   test("a Tenant's photo is shown with its checks and served only to signed-in Property Managers", async () => {
@@ -174,6 +174,8 @@ describe('the count strip and Needs your attention', () => {
 
   test('on All every row keeps the filter in its link', async () => {
     const w = await webWorld();
+    const job = await tomsTapTicket(w);
+    await w.alice.sendQuoteRequests(job.jobId, [w.tradies.pete.id, w.tradies.dana.id]);
     const cookie = await w.signIn();
     const all = await page(w, '/?filter=all', cookie);
 
@@ -202,20 +204,19 @@ describe('the count strip and Needs your attention', () => {
 
     expect(row).toContain('<span class="glance-count">1</span>');
     expect(row).toContain('<span class="glance-label">Visits not confirmed</span>');
-    expect(row).toContain('<span class="glance-sub">today 1 · tomorrow 0');
+    expect(row).toContain('<span class="glance-sub">today 1');
     expect(row).toContain('status=not_confirmed');
   });
 
-  test('with nothing waiting all four rows are quiet and one line says so', async () => {
+  test('with nothing waiting the rows give way to one quiet line', async () => {
     const w = await webWorld();
     const cookie = await w.signIn();
     const dashboard = await page(w, '/', cookie);
 
     for (const cls of ['is-tradies', 'is-owners', 'is-visits', 'is-confirm']) {
-      const row = glanceRowOf(dashboard, cls);
-      expect(row).toContain('glance-row is-zero');
-      expect(row).toContain('<span class="glance-sub">None</span>');
+      expect(dashboard).not.toContain(`<li class="${cls}">`);
     }
+    expect(dashboard).toContain('<section class="glance is-clear" aria-label="Waiting on others">');
     expect(dashboard).toContain('<p class="glance-clear">Nothing is waiting on Tradies, Owners or Tenants.</p>');
     expect(dashboard).toContain('No Maintenance Requests waiting for you.');
   });
@@ -245,8 +246,10 @@ describe('the count strip and Needs your attention', () => {
 });
 
 describe('Waiting on others and the inbox modal', () => {
-  test('the four rows are links to their own queues', async () => {
+  test('the waiting rows are links to their own queues', async () => {
     const w = await webWorld();
+    const job = await tomsTapTicket(w);
+    await w.alice.sendQuoteRequests(job.jobId, [w.tradies.pete.id, w.tradies.dana.id]);
     const cookie = await w.signIn();
     const dashboard = await page(w, '/', cookie);
 
@@ -256,7 +259,8 @@ describe('Waiting on others and the inbox modal', () => {
     expect(glanceRowOf(dashboard, 'is-owners')).toContain('href="/tickets?stage=awaiting_owner"');
     expect(glanceRowOf(dashboard, 'is-visits')).toContain('href="/tickets?stage=approved"');
     expect(glanceRowOf(dashboard, 'is-confirm')).toMatch(/href="\/calendar\?view=day&amp;date=\d{4}-\d{2}-\d{2}&amp;status=not_confirmed"/);
-    for (const label of ['Tradies quoting', 'Owners approving', 'Visit times being arranged', 'Visits not confirmed']) {
+    expect(glanceRowOf(dashboard, 'is-receipts')).toContain('href="/approvals#reimbursements"');
+    for (const label of ['Tradies quoting', 'Owners approving', 'Visit times being arranged', 'Visits not confirmed', 'Receipts awaited']) {
       expect(dashboard).toContain(`<span class="glance-label">${label}</span>`);
     }
   });
@@ -371,7 +375,7 @@ describe('Tickets on the dashboard', () => {
     await firmQuote(w, job, w.tradies.dana, { priceCents: 180_00 });
     const ready = docketOf(await page(w, '/', cookie));
     expect(ready).toContain('class="ticket-row is-decision"');
-    expect(ready).toContain('Ready to choose');
+    expect(ready).toContain('Firm Quotes to choose');
   });
 
   test("Bob's own list leaves out Alice's Tickets, and \"all\" shows them", async () => {
@@ -544,13 +548,13 @@ describe('picking a day in the Next 7 days', () => {
     expect(nextSeven(all)).toContain('href="/calendar?view=day&amp;date=2026-10-13&amp;filter=all"');
   });
 
-  test('an empty day says nothing is booked and links to that day on the calendar', async () => {
+  test('an empty day points to the next visit rather than a dead end', async () => {
     const { w, cookie } = await twoDays();
 
     const strip = nextSeven(await page(w, '/?day=2026-10-14', cookie));
 
     expect(strip).toContain('Wednesday 14 October');
-    expect(strip).toContain('Nothing booked on Wednesday.');
+    expect(strip).toContain('Nothing booked in the next 7 days.');
     expect(strip).toContain('href="/calendar?view=day&amp;date=2026-10-14"');
     expect(strip).not.toContain('2:00 pm');
     expect(strip).not.toContain('9:00 am');

@@ -455,7 +455,7 @@ describe('Work Orders', () => {
     const rated = await submit(formPosting(done.html, /\/rate$/), { score: 4 });
 
     expect(rated.ok).toBe("Pete's Plumbing rated 4 out of 5");
-    expect(rated.page.text).toContain("Pete's Plumbing was rated 4 out of 5.");
+    expect(rated.page.text).toContain("You rated Pete's Plumbing 4 out of 5.");
   });
 });
 

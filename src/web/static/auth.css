@@ -219,16 +219,62 @@ body.au {
   align-items: start;
   gap: 12px 16px;
 }
+/* One field on its own line (the password, with its Show toggle), not half a row. */
+.au-pair.is-single {
+  grid-template-columns: minmax(0, 1fr);
+}
 @media (min-width: 40rem) {
   .au-pair {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  .au-pair.is-single {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
-/* The other way in, under a hairline: a sentence, then a full-width button. */
+/* The Show / Hide control inside the password box: a quiet text button, not a second field. */
+.field-control {
+  position: relative;
+}
+.field-control .input {
+  padding-right: 76px;
+}
+.field-suffix {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  translate: 0 -50%;
+}
+.password-toggle {
+  min-height: 32px;
+  padding: 0 10px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--action);
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-btn);
+}
+.password-toggle:hover {
+  background: var(--page);
+}
+.password-toggle:focus-visible {
+  outline: 2px solid var(--action);
+  outline-offset: 2px;
+}
+@media (max-width: 40rem), (pointer: coarse) {
+  .password-toggle {
+    min-height: 36px;
+  }
+}
+
+/* The other way in, under a hairline: a sentence, then a small secondary button. */
 .au-other {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 12px;
   padding-top: 20px;
   border-top: 1px solid var(--line);
@@ -281,11 +327,13 @@ body.au {
     position: sticky;
     top: 0;
     max-width: none;
-    justify-content: center;
+    /* The thesis starts on the form h1's line, and the "What happens next" block sits at
+       the panel's foot, so the empty third is shared top and bottom rather than pooled. */
+    justify-content: space-between;
     gap: 48px;
     min-height: 100vh;
     min-height: 100dvh;
-    padding: 112px 48px 56px;
+    padding: 96px 48px 56px;
   }
 }
 @media (min-width: 80rem) {
@@ -342,6 +390,11 @@ body.au {
   font-weight: 600;
   color: var(--rail-muted);
 }
+.au-next-note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--rail-muted);
+}
 
 /* The steps in order, numbered on a thin track like the landing page's workflow. */
 .au-steps {
@@ -377,7 +430,7 @@ body.au {
   width: 28px;
   height: 28px;
   border: 1px solid var(--rail-muted);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-family: var(--font-head);
   font-size: 13px;
   font-weight: 600;
@@ -452,7 +505,7 @@ body.au {
   align-items: center;
   height: 30px;
   padding-inline: 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-btn);
   background: var(--action);
   color: var(--surface);
   font-family: var(--font-head);

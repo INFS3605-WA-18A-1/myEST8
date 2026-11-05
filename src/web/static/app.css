@@ -38,6 +38,22 @@
   --muted: #55636f; /* Slate: secondary text, timestamps, hints (6.2:1 on white, 5.4:1 on Sand) */
   --line: #d8dee4; /* Line: hairlines and section borders (decorative) */
   --control: #7d8a95; /* input, select, checkbox and secondary button borders (3.5:1 on white) */
+  --surface-paper: #f6f1e8; /* a Paper tile on Sand: Dispatch's glance tiles, a Ticket box */
+  --surface-band: #ebe8e2; /* the Schedule's rail and toolbar band, an Approvals list heading */
+  --surface-sunk: #d9d6d0; /* the darkest flat: the Ticket's side column, the review's side panel */
+  --sand-deep: #e4d9c6; /* Waiting on others */
+  --sand-tint: #ece3d3; /* the Max Repair Cost tile */
+  --track: #e6dfd2; /* progress and slider tracks */
+  --clay: #e98b6d; /* the Confirm pip, a stale pip */
+  --clay-bg: #f6e0d6; /* a cost over the Max */
+  --amber: #c8961a; /* the waiting dot, the Timeline slider */
+  --amber-bg: #f0d78f; /* Call-out Fees owed, the Tenant avatar */
+  --wattle-bg: #f6ecd2; /* a receipt to review, a reply still to come */
+  --inspection: #a8531a; /* a Site Inspection's swatch and edge */
+  --stage-owner: #3f78a6; /* Tickets by stage: With owner */
+  --stage-approved: #6a9ac3; /* Tickets by stage: To book */
+  --stage-scheduled: #8db0cf; /* Tickets by stage: Booked */
+  --stage-done: #5b9c86; /* Tickets by stage: Done */
   --action: #1f5c8b; /* Harbour: primary buttons, links, focus, selected (white on it 7.1:1) */
   --action-hover: #174a70; /* Harbour, pressed darker: primary hover, link hover */
   --action-divider: rgb(255 255 255 / 0.4); /* the line in a split primary button (decorative, no contrast target) */
@@ -64,6 +80,11 @@
   --shadow-lift: 0 8px 24px rgb(19 33 46 / 0.18); /* the one shadow: menus, dialogs, the phone frame */
   --font-body: 'Public Sans', system-ui, sans-serif;
   --font-head: 'Bricolage Grotesque', system-ui, sans-serif;
+  /* Radii: one per kind of thing (docs/design-system.md). */
+  --radius-sm: 4px; /* rows, badges, inputs, dockets, tiles inside a card */
+  --radius-btn: 6px; /* buttons and segmented controls */
+  --radius-card: 16px; /* every card, section and panel */
+  --radius-pill: 999px; /* badges, chips and avatars only */
   --dur-fast: 120ms;
   --dur-base: 200ms;
   --dur-slow: 360ms;
@@ -202,7 +223,7 @@
        so a page's own summary (a menu, a button) still wins. */
     :where(summary) {
       cursor: pointer;
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
     }
     :where(summary)::marker {
       color: var(--muted);
@@ -268,7 +289,7 @@
       min-height: var(--size);
       padding-inline: 14px;
       gap: 6px;
-      border-radius: 6px;
+      border-radius: var(--radius-btn);
       font-family: var(--font-body);
       font-weight: 600;
       font-size: 14px;
@@ -403,11 +424,14 @@
     .alert .btn-ghost:hover {
       color: inherit;
     }
+    /* Disabled: still the shape of a button (a border, a label), quiet and dashed so it
+       never reads as a badge or a tag, and it says so to the pointer too. */
     .btn:disabled,
     .btn[disabled] {
       background: var(--page);
-      border-color: var(--line);
+      border: 1px dashed var(--control);
       color: var(--muted);
+      cursor: not-allowed;
     }
 
     /* ----- Badges: 13px, 4px radius, the word always present, tinted from the tokens. */
@@ -415,7 +439,7 @@
       height: auto;
       min-height: 20px;
       padding: 1px 8px;
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
       font-size: 13px;
       font-weight: 500;
       line-height: 1.35;
@@ -503,7 +527,7 @@
       min-width: 22px;
       height: 22px;
       padding-inline: 6px;
-      border-radius: 999px;
+      border-radius: var(--radius-pill);
       background: var(--page);
       color: var(--ink);
       font-family: var(--font-body);
@@ -515,6 +539,11 @@
     .count-chip.is-decision {
       background: var(--hivis);
       color: var(--ink);
+    }
+    /* A section's total beside its heading. */
+    .section-title .count-chip {
+      margin-left: 6px;
+      vertical-align: 0.12em;
     }
 
     /* ----- Forms: label above the control, 36px controls (44px on phones and touch screens), the error then the hint under them. */
@@ -575,7 +604,8 @@
     .checkbox {
       --input-color: var(--control);
       border-radius: var(--radius-field);
-      background: var(--surface);
+      /* Only the colour: a shorthand `background` would wipe daisyUI's select caret. */
+      background-color: var(--surface);
       color: var(--ink);
       font-size: 14px;
     }
@@ -585,6 +615,11 @@
     .file-input {
       --size: 2.25rem;
       height: var(--size);
+    }
+    /* Room for the caret daisyUI draws inside a select, so the longest option never runs under it. */
+    .select {
+      padding-inline-end: 2.25rem;
+      background-position: right 0.75rem center;
     }
     .checkbox {
       --input-color: var(--control);
@@ -643,7 +678,7 @@
       padding: 16px;
       background: var(--surface);
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: var(--radius-card);
       box-shadow: var(--shadow-soft);
     }
     .section-head {
@@ -683,7 +718,7 @@
       overflow-x: auto;
       background: var(--surface);
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: var(--radius-card);
     }
     .table {
       font-size: 13px;
@@ -770,7 +805,8 @@
       --step-fg: var(--surface);
     }
 
-    /* ----- Chat: myEST8 on the left on Paper, the person on the right on Harbour. */
+    /* ----- Chat: myEST8 on the left on Paper, the person on the right on the info tint.
+       Harbour is for acting, never for a message. */
     .chat-header,
     .chat-footer {
       font-size: 12px;
@@ -780,9 +816,9 @@
       background-color: var(--page);
       color: var(--ink);
     }
-    .chat-end .chat-bubble:not([class*='chat-bubble-']) {
-      background-color: var(--action);
-      color: var(--surface);
+    .chat-end .chat-bubble.chat-bubble-own {
+      background-color: var(--info-bg);
+      color: var(--ink);
     }
     .chat-bubble {
       border-radius: 8px;
@@ -837,7 +873,7 @@
       min-height: 40px;
       padding: 0 12px;
       border: 1px solid transparent;
-      border-radius: 6px;
+      border-radius: var(--radius-btn);
       font-family: var(--font-body);
       font-size: 14px;
       font-weight: 400;
@@ -886,7 +922,7 @@
       padding: 12px 16px;
       background: var(--surface);
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: var(--radius-sm);
     }
     .stat-tile-label {
       font-size: 12px;
@@ -917,7 +953,7 @@
       padding: 16px;
       background: var(--surface);
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: var(--radius-card);
     }
     .empty-state p {
       margin: 0;
@@ -943,7 +979,7 @@
       padding: 12px;
       background: var(--surface);
       border: 1px solid var(--line);
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
       color: var(--ink);
       text-decoration: none;
       transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
@@ -980,7 +1016,7 @@
     /* The Ticket page's header docket: the number at 40px. */
     .docket.is-large {
       padding: 12px 16px;
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
     }
     .docket.is-large .docket-number {
       font-size: 40px;
@@ -1050,7 +1086,7 @@
       color: var(--ink);
     }
     .count-link {
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
       font-weight: 500;
       text-decoration: underline;
       text-underline-offset: 3px;
@@ -1082,7 +1118,7 @@
       background: var(--line);
       border: 1px solid var(--line);
       border-top: 3px solid var(--action);
-      border-radius: 8px;
+      border-radius: var(--radius-card);
       box-shadow: var(--shadow-soft);
       font-size: 14px;
     }
@@ -1141,7 +1177,7 @@
     }
     /* Numbers stay dark; only Urgent Repairs turns red. A small dot marks tiles with something in them: Wattle for what needs the Property Manager, red for urgent. */
     .count-item.is-urgent .count-chip {
-      color: #a8271c;
+      color: var(--urgent);
     }
     .count-item.is-attention .count-label::before,
     .count-item.is-urgent .count-label::before {
@@ -1157,7 +1193,7 @@
       background: var(--hivis);
     }
     .count-item.is-urgent .count-label::before {
-      background: #c8372d;
+      background: var(--urgent);
     }
     .count-label {
       min-width: 0;
@@ -1175,7 +1211,7 @@
       padding: 8px 12px;
       background: var(--surface);
       border: 1px solid var(--line);
-      border-radius: 6px;
+      border-radius: var(--radius-btn);
     }
     .urgent-issue {
       margin: 0;
@@ -1198,102 +1234,8 @@
       font-size: 13px;
       color: var(--muted);
     }
-    /* Inbox messages in the open panel: each its own white card (who and when on top, the message in a tinted box, then quiet actions). */
-    .dashboard-inbox > .grid {
-      gap: 12px;
-    }
-    .dashboard-inbox .inbox-item {
-      display: grid;
-      gap: 6px;
-      padding: 16px 18px;
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      box-shadow: var(--shadow-soft);
-    }
-    .dashboard-inbox .inbox-item-who {
-      margin: 0;
-      font-size: 16px;
-      font-weight: 600;
-    }
-    .dashboard-inbox .inbox-item-head {
-      flex-wrap: nowrap;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: 12px;
-    }
-    .dashboard-inbox .inbox-item-head > div {
-      flex: 1 1 auto;
-    }
-    .dashboard-inbox .inbox-item-head .badge {
-      flex: 0 0 auto;
-      max-width: 55%;
-      text-align: right;
-    }
-    .dashboard-inbox .inbox-item-from {
-      margin-top: 2px;
-    }
-    .dashboard-inbox .inbox-item-guess > summary {
-      padding: 2px 0;
-      font-size: 13px;
-      color: var(--muted);
-    }
-    .dashboard-inbox .inbox-item-text {
-      margin: 4px 0 0;
-      padding: 10px 14px;
-      background: #eef3f8;
-      border: 1px solid #dbe6f0;
-      border-radius: 10px;
-      font-size: 15px;
-      font-weight: 400;
-    }
-    .dashboard-inbox .inbox-item-actions {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 8px 12px;
-      margin-top: 4px;
-    }
-    /* Pick a contact and Dismiss are both outlined buttons, so each looks clickable. */
-    .dashboard-inbox .inbox-pick > summary {
-      display: inline-flex;
-      align-items: center;
-      min-height: 36px;
-      padding: 0 14px;
-      background: var(--surface);
-      border: 1px solid #8fb0cc;
-      border-radius: 8px;
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--ink);
-      cursor: pointer;
-    }
-    .dashboard-inbox .inbox-item-actions .btn-ghost {
-      min-height: 36px;
-      padding: 0 14px;
-      background: var(--surface);
-      border: 1px solid #8fb0cc;
-      border-radius: 8px;
-      color: var(--ink);
-      font-weight: 600;
-    }
-    .dashboard-inbox .inbox-item-actions .btn-ghost:hover,
-    .dashboard-inbox .inbox-pick > summary:hover {
-      background: #eef3f8;
-    }
-    .dashboard-inbox .inbox-pick > summary {
-      list-style: none;
-    }
-    .dashboard-inbox .inbox-pick > summary::-webkit-details-marker {
-      display: none;
-    }
-    .dashboard-inbox .inbox-pick[open] {
-      flex-basis: 100%;
-    }
-    .dashboard-inbox .inbox-pick[open] > summary {
-      margin-bottom: 8px;
-    }
-    /* ===== The dashboard: soft cards. Left: the day at a glance and what to do next. Right: the inbox, the week and Tickets by stage. ===== */
+    /* ===== The dashboard: soft cards. Left: what to do next, then Waiting on others. Right: the inbox, the week and Tickets by stage.
+       The page scrolls; no card scrolls its list inside itself. ===== */
     .dashboard-desk {
       display: grid;
       grid-template-columns: minmax(0, 1fr);
@@ -1308,65 +1250,11 @@
     .dashboard-desk .section {
       padding: 16px 18px;
       border: 0;
-      border-radius: 22px;
-    }
-    .dash-hello {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: baseline;
-      gap: 0 14px;
-      margin: -6px 0 -10px;
-    }
-    .dash-hello-name {
-      margin: 0;
-      font-family: var(--font-head);
-      font-size: 22px;
-      font-weight: 600;
-      letter-spacing: -0.01em;
-      color: var(--ink);
-    }
-    .dash-hello-line {
-      margin: 0;
-      font-size: 14px;
-      color: var(--muted);
+      border-radius: var(--radius-card);
     }
     @media (min-width: 64rem) {
       .dashboard-desk {
         grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
-      }
-    }
-    /* On a tall enough window the desk is exactly one screen: each column fills it and the long lists scroll inside their own card. */
-    @media (min-width: 64rem) and (min-height: 58rem) {
-      .dashboard-desk {
-        height: calc(100dvh - 9.5rem);
-        min-height: 33rem;
-        overflow: clip;
-      }
-      .dash-col {
-        min-height: 0;
-      }
-      #decisions,
-      #tickets {
-        flex: 1 1 0;
-        min-height: 0;
-        overflow: hidden;
-      }
-      #decisions .section-body,
-      #tickets .section-body {
-        min-height: 0;
-        overflow-y: auto;
-        scrollbar-width: thin;
-      }
-    }
-    /* On a shorter window the page scrolls a little instead of squeezing the lists. */
-    @media (min-width: 64rem) and (max-height: 57.99rem) {
-      #decisions .section-body {
-        max-height: 26rem;
-        overflow-y: auto;
-      }
-      #tickets .section-body {
-        max-height: 17rem;
-        overflow-y: auto;
       }
     }
 
@@ -1379,8 +1267,11 @@
       flex: none;
       min-height: 14.5rem;
       padding: 16px 22px;
-      background: #e4d9c6;
-      border-radius: 22px;
+      background: var(--sand-deep);
+      border-radius: var(--radius-card);
+    }
+    .glance.is-clear {
+      min-height: 0;
     }
     .glance-title {
       margin: 0;
@@ -1420,7 +1311,7 @@
       flex: 1;
       min-width: 0;
       padding: 10px 12px;
-      border-radius: 14px;
+      border-radius: var(--radius-sm);
       background: rgb(255 255 255 / 0.45);
       color: var(--ink);
       text-decoration: none;
@@ -1440,7 +1331,7 @@
     .glance-list > .is-tradies { --c: var(--action); }
     .glance-list > .is-owners { --c: var(--hivis); }
     .glance-list > .is-visits { --c: var(--ink); }
-    .glance-list > .is-confirm { --c: #e98b6d; }
+    .glance-list > .is-confirm { --c: var(--clay); }
     .glance-count {
       font-family: var(--font-head);
       font-size: 28px;
@@ -1466,13 +1357,18 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    /* The compact strip on a phone uses the short label. */
+    .glance-label-short {
+      display: none;
+    }
     .glance-sub {
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
       min-width: 0;
       overflow: hidden;
       font-size: 12px;
       color: var(--muted);
-      text-overflow: ellipsis;
-      white-space: nowrap;
     }
     .glance-row.is-zero .glance-sub {
       color: var(--muted);
@@ -1506,7 +1402,7 @@
       box-shadow: none;
     }
     .glance-pip.is-stale {
-      background: #e98b6d;
+      background: var(--clay);
     }
     .glance-more {
       font-size: 11px;
@@ -1550,12 +1446,14 @@
       align-items: center;
       gap: 12px;
       padding: 9px 10px 9px 14px;
-      background: #f4efe6;
+      background: var(--page);
       border: 0;
-      border-radius: 14px;
+      border-radius: var(--radius-sm);
     }
+    /* The one stripe: a decision row carries Wattle at its left edge. */
     .do-next .queue-row.is-decision {
-      border-left-width: 0;
+      border-left: 4px solid var(--hivis);
+      padding-left: 10px;
     }
     .do-next .queue-thumb {
       flex-basis: 44px;
@@ -1591,9 +1489,6 @@
       align-self: center;
       flex-wrap: nowrap;
     }
-    .do-next .queue-actions .btn {
-      border-radius: 999px;
-    }
     .do-next .queue-badges {
       grid-column: 1;
     }
@@ -1610,13 +1505,12 @@
       color: var(--muted);
     }
     .do-next-urgent .do-next-sub {
-      color: #8f1d14;
+      color: var(--urgent);
     }
     .do-next-urgent .urgent-item {
       background: var(--surface);
-      border: 1px solid #ecc3be;
-      border-left: 3px solid #c8372d;
-      border-radius: 14px;
+      border: 1px solid var(--urgent);
+      border-radius: var(--radius-sm);
     }
     .do-next-clear {
       margin: 4px 0 0;
@@ -1632,9 +1526,9 @@
       flex-direction: column;
       gap: 8px;
       padding: 16px 18px;
-      color: #fff;
-      background: #13212e;
-      border-radius: 22px;
+      color: var(--surface);
+      background: var(--ink);
+      border-radius: var(--radius-card);
     }
     .inbox-card-head {
       display: flex;
@@ -1646,20 +1540,15 @@
       font-family: var(--font-head);
       font-size: 17px;
       font-weight: 600;
-      color: #fff;
+      color: var(--surface);
     }
     .inbox-card-count {
       padding: 2px 9px;
       font-size: 12px;
       font-weight: 600;
-      color: #13212e;
+      color: var(--ink);
       background: var(--hivis);
-      border-radius: 999px;
-    }
-    .inbox-card-note {
-      margin-left: auto;
-      font-size: 12.5px;
-      color: #8fa2b3;
+      border-radius: var(--radius-pill);
     }
     .inbox-previews {
       display: grid;
@@ -1674,10 +1563,10 @@
       gap: 10px;
       align-items: center;
       padding: 5px 10px;
-      color: #fff;
+      color: var(--surface);
       text-decoration: none;
       background: rgba(255, 255, 255, 0.07);
-      border-radius: 14px;
+      border-radius: var(--radius-sm);
       transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), scale var(--dur-slow) var(--ease-spring);
     }
     .inbox-preview:active {
@@ -1686,7 +1575,7 @@
       transition-timing-function: var(--ease-out);
     }
     .inbox-preview:hover {
-      color: #fff;
+      color: var(--surface);
       background: rgba(255, 255, 255, 0.13);
     }
     .inbox-avatar {
@@ -1714,14 +1603,14 @@
     .inbox-preview-text {
       overflow: hidden;
       font-size: 12.5px;
-      color: #a9baca;
+      color: var(--rail-muted);
       text-overflow: ellipsis;
       white-space: nowrap;
     }
     .inbox-preview-when {
       font-size: 12px;
       line-height: 1.3;
-      color: #a9baca;
+      color: var(--rail-muted);
       text-align: right;
       white-space: nowrap;
     }
@@ -1729,75 +1618,32 @@
       margin: 0;
       padding: 4px 0 6px;
       font-size: 14px;
-      color: #c9d4de;
+      color: var(--rail-muted);
     }
-    /* The one control that opens the whole inbox, where the old <details> summary sat. */
+    /* The one control that opens the whole inbox: an outlined button in the rail's own
+       colours, not a Wattle fill (Wattle marks a decision, it is never a button). */
     .inbox-open {
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 6px;
-      min-height: 38px;
+      min-height: 40px;
       font-weight: 600;
-      color: #13212e;
+      color: var(--rail-text);
       text-decoration: none;
-      background: var(--hivis);
-      border-radius: 999px;
+      background: transparent;
+      border: 1px solid var(--rail-muted);
+      border-radius: var(--radius-btn);
+      transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
     }
     .inbox-open:hover {
-      color: #13212e;
-      filter: brightness(0.96);
+      color: var(--rail-text);
+      background: var(--rail-current);
+      border-color: var(--rail-text);
     }
     .inbox-open:focus-visible {
       outline: 2px solid var(--rail-text);
       outline-offset: 2px;
-    }
-    .inbox-more > summary {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 38px;
-      font-weight: 600;
-      color: #13212e;
-      list-style: none;
-      cursor: pointer;
-      background: var(--hivis);
-      border-radius: 999px;
-    }
-    .inbox-more > summary::-webkit-details-marker {
-      display: none;
-    }
-    .inbox-more > summary:hover {
-      filter: brightness(0.96);
-    }
-    .inbox-more .when-open,
-    .inbox-more[open] .when-closed {
-      display: none;
-    }
-    .inbox-more[open] .when-open {
-      display: inline;
-    }
-    .inbox-panel {
-      max-height: 32rem;
-      margin-top: 8px;
-      padding: 14px;
-      overflow-y: auto;
-      color: var(--ink);
-      background: #f4efe6;
-      border-radius: 18px;
-    }
-    /* On a tall window the open list floats over the cards below it, kept inside the desk. */
-    @media (min-width: 64rem) and (min-height: 58rem) {
-      .inbox-panel {
-        position: absolute;
-        top: calc(100% + 8px);
-        right: 0;
-        left: 0;
-        z-index: 20;
-        max-height: calc(100dvh - 9.5rem - 17.5rem);
-        margin-top: 0;
-        box-shadow: 0 18px 44px rgba(19, 33, 46, 0.28);
-      }
     }
 
     /* Tickets by stage: a bar and counts, then one soft row per Ticket with its progress. */
@@ -1805,18 +1651,18 @@
       display: grid;
       gap: 8px;
     }
-    .stage-quoting { --sc: #1f5c8b; }
-    .stage-awaiting_owner { --sc: #3f78a6; }
-    .stage-approved { --sc: #6a9ac3; }
-    .stage-scheduled { --sc: #8db0cf; }
-    .stage-done { --sc: #5b9c86; }
+    .stage-quoting { --sc: var(--action); }
+    .stage-awaiting_owner { --sc: var(--stage-owner); }
+    .stage-approved { --sc: var(--stage-approved); }
+    .stage-scheduled { --sc: var(--stage-scheduled); }
+    .stage-done { --sc: var(--stage-done); }
     .stage-scale {
       display: flex;
       gap: 3px;
       height: 11px;
       overflow: hidden;
-      background: #eee9df;
-      border-radius: 6px;
+      background: var(--track);
+      border-radius: var(--radius-btn);
     }
     .stage-scale i {
       display: block;
@@ -1844,7 +1690,7 @@
       color: var(--ink);
     }
     .stage-counts .is-zero b {
-      color: #8a97a3;
+      color: var(--muted);
     }
     .stage-rows {
       display: grid;
@@ -1859,13 +1705,13 @@
       padding: 7px 12px;
       color: var(--ink);
       text-decoration: none;
-      background: #f4efe6;
-      border-radius: 14px;
+      background: var(--page);
+      border-radius: var(--radius-sm);
       transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), scale var(--dur-slow) var(--ease-spring);
     }
     .ticket-row:hover {
       color: var(--ink);
-      background: #ece5d7;
+      background: var(--sand-tint);
     }
     .ticket-row:active {
       scale: 0.985;
@@ -1882,7 +1728,7 @@
       font-size: 12px;
       font-weight: 600;
       color: var(--action);
-      background: #fff;
+      background: var(--surface);
       border-radius: 50%;
     }
     .ticket-row-main {
@@ -1912,10 +1758,10 @@
       font-weight: 600;
     }
     .ticket-row-urgency.is-urgent {
-      color: #9c1f17;
+      color: var(--urgent);
     }
     .ticket-row-urgency.is-high {
-      color: #8a4b00;
+      color: var(--high);
     }
     .ticket-row-stage {
       display: grid;
@@ -1930,8 +1776,8 @@
       display: block;
       width: 16px;
       height: 12px;
-      background: #ddd6c8;
-      border-radius: 4px;
+      background: var(--track);
+      border-radius: var(--radius-sm);
     }
     .stage-segs i.on {
       background: var(--sc);
@@ -1943,9 +1789,50 @@
     }
     /* Phones: the tally rows put their actions under the text, the counts wrap. */
     @media (max-width: 39.99rem) {
+      /* Waiting on others folds to one compact row of counts: the full label and sub-line
+         would take a screen of their own above "Do next". */
       .glance {
+        gap: 8px;
         min-height: 0;
-        padding: 16px 18px;
+        padding: 12px 14px;
+      }
+      .glance-title {
+        font-size: 15px;
+      }
+      .glance-list {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 4px;
+      }
+      .glance-row {
+        grid-template-columns: minmax(0, 1fr);
+        justify-items: center;
+        gap: 2px;
+        padding: 8px 2px;
+      }
+      .glance-count {
+        font-size: 22px;
+        text-align: center;
+      }
+      .glance-body {
+        justify-items: center;
+        gap: 2px;
+      }
+      .glance-label,
+      .glance-pips,
+      .glance-sub,
+      .glance-go {
+        display: none;
+      }
+      .glance-label-short {
+        display: block;
+        font-size: 11px;
+        line-height: 1.15;
+        color: var(--ink);
+        text-align: center;
+        overflow-wrap: break-word;
+      }
+      .glance-row.is-zero .glance-label-short {
+        color: var(--muted);
       }
       .do-next .queue-main {
         grid-template-columns: minmax(0, 1fr);
@@ -1959,6 +1846,34 @@
         display: flex;
         flex-wrap: wrap;
         gap: 4px 14px;
+      }
+      /* Each Ticket row: the number and two lines of issue, then the progress marker and
+         the stage's name on their own line, so the title keeps the row's width. */
+      .ticket-row {
+        grid-template-columns: 36px minmax(0, 1fr);
+        align-items: start;
+        row-gap: 5px;
+      }
+      .ticket-row-id {
+        grid-row: 1;
+      }
+      .ticket-row-main {
+        grid-column: 2;
+        grid-row: 1;
+      }
+      .ticket-row-title {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        white-space: normal;
+      }
+      .ticket-row-sub {
+        white-space: normal;
+      }
+      .ticket-row-stage {
+        grid-column: 2;
+        grid-row: 2;
       }
     }
     @media (max-width: 40rem), (pointer: coarse) {
@@ -1979,7 +1894,7 @@
       color: var(--ink);
       background: var(--surface);
       border: 0;
-      border-radius: 8px;
+      border-radius: var(--radius-card);
       box-shadow: var(--shadow-lift);
       opacity: 0;
       scale: 0.96;
@@ -2043,7 +1958,7 @@
       cursor: pointer;
       background: transparent;
       border: 0;
-      border-radius: 6px;
+      border-radius: var(--radius-btn);
     }
     .inbox-modal-close:hover {
       background: var(--page);
@@ -2077,7 +1992,7 @@
       color: var(--muted);
       background: var(--surface);
       border: 1px solid var(--line);
-      border-radius: 10px;
+      border-radius: var(--radius-sm);
     }
     .inbox-people-search:focus-within {
       outline: 2px solid var(--action);
@@ -2115,7 +2030,7 @@
       cursor: pointer;
       background: transparent;
       border: 0;
-      border-radius: 10px;
+      border-radius: var(--radius-sm);
     }
     .inbox-person:hover {
       background: rgb(255 255 255 / 0.6);
@@ -2167,7 +2082,7 @@
       color: var(--ink);
       text-align: center;
       background: var(--hivis);
-      border-radius: 999px;
+      border-radius: var(--radius-pill);
     }
     .inbox-no-matches {
       margin: 0;
@@ -2220,7 +2135,7 @@
     .inbox-message {
       max-width: 34rem;
       padding: 9px 12px;
-      border-radius: 12px;
+      border-radius: 8px;
     }
     .inbox-message.is-in {
       align-self: flex-start;
@@ -2229,7 +2144,7 @@
     }
     .inbox-message.is-out {
       align-self: flex-end;
-      color: #fff;
+      color: var(--surface);
       background: var(--action);
     }
     .inbox-message-head {
@@ -2250,7 +2165,7 @@
       color: var(--muted);
     }
     .inbox-message.is-out .inbox-message-head {
-      color: #dbe7f1;
+      color: var(--rail-text);
     }
     .inbox-message-time {
       margin-left: auto;
@@ -2328,7 +2243,7 @@
       padding: 5px 0 6px;
       background: var(--page);
       border: 1px solid transparent;
-      border-radius: 10px;
+      border-radius: var(--radius-sm);
       font-size: 12px;
       color: var(--muted);
       text-decoration: none;
@@ -2435,6 +2350,15 @@
       font-size: 14px;
       color: var(--muted);
     }
+    /* With nothing on a day, the next visit as one line, so the card is not a dead end. */
+    .visit-next {
+      margin: 0;
+      padding: 8px 10px;
+      font-size: 13px;
+      color: var(--ink);
+      background: var(--page);
+      border-radius: var(--radius-sm);
+    }
 
     /* ----- Filled in by AI: the info tint, with a quiet label, for text the AI wrote that the
        Property Manager can edit (a Summary). Not Wattle, not a wash of the page. */
@@ -2445,7 +2369,7 @@
       min-width: 0;
       padding: 8px 12px;
       background: var(--info-bg);
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
       color: var(--ink);
     }
     .ai-filled-label {
@@ -2473,7 +2397,7 @@
     .profile-read-line.is-ai {
       padding: 8px 12px;
       background: var(--info-bg);
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
     }
     .profile-read-sentence {
       margin: 0;
@@ -2546,13 +2470,13 @@
       list-style: none;
       background: var(--surface);
       border: 1px solid var(--control);
-      border-radius: 6px;
+      border-radius: var(--radius-btn);
       box-shadow: var(--shadow-lift);
     }
     .combobox-option,
     .combobox-empty {
       padding: 6px 10px;
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
       font-size: 14px;
       line-height: 1.35;
     }
@@ -2602,7 +2526,7 @@
       padding: 3px;
       background: var(--surface);
       border: 1px solid var(--control);
-      border-radius: 6px;
+      border-radius: var(--radius-btn);
     }
     .segmented.has-thumb {
       position: relative;
@@ -2616,7 +2540,7 @@
       z-index: -1;
       width: var(--thumb-w, 0);
       translate: var(--thumb-x, 0) 0;
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
       background: var(--action);
     }
     .segmented.is-ready .segmented-thumb {
@@ -2627,7 +2551,7 @@
       align-items: center;
       min-height: 28px;
       padding-inline: 12px;
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
       font-family: var(--font-body);
       font-size: 14px;
       font-weight: 600;
@@ -2670,14 +2594,14 @@
       padding: 12px;
       background: var(--surface);
       border: 1px solid var(--line);
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
     }
     .queue-thumb {
       flex: 0 0 56px;
       width: 56px;
       height: 56px;
       overflow: hidden;
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
       background: var(--page);
     }
     .queue-thumb img {
@@ -2790,7 +2714,7 @@
       min-width: 0;
       background: var(--page);
       border: 1px solid var(--line);
-      border-radius: 6px;
+      border-radius: var(--radius-btn);
     }
     .lane-head {
       display: flex;
@@ -2873,7 +2797,7 @@
       align-self: flex-start;
       margin-bottom: 16px;
       padding: 4px 12px;
-      border-radius: 6px;
+      border-radius: var(--radius-btn);
       color: var(--rail-text);
       text-decoration: none;
     }
@@ -2908,10 +2832,8 @@
       margin: 12px 0 0;
       padding: 0 12px;
       font-family: var(--font-body);
-      font-size: 12px;
+      font-size: 13px;
       font-weight: 600;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
       color: var(--rail-text);
       opacity: 0.7;
     }
@@ -2927,7 +2849,7 @@
       gap: 10px;
       min-height: 40px;
       padding: 0 12px;
-      border-radius: 6px;
+      border-radius: var(--radius-btn);
       font-family: var(--font-body);
       font-size: 15px;
       font-weight: 500;
@@ -2948,7 +2870,7 @@
       position: absolute;
       inset: 0;
       z-index: -1;
-      border-radius: 6px;
+      border-radius: var(--radius-btn);
       background: var(--rail-current);
       box-shadow: inset 4px 0 0 var(--hivis);
     }
@@ -3014,7 +2936,7 @@
     .rail-link[data-decision] .rail-count {
       min-width: 20px;
       padding: 0 6px;
-      border-radius: 999px;
+      border-radius: var(--radius-pill);
       background: var(--hivis);
       color: var(--ink);
       font-weight: 600;
@@ -3036,7 +2958,7 @@
       margin-top: 4px;
       padding: 0 12px;
       border: 0;
-      border-radius: 6px;
+      border-radius: var(--radius-btn);
       background: none;
       font-family: var(--font-body);
       font-size: 13px;
@@ -3096,7 +3018,7 @@
         overflow: visible;
         clip-path: none;
         transform: translateY(-50%);
-        border-radius: 4px;
+        border-radius: var(--radius-sm);
         background: var(--rail);
         box-shadow: var(--shadow-lift);
         font-family: var(--font-body);
@@ -3172,6 +3094,16 @@
         clip-path: inset(50%);
         white-space: nowrap;
       }
+      /* The way back sits under the title, beside the subtitle line, so the menu button stays put. */
+      .page-header.has-back {
+        grid-template-areas:
+          'lead end'
+          'back back'
+          'controls controls';
+      }
+      .page-back {
+        min-height: 44px;
+      }
     }
     .page-header-lead {
       grid-area: lead;
@@ -3179,6 +3111,32 @@
       align-items: center;
       gap: 12px;
       min-width: 0;
+    }
+    /* On a phone the menu button holds the top-left; the title takes the rest of the row
+       and the Urgency badge sits under it, so a long title never shares a line with both. */
+    @container content (max-width: 39.99rem) {
+      .page-header-lead {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        align-items: center;
+        column-gap: 12px;
+        row-gap: 2px;
+      }
+      .page-header-lead > .menu-button {
+        grid-column: 1;
+        grid-row: 1 / span 2;
+        align-self: start;
+      }
+      .page-header-lead > .page-title {
+        grid-column: 2;
+        grid-row: 1;
+      }
+      .page-header-lead > .badge {
+        grid-column: 2;
+        grid-row: 2;
+        justify-self: start;
+        align-self: start;
+      }
     }
     .page-header-end {
       grid-area: end;
@@ -3251,7 +3209,7 @@
       width: 40px;
       height: 40px;
       border: 1px solid var(--control);
-      border-radius: 6px;
+      border-radius: var(--radius-btn);
       background: var(--surface);
       color: var(--ink);
     }
@@ -3277,7 +3235,7 @@
       gap: 8px;
       min-height: 36px;
       padding-inline: 8px;
-      border-radius: 6px;
+      border-radius: var(--radius-btn);
       font-size: 14px;
       font-weight: 500;
       color: var(--ink);
@@ -3315,7 +3273,7 @@
       padding: 8px;
       background: var(--surface);
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: var(--radius-card);
       box-shadow: var(--shadow-lift);
     }
     /* Sign out fills the menu's width, so its hover tint does too. */
@@ -3466,8 +3424,13 @@
       line-height: 1.1;
       letter-spacing: -0.01em;
       color: var(--ink);
-      /* Not "anywhere": that lets a squeezed header break "Schedule" mid-word. break-word only splits a word too long for the whole row. */
+      /* Balance a two-line title; a squeezed header never breaks a word ("Schedule" stays whole). */
       overflow-wrap: break-word;
+      text-wrap: balance;
+    }
+    .page-title.is-nowrap {
+      white-space: nowrap;
+      overflow-wrap: normal;
     }
     @media (max-width: 40rem) {
       .page-title {
@@ -3646,7 +3609,7 @@
       color: var(--ink);
       background: var(--surface);
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: var(--radius-card);
       box-shadow: var(--shadow-lift);
     }
     .share.is-start .share-panel {
@@ -3698,7 +3661,7 @@
       text-overflow: ellipsis;
       background: var(--page);
       border: 1px solid var(--control);
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
     }
     .share-copy-button {
       flex-shrink: 0;
@@ -3739,7 +3702,7 @@
       cursor: pointer;
       background: none;
       border: 0;
-      border-radius: 6px;
+      border-radius: var(--radius-btn);
     }
     .share-option:hover {
       background: var(--page);
@@ -3854,7 +3817,7 @@
       margin: 0;
       padding: 8px 12px;
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: var(--radius-card);
       background: var(--surface);
       font-size: 14px;
     }
@@ -3864,7 +3827,7 @@
       gap: 3px;
       margin-top: 2px;
       padding: 1px 8px 1px 6px;
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
       border: 1px solid transparent;
       background: var(--info-bg);
       color: var(--action);
@@ -3971,7 +3934,7 @@
         gap: 8px 12px;
         padding: 12px;
         border: 1px solid var(--line);
-        border-radius: 4px;
+        border-radius: var(--radius-sm);
         background: var(--surface);
       }
       .import-stack tbody :where(td, th) {
@@ -4058,7 +4021,7 @@
       padding: 14px 16px;
       border: 1px solid var(--line);
       border-left: 4px solid var(--hivis);
-      border-radius: 8px;
+      border-radius: var(--radius-card);
       background: var(--surface);
     }
     .dispatch-card:target {
@@ -4070,10 +4033,8 @@
       align-items: center;
       gap: 6px;
       margin: 0 0 4px;
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
+      font-size: 13px;
+      font-weight: 600;
       color: var(--muted);
     }
     .dispatch-card-title {
@@ -4120,7 +4081,7 @@
       min-width: 0;
       padding: 12px;
       border: 1px solid var(--line);
-      border-radius: 6px;
+      border-radius: var(--radius-btn);
       background: var(--surface);
     }
     .tradie-label {
@@ -4288,7 +4249,7 @@
       overflow: hidden;
       background: var(--page);
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: var(--radius-card);
     }
     /* Phones and tablets: about half the screen, so the panel and the table start in reach. */
     @media (max-width: 63.98rem) {
@@ -4386,7 +4347,7 @@
       height: 18px;
       padding: 0 4px;
       border: 1.5px solid var(--surface);
-      border-radius: 999px;
+      border-radius: var(--radius-pill);
       background: var(--ink);
       font-family: var(--font-body);
       font-size: 11px;
@@ -4406,7 +4367,7 @@
       background: color-mix(in srgb, var(--surface) 70%, transparent);
     }
     .map-pin-tradie.is-selected::before {
-      border-radius: 12px;
+      border-radius: var(--radius-sm);
     }
     /* A group of pins that overlap: a white disc with how many, ringed in Night, or in Rust or
        Ochre when it holds an Urgent or High Property. */
@@ -4447,7 +4408,7 @@
       font-size: 14px;
       background: var(--surface);
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: var(--radius-card);
     }
     /* Beside the map the column is the map's height, and the panel picked scrolls inside it. */
     @media (min-width: 64rem) {
@@ -4568,7 +4529,7 @@
         padding: 10px 12px;
         background: var(--surface);
         border: 1px solid var(--line);
-        border-radius: 4px;
+        border-radius: var(--radius-sm);
       }
       .dispatch-stack tbody :where(th, td) {
         display: block;
@@ -4659,7 +4620,7 @@
       row-gap: 2px;
       padding: 12px;
       border: 1px solid var(--line);
-      border-radius: 6px;
+      border-radius: var(--radius-btn);
       background: var(--surface);
       color: var(--ink);
       text-decoration: none;
@@ -4700,7 +4661,7 @@
       margin-top: 16px;
       padding: 12px;
       border: 1px solid var(--line);
-      border-radius: 6px;
+      border-radius: var(--radius-btn);
       background: var(--surface);
     }
     .listing-card-name {
@@ -4779,7 +4740,7 @@
       max-width: 100%;
       padding: 2px 9px 2px 7px;
       border: 1px solid var(--line);
-      border-radius: 999px;
+      border-radius: var(--radius-pill);
       background: var(--surface);
       color: var(--ink);
       font-size: 13px;
@@ -4846,7 +4807,7 @@
       align-items: center;
       gap: 4px;
       padding: 1px 8px;
-      border-radius: 6px;
+      border-radius: var(--radius-btn);
       background: var(--page);
       font-size: 13px;
       line-height: 1.5;
@@ -4888,7 +4849,7 @@
     }
     .badge.badge-soft.urgency-urgent {
       background: var(--urgent);
-      color: #fff;
+      color: var(--surface);
       border-color: var(--urgent);
     }
 
@@ -4959,7 +4920,7 @@
         padding: 10px 12px;
         background: var(--surface);
         border: 1px solid var(--line);
-        border-radius: 4px;
+        border-radius: var(--radius-sm);
       }
       .table-frame.is-stacked tbody :is(th, td) {
         display: block;
@@ -5011,22 +4972,35 @@
          and a note, a number and its words) flow together as one value beside it. */
       .table-frame.is-labelled tbody td[data-label] {
         position: relative;
-        padding-left: calc(8rem + 12px);
+        padding-left: calc(6.5rem + 12px);
         font-size: 14px;
         /* Beats the cell's text-right utility (Tailwind's layer outranks this one): label and value both read from the left. */
         text-align: left !important;
-        overflow-wrap: anywhere;
+        overflow-wrap: break-word;
       }
       .table-frame.is-labelled tbody td[data-label]::before {
         content: attr(data-label);
         position: absolute;
         top: 0;
         left: 0;
-        width: 8rem;
+        width: 6.5rem;
         font-size: 13px;
         line-height: calc(14px * 1.45);
         color: var(--muted);
-        overflow-wrap: anywhere;
+        overflow-wrap: break-word;
+      }
+      /* Under 24rem a label column leaves too little for a value (an email breaks at random):
+         the label sits above its value instead. */
+      @media (max-width: 23.99rem) {
+        .table-frame.is-labelled tbody td[data-label] {
+          padding-left: 0;
+        }
+        .table-frame.is-labelled tbody td[data-label]::before {
+          position: static;
+          display: block;
+          width: auto;
+          margin-bottom: 1px;
+        }
       }
       .table-frame.is-labelled tbody :is(th, td):empty {
         display: none;
@@ -5138,7 +5112,7 @@
     }
     .request-flag {
       padding: 8px 10px;
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
       color: var(--high);
       background: var(--high-bg);
     }
@@ -5195,7 +5169,7 @@
       gap: 8px;
       margin-top: 8px;
       padding: 10px;
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
       color: var(--high);
       background: var(--high-bg);
     }
@@ -5253,7 +5227,7 @@
       flex: none;
       width: 36px;
       height: 36px;
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
       color: var(--action);
     }
     .icon-btn:hover {
@@ -5321,7 +5295,7 @@
       transition: scale var(--dur-fast) var(--ease-out);
     }
     .inline-edit .inline-edit-save {
-      border-radius: 6px;
+      border-radius: var(--radius-btn);
       background: var(--action);
       color: var(--surface);
     }
@@ -5478,7 +5452,7 @@
       aspect-ratio: 8 / 5;
       object-fit: cover;
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: var(--radius-card);
       background: var(--page);
     }
     .property-photo-frame figcaption,
@@ -5632,9 +5606,6 @@
       padding-top: 0;
       border-top: 0;
     }
-    .channel-later-group > .text-sm {
-      margin-top: 4px;
-    }
     .channel-later-title {
       margin: 0;
       font-family: var(--font-head);
@@ -5643,49 +5614,10 @@
       line-height: 1.25;
       color: var(--muted);
     }
-    /* Four equal tiles where they fit, two by two on a phone. */
-    .channel-later-list {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(min(9rem, 100%), 1fr));
-      gap: 8px;
-      margin: 8px 0 0;
-      padding: 0;
-      min-width: 0;
-      list-style: none;
-    }
-    .channel-later {
-      display: grid;
-      grid-template-columns: auto minmax(0, 1fr);
-      align-items: center;
-      gap: 4px 8px;
-      width: 100%;
-      min-width: 0;
-      max-width: 100%;
-      min-height: 44px;
-      padding: 8px 12px;
-      border: 1px solid var(--line);
-      border-radius: 4px;
-      background: var(--page);
-      color: var(--muted);
-      font: inherit;
+    /* The four channels that can't be connected yet: one quiet line, not four disabled tiles. */
+    .channel-later-note {
+      margin: 6px 0 0;
       font-size: 14px;
-      font-weight: 500;
-      text-align: left;
-      cursor: not-allowed;
-    }
-    .channel-later:focus-visible {
-      outline: 2px solid var(--action);
-      outline-offset: 2px;
-    }
-    .channel-later-name {
-      min-width: 0;
-      overflow-wrap: anywhere;
-    }
-    .channel-later .badge {
-      grid-column: 2;
-      justify-self: start;
-      border: 1px solid var(--line);
-      background: var(--surface);
       color: var(--muted);
     }
 
@@ -5745,7 +5677,7 @@
       min-height: 32px;
       padding: 0 10px;
       border: 1px solid var(--line);
-      border-radius: 6px;
+      border-radius: var(--radius-btn);
       background: var(--surface);
       color: var(--ink);
       font-family: var(--font-body);
@@ -5887,7 +5819,7 @@
       list-style: none;
       background: var(--surface);
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: var(--radius-card);
       overflow: hidden;
     }
     @media (min-width: 40rem) {
@@ -5949,6 +5881,10 @@
       font-size: 13px;
       line-height: 1.35;
       color: var(--muted);
+    }
+    .setup-see-all {
+      margin: 12px 0 0;
+      font-size: 13px;
     }
   }
 }
@@ -6034,7 +5970,7 @@
     .ticket-details { order: 9; }
     .ticket-layout .section {
       border: 0;
-      border-radius: 22px;
+      border-radius: var(--radius-card);
       box-shadow: var(--shadow-soft);
     }
     @media (min-width: 64rem) {
@@ -6049,21 +5985,41 @@
       }
       .ticket-side {
         display: grid;
-        gap: 12px;
+        gap: 0;
         min-width: 0;
         grid-column: 2;
         grid-row: 1;
-        align-self: stretch;
+        align-self: start;
         align-content: start;
-        padding: 12px;
-        background: #d9d6d0;
+        overflow: hidden;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius-card);
+      }
+      /* One panel, divided by hairlines: two levels of containers, never a card in a card. */
+      .ticket-side > * + * {
+        border-top: 1px solid var(--line);
+      }
+      .ticket-side > .ticket-costs-slot {
+        padding: 14px 16px;
+      }
+      .ticket-side .section {
+        padding: 14px 16px;
+        border: 0;
         border-radius: 0;
+        box-shadow: none;
+      }
+      .ticket-side .ticket-messages,
+      .ticket-side .ticket-people,
+      .ticket-side .ticket-costs-slot,
+      .ticket-side .ticket-next-slot,
+      .ticket-side .ticket-details {
+        min-width: 0;
       }
       .ticket-main {
         grid-column: 1;
         grid-row: 1;
-        align-self: stretch;
-        grid-template-rows: auto 1fr;
+        align-self: start;
       }
       /* The Progress runs the full width under both columns. */
       .ticket-history {
@@ -6082,14 +6038,15 @@
       .ticket-messages { order: 4; }
       .ticket-details { order: 5; }
     }
-    /* The Summary band: the Summary card (with the stage ring) and the Add another Job tile, inside a dark-yellow outline. */
+    /* The Summary band: the Summary card (with the stage ring) and the Add another Job tile,
+       flat on the page: no outline around a card. */
     .ticket-hero {
       display: grid;
       grid-template-columns: minmax(0, 1fr);
       gap: 12px;
-      padding: 14px;
-      border: 2px solid #c8961a;
-      border-radius: 22px;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
     }
     .ticket-hero-card {
       display: flex;
@@ -6099,7 +6056,7 @@
       gap: 16px;
       padding: 18px 20px;
       background: var(--surface);
-      border-radius: 18px;
+      border-radius: var(--radius-card);
     }
     .ticket-hero-text {
       display: grid;
@@ -6129,7 +6086,7 @@
       padding: 2px 10px;
       font-size: 14px;
       background: var(--page);
-      border-radius: 999px;
+      border-radius: var(--radius-pill);
     }
     .ticket-ring-wrap {
       display: grid;
@@ -6142,11 +6099,11 @@
       place-items: center;
       width: 132px;
       height: 132px;
-      background: radial-gradient(closest-side, var(--surface) 76%, transparent 78%), conic-gradient(var(--action) calc(var(--pct) * 1%), #e6dfd2 0);
+      background: radial-gradient(closest-side, var(--surface) 76%, transparent 78%), conic-gradient(var(--action) calc(var(--pct) * 1%), var(--track) 0);
       border-radius: 50%;
     }
     .ticket-ring.is-done {
-      background: radial-gradient(closest-side, var(--surface) 76%, transparent 78%), conic-gradient(#2f6b52 calc(var(--pct) * 1%), #e6dfd2 0);
+      background: radial-gradient(closest-side, var(--surface) 76%, transparent 78%), conic-gradient(var(--done) calc(var(--pct) * 1%), var(--track) 0);
     }
     .ticket-ring-label {
       max-width: 88px;
@@ -6164,13 +6121,25 @@
       text-align: center;
       color: var(--muted);
     }
+    /* On a phone the ring would fill the first screen: the note says the same in words. */
+    @media (max-width: 39.99rem) {
+      .ticket-ring {
+        display: none;
+      }
+      .ticket-ring-wrap {
+        display: block;
+      }
+      .ticket-ring-note {
+        text-align: left;
+      }
+    }
     /* Add another Job: a dashed tile that opens its form in place. */
     .ticket-add-job {
       min-width: 0;
       padding: 6px 12px;
       background: var(--surface);
-      border: 2px dashed #c8c0b0;
-      border-radius: 14px;
+      border: 2px dashed var(--control);
+      border-radius: var(--radius-sm);
     }
     .ticket-add-job > summary {
       display: flex;
@@ -6207,7 +6176,7 @@
       gap: 8px 12px;
       padding: 14px 16px;
       background: var(--surface);
-      border-radius: 18px;
+      border-radius: var(--radius-card);
     }
     .ticket-people-title {
       margin: 0;
@@ -6237,7 +6206,7 @@
     .ticket-avatar:first-child {
       margin-left: 0;
       color: var(--ink);
-      background: #f0d78f;
+      background: var(--amber-bg);
     }
     .ticket-avatar:nth-child(2) {
       background: var(--ink);
@@ -6255,14 +6224,14 @@
       gap: 2px;
       padding: 14px 8px;
       text-align: center;
-      background: #dbeaf7;
-      border-radius: 18px;
+      background: var(--info-bg);
+      border-radius: var(--radius-card);
     }
     .ticket-cost.is-max {
-      background: #ece3d3;
+      background: var(--sand-tint);
     }
     .ticket-cost.is-over {
-      background: #f6e0d6;
+      background: var(--clay-bg);
     }
     .ticket-cost > .ticket-cost-amount { order: 1; }
     .ticket-cost > .ticket-cost-label { order: 2; }
@@ -6294,7 +6263,7 @@
       color: var(--ink);
       text-decoration: none;
       background: var(--surface);
-      border-radius: 999px;
+      border-radius: var(--radius-pill);
     }
     .ticket-cost-link:hover {
       text-decoration: underline;
@@ -6304,8 +6273,8 @@
       padding: 8px 12px;
       font-size: 13px;
       color: var(--ink);
-      background: #f0d78f;
-      border-radius: 12px;
+      background: var(--amber-bg);
+      border-radius: var(--radius-sm);
     }
     /* What the Tenant reported: the photos, their words, and the answers as small tiles. */
     .ticket-report-body {
@@ -6352,7 +6321,7 @@
       gap: 2px;
       padding: 8px 12px;
       background: var(--page);
-      border-radius: 12px;
+      border-radius: var(--radius-sm);
     }
     .ticket-report-body .ticket-facts dt {
       font-size: 12px;
@@ -6366,7 +6335,7 @@
       padding: 14px 16px;
       background: var(--surface);
       border: 2px solid transparent;
-      border-radius: 18px;
+      border-radius: var(--radius-card);
     }
     .ticket-next-card:has(.is-decision) {
       border-color: var(--hivis);
@@ -6379,7 +6348,7 @@
       font-size: 12px;
       font-weight: 700;
       background: var(--hivis);
-      border-radius: 999px;
+      border-radius: var(--radius-pill);
     }
     .ticket-next {
       display: grid;
@@ -6453,7 +6422,7 @@
       padding: 12px;
       background: var(--surface);
       border: 1px solid var(--line);
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
     }
     .site-form-slots {
       display: flex;
@@ -6520,7 +6489,7 @@
       text-align: left;
       background: var(--surface);
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: var(--radius-card);
       box-shadow: var(--shadow-lift);
     }
     @media (max-width: 39.99rem) {
@@ -6572,7 +6541,7 @@
       min-width: 0;
       padding: 8px;
       border: 1px solid var(--line);
-      border-radius: 6px;
+      border-radius: var(--radius-btn);
       background: var(--surface);
       font-size: 13px;
       line-height: 1.35;
@@ -6666,7 +6635,7 @@
       grid-template-columns: 17rem minmax(0, 1fr);
       align-items: stretch;
       border: 1px solid var(--line);
-      border-radius: 18px;
+      border-radius: var(--radius-card);
       background: var(--surface);
       box-shadow: var(--shadow-soft);
       overflow: hidden;
@@ -6693,7 +6662,7 @@
       gap: 16px;
       min-width: 0;
       padding: 16px;
-      background: #ebe8e2;
+      background: var(--surface-band);
       border-right: 1px solid var(--line);
     }
     .schedule-rail h2 {
@@ -6748,9 +6717,9 @@
     }
     .schedule-filter .select {
       min-width: 7.5rem;
-      border-radius: 999px;
+      border-radius: var(--radius-btn);
     }
-    /* Beside the title the three filters stay on one line, 7rem each and shrinking to 5.5rem, so they fit between "Schedule" and the date. */
+    /* Beside the title the three filters stay on one line, 8.5rem each and shrinking to 7rem, so they fit between "Schedule" and the date. */
     @container content (min-width: 62rem) {
       .schedule-filters {
         flex: 0 1 auto;
@@ -6758,8 +6727,8 @@
         min-width: 0;
       }
       .schedule-filter {
-        flex: 0 1 7rem;
-        min-width: 5.5rem;
+        flex: 0 1 8.5rem;
+        min-width: 7rem;
       }
       .schedule-filter .select {
         width: 100%;
@@ -6769,13 +6738,18 @@
     .schedule-clear {
       font-size: 13px;
     }
-    /* Under 640px the filters fill the controls row, each select an equal share. */
+    /* Under 640px the filters take two to a row, with room for the longest option and its caret. */
     @media (max-width: 39.99rem) {
       .schedule-filters {
         flex: 1 1 100%;
       }
       .schedule-filter {
-        flex: 1 1 6rem;
+        flex: 1 1 45%;
+        min-width: 0;
+      }
+      /* A lone third select takes its share, not the whole row. */
+      .schedule-filter:last-of-type {
+        flex-grow: 0;
       }
       .schedule-filter .select {
         width: 100%;
@@ -6823,14 +6797,13 @@
       margin: 0;
       padding: 8px 4px;
       list-style: none;
-      border-radius: 12px;
+      border-radius: var(--radius-sm);
       background: var(--surface);
       text-align: center;
     }
     .schedule-mini-week {
       font-size: 11px;
       font-weight: 600;
-      letter-spacing: 0.04em;
       color: var(--muted);
       padding-bottom: 4px;
     }
@@ -6851,7 +6824,7 @@
       background: var(--info-bg);
     }
     .schedule-mini-day.is-outside {
-      color: #a3a8ad;
+      color: var(--muted);
     }
     .schedule-mini-day.is-shown {
       background: var(--info-bg);
@@ -6876,21 +6849,18 @@
       background: var(--surface);
     }
 
-    /* Showing and Visits. */
+    /* Visits booked in the period shown. */
     .schedule-stats {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: minmax(0, 1fr);
       gap: 8px;
       margin: 0;
     }
     .schedule-stat {
       min-width: 0;
       padding: 8px 10px;
-      border-radius: 10px;
+      border-radius: var(--radius-sm);
       background: var(--surface);
-    }
-    .schedule-stat.is-showing {
-      background: var(--info-bg);
     }
     .schedule-stat dt {
       font-size: 11px;
@@ -6928,11 +6898,11 @@
       background: var(--action);
     }
     .schedule-swatch.is-inspection {
-      background: #a8531a;
+      background: var(--inspection);
     }
     .schedule-swatch.is-unconfirmed {
-      background: repeating-linear-gradient(135deg, #8d969e 0 2px, #fff 2px 4px);
-      outline: 1px solid #8d969e;
+      background: repeating-linear-gradient(135deg, var(--muted) 0 2px, var(--surface) 2px 4px);
+      outline: 1px solid var(--muted);
     }
     .schedule-swatch.is-reschedule {
       background: var(--hivis);
@@ -6972,7 +6942,7 @@
       align-items: center;
       gap: 10px;
       padding: 8px 10px;
-      border-radius: 12px;
+      border-radius: var(--radius-sm);
       background: var(--surface);
       color: var(--ink);
       text-decoration: none;
@@ -7004,9 +6974,9 @@
     .schedule-free-tag {
       flex: none;
       padding: 1px 8px;
-      border-radius: 999px;
-      background: #dcebe0;
-      color: #2d6a45;
+      border-radius: var(--radius-pill);
+      background: var(--done-bg);
+      color: var(--done);
       font-size: 12px;
       font-weight: 600;
     }
@@ -7019,7 +6989,7 @@
       justify-content: space-between;
       gap: 8px 16px;
       padding: 12px 16px;
-      background: #ebe8e2;
+      background: var(--surface-band);
       border-bottom: 1px solid var(--line);
     }
     .schedule-toolbar-start,
@@ -7038,42 +7008,13 @@
       line-height: 1.1;
       color: var(--ink);
     }
-    /* Day, Week and Month read as a switch, the same shape as Mine and All. */
-    .schedule-toolbar .tabs-border {
-      display: inline-flex;
-      flex-wrap: nowrap;
-      gap: 2px;
-      padding: 3px;
-      border: 1px solid var(--control);
-      border-radius: 999px;
-      background: var(--surface);
-    }
-    .schedule-toolbar .tabs-border > .tab {
-      min-height: 28px;
-      padding-inline: 12px;
-      border: 0;
-      border-radius: 999px;
-    }
-    .schedule-toolbar .tabs-border > .tab.tab-active {
-      background: var(--action);
-      color: var(--surface);
-      --tab-border-color: transparent;
-    }
-    @media (max-width: 40rem), (pointer: coarse) {
-      .schedule-toolbar .tabs-border > .tab {
-        min-height: 36px;
-        padding-inline: 16px;
-      }
-    }
+    /* Day, Week and Month are the same segmented control as Mine and All (ui.ts's segmented). */
     @media (max-width: 767.98px) {
       .schedule-toolbar {
         padding: 10px 12px;
       }
       .schedule-nav {
         gap: 4px;
-      }
-      .schedule-toolbar .tabs-border > .tab {
-        padding-inline: 10px;
       }
     }
 
@@ -7094,7 +7035,7 @@
       justify-content: space-between;
       gap: 8px;
       padding: 12px 16px;
-      background: #ebe8e2;
+      background: var(--surface-band);
       border-bottom: 1px solid var(--line);
       min-height: 3.5rem;
     }
@@ -7151,20 +7092,20 @@
       display: inline-block;
       margin: 0 0 8px;
       padding: 1px 10px;
-      border-radius: 999px;
+      border-radius: var(--radius-pill);
       background: var(--info-bg);
       color: var(--ink);
       font-size: 12px;
       font-weight: 600;
     }
     .schedule-pick-status.is-not_confirmed {
-      background: #ebe8e2;
+      background: var(--surface-band);
     }
     .schedule-pick-status.is-reschedule_requested {
-      background: #fbefc7;
+      background: var(--wattle-bg);
     }
     .schedule-pick-status.is-done {
-      background: #dcebe0;
+      background: var(--done-bg);
     }
     .schedule-pick-card .schedule-pick-top > p:first-child {
       padding: 1px 10px;
@@ -7267,7 +7208,7 @@
     .schedule-flag {
       padding: 1px 8px;
       border: 1px solid var(--line);
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
       background: var(--surface);
       font-size: 13px;
       font-weight: 500;
@@ -7304,7 +7245,7 @@
       min-width: 0;
       padding: 8px;
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: var(--radius-card);
       background: var(--surface);
     }
     .schedule-day.is-empty {
@@ -7363,7 +7304,7 @@
       max-height: min(40rem, calc(100dvh - 16rem));
       overflow: auto;
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: var(--radius-card);
       background: var(--page);
     }
     .schedule-scroll:focus-visible {
@@ -7497,7 +7438,7 @@
       justify-content: center;
       width: 2rem;
       height: 2rem;
-      border-radius: 999px;
+      border-radius: var(--radius-pill);
       font-family: var(--font-head);
       font-size: 20px;
       font-weight: 600;
@@ -7575,7 +7516,7 @@
       padding: 4px 6px 4px 8px;
       border: 1px solid var(--line);
       border-left: 4px solid var(--action);
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
       background: var(--surface);
       font-size: 12px;
       line-height: 1.3;
@@ -7626,27 +7567,29 @@
     .schedule-marker {
       align-self: flex-start;
       padding: 0 6px;
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
       background: var(--info-bg);
       font-size: 12px;
       font-weight: 600;
       color: var(--action);
     }
-    /* An hour or less is one line: the start time, then as much of the issue as fits.
-       The end time, the Tradie and how it stands stay in the link's name. */
-    .schedule-block.is-short .schedule-block-link {
-      flex-direction: row;
-      align-items: baseline;
-      gap: 6px;
-      white-space: nowrap;
+    /* An hour or less is short; half an hour is tiny. Both hide the time visually (the
+       link's name still reads the full visit) and give the block to the issue and the
+       Tradie; a tiny block shows the issue's first line only. */
+    .schedule-block.is-short .schedule-block-link,
+    .schedule-block.is-tiny .schedule-block-link {
+      gap: 0;
+      padding-block: 2px;
     }
     .schedule-block.is-short .schedule-block-time,
-    .schedule-block.is-short .schedule-marker {
-      flex: none;
-    }
+    .schedule-block.is-short .schedule-marker,
     .schedule-block.is-short .schedule-block-end,
     .schedule-block.is-short .schedule-block-meta,
-    .schedule-block.is-short .schedule-block-tradie {
+    .schedule-block.is-tiny .schedule-block-time,
+    .schedule-block.is-tiny .schedule-marker,
+    .schedule-block.is-tiny .schedule-block-end,
+    .schedule-block.is-tiny .schedule-block-meta,
+    .schedule-block.is-tiny .schedule-block-tradie {
       position: absolute;
       width: 1px;
       height: 1px;
@@ -7654,16 +7597,23 @@
       clip-path: inset(50%);
       white-space: nowrap;
     }
-    .schedule-block.is-short .schedule-block-issue {
-      flex: 1 1 auto;
+    .schedule-block.is-short .schedule-block-issue,
+    .schedule-block.is-tiny .schedule-block-issue {
       min-width: 0;
       overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
     }
-    .schedule-block.is-short .line-clamp-2 {
-      display: block;
+    .schedule-block.is-short .schedule-block-issue .line-clamp-2,
+    .schedule-block.is-tiny .schedule-block-issue .line-clamp-2 {
+      font-size: 12px;
+      line-height: 1.2;
+    }
+    .schedule-block.is-tiny .schedule-block-issue .line-clamp-2 {
+      -webkit-line-clamp: 1;
+    }
+    .schedule-block.is-short .schedule-block-tradie {
       overflow: hidden;
+      font-size: 11px;
+      line-height: 1.2;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
@@ -7744,7 +7694,7 @@
       justify-content: center;
       min-width: 1.75rem;
       height: 1.75rem;
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
       font-weight: 600;
       color: var(--ink);
       text-decoration: none;
@@ -7760,7 +7710,7 @@
     .schedule-mday.is-today .schedule-mday-num {
       width: 2rem;
       height: 2rem;
-      border-radius: 999px;
+      border-radius: var(--radius-pill);
       background: var(--action);
       color: var(--surface);
     }
@@ -7782,7 +7732,7 @@
       padding: 4px 8px;
       border: 1px solid var(--line);
       border-left: 4px solid var(--action);
-      border-radius: 10px;
+      border-radius: var(--radius-sm);
       background: var(--surface);
       font-size: 12px;
       line-height: 1.3;
@@ -7840,21 +7790,14 @@
       color: var(--high);
     }
     .schedule-chip.is-inspection a {
-      border-left-color: #a8531a;
+      border-left-color: var(--inspection);
     }
     .schedule-chip.is-inspection .visit-icon:not(.is-standing) {
-      color: #a8531a;
+      color: var(--inspection);
     }
     .schedule-block-time .visit-icon {
       margin-right: 4px;
       vertical-align: -2px;
-    }
-    /* daisyUI's bar under the current tab was white, which vanished on the Harbour pill: Wattle shows. */
-    .schedule-toolbar .tabs-border > .tab::before {
-      background: #b7bec5;
-    }
-    .schedule-toolbar .tabs-border > .tab.tab-active::before {
-      background: var(--hivis);
     }
     .schedule-chip a:hover {
       border-color: var(--action);
@@ -7863,7 +7806,7 @@
       display: block;
       margin-top: 4px;
       padding: 1px 4px;
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
       background: var(--info-bg);
       font-size: 12px;
       font-weight: 600;
@@ -7944,7 +7887,7 @@
       padding: 16px 18px;
       background: var(--surface);
       border: 1px solid var(--line);
-      border-radius: 16px;
+      border-radius: var(--radius-card);
     }
     .soft-head {
       display: flex;
@@ -7968,9 +7911,9 @@
       height: 22px;
       padding: 0 6px;
       place-items: center;
-      border-radius: 11px;
-      background: #13212e;
-      color: #fff;
+      border-radius: var(--radius-pill);
+      background: var(--ink);
+      color: var(--surface);
       font-size: 12px;
       font-weight: 600;
     }
@@ -7984,7 +7927,7 @@
       position: relative;
       overflow: hidden;
       border: 1px solid var(--line);
-      border-radius: 16px;
+      border-radius: var(--radius-card);
       background: var(--page);
     }
     /* The map with its buttons. On a phone it is a block of its own and the panel opens under it; from 64rem the panel floats over it. */
@@ -8031,7 +7974,7 @@
       gap: 8px;
       margin: 0;
       padding: 8px 14px;
-      border-radius: 999px;
+      border-radius: var(--radius-pill);
       background: var(--surface);
       box-shadow: 0 2px 10px rgb(19 33 46 / 12%);
       font-size: 13px;
@@ -8060,7 +8003,7 @@
       max-height: calc(100% - 68px);
       height: auto;
       overflow-y: auto;
-      border-radius: 14px;
+      border-radius: var(--radius-sm);
       box-shadow: 0 6px 24px rgb(19 33 46 / 16%);
     }
     }
@@ -8082,8 +8025,8 @@
       gap: 12px;
       min-width: 0;
       padding: 12px 14px;
-      border-radius: 12px;
-      background: #f6f1e8;
+      border-radius: var(--radius-sm);
+      background: var(--surface-paper);
       color: var(--ink);
       text-decoration: none;
       transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), scale var(--dur-slow) var(--ease-spring), translate var(--dur-base) var(--ease-out);
@@ -8098,10 +8041,10 @@
       transition-timing-function: var(--ease-out);
     }
     .glance-tile.is-warm {
-      background: #fbeede;
+      background: var(--high-bg);
     }
     .glance-tile.is-cool {
-      background: #e7eef5;
+      background: var(--info-bg);
     }
     .glance-tile-value {
       font-family: var(--font-head);
@@ -8110,10 +8053,10 @@
       line-height: 1;
     }
     .glance-tile.is-warm .glance-tile-value {
-      color: #a4510a;
+      color: var(--high);
     }
     .glance-tile.is-hot .glance-tile-value {
-      color: #b3261e;
+      color: var(--urgent);
     }
     .glance-tile-text {
       display: grid;
@@ -8132,7 +8075,7 @@
     .soft-card .dispatch-card {
       border: 1px solid var(--line);
       border-left-width: 1px;
-      border-radius: 14px;
+      border-radius: var(--radius-sm);
       background: var(--surface);
     }
     .dispatch-card-head {
@@ -8148,8 +8091,8 @@
       margin: 0;
       padding: 10px 0;
       justify-items: center;
-      border-radius: 10px;
-      background: #f6f1e8;
+      border-radius: var(--radius-sm);
+      background: var(--surface-paper);
       font-size: 11px;
       color: var(--muted);
     }
@@ -8159,7 +8102,7 @@
       color: var(--ink);
     }
     .soft-card .dispatch-card-kind {
-      color: #a4510a;
+      color: var(--high);
     }
     legend.dispatch-card-legend {
       display: grid;
@@ -8229,22 +8172,22 @@
     .dispatch-tabs {
       display: inline-flex;
       padding: 3px;
-      border-radius: 999px;
-      background: #f1ece2;
+      border-radius: var(--radius-pill);
+      background: var(--surface-band);
     }
     .dispatch-tab {
       min-height: 32px;
       padding: 0 14px;
       border: 0;
-      border-radius: 999px;
+      border-radius: var(--radius-pill);
       background: transparent;
       font: inherit;
       font-size: 13px;
       cursor: pointer;
     }
     .dispatch-tab[aria-pressed='true'] {
-      background: #13212e;
-      color: #fff;
+      background: var(--ink);
+      color: var(--surface);
       transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), scale var(--dur-slow) var(--ease-spring);
     }
     .dispatch-tab[aria-pressed='true']:active {
@@ -8257,7 +8200,7 @@
       width: min(16rem, 100%);
       padding: 0 14px;
       border: 1px solid var(--line);
-      border-radius: 999px;
+      border-radius: var(--radius-pill);
       background: var(--surface);
       font: inherit;
       font-size: 14px;
@@ -8287,21 +8230,21 @@
       height: 34px !important;
       padding: 8px;
       box-sizing: border-box;
-      border-radius: 10px;
-      background: #f1ece2;
+      border-radius: var(--radius-sm);
+      background: var(--surface-band);
       color: var(--muted);
     }
     .dispatch-stack tr[data-urgency='routine'] .dispatch-address .entity-link svg {
-      background: #e7eef5;
-      color: #1f5c8b;
+      background: var(--info-bg);
+      color: var(--action);
     }
     .dispatch-stack tr[data-urgency='high'] .dispatch-address .entity-link svg {
-      background: #a4510a;
-      color: #fff;
+      background: var(--high);
+      color: var(--surface);
     }
     .dispatch-stack tr[data-urgency='urgent'] .dispatch-address .entity-link svg {
-      background: #b3261e;
-      color: #fff;
+      background: var(--urgent);
+      color: var(--surface);
     }
     .dispatch-stack .dispatch-address .entity-link {
       gap: 10px;
@@ -8333,7 +8276,7 @@
       min-height: 36px;
       padding: 0 10px;
       border: 1px solid var(--line);
-      border-radius: 999px;
+      border-radius: var(--radius-pill);
       background: var(--surface);
       font: inherit;
       font-size: 13px;
@@ -8393,7 +8336,7 @@
       width: min(15rem, 100%);
       padding: 0 14px;
       border: 1px solid var(--line);
-      border-radius: 12px;
+      border-radius: var(--radius-sm);
       background: var(--surface);
       color: var(--muted);
     }
@@ -8455,7 +8398,7 @@
       min-height: 40px;
       padding: 0 12px;
       border: 1px solid var(--line);
-      border-radius: 12px;
+      border-radius: var(--radius-sm);
       background: var(--surface);
       font-size: 14px;
       color: var(--muted);
@@ -8505,7 +8448,7 @@
       gap: 2px;
       padding: 4px;
       transform: translateX(-50%);
-      border-radius: 14px;
+      border-radius: var(--radius-sm);
       background: var(--surface);
       box-shadow: 0 2px 12px rgb(19 33 46 / 16%);
     }
@@ -8520,7 +8463,7 @@
       min-height: 40px;
       padding: 0 12px;
       border: 0;
-      border-radius: 10px;
+      border-radius: var(--radius-sm);
       background: transparent;
       font: inherit;
       font-size: 13px;
@@ -8562,7 +8505,7 @@
       margin: 0 12px 0 0 !important;
     }
     .dispatch-mapcard .maplibregl-ctrl-group {
-      border-radius: 22px;
+      border-radius: var(--radius-card);
     }
     .dispatch-mapcard.is-expanded {
       position: fixed;
@@ -8611,7 +8554,7 @@
       min-height: 40px;
       padding: 0 16px;
       border: 1px solid var(--line);
-      border-radius: 999px;
+      border-radius: var(--radius-pill);
       background: var(--surface);
       list-style: none;
     }
@@ -8619,7 +8562,7 @@
       content: '\2197';
       margin-left: auto;
       font-size: 14px;
-      color: #a4510a;
+      color: var(--high);
     }
     @media (max-width: 639.98px) {
       .dispatch-go-cell {
@@ -8645,7 +8588,7 @@
       background: var(--surface);
       border: 1px solid var(--line);
       border-left: 4px solid var(--hivis);
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
       scroll-margin-top: 16px;
     }
     .inbox-item:target {
@@ -8731,7 +8674,7 @@
       font-weight: 500;
       color: var(--ink);
       background: var(--hivis);
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
     }
   }
 }
@@ -8802,9 +8745,18 @@
       color: var(--ink);
       text-decoration: underline;
     }
+    @container content (max-width: 39.99rem) {
+      .page-back {
+        margin-bottom: -10px;
+      }
+    }
     .page-header-lead > .badge {
       flex: none;
-      align-self: center;
+    }
+    @media (min-width: 40rem) {
+      .page-header-lead > .badge {
+        align-self: center;
+      }
     }
     .page-header-date {
       align-items: center;
@@ -8854,15 +8806,12 @@
       align-items: center;
       gap: 8px;
     }
-    .ticket-tools .btn {
-      min-height: 40px;
-      padding-inline: 18px;
-      border-radius: 999px;
-    }
-    .ticket-tools .btn-outline {
-      background: var(--surface);
-      border-color: transparent;
-      box-shadow: var(--shadow-soft);
+    /* Share, Change Urgency and Close Ticket: the same buttons as every other page, under the subtitle. */
+    .ticket-tools {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
     }
     .ticket-tools .btn-primary {
       gap: 6px;
@@ -8881,7 +8830,7 @@
       font-size: 12px;
       color: var(--action);
       background: var(--info-bg);
-      border-radius: 999px;
+      border-radius: var(--radius-pill);
     }
     .ticket-hero .ticket-issue {
       font-size: 22px;
@@ -8899,11 +8848,11 @@
       content: '';
       width: 8px;
       height: 8px;
-      background: #2f6b52;
+      background: var(--done);
       border-radius: 50%;
     }
     .ticket-state.is-closed::before {
-      background: #8a8374;
+      background: var(--muted);
     }
     /* The Jobs beside what the Tenant reported (stacked while a Job is open: its tables need the room). */
     .ticket-pair {
@@ -8935,7 +8884,7 @@
       height: 40px;
       color: var(--action);
       background: var(--info-bg);
-      border-radius: 12px;
+      border-radius: var(--radius-sm);
     }
     .ticket-tiles {
       display: grid;
@@ -8946,7 +8895,7 @@
     .ticket-tiles > div {
       padding: 8px 12px;
       background: var(--page);
-      border-radius: 12px;
+      border-radius: var(--radius-sm);
     }
     .ticket-tiles dt {
       font-size: 12px;
@@ -8959,7 +8908,7 @@
       overflow-wrap: anywhere;
     }
     .ticket-star {
-      color: #d99a00;
+      color: var(--amber);
     }
     /* Progress: a green strip of where it stands, then the tabs and their views. */
     .ticket-progress {
@@ -8968,7 +8917,7 @@
       min-width: 0;
       overflow: hidden;
       background: var(--surface);
-      border-radius: 22px;
+      border-radius: var(--radius-card);
       box-shadow: var(--shadow-soft);
     }
     @media (min-width: 48rem) {
@@ -8981,7 +8930,7 @@
       align-content: start;
       gap: 12px;
       padding: 16px;
-      background: #e1ebe3;
+      background: var(--done-bg);
     }
     .ticket-progress-state {
       display: flex;
@@ -8993,7 +8942,7 @@
       font-weight: 700;
       text-align: center;
       background: var(--surface);
-      border-radius: 14px;
+      border-radius: var(--radius-sm);
     }
     .ticket-progress-stat {
       display: grid;
@@ -9038,10 +8987,8 @@
     }
     .ticket-tab {
       padding: 6px 12px;
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
+      font-size: 13px;
+      font-weight: 600;
       color: var(--muted);
       background: transparent;
       border: 0;
@@ -9095,7 +9042,7 @@
     }
     html:not(.js) .tl-board {
       overflow-x: auto;
-      scrollbar-color: #c8961a #efe8da;
+      scrollbar-color: var(--amber) var(--track);
     }
     /* The slider under the board: a thick dark-yellow thumb on a pale track, easy to grab. */
     .tl-slider {
@@ -9114,29 +9061,29 @@
     }
     .tl-slider::-webkit-slider-runnable-track {
       height: 8px;
-      background: #e6dfd2;
-      border-radius: 999px;
+      background: var(--track);
+      border-radius: var(--radius-pill);
     }
     .tl-slider::-moz-range-track {
       height: 8px;
-      background: #e6dfd2;
-      border-radius: 999px;
+      background: var(--track);
+      border-radius: var(--radius-pill);
     }
     .tl-slider::-webkit-slider-thumb {
       -webkit-appearance: none;
       width: 64px;
       height: 20px;
       margin-top: -6px;
-      background: #c8961a;
+      background: var(--amber);
       border: 0;
-      border-radius: 999px;
+      border-radius: var(--radius-pill);
     }
     .tl-slider::-moz-range-thumb {
       width: 64px;
       height: 20px;
-      background: #c8961a;
+      background: var(--amber);
       border: 0;
-      border-radius: 999px;
+      border-radius: var(--radius-pill);
     }
     .tl-column {
       flex: 0 0 13rem;
@@ -9156,12 +9103,10 @@
       gap: 4px;
       margin: 0;
       padding: 4px 8px;
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
-      background: #ece3d3;
-      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      background: var(--sand-tint);
+      border-radius: var(--radius-btn);
     }
     .tl-cards {
       display: grid;
@@ -9177,7 +9122,7 @@
       font-size: 13px;
       background: var(--surface);
       border: 1px solid var(--line);
-      border-radius: 14px;
+      border-radius: var(--radius-sm);
     }
     .tl-card.is-skipped {
       text-align: center;
@@ -9216,11 +9161,11 @@
       height: 36px;
       color: var(--surface);
       background: var(--action);
-      border-radius: 10px;
+      border-radius: var(--radius-sm);
       transform: translateX(-50%);
     }
     .ticket-cost.is-max .ticket-cost-icon {
-      background: #a5530f;
+      background: var(--high);
     }
     .ticket-cost-link {
       display: inline-flex;
@@ -9255,10 +9200,12 @@
       padding: 0;
       border-radius: 50%;
     }
-    /* The message log stays short (scrolling to the newest) until "Show the whole conversation". */
+    /* The message log stays short (starting at the newest message) until "Show the whole
+       conversation"; its top edge fades so a clipped first line never reads as the start. */
     html.js .ticket-msgs:not(.is-open) .section-body {
       max-height: 12rem;
       overflow-y: auto;
+      mask-image: linear-gradient(to bottom, transparent, var(--ink) 24px);
     }
     .ticket-msgs {
       display: grid;
@@ -9266,63 +9213,36 @@
     }
     .ticket-msgs-toggle {
       justify-self: center;
-      padding: 6px 16px;
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--ink);
-      background: var(--surface);
-      border: 0;
-      border-radius: 999px;
-      cursor: pointer;
     }
     .ticket-msgs-toggle[hidden] {
       display: none;
     }
-    .ticket-detail-grid {
+    /* Ticket details: one column of label and value, never tiles squeezed two to a row. */
+    .ticket-details .ticket-facts {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0;
+    }
+    .ticket-details .ticket-facts > div {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-      margin: 0;
+      gap: 1px;
+      padding-block: 8px;
     }
-    .ticket-detail-tile {
-      display: grid;
-      grid-template-columns: auto minmax(0, 1fr);
-      grid-template-areas: 'icon label' 'icon value';
-      column-gap: 8px;
-      align-content: start;
-      padding: 10px;
-      background: var(--page);
-      border-radius: 14px;
+    .ticket-details .ticket-facts > div + div {
+      border-top: 1px solid var(--line);
     }
-    .ticket-detail-icon {
-      grid-area: icon;
-      display: grid;
-      place-items: center;
-      width: 30px;
-      height: 30px;
-      color: var(--muted);
-      background: var(--surface);
-      border-radius: 50%;
+    .ticket-details .ticket-facts dt {
+      font-size: 12px;
     }
-    .ticket-detail-tile dt {
-      grid-area: label;
-      font-size: 11px;
-      line-height: 1.2;
-      color: var(--muted);
-    }
-    .ticket-detail-tile dd {
-      grid-area: value;
-      margin: 0;
-      font-size: 13px;
-      font-weight: 700;
-      overflow-wrap: anywhere;
+    .ticket-details .ticket-facts dd {
+      font-size: 14px;
+      font-weight: 600;
     }
     .ticket-detail-note {
       display: -webkit-box;
       -webkit-line-clamp: 2;
       -webkit-box-orient: vertical;
       overflow: hidden;
-      font-size: 11px;
+      font-size: 12px;
       font-weight: 400;
       color: var(--muted);
     }
@@ -9348,7 +9268,7 @@
       padding: 8px 12px;
       background: var(--surface);
       border: 1px solid var(--line);
-      border-radius: 12px;
+      border-radius: var(--radius-card);
       box-shadow: var(--shadow-soft);
     }
     .tk-tabs {
@@ -9366,7 +9286,7 @@
       font-weight: 500;
       color: var(--muted);
       text-decoration: none;
-      border-radius: 999px;
+      border-radius: var(--radius-pill);
       transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
     }
     .tk-tab:hover {
@@ -9387,7 +9307,7 @@
       text-align: center;
       color: var(--ink);
       background: var(--page);
-      border-radius: 999px;
+      border-radius: var(--radius-pill);
     }
     .tk-tab.is-ready .tk-tab-count {
       background: var(--hivis);
@@ -9439,8 +9359,8 @@
       align-items: center;
       gap: 16px;
       padding: 12px;
-      background: #dbeaf7;
-      border-radius: 12px;
+      background: var(--info-bg);
+      border-radius: var(--radius-card);
     }
     .tk-photos {
       display: flex;
@@ -9469,7 +9389,7 @@
       font-weight: 600;
       color: var(--ink);
       background: var(--hivis);
-      border-radius: 999px;
+      border-radius: var(--radius-pill);
     }
     .tk-photo-more {
       display: grid;
@@ -9546,7 +9466,7 @@
       padding: 12px;
       background: var(--surface);
       border: 1px solid var(--line);
-      border-radius: 12px;
+      border-radius: var(--radius-card);
       transition: border-color var(--dur-fast) var(--ease-out);
     }
     .tk-card:hover {
@@ -9690,7 +9610,7 @@
       padding: 16px;
       background: var(--surface);
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: var(--radius-card);
     }
     .reimbursement-head > p {
       margin: 0;
@@ -9724,7 +9644,7 @@
       padding: 12px 8px 0;
       background: var(--surface);
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: var(--radius-card);
     }
     .reimbursement-steps .step {
       min-width: 0;
@@ -9838,7 +9758,7 @@
       padding: 0;
       list-style: none;
       border: 1px solid var(--line);
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
     }
     .tradie-row {
       display: grid;
@@ -9890,7 +9810,7 @@
     .ticket-fold[open] {
       padding: 12px;
       background: var(--page);
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
     }
     .ticket-fold-body {
       margin-top: 8px;
@@ -9926,7 +9846,7 @@
       padding: 8px 12px;
       font-size: 14px;
       background: var(--page);
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
     }
   }
 }
@@ -10048,7 +9968,7 @@
       width: min(calc(100cqw - 8rem), calc((100dvh - 12rem) * var(--photo-ratio, 1.3333)));
       height: auto;
       aspect-ratio: var(--photo-ratio, 1.3333);
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
       object-fit: contain;
       touch-action: pan-y;
       user-select: none;
@@ -10116,7 +10036,7 @@
       min-height: 36px;
       padding: 0 10px;
       border: 1px solid var(--control);
-      border-radius: 6px;
+      border-radius: var(--radius-btn);
       background: var(--surface);
       color: var(--muted);
       cursor: text;
@@ -10158,7 +10078,7 @@
     .household-ticket,
     .tradie-rows > li,
     .unlinked-list > li {
-      border-radius: 10px;
+      border-radius: var(--radius-sm);
       transition: background-color var(--dur-fast) var(--ease-out);
     }
     @supports (corner-shape: squircle) {
@@ -10168,7 +10088,7 @@
       .household-ticket,
       .tradie-rows > li,
       .unlinked-list > li {
-        border-radius: 14px;
+        border-radius: var(--radius-sm);
         corner-shape: squircle;
       }
     }
@@ -10240,7 +10160,7 @@
       padding: 6px;
       background: var(--surface);
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: var(--radius-card);
       box-shadow: var(--shadow-lift);
     }
     .add-menu-panel a {
@@ -10309,7 +10229,7 @@
       min-width: 0;
       padding: 24px 12px 12px;
       background: var(--surface);
-      border-radius: 8px;
+      border-radius: var(--radius-card);
       box-shadow: var(--shadow-soft);
     }
     .household-owner {
@@ -10325,7 +10245,7 @@
       padding: 2px 4px 2px 10px;
       background: var(--surface);
       border: 1px solid var(--line);
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
       font-size: 13px;
       font-weight: 500;
       transform: translateY(-50%);
@@ -10336,7 +10256,7 @@
     .household-waiting {
       margin-right: 2px;
       padding: 1px 6px;
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
       background: var(--hivis);
       color: var(--ink);
       font-size: 12px;
@@ -10821,7 +10741,7 @@
   @layer app {
     .request-review .section {
       border: 0;
-      border-radius: 22px;
+      border-radius: var(--radius-card);
       box-shadow: var(--shadow-soft);
     }
     .request-lead {
@@ -10844,14 +10764,14 @@
       padding: 2px 10px;
       color: var(--action);
       background: var(--info-bg);
-      border-radius: 999px;
+      border-radius: var(--radius-pill);
     }
     .request-lead .request-issue {
       font-size: 22px;
       line-height: 1.35;
     }
     .ticket-state.is-waiting::before {
-      background: #c8961a;
+      background: var(--amber);
     }
     /* Label and value as tiles. */
     .request-facts {
@@ -10865,7 +10785,7 @@
       min-width: 0;
       padding: 8px 12px;
       background: var(--page);
-      border-radius: 12px;
+      border-radius: var(--radius-sm);
     }
     .request-facts dt {
       font-size: 12px;
@@ -10911,7 +10831,7 @@
       font-size: 12px;
       font-weight: 700;
       background: var(--hivis);
-      border-radius: 999px;
+      border-radius: var(--radius-pill);
     }
     @media (min-width: 64rem) {
       .request-review {
@@ -10920,7 +10840,7 @@
       .request-side {
         align-self: stretch;
         padding: 12px;
-        background: #d9d6d0;
+        background: var(--surface-sunk);
         border-radius: 0;
         gap: 12px;
       }
@@ -10948,7 +10868,7 @@
       gap: 16px;
       padding: 16px 20px 20px;
       background: var(--surface);
-      border-radius: 28px;
+      border-radius: var(--radius-card);
       box-shadow: var(--shadow-soft);
     }
 
@@ -10983,25 +10903,25 @@
     }
     .appr-stage-item:first-child .appr-stage {
       clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 50%, calc(100% - 18px) 100%, 0 100%);
-      border-radius: 10px 0 0 10px;
+      border-radius: var(--radius-sm) 0 0 var(--radius-sm);
     }
     .appr-stage-item:last-child .appr-stage {
       clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 18px 50%);
-      border-radius: 0 10px 10px 0;
+      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
     }
     .appr-stage-item:only-child .appr-stage {
       clip-path: none;
-      border-radius: 10px;
+      border-radius: var(--radius-sm);
     }
     .appr-stage.is-owners {
-      color: #fff;
-      background: linear-gradient(135deg, #184d75, #2a74ad);
+      color: var(--surface);
+      background: var(--action);
     }
     .appr-stage.is-silent {
-      background: linear-gradient(135deg, #ffbb1f, #ffd770);
+      background: var(--hivis);
     }
     .appr-stage.is-claims {
-      background: linear-gradient(135deg, #cfe2f3, #eaf3fb);
+      background: var(--info-bg);
     }
     /* The stage that needs the Property Manager has a count that pulses softly. */
     .appr-stage.is-silent .appr-stage-count {
@@ -11057,13 +10977,13 @@
       padding: 0 6px;
       font-size: 12px;
       font-weight: 700;
-      color: #fff;
+      color: var(--surface);
       background: var(--ink);
-      border-radius: 999px;
+      border-radius: var(--radius-pill);
     }
     .appr-stage.is-owners .appr-stage-count {
       color: var(--action);
-      background: #fff;
+      background: var(--surface);
     }
     .appr-stage-note {
       margin: 6px 0 0;
@@ -11081,9 +11001,9 @@
       font-family: var(--font-head);
       font-size: 20px;
       font-weight: 700;
-      background: #e6e4df;
-      border-left: 5px solid #8d969e;
-      border-radius: 4px 14px 14px 4px;
+      background: var(--surface-band);
+      border-left: 5px solid var(--muted);
+      border-radius: var(--radius-sm);
     }
     /* The line that would be under a stage, when there is no stage bar: a white pill at the heading's right. */
     .appr-list-note {
@@ -11093,8 +11013,8 @@
       font-size: 13px;
       font-weight: 600;
       color: var(--ink);
-      background: #fff;
-      border-radius: 999px;
+      background: var(--surface);
+      border-radius: var(--radius-pill);
     }
     .appr-list-count {
       display: grid;
@@ -11105,9 +11025,9 @@
       font-family: var(--font-body, inherit);
       font-size: 13px;
       font-weight: 700;
-      color: #fff;
+      color: var(--surface);
       background: var(--ink);
-      border-radius: 999px;
+      border-radius: var(--radius-pill);
     }
     .appr-list {
       display: grid;
@@ -11127,7 +11047,7 @@
       overflow: hidden;
       background: var(--surface);
       border: 1px solid var(--line);
-      border-radius: 18px;
+      border-radius: var(--radius-card);
     }
     .appr-status {
       display: grid;
@@ -11145,19 +11065,19 @@
       font-weight: 700;
     }
     .appr-card.is-silent .appr-status {
-      background: #fde8e4;
-      color: #a32020;
+      background: var(--urgent-bg);
+      color: var(--urgent);
     }
     .appr-card.is-silent .appr-status-age {
       color: var(--ink);
     }
     .appr-card.is-waiting .appr-status {
-      background: #f6ecd2;
-      color: #7a5200;
+      background: var(--wattle-bg);
+      color: var(--high);
     }
     .appr-card.is-review .appr-status {
-      background: #fff1cc;
-      color: #7a5200;
+      background: var(--wattle-bg);
+      color: var(--high);
     }
     .appr-card.is-receipt .appr-status,
     .appr-card.is-forwarded .appr-status {
@@ -11206,20 +11126,18 @@
       font-size: 13px;
       font-weight: 400;
       background: var(--page);
-      border-radius: 999px;
+      border-radius: var(--radius-pill);
     }
     .appr-address .entity-link {
       padding: 2px 10px;
       font-size: 13px;
       background: var(--info-bg);
-      border-radius: 999px;
+      border-radius: var(--radius-pill);
     }
     .appr-more > summary {
       width: fit-content;
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
+      font-size: 13px;
+      font-weight: 600;
       color: var(--ink);
       cursor: pointer;
     }
@@ -11253,10 +11171,8 @@
     }
     .appr-label {
       margin: 0;
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
+      font-size: 13px;
+      font-weight: 600;
       color: var(--muted);
     }
     .appr-person {
@@ -11292,26 +11208,26 @@
       height: 32px;
       font-size: 11px;
       font-weight: 700;
-      color: #fff;
+      color: var(--surface);
       background: var(--ink);
       border-radius: 50%;
     }
     .appr-avatar.is-tenant {
       color: var(--ink);
-      background: #ecd48f;
+      background: var(--amber-bg);
     }
     .appr-tile {
       min-width: 0;
       padding: 8px 12px;
       background: var(--page);
-      border-radius: 12px;
+      border-radius: var(--radius-sm);
     }
     .appr-tile p {
       margin: 0;
     }
     .appr-tile.is-empty {
       background: transparent;
-      border: 1px dashed #c8c0b0;
+      border: 1px dashed var(--control);
     }
     .appr-amount {
       margin: 0;
@@ -11319,7 +11235,7 @@
       font-weight: 700;
     }
     .appr-amount.is-over {
-      color: #b3261e;
+      color: var(--urgent);
     }
     .appr-amount.is-quiet {
       font-size: 15px;
@@ -11347,13 +11263,13 @@
       place-items: center;
       width: 44px;
       height: 44px;
-      background: radial-gradient(closest-side, var(--surface) 72%, transparent 74%), conic-gradient(#b3261e calc(var(--fill) * 1%), #f2c9c4 0);
+      background: radial-gradient(closest-side, var(--surface) 72%, transparent 74%), conic-gradient(var(--urgent) calc(var(--fill) * 1%), var(--urgent-bg) 0);
       border-radius: 50%;
     }
     .appr-ring > span {
       font-size: 10px;
       font-weight: 700;
-      color: #b3261e;
+      color: var(--urgent);
     }
     .appr-done {
       display: grid;

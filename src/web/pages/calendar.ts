@@ -31,7 +31,7 @@ import { icon } from '../icons.ts';
 import { layoutDay, hourRange, minuteOfDay, type DayLayout, type HourRange } from '../schedule-layout.ts';
 import { COLLEAGUES_ONLY, shareButton, shareUrl } from '../share.ts';
 import { shellInfo } from '../shell.ts';
-import { badge, clip, flashFrom, formatTime, formatWhen, humanise, linkButton, page, segmented, tabs, type Html } from '../ui.ts';
+import { badge, clip, flashFrom, formatTime, formatWhen, humanise, linkButton, page, segmented, type Html } from '../ui.ts';
 
 export type { Booking } from '../bookings.ts';
 
@@ -127,7 +127,6 @@ export function calendarPages() {
             <div class="schedule-rail">
               ${miniMonth(monthFirst, period, visitDays, ctx)}
               <dl class="schedule-stats">
-                <div class="schedule-stat is-showing"><dt>Showing</dt><dd>${period.short}</dd></div>
                 <div class="schedule-stat"><dt>Visits</dt><dd class="num">${bookings.length} booked</dd></div>
               </dl>
               ${visitTypes()}
@@ -372,7 +371,8 @@ function blockName(b: Booking, ctx: Ctx): string {
 function visitBlock(b: Booking, style: string, rows: number, ctx: Ctx): Html {
   const kind = visitKind(b);
   const words = visitWords(b);
-  const flags = [rows <= 4 ? 'is-short' : '', ...bookingFlags(b, b.propertyManagerId === ctx.meId)].filter(Boolean).join(' ');
+  // An hour or less is short; half an hour is tiny. Both hide the time, which the link's name still reads.
+  const flags = [rows <= 2 ? 'is-tiny' : rows <= 4 ? 'is-short' : '', ...bookingFlags(b, b.propertyManagerId === ctx.meId)].filter(Boolean).join(' ');
   return html`<li class="schedule-block ${flags}" style="${style}" ${pickData(b)}>
     <a class="schedule-block-link" href="${ticketHref(b)}" aria-label="${blockName(b, ctx)}">
       <span class="schedule-block-time num">${tradeIcon(b.trade)}<time datetime="${b.start}">${formatTime(b.start, ctx.timeZone)}</time><span class="schedule-block-end"> – <time datetime="${b.end}">${formatTime(b.end, ctx.timeZone)}</time></span></span>
@@ -580,7 +580,7 @@ function scheduleToolbar(p: Period, filter: Filter, focus: string, q: Query): Ht
   return html`<div class="schedule-toolbar">
     <div class="schedule-toolbar-start">
       ${linkButton('Today', hrefFor(p.view, null, filter, q), { size: 'sm' })}
-      ${tabs(
+      ${segmented(
         VIEWS.map((v) => ({ label: v === 'day' ? 'Day' : v === 'week' ? 'Week' : 'Month', href: hrefFor(v, focus, filter, q), active: v === p.view })),
         'Calendar views',
       )}
@@ -612,9 +612,9 @@ function filterForm(p: Period, filter: Filter, q: Query, tradies: DirectoryTradi
     <input type="hidden" name="view" value="${p.view}" />
     <input type="hidden" name="date" value="${p.first}" />
     ${filter === 'all' ? html`<input type="hidden" name="filter" value="all" />` : ''}
-    ${select('tradie', 'Tradie', 'Tradie', names, q.tradie)}
-    ${select('property', 'Property', 'Property', properties, q.property)}
-    ${select('status', 'Status', 'Status', STATUSES.map(([v, text]) => [v, text]), q.status)}
+    ${select('tradie', 'Tradie', 'All Tradies', names, q.tradie)}
+    ${select('property', 'Property', 'All Properties', properties, q.property)}
+    ${select('status', 'Status', 'Any status', STATUSES.map(([v, text]) => [v, text]), q.status)}
     <button type="submit" class="btn btn-sm filter-bar-apply">Apply</button>
     ${q.tradie || q.property || q.status ? html`<a class="link schedule-clear" href="${hrefFor(p.view, p.first, filter)}">Clear</a>` : ''}
   </form>`;
@@ -690,32 +690,36 @@ function initials(name: string): string {
 }
 
 /**
- * The Agency's Tradies on the left: initials, the business name, how many visits they
- * have in the period shown, and a Free tag when they have none today (the calendar
- * returns all Agency visits, not only Mine). Each is a link that filters the grid to
- * that Tradie; the one filtered to links back to all. Busy Tradies first.
+ * The Agency's Tradies on the left: only the ones with a visit in the period shown, busiest
+ * first, each with initials, the business name and how many visits. Under them one line
+ * counts the Tradies free today, so the rail never lists seventeen names of people with
+ * nothing on. Each entry filters the grid to that Tradie; the one filtered to links back
+ * to everyone.
  */
 function tradieList(tradies: DirectoryTradie[], every: Booking[], shown: Booking[], p: Period, today: string, ctx: Ctx): Html {
   const todayOn = p.days.includes(today);
   const busyToday = new Set(every.filter((b) => dayOf(b.start, ctx.timeZone) <= today && dayOf(new Date(Date.parse(b.end) - 1).toISOString(), ctx.timeZone) >= today).map((b) => b.tradieId));
   const entries = tradies
     .map((t) => ({ id: t.tradieId, name: t.businessName ?? t.name, count: shown.filter((b) => b.tradieId === t.tradieId).length, free: todayOn && !busyToday.has(t.tradieId), trades: t.trades }))
-    .sort((a, b) => Number(a.free) - Number(b.free) || a.name.localeCompare(b.name, 'en'));
+    .filter((t) => t.count > 0)
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'en'));
+  const free = entries.filter((e) => e.free).length + (tradies.length - entries.length);
   const when = p.view === 'day' ? (p.current ? 'today' : 'that day') : p.noun;
   return html`<section class="schedule-tradies" aria-labelledby="tradies-title">
-    <h2 id="tradies-title">Tradies${todayOn && tradies.length ? html` <span class="num">(${entries.filter((e) => e.free).length} free today)</span>` : ''}</h2>
+    <h2 id="tradies-title">Tradies</h2>
     ${entries.length
       ? html`<ul class="schedule-tradie-list">
           ${entries.map((e) => {
             const on = ctx.q.tradie === e.id;
             return html`<li><a class="schedule-tradie${on ? ' is-on' : ''}" href="${hrefFor(p.view, p.first, ctx.filter, { ...ctx.q, tradie: on ? null : e.id })}" ${on ? html`aria-current="true"` : ''}>
               <span class="tradie-initials" aria-hidden="true">${initials(e.name)}</span>
-              <span class="schedule-tradie-text"><span class="schedule-tradie-name">${e.name}</span><span class="schedule-tradie-sub">${e.count ? plural(e.count, 'visit', 'visits') : 'No visits'} ${when}</span></span>
+              <span class="schedule-tradie-text"><span class="schedule-tradie-name">${e.name}</span><span class="schedule-tradie-sub">${plural(e.count, 'visit', 'visits')} ${when}</span></span>
               ${e.free ? html`<span class="schedule-free-tag">Free</span>` : ''}
             </a></li>`;
           })}
         </ul>`
-      : html`<p class="schedule-free-note">No Tradies yet. <a class="link" href="/tradies/new">Add a Tradie</a></p>`}
+      : html`<p class="schedule-free-note">No visits ${when}.</p>`}
+    ${tradies.length ? (todayOn ? html`<p class="schedule-free-note">${plural(free, 'Tradie', 'Tradies')} free today</p>` : html`<p class="schedule-free-note">${plural(tradies.length, 'Tradie', 'Tradies')} in the Agency</p>`) : html`<p class="schedule-free-note">No Tradies yet. <a class="link" href="/tradies/new">Add a Tradie</a></p>`}
   </section>`;
 }
 

@@ -32,7 +32,8 @@ function holds(current: string | undefined, number: string): boolean {
 
 /** WhatsApp's chip: not offered here, connected (proved: the number is the server's), or not connected yet. Optional, so never a warning. */
 export function whatsappChip(number: string | null, current: AgencyChannel | undefined, o: { outline?: boolean } = {}): Html {
-  if (number === null) return badge('Not available here', 'neutral', { wrap: true, outline: o.outline });
+  // Not set up on this server: the panel says so in words; a "Not available here" tag on the heading only repeats it.
+  if (number === null) return html``;
   if (current && holds(current.address, number)) return badge('Connected', 'success', { wrap: true });
   return badge('Not connected', 'neutral', { wrap: true, outline: o.outline });
 }

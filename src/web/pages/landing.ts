@@ -37,15 +37,15 @@ export function landingRoutes(app: App, sessions: Sessions, o: { demo: boolean }
 const SIGN_UP = 'Create your Agency’s account';
 
 /** One of the landing page's photographs, served from /assets/landing-<name>. */
-const photo = (name: string, alt: string, width: number, height: number, o: { eager?: boolean; className?: string } = {}) =>
+const photo = (name: string, alt: string, width: number, height: number, o: { eager?: boolean; immediate?: boolean; className?: string } = {}) =>
   html`<img
     src="/assets/landing-${name}"
     alt="${alt}"
     width="${width}"
     height="${height}"
     class="${o.className ?? ''}"
-    ${o.eager ? html`fetchpriority="high"` : html`loading="lazy"`}
-    decoding="async"
+    ${o.eager ? html`fetchpriority="high"` : o.immediate ? '' : html`loading="lazy"`}
+    decoding="${o.immediate ? 'sync' : 'async'}"
   />`;
 
 /** The landing page: the hero, the demo sign-ins (demo only), the live example, the repair, the chores, the way in, the credits. */
@@ -61,7 +61,7 @@ function landingPage(o: { demo: boolean }): Html {
           <div class="lp-wrap lp-bar-inner">
             <a href="/" class="logotype lp-home" aria-label="myEST8 home">${logo()}</a>
             <nav class="lp-bar-links" aria-label="Page">
-              ${linkButton('How it works', '#example', { variant: 'ghost', size: 'sm' })} ${linkButton('One repair', '#repair', { variant: 'ghost', size: 'sm' })}
+              ${linkButton('How it works', '#example', { variant: 'ghost', size: 'sm' })} ${linkButton('A repair, start to finish', '#repair', { variant: 'ghost', size: 'sm' })}
               ${linkButton('What it handles', '#handled', { variant: 'ghost', size: 'sm' })}
             </nav>
             <nav class="lp-bar-actions" aria-label="Account">
@@ -286,8 +286,9 @@ const EXAMPLES: Example[] = [
  */
 function example(): Html {
   return html`<section class="lp-example" id="example" aria-labelledby="example-title">
+    <h2 id="example-title" class="lp-split-title"><span>Their words,</span> <span>your request</span></h2>
     <div class="lp-example-in">
-      <fieldset class="lp-choices" data-rise>
+      <fieldset class="lp-choices">
         <legend class="lp-choices-legend">What the Tenant texts</legend>
         ${EXAMPLES.map(
           (e, i) => html`<label class="lp-choice">
@@ -315,7 +316,6 @@ function example(): Html {
       ${EXAMPLES.map((e) => html`<div class="lp-result" data-example="${e.id}">${e.result}</div>`)}
       <p class="lp-caption">The marked words are where myEST8 found the Trade and the Urgency.</p>
     </div>
-    <h2 id="example-title" class="lp-split-title"><span>Their words,</span> <span>your request</span></h2>
   </section>`;
 }
 
@@ -405,7 +405,7 @@ const DECISIONS = [
     text: 'Check the summary, Trade and Urgency myEST8 filled in, edit them if you need to, and confirm. It becomes a Ticket.',
   },
   {
-    title: 'Book a Site Inspection when a Tradie needs one',
+    title: 'Sometimes: book a Site Inspection',
     text: 'Each Tradie gives an Estimate and says if they need to see the issue before a Firm Quote. Book their visit, or go ahead on an Estimate for a cheap routine Job.',
   },
   {
@@ -436,7 +436,7 @@ const PEOPLE = [
  * Manager (each with the Wattle stripe), what myEST8 does, and who never signs in.
  */
 function handled(): Html {
-  const slot = (name: string, alt: string, w: number, h: number) => html`<span class="lp-slot">${photo(name, alt, w, h)}</span>`;
+  const slot = (name: string, alt: string, w: number, h: number) => html`<span class="lp-slot">${photo(name, alt, w, h, { immediate: true })}</span>`;
   return html`<section class="lp-handled" id="handled" aria-labelledby="handled-title">
     <div class="lp-wrap">
       <h2 id="handled-title" class="sr-only">What myEST8 handles</h2>
@@ -485,9 +485,9 @@ function handled(): Html {
 function closing(): Html {
   return html`<section class="lp-close" aria-labelledby="lp-close-title">
     <div class="lp-strip">
-      ${photo('king-street.jpg', 'Shops and terraces along King Street, Newtown', 1000, 1333)}
-      ${photo('wattle-street.jpg', 'Painted iron lace on a terrace balcony in Wattle Street, Ultimo', 1920, 1083)}
-      ${photo('plumber-wrenches.jpg', 'A plumber tightening a fitting with two wrenches', 1096, 894)}
+      ${photo('king-street.jpg', 'Shops and terraces along King Street, Newtown', 1000, 1333, { immediate: true })}
+      ${photo('wattle-street.jpg', 'Painted iron lace on a terrace balcony in Wattle Street, Ultimo', 1920, 1083, { immediate: true })}
+      ${photo('plumber-wrenches.jpg', 'A plumber tightening a fitting with two wrenches', 1096, 894, { immediate: true })}
     </div>
     <div class="lp-close-field">
       <div class="lp-wrap lp-close-inner">

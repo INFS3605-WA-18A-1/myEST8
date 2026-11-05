@@ -25,7 +25,7 @@ import { shellInfo } from '../shell.ts';
 import { importPages } from './import.ts';
 import { serverSmsPanel } from './server-sms.ts';
 import { serverWhatsappPanel, whatsappChip } from './server-whatsapp.ts';
-import { channelName, laterChannelList, LATER_CHANNELS_NOTE, WORKING_CHANNELS } from './channel-options.ts';
+import { channelName, laterChannelList, WORKING_CHANNELS } from './channel-options.ts';
 import { smsNumberPanel, smsNumbersOffered } from './sms-number.ts';
 import { alert, button, emptyState, field, flashFrom, formatMoney, linkButton, page, section, table, type Flash, type Html } from '../ui.ts';
 import { addBuildingManagerPage, addOwnerPage, type AddPersonRefusal } from './owners.ts';
@@ -113,6 +113,8 @@ export function setupPages(o: { connectors?: ChannelConnectors } = {}) {
     const email = await actions.ensureInboundEmail();
     const channels = await actions.channels();
     const pending = await actions.pendingChannelVerifications();
+    // All five areas have something in them and a channel is connected: the page becomes the Agency's directory.
+    const complete = channels.length > 0 && agency.owners.length > 0 && agency.tradies.length > 0 && agency.properties.length > 0 && agency.tenants.length > 0;
     // The server's phone replaces both the typed number and code and the Twilio panel.
     const serverPhone = connectors.smsPhone;
     const currentSms = channels.find((ch) => ch.type === 'sms')?.address;
@@ -120,12 +122,12 @@ export function setupPages(o: { connectors?: ChannelConnectors } = {}) {
 
     return c.html(
       page({
-        title: 'Set up myEST8',
+        title: complete ? 'Agency setup' : 'Set up myEST8',
         pm,
         active: 'settings',
         flash,
         shell: await shellInfo(c),
-        subtitle: 'Work through these areas once. Come back any time to add more.',
+        subtitle: complete ? 'Everything is connected. Add or change people here.' : 'Work through these areas once. Come back any time to add more.',
         actions: linkButton('Use the step-by-step guide', '/welcome', { variant: 'secondary', size: 'sm' }),
         body: html`
           ${areasNav(agency, channels, connectors.unavailable)}
@@ -390,7 +392,6 @@ async function channelsArea(
     </div>
     <div id="later-channels" class="channel-later-group">
       <h3 class="channel-later-title">More channels</h3>
-      <p class="text-sm text-muted">${LATER_CHANNELS_NOTE}</p>
       ${laterChannelList()}
     </div>
   `;
@@ -441,7 +442,7 @@ function peopleArea(agency: Agency, shownFor: (key: FormKey) => Shown): Html {
   return html`<div class="grid gap-4 md:grid-cols-2">
     ${subsection({
       title: 'Property Owners',
-      body: html`${peopleTable(agency.owners, 'No Property Owners yet.')}
+      body: html`${peopleTable(agency.owners, 'No Property Owners yet.', '/owners', 'Property Owners')}
         ${addForm(
           'Add a Property Owner',
           owner.open,
@@ -453,7 +454,7 @@ function peopleArea(agency: Agency, shownFor: (key: FormKey) => Shown): Html {
     ${subsection({
       title: 'Building Managers',
       body: html`<p class="text-sm text-muted">For strata Properties: Common Area issues go to the Building Manager.</p>
-        ${peopleTable(agency.buildingManagers, 'No Building Managers yet.')}
+        ${peopleTable(agency.buildingManagers, 'No Building Managers yet.', '/building-managers', 'Building Managers')}
         ${addForm(
           'Add a Building Manager',
           buildingManager.open,
@@ -468,8 +469,9 @@ function peopleArea(agency: Agency, shownFor: (key: FormKey) => Shown): Html {
 async function tradiesArea(c: Context<WebEnv>, agency: Agency, choice: ListingChoice, shown: Shown): Promise<Html> {
   const { actions } = c.var;
   return html`
-    <p class="text-sm">Add the Tradies the Agency already uses. They're shared by every Property Manager. Each Tradie's page is under <a class="link" href="/tradies">Tradies</a>.</p>
-    ${await tradiesTable(actions, agency.tradies)}
+    <p class="text-sm">Add the Tradies the Agency already uses. They're shared by every Property Manager. Each Tradie's page is under <a class="link" href="/profiles">Profiles</a>.</p>
+    ${await tradiesTable(actions, agency.tradies.slice(0, 5))}
+    ${seeAllIn(agency.tradies.length, 'Tradie', 'Tradies', '/profiles')}
     ${addForm(
       'Add a Tradie',
       shown.open || !!(choice.query || choice.place || choice.manual),
@@ -491,7 +493,7 @@ function propertiesArea(agency: Agency, myId: number, shown: Shown): Html {
     const person = people.find((p) => p.id === id);
     return person ? (person.businessName ?? person.name) : '—';
   };
-  const rows = agency.properties.map((p) => [
+  const rows = agency.properties.slice(0, 5).map((p) => [
     html`${p.address}`,
     html`${agency.propertyManagers.find((m) => m.id === p.propertyManagerId)?.name ?? '—'}`,
     html`${nameOf(agency.owners, p.ownerId)}`,
@@ -505,6 +507,7 @@ function propertiesArea(agency: Agency, myId: number, shown: Shown): Html {
     ${agency.properties.length
       ? table(['Address', 'Property Manager', 'Property Owner', 'Max Repair Cost', 'Tenants', 'Nominated Tradies', 'Building Manager'], rows, { caption: 'Properties', stack: 'labelled' })
       : emptyState('No Properties yet.')}
+    ${seeAllIn(agency.properties.length, 'Property', 'Properties', '/properties')}
     ${addForm(
       'Add a Property',
       shown.open,
@@ -567,7 +570,7 @@ function tenantsArea(agency: Agency, shown: Shown): Html {
     ${agency.tenants.length
       ? table(
           ['Name', 'Property', 'Mobile', 'Email', 'Tenancy start'],
-          agency.tenants.map((t) => [
+          agency.tenants.slice(0, 5).map((t) => [
             html`${t.name}`,
             html`${addressOf(t.propertyId)}`,
             html`${t.mobile ?? '—'}`,
@@ -577,6 +580,7 @@ function tenantsArea(agency: Agency, shown: Shown): Html {
           { caption: 'Tenants', stack: 'labelled' },
         )
       : emptyState('Tenants appear here once you add them. Add a Property first.')}
+    ${seeAllIn(agency.tenants.length, 'Tenant', 'Tenants', '/tenants')}
     ${addForm(
       'Add a Tenant',
       shown.open,
@@ -605,13 +609,19 @@ function tenantsArea(agency: Agency, shown: Shown): Html {
 
 // Form parts
 
-function peopleTable(people: Person[], empty: string): Html {
+function peopleTable(people: Person[], empty: string, href: string, name: string): Html {
   if (!people.length) return emptyState(empty);
-  return table(
+  return html`${table(
     ['Name', 'Mobile', 'Email'],
-    people.map((p) => [html`${p.name}`, html`${p.mobile ?? '—'}`, html`${p.email ?? '—'}`]),
+    people.slice(0, 5).map((p) => [html`${p.name}`, html`${p.mobile ?? '—'}`, html`${p.email ?? '—'}`]),
     { stack: 'labelled' },
-  );
+  )}
+  ${seeAllIn(people.length, name.replace(/s$/, ''), name, href)}`;
+}
+
+/** "See all 17 Tradies": the way from a five-row setup list to the page that holds them all. */
+function seeAllIn(count: number, one: string, many: string, href: string): Html {
+  return count > 5 ? html`<p class="setup-see-all"><a class="link" href="${href}">See all ${count} ${count === 1 ? one : many}</a></p>` : html``;
 }
 
 /** A calendar date as people read it: "2026-09-01" is "1 Sep 2026". */

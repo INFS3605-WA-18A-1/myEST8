@@ -447,7 +447,7 @@
     });
     map.once('style.load', () => {
       styled = true;
-      const ring = getComputedStyle(mapElement).getPropertyValue('--action').trim() || '#1f5c8b';
+      const ring = getComputedStyle(mapElement).getPropertyValue('--action').trim() || 'currentColor';
       map.addSource(RING, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       map.addLayer({ id: RING, type: 'line', source: RING, paint: { 'line-color': ring, 'line-width': 1.5, 'line-opacity': 0.55, 'line-dasharray': [2.7, 4] } });
       for (const p of data.properties) {

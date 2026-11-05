@@ -324,6 +324,7 @@ async function showTicket(c: Context<WebEnv>, raw: string, refused?: DetailsEdit
     return c.html(page({ title: 'Ticket not found', pm, active: 'tickets', flash, body, shell: await shellInfo(c) }), 404);
   }
   const { timeZone } = actions.agency();
+  const shell = await shellInfo(c);
   const [suggest, freeSlots, ownerUnreached] = await Promise.all([
     suggestionsFor(actions, ticket, c.req.query('suggest')),
     freeSlotsFor(actions, ticket),
@@ -334,7 +335,8 @@ async function showTicket(c: Context<WebEnv>, raw: string, refused?: DetailsEdit
   return c.html(
     page({
       title: `Ticket #${ticket.ticketId}`,
-      shell: await shellInfo(c),
+      titleNowrap: true,
+      shell,
       pm,
       active: 'tickets',
       flash,
@@ -512,7 +514,7 @@ function stageRing(t: TicketView, x: Extras): Html {
   const pct = total ? Math.round((done / total) * 100) : 0;
   return html`<div class="ticket-ring-wrap">
     <div class="ticket-ring${done === total ? ' is-done' : ''}" style="--pct:${pct}"><span class="ticket-ring-label">${done === total ? 'Done' : (current?.label ?? '')}</span></div>
-    <p class="ticket-ring-note">${done} of ${total} stages done${skipped ? html`<br />${skipped} not needed` : nothing}</p>
+    <p class="ticket-ring-note">${done === total ? `All ${total} stages done${skipped ? ` (${skipped} skipped)` : ''}` : html`${done} of ${total} stages done${skipped ? html`<br />${skipped} skipped` : nothing}`}</p>
   </div>`;
 }
 
@@ -570,12 +572,12 @@ function costTiles(t: TicketView): Html {
         <span class="ticket-cost-icon" aria-hidden="true">${icon('receipt', { size: 'size-5' })}</span>
         <span class="ticket-cost-label">Repair Cost</span> <strong class="ticket-cost-amount num">${t.repairCostCents > 0 ? formatMoney(t.repairCostCents) : '—'}</strong>
         ${overMax ? html`<span class="ticket-cost-note">Over the Max Repair Cost, with the Property Owner's approval</span>` : nothing}
-        <a class="ticket-cost-link" href="#ticket-costs" data-tab-link="ticket-costs">Costs ${icon('arrow-right', { size: 'size-3.5' })}</a>
+        <a class="ticket-cost-link" href="#ticket-costs" data-tab-link="ticket-costs">Costs</a>
       </div>
       <div class="ticket-cost is-max">
         <span class="ticket-cost-icon" aria-hidden="true">${icon('shield', { size: 'size-5' })}</span>
         <span class="ticket-cost-label">Max Repair Cost</span> <strong class="ticket-cost-amount num">${formatMoney(t.maxRepairCostCents)}</strong>
-        <a class="ticket-cost-link" href="/properties/${t.propertyId}">Change ${icon('arrow-right', { size: 'size-3.5' })}</a>
+        <a class="ticket-cost-link" href="/properties/${t.propertyId}">Change</a>
       </div>
     </div>
     ${fees > 0 ? html`<p class="ticket-fees num" data-callout-fees>Call-out Fees owed ${formatMoney(fees)}, on top of the Repair Cost</p>` : nothing}`;
@@ -696,7 +698,7 @@ function progressCard(t: TicketView, x: Extras): Html {
     html`<button type="button" role="tab" id="tab-${id}" class="ticket-tab" aria-controls="${id}" aria-selected="${selected ? 'true' : 'false'}">${label}</button>`;
   return html`<section class="ticket-progress" data-tabs aria-label="Progress">
     <aside class="ticket-progress-strip${all ? ' is-done' : ''}">
-      <p class="ticket-progress-state">${icon('check-circle', { size: 'size-5' })}${all ? 'Done' : (current?.label ?? 'Open')}</p>
+      <p class="ticket-progress-state">${icon('check-circle', { size: 'size-5' })}${all ? 'Complete' : (current?.label ?? 'Open')}</p>
       <p class="ticket-progress-stat"><b class="num">${done}/${total}</b><span>Stages done</span>${skipped ? html`<span class="text-muted">${skipped} not needed</span>` : nothing}</p>
       ${finished ? html`<p class="ticket-progress-stat"><b>Completed on</b><span>${formatDay(finished, x.timeZone)}</span></p>` : nothing}
       ${days !== null ? html`<p class="ticket-progress-stat"><b>Took</b><span>${days} ${plural(days, 'day')}</span></p>` : nothing}
@@ -957,19 +959,25 @@ function reportedAgo(iso: string, now: Date): string {
   return `Reported ${days} ${plural(days, 'day')} ago`;
 }
 
-/** Who looks after the Ticket, what else goes wrong at the Property, and what the intake agent's photo check said, as small tiles. */
+/**
+ * Who looks after the Ticket, what else goes wrong at the Property and what the intake
+ * photo check said, as a single-column list of label and value: nothing is crushed into
+ * tiles, and a long Trade list reads down the page.
+ */
 function detailsCard(t: TicketView): Html {
-  const tile = (iconName: string, label: string, value: Html | string) =>
-    html`<div class="ticket-detail-tile"><span class="ticket-detail-icon" aria-hidden="true">${icon(iconName, { size: 'size-4' })}</span><dt>${label}</dt><dd>${value}</dd></div>`;
+  const frequent = t.frequentIssues.filter((f) => f.tickets >= 2);
+  const photoCheck = t.imageMatch
+    ? html`${badge(humanise(t.imageMatch.result), t.imageMatch.result === 'matches' ? 'success' : 'warning')}${t.imageMatch.reason.startsWith('Demo check:') ? nothing : html` <span class="ticket-detail-note">${t.imageMatch.reason}</span>`}`
+    : nothing;
   return card({
     title: 'Ticket details',
-    body: html`<dl class="ticket-detail-grid">
-      ${tile('user', 'Property Manager', t.propertyManager)}
-      ${tile('key', 'Property Owner', entityLink('person', t.owner.name, `/owners/${t.owner.personId}`))}
-      ${t.buildingManager ? tile('buildings', 'Building Manager', entityLink('person', t.buildingManager.name, `/building-managers/${t.buildingManager.personId}`)) : nothing}
-      ${tile('house-line', 'Frequent issues here', frequentIssues(t))}
-      ${t.imageMatch ? tile('check-circle', 'Photo check', html`${badge(humanise(t.imageMatch.result), t.imageMatch.result === 'matches' ? 'success' : 'warning')} <span class="ticket-detail-note">${t.imageMatch.reason}</span>`) : nothing}
-    </dl>`,
+    body: facts([
+      ['Property Manager', t.propertyManager],
+      ['Property Owner', entityLink('person', t.owner.name, `/owners/${t.owner.personId}`)],
+      ...(t.buildingManager ? [['Building Manager', entityLink('person', t.buildingManager.name, `/building-managers/${t.buildingManager.personId}`)] as [string, Html]] : []),
+      ...(frequent.length ? [['Frequent issues here', frequent.map((f) => `${humanise(f.trade)} (${f.tickets} ${plural(f.tickets, 'Ticket')})`).join(', ')] as [string, string]] : []),
+      ...(t.imageMatch ? [['Photo check', photoCheck] as [string, Html]] : []),
+    ]),
   });
 }
 
@@ -990,11 +998,6 @@ function jobsFoot(t: TicketView): Html {
   if (t.status !== 'open') return nothing;
   const openJobs = t.jobs.filter(isOpen).length;
   return openJobs ? html`<p class="ticket-close-hint">Close once every Job is done or cancelled (${openJobs} still open).</p>` : nothing;
-}
-
-function frequentIssues(t: TicketView): string {
-  if (!t.frequentIssues.length) return 'None yet';
-  return t.frequentIssues.map((f) => `${humanise(f.trade)} (${f.tickets} ${plural(f.tickets, 'Ticket')})`).join(', ');
 }
 
 /** Change Urgency, folded into a small menu beside Share and Close Ticket while the Ticket is open. */
@@ -1041,7 +1044,7 @@ function reportCard(t: TicketView): Html {
 
 function photoCaption(p: Photo): Html {
   if (p.metadata === 'flagged') return html`${badge('Flagged', 'warning')} ${p.reasons.map((r) => PHOTO_FLAG[r] ?? humanise(r)).join(', ')}`;
-  return p.metadata === 'ok' ? badge('Metadata OK', 'success') : badge('No metadata');
+  return p.metadata === 'ok' ? badge('Photo taken at the Property', 'success') : badge('No photo details');
 }
 
 /**
@@ -1054,7 +1057,7 @@ function jobCard(t: TicketView, job: JobView, x: Extras): Html {
   return html`<section class="section ticket-job" id="job-${job.jobId}">
     <div class="section-head">
       <h2 class="section-title ticket-job-title"><span class="ticket-job-icon" aria-hidden="true">${icon('wrench', { size: 'size-5' })}</span>${jobLabel(t, job.jobId)}</h2>
-      <div class="section-actions">${statusBadge(job.status, { job: true })} ${job.checkTrade ? badge('Check trade', 'warning') : nothing}</div>
+      <div class="section-actions">${job.status === 'done' ? nothing : statusBadge(job.status, { job: true })} ${job.checkTrade ? badge('Check trade', 'warning') : nothing}</div>
     </div>
     <div class="section-body">
       ${jobTiles(t, job, x)}
@@ -1805,8 +1808,9 @@ function ratingSection(t: TicketView, job: JobView, inNext = false): Html {
   if (inNext && !rated) return nothing;
   return html`<section class="space-y-3" id="job-${job.jobId}-rating">
     ${sectionHeader('Rating')}
-    <p>${ratedLine(t, job)}</p>
-    ${rated ? html`<p>${tradie} was rated ${String(rated.score)} out of 5.</p>` : ratingForm(t, job)}
+    ${rated
+      ? html`<p>You rated ${tradie} ${String(rated.score)} out of 5.</p>`
+      : html`<p>${ratedLine(t, job)}</p>${ratingForm(t, job)}`}
   </section>`;
 }
 
@@ -1992,7 +1996,7 @@ function describeEvent(t: TicketView, event: TimelineEvent, x: Extras): { title:
 function messagesCard(t: TicketView, x: Extras): Html {
   return html`<div class="ticket-msgs" data-msgs>
     ${messageLog(t.messages, { timeZone: x.timeZone, markRead: `/tickets/${t.ticketId}/read` })}
-    <button type="button" class="ticket-msgs-toggle js-only" data-msgs-toggle aria-expanded="false">Show the whole conversation</button>
+    <button type="button" class="btn btn-outline btn-sm ticket-msgs-toggle js-only" data-msgs-toggle aria-expanded="false">Show the whole conversation</button>
   </div>`;
 }
 

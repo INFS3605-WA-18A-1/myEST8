@@ -44,7 +44,7 @@ body.lp {
   font-size: clamp(40px, 6vw, 96px);
   font-weight: 700;
   line-height: 0.98;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.02em;
   color: var(--ink);
   text-wrap: balance;
 }
@@ -145,9 +145,11 @@ body.lp {
   .lp-hero {
     padding-top: 48px;
   }
+  /* The headline runs from the left gutter; the words and the ways in sit under it, in
+     the left third, so the main action is high on the page rather than pushed down. */
   .lp-hero-grid {
     grid-template-columns: minmax(0, 34fr) minmax(0, 66fr);
-    grid-template-areas: 'intro title' 'intro figure';
+    grid-template-areas: 'title title' 'intro figure';
     column-gap: 32px;
     row-gap: 40px;
   }
@@ -159,7 +161,7 @@ body.lp {
   font-size: clamp(48px, 12.4vw, 72px);
   font-weight: 800;
   line-height: 0.92;
-  letter-spacing: -0.045em;
+  letter-spacing: -0.028em;
   color: var(--ink);
 }
 @media (min-width: 64rem) {
@@ -209,7 +211,7 @@ body.lp {
 }
 @media (min-width: 64rem) {
   .lp-intro {
-    padding-top: 30vh;
+    padding-top: 0;
     max-width: 26em;
   }
 }
@@ -257,7 +259,8 @@ body.lp {
   object-fit: cover;
   object-position: 50% 60%;
 }
-/* The count of decisions, a Night block on the photograph's top-left corner. */
+/* The count of decisions, a Night block on the photograph's top-left corner, with the
+   Wattle decision stripe beside it (never Wattle type). */
 .lp-figure-block {
   position: absolute;
   top: 0;
@@ -267,8 +270,9 @@ body.lp {
   flex-direction: column;
   gap: 4px;
   width: min(62%, 280px);
-  padding: 18px 20px 20px;
+  padding: 18px 20px 20px 16px;
   background: var(--ink);
+  border-left: 4px solid var(--hivis);
   color: var(--surface);
   font-size: 16px;
   line-height: 1.35;
@@ -278,7 +282,7 @@ body.lp {
   font-size: 36px;
   font-weight: 700;
   line-height: 1;
-  color: var(--hivis);
+  color: var(--surface);
 }
 .lp-hero-figure .lp-caption {
   margin: 12px 20px 0;
@@ -367,8 +371,8 @@ body.lp {
 .lp-example {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-areas: 'in' 'out';
-  margin-top: 160px;
+  grid-template-areas: 'title' 'in' 'out';
+  margin-top: 96px;
 }
 .lp-demo + .lp-example {
   margin-top: 0;
@@ -376,9 +380,8 @@ body.lp {
 @media (min-width: 64rem) {
   .lp-example {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    grid-template-rows: 1fr auto;
-    grid-template-areas: 'in out' 'title title';
-    min-height: 90svh;
+    grid-template-rows: auto auto;
+    grid-template-areas: 'title title' 'in out';
   }
 }
 .lp-example-in {
@@ -423,37 +426,31 @@ body.lp {
   }
 }
 
-/* The title in two halves, one on each field, on one baseline. */
+/* The title in two halves, above the two fields, on the page's own gutter. */
 .lp-split-title {
   grid-area: title;
-  display: grid;
-  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 0.28em;
+  margin: 0 0 32px;
+  padding: 0 20px;
   font-family: var(--font-head);
   font-size: clamp(40px, 6vw, 96px);
   font-weight: 700;
   line-height: 0.98;
-  letter-spacing: -0.035em;
-  padding: 0 20px 24px;
+  letter-spacing: -0.02em;
   color: var(--ink);
+  text-wrap: balance;
 }
-@media (max-width: 63.99rem) {
-  .lp-example {
-    grid-template-areas: 'title' 'in' 'out';
+@media (min-width: 48rem) {
+  .lp-split-title {
+    padding-inline: 32px;
   }
 }
 @media (min-width: 64rem) {
   .lp-split-title {
-    grid-template-columns: 1fr 1fr;
-    padding: 0;
-  }
-  .lp-split-title > span {
-    padding: 0 32px 56px;
-    background: var(--surface);
-  }
-  .lp-split-title > span:first-child {
-    background: var(--ink);
-    color: var(--surface);
-    padding-left: max(32px, calc((100vw - 1376px) / 2 + 32px));
+    margin-bottom: 0;
+    padding: 0 max(32px, calc((100vw - 1376px) / 2 + 32px)) 40px;
   }
 }
 
@@ -491,7 +488,7 @@ body.lp {
   align-items: center;
   min-height: 44px;
   padding: 8px 16px;
-  border-radius: 6px;
+  border-radius: var(--radius-btn);
   background: var(--rail-current);
   color: var(--surface);
   font-weight: 600;
@@ -638,7 +635,7 @@ body.lp {
 }
 .lp-ai-tag {
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: var(--info-bg);
   color: var(--action);
   font-weight: 500;
@@ -699,7 +696,7 @@ body.lp {
   width: 100%;
   aspect-ratio: 4 / 3;
   object-fit: cover;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 .lp-request-actions {
   display: flex;
@@ -712,7 +709,7 @@ body.lp {
   min-height: 36px;
   padding: 0 14px;
   border: 1px solid var(--control); /* taste-skill-ignore: the app's secondary button, inside data-ui */
-  border-radius: 6px;
+  border-radius: var(--radius-btn);
   font-weight: 600;
   font-size: 16px;
   color: var(--ink);
@@ -729,8 +726,10 @@ body.lp {
 
 /* ----- One repair ----- */
 
+/* The rhythm: the live example sits close to the hero (96px), one repair gets the page's
+   biggest pause (160px), and what myEST8 handles follows it closely (64px). */
 .lp-repair {
-  padding-block: 120px 0;
+  padding-block: 96px 0;
 }
 @media (min-width: 64rem) {
   .lp-repair {
@@ -866,13 +865,13 @@ body.lp {
 /* ----- What myEST8 handles ----- */
 
 .lp-handled {
-  margin-top: 120px;
+  margin-top: 64px;
   padding-block: 96px;
   background: var(--surface);
 }
 @media (min-width: 64rem) {
   .lp-handled {
-    margin-top: 160px;
+    margin-top: 64px;
     padding-block: 120px;
   }
 }
@@ -1141,39 +1140,28 @@ body.lp {
 }
 
 /*
- * Each section's parts rise in as it enters, in reading order (app.js adds
- * .is-in). Only with JS, so nothing stays hidden if the script fails.
+ * Each section's parts rise in as it enters, in reading order (app.js adds .is-in).
+ * Nothing is hidden before that: a full-page capture, a print or a script that never
+ * runs shows every section in place, and the rise is an addition, never a gate.
  */
-html.js .lp [data-rise] {
-  opacity: 0;
-  transform: translateY(24px);
-  transition:
-    opacity 700ms var(--ease-out),
-    transform 700ms var(--ease-out);
-  transition-delay: calc(var(--rise-i, 0) * 80ms);
-}
-html.js .lp .lp-intro[data-rise] {
-  opacity: 1;
-  transform: none;
-}
 html.js .lp [data-rise].is-in {
-  opacity: 1;
-  transform: none;
+  animation: lp-fade-up 700ms var(--ease-out) both;
+  animation-delay: calc(var(--rise-i, 0) * 80ms);
 }
-html.js .lp .lp-bar-chart .lp-segment {
+html.js .lp .lp-bar-chart.is-in .lp-segment {
   transform-origin: left center;
+  animation: lp-grow 900ms var(--ease-emphasis) both;
 }
-html.js .lp .lp-bar-chart:not(.is-in) .lp-segment {
-  transform: scaleX(0.001);
+html.js .lp .lp-bar-chart.is-in .lp-segment:nth-of-type(2) {
+  animation-delay: 120ms;
 }
-html.js .lp .lp-bar-chart .lp-segment {
-  transition: transform 900ms var(--ease-emphasis);
+html.js .lp .lp-bar-chart.is-in .lp-segment:nth-of-type(3) {
+  animation-delay: 240ms;
 }
-html.js .lp .lp-bar-chart .lp-segment:nth-of-type(2) {
-  transition-delay: 120ms;
-}
-html.js .lp .lp-bar-chart .lp-segment:nth-of-type(3) {
-  transition-delay: 240ms;
+@keyframes lp-grow {
+  from {
+    transform: scaleX(0.001);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1181,17 +1169,25 @@ html.js .lp .lp-bar-chart .lp-segment:nth-of-type(3) {
   .lp-intro,
   .lp-figure-block,
   .lp-hero-photo img,
-  .lp-example [data-example] {
+  .lp-example [data-example],
+  html.js .lp [data-rise].is-in,
+  html.js .lp .lp-bar-chart.is-in .lp-segment {
     animation: none;
-  }
-  html.js .lp [data-rise],
-  html.js .lp .lp-bar-chart:not(.is-in) .lp-segment {
-    opacity: 1;
-    transform: none;
-    transition: none;
   }
   .lp .btn,
   .lp-choice-label {
     transition: none;
+  }
+}
+
+/* Printing or a full-page capture never waits for a scroll: every part is in place. */
+@media print {
+  html.js .lp [data-rise],
+  html.js .lp [data-rise].is-in,
+  html.js .lp .lp-bar-chart.is-in .lp-segment {
+    opacity: 1 !important;
+    transform: none !important;
+    animation: none !important;
+    transition: none !important;
   }
 }

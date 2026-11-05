@@ -146,11 +146,16 @@ describe('the Reimbursement Request page', () => {
     expect(w.h.messenger.to(TOM).filter((m) => m.template === 'tenant.urgent_repair_reminder')).toHaveLength(1);
   });
 
-  test("the dashboard's Urgent Repairs open their Reimbursement Requests", async () => {
+  test("the dashboard's waiting receipts open the Reimbursement Requests through Approvals", async () => {
     const w = await webWorld();
     const cookie = await w.signIn();
     const { id } = await tomsBurstPipe(w);
 
-    expect(await page(w, '/', cookie)).toContain(`href="/reimbursements/${id}"`);
+    const dashboard = await page(w, '/', cookie);
+    expect(dashboard).toContain('Receipts awaited');
+    expect(dashboard).toContain('href="/approvals#reimbursements"');
+
+    const approvals = await page(w, '/approvals', cookie);
+    expect(approvals).toContain(`href="/reimbursements/${id}"`);
   });
 });

@@ -7,7 +7,11 @@ describe('signing up', () => {
 
     const page = await (await w.get('/signup')).text();
 
-    for (const name of ['name', 'email', 'password', 'confirmPassword', 'agencyName', 'timeZone']) expect(page).toContain(`name="${name}"`);
+    for (const name of ['name', 'email', 'password', 'agencyName', 'timeZone']) expect(page).toContain(`name="${name}"`);
+    expect(page).not.toContain('name="confirmPassword"');
+    expect(page).toContain('data-reveal="field-password"');
+    expect(page).toContain('aria-label="Show password"');
+    expect(page).toContain('aria-pressed="false"');
     expect(page).toContain('<option value="Australia/Sydney" selected>');
     expect(page).toContain('<option value="Australia/Perth"');
     expect(page).toContain('href="/login"');
@@ -16,7 +20,7 @@ describe('signing up', () => {
   test('a short password is refused next to the field, keeping everything else typed', async () => {
     const w = await webWorld();
 
-    const res = await w.post('/signup', signUpFields({ password: 'tiny-pw', confirmPassword: 'tiny-pw' }));
+    const res = await w.post('/signup', signUpFields({ password: 'tiny-pw' }));
 
     expect(res.status).toBe(400);
     expect(res.headers.get('set-cookie')).toBeNull();
@@ -29,14 +33,14 @@ describe('signing up', () => {
     expect(page).not.toContain('tiny-pw');
   });
 
-  test("passwords that don't match are refused, and never shown again", async () => {
+  test('the password is typed only once, and the server never sends it back', async () => {
     const w = await webWorld();
 
-    const res = await w.post('/signup', signUpFields({ confirmPassword: 'sunrise-2027' }));
+    const res = await w.post('/signup', signUpFields({ password: 'sunrise-2027', email: 'not-an-email' }));
 
     expect(res.status).toBe(400);
     const page = await res.text();
-    expect(visible(page)).toContain("The passwords don't match");
+    expect(visible(page)).toContain("not-an-email isn't an email address");
     expect(page).toContain('value="Sam Sun"');
     expect(page).not.toContain('sunrise-202');
   });

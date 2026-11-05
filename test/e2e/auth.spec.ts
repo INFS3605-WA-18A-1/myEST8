@@ -19,9 +19,9 @@ test('a new Agency signs up and lands signed in', async ({ page }) => {
 test('a demo Property Manager signs in and sees the dashboard', async ({ page }) => {
   await signIn(page);
 
-  await expect(page.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: /^Hi,/ })).toBeVisible();
   await expect(page.getByText('Harbour Realty').first()).toBeVisible();
-  await expect(page.getByRole('heading', { level: 2, name: 'Do next' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 2, name: /^Do next/ })).toBeVisible();
 });
 
 test('a wrong password is refused with a message', async ({ page }) => {

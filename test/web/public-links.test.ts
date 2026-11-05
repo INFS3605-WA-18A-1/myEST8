@@ -32,7 +32,7 @@ async function publicPages() {
     ['the sign-in page', await (await plain.get('/login')).text()],
     ['the sign-in page after a refusal', await (await plain.web.request('/login', { method: 'POST', body: new URLSearchParams({ email: 'a@b.example', password: 'nope' }) })).text()],
     ['the sign-up page', await (await plain.get('/signup')).text()],
-    ['the sign-up page after a refusal', await (await plain.post('/signup', signUpFields({ confirmPassword: 'different-1' }))).text()],
+    ['the sign-up page after a refusal', await (await plain.post('/signup', signUpFields({ email: 'not-an-email' }))).text()],
   ] as const;
 }
 
@@ -59,7 +59,7 @@ describe('links on public pages', () => {
     expect(bar).toMatch(/<a href="\/signup"[^>]*btn-primary[^>]*>Create your Agency’s account<\/a>/);
   });
 
-  test('the sign-in page has exactly one control named Sign in, and the sign-up and sign-in buttons are full width', async () => {
+  test('the sign-in page has exactly one control named Sign in, and the sign-up button is full width', async () => {
     const w = await webWorld();
 
     const login = await (await w.get('/login')).text();
@@ -67,7 +67,9 @@ describe('links on public pages', () => {
 
     expect(login.match(/>Sign in<\/(button|a)>/g)).toEqual(['>Sign in</button>']);
     expect(login).toMatch(/<a href="\/signup"[^>]*btn-block[^>]*>Create your Agency’s account<\/a>/);
-    expect(signup).toMatch(/<a href="\/login"[^>]*btn-block[^>]*>Sign in<\/a>/);
+    // The other way in is a small secondary button, not a second full-width primary.
+    expect(signup).toContain('<a href="/login" class="btn btn-outline btn-sm">Sign in</a>');
+    expect(signup).not.toMatch(/<a href="\/login"[^>]*btn-block/);
     expect(visible(signup)).toContain('Already have an account?');
   });
 

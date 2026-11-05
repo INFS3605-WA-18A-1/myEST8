@@ -368,6 +368,25 @@ try {
   });
 })();
 
+// === password ===
+// The Show / Hide button inside a password field (the sign-up form). It says both what it
+// does and whether the password is showing, and never changes what the field posts.
+onContent((root) => {
+  for (const toggle of root.querySelectorAll('[data-reveal]')) {
+    if (toggle.dataset.ready) continue;
+    toggle.dataset.ready = '1';
+    const input = document.getElementById(toggle.dataset.reveal);
+    if (!(input instanceof HTMLInputElement)) continue;
+    toggle.addEventListener('click', () => {
+      const showing = input.type === 'text';
+      input.type = showing ? 'password' : 'text';
+      toggle.setAttribute('aria-pressed', String(!showing));
+      toggle.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+      toggle.textContent = showing ? 'Show' : 'Hide';
+    });
+  }
+});
+
 // === landing ===
 // The landing page's sections rise into view as they reach the screen, their parts
 // in reading order. landing.css only hides [data-rise] when this file has run
@@ -384,6 +403,11 @@ try {
   for (const section of new Set(parts.map((el) => el.closest('section, aside') ?? document.body))) {
     parts.filter((el) => (el.closest('section, aside') ?? document.body) === section).forEach((el, i) => el.style.setProperty('--rise-i', String(i)));
   }
+  // Anything already on screen (or above it, after a hash jump) is shown at once: a
+  // deep link must never land on a hidden section, and a full-page capture or print
+  // must not leave blank bands.
+  const inView = (el) => el.getBoundingClientRect().top < window.innerHeight + 200;
+  parts.filter(inView).forEach(show);
   const seen = new IntersectionObserver(
     (entries) => {
       for (const entry of entries) {
@@ -392,9 +416,11 @@ try {
         seen.unobserve(entry.target);
       }
     },
-    { rootMargin: '0px 0px -10% 0px' },
+    { rootMargin: '0px 0px 200px 0px' },
   );
-  parts.forEach((el) => seen.observe(el));
+  for (const el of parts) if (!el.classList.contains('is-in')) seen.observe(el);
+  // A link to a section further down scrolls first, then its parts are in view.
+  window.addEventListener('hashchange', () => requestAnimationFrame(() => parts.filter(inView).forEach(show)));
 })();
 
 // === import ===
@@ -1794,8 +1820,16 @@ onContent((root) => {
     const body = msgs.querySelector('.section-body');
     const toggle = msgs.querySelector('[data-msgs-toggle]');
     if (!body || !toggle) continue;
-    // The short view ends at the newest message; the button is only for a log longer than it.
-    body.scrollTop = body.scrollHeight;
+    // The short view starts at the top of the newest message, not halfway through it:
+    // a bubble taller than the frame reads from its first line.
+    const newest = () => {
+      const bubbles = body.querySelectorAll('.chat');
+      const last = bubbles[bubbles.length - 1];
+      if (!last) return;
+      const top = last.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop;
+      body.scrollTop = Math.max(0, top - 4);
+    };
+    newest();
     toggle.hidden = body.scrollHeight <= body.clientHeight + 4;
   }
   // A slider under the Timeline board that scrolls it sideways (and follows it), shown
@@ -1868,7 +1902,13 @@ document.addEventListener('click', (event) => {
     const msgs = toggle.closest('[data-msgs]');
     const open = msgs?.classList.toggle('is-open');
     toggle.setAttribute('aria-expanded', String(Boolean(open)));
-    if (!open) msgs.querySelector('.section-body')?.scrollTo({ top: 1e9 });
+    if (!open) {
+      // Back to the short view, starting at the newest message's first line.
+      const body = msgs.querySelector('.section-body');
+      const bubbles = body?.querySelectorAll('.chat') ?? [];
+      const last = bubbles[bubbles.length - 1];
+      if (body && last) body.scrollTop = Math.max(0, last.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop - 4);
+    }
     toggle.textContent = open ? 'Show fewer messages' : 'Show the whole conversation';
   }
 });

@@ -76,7 +76,7 @@ import {
 } from './onboarding-forms.ts';
 import { serverSmsPanel } from './server-sms.ts';
 import { serverWhatsappPanel, whatsappChip } from './server-whatsapp.ts';
-import { channelName, laterChannelList, LATER_CHANNELS_NOTE, WORKING_CHANNELS, type ChannelOption } from './channel-options.ts';
+import { channelName, laterChannelList, WORKING_CHANNELS, type ChannelOption } from './channel-options.ts';
 import { smsNumberPanel, smsNumbersOffered } from './sms-number.ts';
 import { TIME_ZONES } from './signup.ts';
 
@@ -412,8 +412,7 @@ async function channelsStep(c: WizardContext, demo: boolean, connectors: Channel
         <div id="later-channels" class="${WIZARD_CHANNEL_ROW}">
           <div><h2 class="channel-later-title">More channels</h2></div>
           <div class="min-w-0">
-            <p class="text-sm text-muted">${LATER_CHANNELS_NOTE}</p>
-            <div class="mt-2">${laterChannelList()}</div>
+            ${laterChannelList()}
           </div>
         </div>
       </div>

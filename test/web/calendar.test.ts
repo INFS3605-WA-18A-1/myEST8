@@ -226,24 +226,26 @@ describe('Schedule: Site Inspections and who is free', () => {
     expect(html).toContain(`href="/tickets/${job.ticketId}#job-${job.jobId}"`);
   });
 
-  test('every Tradie is free today when none is booked, and another week calls none of them free', async () => {
+  test('the Tradies rail counts who is free today, and a later week names the Tradies it has', async () => {
     const w = await webWorld();
     await bookedTap(w);
     const cookie = await w.signIn();
 
     const free = visible(freePanel(await page(w, '/calendar', cookie)));
-    // Now is Saturday 10 October; Pete's visit is on Tuesday, so every Tradie is free today.
-    expect(free).toContain('Tradies (6 free today)');
-    expect(free).toContain("Pete's Plumbing");
+    // Now is Saturday 10 October; Pete's visit is on Tuesday, so every Tradie is free today
+    // and this week has no visits, so only the count is listed.
+    expect(free).toContain('No visits this week.');
+    expect(free).toContain('6 Tradies free today');
 
-    // Another week has no today, so no Tradie is called free; the list stays, with each one's visits that week.
+    // Another week has no today, so nobody is called free; the rail lists the Tradies with visits that week.
     const next = freePanel(await page(w, '/calendar?view=week&date=2026-10-19', cookie));
     expect(next).not.toContain('schedule-free-tag');
     expect(visible(next)).not.toContain('free today');
-    expect(visible(next)).toContain("Pete's Plumbing No visits this week");
+    expect(visible(next)).toContain('No visits this week.');
+    expect(visible(next)).toContain('6 Tradies in the Agency');
   });
 
-  test('the Tradies list tags each Tradie free today, and lists the one booked today first, untagged', async () => {
+  test('the Tradies rail lists the one booked today first, and counts the rest free', async () => {
     const w = await webWorld();
     await bookedTap(w);
     // Pete's visit is Tuesday 13 October at 9 am. Move to that morning, so today is a day he is booked.
@@ -253,22 +255,15 @@ describe('Schedule: Site Inspections and who is free', () => {
     const panel = freePanel(await page(w, '/calendar', cookie));
     const text = visible(panel);
 
-    expect(text).toContain('Tradies (5 free today)');
-    // Pete is booked today, so he has no Free tag, and he comes first; the rest are free, by business name.
+    expect(text).toContain('5 Tradies free today');
+    // Only the Tradies with a visit in the period are listed: Pete, with no Free tag, and no one else.
     const entries = panel.split('<li>').slice(1);
-    const pete = entries.find((e) => e.includes('Pete'))!;
+    expect(entries).toHaveLength(1);
+    const pete = entries[0]!;
+    expect(pete).toContain('Pete');
     expect(pete).not.toContain('schedule-free-tag');
     expect(visible(pete)).toContain('1 visit this week');
-    expect(entries.filter((e) => e.includes('schedule-free-tag'))).toHaveLength(5);
-    expect(entries[0]).toContain('Pete');
-    const names = ['Drip Doctors', 'Flow Bros', "Nina's Plumbing", 'Quick Pipes', 'Sparky Sam'];
-    let at = -1;
-    for (const name of names) {
-      const found = text.indexOf(name);
-      expect(found, name).toBeGreaterThan(at);
-      at = found;
-    }
-    expect(panel).toContain('aria-hidden="true">DD</span>');
+    expect(panel).toContain('aria-hidden="true">PP</span>');
   });
 
   test('with everyone booked, no Tradie is tagged free', async () => {
@@ -291,8 +286,8 @@ describe('Schedule: Site Inspections and who is free', () => {
 
     const text = visible(freePanel(await page(w, '/calendar', cookie)));
 
-    expect(text).toContain('Tradies (0 free today)');
-    expect(text).not.toContain('Free ');
+    expect(text).toContain('0 Tradies free today');
+    expect(text).not.toContain('schedule-free-tag');
   }, 60_000);
 
   test('the grid is the target the page can jump to', async () => {
@@ -714,7 +709,7 @@ describe('Schedule: views and links', () => {
     expect(tabsAt).toBeGreaterThan(-1);
     const nav = html.slice(tabsAt, html.indexOf('</nav>', tabsAt));
     expect(nav).toContain('href="/calendar?view=day&amp;date=2026-10-19&amp;filter=all"');
-    expect(nav).toMatch(/href="\/calendar\?view=week&amp;date=2026-10-19&amp;filter=all" class="tab[^"]*tab-active[^"]*" aria-current="page"/);
+    expect(nav).toMatch(/href="\/calendar\?view=week&amp;date=2026-10-19&amp;filter=all" class="segmented-item" aria-current="page"/);
     expect(nav).toContain('href="/calendar?view=month&amp;date=2026-10-19&amp;filter=all"');
   });
 
