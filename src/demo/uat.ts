@@ -20,6 +20,7 @@ import { createJevTradeSuggester } from '../adapters/jev-trades.ts';
 import { createNominatimGeocoder } from '../adapters/nominatim.ts';
 import { createPhotonAddressSuggester } from '../adapters/photon.ts';
 import { createQuoteReader } from '../adapters/quote-reader.ts';
+import { createStreetView } from '../adapters/street-view.ts';
 import { createApp } from '../app.ts';
 import type { Db } from '../db.ts';
 import type { BlobStore, ChannelType } from '../ports.ts';
@@ -78,6 +79,8 @@ export async function seedSignedUpAgency(input: { db: Db; blobs: BlobStore | nul
     imageMatcher: createImageMatcher({ ...at('vision'), apiKey: 'demo' }),
     quoteReader: createQuoteReader({ ...at('quotes'), apiKey: 'demo', clock, timeZone: DEMO_TIME_ZONE }),
     places: createGooglePlaces({ apiKey: 'demo', fetch: mockFetch, placesBaseUrl: `${MOCK}/google/places` }),
+    // The demo's mock Street View, as the runtime uses with no GOOGLE_MAPS_API_KEY.
+    propertyPhotos: createStreetView({ ...at('google/streetview'), apiKey: 'demo' }),
     geocoder: createNominatimGeocoder({ ...at('nominatim'), userAgent: 'myEST8 UAT seed', wait: async () => {} }),
     addressSuggester: createPhotonAddressSuggester({ ...at('photon'), userAgent: 'myEST8 UAT seed' }),
     tradeSuggester: createJevTradeSuggester({ ...at('jev'), apiKey: 'demo' }),
