@@ -10949,18 +10949,35 @@
       width: 24px;
       height: 24px;
     }
+    /* From 64rem the status is a column of its own. Until 82rem the figures sit on a
+       second row under the Ticket, so neither the Ticket (and its Forward to Owner form)
+       nor the three figures get squeezed; from 82rem all three columns sit side by side. */
     @media (min-width: 64rem) {
       .appr-card {
-        grid-template-columns: 11rem minmax(0, 1.8fr) minmax(0, 3.6fr);
+        grid-template-columns: 11rem minmax(0, 1fr);
         align-items: stretch;
+      }
+      .appr-status {
+        grid-row: span 2;
       }
       .appr-figures {
         align-content: center;
-        padding: 0;
+        padding: 0 16px 6px;
       }
       .appr-figures .appr-col {
-        flex: 1 1 11rem;
+        flex: 1 1 9rem;
         padding: 10px 12px 10px 0;
+      }
+    }
+    @media (min-width: 82rem) {
+      .appr-card {
+        grid-template-columns: 11rem minmax(0, 2fr) minmax(0, 3.4fr);
+      }
+      .appr-status {
+        grid-row: auto;
+      }
+      .appr-figures {
+        padding: 0;
       }
     }
   }

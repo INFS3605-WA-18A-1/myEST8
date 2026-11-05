@@ -134,7 +134,7 @@ function ownerCard(w: Approvals['waitingOnOwner'][number], timeZone: string, now
       </details>
     </div>
     <div class="appr-figures">
-      ${person('Property Owner', w.ownerName, 'owner', w.ownerMobile ? html`<p class="appr-person-contact">${contactLink('mobile', w.ownerMobile)}</p>` : undefined)}
+      ${person('Property Owner', w.ownerName, 'owner', w.ownerMobile ? html`<p class="appr-person-contact">${contactLink('mobile', w.ownerMobile, { title: true })}</p>` : undefined)}
       <div class="appr-col"><p class="appr-label">Quote</p>
         <div class="appr-tile"><p class="appr-amount">${formatMoney(w.quotePriceCents)}</p><p class="appr-tile-note">${w.tradieBusinessName}</p></div></div>
       <div class="appr-col"><p class="appr-label">Over the limit</p>
