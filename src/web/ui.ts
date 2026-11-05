@@ -576,11 +576,15 @@ export function rowLink(label: string, href: string): Html {
   return html`<a class="row-link" href="${href}">${label}</a>`;
 }
 
-/** A phone number or email address that calls or writes, with its icon. */
-export function contactLink(kind: 'mobile' | 'email', value: string): Html {
+/**
+ * A phone number or email address that calls or writes, with its icon. `title` repeats
+ * the value as a tooltip, for a column where the link can be cut short with an ellipsis.
+ */
+export function contactLink(kind: 'mobile' | 'email', value: string, o: { title?: boolean } = {}): Html {
+  const title = o.title ? html` title="${value}"` : '';
   return kind === 'mobile'
-    ? html`<a class="contact-link num" href="tel:${value}">${icon('phone', { size: 'size-4' })}<span>${value}</span></a>`
-    : html`<a class="contact-link is-email" href="mailto:${value}">${icon('envelope-simple', { size: 'size-4' })}<span>${value}</span></a>`;
+    ? html`<a class="contact-link num" href="tel:${value}"${title}>${icon('phone', { size: 'size-4' })}<span>${value}</span></a>`
+    : html`<a class="contact-link is-email" href="mailto:${value}"${title}>${icon('envelope-simple', { size: 'size-4' })}<span>${value}</span></a>`;
 }
 
 const PROFILE_PATH: Record<Role, string> = {
