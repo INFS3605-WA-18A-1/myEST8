@@ -133,14 +133,16 @@ function ownerCard(w: Approvals['waitingOnOwner'][number], timeZone: string, now
         <p>Asked ${formatWhen(w.requestedAt, timeZone)}. The Property's Max Repair Cost is ${formatMoney(w.maxRepairCostCents)}.</p>
       </details>
     </div>
-    ${person('Property Owner', w.ownerName, 'owner', w.ownerMobile ? html`<p class="appr-person-contact">${contactLink('mobile', w.ownerMobile)}</p>` : undefined)}
-    <div class="appr-col"><p class="appr-label">Quote</p>
-      <div class="appr-tile"><p class="appr-amount">${formatMoney(w.quotePriceCents)}</p><p class="appr-tile-note">${w.tradieBusinessName}</p></div></div>
-    <div class="appr-col"><p class="appr-label">Over the limit</p>
-      <div class="appr-over">
-        <span class="appr-ring" style="--pct:${Math.min(100, over)}"><span>${over}%</span></span>
-        <div><p class="appr-amount is-over">${formatMoney(w.overByCents)}</p><p class="appr-tile-note whitespace-nowrap">${formatMoney(w.repairCostCents)} of ${formatMoney(w.maxRepairCostCents)}</p></div>
-      </div></div>
+    <div class="appr-figures">
+      ${person('Property Owner', w.ownerName, 'owner', w.ownerMobile ? html`<p class="appr-person-contact">${contactLink('mobile', w.ownerMobile, { title: true })}</p>` : undefined)}
+      <div class="appr-col"><p class="appr-label">Quote</p>
+        <div class="appr-tile"><p class="appr-amount">${formatMoney(w.quotePriceCents)}</p><p class="appr-tile-note">${w.tradieBusinessName}</p></div></div>
+      <div class="appr-col"><p class="appr-label">Over the limit</p>
+        <div class="appr-over">
+          <span class="appr-ring" style="--pct:${Math.min(100, over)}"><span>${over}%</span></span>
+          <div><p class="appr-amount is-over">${formatMoney(w.overByCents)}</p><p class="appr-tile-note">${formatMoney(w.repairCostCents)} of ${formatMoney(w.maxRepairCostCents)}</p></div>
+        </div></div>
+    </div>
   </article>`;
 }
 
@@ -157,14 +159,16 @@ function claimCard(u: Approvals['reimbursements'][number], all: boolean, timeZon
       <p class="appr-address">${entityLink('property', u.propertyAddress, `/properties/${u.propertyId}`)}</p>
       <div class="appr-action">${reimbursementAction(u, all)}</div>
     </div>
-    ${person('Tenant', u.tenantName, 'tenant')}
-    ${person('Property Owner', u.ownerName, 'owner')}
-    <div class="appr-col"><p class="appr-label">Amount</p>
-      ${
-        u.amountCents === null
-          ? html`<div class="appr-tile is-empty"><p class="appr-amount is-quiet">Not given</p><p class="appr-tile-note">Waiting for the receipt</p></div>`
-          : html`<div class="appr-tile"><p class="appr-amount">${formatMoney(u.amountCents)}</p>${u.amountCents > u.limitCents ? html`<p class="appr-tile-note text-high">Over the ${formatMoney(u.limitCents)} limit</p>` : ''}</div>`
-      }
+    <div class="appr-figures">
+      ${person('Tenant', u.tenantName, 'tenant')}
+      ${person('Property Owner', u.ownerName, 'owner')}
+      <div class="appr-col"><p class="appr-label">Amount</p>
+        ${
+          u.amountCents === null
+            ? html`<div class="appr-tile is-empty"><p class="appr-amount is-quiet">Not given</p><p class="appr-tile-note">Waiting for the receipt</p></div>`
+            : html`<div class="appr-tile"><p class="appr-amount">${formatMoney(u.amountCents)}</p>${u.amountCents > u.limitCents ? html`<p class="appr-tile-note text-high">Over the ${formatMoney(u.limitCents)} limit</p>` : ''}</div>`
+        }
+      </div>
     </div>
   </article>`;
 }

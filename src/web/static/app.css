@@ -72,7 +72,7 @@
   --ease-exit: cubic-bezier(0.4, 0, 1, 1);
   /* A spring with damping 0.7 (about 4.6% overshoot): press release, menus, dialogs, the thumb. */
   --ease-spring: linear(0, 0.057, 0.191, 0.356, 0.523, 0.672, 0.796, 0.891, 0.959, 1.004, 1.031, 1.043, 1.046, 1.043, 1.036, 1.029, 1.021, 1.014, 1.009, 1.005, 1.002, 1, 0.999, 0.998, 1);
-  /* Damping 0.6 (about 9.5% overshoot): only the glance bubbles' entrance and a changed count. */
+  /* Damping 0.6 (about 9.5% overshoot): only a rail count when it changes. */
   --ease-bounce: linear(0, 0.078, 0.256, 0.469, 0.672, 0.839, 0.962, 1.041, 1.082, 1.095, 1.089, 1.072, 1.052, 1.033, 1.017, 1.005, 0.997, 0.992, 0.991, 0.991, 0.993, 0.995, 0.997, 0.998, 1);
 }
 
@@ -1370,23 +1370,17 @@
       }
     }
 
-    /* Your day at a glance: sand-tan card, bubbles sized by count. */
+    /* Your day at a glance: a sand-tan card of tally rows. Each row is a count, a label
+       and a pip per item; two columns once the card itself is wide enough. */
     .glance {
-      position: relative;
+      container-type: inline-size;
       display: grid;
-      grid-template-columns: 10.5rem minmax(0, 1fr);
-      gap: 8px;
+      gap: 12px;
       flex: none;
       min-height: 14.5rem;
       padding: 16px 22px;
-      overflow: hidden;
       background: #e4d9c6;
       border-radius: 22px;
-    }
-    .glance-key {
-      display: flex;
-      flex-direction: column;
-      min-width: 0;
     }
     .glance-title {
       margin: 0;
@@ -1394,123 +1388,135 @@
       font-size: 18px;
       font-weight: 600;
       line-height: 1.25;
+      white-space: nowrap;
       color: var(--ink);
     }
-    .glance-legend {
+    .glance-list {
       display: grid;
-      gap: 10px;
-      margin: auto 0 0;
+      grid-template-columns: minmax(0, 1fr);
+      align-content: start;
+      gap: 8px;
+      margin: 0;
       padding: 0;
       list-style: none;
-      font-size: 14px;
     }
-    .glance-legend li {
+    /* Two columns from 32rem of card content: the card is 631px wide at 1440px and
+       590px at 1366px (a little less with a classic scrollbar), so a literal 40rem
+       would never reach it on the desk laptop. */
+    @container (min-width: 32rem) {
+      .glance-list {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+    .glance-list > li {
       display: flex;
       min-width: 0;
     }
-    .glance-legend-link {
-      display: flex;
+    .glance-row {
+      display: grid;
+      grid-template-columns: 2.5rem minmax(0, 1fr) auto;
       align-items: center;
-      gap: 10px;
+      gap: 4px 10px;
       flex: 1;
       min-width: 0;
-      border-radius: 6px;
-      color: inherit;
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: rgb(255 255 255 / 0.45);
+      color: var(--ink);
       text-decoration: none;
-      transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+      transition: background-color var(--dur-fast) var(--ease-out);
     }
-    .glance-legend-link:hover {
+    .glance-row:hover {
+      background: rgb(255 255 255 / 0.75);
       color: var(--ink);
     }
-    .glance-legend i {
-      flex: none;
-      width: 22px;
-      height: 6px;
-      border-radius: 3px;
-      background: var(--c);
+    .glance-row:active {
+      background: rgb(255 255 255 / 0.9);
     }
-    .glance-legend b {
-      margin-left: auto;
-      font-family: var(--font-head);
-      font-weight: 600;
-    }
-    .is-tickets { --c: #1f5c8b; --fg: #fff; }
-    .is-alerts { --c: #e98b6d; --fg: #3a1708; }
-    .is-requests { --c: #ffc233; --fg: #13212e; }
-    .is-inbox { --c: #13212e; --fg: #fff; }
-    .is-quotes { --c: #cdbd94; --fg: #13212e; }
-    .is-urgent { --c: #c8372d; --fg: #fff; }
-    .glance-bubbles {
-      position: relative;
-      min-width: 0;
-    }
-    .bubble {
-      position: absolute;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      width: var(--size);
-      height: var(--size);
-      border-radius: 50%;
-      background: var(--c);
-      color: var(--fg);
-      text-align: center;
-      text-decoration: none;
-      box-shadow: 0 14px 30px color-mix(in srgb, var(--c) 35%, transparent);
-      animation: bubble-in 520ms var(--ease-bounce) backwards;
-      animation-delay: calc(var(--i) * 40ms + 60ms);
-      transition: scale var(--dur-slow) var(--ease-spring), box-shadow var(--dur-base) var(--ease-out);
-    }
-    html.glance-seen .bubble {
-      animation: none;
-    }
-    .bubble:hover {
-      color: var(--fg);
-      scale: 1.05;
-      box-shadow: var(--shadow-lift);
-      z-index: 1;
-    }
-    .bubble:active {
-      scale: 0.97;
-      transition-duration: var(--dur-fast);
-      transition-timing-function: var(--ease-out);
-    }
-    .bubble:focus-visible {
+    .glance-row:focus-visible {
       outline: 2px solid var(--action);
       outline-offset: 2px;
-      z-index: 2;
     }
-    .bubble.is-tickets { left: 0; top: 6px; }
-    .bubble.is-alerts { left: 28%; top: 74px; }
-    .bubble.is-requests { left: 50%; top: 0; }
-    .bubble.is-inbox { left: 57%; top: 112px; }
-    .bubble.is-quotes { right: 0; top: 8px; }
-    .bubble.is-urgent { right: 0; bottom: 0; }
-    .bubble.is-zero {
-      opacity: 0.6;
-    }
-    .bubble-num {
+    .glance-list > .is-tickets { --c: #1f5c8b; }
+    .glance-list > .is-alerts { --c: #e98b6d; }
+    .glance-list > .is-requests { --c: #ffc233; }
+    .glance-list > .is-inbox { --c: #13212e; }
+    .glance-list > .is-quotes { --c: #cdbd94; }
+    .glance-list > .is-urgent { --c: #c8372d; }
+    .glance-count {
       font-family: var(--font-head);
-      font-size: calc(var(--size) * 0.27);
+      font-size: 28px;
       font-weight: 600;
       line-height: 1;
+      font-variant-numeric: tabular-nums;
+      text-align: right;
     }
-    .bubble-go {
+    .glance-row.is-zero .glance-count,
+    .glance-row.is-zero .glance-label {
+      color: var(--muted);
+    }
+    .glance-body {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+    }
+    .glance-label {
+      min-width: 0;
+      overflow: hidden;
+      font-size: 14px;
+      color: var(--ink);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .glance-pips {
       display: flex;
-      margin-top: 1px;
-      line-height: 0;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 3px;
+      min-height: 8px;
     }
-    .bubble-label {
-      max-width: 92%;
-      margin-top: 1px;
-      font-size: 12px;
-      line-height: 1.2;
+    .glance-pip {
+      flex: none;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--c);
+      /* A faint Night edge so the light colours (Wattle, the quote tan, clay) still read on the pale row. */
+      box-shadow: inset 0 0 0 1px rgb(19 33 46 / 0.25);
+      animation: glance-pip-in 420ms var(--ease-spring) backwards;
+      animation-delay: calc(var(--n, 0) * 25ms);
     }
-    @keyframes bubble-in {
+    .glance-pip.is-zero {
+      background: transparent;
+      border: 1.5px solid color-mix(in srgb, var(--c) 60%, var(--ink));
+      box-shadow: none;
+    }
+    .glance-more {
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+      color: var(--muted);
+    }
+    .glance-go {
+      display: flex;
+      color: var(--muted);
+      transition: translate var(--dur-fast) var(--ease-out);
+    }
+    .glance-row:hover .glance-go {
+      translate: 2px 0;
+    }
+    html.glance-seen .glance-pip {
+      animation: none;
+    }
+    @keyframes glance-pip-in {
       from {
         opacity: 0;
-        scale: 0.6;
+        scale: 0;
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .glance-pip {
+        animation: none;
       }
     }
 
@@ -1897,28 +1903,12 @@
       font-weight: 600;
       white-space: nowrap;
     }
-    /* Phones: the legend sits above the bubbles, rows put their actions under the text, the counts wrap. */
+    /* Phones: the tally rows put their actions under the text, the counts wrap. */
     @media (max-width: 39.99rem) {
       .glance {
-        grid-template-columns: minmax(0, 1fr);
         min-height: 0;
         padding: 16px 18px;
       }
-      .glance-legend {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 6px 18px;
-        margin-top: 12px;
-        font-size: 13px;
-      }
-      .glance-bubbles {
-        height: 200px;
-      }
-      .bubble.is-tickets { left: 0; top: 4px; }
-      .bubble.is-alerts { left: 34%; top: 70px; }
-      .bubble.is-requests { left: 52%; top: 0; }
-      .bubble.is-inbox { left: auto; right: 0; top: 96px; }
-      .bubble.is-quotes { left: 2%; right: auto; top: auto; bottom: 0; }
-      .bubble.is-urgent { right: 0; top: 0; }
       .do-next .queue-main {
         grid-template-columns: minmax(0, 1fr);
       }
@@ -1934,12 +1924,12 @@
       }
     }
     @media (max-width: 40rem), (pointer: coarse) {
-      .glance-legend-link {
+      .glance-row {
         min-height: 44px;
       }
     }
 
-    /* Inbox and Alerts, opened from a glance bubble: a dialog over the dashboard. */
+    /* Inbox and Alerts, opened from a glance row: a dialog over the dashboard. */
     .glance-dialog {
       width: min(640px, calc(100% - 32px));
       max-width: 640px;
@@ -7619,6 +7609,7 @@
 
     /* ----- Dispatch, soft cards: the map card beside Today at a glance and To dispatch, Properties under them. */
     .dispatch-top {
+      --dispatch-h: 43rem; /* the map card and the right column share one height from 64rem */
       display: grid;
       grid-template-columns: minmax(0, 1fr);
       gap: 16px;
@@ -7692,7 +7683,7 @@
     /* From 64rem the card sets the height and the stage fills it. This comes after the rule above so it wins. */
     @media (min-width: 64rem) {
       .dispatch-mapcard {
-        height: 43rem;
+        height: var(--dispatch-h);
         max-height: none;
         position: sticky;
         top: 76px;
@@ -7866,6 +7857,36 @@
     .dispatch-right {
       display: grid;
       gap: 16px;
+    }
+    /* From 64rem the right column is as tall as the map card beside it: Today at a glance
+       keeps its natural height and To dispatch takes the rest, its header fixed while its
+       cards scroll. Sharing the map's height keeps both bottoms level whatever the header does. */
+    @media (min-width: 64rem) {
+      .dispatch-right {
+        display: flex;
+        flex-direction: column;
+        height: var(--dispatch-h);
+      }
+      .dispatch-right > .soft-card:first-child {
+        flex: none;
+      }
+      #to-dispatch {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        flex: 1 1 0;
+        min-height: 0;
+      }
+      #to-dispatch > .dispatch-queue {
+        align-content: start;
+        min-height: 0;
+        overflow-y: auto;
+        padding-right: 4px;
+        scrollbar-width: thin;
+      }
+      /* One sentence: it keeps its own height rather than stretching into a tall empty box. */
+      #to-dispatch > .empty-state {
+        align-self: start;
+      }
     }
     .dispatch-stack .dispatch-address .entity-link {
       border: 0;
@@ -10678,10 +10699,13 @@
       display: grid;
       gap: 8px;
     }
-    /* A card: the status panel, the main block, then the figures. */
+    /* A card: the status panel, the main block, then the figures. From 64rem each is a
+       column with its own min-width, and the figures wrap under one another rather than
+       crossing into the main block. */
     .appr-card {
       display: grid;
       grid-template-columns: minmax(0, 1fr);
+      min-width: 0;
       overflow: hidden;
       background: var(--surface);
       border: 1px solid var(--line);
@@ -10691,6 +10715,7 @@
       display: grid;
       align-content: center;
       gap: 2px;
+      min-width: 0;
       padding: 10px 16px;
       font-size: 13px;
       background: var(--info-bg);
@@ -10738,9 +10763,24 @@
       flex-wrap: wrap;
       align-items: center;
       gap: 8px;
+      min-width: 0;
+      overflow-wrap: anywhere;
       font-family: var(--font-head);
       font-size: 16px;
       font-weight: 600;
+    }
+    /* The person, quote and over-limit columns share the card's right side and wrap
+       onto another line when the card is too narrow, instead of overlapping. */
+    .appr-figures {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0 12px;
+      min-width: 0;
+      padding: 0 16px;
+    }
+    .appr-figures .appr-col {
+      flex: 1 1 11rem;
+      padding: 0 0 10px;
     }
     .appr-pill {
       padding: 1px 10px;
@@ -10805,6 +10845,7 @@
       display: flex;
       align-items: center;
       gap: 10px;
+      min-width: 0;
     }
     .appr-person p {
       margin: 0;
@@ -10814,6 +10855,16 @@
     }
     .appr-person-contact {
       font-size: 13px;
+    }
+    .appr-person-contact .contact-link {
+      max-width: 100%;
+      min-width: 0;
+    }
+    .appr-person-contact .contact-link span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .appr-avatar {
       flex: none;
@@ -10832,6 +10883,7 @@
       background: #ecd48f;
     }
     .appr-tile {
+      min-width: 0;
       padding: 8px 12px;
       background: var(--page);
       border-radius: 12px;
@@ -10857,6 +10909,7 @@
     }
     .appr-tile-note {
       margin: 0;
+      overflow-wrap: anywhere;
       font-size: 12px;
       color: var(--muted);
     }
@@ -10864,6 +10917,10 @@
       display: flex;
       align-items: center;
       gap: 10px;
+      min-width: 0;
+    }
+    .appr-over > div {
+      min-width: 0;
     }
     .appr-ring {
       --fill: var(--pct);
@@ -10892,13 +10949,35 @@
       width: 24px;
       height: 24px;
     }
+    /* From 64rem the status is a column of its own. Until 82rem the figures sit on a
+       second row under the Ticket, so neither the Ticket (and its Forward to Owner form)
+       nor the three figures get squeezed; from 82rem all three columns sit side by side. */
     @media (min-width: 64rem) {
       .appr-card {
-        grid-template-columns: 9.5rem minmax(0, 2.4fr) repeat(3, minmax(0, 1fr));
+        grid-template-columns: 11rem minmax(0, 1fr);
         align-items: stretch;
       }
-      .appr-col {
+      .appr-status {
+        grid-row: span 2;
+      }
+      .appr-figures {
+        align-content: center;
+        padding: 0 16px 6px;
+      }
+      .appr-figures .appr-col {
+        flex: 1 1 9rem;
         padding: 10px 12px 10px 0;
+      }
+    }
+    @media (min-width: 82rem) {
+      .appr-card {
+        grid-template-columns: 11rem minmax(0, 2fr) minmax(0, 3.4fr);
+      }
+      .appr-status {
+        grid-row: auto;
+      }
+      .appr-figures {
+        padding: 0;
       }
     }
   }
