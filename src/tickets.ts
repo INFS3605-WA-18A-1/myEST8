@@ -875,6 +875,60 @@ export function createTickets({ db, clock, settings, ports, modules }: Context) 
       await run(db, 'UPDATE messages SET issue_id = ?, unread = ? WHERE id = ?', issueId, Number(unread), messageId);
     },
 
+    /**
+     * Every message exchanged with one contact, oldest first, across their Tickets and
+     * Maintenance Requests. A person is matched by id and by the address they write
+     * from, because an inbox message is logged before its sender is linked; an unknown
+     * sender (no person) is matched by address alone.
+     */
+    async messagesOfContact(agencyId: number, contact: { personId: number | null; address: string }) {
+      type Row = {
+        id: number;
+        direction: 'in' | 'out';
+        person_id: number | null;
+        channel_type: ChannelType;
+        address: string;
+        template: string | null;
+        text: string;
+        composed: boolean;
+        delivery_error: string | null;
+        unread: number;
+        at: string;
+        issue_id: number | null;
+      };
+      const rows =
+        contact.personId === null
+          ? await all<Row>(
+              db,
+              `SELECT id, direction, person_id, channel_type, address, template, text, composed, delivery_error, unread, at, issue_id
+               FROM messages WHERE agency_id = ? AND person_id IS NULL AND address = ? ORDER BY at, id`,
+              agencyId,
+              contact.address,
+            )
+          : await all<Row>(
+              db,
+              `SELECT id, direction, person_id, channel_type, address, template, text, composed, delivery_error, unread, at, issue_id
+               FROM messages WHERE agency_id = ? AND (person_id = ? OR address = ?) ORDER BY at, id`,
+              agencyId,
+              contact.personId,
+              contact.address,
+            );
+      return rows.map((m) => ({
+        id: m.id,
+        direction: m.direction,
+        personId: m.person_id,
+        channel: m.channel_type,
+        address: m.address,
+        template: m.template,
+        text: m.text,
+        composed: m.composed,
+        deliveryError: m.delivery_error,
+        unread: !!m.unread,
+        at: m.at,
+        issueId: m.issue_id,
+      }));
+    },
+
     async messages(issueId: number) {
       return (await all<{ direction: 'in' | 'out'; person_id: number | null; channel_type: ChannelType; address: string; template: string | null; text: string; composed: boolean; delivery_error: string | null; unread: number; at: string }>(
         db,

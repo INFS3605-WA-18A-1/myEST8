@@ -34,14 +34,14 @@ describe('a shared contact address on the page', () => {
     expect(visible(tenant)).toContain('Also Kevin He (Property Owner)');
   });
 
-  test('the Inbox card for a shared address names both people and offers Pick a contact', async () => {
+  test('the Inbox modal for a shared address names both people and offers Pick a contact', async () => {
     const w = await webWorld();
     await w.alice.editOwner(w.ids.olivia, { name: 'Olivia Owens', mobile: PETE, email: OLIVIA_EMAIL });
     await w.h.receive(PETE, 'Hello from the shared phone');
     const cookie = await w.signIn();
 
     const page = await (await w.get('/', cookie)).text();
-    const box = page.slice(page.indexOf('id="inbox"'), page.indexOf('</section>', page.indexOf('id="inbox"')));
+    const box = page.slice(page.indexOf('id="inbox-dialog"'), page.indexOf('</dialog>', page.indexOf('id="inbox-dialog"')));
     expect(box).toContain('Shared address');
     expect(box).toMatch(
       new RegExp(
