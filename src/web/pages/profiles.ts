@@ -131,6 +131,8 @@ const TICKETS_SHOWN = 3;
  * One household: the Owner's tab on the card's top edge, then two columns. On the left
  * the address with its Tenants hanging off it and the Building Manager; on the right
  * what is wrong there, the open Tickets, High first. On a phone the Tickets follow the people.
+ * A Property photo, when there is one, sits on the card's right edge (a band along the
+ * bottom on a phone). No photo leaves the card as it is.
  */
 function householdCard(household: Household): Html {
   const waiting = household.owner.approvalsWaiting;
@@ -162,7 +164,19 @@ function householdCard(household: Household): Html {
       </div>
       ${householdTickets(household)}
     </div>
+    ${householdPhoto(household)}
   </article>`;
+}
+
+/**
+ * The Property's photo, flush with the card. Decorative: the address is already the heading.
+ * Width and height are the street-photo frame; the card's CSS crops it with object-fit.
+ */
+function householdPhoto(household: Household): Html {
+  if (!household.photoUrl) return html``;
+  return html`<div class="household-photo-slot">
+    <img class="household-photo" src="${household.photoUrl}" alt="" width="640" height="400" loading="lazy" decoding="async" />
+  </div>`;
 }
 
 /** The household's open Tickets, each a row to the Ticket with its Urgency; one quiet line when there are none. */
