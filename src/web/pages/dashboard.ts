@@ -275,9 +275,6 @@ function greeting(name: string, view: Dashboard, needReceipt: number): Html {
   </div>`;
 }
 
-/** Counts that size the bubbles: more of something, a bigger bubble, within a cap. */
-const bubbleSize = (count: number, min: number, step: number, max: number) => (count === 0 ? min : Math.min(max, min + 14 + count * step));
-
 type Decided = { toCheck: BoardTicket[]; toBook: BoardTicket[]; toChoose: BoardTicket[] };
 
 /** The Tickets list, keeping All when the dashboard is showing everyone's work. */
@@ -287,24 +284,22 @@ function ticketsHref(filter: Filter) {
 
 type GlanceItem = {
   cls: string;
-  /** The word in the bubble. */
+  /** The words beside the count. */
   label: string;
-  /** The words in the legend, when they are longer than the bubble. */
-  legend: string;
   count: number;
   href: string;
-  size: number;
-  /** Set when the bubble opens a dialog instead of a page. The href stays an anchor for when JavaScript is off. */
+  /** Set when the row opens a dialog instead of a page. The href stays an anchor for when JavaScript is off. */
   dialog?: string;
 };
 
 /**
- * Today at a glance: a soft card of bubbles, one for each thing a Property Manager
- * counts (Open Tickets, Alerts, Maintenance Requests, Quotes, the inbox, and Urgent
- * Repairs when one needs a receipt). Open Tickets, Requests, Quotes and Urgent open
- * their lists. Inbox and Alerts open a dialog over the dashboard (the legend does
- * the same). A bubble's size follows its count. The Tickets list has no view that is
- * only quote decisions or Urgent Repairs, so those two open `/tickets`.
+ * Today at a glance: a soft card of tally rows, one for each thing a Property Manager
+ * counts (Open Tickets, Alerts, Maintenance Requests, Quote decisions, the inbox, and
+ * Urgent Repairs when one needs a receipt). Open Tickets, Requests, Quote decisions and
+ * Urgent open their lists. Inbox and Alerts open a dialog over the dashboard. A row
+ * shows its count, then a pip for each item (up to twelve, then "+n"), so the size of
+ * the queue is legible without a chart. The Tickets list has no view that is only
+ * quote decisions or Urgent Repairs, so those two open `/tickets`.
  */
 function glance(view: Dashboard, needReceipt: number, waiting: number, filter: Filter): Html {
   const tickets = view.tickets.length;
@@ -313,38 +308,39 @@ function glance(view: Dashboard, needReceipt: number, waiting: number, filter: F
   const inbox = view.inbox.length;
   const list = ticketsHref(filter);
   const items: GlanceItem[] = [
-    { cls: 'is-tickets', label: 'Open Tickets', legend: 'Open Tickets', count: tickets, href: list, size: bubbleSize(tickets, 80, 12, 164) },
-    { cls: 'is-alerts', label: 'Alerts', legend: 'Alerts', count: alerts, href: '#alerts', dialog: 'alerts-dialog', size: bubbleSize(alerts, 68, 14, 132) },
-    { cls: 'is-requests', label: 'Requests', legend: 'Requests', count: requests, href: '/requests', size: bubbleSize(requests, 64, 20, 108) },
-    { cls: 'is-quotes', label: 'Quotes', legend: 'Quote decisions', count: waiting, href: list, size: bubbleSize(waiting, 60, 14, 96) },
-    { cls: 'is-inbox', label: 'Inbox', legend: 'Inbox', count: inbox, href: '#inbox', dialog: 'inbox-dialog', size: bubbleSize(inbox, 60, 10, 98) },
-    ...(needReceipt
-      ? [{ cls: 'is-urgent', label: 'Urgent', legend: 'Urgent Repairs', count: needReceipt, href: list, size: bubbleSize(needReceipt, 60, 14, 96) }]
-      : []),
+    { cls: 'is-tickets', label: 'Open Tickets', count: tickets, href: list },
+    { cls: 'is-alerts', label: 'Alerts', count: alerts, href: '#alerts', dialog: 'alerts-dialog' },
+    { cls: 'is-requests', label: 'Requests', count: requests, href: '/requests' },
+    { cls: 'is-quotes', label: 'Quote decisions', count: waiting, href: list },
+    { cls: 'is-inbox', label: 'Inbox', count: inbox, href: '#inbox', dialog: 'inbox-dialog' },
+    ...(needReceipt ? [{ cls: 'is-urgent', label: 'Urgent Repairs', count: needReceipt, href: list }] : []),
   ];
   return html`<section class="glance" aria-label="Today at a glance">
-    <div class="glance-key">
-      <h3 class="glance-title">Your day<br />at a glance</h3>
-      <ul class="glance-legend">
-        ${items.map((item) => legendItem(item))}
-      </ul>
-    </div>
-    <div class="glance-bubbles" role="group" aria-label="Counts">
-      ${items.map((item, i) => bubble(item, i))}
-    </div>
+    <h3 class="glance-title">Your day at a glance</h3>
+    <ul class="glance-list">
+      ${items.map((item) => glanceRow(item))}
+    </ul>
   </section>`;
 }
 
-/** A legend row: the same destination as its bubble. */
-function legendItem(item: GlanceItem): Html {
+/** One tally row. The trailing glyph says whether it opens a page or a dialog. */
+function glanceRow(item: GlanceItem): Html {
   const dialog = item.dialog ? html` data-dialog="${item.dialog}" aria-haspopup="dialog"` : '';
-  return html`<li class="${item.cls}"><a href="${item.href}" class="glance-legend-link"${dialog}><i></i>${item.legend}<b>${item.count}</b></a></li>`;
+  return html`<li class="${item.cls}"><a href="${item.href}" class="glance-row${item.count === 0 ? ' is-zero' : ''}"${dialog}>
+    <span class="glance-count">${item.count}</span>
+    <span class="glance-body">
+      <span class="glance-label">${item.label}</span>
+      ${pips(item.count)}
+    </span>
+    <span class="glance-go">${icon(item.dialog ? 'tray' : 'arrow-up-right', { size: 'size-4' })}</span>
+  </a></li>`;
 }
 
-/** One bubble. The glyph under the count says whether it opens a page or a dialog. */
-function bubble(item: GlanceItem, i: number): Html {
-  const dialog = item.dialog ? html` data-dialog="${item.dialog}" aria-haspopup="dialog"` : '';
-  return html`<a href="${item.href}" class="bubble ${item.cls}${item.count === 0 ? ' is-zero' : ''}" style="--size:${item.size}px;--i:${i}"${dialog}><span class="bubble-num">${item.count}</span><span class="bubble-go">${icon(item.dialog ? 'tray' : 'arrow-up-right', { size: 'size-3.5' })}</span><span class="bubble-label">${item.label}</span></a>`;
+/** One pip per item, up to twelve, then "+n". A count of zero is a single hollow ring. */
+function pips(count: number): Html {
+  if (count === 0) return html`<span class="glance-pips" aria-hidden="true"><i class="glance-pip is-zero"></i></span>`;
+  const shown = Math.min(count, 12);
+  return html`<span class="glance-pips" aria-hidden="true">${Array.from({ length: shown }, (_, i) => html`<i class="glance-pip" style="--n:${i}"></i>`)}${count > 12 ? html`<span class="glance-more">+${count - 12}</span>` : ''}</span>`;
 }
 
 /**

@@ -72,7 +72,7 @@
   --ease-exit: cubic-bezier(0.4, 0, 1, 1);
   /* A spring with damping 0.7 (about 4.6% overshoot): press release, menus, dialogs, the thumb. */
   --ease-spring: linear(0, 0.057, 0.191, 0.356, 0.523, 0.672, 0.796, 0.891, 0.959, 1.004, 1.031, 1.043, 1.046, 1.043, 1.036, 1.029, 1.021, 1.014, 1.009, 1.005, 1.002, 1, 0.999, 0.998, 1);
-  /* Damping 0.6 (about 9.5% overshoot): only the glance bubbles' entrance and a changed count. */
+  /* Damping 0.6 (about 9.5% overshoot): only a rail count when it changes. */
   --ease-bounce: linear(0, 0.078, 0.256, 0.469, 0.672, 0.839, 0.962, 1.041, 1.082, 1.095, 1.089, 1.072, 1.052, 1.033, 1.017, 1.005, 0.997, 0.992, 0.991, 0.991, 0.993, 0.995, 0.997, 0.998, 1);
 }
 
@@ -1370,23 +1370,17 @@
       }
     }
 
-    /* Your day at a glance: sand-tan card, bubbles sized by count. */
+    /* Your day at a glance: a sand-tan card of tally rows. Each row is a count, a label
+       and a pip per item; two columns once the card itself is wide enough. */
     .glance {
-      position: relative;
+      container-type: inline-size;
       display: grid;
-      grid-template-columns: 10.5rem minmax(0, 1fr);
-      gap: 8px;
+      gap: 12px;
       flex: none;
       min-height: 14.5rem;
       padding: 16px 22px;
-      overflow: hidden;
       background: #e4d9c6;
       border-radius: 22px;
-    }
-    .glance-key {
-      display: flex;
-      flex-direction: column;
-      min-width: 0;
     }
     .glance-title {
       margin: 0;
@@ -1394,45 +1388,54 @@
       font-size: 18px;
       font-weight: 600;
       line-height: 1.25;
+      white-space: nowrap;
       color: var(--ink);
     }
-    .glance-legend {
+    .glance-list {
       display: grid;
-      gap: 10px;
-      margin: auto 0 0;
+      grid-template-columns: minmax(0, 1fr);
+      align-content: start;
+      gap: 8px;
+      margin: 0;
       padding: 0;
       list-style: none;
-      font-size: 14px;
     }
-    .glance-legend li {
+    /* Two columns from 32rem of card content: the card is 631px wide at 1440px and
+       590px at 1366px (a little less with a classic scrollbar), so a literal 40rem
+       would never reach it on the desk laptop. */
+    @container (min-width: 32rem) {
+      .glance-list {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+    .glance-list > li {
       display: flex;
       min-width: 0;
     }
-    .glance-legend-link {
-      display: flex;
+    .glance-row {
+      display: grid;
+      grid-template-columns: 2.5rem minmax(0, 1fr) auto;
       align-items: center;
-      gap: 10px;
+      gap: 4px 10px;
       flex: 1;
       min-width: 0;
-      border-radius: 6px;
-      color: inherit;
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: rgb(255 255 255 / 0.45);
+      color: var(--ink);
       text-decoration: none;
-      transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+      transition: background-color var(--dur-fast) var(--ease-out);
     }
-    .glance-legend-link:hover {
+    .glance-row:hover {
+      background: rgb(255 255 255 / 0.75);
       color: var(--ink);
     }
-    .glance-legend i {
-      flex: none;
-      width: 22px;
-      height: 6px;
-      border-radius: 3px;
-      background: var(--c);
+    .glance-row:active {
+      background: rgb(255 255 255 / 0.9);
     }
-    .glance-legend b {
-      margin-left: auto;
-      font-family: var(--font-head);
-      font-weight: 600;
+    .glance-row:focus-visible {
+      outline: 2px solid var(--action);
+      outline-offset: 2px;
     }
     .is-tickets { --c: #1f5c8b; --fg: #fff; }
     .is-alerts { --c: #e98b6d; --fg: #3a1708; }
@@ -1440,77 +1443,77 @@
     .is-inbox { --c: #13212e; --fg: #fff; }
     .is-quotes { --c: #cdbd94; --fg: #13212e; }
     .is-urgent { --c: #c8372d; --fg: #fff; }
-    .glance-bubbles {
-      position: relative;
-      min-width: 0;
-    }
-    .bubble {
-      position: absolute;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      width: var(--size);
-      height: var(--size);
-      border-radius: 50%;
-      background: var(--c);
-      color: var(--fg);
-      text-align: center;
-      text-decoration: none;
-      box-shadow: 0 14px 30px color-mix(in srgb, var(--c) 35%, transparent);
-      animation: bubble-in 520ms var(--ease-bounce) backwards;
-      animation-delay: calc(var(--i) * 40ms + 60ms);
-      transition: scale var(--dur-slow) var(--ease-spring), box-shadow var(--dur-base) var(--ease-out);
-    }
-    html.glance-seen .bubble {
-      animation: none;
-    }
-    .bubble:hover {
-      color: var(--fg);
-      scale: 1.05;
-      box-shadow: var(--shadow-lift);
-      z-index: 1;
-    }
-    .bubble:active {
-      scale: 0.97;
-      transition-duration: var(--dur-fast);
-      transition-timing-function: var(--ease-out);
-    }
-    .bubble:focus-visible {
-      outline: 2px solid var(--action);
-      outline-offset: 2px;
-      z-index: 2;
-    }
-    .bubble.is-tickets { left: 0; top: 6px; }
-    .bubble.is-alerts { left: 28%; top: 74px; }
-    .bubble.is-requests { left: 50%; top: 0; }
-    .bubble.is-inbox { left: 57%; top: 112px; }
-    .bubble.is-quotes { right: 0; top: 8px; }
-    .bubble.is-urgent { right: 0; bottom: 0; }
-    .bubble.is-zero {
-      opacity: 0.6;
-    }
-    .bubble-num {
+    .glance-count {
       font-family: var(--font-head);
-      font-size: calc(var(--size) * 0.27);
+      font-size: 28px;
       font-weight: 600;
       line-height: 1;
+      font-variant-numeric: tabular-nums;
+      text-align: right;
     }
-    .bubble-go {
+    .glance-row.is-zero .glance-count,
+    .glance-row.is-zero .glance-label {
+      color: var(--muted);
+    }
+    .glance-body {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+    }
+    .glance-label {
+      min-width: 0;
+      overflow: hidden;
+      font-size: 14px;
+      color: var(--ink);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .glance-pips {
       display: flex;
-      margin-top: 1px;
-      line-height: 0;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 3px;
+      min-height: 8px;
     }
-    .bubble-label {
-      max-width: 92%;
-      margin-top: 1px;
-      font-size: 12px;
-      line-height: 1.2;
+    .glance-pip {
+      flex: none;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--c);
+      animation: glance-pip-in 420ms var(--ease-spring) backwards;
+      animation-delay: calc(var(--n, 0) * 25ms);
     }
-    @keyframes bubble-in {
+    .glance-pip.is-zero {
+      background: transparent;
+      border: 1.5px solid color-mix(in srgb, var(--c) 60%, transparent);
+    }
+    .glance-more {
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+      color: var(--muted);
+    }
+    .glance-go {
+      display: flex;
+      color: var(--muted);
+      transition: translate var(--dur-fast) var(--ease-out);
+    }
+    .glance-row:hover .glance-go {
+      translate: 2px 0;
+    }
+    html.glance-seen .glance-pip {
+      animation: none;
+    }
+    @keyframes glance-pip-in {
       from {
         opacity: 0;
-        scale: 0.6;
+        scale: 0;
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .glance-pip {
+        animation: none;
       }
     }
 
@@ -1897,28 +1900,12 @@
       font-weight: 600;
       white-space: nowrap;
     }
-    /* Phones: the legend sits above the bubbles, rows put their actions under the text, the counts wrap. */
+    /* Phones: the tally rows put their actions under the text, the counts wrap. */
     @media (max-width: 39.99rem) {
       .glance {
-        grid-template-columns: minmax(0, 1fr);
         min-height: 0;
         padding: 16px 18px;
       }
-      .glance-legend {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 6px 18px;
-        margin-top: 12px;
-        font-size: 13px;
-      }
-      .glance-bubbles {
-        height: 200px;
-      }
-      .bubble.is-tickets { left: 0; top: 4px; }
-      .bubble.is-alerts { left: 34%; top: 70px; }
-      .bubble.is-requests { left: 52%; top: 0; }
-      .bubble.is-inbox { left: auto; right: 0; top: 96px; }
-      .bubble.is-quotes { left: 2%; right: auto; top: auto; bottom: 0; }
-      .bubble.is-urgent { right: 0; top: 0; }
       .do-next .queue-main {
         grid-template-columns: minmax(0, 1fr);
       }
@@ -1934,7 +1921,7 @@
       }
     }
     @media (max-width: 40rem), (pointer: coarse) {
-      .glance-legend-link {
+      .glance-row {
         min-height: 44px;
       }
     }

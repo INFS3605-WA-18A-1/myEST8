@@ -50,7 +50,7 @@ function swapView(update) {
   return viewTransition.updateCallbackDone;
 }
 
-if (document.querySelector('.glance-bubbles')) {
+if (document.querySelector('.glance-list')) {
   try {
     sessionStorage.setItem('glance', '1');
   } catch {

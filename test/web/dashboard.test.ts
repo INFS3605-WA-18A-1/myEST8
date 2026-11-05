@@ -161,11 +161,12 @@ describe('the count strip and Needs your attention', () => {
     return { w, cookie: await w.signIn(), routine, high };
   }
 
-  test('the Quotes bubble counts the Tickets waiting on a Quote decision, and opens the Tickets list', async () => {
+  test('the Quote decisions row counts the Tickets waiting on a Quote decision, and opens the Tickets list', async () => {
     const { w, cookie } = await quoteDecisions();
     const dashboard = await page(w, '/', cookie);
-    expect(dashboard).toMatch(/<a href="\/tickets" class="bubble is-quotes[^"]*"[^>]*><span class="bubble-num">2<\/span><span class="bubble-go">[\s\S]*?<span class="bubble-label">Quotes<\/span>/);
-    expect(dashboard).toContain('Quote decisions');
+    expect(dashboard).toMatch(
+      /<li class="is-quotes"><a href="\/tickets" class="glance-row"[\s\S]*?<span class="glance-count">2<\/span>[\s\S]*?<span class="glance-label">Quote decisions<\/span>/,
+    );
     expect(dashboard).toContain('Open Tickets');
   });
 
@@ -173,7 +174,9 @@ describe('the count strip and Needs your attention', () => {
     const w = await webWorld();
     const cookie = await w.signIn();
     const dashboard = await page(w, '/', cookie);
-    expect(dashboard).toMatch(/class="bubble is-quotes is-zero"/);
+    expect(dashboard).toMatch(
+      /<li class="is-quotes"><a href="\/tickets" class="glance-row is-zero"[\s\S]*?<span class="glance-count">0<\/span>[\s\S]*?<span class="glance-label">Quote decisions<\/span>/,
+    );
     expect(dashboard).toContain('No Maintenance Requests waiting for you.');
   });
 
@@ -201,30 +204,29 @@ describe('the count strip and Needs your attention', () => {
   });
 });
 
-describe('glance bubbles', () => {
-  test('page bubbles open their lists, and Inbox and Alerts open dialogs', async () => {
+describe('glance rows', () => {
+  test('page rows open their lists, and Inbox and Alerts open dialogs', async () => {
     const w = await webWorld();
     const cookie = await w.signIn();
     const dashboard = await page(w, '/', cookie);
 
-    expect(dashboard).toMatch(/<a href="\/tickets" class="bubble is-tickets/);
-    expect(dashboard).toMatch(/<a href="\/requests" class="bubble is-requests/);
-    expect(dashboard).toMatch(/<a href="\/tickets" class="bubble is-quotes/);
-    expect(dashboard).toMatch(/<a href="#alerts" class="bubble is-alerts[^"]*"[^>]*data-dialog="alerts-dialog" aria-haspopup="dialog">/);
-    expect(dashboard).toMatch(/<a href="#inbox" class="bubble is-inbox[^"]*"[^>]*data-dialog="inbox-dialog" aria-haspopup="dialog">/);
-    expect(dashboard).toMatch(/<a href="\/tickets" class="glance-legend-link"><i><\/i>Open Tickets/);
-    expect(dashboard).toMatch(/<a href="\/requests" class="glance-legend-link"><i><\/i>Requests/);
-    expect(dashboard).toMatch(/<a href="#inbox" class="glance-legend-link" data-dialog="inbox-dialog" aria-haspopup="dialog"><i><\/i>Inbox/);
-    expect(dashboard).toMatch(/<a href="#alerts" class="glance-legend-link" data-dialog="alerts-dialog" aria-haspopup="dialog"><i><\/i>Alerts/);
+    expect(dashboard).toMatch(/<li class="is-tickets"><a href="\/tickets" class="glance-row[^"]*"/);
+    expect(dashboard).toMatch(/<li class="is-requests"><a href="\/requests" class="glance-row[^"]*"/);
+    expect(dashboard).toMatch(/<li class="is-quotes"><a href="\/tickets" class="glance-row[^"]*"/);
+    expect(dashboard).toMatch(/<li class="is-alerts"><a href="#alerts" class="glance-row[^"]*"[^>]*data-dialog="alerts-dialog" aria-haspopup="dialog">/);
+    expect(dashboard).toMatch(/<li class="is-inbox"><a href="#inbox" class="glance-row[^"]*"[^>]*data-dialog="inbox-dialog" aria-haspopup="dialog">/);
+    for (const label of ['Open Tickets', 'Requests', 'Quote decisions', 'Inbox', 'Alerts']) {
+      expect(dashboard).toContain(`<span class="glance-label">${label}</span>`);
+    }
 
     expect(dialogOf(dashboard, 'inbox-dialog')).toContain('The inbox is empty.');
     expect(dialogOf(dashboard, 'alerts-dialog')).toContain('No alerts.');
     expect(dialogOf(dashboard, 'inbox-dialog')).toContain('aria-label="Close"');
 
     const all = await page(w, '/?filter=all', cookie);
-    expect(all).toMatch(/<a href="\/tickets\?filter=all" class="bubble is-tickets/);
-    expect(all).toMatch(/<a href="\/tickets\?filter=all" class="bubble is-quotes/);
-    expect(all).toMatch(/<a href="\/requests" class="bubble is-requests/);
+    expect(all).toMatch(/<li class="is-tickets"><a href="\/tickets\?filter=all" class="glance-row[^"]*"/);
+    expect(all).toMatch(/<li class="is-quotes"><a href="\/tickets\?filter=all" class="glance-row[^"]*"/);
+    expect(all).toMatch(/<li class="is-requests"><a href="\/requests" class="glance-row[^"]*"/);
     expect(all).not.toMatch(/href="\/requests\?/);
   });
 

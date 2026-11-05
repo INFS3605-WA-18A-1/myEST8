@@ -1,5 +1,6 @@
-// The dashboard's "Your day at a glance" bubbles in the browser: they sit inside their card
-// at laptop, tablet and phone widths, and the page never scrolls sideways on a phone.
+// The dashboard's "Your day at a glance" tally rows in the browser: they sit inside
+// their card at laptop, tablet and phone widths, and the page never scrolls sideways
+// on a phone.
 
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { signIn } from './support/actions.ts';
@@ -7,10 +8,10 @@ import { freePort, startDemo, uniqueSchema } from './support/server.ts';
 
 const overflow = (page: Page) => page.evaluate<number>('document.documentElement.scrollWidth - document.documentElement.clientWidth');
 
-/** Each count bubble's box, and whether it sits inside the glance card. */
-function bubbles(page: Page) {
+/** Each tally row's box, and whether it sits inside the glance card. */
+function rows(page: Page) {
   return page
-    .getByRole('group', { name: 'Counts' })
+    .getByRole('region', { name: 'Today at a glance' })
     .getByRole('link')
     .evaluateAll((els) => {
       const card = els[0]?.closest('.glance')?.getBoundingClientRect();
@@ -24,30 +25,31 @@ function bubbles(page: Page) {
     });
 }
 
-test('on a laptop and a tablet the count bubbles sit inside their card, and none spills', async ({ page }) => {
+test('on a laptop and a tablet the tally rows sit inside their card, and none spills', async ({ page }) => {
   await signIn(page);
   for (const width of [1366, 1024, 800]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/');
-    const laid = await bubbles(page);
+    const laid = await rows(page);
     expect(laid.length, `${width}px`).toBeGreaterThanOrEqual(5);
-    expect(laid.every((bubble) => bubble.inside), `${width}px`).toBe(true);
-    expect(laid.every((bubble) => !bubble.spills), `${width}px`).toBe(true);
+    expect(laid.every((row) => row.inside), `${width}px`).toBe(true);
+    expect(laid.every((row) => !row.spills), `${width}px`).toBe(true);
   }
 });
 
-test('the Inbox bubble opens a dialog, and Escape returns focus to the bubble', async ({ page }) => {
+test('the Inbox row opens a dialog, and Escape returns focus to the row', async ({ page }) => {
   await signIn(page);
   await page.setViewportSize({ width: 1366, height: 900 });
   await page.goto('/');
-  const bubble = page.getByRole('group', { name: 'Counts' }).getByRole('link', { name: /Inbox/ });
-  await bubble.click();
+  const row = page.getByRole('region', { name: 'Today at a glance' }).getByRole('link', { name: /Inbox/ });
+  await expect(row).toHaveAccessibleName(/^\d+ Inbox$/);
+  await row.click();
   const dialog = page.getByRole('dialog', { name: 'Inbox' });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole('heading', { name: 'Inbox' })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
-  await expect(bubble).toBeFocused();
+  await expect(row).toBeFocused();
 });
 
 test('choosing a day refreshes the visit list and leaves the greeting in place', async ({ page }) => {
@@ -71,13 +73,13 @@ test('choosing a day refreshes the visit list and leaves the greeting in place',
   );
 });
 
-test('on a phone the bubbles stay inside their card, and the page never scrolls sideways', async ({ page }) => {
+test('on a phone the tally rows stay inside their card, and the page never scrolls sideways', async ({ page }) => {
   await signIn(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
-  const phone = await bubbles(page);
+  const phone = await rows(page);
   expect(phone.length).toBeGreaterThanOrEqual(5);
-  expect(phone.every((bubble) => bubble.inside)).toBe(true);
+  expect(phone.every((row) => row.inside)).toBe(true);
   expect(await overflow(page)).toBe(0);
 });
 
