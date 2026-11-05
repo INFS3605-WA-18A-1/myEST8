@@ -47,7 +47,7 @@ describe('the Reimbursement Request page', () => {
     for (const step of ['Reported', 'Receipt received', 'Forwarded to Property Owner', 'Reimbursed']) expect(readable).toContain(step);
     expect(ticks(html)).toBe(1);
     // The message source: Tom's report and what he was sent.
-    expect(readable).toContain('From +61400000001 by SMS');
+    expect(readable).toContain('From Tom Tran (Tenant) by SMS');
     expect(readable).toContain('Urgent repair: what to do now');
     expect(readable).toContain('Tenant told to arrange the Urgent Repair and send the receipt');
 

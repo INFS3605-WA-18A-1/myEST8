@@ -172,7 +172,7 @@ describe('the onboarding guide', () => {
     expect(refused.location).toMatch(/^\/setup\?form=tradie&google=lucky&error=/);
     expect(refused.page).toContain('Link the Tradie to their Google listing, or mark them as not on Google');
     expect(refused.page).toContain('/setup?google=lucky&amp;place=place-lucky#tradies');
-    expect(refused.page).toMatch(/<details class="mt-4" open>\s*<summary[^>]*>Add a Tradie/);
+    expect(refused.page).toMatch(/<details class="mt-4" open>\s*<summary[^>]*>[\s\S]*?Add a Tradie/);
 
     const added = await submit(w, '/setup/tradies?from=setup&google=lucky', { ...tradie, placeId: 'place-lucky' }, cookie);
     expect(added.location).toMatch(/^\/setup\?ok=/);

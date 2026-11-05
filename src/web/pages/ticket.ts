@@ -466,8 +466,10 @@ function ticketBody(t: TicketView, x: Extras, share: Html, edit: SummaryEdit): H
         </div>
       </div>
       <div class="ticket-side">
-        <div class="ticket-people">${peopleCard(t)}</div>
-        <div class="ticket-costs-slot">${costTiles(t)}</div>
+        <div class="ticket-people-costs">
+          <div class="ticket-people">${peopleCard(t)}</div>
+          <div class="ticket-costs-slot">${costTiles(t)}</div>
+        </div>
         <div class="ticket-next-slot">${nextStepLine(t, x)}</div>
         <div class="ticket-messages">${messagesCard(t, x)}</div>
         <div class="ticket-details">${detailsCard(t)}</div>
@@ -490,13 +492,17 @@ function focusJob(t: TicketView, x: Extras): JobView | undefined {
 
 /** The Summary, its address and status, the stage ring, and (open Tickets) the tile that adds another Job. */
 function heroCard(t: TicketView, x: Extras, edit: SummaryEdit): Html {
+  // The ring already says Done, so the closed Ticket isn't also given a second word for it.
+  const job = focusJob(t, x);
+  const counts = job ? stageCounts(jobStages(job, x)) : null;
+  const ringDone = Boolean(counts && counts.total > 0 && counts.done === counts.total);
   return html`<section class="ticket-hero" id="ticket-hero" aria-label="Summary">
     <div class="ticket-hero-card">
       <div class="ticket-hero-text">
         ${summaryBlock(t, edit)}
         <p class="ticket-hero-meta">
           <span class="ticket-chip">${entityLink('property', t.propertyAddress, `/properties/${t.propertyId}`)}</span>
-          <span class="ticket-state${t.status === 'open' ? '' : ' is-closed'}">${humanise(t.status)}</span>
+          ${t.status === 'open' || !ringDone ? html`<span class="ticket-state${t.status === 'open' ? '' : ' is-closed'}">${humanise(t.status)}</span>` : nothing}
           ${t.checkUrgency ? html`<span class="text-sm text-muted">The intake agent wasn't sure of the Urgency.</span>` : nothing}
         </p>
       </div>
@@ -514,7 +520,7 @@ function stageRing(t: TicketView, x: Extras): Html {
   const pct = total ? Math.round((done / total) * 100) : 0;
   return html`<div class="ticket-ring-wrap">
     <div class="ticket-ring${done === total ? ' is-done' : ''}" style="--pct:${pct}"><span class="ticket-ring-label">${done === total ? 'Done' : (current?.label ?? '')}</span></div>
-    <p class="ticket-ring-note">${done === total ? `All ${total} stages done${skipped ? ` (${skipped} skipped)` : ''}` : html`${done} of ${total} stages done${skipped ? html`<br />${skipped} skipped` : nothing}`}</p>
+    <p class="ticket-ring-note">${done === total ? `All ${total} stages done${skipped ? ` (${skipped} not needed)` : ''}` : html`${done} of ${total} stages done${skipped ? html`<br />${skipped} not needed` : nothing}`}</p>
   </div>`;
 }
 
@@ -569,15 +575,15 @@ function costTiles(t: TicketView): Html {
   const fees = t.jobs.reduce((sum, job) => sum + calloutFeesOwed(job).cents, 0);
   return html`<div class="ticket-costs">
       <div class="ticket-cost${overMax ? ' is-over' : ''}">
-        <span class="ticket-cost-icon" aria-hidden="true">${icon('receipt', { size: 'size-5' })}</span>
-        <span class="ticket-cost-label">Repair Cost</span> <strong class="ticket-cost-amount num">${t.repairCostCents > 0 ? formatMoney(t.repairCostCents) : '—'}</strong>
+        <p class="ticket-cost-head"><span class="ticket-cost-icon" aria-hidden="true">${icon('receipt', { size: 'size-4' })}</span><span class="ticket-cost-label">Repair Cost</span></p>
+        <strong class="ticket-cost-amount num">${t.repairCostCents > 0 ? formatMoney(t.repairCostCents) : '—'}</strong>
         ${overMax ? html`<span class="ticket-cost-note">Over the Max Repair Cost, with the Property Owner's approval</span>` : nothing}
-        <a class="ticket-cost-link" href="#ticket-costs" data-tab-link="ticket-costs">Costs</a>
+        <a class="btn btn-sm btn-secondary" href="#ticket-costs" data-tab-link="ticket-costs">Costs</a>
       </div>
       <div class="ticket-cost is-max">
-        <span class="ticket-cost-icon" aria-hidden="true">${icon('shield', { size: 'size-5' })}</span>
-        <span class="ticket-cost-label">Max Repair Cost</span> <strong class="ticket-cost-amount num">${formatMoney(t.maxRepairCostCents)}</strong>
-        <a class="ticket-cost-link" href="/properties/${t.propertyId}">Change</a>
+        <p class="ticket-cost-head"><span class="ticket-cost-icon" aria-hidden="true">${icon('shield', { size: 'size-4' })}</span><span class="ticket-cost-label">Max Repair Cost</span></p>
+        <strong class="ticket-cost-amount num">${formatMoney(t.maxRepairCostCents)}</strong>
+        <a class="btn btn-sm btn-secondary" href="/properties/${t.propertyId}">Change</a>
       </div>
     </div>
     ${fees > 0 ? html`<p class="ticket-fees num" data-callout-fees>Call-out Fees owed ${formatMoney(fees)}, on top of the Repair Cost</p>` : nothing}`;
@@ -636,10 +642,12 @@ function timelineBoard(t: TicketView, x: Extras): Html {
   // The Site inspection column holds a quiet "Not needed" when the Job went without one.
   const siteSkipped = stages.some((s) => s.label === SITE && s.state === 'skipped') && columns.has(ESTIMATES!) && !columns.has(SITE!);
   const order = [REPORTED_COLUMN, ...JOB_TRACKER_STAGES].filter((c) => columns.has(c) || (siteSkipped && c === SITE));
+  const currentStage = stages.find((s) => s.state === 'current')?.label;
+  const currentColumn = currentStage && order.includes(currentStage) ? currentStage : order.at(-1);
   const stageDone = (label: string) => label === REPORTED_COLUMN || stages.some((s) => s.label === label && s.state === 'done');
   return html`<div class="tl-board" tabindex="0" role="region" aria-label="Timeline by stage">
     ${order.map(
-      (label, i) => html`${i ? html`<span class="tl-arrow" aria-hidden="true">${icon('arrows-left-right', { size: 'size-4' })}</span>` : nothing}<section class="tl-column">
+      (label, i) => html`${i ? html`<span class="tl-arrow" aria-hidden="true">${icon('caret-right', { size: 'size-4' })}</span>` : nothing}<section class="tl-column"${label === currentColumn ? html` data-current="1"` : ''}>
         <h3 class="tl-head${stageDone(label) ? ' is-done' : ''}">${stageDone(label) ? icon('check', { size: 'size-3.5', weight: 'bold' }) : nothing}${label}</h3>
         <ol class="tl-cards" role="list">
           ${columns.has(label)
@@ -698,10 +706,9 @@ function progressCard(t: TicketView, x: Extras): Html {
     html`<button type="button" role="tab" id="tab-${id}" class="ticket-tab" aria-controls="${id}" aria-selected="${selected ? 'true' : 'false'}">${label}</button>`;
   return html`<section class="ticket-progress" data-tabs aria-label="Progress">
     <aside class="ticket-progress-strip${all ? ' is-done' : ''}">
-      <p class="ticket-progress-state">${icon('check-circle', { size: 'size-5' })}${all ? 'Complete' : (current?.label ?? 'Open')}</p>
-      <p class="ticket-progress-stat"><b class="num">${done}/${total}</b><span>Stages done</span>${skipped ? html`<span class="text-muted">${skipped} not needed</span>` : nothing}</p>
-      ${finished ? html`<p class="ticket-progress-stat"><b>Completed on</b><span>${formatDay(finished, x.timeZone)}</span></p>` : nothing}
-      ${days !== null ? html`<p class="ticket-progress-stat"><b>Took</b><span>${days} ${plural(days, 'day')}</span></p>` : nothing}
+      ${all
+        ? html`<p class="ticket-progress-line">${icon('check-circle', { size: 'size-5' })}<span>Done${finished ? ` ${formatDay(finished, x.timeZone)}` : ''}${days !== null ? ` · took ${days} ${plural(days, 'day')}` : ''}</span></p>`
+        : html`<p class="ticket-progress-line">${icon('circle', { size: 'size-5' })}<span>${current?.label ?? 'Open'} · ${done} of ${total} stages done${skipped ? ` · ${skipped} not needed` : ''}</span></p>`}
     </aside>
     <div class="ticket-progress-main">
       <div class="ticket-progress-head">
@@ -962,7 +969,8 @@ function reportedAgo(iso: string, now: Date): string {
 /**
  * Who looks after the Ticket, what else goes wrong at the Property and what the intake
  * photo check said, as a single-column list of label and value: nothing is crushed into
- * tiles, and a long Trade list reads down the page.
+ * tiles, and a long Trade list reads down the page. A "Matches" check says nothing the
+ * photo's own "Photo taken at the Property" chip doesn't, so it is left out.
  */
 function detailsCard(t: TicketView): Html {
   const frequent = t.frequentIssues.filter((f) => f.tickets >= 2);
@@ -976,7 +984,7 @@ function detailsCard(t: TicketView): Html {
       ['Property Owner', entityLink('person', t.owner.name, `/owners/${t.owner.personId}`)],
       ...(t.buildingManager ? [['Building Manager', entityLink('person', t.buildingManager.name, `/building-managers/${t.buildingManager.personId}`)] as [string, Html]] : []),
       ...(frequent.length ? [['Frequent issues here', frequent.map((f) => `${humanise(f.trade)} (${f.tickets} ${plural(f.tickets, 'Ticket')})`).join(', ')] as [string, string]] : []),
-      ...(t.imageMatch ? [['Photo check', photoCheck] as [string, Html]] : []),
+      ...(t.imageMatch && t.imageMatch.result !== 'matches' ? [['Photo check', photoCheck] as [string, Html]] : []),
     ]),
   });
 }
@@ -1068,23 +1076,27 @@ function jobCard(t: TicketView, job: JobView, x: Extras): Html {
   </section>`;
 }
 
-/** What is known about a Job at a glance: the Tradie, the visit, the price (capped, if it is) and the Tenant's rating. */
+/** What is known about a Job at a glance: the Tradie, the visit, the price (capped, if it is) and both ratings, side by side. */
 function jobTiles(t: TicketView, job: JobView, x: Extras): Html {
   const wo = job.workOrder;
   const approved = job.quotes.find((q) => q.status === 'approved');
   const tradie = wo?.businessName ?? approved?.businessName;
   const tenantScore = lastEvent(t, 'tenant_rated', job.jobId)?.score;
+  const managerScore = lastEvent(t, 'tradie_rated', job.jobId)?.score;
+  const stars = (score: unknown) => (score !== undefined ? html`<span class="ticket-star" aria-hidden="true">★</span> ${String(score)} out of 5` : 'Not yet');
   const tiles: [string, Html | string][] = [
     ...(tradie ? ([['Tradie', tradie]] as [string, string][]) : []),
     ...(wo ? ([['Visit', formatRange(wo.start, wo.end, x.timeZone)]] as [string, string][]) : []),
     ...(approved ? ([[approved.stage === 'firm' ? 'Firm Quote' : 'Estimate', approved.notToExceedCents !== null ? `Capped at ${formatMoney(approved.notToExceedCents)}` : formatMoney(approved.priceCents)]] as [string, string][]) : []),
-    ...(job.status === 'done'
-      ? ([[`Tenant's rating`, tenantScore !== undefined ? html`<span class="ticket-star" aria-hidden="true">★</span> ${String(tenantScore)} out of 5` : 'Not yet']] as [string, Html][])
-      : []),
     ...(!tradie && job.status === 'quoting' ? ([['Tradies asked', String(job.quoteRequests.length)], ['Quotes in', String(job.quotes.length)]] as [string, string][]) : []),
   ];
-  if (!tiles.length) return nothing;
-  return html`<dl class="ticket-tiles">${tiles.map(([label, value]) => html`<div><dt>${label}</dt><dd>${value}</dd></div>`)}</dl>`;
+  const ratings: [string, Html | string][] = job.status === 'done' ? [["Tenant's rating", stars(tenantScore)], ['Your rating', stars(managerScore)]] : [];
+  if (!tiles.length && !ratings.length) return nothing;
+  const tile = ([label, value]: [string, Html | string]) => html`<div><dt>${label}</dt><dd>${value}</dd></div>`;
+  return html`<dl class="ticket-tiles">
+    ${tiles.map(tile)}
+    ${ratings.length ? html`<div class="ticket-tiles-pair">${ratings.map(tile)}</div>` : nothing}
+  </dl>`;
 }
 
 /** The Call-out Fees the Job owes: each Tradie's whose Site Inspection has happened, whether or not they get the Job. */
@@ -1802,15 +1814,13 @@ function suggestionsPanel(t: TicketView, wo: WorkOrderView, suggest: NonNullable
 }
 
 function ratingSection(t: TicketView, job: JobView, inNext = false): Html {
-  const tradie = job.workOrder?.businessName ?? 'the Tradie';
   const rated = lastEvent(t, 'tradie_rated', job.jobId);
-  // While the rating form is in the Next card, the Job says nothing more than the tiles do.
-  if (inNext && !rated) return nothing;
+  // The Job's tiles carry the rating once it is given, and the Next card holds the
+  // form while it waits: the section itself has nothing left to say in either case.
+  if (rated || inNext) return nothing;
   return html`<section class="space-y-3" id="job-${job.jobId}-rating">
     ${sectionHeader('Rating')}
-    ${rated
-      ? html`<p>You rated ${tradie} ${String(rated.score)} out of 5.</p>`
-      : html`<p>${ratedLine(t, job)}</p>${ratingForm(t, job)}`}
+    <p>${ratedLine(t, job)}</p>${ratingForm(t, job)}
   </section>`;
 }
 
@@ -1994,9 +2004,17 @@ function describeEvent(t: TicketView, event: TimelineEvent, x: Extras): { title:
 
 /** The Ticket's issue's message log (src/web/messages.ts), marked read through the Ticket. */
 function messagesCard(t: TicketView, x: Extras): Html {
+  const toggle = html`<button type="button" class="btn btn-outline btn-sm ticket-msgs-toggle js-only" data-msgs-toggle aria-expanded="false">Show the whole conversation</button>`;
   return html`<div class="ticket-msgs" data-msgs>
-    ${messageLog(t.messages, { timeZone: x.timeZone, markRead: `/tickets/${t.ticketId}/read` })}
-    <button type="button" class="btn btn-outline btn-sm ticket-msgs-toggle js-only" data-msgs-toggle aria-expanded="false">Show the whole conversation</button>
+    ${messageLog(t.messages, {
+      timeZone: x.timeZone,
+      markRead: `/tickets/${t.ticketId}/read`,
+      contacts: [
+        { name: t.tenantName, role: 'Tenant', mobile: t.tenantMobile, email: t.tenantEmail },
+        { name: t.owner.name, role: 'Property Owner', mobile: t.owner.mobile, email: t.owner.email },
+      ],
+      more: toggle,
+    })}
   </div>`;
 }
 

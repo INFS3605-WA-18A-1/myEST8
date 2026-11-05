@@ -347,7 +347,7 @@ function subsection(o: { title: string | Html; id?: string; actions?: Html; body
 /** An "Add" form, folded away unless `open` (when it was refused, so its errors show). */
 function addForm(title: string, open: boolean, body: Html): Html {
   return html`<details class="mt-4" ${open ? 'open' : ''}>
-    <summary class="cursor-pointer font-semibold text-action">${title}</summary>
+    <summary class="setup-disclosure">${icon('caret-right', { size: 'size-4' })}<span>${title}</span></summary>
     <div class="mt-3">${body}</div>
   </details>`;
 }
@@ -355,7 +355,7 @@ function addForm(title: string, open: boolean, body: Html): Html {
 /** "Add many from a spreadsheet", folded away unless its upload was refused. */
 function importForm(kind: ImportKind, shown: Shown): Html {
   return html`<details class="import-details" id="import-${kind}" ${shown.open ? 'open' : ''}>
-    <summary class="cursor-pointer font-semibold text-action">${icon('file-xls', { size: 'size-4' })}<span>Add many from a spreadsheet</span></summary>
+    <summary class="setup-disclosure">${icon('caret-right', { size: 'size-4' })}${icon('file-xls', { size: 'size-4' })}<span>Add many from a spreadsheet</span></summary>
     <div class="mt-3">${importPanel(kind, { error: shown.error })}</div>
   </details>`;
 }
@@ -439,30 +439,30 @@ function channelCard(
 function peopleArea(agency: Agency, shownFor: (key: FormKey) => Shown): Html {
   const owner = shownFor('owner');
   const buildingManager = shownFor('building-manager');
-  return html`<div class="grid gap-4 md:grid-cols-2">
-    ${subsection({
-      title: 'Property Owners',
-      body: html`${peopleTable(agency.owners, 'No Property Owners yet.', '/owners', 'Property Owners')}
-        ${addForm(
-          'Add a Property Owner',
-          owner.open,
-          html`${owner.error}
-            ${addPersonForm({ id: 'owner', action: '/setup/owners', submit: 'Add Property Owner' })}`,
-        )}
-        ${importForm('owners', shownFor('import-owners'))}`,
-    })}
-    ${subsection({
-      title: 'Building Managers',
-      body: html`<p class="text-sm text-muted">For strata Properties: Common Area issues go to the Building Manager.</p>
-        ${peopleTable(agency.buildingManagers, 'No Building Managers yet.', '/building-managers', 'Building Managers')}
-        ${addForm(
-          'Add a Building Manager',
-          buildingManager.open,
-          html`${buildingManager.error}
-            ${addPersonForm({ id: 'building-manager', action: '/setup/building-managers', submit: 'Add Building Manager' })}`,
-        )}
-        ${importForm('building-managers', shownFor('import-building-managers'))}`,
-    })}
+  return html`<div class="setup-people">
+    <div class="setup-people-col">
+      <h3 class="section-title">Property Owners</h3>
+      <div class="setup-people-table">${peopleTable(agency.owners, 'No Property Owners yet.', '/owners', 'Property Owners')}</div>
+      ${addForm(
+        'Add a Property Owner',
+        owner.open,
+        html`${owner.error}
+          ${addPersonForm({ id: 'owner', action: '/setup/owners', submit: 'Add Property Owner' })}`,
+      )}
+      ${importForm('owners', shownFor('import-owners'))}
+    </div>
+    <div class="setup-people-col">
+      <h3 class="section-title">Building Managers</h3>
+      <p class="text-sm text-muted">For strata Properties: Common Area issues go to the Building Manager.</p>
+      <div class="setup-people-table">${peopleTable(agency.buildingManagers, 'No Building Managers yet.', '/building-managers', 'Building Managers')}</div>
+      ${addForm(
+        'Add a Building Manager',
+        buildingManager.open,
+        html`${buildingManager.error}
+          ${addPersonForm({ id: 'building-manager', action: '/setup/building-managers', submit: 'Add Building Manager' })}`,
+      )}
+      ${importForm('building-managers', shownFor('import-building-managers'))}
+    </div>
   </div>`;
 }
 
@@ -621,7 +621,7 @@ function peopleTable(people: Person[], empty: string, href: string, name: string
 
 /** "See all 17 Tradies": the way from a five-row setup list to the page that holds them all. */
 function seeAllIn(count: number, one: string, many: string, href: string): Html {
-  return count > 5 ? html`<p class="setup-see-all"><a class="link" href="${href}">See all ${count} ${count === 1 ? one : many}</a></p>` : html``;
+  return count > 5 ? html`<p class="setup-see-all"><a class="setup-link" href="${href}">See all ${count} ${count === 1 ? one : many}</a></p>` : html``;
 }
 
 /** A calendar date as people read it: "2026-09-01" is "1 Sep 2026". */

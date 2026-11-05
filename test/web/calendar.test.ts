@@ -142,8 +142,6 @@ describe('Schedule: the week', () => {
     const html = await page(w, '/calendar?week=2026-10-12', cookie);
 
     const summary = visible(summaryOf(html));
-    // The count is in the Visits tile on the left; the summary keeps the flags.
-    expect(visible(html)).toContain('Visits 1 booked');
     expect(summary).toContain('1 reschedule request waiting on you');
     // Each day with visits says how many, beside its name.
     expect(visible(week(html))).toMatch(/Tue 13 Tuesday 13 October 1 visit/);
@@ -235,7 +233,7 @@ describe('Schedule: Site Inspections and who is free', () => {
     // Now is Saturday 10 October; Pete's visit is on Tuesday, so every Tradie is free today
     // and this week has no visits, so only the count is listed.
     expect(free).toContain('No visits this week.');
-    expect(free).toContain('6 Tradies free today');
+    expect(free).toContain('Every Tradie is free today');
 
     // Another week has no today, so nobody is called free; the rail lists the Tradies with visits that week.
     const next = freePanel(await page(w, '/calendar?view=week&date=2026-10-19', cookie));
@@ -374,7 +372,7 @@ describe('Schedule: the Day', () => {
     const html = await page(w, '/calendar?view=day&date=2026-10-13', cookie);
 
     expect(visible(html)).toContain('Tuesday 13 October');
-    expect(visible(html)).toContain('Visits 2 booked');
+    expect(html.match(/class="schedule-block[ "]/g) ?? []).toHaveLength(2);
     const g = grid(html, 'day');
     expect(g).toMatch(/role="region" aria-label="Tuesday 13 October, hour by hour\. Visits at the same time sit side by side: scroll sideways to see them all\." tabindex="0"/);
     expect(g).toContain('--slots: 48; --cols: 2');
@@ -544,7 +542,7 @@ describe('Schedule: the toolbar', () => {
 
     expect(html).toContain('<nav class="segmented" aria-label="Whose visits">');
     expect(html).not.toContain('schedule-toolbar-end');
-    const form = html.slice(html.indexOf('<form method="get" action="/calendar" class="schedule-filters"'), html.indexOf('</form>', html.indexOf('class="schedule-filters"')));
+    const form = html.slice(html.indexOf('<form method="get" action="/calendar" class="schedule-filters is-desk"'), html.indexOf('</form>', html.indexOf('class="schedule-filters is-desk"')));
     expect(form).toContain('data-autosubmit');
     expect(form).toContain('name="view" value="day"');
     expect(form).toContain('name="date" value="2026-10-13"');
@@ -725,16 +723,16 @@ describe('Schedule: views and links', () => {
 });
 
 describe('Schedule: filters, the small month and the Picked visit panel', () => {
-  test('the Tradie and Status filters narrow the grid and the Visits count, and the links keep them', async () => {
+  test('the Tradie and Status filters narrow the grid, and the links keep them', async () => {
     const w = await webWorld();
     const { tap, fan } = await busyTuesday(w);
     const cookie = await w.signIn();
 
     const all = await page(w, '/calendar?view=day&date=2026-10-13', cookie);
-    expect(visible(all)).toContain('Visits 2 booked');
+    expect(all.match(/class="schedule-block[ "]/g) ?? []).toHaveLength(2);
 
     const pete = await page(w, `/calendar?view=day&date=2026-10-13&tradie=${w.tradies.pete.id}`, cookie);
-    expect(visible(pete)).toContain('Visits 1 booked');
+    expect(pete.match(/class="schedule-block[ "]/g) ?? []).toHaveLength(1);
     expect(pete).toContain(`href="/tickets/${tap.ticketId}"`);
     expect(pete).not.toContain(`href="/tickets/${fan.ticketId}"`);
     // The next-day link keeps the filter; the selected Tradie links back to everyone.
@@ -743,7 +741,8 @@ describe('Schedule: filters, the small month and the Picked visit panel', () => 
     expect(pete).toContain('aria-current="true"');
 
     const none = await page(w, '/calendar?view=day&date=2026-10-13&status=done', cookie);
-    expect(visible(none)).toContain('Visits 0 booked');
+    expect(none.match(/class="schedule-block[ "]/g) ?? []).toHaveLength(0);
+    expect(visible(none)).toContain('Nothing booked on Tuesday 13 October.');
   });
 
   test('the small month links each day to its Day, marks the days with visits and tints the period shown', async () => {
