@@ -38,9 +38,11 @@ and Cloudflare Tunnel in `docs/hosting.md`, which still works for self-hosting.
 
 **Vercel's own Git integration is off.** `vercel.json` sets `"git": {"deploymentEnabled": false}`, so a push never makes Vercel build and deploy by itself. Otherwise Vercel could ship a commit before `test` and `migrate-prod` have finished, running new code on an old schema. Every production deploy goes through `deploy-prod` (or `Rollback`) in GitHub Actions.
 
+`test` is a gate, not the work: `test-unit` runs vitest over four runners (`--shard`), `e2e` runs Playwright beside them, and `test` only fails when one of those did. The gate keeps the name branch protection requires. The shards and the browser suite run on their own runners, which is what took a pull request from about thirteen minutes to about four. The Vercel steps themselves are seconds: `vercel build` takes seven, and `vercel deploy` uploads only the files the project doesn't already have, though it rebuilds rather than doing an incremental build.
+
 | Event | Jobs |
 | --- | --- |
-| Pull request | `test` and `build`, with no secrets (forks included). There are no previews: the single Supabase project is production, and a preview would use its data. Instead `build` runs production's `vercel build` without deploying, and `scripts/check-vercel-function.ts` checks the function holds every file the app reads at run time. |
+| Pull request | `test` (four `test-unit` shards and `e2e`) and `build`, with no secrets (forks included). There are no previews: the single Supabase project is production, and a preview would use its data. Instead `build` runs production's `vercel build` without deploying, and `scripts/check-vercel-function.ts` checks the function holds every file the app reads at run time. |
 | Push to `master` | `test` and `build`, then `migrate-prod` (`supabase db push`), `deploy-prod`, and `smoke` (landing page 200, worker route 401 without the secret and 200 with it). |
 | Manual | `Rollback`: give it an earlier deployment's address or id (`vercel ls --prod`). |
 
