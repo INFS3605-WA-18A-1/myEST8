@@ -56,6 +56,19 @@ async function zoomInUntilVisible(map: Locator, pin: Locator) {
   await expect(pin).toBeVisible();
 }
 
+test('the header search suggests a Property as you type, and Enter opens it', async ({ page }) => {
+  await signIn(page);
+  await page.goto('/dispatch');
+  const search = page.getByRole('combobox', { name: 'Search Properties, Tickets or Tradies' });
+  await search.fill('Ocean');
+  const option = page.getByRole('option', { name: /5\/40 Ocean Ave/ });
+  await expect(option).toBeVisible();
+  await search.press('ArrowDown');
+  await search.press('Enter');
+  await expect(page).toHaveURL(/\/properties\/\d+$/);
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Ocean Ave');
+});
+
 test('Dispatch draws a pin or group for every Property and Tradie with a location, on OpenFreeMap Positron and nothing else', async ({ page }) => {
   const urls = await stubBasemap(page);
   await signIn(page);

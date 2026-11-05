@@ -313,7 +313,7 @@
     form[aria-busy='true'] .btn {
       scale: none;
     }
-    .glance-dialog-close,
+    .inbox-modal-close,
     .menu-button,
     .photo-viewer-button,
     .flash-close,
@@ -321,7 +321,7 @@
     .user-menu > summary {
       transition: background-color var(--dur-fast) var(--ease-out), scale var(--dur-slow) var(--ease-spring);
     }
-    .glance-dialog-close:active,
+    .inbox-modal-close:active,
     .menu-button:active,
     .photo-viewer-button:active,
     .flash-close:active,
@@ -1437,12 +1437,10 @@
       outline: 2px solid var(--action);
       outline-offset: 2px;
     }
-    .glance-list > .is-tickets { --c: #1f5c8b; }
-    .glance-list > .is-alerts { --c: #e98b6d; }
-    .glance-list > .is-requests { --c: #ffc233; }
-    .glance-list > .is-inbox { --c: #13212e; }
-    .glance-list > .is-quotes { --c: #cdbd94; }
-    .glance-list > .is-urgent { --c: #c8372d; }
+    .glance-list > .is-tradies { --c: var(--action); }
+    .glance-list > .is-owners { --c: var(--hivis); }
+    .glance-list > .is-visits { --c: var(--ink); }
+    .glance-list > .is-confirm { --c: #e98b6d; }
     .glance-count {
       font-family: var(--font-head);
       font-size: 28px;
@@ -1468,6 +1466,22 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    .glance-sub {
+      min-width: 0;
+      overflow: hidden;
+      font-size: 12px;
+      color: var(--muted);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .glance-row.is-zero .glance-sub {
+      color: var(--muted);
+    }
+    .glance-clear {
+      margin: 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
     .glance-pips {
       display: flex;
       flex-wrap: wrap;
@@ -1490,6 +1504,9 @@
       background: transparent;
       border: 1.5px solid color-mix(in srgb, var(--c) 60%, var(--ink));
       box-shadow: none;
+    }
+    .glance-pip.is-stale {
+      background: #e98b6d;
     }
     .glance-more {
       font-size: 11px;
@@ -1714,6 +1731,27 @@
       font-size: 14px;
       color: #c9d4de;
     }
+    /* The one control that opens the whole inbox, where the old <details> summary sat. */
+    .inbox-open {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      min-height: 38px;
+      font-weight: 600;
+      color: #13212e;
+      text-decoration: none;
+      background: var(--hivis);
+      border-radius: 999px;
+    }
+    .inbox-open:hover {
+      color: #13212e;
+      filter: brightness(0.96);
+    }
+    .inbox-open:focus-visible {
+      outline: 2px solid var(--rail-text);
+      outline-offset: 2px;
+    }
     .inbox-more > summary {
       display: flex;
       align-items: center;
@@ -1929,11 +1967,12 @@
       }
     }
 
-    /* Inbox and Alerts, opened from a glance row: a dialog over the dashboard. */
-    .glance-dialog {
-      width: min(640px, calc(100% - 32px));
-      max-width: 640px;
-      max-height: min(80dvh, 40rem);
+    /* The inbox as a mail client, opened from a preview or "Check all N messages". */
+    .inbox-modal {
+      width: min(960px, calc(100% - 32px));
+      max-width: 960px;
+      height: min(44rem, 84dvh);
+      max-height: 84dvh;
       margin: auto;
       padding: 0;
       overflow: hidden;
@@ -1952,7 +1991,7 @@
         display var(--dur-fast) allow-discrete,
         overlay var(--dur-fast) allow-discrete;
     }
-    .glance-dialog[open] {
+    .inbox-modal[open] {
       display: flex;
       flex-direction: column;
       opacity: 1;
@@ -1962,35 +2001,36 @@
       transition-timing-function: var(--ease-out), var(--ease-spring), var(--ease-emphasis);
     }
     @starting-style {
-      .glance-dialog[open] {
+      .inbox-modal[open] {
         opacity: 0;
         scale: 0.96;
         translate: 0 8px;
       }
     }
-    .glance-dialog::backdrop {
+    .inbox-modal::backdrop {
       background-color: transparent;
       transition:
         background-color var(--dur-base) var(--ease-out),
         display var(--dur-base) allow-discrete,
         overlay var(--dur-base) allow-discrete;
     }
-    .glance-dialog[open]::backdrop {
+    .inbox-modal[open]::backdrop {
       background-color: var(--scrim);
     }
     @starting-style {
-      .glance-dialog[open]::backdrop {
+      .inbox-modal[open]::backdrop {
         background-color: transparent;
       }
     }
-    .glance-dialog-head {
+    .inbox-modal-head {
       display: flex;
+      flex: none;
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      padding: 16px 16px 0;
+      padding: 12px 16px;
     }
-    .glance-dialog-close {
+    .inbox-modal-close {
       display: inline-flex;
       flex: none;
       align-items: center;
@@ -2005,29 +2045,267 @@
       border: 0;
       border-radius: 6px;
     }
-    .glance-dialog-close:hover {
+    .inbox-modal-close:hover {
       background: var(--page);
     }
-    .glance-dialog-body {
+    .inbox-modal-empty {
+      padding: 0 16px 16px;
+      color: var(--muted);
+    }
+    .inbox-shell {
+      display: grid;
+      grid-template-columns: minmax(15rem, 20rem) minmax(0, 1fr);
       flex: 1 1 auto;
       min-height: 0;
-      padding: 16px;
-      overflow: auto;
+      border-top: 1px solid var(--line);
+    }
+    .inbox-people {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      background: var(--page);
+      border-right: 1px solid var(--line);
+    }
+    .inbox-people-search {
+      display: flex;
+      flex: none;
+      align-items: center;
+      gap: 8px;
+      min-height: 40px;
+      margin: 12px;
+      padding: 0 12px;
+      color: var(--muted);
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+    }
+    .inbox-people-search:focus-within {
+      outline: 2px solid var(--action);
+    }
+    .inbox-people-search input {
+      flex: 1;
+      min-width: 0;
+      font: inherit;
+      font-size: 14px;
+      color: var(--ink);
+      background: transparent;
+      border: 0;
+    }
+    .inbox-people-search input:focus {
+      outline: none;
+    }
+    .inbox-people-list {
+      flex: 1 1 auto;
+      min-height: 0;
+      margin: 0;
+      padding: 0 8px 12px;
+      overflow-y: auto;
+      list-style: none;
       overscroll-behavior: contain;
     }
-    @media (max-width: 29.99rem) {
-      .glance-dialog {
+    .inbox-person {
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: start;
+      width: 100%;
+      padding: 10px;
+      color: var(--ink);
+      text-align: left;
+      cursor: pointer;
+      background: transparent;
+      border: 0;
+      border-radius: 10px;
+    }
+    .inbox-person:hover {
+      background: rgb(255 255 255 / 0.6);
+    }
+    .inbox-person.is-active {
+      background: var(--surface);
+      box-shadow: inset 0 0 0 1px var(--line);
+    }
+    .inbox-person:focus-visible {
+      outline: 2px solid var(--action);
+      outline-offset: -2px;
+    }
+    .inbox-person .inbox-avatar {
+      color: var(--rail-text);
+      background: var(--ink);
+    }
+    .inbox-person-main {
+      display: grid;
+      gap: 1px;
+      min-width: 0;
+    }
+    .inbox-person-who,
+    .inbox-person-preview {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .inbox-person-who {
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .inbox-person-preview {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .inbox-person-meta {
+      display: grid;
+      justify-items: end;
+      gap: 4px;
+      font-size: 11px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .inbox-waiting {
+      min-width: 18px;
+      padding: 1px 5px;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--ink);
+      text-align: center;
+      background: var(--hivis);
+      border-radius: 999px;
+    }
+    .inbox-no-matches {
+      margin: 0;
+      padding: 4px 16px 12px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .inbox-thread-panes {
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .inbox-thread {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      min-height: 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+    .inbox-thread[hidden] {
+      display: none;
+    }
+    .inbox-thread-head {
+      flex: none;
+      padding: 14px 20px 10px;
+      border-bottom: 1px solid var(--line);
+    }
+    .inbox-thread-name {
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    .inbox-thread-sub {
+      margin: 2px 0 0;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .inbox-messages {
+      display: flex;
+      flex: 1 0 auto;
+      flex-direction: column;
+      gap: 8px;
+      margin: 0;
+      padding: 16px 20px;
+      list-style: none;
+    }
+    .inbox-message {
+      max-width: 34rem;
+      padding: 9px 12px;
+      border-radius: 12px;
+    }
+    .inbox-message.is-in {
+      align-self: flex-start;
+      background: var(--page);
+      border: 1px solid var(--line);
+    }
+    .inbox-message.is-out {
+      align-self: flex-end;
+      color: #fff;
+      background: var(--action);
+    }
+    .inbox-message-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px 10px;
+      font-size: 11px;
+    }
+    .inbox-message-channel,
+    .inbox-message-direction {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-weight: 600;
+    }
+    .inbox-message.is-in .inbox-message-head {
+      color: var(--muted);
+    }
+    .inbox-message.is-out .inbox-message-head {
+      color: #dbe7f1;
+    }
+    .inbox-message-time {
+      margin-left: auto;
+      font-weight: 400;
+    }
+    .inbox-message-text {
+      margin: 4px 0 0;
+      font-size: 14px;
+      line-height: 1.4;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .inbox-message-empty {
+      padding: 8px 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .inbox-triage-list {
+      flex: none;
+      padding: 12px 20px 20px;
+      background: var(--page);
+      border-top: 1px solid var(--line);
+    }
+    .inbox-triage-title {
+      margin: 0 0 8px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .inbox-modal .inbox-item {
+      margin-bottom: 8px;
+      background: var(--surface);
+    }
+    @media (max-width: 47.99rem) {
+      .inbox-modal {
         width: 100%;
         max-width: none;
         height: 100%;
         max-height: none;
         margin: 0;
         border-radius: 0;
-        scale: 1;
-        translate: 0 32px;
       }
+      .inbox-shell {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: minmax(8rem, 0.4fr) minmax(0, 1fr);
+      }
+      .inbox-people {
+        min-height: 0;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+    }
+    @media (max-width: 29.99rem) {
       @starting-style {
-        .glance-dialog[open] {
+        .inbox-modal[open] {
           scale: 1;
           translate: 0 32px;
         }
@@ -8106,9 +8384,11 @@
       gap: 8px;
     }
     .dispatch-q {
+      position: relative;
       display: flex;
       align-items: center;
       gap: 8px;
+      min-width: 0;
       min-height: 40px;
       width: min(15rem, 100%);
       padding: 0 14px;
@@ -8132,6 +8412,41 @@
     }
     .dispatch-q:focus-within {
       outline: 2px solid var(--action);
+    }
+    .search-suggest-list {
+      right: auto;
+      width: min(24rem, calc(100vw - 32px));
+    }
+    .search-suggest-option {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 8px 10px;
+    }
+    .search-suggest-icon {
+      display: flex;
+      flex: none;
+      margin-top: 2px;
+      color: var(--muted);
+    }
+    .search-suggest-main {
+      display: grid;
+      gap: 1px;
+      min-width: 0;
+    }
+    .search-suggest-label,
+    .search-suggest-sub {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .search-suggest-label {
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .search-suggest-sub {
+      font-size: 12px;
+      color: var(--muted);
     }
     .dispatch-pick {
       display: inline-flex;

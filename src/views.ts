@@ -267,6 +267,113 @@ export function createViews(ctx: Context) {
     },
 
     /**
+     * The header search's suggestions: Properties whose address or suburb matches, and
+     * Tickets whose number or Summary/description matches, capped at eight and mixing
+     * the two kinds so neither crowds the other out. Only the Agency's own records:
+     * this runs for a signed-in Property Manager and never leaves their Agency.
+     */
+    async searchSuggest(agencyId: number, rawQuery: string) {
+      const query = rawQuery.trim().toLowerCase();
+      if (query.length < 2) return [];
+      const words = query.replace(/^#/, '');
+      const number = /^\d+$/.test(words) ? Number(words) : null;
+      const [properties, allTickets] = await Promise.all([profiles.properties(agencyId), tickets.list(agencyId, null)]);
+      const issues = await tickets.issuesWithUnread(allTickets.map((ticket) => ticket.issueId));
+      const propertyById = new Map(properties.map((property) => [property.id, property]));
+
+      const haystack = (value: string) => value.toLowerCase();
+      const propertyRank = (property: (typeof properties)[number]) => {
+        const address = haystack(property.address);
+        const suburb = haystack(property.suburb);
+        if (address.startsWith(query)) return 0;
+        if (suburb.startsWith(query)) return 1;
+        if (address.includes(query) || suburb.includes(query)) return 2;
+        return -1;
+      };
+      const ticketRank = (ticket: (typeof allTickets)[number]) => {
+        if (number !== null && ticket.id === number) return 0;
+        const title = haystack(issues.get(ticket.issueId)?.summary ?? issues.get(ticket.issueId)?.description ?? '');
+        if (title.startsWith(query)) return 1;
+        if (title.includes(query)) return 2;
+        return -1;
+      };
+
+      const propertyHits = properties
+        .map((property) => ({ property, rank: propertyRank(property) }))
+        .filter((hit) => hit.rank >= 0)
+        .sort((a, b) => a.rank - b.rank || a.property.address.localeCompare(b.property.address))
+        .slice(0, 8);
+      const ticketHits = allTickets
+        .map((ticket) => ({ ticket, rank: ticketRank(ticket) }))
+        .filter((hit) => hit.rank >= 0)
+        .sort((a, b) => a.rank - b.rank || a.ticket.reportedAt.localeCompare(b.ticket.reportedAt) || a.ticket.id - b.ticket.id)
+        .slice(0, 8);
+
+      const stageWord: Record<Stage, string> = {
+        quoting: 'Quoting',
+        awaiting_owner: 'With Property Owner',
+        approved: 'Ready to book',
+        scheduled: 'Booked',
+        done: 'Done',
+      };
+      const jobs = ticketHits.length ? await tickets.jobsOfTickets(ticketHits.map(({ ticket }) => ticket.id)) : [];
+      const stageOfTicket = (ticketId: number) => stageWord[stageOf(jobs.filter((job) => job.ticketId === ticketId))];
+
+      const suggestions = [
+        ...propertyHits.map(({ property }) => ({ type: 'property' as const, label: property.address, sub: property.suburb, href: `/properties/${property.id}` })),
+        ...ticketHits.map(({ ticket }) => {
+          const issue = issues.get(ticket.issueId);
+          const address = propertyById.get(ticket.propertyId)?.address ?? '';
+          return {
+            type: 'ticket' as const,
+            label: `#${ticket.id} ${issue?.summary ?? issue?.description ?? 'Ticket'}`,
+            sub: `${address} · ${stageOfTicket(ticket.id)}`,
+            href: `/tickets/${ticket.id}`,
+          };
+        }),
+      ];
+      // Take one of each kind in turn, so a page of matching addresses still leaves room for Tickets.
+      const mixed: typeof suggestions = [];
+      const propertyCount = propertyHits.length;
+      const ticketCount = ticketHits.length;
+      for (let i = 0; i < Math.max(propertyCount, ticketCount) && mixed.length < 8; i++) {
+        if (i < propertyCount) mixed.push(suggestions[i]!);
+        if (mixed.length < 8 && i < ticketCount) mixed.push(suggestions[propertyCount + i]!);
+      }
+      return mixed;
+    },
+
+    /**
+     * The open inbox as conversations, newest first: one per person (or one per unknown
+     * sender's address), each with the messages exchanged with them oldest first. The
+     * inbox items themselves ride along so the inbox modal can keep their triage actions.
+     */
+    async inboxThreads(agencyId: number) {
+      const items = await intake.inbox(agencyId);
+      const groups = new Map<string, typeof items>();
+      for (const item of items) {
+        const key = item.personId === null ? `address:${item.from}` : `person:${item.personId}`;
+        groups.set(key, [...(groups.get(key) ?? []), item]);
+      }
+      const conversations = await Promise.all(
+        [...groups].map(async ([key, group]) => {
+          const latest = group[group.length - 1]!;
+          return {
+            key,
+            personId: latest.personId,
+            personName: latest.personName,
+            address: latest.from,
+            waiting: group.length,
+            latestAt: latest.receivedAt,
+            items: group,
+            messages: await tickets.messagesOfContact(agencyId, { personId: latest.personId, address: latest.from }),
+          };
+        }),
+      );
+      return conversations.sort((a, b) => b.latestAt.localeCompare(a.latestAt));
+    },
+
+    /**
      * The Maintenance Requests waiting for a Property Manager to confirm, narrowed by `o`
      * (Trade is the Trade it was classified as): Urgent, High, then Routine, oldest first within each.
      */

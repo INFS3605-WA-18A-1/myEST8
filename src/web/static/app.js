@@ -1068,14 +1068,185 @@ onContent((root) => {
   });
 })();
 
-// === glance dialogs ===
-// Inbox and Alerts open over the dashboard. Without this file those tally rows are
-// anchors on the page. The listener stays on the document, so a dashboard swapped
-// in by in-page navigation (myest8:content replaces #main) still opens them.
+// === predictive header search ===
+// The Dispatch search box (input[data-search-suggest]) offers matching Properties
+// and Tickets as the Property Manager types, from /search/suggest. Arrow keys move,
+// Enter picks, Escape closes, a click picks. Without this file Enter still submits
+// the ordinary search form.
+(() => {
+  let made = 0;
+
+  onContent((root) => {
+    for (const input of root.querySelectorAll('input[data-search-suggest]')) {
+      if (!(input instanceof HTMLInputElement) || !input.form) continue;
+      const list = document.getElementById(input.getAttribute('aria-controls') ?? '');
+      if (!(list instanceof HTMLUListElement)) continue;
+      const icons = document.getElementById('search-suggest-icons');
+
+      const n = ++made;
+      let shown = [];
+      let active = -1;
+      let timer = 0;
+      let request = 0;
+
+      function setActive(i) {
+        active = i;
+        for (const item of list.querySelectorAll('[role="option"]')) {
+          const on = item.id === `search-suggest-${n}-${i}`;
+          item.classList.toggle('is-active', on);
+          item.setAttribute('aria-selected', on ? 'true' : 'false');
+        }
+        if (i >= 0) {
+          input.setAttribute('aria-activedescendant', `search-suggest-${n}-${i}`);
+          document.getElementById(`search-suggest-${n}-${i}`)?.scrollIntoView({ block: 'nearest' });
+        } else input.removeAttribute('aria-activedescendant');
+      }
+
+      function close() {
+        list.hidden = true;
+        input.setAttribute('aria-expanded', 'false');
+        input.removeAttribute('aria-activedescendant');
+        active = -1;
+      }
+
+      function dropInFlight() {
+        window.clearTimeout(timer);
+        request++;
+      }
+
+      function iconFor(type) {
+        const template = icons?.content.querySelector(`[data-icon="${type}"]`);
+        return template ? template.cloneNode(true) : document.createDocumentFragment();
+      }
+
+      function choose(suggestion) {
+        dropInFlight();
+        close();
+        window.location.assign(suggestion.href);
+      }
+
+      function render(suggestions) {
+        if (document.activeElement !== input) return;
+        shown = suggestions;
+        list.replaceChildren(
+          ...(suggestions.length
+            ? suggestions.map((suggestion, i) => {
+                const item = document.createElement('li');
+                item.id = `search-suggest-${n}-${i}`;
+                item.className = 'combobox-option search-suggest-option';
+                item.setAttribute('role', 'option');
+                item.setAttribute('aria-selected', 'false');
+                const main = document.createElement('span');
+                main.className = 'search-suggest-main';
+                const primary = document.createElement('span');
+                primary.className = 'search-suggest-label';
+                primary.textContent = suggestion.label;
+                const secondary = document.createElement('span');
+                secondary.className = 'search-suggest-sub';
+                secondary.textContent = suggestion.sub;
+                main.append(primary, secondary);
+                item.append(iconFor(suggestion.type), main);
+                item.addEventListener('mousedown', (event) => event.preventDefault());
+                item.addEventListener('click', () => choose(suggestion));
+                return item;
+              })
+            : [Object.assign(document.createElement('li'), { className: 'combobox-empty', textContent: 'No matches' })]),
+        );
+        list.hidden = false;
+        input.setAttribute('aria-expanded', 'true');
+        setActive(suggestions.length ? 0 : -1);
+      }
+
+      input.addEventListener('input', () => {
+        dropInFlight();
+        const query = input.value.trim();
+        if (query.length < 2) {
+          shown = [];
+          return close();
+        }
+        const mine = ++request;
+        timer = window.setTimeout(async () => {
+          let suggestions = [];
+          try {
+            const response = await fetch(`/search/suggest?q=${encodeURIComponent(query)}`, { headers: { accept: 'application/json' } });
+            const body = response.ok ? await response.json() : [];
+            if (Array.isArray(body)) suggestions = body;
+          } catch {
+            suggestions = [];
+          }
+          if (mine === request) render(suggestions);
+        }, 150);
+      });
+
+      input.addEventListener('keydown', (event) => {
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+          if (shown.length === 0) return;
+          event.preventDefault();
+          if (list.hidden) {
+            list.hidden = false;
+            input.setAttribute('aria-expanded', 'true');
+            setActive(0);
+            return;
+          }
+          const step = event.key === 'ArrowDown' ? 1 : -1;
+          setActive((active + step + shown.length) % shown.length);
+          return;
+        }
+        if (event.key === 'Enter' && !list.hidden && active >= 0 && shown[active]) {
+          event.preventDefault();
+          choose(shown[active]);
+          return;
+        }
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          close();
+        }
+      });
+
+      input.addEventListener('focus', () => {
+        if (shown.length && input.value.trim().length >= 2) {
+          list.hidden = false;
+          input.setAttribute('aria-expanded', 'true');
+        }
+      });
+
+      input.addEventListener('blur', () => {
+        // A click on an option is handled on mousedown, so this only closes the list.
+        close();
+      });
+    }
+  });
+})();
+
+// === inbox modal ===
+// The dashboard's Inbox opens over the page as a mail client: people on the left and
+// the selected person's thread on the right. Each preview opens it on that person,
+// "Check all N messages" opens the newest, and the search narrows the people by name,
+// number and message text. The dialog is native, so focus is trapped and Escape closes
+// it; closing returns focus to the control that opened it.
 (() => {
   let opener = null;
-  // Closing one dialog to open another must not send focus back in between.
-  let restoring = true;
+
+  function select(dialog, index) {
+    for (const button of dialog.querySelectorAll('[data-inbox-person]')) {
+      const on = Number(button.getAttribute('data-inbox-person')) === index;
+      button.classList.toggle('is-active', on);
+      button.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+    for (const pane of dialog.querySelectorAll('[data-inbox-thread]')) {
+      pane.hidden = Number(pane.getAttribute('data-inbox-thread')) !== index;
+    }
+  }
+
+  function open(link, index) {
+    const dialog = document.getElementById('inbox-dialog');
+    if (!(dialog instanceof HTMLDialogElement)) return;
+    opener = link;
+    if (!dialog.open) dialog.showModal();
+    select(dialog, index);
+    const selected = dialog.querySelector(`[data-inbox-person="${index}"]`);
+    if (selected instanceof HTMLElement) selected.focus();
+  }
 
   document.addEventListener('click', (event) => {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -1092,39 +1263,49 @@ onContent((root) => {
       return;
     }
 
-    if (target instanceof HTMLDialogElement && target.classList.contains('glance-dialog') && target.open) {
+    if (target instanceof HTMLDialogElement && target.classList.contains('inbox-modal') && target.open) {
       const box = target.getBoundingClientRect();
       const outside = event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom;
       if (outside) target.close();
       return;
     }
 
-    const link = target.closest('[data-dialog]');
+    const person = target.closest('[data-inbox-person]');
+    if (person) {
+      const dialog = target.closest('dialog');
+      if (dialog instanceof HTMLDialogElement) select(dialog, Number(person.getAttribute('data-inbox-person')));
+      return;
+    }
+
+    const link = target.closest('[data-inbox-open]');
     if (!(link instanceof HTMLElement)) return;
-    const dialog = document.getElementById(link.getAttribute('data-dialog') ?? '');
-    if (!(dialog instanceof HTMLDialogElement)) return;
     event.preventDefault();
-    opener = link;
-    restoring = false;
-    for (const open of document.querySelectorAll('dialog.glance-dialog[open]')) {
-      if (open !== dialog) open.close();
+    open(link, Number(link.getAttribute('data-inbox-open') ?? 0));
+  });
+
+  // The search filters people by what they said as well as who they are.
+  document.addEventListener('input', (event) => {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement) || !input.matches('[data-inbox-search]')) return;
+    const dialog = input.closest('dialog');
+    if (!dialog) return;
+    const query = input.value.trim().toLowerCase();
+    let shown = 0;
+    for (const item of dialog.querySelectorAll('[data-inbox-person]')) {
+      const matches = !query || (item.getAttribute('data-inbox-haystack') ?? '').includes(query);
+      if (item.parentElement instanceof HTMLElement) item.parentElement.hidden = !matches;
+      if (matches) shown++;
     }
-    restoring = true;
-    if (!dialog.open) {
-      dialog.showModal();
-      const from = link.getBoundingClientRect();
-      const box = dialog.getBoundingClientRect();
-      if (box.width && box.height) dialog.style.transformOrigin = `${from.left + from.width / 2 - box.left}px ${from.top + from.height / 2 - box.top}px`;
-    }
+    const none = dialog.querySelector('[data-inbox-no-matches]');
+    if (none instanceof HTMLElement) none.hidden = shown > 0;
   });
 
   // close does not bubble; capture hears it from the dialog.
   document.addEventListener(
     'close',
     (event) => {
-      if (!restoring) return;
       const dialog = event.target;
-      if (!(dialog instanceof HTMLDialogElement) || !dialog.classList.contains('glance-dialog')) return;
+      if (!(dialog instanceof HTMLDialogElement) || !dialog.classList.contains('inbox-modal')) return;
       const back = opener;
       opener = null;
       if (back instanceof HTMLElement && back.isConnected) back.focus();

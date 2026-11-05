@@ -11,6 +11,7 @@ import { profilePages } from './pages/profiles.ts';
 import { propertyPages } from './pages/properties.ts';
 import { reimbursementPages } from './pages/reimbursement.ts';
 import { requestPages } from './pages/requests.ts';
+import { searchPages } from './pages/search.ts';
 import { settingsPages } from './pages/settings.ts';
 import { serverSmsPages } from './pages/server-sms.ts';
 import { serverWhatsappPages } from './pages/server-whatsapp.ts';
@@ -52,6 +53,7 @@ export function pmPages(o: { demo: boolean; connectors: ChannelConnectors } = { 
   if (o.connectors.whatsappNumber) pages.route('/server-whatsapp', serverWhatsappPages(o.connectors.whatsappNumber));
   pages.route('/settings', settingsPages(o));
   pages.route('/requests', requestPages());
+  pages.route('/search', searchPages());
   pages.route('/', dashboardPages());
   return pages;
 }
