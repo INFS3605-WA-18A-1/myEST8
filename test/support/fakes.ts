@@ -21,6 +21,8 @@ import type {
   Messenger,
   OutboundMessage,
   PlacesLookup,
+  PropertyPhoto,
+  PropertyPhotos,
   QuoteReader,
   TradeSuggester,
 } from '../../src/ports.ts';
@@ -231,6 +233,17 @@ export class FakeGeocoder implements Geocoder {
   locations = new Map<string, { lat: number; lng: number }>();
   async geocode(address: string) {
     return this.locations.get(address) ?? null;
+  }
+}
+
+/** Returns `photo`, or null when there is no imagery. An Error is thrown, as a failed lookup. */
+export class FakePropertyPhotos implements PropertyPhotos {
+  photo: PropertyPhoto | null | Error = null;
+  calls: { address: string; location: { lat: number; lng: number } | null }[] = [];
+  async lookup(place: { address: string; location: { lat: number; lng: number } | null }) {
+    this.calls.push(place);
+    if (this.photo instanceof Error) throw this.photo;
+    return this.photo;
   }
 }
 

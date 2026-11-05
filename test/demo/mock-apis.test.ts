@@ -2,6 +2,7 @@
 
 import { describe, expect, test } from 'vitest';
 import { createGooglePlaces } from '../../src/adapters/google-places.ts';
+import { createStreetView } from '../../src/adapters/street-view.ts';
 import { createImageMatcher } from '../../src/adapters/image-matcher.ts';
 import { createJevClassifier } from '../../src/adapters/jev.ts';
 import { createJevJobFitJudge } from '../../src/adapters/jev-job-fit.ts';
@@ -27,6 +28,7 @@ const quoteReader = createQuoteReader({
 // The mock needs no pacing between requests, so the geocoder doesn't wait.
 const geocoder = createNominatimGeocoder({ baseUrl: 'http://mock.local/nominatim', userAgent: 'myEST8 (test)', fetch, wait: async () => {} });
 const places = createGooglePlaces({ apiKey: 'demo', fetch, placesBaseUrl: 'http://mock.local/google/places' });
+const propertyPhotos = createStreetView({ apiKey: 'demo', fetch, baseUrl: 'http://mock.local/google/streetview' });
 
 type Item = { ref: string; summary: string };
 
@@ -413,5 +415,13 @@ describe('mock Google Places and Nominatim', () => {
   test('the Places API needs a field mask, as Google does', async () => {
     const response = await mockApis().request('http://mock.local/google/places/v1/places/demo-flow-bros');
     expect(response.status).toBe(400);
+  });
+
+  test('Street View returns a JPEG of a house, and no-imagery is none', async () => {
+    const photo = await propertyPhotos.lookup({ address: '12 King St, Newtown NSW 2042', location: { lat: -33.897, lng: 151.179 } });
+    expect(photo?.contentType).toBe('image/jpeg');
+    expect(photo!.content[0]).toBe(0xff);
+    expect(photo!.content[1]).toBe(0xd8);
+    expect(await propertyPhotos.lookup({ address: 'no-imagery', location: null })).toBeNull();
   });
 });

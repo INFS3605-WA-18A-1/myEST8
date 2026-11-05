@@ -1,23 +1,32 @@
 // The Agency's Properties: the list at /properties, adding one at /properties/new
 // (the form still posts to /setup/properties), and one Property's profile at
-// /properties/:id: its open Tickets first, then the Max Repair Cost, Property Owner
-// and Property Manager, its Tenants, nominated Tradies, frequent issues and closed
-// Tickets. The profile's pen edits its details in place (inlineEdit; without JavaScript
-// ?edit=details opens it) and posts to /properties/:id/details.
+// /properties/:id. The profile opens with the Property's photo (fetched when it was
+// added, or one the Property Manager uploaded), then its open Tickets, the Max Repair
+// Cost, Property Owner and Property Manager, its Tenants, nominated Tradies, frequent
+// issues and closed Tickets. The profile's pen edits its details in place (inlineEdit;
+// without JavaScript ?edit=details opens it) and posts to /properties/:id/details.
+// GET /properties/:id/photo serves the photo. POST replaces it, or restores the online one.
 
 import { Hono, type Context } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
 import { ActionError } from '../../shared.ts';
-import { cents, list as listOf, text } from '../forms.ts';
+import { cents, files, list as listOf, text, type FormValues } from '../forms.ts';
 import { icon } from '../icons.ts';
 import type { WebEnv } from '../env.ts';
 import { shellInfo } from '../shell.ts';
-import { alert, badge, button, contactLink, emptyState, entityLink, field, inlineEdit, flashFrom, formatAge, formatMoney, humanise, linkButton, page, rowLink, section, sectionHeader, statusBadge, table, ticketCell, urgencyBadge, type Html } from '../ui.ts';
+import { streamOf } from '../stream.ts';
+import { alert, badge, button, contactLink, emptyState, entityLink, field, inlineEdit, flashFrom, formatAge, formatMoney, humanise, linkButton, page, postButton, rowLink, section, sectionHeader, statusBadge, table, ticketCell, urgencyBadge, withFlash, type Html } from '../ui.ts';
 import { chosenId, importPanel, nominatedFrom, postedLocation, propertyFields, propertyPlaceFields, saveDetails, tradiePicker, valueOf, type DetailsEdit, type Errors, type Values } from './onboarding-forms.ts';
 
 type Overview = Awaited<ReturnType<PropertyManagerActions['propertyOverviews']>>[number];
 type PropertyView = Awaited<ReturnType<PropertyManagerActions['property']>>;
+
+/** A 10 MB photo, plus the multipart framing. */
+const PHOTO_UPLOAD_BYTES = 11 * 1024 * 1024;
+
+const photoBack = (id: number) => `/properties/${id}#photo`;
 
 /** Properties under /properties. */
 export function propertyPages() {
@@ -50,6 +59,64 @@ export function propertyPages() {
   });
 
   pages.get('/new', (c) => addPropertyPage(c));
+
+  pages.get('/:id{[0-9]+}/photo', async (c) => {
+    const id = Number(c.req.param('id'));
+    try {
+      const file = await c.var.actions.propertyPhoto(id);
+      if (!file) return c.text('Not found', 404);
+      return c.body(streamOf(file.content), 200, {
+        'content-type': file.contentType,
+        'content-disposition': 'inline',
+        'cache-control': 'private, max-age=86400',
+        'x-content-type-options': 'nosniff',
+        // Uploaded content is never run as a page on this origin.
+        'content-security-policy': "default-src 'none'; sandbox",
+        'referrer-policy': 'no-referrer',
+      });
+    } catch (error) {
+      if (error instanceof ActionError && error.code === 'not_found') return c.text('Not found', 404);
+      throw error;
+    }
+  });
+
+  pages.post(
+    '/:id{[0-9]+}/photo',
+    bodyLimit({
+      maxSize: PHOTO_UPLOAD_BYTES,
+      onError: (c) => c.redirect(withFlash(photoBack(Number(c.req.param('id'))), 'error', 'The photo must be under 10 MB.'), 303),
+    }),
+    async (c) => {
+      const id = Number(c.req.param('id'));
+      const form = (await c.req.parseBody({ all: true }).catch(() => ({}))) as FormValues;
+      const file = files(form, 'photo')[0];
+      if (!file) return c.redirect(withFlash(photoBack(id), 'error', 'Choose a photo to upload.'), 303);
+      try {
+        await c.var.actions.replacePropertyPhoto(id, {
+          filename: file.name,
+          contentType: file.type || 'application/octet-stream',
+          content: new Uint8Array(await file.arrayBuffer()),
+        });
+      } catch (error) {
+        if (error instanceof ActionError && error.code === 'not_found') return profilePage(c, id);
+        if (error instanceof ActionError) return c.redirect(withFlash(photoBack(id), 'error', error.message), 303);
+        throw error;
+      }
+      return c.redirect(withFlash(photoBack(id), 'ok', 'Photo replaced.'), 303);
+    },
+  );
+
+  pages.post('/:id{[0-9]+}/photo/online', async (c) => {
+    const id = Number(c.req.param('id'));
+    try {
+      await c.var.actions.useOnlinePropertyPhoto(id);
+    } catch (error) {
+      if (error instanceof ActionError && error.code === 'not_found') return profilePage(c, id);
+      if (error instanceof ActionError) return c.redirect(withFlash(photoBack(id), 'error', error.message), 303);
+      throw error;
+    }
+    return c.redirect(withFlash(photoBack(id), 'ok', 'Using the online photo.'), 303);
+  });
 
   pages.post('/:id{[0-9]+}/details', (c) => {
     const id = Number(c.req.param('id'));
@@ -121,7 +188,7 @@ async function profilePage(c: Context<WebEnv>, id: number, refused?: DetailsEdit
       shell: shellInfo(c),
       actions: linkButton('Back to Properties', '/properties', { variant: 'ghost', size: 'sm' }),
       body: html`
-        ${openTickets(property, now)} ${await facts(c, property, editing, refused)}
+        ${photoBlock(property)} ${openTickets(property, now)} ${await facts(c, property, editing, refused)}
         <div class="grid gap-6 lg:grid-cols-2">${tenants(property)}${nominated(property)}</div>
         ${frequent(property)} ${closedTickets(property, now)}
       `,
@@ -171,6 +238,34 @@ export async function addPropertyPage(c: Context<WebEnv>, refused?: AddPropertyR
     }),
     refused ? 400 : 200,
   );
+}
+
+/** The Property's photo, and the ways a Property Manager changes it. */
+function photoBlock(p: PropertyView): Html {
+  return section({
+    id: 'photo',
+    title: 'Photo',
+    body: html`<div class="property-photo">
+      ${p.photoUrl
+        ? html`<figure class="property-photo-frame">
+            <img src="${p.photoUrl}" alt="Photo of ${p.address}" width="640" height="400" />
+            <figcaption>${p.photoSource === 'manager' ? 'Your photo' : 'Online photo'}</figcaption>
+          </figure>`
+        : html`<p class="property-photo-empty">No photo of this Property yet.</p>`}
+      <form method="post" action="/properties/${p.propertyId}/photo" enctype="multipart/form-data" class="property-photo-replace">
+        ${field({
+          label: 'Choose a photo',
+          name: 'photo',
+          id: 'property-photo',
+          type: 'file',
+          accept: 'image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic',
+          hint: 'JPEG, PNG, WebP or HEIC, up to 10 MB.',
+        })}
+        <div class="property-photo-actions">${button('Replace photo', { variant: 'secondary', size: 'sm' })}</div>
+      </form>
+      ${p.photoSource === 'manager' ? html`<div class="property-photo-actions">${postButton(`/properties/${p.propertyId}/photo/online`, 'Use the online photo', { variant: 'ghost', size: 'sm' })}</div>` : ''}
+    </div>`,
+  });
 }
 
 function list(properties: Overview[]): Html {

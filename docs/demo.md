@@ -207,7 +207,7 @@ Each external API can be pointed at a real endpoint with env vars. Anything not 
 | `JEV_API_URL`, `JEV_API_KEY`          | The classifier (Jev)                                  |
 | `VISION_API_URL`, `VISION_API_KEY`    | The photo matcher                                     |
 | `QUOTES_API_URL`, `QUOTES_API_KEY`    | The quote reader                                      |
-| `GOOGLE_MAPS_API_KEY`                 | Google Places (New) only                              |
+| `GOOGLE_MAPS_API_KEY`                 | Google Places (New), and Street View Static for a Property's photo |
 | `NOMINATIM_URL`                       | Geocoding, which places addresses on the Dispatch map. Needs no key. Hosted mode and `npm start` default to `https://nominatim.openstreetmap.org` |
 | `PHOTON_URL`                          | Address suggestions as a Property's address is typed. Needs no key. Hosted mode and `npm start` default to `https://photon.komoot.io` |
 | `TWILIO_*`, `SENDGRID_*`, `FILE_LINK_SECRET`, `DEMO_SEND_TO` | Real SMS and email. See [Sending real messages](#sending-real-messages) |
