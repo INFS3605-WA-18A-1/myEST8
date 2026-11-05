@@ -85,6 +85,11 @@ function cached<K, V>(lookup: (key: K) => Promise<V>) {
   };
 }
 
+/** Where a signed-in Property Manager loads a Property's photo. `v` changes when the file does. */
+function propertyPhotoUrl(propertyId: number, fileId: number | null): string | null {
+  return fileId === null ? null : `/properties/${propertyId}/photo?v=${fileId}`;
+}
+
 export function createViews(ctx: Context) {
   const { clock, modules } = ctx;
   const { profiles, tickets, intake } = modules;
@@ -413,6 +418,10 @@ export function createViews(ctx: Context) {
       return {
         propertyId: property.id,
         address: property.address,
+        /** The photo, or null. `v` is the file id, so a replaced photo is a new address. */
+        photoUrl: propertyPhotoUrl(property.id, property.photoFileId),
+        /** `fetched` is the online photo; `manager` is the Property Manager's own. Null when there is no photo. */
+        photoSource: property.photoSource,
         maxRepairCostCents: property.maxRepairCostCents,
         propertyManager: (await profiles.propertyManager(property.propertyManagerId)).name,
         owner: { personId: owner.id, name: owner.name, mobile: owner.mobile, email: owner.email },
@@ -820,6 +829,8 @@ export function createViews(ctx: Context) {
             propertyId: property.id,
             address: property.address,
             suburb: property.suburb,
+            /** The Property's photo, or null. `v` is the file id, so a replaced photo is a new address. */
+            photoUrl: propertyPhotoUrl(property.id, property.photoFileId),
             openTickets: propertyTickets.length,
             worstUrgency: URGENCIES.find((urgency) => propertyTickets.some((ticket) => ticket.urgency === urgency)) ?? null,
             // What the open Tickets are about, High first, so the household shows what is wrong there.

@@ -2,7 +2,7 @@ import type { Db } from './db.ts';
 import type { Files } from './files.ts';
 import type { Intake } from './intake.ts';
 import type { Notifications } from './notifications.ts';
-import type { Clock, Classifier, Composer, DetailExtractor, FetchMedia, Geocoder, AddressSuggester, ImageMatcher, JobFitJudge, Messenger, PlacesLookup, QuoteReader, RequestJudge, Summariser, TradeSuggester } from './ports.ts';
+import type { Clock, Classifier, Composer, DetailExtractor, FetchMedia, Geocoder, AddressSuggester, ImageMatcher, JobFitJudge, Messenger, PlacesLookup, PropertyPhotos, QuoteReader, RequestJudge, Summariser, TradeSuggester } from './ports.ts';
 import type { Profiles } from './profiles.ts';
 import type { Quotes } from './quotes.ts';
 import type { Scheduling } from './scheduling.ts';
@@ -28,6 +28,8 @@ export interface Ports {
   detailExtractor: DetailExtractor | null;
   places: PlacesLookup;
   geocoder: Geocoder;
+  /** A photo of a Property from online imagery. Null from the lookup means there is none. */
+  propertyPhotos: PropertyPhotos;
   /** Street addresses to offer while a Property's address is typed. */
   addressSuggester: AddressSuggester;
   tradeSuggester: TradeSuggester;

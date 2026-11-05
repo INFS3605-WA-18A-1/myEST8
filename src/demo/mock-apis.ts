@@ -2,6 +2,8 @@
 // runs offline through the real adapters. Each speaks the same wire format as
 // the service it stands in for; the answers come from small deterministic rules.
 
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { Hono, type Context } from 'hono';
 import { wallClock, zonedInstant } from '../zoned-time.ts';
 import type { Composer, DetailExtractor, ExtractedDetails, Summariser } from '../ports.ts';
@@ -75,10 +77,21 @@ export const DEMO_PLACES: readonly DemoListing[] = [
   },
 ];
 
+/** Street photos the demo serves as a Property's online photo, picked from the address so the same place stays the same. */
+const HOUSE_PHOTOS = ['king-street.jpg', 'newtown-terraces.jpg', 'ultimo-terrace.jpg', 'wattle-street.jpg'];
+
+function housePhoto(location: string): Buffer {
+  let n = 0;
+  for (const ch of location) n = (n + ch.charCodeAt(0)) % HOUSE_PHOTOS.length;
+  const file = fileURLToPath(new URL(`../web/static/landing/${HOUSE_PHOTOS[n]}`, import.meta.url));
+  return readFileSync(file);
+}
+
 /**
  * Dummy versions of every external API the app calls, at these paths:
  * /jev/v1/systemone (classifier choice questions, and noul questions for a listing's Trades), /vision/v1/image-match, /quotes/v1/quote-read (also /quotes/v1/read),
  * /google/places/v1/places:searchText, /google/places/v1/places/:id,
+ * /google/streetview/metadata, /google/streetview,
  * /nominatim/search, /photon/api/.
  * Wire the real adapters to it with `mockFetch()` and baseUrls under http://mock.local.
  */
@@ -150,6 +163,19 @@ export function mockApis() {
     const place = DEMO_PLACES.find((p) => p.placeId === c.req.param('id'));
     if (!place) return googleError(c, 404, 'NOT_FOUND', `Place '${c.req.param('id')}' not found.`);
     return c.json(masked(googlePlace(place), fields, ''));
+  });
+
+  // Street View: metadata first, then a JPEG of a house. "no-imagery" has none.
+  app.get('/google/streetview/metadata', (c) => {
+    const location = c.req.query('location') ?? '';
+    if (!location.trim()) return c.json({ status: 'INVALID_REQUEST' });
+    if (location === 'no-imagery') return c.json({ status: 'ZERO_RESULTS' });
+    return c.json({ status: 'OK', copyright: '© Google' });
+  });
+  app.get('/google/streetview', (c) => {
+    const location = c.req.query('location') ?? '';
+    if (!location.trim() || location === 'no-imagery') return c.json({ status: 'ZERO_RESULTS' }, 404);
+    return new Response(housePhoto(location), { status: 200, headers: { 'content-type': 'image/jpeg' } });
   });
 
   // Nominatim: the demo addresses' points. Photon: the same addresses, as suggestions.

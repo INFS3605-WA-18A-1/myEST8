@@ -11,6 +11,7 @@ import { createClaudeComposer } from '../adapters/claude-composer.ts';
 import { createClaudeExtractor } from '../adapters/claude-extractor.ts';
 import { createClaudeSummariser } from '../adapters/claude-summariser.ts';
 import { createGooglePlaces } from '../adapters/google-places.ts';
+import { createStreetView } from '../adapters/street-view.ts';
 import { createImageMatcher } from '../adapters/image-matcher.ts';
 import { createJevClassifier } from '../adapters/jev.ts';
 import { createJevJobFitJudge } from '../adapters/jev-job-fit.ts';
@@ -47,7 +48,7 @@ const MOCK = 'http://mock.local';
 export type Env = Record<string, string | undefined>;
 
 /** Which external APIs are real (set by env vars) and which are the in-process mocks. */
-export type ApiChoice = Record<'classifier' | 'tradeSuggester' | 'jobFitJudge' | 'imageMatcher' | 'quoteReader' | 'places' | 'geocoder' | 'addressSuggester' | 'messenger', 'mock' | 'real'> & {
+export type ApiChoice = Record<'classifier' | 'tradeSuggester' | 'jobFitJudge' | 'imageMatcher' | 'quoteReader' | 'places' | 'propertyPhotos' | 'geocoder' | 'addressSuggester' | 'messenger', 'mock' | 'real'> & {
   /** `off` is a hosted app with no Jev URL: the profile read stays on code-only signals. */
   requestJudge: 'mock' | 'real' | 'off';
 };
@@ -64,6 +65,7 @@ export function providerLogName(name: string, env: Env): string {
   if (name === 'tradeSuggester') return 'Trade suggester';
   if (name === 'jobFitJudge') return 'job-fit judge';
   if (name === 'requestJudge') return 'request judge';
+  if (name === 'propertyPhotos') return 'property photos';
   return name;
 }
 
@@ -94,6 +96,8 @@ function hostedProviders(env: Env): HostedProvider[] {
     // And the request judge behind a Tenant's profile read (ADR 0018). Without it the read is code-only.
     { provider: providerLogName('requestJudge', env), required: false, missing: unset('JEV_API_URL') },
     { provider: 'places', required: true, missing: unset('GOOGLE_MAPS_API_KEY') },
+    // The same key, for a Property's photo (Street View Static). Not required: with no key the mock photo is used.
+    { provider: 'property photos', required: false, missing: unset('GOOGLE_MAPS_API_KEY') },
     { provider: 'geocoder', required: false, missing: [] },
     { provider: 'address suggestions', required: false, missing: [] },
     { provider: 'file storage', required: true, missing: unset('SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY') },
@@ -297,6 +301,7 @@ export async function createDemo<Seeded extends boolean = true>(
   const photonUrl = env.PHOTON_URL?.trim() || (hosted || options.live ? PUBLIC_PHOTON_URL : undefined);
   const photon = pick(photonUrl, `${MOCK}/photon`);
   const google = env.GOOGLE_MAPS_API_KEY ? { apiKey: env.GOOGLE_MAPS_API_KEY, fetch } : { apiKey: 'demo', fetch: mockFetch, placesBaseUrl: `${MOCK}/google/places` };
+  const streetView = env.GOOGLE_MAPS_API_KEY ? { apiKey: env.GOOGLE_MAPS_API_KEY, fetch } : { apiKey: 'demo', fetch: mockFetch, baseUrl: `${MOCK}/google/streetview` };
   const apis: ApiChoice = {
     classifier: anthropicKey || env.JEV_API_URL ? 'real' : 'mock',
     tradeSuggester: env.JEV_API_URL?.trim() ? 'real' : 'mock',
@@ -305,6 +310,7 @@ export async function createDemo<Seeded extends boolean = true>(
     imageMatcher: env.VISION_API_URL ? 'real' : 'mock',
     quoteReader: env.QUOTES_API_URL ? 'real' : 'mock',
     places: env.GOOGLE_MAPS_API_KEY ? 'real' : 'mock',
+    propertyPhotos: env.GOOGLE_MAPS_API_KEY ? 'real' : 'mock',
     geocoder: nominatimUrl ? 'real' : 'mock',
     addressSuggester: photonUrl ? 'real' : 'mock',
     messenger: env.TWILIO_ACCOUNT_SID || env.SENDGRID_API_KEY || env.RESEND_API_KEY || env.GOOGLE_CLIENT_ID || env.META_WHATSAPP_PHONE_NUMBER_ID || env.TEXTBEE_API_KEY ? 'real' : 'mock',
@@ -363,6 +369,7 @@ export async function createDemo<Seeded extends boolean = true>(
     imageMatcher: createImageMatcher({ ...vision, apiKey: env.VISION_API_KEY ?? 'demo' }),
     quoteReader: createQuoteReader({ ...quotes, apiKey: env.QUOTES_API_KEY ?? 'demo', clock, timeZone }),
     places: createGooglePlaces(google),
+    propertyPhotos: createStreetView(streetView),
     // The mock needs no pacing, but a real Nominatim gets at most a request a second.
     geocoder: createNominatimGeocoder({ ...nominatim, userAgent: `myEST8 (${baseUrl})`, ...(nominatimUrl ? {} : { wait: async () => {} }) }),
     addressSuggester: createPhotonAddressSuggester({ ...photon, userAgent: `myEST8 (${baseUrl})` }),
