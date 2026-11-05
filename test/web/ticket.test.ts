@@ -168,7 +168,7 @@ describe('the Ticket view', () => {
     expect(text).toContain('myEST8 4.0 (1) from 1 rating Google 4.8 (120) from 120 reviews Trade only');
     expect(text).toContain('Reported by the Tenant');
     expect(text).toContain('Confirmed as a Ticket');
-    expect(text).toContain(`From ${TOM}`);
+    expect(text).toContain('From Tom Tran (Tenant)');
   });
 
   test('an unknown Ticket is not found', async () => {
@@ -455,7 +455,10 @@ describe('Work Orders', () => {
     const rated = await submit(formPosting(done.html, /\/rate$/), { score: 4 });
 
     expect(rated.ok).toBe("Pete's Plumbing rated 4 out of 5");
-    expect(rated.page.text).toContain("You rated Pete's Plumbing 4 out of 5.");
+    // The Job's tiles carry both ratings, so the page doesn't repeat the words.
+    expect(rated.page.text).toContain('Your rating');
+    expect(rated.page.text).toContain('4 out of 5');
+    expect(rated.page.text).not.toContain("You rated Pete's Plumbing");
   });
 });
 

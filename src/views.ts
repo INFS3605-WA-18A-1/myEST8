@@ -99,15 +99,20 @@ export function createViews(ctx: Context) {
     return { propertyAddress: property.address, propertyManager: (await profiles.propertyManager(property.propertyManagerId)).name };
   };
 
-  const issueDetails = async (issue: Issue) => ({
-    description: issue.description,
-    answers: issue.answers,
-    photos: (await tickets.photos(issue.id)).map(({ photoId, fileId, metadata, reasons }) => ({ photoId, fileId, metadata, reasons })),
-    imageMatch: issue.imageMatch,
-    noPhotos: issue.noPhotos,
-    tenantId: issue.tenantId,
-    tenantName: (await profiles.person(issue.tenantId)).name,
-  });
+  const issueDetails = async (issue: Issue) => {
+    const tenant = await profiles.person(issue.tenantId);
+    return {
+      description: issue.description,
+      answers: issue.answers,
+      photos: (await tickets.photos(issue.id)).map(({ photoId, fileId, metadata, reasons }) => ({ photoId, fileId, metadata, reasons })),
+      imageMatch: issue.imageMatch,
+      noPhotos: issue.noPhotos,
+      tenantId: issue.tenantId,
+      tenantName: tenant.name,
+      tenantMobile: tenant.mobile,
+      tenantEmail: tenant.email,
+    };
+  };
 
   /**
    * Tickets as a list shows them, in the order given. Their jobs, issues (with unread
@@ -1041,7 +1046,7 @@ export function createViews(ctx: Context) {
         summaryBy: issue.summaryBy,
         propertyId: property.id,
         maxRepairCostCents: property.maxRepairCostCents,
-        owner: { personId: owner.id, name: owner.name },
+        owner: { personId: owner.id, name: owner.name, mobile: owner.mobile, email: owner.email },
         buildingManager: buildingManager ? { personId: buildingManager.id, name: buildingManager.name } : null,
         frequentIssues: await profiles.frequentIssues(property.id),
         repairCostCents: await modules.quotes.repairCost(ticket.id),

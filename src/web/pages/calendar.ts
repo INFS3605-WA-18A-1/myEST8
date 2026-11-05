@@ -4,7 +4,7 @@
 //
 // The page is one white card. Beside the title sit the Tradie, Property and Status
 // filters; Mine / All and Share are in the page header. On the left (a Paper rail) are a
-// small month, Showing and Visits, the Visit types boxes and the Tradies; in the middle
+// small month, the Visit types boxes and the Tradies; in the middle
 // the toolbar (Today, Day / Week / Month, the period and its arrows) over the grid; on
 // the right the Picked visit panel, which app.js fills when a visit is clicked. Week is
 // an hour-by-hour grid, Monday to Sunday, each day a small weekday over a large date. A
@@ -126,9 +126,6 @@ export function calendarPages() {
           <div class="schedule-shell" data-schedule-shell>
             <div class="schedule-rail">
               ${miniMonth(monthFirst, period, visitDays, ctx)}
-              <dl class="schedule-stats">
-                <div class="schedule-stat"><dt>Visits</dt><dd class="num">${bookings.length} booked</dd></div>
-              </dl>
               ${visitTypes()}
               ${tradieList(directory, every, bookings, period, today, ctx)}
             </div>
@@ -596,7 +593,8 @@ function scheduleToolbar(p: Period, filter: Filter, focus: string, q: Query): Ht
 /**
  * Beside the title: Tradie, Property and Status. A GET form that keeps the view, the
  * date and Mine / All, and applies when one changes (app.js); the Apply button is for
- * a page without it.
+ * a page without it. On a phone the three selects fold into one Filter disclosure, so
+ * the header keeps a single row for Filter, Mine / All and Share.
  */
 function filterForm(p: Period, filter: Filter, q: Query, tradies: DirectoryTradie[], properties: [number, string][]): Html {
   const select = (name: string, label: string, all: string, options: [string | number, string][], value: string | number | null) => html`<label class="schedule-filter">
@@ -608,16 +606,30 @@ function filterForm(p: Period, filter: Filter, q: Query, tradies: DirectoryTradi
   </label>`;
   const names: [number, string][] = tradies.map((t) => [t.tradieId, t.businessName ?? t.name]);
   names.sort((a, b) => a[1].localeCompare(b[1], 'en'));
-  return html`<form method="get" action="/calendar" class="schedule-filters" data-autosubmit role="search" aria-label="Filter the schedule">
-    <input type="hidden" name="view" value="${p.view}" />
+  const selects = html`${select('tradie', 'Tradie', 'All Tradies', names, q.tradie)}${select('property', 'Property', 'All Properties', properties, q.property)}${select('status', 'Status', 'Any status', STATUSES.map(([v, text]) => [v, text]), q.status)}`;
+  const active = [q.tradie, q.property, q.status].filter(Boolean).length;
+  const clear = q.tradie || q.property || q.status ? html`<a class="link schedule-clear" href="${hrefFor(p.view, p.first, filter)}">Clear</a>` : '';
+  const hidden = html`<input type="hidden" name="view" value="${p.view}" />
     <input type="hidden" name="date" value="${p.first}" />
-    ${filter === 'all' ? html`<input type="hidden" name="filter" value="all" />` : ''}
-    ${select('tradie', 'Tradie', 'All Tradies', names, q.tradie)}
-    ${select('property', 'Property', 'All Properties', properties, q.property)}
-    ${select('status', 'Status', 'Any status', STATUSES.map(([v, text]) => [v, text]), q.status)}
-    <button type="submit" class="btn btn-sm filter-bar-apply">Apply</button>
-    ${q.tradie || q.property || q.status ? html`<a class="link schedule-clear" href="${hrefFor(p.view, p.first, filter)}">Clear</a>` : ''}
-  </form>`;
+    ${filter === 'all' ? html`<input type="hidden" name="filter" value="all" />` : ''}`;
+  return html`<form method="get" action="/calendar" class="schedule-filters is-desk" data-autosubmit role="search" aria-label="Filter the schedule">
+      ${hidden}${selects}
+      <button type="submit" class="btn btn-sm filter-bar-apply">Apply</button>
+      ${clear}
+    </form>
+    <form method="get" action="/calendar" class="schedule-filters is-phone" data-autosubmit role="search" aria-label="Filter the schedule">
+      ${hidden}
+      <details class="schedule-filter-menu">
+        <summary class="btn btn-sm btn-secondary schedule-filter-summary">
+          ${icon('funnel', { size: 'size-4' })}<span>Filter</span>${active ? html`<span class="schedule-filter-count" aria-hidden="true">${active}</span>` : ''}<span class="schedule-filter-caret">${icon('caret-down', { size: 'size-3.5' })}</span>
+        </summary>
+        <div class="schedule-filter-body">
+          ${selects}
+          <button type="submit" class="btn btn-sm filter-bar-apply">Apply</button>
+          ${clear}
+        </div>
+      </details>
+    </form>`;
 }
 
 /**
@@ -714,12 +726,12 @@ function tradieList(tradies: DirectoryTradie[], every: Booking[], shown: Booking
             return html`<li><a class="schedule-tradie${on ? ' is-on' : ''}" href="${hrefFor(p.view, p.first, ctx.filter, { ...ctx.q, tradie: on ? null : e.id })}" ${on ? html`aria-current="true"` : ''}>
               <span class="tradie-initials" aria-hidden="true">${initials(e.name)}</span>
               <span class="schedule-tradie-text"><span class="schedule-tradie-name">${e.name}</span><span class="schedule-tradie-sub">${plural(e.count, 'visit', 'visits')} ${when}</span></span>
-              ${e.free ? html`<span class="schedule-free-tag">Free</span>` : ''}
+              ${e.free ? html`<span class="schedule-free-tag">Free today</span>` : ''}
             </a></li>`;
           })}
         </ul>`
       : html`<p class="schedule-free-note">No visits ${when}.</p>`}
-    ${tradies.length ? (todayOn ? html`<p class="schedule-free-note">${plural(free, 'Tradie', 'Tradies')} free today</p>` : html`<p class="schedule-free-note">${plural(tradies.length, 'Tradie', 'Tradies')} in the Agency</p>`) : html`<p class="schedule-free-note">No Tradies yet. <a class="link" href="/tradies/new">Add a Tradie</a></p>`}
+    ${tradies.length ? (todayOn ? html`<p class="schedule-free-note">${free === tradies.length ? 'Every Tradie is free today' : `${plural(free, 'Tradie', 'Tradies')} free today`}</p>` : html`<p class="schedule-free-note">${plural(tradies.length, 'Tradie', 'Tradies')} in the Agency</p>`) : html`<p class="schedule-free-note">No Tradies yet. <a class="link" href="/tradies/new">Add a Tradie</a></p>`}
   </section>`;
 }
 

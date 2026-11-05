@@ -1816,17 +1816,18 @@ onContent((root) => {
     if (selected) selectTab(selected);
   }
   for (const msgs of root.querySelectorAll('[data-msgs]')) {
-    const body = msgs.querySelector('.section-body');
+    const body = msgs.querySelector('.message-scroll') ?? msgs.querySelector('.section-body');
     const toggle = msgs.querySelector('[data-msgs-toggle]');
     if (!body || !toggle) continue;
     // The short view starts at the top of the newest message, not halfway through it:
-    // a bubble taller than the frame reads from its first line.
+    // a bubble taller than the frame reads from its first line. The 28px keeps the
+    // bubble's header clear of the top fade, where the text would fall below 4.5:1.
     const newest = () => {
       const bubbles = body.querySelectorAll('.chat');
       const last = bubbles[bubbles.length - 1];
       if (!last) return;
       const top = last.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop;
-      body.scrollTop = Math.max(0, top - 4);
+      body.scrollTop = Math.max(0, top - 28);
     };
     newest();
     toggle.hidden = body.scrollHeight <= body.clientHeight + 4;
@@ -1844,6 +1845,13 @@ onContent((root) => {
     slider.value = '0';
     slider.setAttribute('aria-label', 'Scroll the Timeline sideways');
     board.after(slider);
+    // Open on the stage the Job is at (or the last one when it is done): at 1440 the
+    // later columns would otherwise sit off-screen with no sign that they are there.
+    const current = board.querySelector('[data-current]');
+    if (current) {
+      const left = current.getBoundingClientRect().left - board.getBoundingClientRect().left + board.scrollLeft;
+      board.scrollLeft = Math.max(0, left - 8);
+    }
     const sync = () => {
       const max = board.scrollWidth - board.clientWidth;
       slider.hidden = max <= 4;
@@ -1903,10 +1911,10 @@ document.addEventListener('click', (event) => {
     toggle.setAttribute('aria-expanded', String(Boolean(open)));
     if (!open) {
       // Back to the short view, starting at the newest message's first line.
-      const body = msgs.querySelector('.section-body');
+      const body = msgs.querySelector('.message-scroll') ?? msgs.querySelector('.section-body');
       const bubbles = body?.querySelectorAll('.chat') ?? [];
       const last = bubbles[bubbles.length - 1];
-      if (body && last) body.scrollTop = Math.max(0, last.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop - 4);
+      if (body && last) body.scrollTop = Math.max(0, last.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop - 28);
     }
     toggle.textContent = open ? 'Show fewer messages' : 'Show the whole conversation';
   }

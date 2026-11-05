@@ -209,7 +209,7 @@ export function channelGuide(type: 'sms' | 'email', _origin: string, o: { open?:
   switch (type) {
     case 'sms':
       return html`<details class="text-sm" ${open}>
-          <summary>How SMS verification works</summary>
+          <summary class="setup-disclosure">${icon('caret-right', { size: 'size-4' })}<span>How SMS verification works</span></summary>
           <ol class="mt-2 ml-5 list-decimal space-y-1">
             <li>Enter the mobile number the Agency uses for SMS.</li>
             <li>myEST8 texts a 6-digit code to that number. The code lasts 10 minutes.</li>
@@ -218,7 +218,7 @@ export function channelGuide(type: 'sms' | 'email', _origin: string, o: { open?:
         </details>`;
     case 'email':
       return html`<details class="text-sm" ${open}>
-          <summary>Forward mail to myEST8</summary>
+          <summary class="setup-disclosure">${icon('caret-right', { size: 'size-4' })}<span>Forward mail to myEST8</span></summary>
           <p class="mt-2">myEST8 gives the Agency an address on its inbound domain. Forward the Agency inbox to that address. Resend receives the mail and turns it into Maintenance Requests.</p>
           <ol class="mt-2 ml-5 list-decimal space-y-1">
             <li>Copy the inbound address shown here.</li>
@@ -528,7 +528,7 @@ function listingCard(listing: ListingDetails): Html {
   const site = listing.website && /^https?:\/\//i.test(listing.website) ? html`<a class="link" href="${listing.website}" rel="noopener noreferrer">${listing.website}</a>` : null;
   const trades = listing.tradesSuggested
     ? listing.suggestedTrades.length
-      ? html`<span class="flex flex-wrap gap-1">${listing.suggestedTrades.map((trade) => badge(humanise(trade), 'info'))}</span>`
+      ? html`<span class="flex flex-wrap gap-1">${listing.suggestedTrades.map((trade) => badge(humanise(trade)))}</span>`
       : 'None'
     : "Jev couldn't suggest any right now";
   const facts: [string, Html | string][] = [];
@@ -707,7 +707,7 @@ export async function tradiesTable(actions: PropertyManagerActions, tradies: Per
     return [
       rowLink(t.businessName ?? t.name, `/tradies/${t.id}`),
       html`${t.name}`,
-      html`${t.trades.map((trade) => html`${badge(humanise(trade), 'info')} `)}`,
+      html`${t.trades.map((trade) => html`${badge(humanise(trade))} `)}`,
       ratingChip({ source: 'myEST8', rating: average, count, named: false }),
       ratingChip({ source: 'Google', rating: t.googleRating, count: t.googleReviewCount ?? 0, onGoogle: !!t.googlePlaceId, named: false }),
     ];
