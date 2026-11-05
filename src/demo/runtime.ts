@@ -411,10 +411,10 @@ export async function createDemo<Seeded extends boolean = true>(
   }
 
   // UAT only (src/demo/uat.ts): hosted, every Agency that signs up starts with the demo's people and work in it.
-  // UAT_SEED_SIGNUPS=1 does the same on a local start. The seed takes a minute or so on production, so it runs
-  // after the sign-up's response, queued with the worker: api/index.ts keeps the function going for that after
-  // every POST. A seed that fails is logged; the sign-up still stands.
-  if (hosted || env.UAT_SEED_SIGNUPS === '1') {
+  // UAT_SEED_SIGNUPS=1 does the same on a local start, and =0 turns it off hosted. The seed takes a minute or so
+  // on production, so it runs after the sign-up's response, queued with the worker: api/index.ts keeps the function
+  // going for that after every POST. A seed that fails is logged; the sign-up still stands.
+  if (hosted ? env.UAT_SEED_SIGNUPS !== '0' : env.UAT_SEED_SIGNUPS === '1') {
     const signUp = app.signUp;
     const log = options.log ?? ((line: string) => console.log(line));
     app.signUp = async (input) => {
