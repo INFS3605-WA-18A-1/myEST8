@@ -5,8 +5,8 @@
   "rewrites": [{ "source": "/(.*)", "destination": "/api" }],
   "functions": {
     "api/index.ts": {
-      "maxDuration": 60,
-      "includeFiles": "{src/web/static/**,node_modules/daisyui/**,node_modules/maplibre-gl/{package.json,dist/maplibre-gl{,-worker}.mjs,dist/maplibre-gl.css},node_modules/@fontsource-variable/{bricolage-grotesque,public-sans}/**,node_modules/@phosphor-icons/core/assets/**}"
+      "maxDuration": 300,
+      "includeFiles": "{src/web/static/**,src/demo/sample-photos/**,node_modules/daisyui/**,node_modules/maplibre-gl/{package.json,dist/maplibre-gl{,-worker}.mjs,dist/maplibre-gl.css},node_modules/@fontsource-variable/{bricolage-grotesque,public-sans}/**,node_modules/@phosphor-icons/core/assets/**}"
     }
   },
   "crons": [{ "path": "/api/cron/worker", "schedule": "0 6 * * *" }]
