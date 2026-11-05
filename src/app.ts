@@ -9,6 +9,7 @@ import { createNotifications } from './notifications.ts';
 import { createOnboarding } from './onboarding.ts';
 import { UndeliverableError, type BlobStore, type ChannelType, type Clock, type InboundMessage } from './ports.ts';
 import { createProfiles, type SignUp } from './profiles.ts';
+import { registerPropertyPhotos, replacePropertyPhoto, useOnlinePropertyPhoto } from './property-photos.ts';
 import { createQuotes, type EstimateInput, type FirmQuoteInput } from './quotes.ts';
 import { createScheduling } from './scheduling.ts';
 import type { SmsNumbers } from './sms-numbers.ts';
@@ -57,6 +58,7 @@ export function createApp(
       detailExtractor: deps.detailExtractor,
       places: deps.places,
       geocoder: deps.geocoder,
+      propertyPhotos: deps.propertyPhotos,
       addressSuggester: deps.addressSuggester,
       tradeSuggester: deps.tradeSuggester,
       jobFitJudge: deps.jobFitJudge,
@@ -66,6 +68,7 @@ export function createApp(
     modules,
   };
   modules.profiles = createProfiles(ctx);
+  registerPropertyPhotos(ctx);
   modules.notifications = createNotifications(ctx);
   modules.tickets = createTickets(ctx);
   modules.intake = createIntake(ctx);
@@ -219,6 +222,10 @@ export function createApp(
         /** A photo, receipt or PDF Quote stored for the Agency, or null. */
         file: (fileId: number) => files.getInAgency(agencyId, fileId),
         dashboard: ({ filter = 'mine' }: { filter?: 'mine' | 'all' } = {}) => views.dashboard(agencyId, propertyManagerId, filter),
+        /** The header search's Properties and Tickets matching what was typed, capped at eight. */
+        searchSuggest: (query: string) => views.searchSuggest(agencyId, query),
+        /** The open inbox as conversations, each with its full message history. */
+        inboxThreads: () => views.inboxThreads(agencyId),
         /** The Maintenance Requests waiting for review: the Property Manager's own (the default) or all of the Agency's, optionally by Urgency, Trade and Property. */
         requests: (o: Partial<ListOptions> = {}) => views.requests(agencyId, propertyManagerId, { ...o, filter: o.filter ?? 'mine' }),
         /** One Maintenance Request waiting for review, or null. */
@@ -367,6 +374,15 @@ export function createApp(
         addProperty: (input: Parameters<typeof onboarding.addProperty>[1]) => onboarding.addProperty(agencyId, input),
         /** Changes a Property's address, suburb, Max Repair Cost, Property Owner, Property Manager, Building Manager and Nominated Tradies. A new address is geocoded again (a failing lookup leaves no pin for Look up missing addresses). Refuses field by field, as adding does. */
         editProperty: (propertyId: number, input: Parameters<typeof onboarding.editProperty>[2]) => onboarding.editProperty(agencyId, propertyId, input),
+        /** The Property's photo bytes, or null when it has none. Refuses a Property outside the Agency. */
+        propertyPhoto: async (propertyId: number) => {
+          const property = await profiles.propertyInAgency(agencyId, propertyId);
+          return property.photoFileId === null ? null : files.getInAgency(agencyId, property.photoFileId);
+        },
+        /** Stores a Property Manager's photo in place of the current one. A later fetch will not replace it. */
+        replacePropertyPhoto: (propertyId: number, upload: Upload) => replacePropertyPhoto(ctx, agencyId, propertyId, upload),
+        /** Fetches the online photo again and stores it in place of the Property Manager's. */
+        useOnlinePropertyPhoto: (propertyId: number) => useOnlinePropertyPhoto(ctx, agencyId, propertyId),
         findGoogleListings: (query: string) => onboarding.findGoogleListings(query),
         /** A Google listing's details and the Trades Jev suggests for it, to fill in the Tradie form. Stores nothing. */
         googleListing: (placeId: string) => onboarding.googleListing(placeId),

@@ -206,7 +206,12 @@ test('a request with one photo has no arrows and no counter', async ({ page }) =
 });
 
 const rect = async (locator: Locator) => (await locator.boundingBox())!;
-const overlap = (a: { x: number; y: number; width: number; height: number }, b: typeof a) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+/** Shared area of two boxes. A fraction of a pixel is subpixel rounding, not a control sitting on the photo. */
+const overlap = (a: { x: number; y: number; width: number; height: number }, b: typeof a) => {
+  const width = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+  const height = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
+  return width > 1 && height > 1;
+};
 
 for (const [width, height] of [[1366, 768], [390, 844]]) {
   test(`at ${width} px the viewer fills the screen, its controls fit and clear the photo, and nothing scrolls`, async ({ page }) => {

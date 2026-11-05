@@ -46,6 +46,9 @@ export interface Person {
   lastInbound: { channelType: ChannelType; address: string; at: string } | null;
 }
 
+/** Who chose the photo currently stored for a Property. */
+export type PropertyPhotoSource = 'fetched' | 'manager';
+
 export interface Property {
   id: number;
   agencyId: number;
@@ -57,6 +60,10 @@ export interface Property {
   maxRepairCostCents: number;
   buildingManagerId: number | null;
   nominatedTradieIds: number[];
+  /** The stored photo, or null when the Property has none. */
+  photoFileId: number | null;
+  /** Set together with `photoFileId`: the online photo, or the Property Manager's own. */
+  photoSource: PropertyPhotoSource | null;
 }
 
 /** One of the Agency's channels: the address Tenants, Tradies and Property Owners send to, and when it last passed a test message. */
@@ -102,7 +109,7 @@ export type NewPerson = {
   googlePlaceId?: string;
 };
 
-export type NewProperty = Omit<Property, 'id' | 'agencyId' | 'location' | 'buildingManagerId'> & {
+export type NewProperty = Omit<Property, 'id' | 'agencyId' | 'location' | 'buildingManagerId' | 'photoFileId' | 'photoSource'> & {
   buildingManagerId?: number | null;
   /** Where the address is on the map, when already looked up (so addProperty can run inside a transaction). A point outside Australia is ignored and the address is looked up. Null means the lookup already found nothing. */
   location?: { lat: number; lng: number } | null;
@@ -146,6 +153,8 @@ type PropertyRow = {
   owner_id: number;
   max_repair_cost_cents: number;
   building_manager_id: number | null;
+  photo_file_id: number | null;
+  photo_source: PropertyPhotoSource | null;
 };
 
 /** Compared against when an email is unknown; no password matches it. */
@@ -181,7 +190,7 @@ function passwordMatches(password: string, stored: string) {
 }
 
 /** The Agency, its Property Managers, Properties, Tenants, Property Owners, Tradies and Building Managers. */
-export function createProfiles({ db, clock, ports, modules }: Context) {
+export function createProfiles({ db, clock, ports, worker, modules }: Context) {
 
   function toPerson(row: PersonRow): Person {
     return {
@@ -223,6 +232,8 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
       maxRepairCostCents: row.max_repair_cost_cents,
       buildingManagerId: row.building_manager_id,
       nominatedTradieIds: (await nominatedTradies(row.agency_id)).filter((r) => r.property_id === row.id).map((r) => r.tradie_id),
+      photoFileId: row.photo_file_id,
+      photoSource: row.photo_source,
     };
   }
 
@@ -671,8 +682,8 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
 
     async addProperty(agencyId: number, input: NewProperty) {
       const location = await locate(input);
-      return transaction(db, async () => {
-        const id = await run(
+      const id = await transaction(db, async () => {
+        const propertyId = await run(
           db,
           `INSERT INTO properties (agency_id, property_manager_id, address, suburb, lat, lng, owner_id, max_repair_cost_cents, building_manager_id)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
@@ -687,10 +698,13 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
           input.buildingManagerId ?? null,
         );
         for (const tradieId of input.nominatedTradieIds) {
-          await run(db, 'INSERT INTO nominated_tradies (property_id, tradie_id) VALUES (?, ?)', id, tradieId);
+          await run(db, 'INSERT INTO nominated_tradies (property_id, tradie_id) VALUES (?, ?)', propertyId, tradieId);
         }
-        return id;
+        return propertyId;
       });
+      // After the row is committed, so the task can see it. The fetch never blocks adding.
+      await worker.schedule('properties.fetch_photo', { propertyId: id });
+      return id;
     },
 
     /**
@@ -779,8 +793,16 @@ export function createProfiles({ db, clock, ports, modules }: Context) {
       let placed = 0;
       for (const { id, location } of propertyPoints) {
         if (!location) continue;
-        await run(db, 'UPDATE properties SET lat = ?, lng = ? WHERE id = ?', location.lat, location.lng, id);
+        const row = await one<{ photo_file_id: number | null }>(
+          db,
+          'UPDATE properties SET lat = ?, lng = ? WHERE id = ? RETURNING photo_file_id',
+          location.lat,
+          location.lng,
+          id,
+        );
         placed++;
+        // A Property that still has no photo can now be looked up by its point. One already fetched, or a Property Manager's, is left alone.
+        if (row?.photo_file_id === null) await worker.scheduleUnlessWaiting('properties.fetch_photo', { propertyId: id });
       }
       for (const row of tradiePoints) {
         if (!row) continue;

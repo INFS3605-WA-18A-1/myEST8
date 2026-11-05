@@ -45,14 +45,11 @@ function match(text: string, pattern: RegExp) {
   return found[1]!;
 }
 
-/** One glance dialog, from its opening tag through the close tag. */
-function dialogOf(page: string, id: string) {
-  const marker = `id="${id}"`;
-  const at = page.indexOf(marker);
-  if (at < 0) throw new Error(`No dialog ${id}`);
-  const start = page.lastIndexOf('<dialog', at);
-  const end = page.indexOf('</dialog>', at);
-  return page.slice(start, end + '</dialog>'.length);
+/** One glance row, from its <li> through the close tag. */
+function glanceRowOf(page: string, cls: string) {
+  const start = page.indexOf(`<li class="${cls}">`);
+  if (start < 0) throw new Error(`No glance row ${cls}`);
+  return page.slice(start, page.indexOf('</li>', start));
 }
 
 describe('Maintenance Requests on the dashboard', () => {
@@ -161,33 +158,65 @@ describe('the count strip and Needs your attention', () => {
     return { w, cookie: await w.signIn(), routine, high };
   }
 
-  test('the Quote decisions row counts the Tickets waiting on a Quote decision, and opens the Tickets list', async () => {
-    const { w, cookie } = await quoteDecisions();
-    const dashboard = await page(w, '/', cookie);
-    expect(dashboard).toMatch(
-      /<li class="is-quotes"><a href="\/tickets" class="glance-row"[\s\S]*?<span class="glance-count">2<\/span>[\s\S]*?<span class="glance-label">Quote decisions<\/span>/,
-    );
-    expect(dashboard).toContain('Open Tickets');
-  });
-
-  test('a row draws a pip per item up to twelve, then "+n"', async () => {
+  test('the Tradies quoting row counts the quoting Tickets with no decision, with their Quotes in and the oldest wait', async () => {
     const w = await webWorld();
-    for (let i = 0; i < 13; i++) await tomsTapTicket(w);
+    const job = await tomsTapTicket(w);
+    await w.alice.sendQuoteRequests(job.jobId, [w.tradies.pete.id, w.tradies.dana.id]);
     const cookie = await w.signIn();
     const dashboard = await page(w, '/', cookie);
-    const row = dashboard.match(/<li class="is-tickets">[\s\S]*?<\/li>/)?.[0] ?? '';
-    expect(row).toContain('<span class="glance-count">13</span>');
-    expect(row.match(/class="glance-pip"/g)).toHaveLength(12);
-    expect(row).toContain('<span class="glance-more">+1</span>');
+    const row = glanceRowOf(dashboard, 'is-tradies');
+
+    expect(row).toContain('href="/tickets?stage=quoting"');
+    expect(row).toContain('<span class="glance-count">1</span>');
+    expect(row).toContain('<span class="glance-label">Tradies quoting</span>');
+    expect(row).toContain('<span class="glance-sub">0 of 2 Quotes in · oldest opened ');
   });
 
-  test('with nothing waiting every count is quiet', async () => {
+  test('on All every row keeps the filter in its link', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+    const all = await page(w, '/?filter=all', cookie);
+
+    expect(glanceRowOf(all, 'is-tradies')).toContain('href="/tickets?stage=quoting&amp;filter=all"');
+    expect(glanceRowOf(all, 'is-owners')).toContain('href="/tickets?stage=awaiting_owner&amp;filter=all"');
+    expect(glanceRowOf(all, 'is-visits')).toContain('href="/tickets?stage=approved&amp;filter=all"');
+    expect(glanceRowOf(all, 'is-confirm')).toMatch(/href="\/calendar\?view=day&amp;date=\d{4}-\d{2}-\d{2}&amp;status=not_confirmed&amp;filter=all"/);
+  });
+
+  test('a Ticket opened more than seven days ago turns its pip stale', async () => {
+    const w = await webWorld();
+    await tomsTapTicket(w);
+    await w.h.advance(8 * 24 * HOUR);
+    const cookie = await w.signIn();
+    const row = glanceRowOf(await page(w, '/', cookie), 'is-tradies');
+
+    expect(row).toContain('class="glance-pip is-stale"');
+  });
+
+  test('a visit today that the Tenant has not confirmed counts in Visits not confirmed', async () => {
+    const w = await webWorld();
+    const job = await tomsTapTicket(w);
+    await bookVisit(w, job, new Date('2026-10-10T14:00:00+11:00'));
+    const cookie = await w.signIn();
+    const row = glanceRowOf(await page(w, '/', cookie), 'is-confirm');
+
+    expect(row).toContain('<span class="glance-count">1</span>');
+    expect(row).toContain('<span class="glance-label">Visits not confirmed</span>');
+    expect(row).toContain('<span class="glance-sub">today 1 · tomorrow 0');
+    expect(row).toContain('status=not_confirmed');
+  });
+
+  test('with nothing waiting all four rows are quiet and one line says so', async () => {
     const w = await webWorld();
     const cookie = await w.signIn();
     const dashboard = await page(w, '/', cookie);
-    expect(dashboard).toMatch(
-      /<li class="is-quotes"><a href="\/tickets" class="glance-row is-zero"[\s\S]*?<span class="glance-count">0<\/span>[\s\S]*?<span class="glance-label">Quote decisions<\/span>/,
-    );
+
+    for (const cls of ['is-tradies', 'is-owners', 'is-visits', 'is-confirm']) {
+      const row = glanceRowOf(dashboard, cls);
+      expect(row).toContain('glance-row is-zero');
+      expect(row).toContain('<span class="glance-sub">None</span>');
+    }
+    expect(dashboard).toContain('<p class="glance-clear">Nothing is waiting on Tradies, Owners or Tenants.</p>');
     expect(dashboard).toContain('No Maintenance Requests waiting for you.');
   });
 
@@ -215,56 +244,80 @@ describe('the count strip and Needs your attention', () => {
   });
 });
 
-describe('glance rows', () => {
-  test('page rows open their lists, and Inbox and Alerts open dialogs', async () => {
+describe('Waiting on others and the inbox modal', () => {
+  test('the four rows are links to their own queues', async () => {
     const w = await webWorld();
     const cookie = await w.signIn();
     const dashboard = await page(w, '/', cookie);
 
-    expect(dashboard).toMatch(/<li class="is-tickets"><a href="\/tickets" class="glance-row[^"]*"/);
-    expect(dashboard).toMatch(/<li class="is-requests"><a href="\/requests" class="glance-row[^"]*"/);
-    expect(dashboard).toMatch(/<li class="is-quotes"><a href="\/tickets" class="glance-row[^"]*"/);
-    expect(dashboard).toMatch(/<li class="is-alerts"><a href="#alerts" class="glance-row[^"]*"[^>]*data-dialog="alerts-dialog" aria-haspopup="dialog">/);
-    expect(dashboard).toMatch(/<li class="is-inbox"><a href="#inbox" class="glance-row[^"]*"[^>]*data-dialog="inbox-dialog" aria-haspopup="dialog">/);
-    for (const label of ['Open Tickets', 'Requests', 'Quote decisions', 'Inbox', 'Alerts']) {
+    expect(dashboard).toContain('<section class="glance" aria-label="Waiting on others">');
+    expect(dashboard).toContain('<h3 class="glance-title">Waiting on others</h3>');
+    expect(glanceRowOf(dashboard, 'is-tradies')).toContain('href="/tickets?stage=quoting"');
+    expect(glanceRowOf(dashboard, 'is-owners')).toContain('href="/tickets?stage=awaiting_owner"');
+    expect(glanceRowOf(dashboard, 'is-visits')).toContain('href="/tickets?stage=approved"');
+    expect(glanceRowOf(dashboard, 'is-confirm')).toMatch(/href="\/calendar\?view=day&amp;date=\d{4}-\d{2}-\d{2}&amp;status=not_confirmed"/);
+    for (const label of ['Tradies quoting', 'Owners approving', 'Visit times being arranged', 'Visits not confirmed']) {
       expect(dashboard).toContain(`<span class="glance-label">${label}</span>`);
     }
-
-    expect(dialogOf(dashboard, 'inbox-dialog')).toContain('The inbox is empty.');
-    expect(dialogOf(dashboard, 'alerts-dialog')).toContain('No alerts.');
-    expect(dialogOf(dashboard, 'inbox-dialog')).toContain('aria-label="Close"');
-
-    const all = await page(w, '/?filter=all', cookie);
-    expect(all).toMatch(/<li class="is-tickets"><a href="\/tickets\?filter=all" class="glance-row[^"]*"/);
-    expect(all).toMatch(/<li class="is-quotes"><a href="\/tickets\?filter=all" class="glance-row[^"]*"/);
-    expect(all).toMatch(/<li class="is-requests"><a href="\/requests" class="glance-row[^"]*"/);
-    expect(all).not.toMatch(/href="\/requests\?/);
   });
 
-  test('the Inbox and Alerts dialogs repeat the rows and their actions', async () => {
+  test('the inbox modal lists the unknown sender and keeps their triage actions', async () => {
     const w = await webWorld();
-    const text = 'I can smell gas in the kitchen';
-    w.h.classifier.when(text, {
-      messageClass: 'new_issue',
-      relatedItem: 'none',
-      urgency: 'routine',
-      trade: 'plumbing',
-      safety: ['risk', 0.95],
-    });
-    await w.h.receive(TOM, text);
     await w.h.receive(STRANGER, 'Hi, this is Tom on my work phone');
     const cookie = await w.signIn();
     const dashboard = await page(w, '/', cookie);
 
-    const inbox = dialogOf(dashboard, 'inbox-dialog');
-    expect(inbox).toContain('Hi, this is Tom on my work phone');
-    expect(inbox).toMatch(/action="\/inbox\/\d+\/link"/);
-    expect(inbox).toMatch(/action="\/inbox\/\d+\/dismiss"/);
-    expect(inbox).toContain('id="dialog-inbox-');
+    expect(dashboard).toContain('<dialog id="inbox-dialog" class="inbox-modal"');
+    expect(dashboard).toContain('data-inbox-open="0"');
+    expect(dashboard).toContain('data-inbox-person="0"');
+    expect(dashboard).toContain('<span class="inbox-person-who">' + STRANGER + '</span>');
+    expect(dashboard).toContain('Hi, this is Tom on my work phone');
+    expect(dashboard).toContain('Unknown sender');
+    expect(dashboard).toMatch(/action="\/inbox\/\d+\/link"/);
+    expect(dashboard).toMatch(/action="\/inbox\/\d+\/dismiss"/);
+    expect(dashboard).toContain('Search people or messages');
+  });
 
-    const alerts = dialogOf(dashboard, 'alerts-dialog');
-    expect(alerts).toContain(`Safety risk: ${text}`);
-    expect(alerts).toContain('Review the Urgent Repair');
+  test('a thread says each message\'s channel, direction and time, oldest first', async () => {
+    const w = await webWorld();
+    await w.h.receive(STRANGER, 'Hi, this is Tom on my work phone');
+    await w.h.advance(HOUR);
+    await w.h.receive(STRANGER, 'Sorry, it is Tom from 12 King St');
+    const cookie = await w.signIn();
+    const dashboard = await page(w, '/', cookie);
+
+    const thread = dashboard.slice(dashboard.indexOf('data-inbox-thread="0"'), dashboard.indexOf('</section>', dashboard.indexOf('data-inbox-thread="0"')));
+    expect(thread).toContain('<span class="inbox-message-channel">');
+    expect(thread).toContain('SMS');
+    expect(thread).toContain('Received');
+    const first = thread.indexOf('Hi, this is Tom on my work phone');
+    const second = thread.indexOf('Sorry, it is Tom from 12 King St');
+    expect(first).toBeGreaterThan(-1);
+    expect(second).toBeGreaterThan(first);
+  });
+
+  test('linking a sender makes their earlier messages part of the thread, beside what the Agency sent', async () => {
+    const w = await webWorld();
+    await tomsTapTicket(w);
+    await w.h.receive(STRANGER, 'Hi, this is Tom on my work phone');
+    const [item] = (await w.alice.dashboard()).inbox;
+    await w.alice.linkSender(item!.itemId, w.ids.tom);
+
+    const [thread] = await w.alice.inboxThreads();
+
+    expect(thread!.personId).toBe(w.ids.tom);
+    expect(thread!.personName).toBe('Tom Tran');
+    expect(thread!.messages.map((message) => message.text)).toContain('Hi, this is Tom on my work phone');
+    expect(thread!.messages.some((message) => message.direction === 'out')).toBe(true);
+  });
+
+  test('an empty inbox still opens, and says so', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+    const dashboard = await page(w, '/', cookie);
+
+    expect(dashboard).toContain('<dialog id="inbox-dialog" class="inbox-modal"');
+    expect(dashboard).toContain('The inbox is empty.');
   });
 });
 
@@ -344,15 +397,13 @@ describe('the Agency inbox', () => {
 
     const inbox = await page(w, '/', cookie);
     expect(inbox).toContain('Unknown sender');
-    // The preview row in the Inbox card points at the item and its actions below.
-    expect(inbox).toMatch(/href="#inbox-(\d+)"[\s\S]*id="inbox-\1"/);
+    // The preview row opens the inbox modal on the conversation.
+    expect(inbox).toContain('data-inbox-open="0"');
     expect(inbox).toContain(STRANGER);
-    // The message sits in the Inbox with its actions on it; on phones a brief row in Needs your attention points at it.
-    const box = inbox.slice(inbox.indexOf('id="inbox"'), inbox.indexOf('</section>', inbox.indexOf('id="inbox"')));
-    const itemId = match(box, /id="inbox-(\d+)"/);
-    expect(box).toContain(`action="/inbox/${itemId}/link"`);
-    expect(box).toContain(`action="/inbox/${itemId}/dismiss"`);
-    expect(inbox).toMatch(/href="#inbox-(\d+)"[\s\S]*id="inbox-\1"/);
+    const itemId = match(inbox, /action="\/inbox\/(\d+)\/link"/);
+    expect(inbox).toContain(`action="/inbox/${itemId}/link"`);
+    expect(inbox).toContain(`action="/inbox/${itemId}/dismiss"`);
+    expect(inbox).toContain(`id="thread-0-inbox-${itemId}"`);
 
     const unchosen = await w.post(`/inbox/${itemId}/link`, { personId: '' }, cookie);
     expect(await follow(w, unchosen, cookie)).toContain('Choose who sent this message');
@@ -365,7 +416,7 @@ describe('the Agency inbox', () => {
 
     const dismissed = await follow(w, await w.post(`/inbox/${itemId}/dismiss`, {}, cookie), cookie);
     expect(dismissed).toContain('Message dismissed');
-    expect(dismissed).not.toContain(`id="inbox-${itemId}"`);
+    expect(dismissed).not.toContain(`id="thread-0-inbox-${itemId}"`);
     expect(dismissed).not.toContain('Hi, this is Tom on my work phone');
   });
 });

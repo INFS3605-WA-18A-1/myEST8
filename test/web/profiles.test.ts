@@ -175,6 +175,25 @@ describe('Profiles', () => {
     for (const href of ADD) expect(menu).toContain(`href="${href}"`);
   });
 
+  test('a household card shows the Property photo, and none when there is no photo', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+    const upload = new FormData();
+    upload.append('photo', new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], 'front.png', { type: 'image/png' }));
+    const posted = await w.web.request(`/properties/${w.ids.kingSt}/photo`, { method: 'POST', body: upload, headers: { cookie } });
+    expect(posted.status).toBe(303);
+
+    const page = await (await w.get('/profiles?filter=all', cookie)).text();
+    const cards = page.split('<article class="household">').slice(1);
+    const king = cards.find((card) => card.includes(KING_ST)) ?? '';
+    const ocean = cards.find((card) => card.includes(OCEAN_AVE)) ?? '';
+    const src = /src="(\/properties\/\d+\/photo\?v=\d+)"/.exec(king)?.[1];
+    expect(src).toMatch(new RegExp(`^/properties/${w.ids.kingSt}/photo\\?v=\\d+$`));
+    expect(king).toContain(`class="household-photo" src="${src}" alt="" width="640" height="400" loading="lazy" decoding="async"`);
+    expect(ocean).not.toContain('<img');
+    expect(ocean).not.toContain('household-photo');
+  });
+
   test('the side menu has one Profiles item, current on a profile page', async () => {
     const w = await webWorld();
     const cookie = await w.signIn();

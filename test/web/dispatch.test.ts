@@ -151,6 +151,56 @@ describe('Dispatch: the header search and filters', () => {
   });
 });
 
+describe('the header search suggestions', () => {
+  type Suggestion = { type: 'property' | 'ticket'; label: string; sub: string; href: string };
+
+  async function suggest(w: Web, cookie: string, q: string): Promise<Suggestion[]> {
+    const res = await w.get(`/search/suggest?q=${encodeURIComponent(q)}`, cookie);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toMatch(/application\/json/);
+    return (await res.json()) as Suggestion[];
+  }
+
+  test('a Property matches on its address or suburb and links to its page', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    const byAddress = await suggest(w, cookie, 'King St');
+    expect(byAddress).toContainEqual({ type: 'property', label: KING_ST, sub: 'Newtown', href: `/properties/${w.ids.kingSt}` });
+
+    const bySuburb = await suggest(w, cookie, 'Bondi');
+    expect(bySuburb.some((suggestion) => suggestion.type === 'property' && suggestion.href === `/properties/${w.ids.oceanAve}`)).toBe(true);
+  });
+
+  test('a Ticket matches on its number and its title, with its Property and stage beside it', async () => {
+    const w = await webWorld();
+    const { ticketId } = await tomsTapTicket(w);
+    const cookie = await w.signIn();
+
+    const byNumber = await suggest(w, cookie, `#${ticketId}`);
+    const numberTicket = byNumber.find((suggestion) => suggestion.type === 'ticket');
+    expect(numberTicket).toMatchObject({ sub: `${KING_ST} · Quoting`, href: `/tickets/${ticketId}` });
+    expect(numberTicket!.label.startsWith(`#${ticketId} `)).toBe(true);
+    expect(numberTicket!.label.toLowerCase()).toContain('kitchen tap');
+
+    const byTitle = await suggest(w, cookie, 'kitchen tap');
+    const titleTicket = byTitle.find((suggestion) => suggestion.type === 'ticket');
+    expect(titleTicket).toMatchObject({ sub: `${KING_ST} · Quoting`, href: `/tickets/${ticketId}` });
+    expect(titleTicket!.label.toLowerCase()).toContain('kitchen tap');
+  });
+
+  test('the list is capped at eight, empty under two characters, and closed to a signed-out visitor', async () => {
+    const w = await webWorld();
+    for (let i = 0; i < 6; i++) await tomsTapTicket(w);
+    const cookie = await w.signIn();
+
+    expect((await suggest(w, cookie, 'St')).length).toBeLessThanOrEqual(8);
+    expect(await suggest(w, cookie, 'K')).toEqual([]);
+    expect(await suggest(w, cookie, '')).toEqual([]);
+    expect((await w.get('/search/suggest?q=King')).status).toBe(303);
+  });
+});
+
 describe('Dispatch: the table of Properties', () => {
   test('lists the Properties with open Tickets, each Ticket named by its issue, and folds the rest away', async () => {
     const w = await webWorld();

@@ -126,7 +126,7 @@ export function dashboardPages() {
       toBook: view.tickets.filter((t) => t.decision === 'book_inspection'),
       toChoose: view.tickets.filter((t) => t.decision === 'choose_quote'),
     };
-    const waiting = decided.toCheck.length + decided.toBook.length + decided.toChoose.length;
+    const threads = view.inbox.length ? await actions.inboxThreads() : [];
 
     return c.html(
       page({
@@ -143,17 +143,16 @@ export function dashboardPages() {
           ${greeting(pm.name, view, needReceipt)}
           <div class="dashboard-desk">
             <div class="dash-col">
-              ${glance(view, needReceipt, waiting, filter)}
+              ${glance(view, filter, now, timeZone, pm.id)}
               ${doNext({ view, ...decided, q, timeZone, now, shareLink: shareUrl(c, '/?filter=all#requests') })}
             </div>
             <div class="dash-col">
-              ${inboxCard(view.inbox, people, timeZone, q)}
+              ${inboxCard(threads, view.inbox.length, timeZone)}
               ${nextSevenDays(view.calendar, now, timeZone, c.req.query('day'), filter)}
               ${ticketsByStage(view.tickets, filter, now)}
             </div>
           </div>
-          ${inboxDialog(view.inbox, people, timeZone, q)}
-          ${alertsDialog(view.alerts, timeZone)}
+          ${inboxModal(threads, people, timeZone, q)}
         `,
       }),
     );
@@ -277,104 +276,121 @@ function greeting(name: string, view: Dashboard, needReceipt: number): Html {
 
 type Decided = { toCheck: BoardTicket[]; toBook: BoardTicket[]; toChoose: BoardTicket[] };
 
-/** The Tickets list, keeping All when the dashboard is showing everyone's work. */
-function ticketsHref(filter: Filter) {
-  return filter === 'all' ? '/tickets?filter=all' : '/tickets';
-}
-
 type GlanceItem = {
   cls: string;
   /** The words beside the count. */
   label: string;
   count: number;
   href: string;
-  /** Set when the row opens a dialog instead of a page. The href stays an anchor for when JavaScript is off. */
-  dialog?: string;
+  /** What the row waits on, under the label. A zero count reads "None" instead. */
+  sub: string;
+  /** One item per pip, oldest first; each carries when it was opened. */
+  items: { at: string }[];
+  chips?: Html[];
 };
 
+/** A Ticket is stale once it has waited this many days for the other side. */
+const STALE_DAYS = 7;
+
 /**
- * Today at a glance: a soft card of tally rows, one for each thing a Property Manager
- * counts (Open Tickets, Alerts, Maintenance Requests, Quote decisions, the inbox, and
- * Urgent Repairs when one needs a receipt). Open Tickets, Requests, Quote decisions and
- * Urgent open their lists. Inbox and Alerts open a dialog over the dashboard. A row
- * shows its count, then a pip for each item (up to twelve, then "+n"), so the size of
- * the queue is legible without a chart. The Tickets list has no view that is only
- * quote decisions or Urgent Repairs, so those two open `/tickets`.
+ * Waiting on others: the four things a Property Manager is waiting for someone else
+ * to do (Tradies to quote, Property Owners to approve, visit times to be arranged, and
+ * visits to be confirmed), each a row with its count, what it waits on, and a pip for
+ * every item. A count of zero reads "None"; when nothing waits at all, one line says so.
  */
-function glance(view: Dashboard, needReceipt: number, waiting: number, filter: Filter): Html {
-  const tickets = view.tickets.length;
-  const alerts = view.alerts.length;
-  const requests = view.maintenanceRequests.length;
-  const inbox = view.inbox.length;
-  const list = ticketsHref(filter);
-  const items: GlanceItem[] = [
-    { cls: 'is-tickets', label: 'Open Tickets', count: tickets, href: list },
-    { cls: 'is-alerts', label: 'Alerts', count: alerts, href: '#alerts', dialog: 'alerts-dialog' },
-    { cls: 'is-requests', label: 'Requests', count: requests, href: '/requests' },
-    { cls: 'is-quotes', label: 'Quote decisions', count: waiting, href: list },
-    { cls: 'is-inbox', label: 'Inbox', count: inbox, href: '#inbox', dialog: 'inbox-dialog' },
-    ...(needReceipt ? [{ cls: 'is-urgent', label: 'Urgent Repairs', count: needReceipt, href: list }] : []),
+function glance(view: Dashboard, filter: Filter, now: Date, timeZone: string, pmId: number): Html {
+  const q = filter === 'all' ? '&filter=all' : '';
+  const tradies = view.tickets.filter((t) => t.stage === 'quoting' && t.decision === null);
+  const owners = view.tickets.filter((t) => t.stage === 'awaiting_owner');
+  const visits = view.tickets.filter((t) => t.stage === 'approved');
+  const ownerNoReply = view.alerts.filter((alert) => alert.kind === 'owner_no_reply').length;
+  const slowToOffer = view.alerts.filter((alert) => alert.kind === 'tradie_no_visit_times').length;
+  const tenantToPick = view.alerts.filter((alert) => alert.kind === 'tenant_no_visit_pick').length;
+  const today = dayOf(now, timeZone);
+  const tomorrow = addDays(today, 1);
+  const inWindow = view.calendar.filter((b) => {
+    const day = dayOf(b.start, timeZone);
+    return (day === today || day === tomorrow) && (filter === 'all' || b.propertyManagerId === pmId);
+  });
+  const unconfirmed = inWindow.filter((b) => b.visit === 'not_confirmed');
+  const reschedules = inWindow.filter((b) => b.visit === 'reschedule_requested');
+  const todayUnconfirmed = unconfirmed.filter((b) => dayOf(b.start, timeZone) === today).length;
+  const tomorrowUnconfirmed = unconfirmed.length - todayUnconfirmed;
+
+  const received = tradies.reduce((sum, t) => sum + (t.quoting?.received ?? 0), 0);
+  const asked = tradies.reduce((sum, t) => sum + (t.quoting?.asked ?? 0), 0);
+  const oldest = (items: { reportedAt: string }[]) => (items.length ? ageOf(items.reduce((oldest, t) => (t.reportedAt < oldest ? t.reportedAt : oldest), items[0]!.reportedAt), now) : '');
+  const oldestFirst = (items: { at: string }[]) => [...items].sort((a, b) => a.at.localeCompare(b.at));
+
+  const rows: GlanceItem[] = [
+    {
+      cls: 'is-tradies',
+      label: 'Tradies quoting',
+      count: tradies.length,
+      href: `/tickets?stage=quoting${q}`,
+      sub: `${received} of ${asked} Quotes in · oldest opened ${oldest(tradies)}`,
+      items: oldestFirst(tradies.map((t) => ({ at: t.reportedAt }))),
+    },
+    {
+      cls: 'is-owners',
+      label: 'Owners approving',
+      count: owners.length,
+      href: `/tickets?stage=awaiting_owner${q}`,
+      sub: `oldest opened ${oldest(owners)}`,
+      items: oldestFirst(owners.map((t) => ({ at: t.reportedAt }))),
+      chips: ownerNoReply ? [badge(`${ownerNoReply} not replying`, 'warning', { outline: true })] : [],
+    },
+    {
+      cls: 'is-visits',
+      label: 'Visit times being arranged',
+      count: visits.length,
+      href: `/tickets?stage=approved${q}`,
+      sub: slowToOffer || tenantToPick ? `${slowToOffer} Tradies slow to offer · ${tenantToPick} Tenants yet to pick` : `oldest opened ${oldest(visits)}`,
+      items: oldestFirst(visits.map((t) => ({ at: t.reportedAt }))),
+    },
+    {
+      cls: 'is-confirm',
+      label: 'Visits not confirmed',
+      count: unconfirmed.length,
+      href: `/calendar?view=day&date=${today}&status=not_confirmed${q}`,
+      sub: `today ${todayUnconfirmed} · tomorrow ${tomorrowUnconfirmed}`,
+      items: oldestFirst(unconfirmed.map((b) => ({ at: b.start }))),
+      chips: reschedules.length ? [badge(`${reschedules.length} reschedule asked`, 'warning', { outline: true })] : [],
+    },
   ];
-  return html`<section class="glance" aria-label="Today at a glance">
-    <h3 class="glance-title">Your day at a glance</h3>
+
+  return html`<section class="glance" aria-label="Waiting on others">
+    <h3 class="glance-title">Waiting on others</h3>
     <ul class="glance-list">
-      ${items.map((item) => glanceRow(item))}
+      ${rows.map((row) => glanceRow(row, now))}
     </ul>
+    ${rows.every((row) => row.count === 0) ? html`<p class="glance-clear">Nothing is waiting on Tradies, Owners or Tenants.</p>` : ''}
   </section>`;
 }
 
-/** One tally row. The trailing glyph says whether it opens a page or a dialog. */
-function glanceRow(item: GlanceItem): Html {
-  const dialog = item.dialog ? html` data-dialog="${item.dialog}" aria-haspopup="dialog"` : '';
-  return html`<li class="${item.cls}"><a href="${item.href}" class="glance-row${item.count === 0 ? ' is-zero' : ''}"${dialog}>
+/** One tally row. The trailing glyph opens the row's list. */
+function glanceRow(item: GlanceItem, now: Date): Html {
+  return html`<li class="${item.cls}"><a href="${item.href}" class="glance-row${item.count === 0 ? ' is-zero' : ''}">
     <span class="glance-count">${item.count}</span>
     <span class="glance-body">
       <span class="glance-label">${item.label}</span>
-      ${pips(item.count)}
+      ${pips(item.items, item.count, now)}
+      <span class="glance-sub">${item.count === 0 ? 'None' : item.sub}${item.chips?.length ? html` ${item.chips}` : ''}</span>
     </span>
-    <span class="glance-go">${icon(item.dialog ? 'tray' : 'arrow-up-right', { size: 'size-4' })}</span>
+    <span class="glance-go">${icon('arrow-up-right', { size: 'size-4' })}</span>
   </a></li>`;
 }
 
 /** One pip per item, up to twelve, then "+n". A count of zero is a single hollow ring. */
-function pips(count: number): Html {
+function pips(items: { at: string }[], count: number, now: Date): Html {
   if (count === 0) return html`<span class="glance-pips" aria-hidden="true"><i class="glance-pip is-zero"></i></span>`;
-  const shown = Math.min(count, 12);
-  return html`<span class="glance-pips" aria-hidden="true">${Array.from({ length: shown }, (_, i) => html`<i class="glance-pip" style="--n:${i}"></i>`)}${count > 12 ? html`<span class="glance-more">+${count - 12}</span>` : ''}</span>`;
+  const shown = items.slice(0, 12);
+  return html`<span class="glance-pips" aria-hidden="true">${shown.map((pip, i) => html`<i class="glance-pip${isStale(pip.at, now) ? ' is-stale' : ''}" style="--n:${i}"></i>`)}${count > 12 ? html`<span class="glance-more">+${count - 12}</span>` : ''}</span>`;
 }
 
-/**
- * Inbox and Alerts over the dashboard. The rows are the same ones the card and
- * Do next draw, so linking a sender, routing, dismissing and each alert's action
- * post as they do there. An id prefix keeps the dialog's fields from repeating the
- * card's. Without JavaScript the tally rows are anchors and these stay closed.
- */
-function inboxDialog(items: InboxItem[], people: Person[], timeZone: string, q: string): Html {
-  const byNewest = [...items].sort((a, b) => b.receivedAt.localeCompare(a.receivedAt));
-  return glanceDialog({
-    id: 'inbox-dialog',
-    title: 'Inbox',
-    body: html`<div class="dashboard-inbox">${inboxList(byNewest, people, timeZone, q, 'dialog-')}</div>`,
-  });
-}
-
-function alertsDialog(alerts: Alert[], timeZone: string): Html {
-  return glanceDialog({
-    id: 'alerts-dialog',
-    title: 'Alerts',
-    body: alerts.length ? html`<div class="grid gap-2">${alerts.map((alert) => alertRow(alert, timeZone))}</div>` : emptyState('No alerts.'),
-  });
-}
-
-function glanceDialog(o: { id: string; title: string; body: Html }): Html {
-  const titleId = `${o.id}-title`;
-  return html`<dialog id="${o.id}" class="glance-dialog" aria-labelledby="${titleId}">
-    <div class="glance-dialog-head">
-      <h2 id="${titleId}" class="section-title">${o.title}</h2>
-      <button type="button" class="glance-dialog-close" data-dialog-close aria-label="Close">${icon('x', { size: 'size-5' })}</button>
-    </div>
-    <div class="glance-dialog-body">${o.body}</div>
-  </dialog>`;
+/** Whether an item has waited more than a week for the other side. */
+function isStale(at: string, now: Date): boolean {
+  return now.getTime() - new Date(at).getTime() > STALE_DAYS * 24 * 60 * 60 * 1000;
 }
 
 // Do next
@@ -522,36 +538,204 @@ function alertRow(alert: Alert, timeZone: string): Html {
 
 // Inbox
 
+type InboxThread = Awaited<ReturnType<PropertyManagerActions['inboxThreads']>>[number];
+type InboxMessage = InboxThread['messages'][number];
+
+/** The channel each message came by, in words and as a Phosphor icon. */
+const CHANNEL: Record<string, { label: string; icon: string }> = {
+  sms: { label: 'SMS', icon: 'chat-circle-text' },
+  email: { label: 'Email', icon: 'envelope-simple' },
+  whatsapp: { label: 'WhatsApp', icon: 'whatsapp-logo' },
+};
+
+/** Initials for an avatar, or "+" for a number with no name. */
+function initialsOf(name: string): string {
+  return name.replace(/[^A-Za-z ]/g, '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('') || '+';
+}
+
+/** The last thing said in a conversation. */
+function lastMessage(thread: InboxThread): InboxMessage | undefined {
+  return thread.messages.at(-1);
+}
+
 /**
- * The inbox in brief: the three newest messages as one-line previews, and a button
- * that opens every message with its actions (link the sender, route, dismiss). The
- * full list opens over the card, so the page keeps its shape.
+ * The inbox in brief: the newest three conversations as one-line previews, and one
+ * control that opens the whole inbox over the dashboard. Each preview opens the modal
+ * on its own person.
  */
-function inboxCard(items: InboxItem[], people: Person[], timeZone: string, q: string): Html {
-  const byNewest = [...items].sort((a, b) => b.receivedAt.localeCompare(a.receivedAt));
-  const newest = byNewest.slice(0, 3);
-  const initials = (name: string) => name.replace(/[^A-Za-z ]/g, '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('') || '+';
+function inboxCard(threads: InboxThread[], total: number, timeZone: string): Html {
+  const newest = threads.slice(0, 3);
   return html`<section class="inbox-card" id="inbox" aria-label="Inbox">
     <div class="inbox-card-head">
       <h3 class="inbox-card-title">Inbox</h3>
-      ${items.length ? html`<span class="inbox-card-count">${items.length} waiting</span><span class="inbox-card-note">Latest ${newest.length}</span>` : ''}
+      ${threads.length ? html`<span class="inbox-card-count">${total} waiting</span><span class="inbox-card-note">Latest ${newest.length}</span>` : ''}
     </div>
-    ${items.length
+    ${threads.length
       ? html`<ul class="inbox-previews">
-            ${newest.map(
-              (item) => html`<li><a class="inbox-preview" href="#inbox-${item.itemId}">
-                <span class="inbox-avatar" aria-hidden="true">${initials(item.personName ?? '')}</span>
-                <span class="inbox-preview-main"><span class="inbox-preview-who">${item.personName ?? item.from}</span><span class="inbox-preview-text">${item.text}</span></span>
-                <time class="inbox-preview-when" datetime="${item.receivedAt}">${formatWhen(item.receivedAt, timeZone)}</time>
-              </a></li>`,
-            )}
+            ${newest.map((thread, i) => {
+              const last = lastMessage(thread);
+              return html`<li><a class="inbox-preview" href="#inbox" data-inbox-open="${i}">
+                <span class="inbox-avatar" aria-hidden="true">${initialsOf(thread.personName ?? thread.address)}</span>
+                <span class="inbox-preview-main"><span class="inbox-preview-who">${thread.personName ?? thread.address}</span><span class="inbox-preview-text">${last?.text ?? thread.items[0]?.text ?? ''}</span></span>
+                <time class="inbox-preview-when" datetime="${thread.latestAt}">${formatWhen(thread.latestAt, timeZone)}</time>
+              </a></li>`;
+            })}
           </ul>
-          <details class="inbox-more">
-            <summary><span class="when-closed">Check ${items.length === 1 ? 'the message' : `all ${items.length} messages`}</span><span class="when-open">Close messages</span></summary>
-            <div class="inbox-panel dashboard-inbox">${inboxList(byNewest, people, timeZone, q)}</div>
-          </details>`
+          <a class="inbox-open" href="#inbox" data-inbox-open="0">Check ${total === 1 ? 'the message' : `all ${total} messages`}${icon('arrow-up-right', { size: 'size-4' })}</a>`
       : html`<p class="inbox-empty">The inbox is empty.</p>`}
   </section>`;
+}
+
+/**
+ * The inbox as a mail client over the dashboard: people on the left, with a search
+ * over names, numbers and message text, and the selected person's whole history on the
+ * right, each message saying its channel and time. The open inbox items keep their
+ * triage actions in the thread, under "Waiting on you". A native dialog traps focus,
+ * Escape closes it, and the button that opened it gets focus back.
+ */
+function inboxModal(threads: InboxThread[], people: Person[], timeZone: string, q: string): Html {
+  const titleId = 'inbox-dialog-title';
+  return html`<dialog id="inbox-dialog" class="inbox-modal" aria-labelledby="${titleId}">
+    <div class="inbox-modal-head">
+      <h2 id="${titleId}" class="section-title">Inbox</h2>
+      <button type="button" class="inbox-modal-close" data-dialog-close aria-label="Close">${icon('x', { size: 'size-5' })}</button>
+    </div>
+    ${threads.length
+      ? html`<div class="inbox-shell">
+          <aside class="inbox-people">
+            <label class="inbox-people-search">
+              <span class="sr-only">Search people or messages</span>
+              ${icon('magnifying-glass', { size: 'size-4' })}
+              <input type="search" placeholder="Search people or messages" autocomplete="off" data-inbox-search />
+            </label>
+            <ul class="inbox-people-list" aria-label="Conversations">
+              ${threads.map((thread, i) => inboxPerson(thread, i, timeZone))}
+            </ul>
+            <p class="inbox-no-matches" data-inbox-no-matches hidden>No people match that search.</p>
+          </aside>
+          <div class="inbox-thread-panes">
+            ${threads.map((thread, i) => inboxThread(thread, i, people, timeZone, q))}
+          </div>
+        </div>`
+      : html`<p class="inbox-empty inbox-modal-empty">The inbox is empty.</p>`}
+  </dialog>`;
+}
+
+/** One person in the modal's left column: avatar, name or number, the last line and its time. */
+function inboxPerson(thread: InboxThread, i: number, timeZone: string): Html {
+  const last = lastMessage(thread);
+  const haystack = [thread.personName ?? '', thread.address, ...thread.items.map((item) => item.text), ...thread.messages.map((message) => message.text)].join(' ').toLowerCase();
+  return html`<li>
+    <button type="button" class="inbox-person${i === 0 ? ' is-active' : ''}" data-inbox-person="${i}" data-inbox-haystack="${haystack}" aria-pressed="${i === 0 ? 'true' : 'false'}">
+      <span class="inbox-avatar" aria-hidden="true">${initialsOf(thread.personName ?? thread.address)}</span>
+      <span class="inbox-person-main">
+        <span class="inbox-person-who">${thread.personName ?? thread.address}</span>
+        <span class="inbox-person-preview">${last?.text ?? thread.items[0]?.text ?? ''}</span>
+      </span>
+      <span class="inbox-person-meta">
+        <time datetime="${thread.latestAt}">${formatWhen(thread.latestAt, timeZone)}</time>
+        ${thread.waiting ? html`<span class="inbox-waiting">${thread.waiting}</span>` : ''}
+      </span>
+    </button>
+  </li>`;
+}
+
+/** One conversation on the right: its whole history oldest to newest, then what waits on the Property Manager. */
+function inboxThread(thread: InboxThread, i: number, people: Person[], timeZone: string, q: string): Html {
+  const headingId = `inbox-thread-${i}`;
+  return html`<section class="inbox-thread" data-inbox-thread="${i}" aria-labelledby="${headingId}"${i === 0 ? '' : html` hidden`}>
+    <header class="inbox-thread-head">
+      <h3 id="${headingId}" class="inbox-thread-name">${thread.personName ?? thread.address}</h3>
+      <p class="inbox-thread-sub">${thread.personName ? thread.address : 'Unknown sender'}${thread.waiting ? ` · ${thread.waiting} waiting` : ''}</p>
+    </header>
+    <ol class="inbox-messages">
+      ${thread.messages.length
+        ? thread.messages.map((message) => inboxMessage(message, timeZone))
+        : html`<li class="inbox-message-empty">No messages recorded with this person yet.</li>`}
+    </ol>
+    ${thread.items.length
+      ? html`<div class="inbox-triage-list">
+          <h4 class="inbox-triage-title">Waiting on you</h4>
+          ${thread.items.map((item) => triageCard(item, people, timeZone, q, `thread-${i}-`))}
+        </div>`
+      : ''}
+  </section>`;
+}
+
+/** One message in a thread: its channel, when it came, and whether it came in or went out. */
+function inboxMessage(message: InboxMessage, timeZone: string): Html {
+  const inbound = message.direction === 'in';
+  const channel = CHANNEL[message.channel] ?? { label: humanise(message.channel), icon: 'chat-circle-text' };
+  return html`<li class="inbox-message ${inbound ? 'is-in' : 'is-out'}">
+    <div class="inbox-message-head">
+      <span class="inbox-message-channel">${icon(channel.icon, { size: 'size-3.5' })}${channel.label}</span>
+      <span class="inbox-message-direction">${icon(inbound ? 'arrow-down-left' : 'arrow-up-right', { size: 'size-3.5' })}${inbound ? 'Received' : 'Sent'}</span>
+      <time class="inbox-message-time" datetime="${message.at}">${formatWhen(message.at, timeZone)}</time>
+    </div>
+    <p class="inbox-message-text">${message.text}</p>
+  </li>`;
+}
+
+/**
+ * One open inbox message's triage block: the classification, the agent's best guess,
+ * and linking the sender, routing and dismissing, exactly as the inbox has always
+ * offered them. `idPrefix` keeps two conversations' fields apart.
+ */
+function triageCard(item: InboxItem, people: Person[], timeZone: string, q: string, idPrefix = ''): Html {
+  const [reason, tone] = INBOX_REASON[item.reason];
+  const base = `/inbox/${item.itemId}`;
+  const guesses = item.bestGuess && Object.keys(item.bestGuess).length ? item.bestGuess : null;
+  return html`<article class="inbox-item${item.personId === null ? ' is-unknown' : ''}" id="${idPrefix}inbox-${item.itemId}">
+    <div class="inbox-item-head">
+      <div class="min-w-0">
+        <p class="inbox-item-who">${item.personName ?? item.from}</p>
+        <p class="inbox-item-from">
+          ${item.personName ? html`<span>${item.from}</span>` : ''}
+          <span>${formatWhen(item.receivedAt, timeZone)}</span>
+        </p>
+      </div>
+      ${badge(reason, tone)}
+    </div>
+    ${item.reason === 'shared_address'
+      ? sharedAddressNote(
+          'Could be',
+          item.candidates.map((c) => ({ label: `${c.name} (${ROLE_LABEL[c.role]})`, href: profileHref(c.role, c.personId) })),
+        )
+      : ''}
+    ${guesses
+      ? html`<details class="inbox-item-guess">
+          <summary>Looks like: ${guessSummary(guesses)}</summary>
+          ${dl(Object.entries(guesses).map(([question, answer]) => [guessLabel(question), guessAnswer(answer)]))}
+        </details>`
+      : ''}
+    <div class="inbox-item-actions">
+      ${item.personId === null
+        ? html`<details class="inbox-pick">
+            <summary>Pick a contact</summary>
+            <form method="post" action="${base}/link${q}" class="inbox-item-link">
+            ${field({
+              label: 'Link sender to',
+              name: 'personId',
+              id: `${idPrefix}person-${item.itemId}`,
+              type: 'select',
+              required: true,
+              placeholder: 'Search people by name',
+              search: true,
+              options: people.map((p) => ({ value: String(p.id), label: personLabel(p) })),
+              hint:
+                item.reason === 'shared_address'
+                  ? 'This message is recorded as theirs. A later message from this address is still shared.'
+                  : 'Their next message from this address will be recognised.',
+            })}
+            ${button('Link sender')}
+            </form>
+          </details>`
+        : item.reason === 'low_confidence' && item.bestGuess
+          ? postButton(`${base}/route${q}`, 'Route with best guess', { size: 'sm' })
+          : ''}
+      ${postButton(`${base}/dismiss${q}`, 'Dismiss', { variant: 'ghost', size: 'sm' })}
+    </div>
+  </article>`;
 }
 
 // Tickets by stage
@@ -726,74 +910,7 @@ function urgentRepairsList(repairs: UrgentRepair[], timeZone: string): Html {
   </ul>`;
 }
 
-// Inbox
-
-function inboxList(items: InboxItem[], people: Person[], timeZone: string, q: string, idPrefix = ''): Html {
-  if (!items.length) return emptyState('The inbox is empty.');
-  return html`<div class="grid gap-2">${items.map((item) => inboxItem(item, people, timeZone, q, idPrefix))}</div>`;
-}
-
-/**
- * One inbox item, compact: the message, who sent it and when, then the agent's best
- * guess in one line beside the actions. Every answer behind the guess is one click away.
- */
-function inboxItem(item: InboxItem, people: Person[], timeZone: string, q: string, idPrefix = ''): Html {
-  const [reason, tone] = INBOX_REASON[item.reason];
-  const base = `/inbox/${item.itemId}`;
-  const guesses = item.bestGuess && Object.keys(item.bestGuess).length ? item.bestGuess : null;
-  return html`<article class="inbox-item${item.personId === null ? ' is-unknown' : ''}" id="${idPrefix}inbox-${item.itemId}">
-    <div class="inbox-item-head">
-      <div class="min-w-0">
-        <p class="inbox-item-who">${item.personName ?? item.from}</p>
-        <p class="inbox-item-from">
-          ${item.personName ? html`<span>${item.from}</span>` : ''}
-          <span>${formatWhen(item.receivedAt, timeZone)}</span>
-        </p>
-      </div>
-      ${badge(reason, tone)}
-    </div>
-    <blockquote class="inbox-item-text">${item.text}</blockquote>
-    ${item.reason === 'shared_address'
-      ? sharedAddressNote(
-          'Could be',
-          item.candidates.map((c) => ({ label: `${c.name} (${ROLE_LABEL[c.role]})`, href: profileHref(c.role, c.personId) })),
-        )
-      : ''}
-    ${guesses
-      ? html`<details class="inbox-item-guess">
-          <summary>Looks like: ${guessSummary(guesses)}</summary>
-          ${dl(Object.entries(guesses).map(([question, answer]) => [guessLabel(question), guessAnswer(answer)]))}
-        </details>`
-      : ''}
-    <div class="inbox-item-actions">
-      ${item.personId === null
-        ? html`<details class="inbox-pick">
-            <summary>Pick a contact</summary>
-            <form method="post" action="${base}/link${q}" class="inbox-item-link">
-            ${field({
-              label: 'Link sender to',
-              name: 'personId',
-              id: `${idPrefix}person-${item.itemId}`,
-              type: 'select',
-              required: true,
-              placeholder: 'Search people by name',
-              search: true,
-              options: people.map((p) => ({ value: String(p.id), label: personLabel(p) })),
-              hint:
-                item.reason === 'shared_address'
-                  ? 'This message is recorded as theirs. A later message from this address is still shared.'
-                  : 'Their next message from this address will be recognised.',
-            })}
-            ${button('Link sender')}
-            </form>
-          </details>`
-        : item.reason === 'low_confidence' && item.bestGuess
-          ? postButton(`${base}/route${q}`, 'Route with best guess', { size: 'sm' })
-          : ''}
-      ${postButton(`${base}/dismiss${q}`, 'Dismiss', { variant: 'ghost', size: 'sm' })}
-    </div>
-  </article>`;
-}
+// Inbox helpers
 
 /**
  * The best guess in one line: what kind of message, what it is about, then its

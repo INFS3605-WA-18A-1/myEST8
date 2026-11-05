@@ -983,7 +983,11 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
       return transaction(db, async () => {
         const item = await openInboxItem(agencyId, itemId);
         const person = await modules.profiles.personInAgency(agencyId, personId);
-        await modules.profiles.linkAddress(agencyId, person.id, (await received(item.inbound_id)).from);
+        const from = (await received(item.inbound_id)).from;
+        await modules.profiles.linkAddress(agencyId, person.id, from);
+        // The messages already logged from this address become theirs too, so the
+        // inbox's thread shows the whole conversation, not just what comes next.
+        await run(db, 'UPDATE messages SET person_id = ? WHERE agency_id = ? AND person_id IS NULL AND address = ?', person.id, agencyId, from);
         await run(db, 'UPDATE inbox_items SET person_id = ? WHERE id = ?', person.id, itemId);
       });
     },

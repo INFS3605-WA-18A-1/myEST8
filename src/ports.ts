@@ -239,6 +239,22 @@ export interface Geocoder {
   geocode(address: string): Promise<{ lat: number; lng: number } | null>;
 }
 
+/** A photo of a Property from online imagery: the bytes and their content type. */
+export interface PropertyPhoto {
+  contentType: string;
+  content: Uint8Array;
+}
+
+export interface PropertyPhotos {
+  /**
+   * A photo of the place. Uses the latitude and longitude when they are given,
+   * and the street address when they are not or when that point has no imagery.
+   * Null when there is no imagery (or nothing to look up). Throws when the lookup
+   * itself fails, so the caller's task retries.
+   */
+  lookup(place: { address: string; location: { lat: number; lng: number } | null }): Promise<PropertyPhoto | null>;
+}
+
 /** One address a Property Manager can pick while typing a Property's address. */
 export interface AddressSuggestion {
   /** The line in the list, such as "12 King Street, Ashbury NSW 2193". */

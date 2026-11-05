@@ -1,9 +1,9 @@
-// The dashboard's "Your day at a glance" tally rows in the browser: they sit inside
+// The dashboard's "Waiting on others" tally rows in the browser: they sit inside
 // their card at laptop, tablet and phone widths, and the page never scrolls sideways
-// on a phone.
+// on a phone. The inbox opens as a mail-client modal.
 
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { signIn } from './support/actions.ts';
+import { signIn, unique } from './support/actions.ts';
 import { freePort, startDemo, uniqueSchema } from './support/server.ts';
 
 const overflow = (page: Page) => page.evaluate<number>('document.documentElement.scrollWidth - document.documentElement.clientWidth');
@@ -11,7 +11,7 @@ const overflow = (page: Page) => page.evaluate<number>('document.documentElement
 /** Each tally row's box, and whether it sits inside the glance card. */
 function rows(page: Page) {
   return page
-    .getByRole('region', { name: 'Today at a glance' })
+    .getByRole('region', { name: 'Waiting on others' })
     .getByRole('link')
     .evaluateAll((els) => {
       const card = els[0]?.closest('.glance')?.getBoundingClientRect();
@@ -31,25 +31,43 @@ test('on a laptop and a tablet the tally rows sit inside their card, and none sp
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/');
     const laid = await rows(page);
-    expect(laid.length, `${width}px`).toBeGreaterThanOrEqual(5);
+    expect(laid.length, `${width}px`).toBeGreaterThanOrEqual(4);
     expect(laid.every((row) => row.inside), `${width}px`).toBe(true);
     expect(laid.every((row) => !row.spills), `${width}px`).toBe(true);
   }
 });
 
-test('the Inbox row opens a dialog, and Escape returns focus to the row', async ({ page }) => {
+test('a message opens the inbox modal on its person, and Escape returns focus', async ({ page }) => {
+  const text = `Hi ${unique()}`;
   await signIn(page);
-  await page.setViewportSize({ width: 1366, height: 900 });
-  await page.goto('/');
-  const row = page.getByRole('region', { name: 'Today at a glance' }).getByRole('link', { name: /Inbox/ });
-  await expect(row).toHaveAccessibleName(/^\d+ Inbox$/);
-  await row.click();
+
+  // Wei Zhang (7 Wilson St) sends a one-liner the agent can't place, so it waits in the inbox.
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Simulator' }).click();
+  await page.getByRole('navigation', { name: 'People' }).getByRole('link', { name: /^Wei Zhang/ }).click();
+  const phone = page.getByRole('region', { name: "Wei Zhang's phone" });
+  const messages = phone.getByRole('region', { name: 'Messages with Wei Zhang' });
+  await phone.getByRole('textbox', { name: 'Message' }).fill(text);
+  await phone.getByRole('button', { name: 'Send as Wei Zhang' }).click();
+  await expect(messages.getByText(text, { exact: true })).toBeVisible();
+
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Dashboard' }).click();
+  const inbox = page.getByRole('region', { name: 'Inbox' });
+  const preview = inbox.getByRole('link', { name: new RegExp(text) }).first();
+  await expect(preview).toBeVisible();
+  await preview.click();
+
   const dialog = page.getByRole('dialog', { name: 'Inbox' });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole('heading', { name: 'Inbox' })).toBeVisible();
+  await expect(dialog.getByRole('heading', { name: 'Wei Zhang' })).toBeVisible();
+  const thread = dialog.locator('[data-inbox-thread="0"]');
+  await expect(thread.getByText(text, { exact: true })).toBeVisible();
+  await expect(thread.getByText('SMS', { exact: true })).toBeVisible();
+  await expect(thread.getByText('Agent unsure', { exact: true })).toBeVisible();
+  await expect(thread.getByRole('button', { name: 'Route with best guess' })).toBeVisible();
+
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
-  await expect(row).toBeFocused();
+  await expect(preview).toBeFocused();
 });
 
 test('choosing a day refreshes the visit list and leaves the greeting in place', async ({ page }) => {
@@ -78,7 +96,7 @@ test('on a phone the tally rows stay inside their card, and the page never scrol
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   const phone = await rows(page);
-  expect(phone.length).toBeGreaterThanOrEqual(5);
+  expect(phone.length).toBeGreaterThanOrEqual(4);
   expect(phone.every((row) => row.inside)).toBe(true);
   expect(await overflow(page)).toBe(0);
 });

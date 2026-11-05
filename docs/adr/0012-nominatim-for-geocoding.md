@@ -16,7 +16,7 @@ A request is `GET {NOMINATIM_URL}/search` with the address as `q`, `format=jsonv
 - Results are kept. A found location is stored on the Property or Tradie and never looked up again.
 - Attribution: the Dispatch map already shows OpenStreetMap's credit through its attribution control.
 
-**What stays on Google:** the Places API (New), for listing search, details and ratings, and the Tradie autofill. `GOOGLE_MAPS_API_KEY` needs only that API enabled.
+**What stays on Google:** the Places API (New), for listing search, details and ratings, and the Tradie autofill. The same key also calls the Street View Static API for a Property's photo: metadata first, then a 640×400 outdoor image only when that status is OK. `GOOGLE_MAPS_API_KEY` needs the Places API (New) and the Street View Static API enabled.
 
 **Configuration:** `NOMINATIM_URL` is the base URL. It is optional. Hosted mode and `npm start` default to `https://nominatim.openstreetmap.org`, so it is never a missing setting. The local demo and the tests use the in-process mock unless it is set.
 

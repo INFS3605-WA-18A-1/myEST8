@@ -163,6 +163,7 @@ describe('the demo', () => {
       imageMatcher: 'mock',
       quoteReader: 'mock',
       places: 'mock',
+      propertyPhotos: 'mock',
       geocoder: 'mock',
       addressSuggester: 'mock',
       messenger: 'mock',

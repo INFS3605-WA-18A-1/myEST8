@@ -36,7 +36,7 @@ The person who organises repairs to Common Areas together with the strata. Not p
 ### Places
 
 **Property**:
-One rentable dwelling with its own lease and owner.
+One rentable dwelling with its own lease and owner. It can have a photo: one fetched from the street when the Property is added, or one a Property Manager uploads in its place.
 _Avoid_: unit, building
 
 **Common Area**:

@@ -248,11 +248,24 @@ function stateOf(address: string): string | null {
 function dispatchControls(o: { search: string; region: string; regions: string[]; trade: string }): Html {
   const option = (value: string, label: string, chosen: string) => html`<option value="${value}"${value === chosen ? html` selected` : ''}>${label}</option>`;
   return html`<form method="get" action="/dispatch" class="dispatch-controls" role="search" aria-label="Narrow Dispatch" data-autosubmit>
-    <label class="dispatch-q">
-      <span class="sr-only">Search Properties, Tickets or Tradies</span>
+    <div class="dispatch-q">
+      <label class="sr-only" for="dispatch-q">Search Properties, Tickets or Tradies</label>
       ${icon('magnifying-glass', { size: 'size-4' })}
-      <input type="search" name="q" value="${o.search}" placeholder="Search properties, tickets or tradies" autocomplete="off" />
-    </label>
+      <input
+        id="dispatch-q"
+        type="search"
+        name="q"
+        value="${o.search}"
+        placeholder="Search properties, tickets or tradies"
+        autocomplete="off"
+        role="combobox"
+        aria-autocomplete="list"
+        aria-expanded="false"
+        aria-controls="search-suggest-list"
+        data-search-suggest
+      />
+      <ul id="search-suggest-list" class="combobox-list search-suggest-list" role="listbox" aria-label="Search suggestions" hidden></ul>
+    </div>
     ${o.regions.length
       ? html`<label class="dispatch-pick"><span>Region</span>
           <select name="region">${option('', 'All', o.region)}${o.regions.map((r) => option(r, r, o.region))}</select></label>`
@@ -260,7 +273,11 @@ function dispatchControls(o: { search: string; region: string; regions: string[]
     <label class="dispatch-pick"><span>Trade</span>
       <select name="trade">${option('', 'All', o.trade)}${TRADES.map((t) => option(t, humanise(t), o.trade))}</select></label>
     <button type="submit" class="btn btn-sm filter-bar-apply">Search</button>
-  </form>`;
+  </form>
+  <template id="search-suggest-icons">
+    <span class="search-suggest-icon" data-icon="property">${icon('house', { size: 'size-4' })}</span>
+    <span class="search-suggest-icon" data-icon="ticket">${icon('ticket', { size: 'size-4' })}</span>
+  </template>`;
 }
 
 /**
