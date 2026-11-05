@@ -54,8 +54,11 @@ if (document.querySelector('.glance-list')) {
   try {
     sessionStorage.setItem('glance', '1');
   } catch {
-    // Storage blocked: the bubbles may settle in again next time.
+    // Storage blocked: the pips may fill in again next time.
   }
+  // Mine/All swaps #main without reloading, so the head script that sets glance-seen
+  // doesn't run again: set it on the first swap so the new pips don't fill in twice.
+  document.addEventListener('myest8:content', () => document.documentElement.classList.add('glance-seen'), { once: true });
 }
 
 // Setup for elements in the page goes through onContent: it runs on the document
@@ -1066,7 +1069,7 @@ onContent((root) => {
 })();
 
 // === glance dialogs ===
-// Inbox and Alerts open over the dashboard. Without this file those bubbles are
+// Inbox and Alerts open over the dashboard. Without this file those tally rows are
 // anchors on the page. The listener stays on the document, so a dashboard swapped
 // in by in-page navigation (myest8:content replaces #main) still opens them.
 (() => {

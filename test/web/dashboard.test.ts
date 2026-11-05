@@ -170,6 +170,17 @@ describe('the count strip and Needs your attention', () => {
     expect(dashboard).toContain('Open Tickets');
   });
 
+  test('a row draws a pip per item up to twelve, then "+n"', async () => {
+    const w = await webWorld();
+    for (let i = 0; i < 13; i++) await tomsTapTicket(w);
+    const cookie = await w.signIn();
+    const dashboard = await page(w, '/', cookie);
+    const row = dashboard.match(/<li class="is-tickets">[\s\S]*?<\/li>/)?.[0] ?? '';
+    expect(row).toContain('<span class="glance-count">13</span>');
+    expect(row.match(/class="glance-pip"/g)).toHaveLength(12);
+    expect(row).toContain('<span class="glance-more">+1</span>');
+  });
+
   test('with nothing waiting every count is quiet', async () => {
     const w = await webWorld();
     const cookie = await w.signIn();

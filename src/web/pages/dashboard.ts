@@ -347,7 +347,7 @@ function pips(count: number): Html {
  * Inbox and Alerts over the dashboard. The rows are the same ones the card and
  * Do next draw, so linking a sender, routing, dismissing and each alert's action
  * post as they do there. An id prefix keeps the dialog's fields from repeating the
- * card's. Without JavaScript the bubbles are anchors and these stay closed.
+ * card's. Without JavaScript the tally rows are anchors and these stay closed.
  */
 function inboxDialog(items: InboxItem[], people: Person[], timeZone: string, q: string): Html {
   const byNewest = [...items].sort((a, b) => b.receivedAt.localeCompare(a.receivedAt));
