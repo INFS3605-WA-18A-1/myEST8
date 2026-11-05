@@ -287,7 +287,7 @@ describe('the demo', () => {
         TWILIO_SMS_FROM: '+61480000000',
         FILE_LINK_SECRET: 'a-test-secret-that-is-long-enough-1234',
         PUBLIC_URL: 'https://myest8.test',
-        DEMO_SEND_TO: '+61400000001',
+        DEMO_SEND_TO: '+61411000001',
       }),
       seedAgency: false,
       log: (line) => lines.push(line),
@@ -312,13 +312,13 @@ describe('the demo', () => {
     });
     const sunrise = await d.app.asPropertyManager(pm);
     await sunrise.connectChannel('sms', '+61291000002');
-    await sunrise.sendTestMessage('sms', '+61400000001');
+    await sunrise.sendTestMessage('sms', '+61411000001');
 
     const sent = requests.filter((r) => r.url.includes('/gateway/send-sms') || r.url.includes('api.twilio.com'));
     expect(sent.map((r) => r.url)).toEqual(['https://api.textbee.dev/api/v1/gateway/send-sms']);
     expect(sent[0]!.headers.get('x-api-key')).toBe('textbee-test-api-key');
     expect(await sent[0]!.json()).toEqual({
-      recipients: ['+61400000001'],
+      recipients: ['+61411000001'],
       message: 'This is a test message from Sunrise Realty on myEST8. This channel is working.',
       deviceId: '664a9b8cd0e1f2a3b4c5d6e7',
     });
