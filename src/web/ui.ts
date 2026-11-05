@@ -392,9 +392,9 @@ export function button(
   return html`<button type="${o.type ?? 'submit'}" class="${buttonClass(o.variant ?? 'primary', o.size, o.block)}" ${o.name ? html`name="${o.name}" value="${o.value ?? ''}"` : ''} ${o.disabled ? 'disabled' : ''} ${o.formaction ? html`formaction="${o.formaction}"` : ''}>${o.icon ? icon(o.icon, { size: 'size-4' }) : ''}${label}</button>`;
 }
 
-/** A link styled as a button. */
-export function linkButton(label: string, href: string, o: { variant?: Variant; size?: ButtonSize; block?: boolean } = {}): Html {
-  return html`<a href="${href}" class="${buttonClass(o.variant ?? 'secondary', o.size, o.block)}">${label}</a>`;
+/** A link styled as a button. `title` adds a tooltip (a phone number behind "Call Oscar"). */
+export function linkButton(label: string, href: string, o: { variant?: Variant; size?: ButtonSize; block?: boolean; title?: string } = {}): Html {
+  return html`<a href="${href}" class="${buttonClass(o.variant ?? 'secondary', o.size, o.block)}"${o.title ? html` title="${o.title}"` : ''}>${label}</a>`;
 }
 
 /** A one-click action: a small form that POSTs `fields` to `action`. `confirm` asks first (via app.js). */

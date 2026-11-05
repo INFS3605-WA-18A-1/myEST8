@@ -616,10 +616,11 @@
       --size: 2.25rem;
       height: var(--size);
     }
-    /* Room for the caret daisyUI draws inside a select, so the longest option never runs under it. */
+    /* Room for the caret daisyUI draws inside a select, so the longest option never runs under it.
+       daisyUI's two-layer caret keeps its own background-position; overriding it collapses the
+       two 4px strokes into one dot. */
     .select {
-      padding-inline-end: 2.25rem;
-      background-position: right 0.75rem center;
+      padding-inline-end: 2.5rem;
     }
     .checkbox {
       --input-color: var(--control);
@@ -1207,11 +1208,30 @@
     }
 
     /* The dashboard: Urgent Repairs lead the right column, and long lists scroll inside their own box so the page stays short. */
+    .urgent-list {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
     .urgent-item {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
       padding: 8px 12px;
       background: var(--surface);
       border: 1px solid var(--line);
       border-radius: var(--radius-btn);
+    }
+    .urgent-main {
+      min-width: 0;
+    }
+    .urgent-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
     }
     .urgent-issue {
       margin: 0;
@@ -1233,6 +1253,14 @@
     .urgent-receipts {
       font-size: 13px;
       color: var(--muted);
+    }
+    @media (max-width: 39.99rem) {
+      .urgent-item {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .urgent-actions {
+        margin-top: 6px;
+      }
     }
     /* ===== The dashboard: soft cards. Left: what to do next, then Waiting on others. Right: the inbox, the week and Tickets by stage.
        The page scrolls; no card scrolls its list inside itself. ===== */
@@ -1298,6 +1326,10 @@
       .glance-list {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
+      /* An odd last row takes the whole width, so it never sits alone in one column. */
+      .glance-list > li:last-child:nth-child(odd) {
+        grid-column: 1 / -1;
+      }
     }
     .glance-list > li {
       display: flex;
@@ -1306,7 +1338,7 @@
     .glance-row {
       display: grid;
       grid-template-columns: 2.5rem minmax(0, 1fr) auto;
-      align-items: center;
+      align-items: start;
       gap: 4px 10px;
       flex: 1;
       min-width: 0;
@@ -1332,6 +1364,7 @@
     .glance-list > .is-owners { --c: var(--hivis); }
     .glance-list > .is-visits { --c: var(--ink); }
     .glance-list > .is-confirm { --c: var(--clay); }
+    .glance-list > .is-receipts { --c: var(--clay); }
     .glance-count {
       font-family: var(--font-head);
       font-size: 28px;
@@ -1345,11 +1378,17 @@
       color: var(--muted);
     }
     .glance-body {
-      display: grid;
-      gap: 4px;
+      display: block;
+      min-width: 0;
+    }
+    /* The label and its pips share one line; the sub-line sits under them. */
+    .glance-line {
+      display: flex;
+      align-items: center;
       min-width: 0;
     }
     .glance-label {
+      flex: 0 1 auto;
       min-width: 0;
       overflow: hidden;
       font-size: 14px;
@@ -1366,6 +1405,7 @@
       -webkit-line-clamp: 2;
       -webkit-box-orient: vertical;
       min-width: 0;
+      margin-top: 4px;
       overflow: hidden;
       font-size: 12px;
       color: var(--muted);
@@ -1373,17 +1413,20 @@
     .glance-row.is-zero .glance-sub {
       color: var(--muted);
     }
-    .glance-clear {
+    .glance-clear,
+    .glance-none {
       margin: 0;
       font-size: 13px;
       color: var(--muted);
     }
     .glance-pips {
-      display: flex;
+      display: inline-flex;
+      flex: none;
       flex-wrap: wrap;
       align-items: center;
       gap: 3px;
       min-height: 8px;
+      margin-left: 6px;
     }
     .glance-pip {
       flex: none;
@@ -1405,13 +1448,14 @@
       background: var(--clay);
     }
     .glance-more {
-      font-size: 11px;
+      font-size: 12px;
       font-variant-numeric: tabular-nums;
       line-height: 1;
       color: var(--muted);
     }
     .glance-go {
       display: flex;
+      align-self: center;
       color: var(--muted);
       transition: translate var(--dur-fast) var(--ease-out);
     }
@@ -1498,11 +1542,15 @@
     .do-next .queue-meta {
       margin: 0;
     }
+    /* A group's heading attaches to its own rows: more air above it than below. */
     .do-next-sub {
-      margin: 0 0 6px;
+      margin: 12px 0 -3px;
       font-size: 13px;
       font-weight: 600;
       color: var(--muted);
+    }
+    .do-next > :first-child > .do-next-sub {
+      margin-top: 0;
     }
     .do-next-urgent .do-next-sub {
       color: var(--urgent);
@@ -1614,6 +1662,18 @@
       text-align: right;
       white-space: nowrap;
     }
+    /* On a phone the full date would take most of the row, so only the time shows. */
+    .inbox-when-short {
+      display: none;
+    }
+    @media (max-width: 39.99rem) {
+      .inbox-when-full {
+        display: none;
+      }
+      .inbox-when-short {
+        display: inline;
+      }
+    }
     .inbox-empty {
       margin: 0;
       padding: 4px 0 6px;
@@ -1651,6 +1711,12 @@
       display: grid;
       gap: 8px;
     }
+    /* The bar counts every open Ticket, not only the ones Waiting on others names. */
+    .stage-caption {
+      margin: 0;
+      font-size: 12px;
+      color: var(--muted);
+    }
     .stage-quoting { --sc: var(--action); }
     .stage-awaiting_owner { --sc: var(--stage-owner); }
     .stage-approved { --sc: var(--stage-approved); }
@@ -1662,6 +1728,7 @@
       height: 11px;
       overflow: hidden;
       background: var(--track);
+      border: 1px solid var(--control);
       border-radius: var(--radius-btn);
     }
     .stage-scale i {
@@ -1699,7 +1766,7 @@
     .ticket-row {
       position: relative;
       display: grid;
-      grid-template-columns: 36px minmax(0, 1fr) auto;
+      grid-template-columns: 36px minmax(0, 1fr) 6.5rem;
       gap: 12px;
       align-items: center;
       padding: 7px 12px;
@@ -1778,9 +1845,12 @@
       height: 12px;
       background: var(--track);
       border-radius: var(--radius-sm);
+      /* The unfilled track is nearly the row's Sand; a control-coloured edge keeps it visible. */
+      box-shadow: inset 0 0 0 1px var(--control);
     }
     .stage-segs i.on {
       background: var(--sc);
+      box-shadow: none;
     }
     .ticket-row-stage-name {
       font-size: 12px;
@@ -1800,7 +1870,7 @@
         font-size: 15px;
       }
       .glance-list {
-        grid-template-columns: repeat(5, minmax(0, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
         gap: 4px;
       }
       .glance-row {
@@ -1814,10 +1884,20 @@
         text-align: center;
       }
       .glance-body {
-        justify-items: center;
-        gap: 2px;
+        text-align: center;
       }
-      .glance-label,
+      .glance-line {
+        display: block;
+      }
+      /* The long label stays the link's name for screen readers; the short one is what shows. */
+      .glance-label {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
       .glance-pips,
       .glance-sub,
       .glance-go {
@@ -1825,7 +1905,7 @@
       }
       .glance-label-short {
         display: block;
-        font-size: 11px;
+        font-size: 12px;
         line-height: 1.15;
         color: var(--ink);
         text-align: center;
@@ -1843,9 +1923,10 @@
         margin-top: 6px;
       }
       .stage-counts {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 4px 14px;
+        display: grid;
+        grid-template-columns: repeat(5, auto);
+        justify-content: space-between;
+        gap: 4px 8px;
       }
       /* Each Ticket row: the number and two lines of issue, then the progress marker and
          the stage's name on their own line, so the title keeps the row's width. */
@@ -2070,7 +2151,7 @@
       display: grid;
       justify-items: end;
       gap: 4px;
-      font-size: 11px;
+      font-size: 12px;
       color: var(--muted);
       white-space: nowrap;
     }
@@ -2152,7 +2233,7 @@
       flex-wrap: wrap;
       align-items: center;
       gap: 4px 10px;
-      font-size: 11px;
+      font-size: 12px;
     }
     .inbox-message-channel,
     .inbox-message-direction {
@@ -3124,6 +3205,11 @@
       }
       .page-header-lead > .menu-button {
         grid-column: 1;
+        grid-row: 1;
+        align-self: center;
+      }
+      /* A badge under the title makes the lead two rows tall; the button then spans both so it stays centred. */
+      .page-header-lead:has(> .badge) > .menu-button {
         grid-row: 1 / span 2;
         align-self: start;
       }
@@ -3449,6 +3535,15 @@
       max-width: 72ch;
       font-size: 14px;
       color: var(--muted);
+    }
+    /* In the app's header row the subtitle takes the room it needs, so a single action stays on its right. */
+    .app-content .page-subtitle {
+      flex: 1 1 20rem;
+      min-width: 0;
+    }
+    /* The subtitle belongs to the title, not to the body: pull it up from the column's 24px gap. */
+    .page-header + .page-head {
+      margin-top: -14px;
     }
     .page-actions {
       display: flex;
@@ -11267,7 +11362,7 @@
       border-radius: 50%;
     }
     .appr-ring > span {
-      font-size: 10px;
+      font-size: 12px;
       font-weight: 700;
       color: var(--urgent);
     }

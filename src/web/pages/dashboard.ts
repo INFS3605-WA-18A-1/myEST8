@@ -25,6 +25,7 @@ import {
   emptyState,
   field,
   flashFrom,
+  formatTime,
   formatWhen,
   humanise,
   linkButton,
@@ -83,20 +84,11 @@ const MESSAGE_CLASS: Record<string, string> = {
   other: 'Not maintenance',
 };
 
-/** The board's lanes, named as the Property Manager says them. */
-/** The same stages in a few words, for the counts above the Ticket rows. */
+/** The same stages in a few words, for the counts above the Ticket rows and each row's marker. */
 const STAGE_SHORT: Record<Stage, string> = {
   quoting: 'Quoting',
   awaiting_owner: 'With owner',
   approved: 'To book',
-  scheduled: 'Booked',
-  done: 'Done',
-};
-
-const STAGE_TITLE: Record<Stage, string> = {
-  quoting: 'Quoting',
-  awaiting_owner: 'With Property Owner',
-  approved: 'Ready to book',
   scheduled: 'Booked',
   done: 'Done',
 };
@@ -127,7 +119,10 @@ export function dashboardPages() {
     };
     // Only the receipts the Property Manager has to review are "Do next" work; the ones awaiting a receipt or with the Owner wait on someone else.
     const toReview = view.urgentRepairs.filter((u) => u.status === 'receipt_received');
-    const waiting = view.maintenanceRequests.length + decided.toCheck.length + decided.toBook.length + decided.toChoose.length + view.alerts.length + toReview.length;
+    // A Tradie slow to offer visit times, or a Tenant yet to pick one, waits on someone else:
+    // it belongs in Waiting on others, never in both cards.
+    const alerts = view.alerts.filter((a) => a.kind !== 'tradie_no_visit_times' && a.kind !== 'tenant_no_visit_pick');
+    const waiting = view.maintenanceRequests.length + decided.toCheck.length + decided.toBook.length + decided.toChoose.length + alerts.length + toReview.length;
     const threads = view.inbox.length ? await actions.inboxThreads() : [];
     const firstName = pm.name.trim().split(/\s+/)[0] || pm.name;
 
@@ -147,12 +142,12 @@ export function dashboardPages() {
         body: html`
           <div class="dashboard-desk">
             <div class="dash-col">
-              ${doNext({ view, ...decided, toReview, total: waiting, q, timeZone, now, shareLink: shareUrl(c, '/?filter=all#requests') })}
+              ${doNext({ view, ...decided, toReview, alerts, total: waiting, q, timeZone, now, shareLink: shareUrl(c, '/?filter=all#requests') })}
               ${glance(view, filter, now, timeZone, pm.id)}
             </div>
             <div class="dash-col">
               ${inboxCard(threads, view.inbox.length, timeZone)}
-              ${nextSevenDays(view.calendar, now, timeZone, c.req.query('day'), filter)}
+              ${nextSevenDays(view.calendar, now, timeZone, c.req.query('day'), filter, pm.id)}
               ${ticketsByStage(view.tickets, filter, now)}
             </div>
           </div>
@@ -163,13 +158,13 @@ export function dashboardPages() {
   });
 
   // The day strip asks for this on its own, so choosing a day does not redraw the dashboard.
-  // The visits are the same window dashboard() returns, which Mine and All do not narrow.
+  // The visits are the same window dashboard() returns, narrowed to the Property Manager's own on Mine.
   pages.get('/next-7-days', async (c) => {
-    const { actions } = c.var;
+    const { actions, pm } = c.var;
     const { timeZone } = actions.agency();
     const now = actions.now();
     const bookings = await actions.calendar(dashboardCalendarRange(now, timeZone));
-    return c.html(nextSevenDays(bookings, now, timeZone, c.req.query('day'), filterOf(c)));
+    return c.html(nextSevenDays(bookings, now, timeZone, c.req.query('day'), filterOf(c), pm.id));
   });
 
   pages.post('/requests/:issueId{[0-9]+}/confirm', async (c) =>
@@ -281,6 +276,8 @@ type GlanceItem = {
   label: string;
   /** The words on a phone's compact strip ("Tradies", "Owners"). */
   short: string;
+  /** The words for the quiet line when this row has nothing waiting. */
+  none: string;
   count: number;
   href: string;
   /** What the row waits on, under the label. A zero count reads "None" instead. */
@@ -293,12 +290,19 @@ type GlanceItem = {
 /** A Ticket is stale once it has waited this many days for the other side. */
 const STALE_DAYS = 7;
 
+/** "a", "a or b", "a, b or c". */
+function orList(words: string[]): string {
+  if (words.length <= 1) return words[0] ?? '';
+  return `${words.slice(0, -1).join(', ')} or ${words.at(-1)}`;
+}
+
 /**
  * Waiting on others: the things a Property Manager is waiting for someone else to do
  * (Tradies to quote, Property Owners to approve — a Quote or a receipt — visit times
  * to be arranged, visits to be confirmed and receipts to come back), each a row with
- * its count, what it waits on, and a pip for every item. A count of zero reads "None";
- * when nothing waits at all, the rows give way to one line saying so.
+ * its count, what it waits on, and a pip for every item. A row with nothing waiting is
+ * left out and named in one quiet line; when nothing waits at all, the rows give way
+ * to one line saying so.
  */
 function glance(view: Dashboard, filter: Filter, now: Date, timeZone: string, pmId: number): Html {
   const q = filter === 'all' ? '&filter=all' : '';
@@ -308,8 +312,10 @@ function glance(view: Dashboard, filter: Filter, now: Date, timeZone: string, pm
   const forwarded = view.urgentRepairs.filter((u) => u.status === 'receipt_forwarded');
   const receipts = view.urgentRepairs.filter((u) => u.status === 'reminder_sent');
   const ownerNoReply = view.alerts.filter((alert) => alert.kind === 'owner_no_reply').length;
-  const slowToOffer = view.alerts.filter((alert) => alert.kind === 'tradie_no_visit_times').length;
-  const tenantToPick = view.alerts.filter((alert) => alert.kind === 'tenant_no_visit_pick').length;
+  const slowAlerts = view.alerts.filter((alert) => alert.kind === 'tradie_no_visit_times');
+  const pickAlerts = view.alerts.filter((alert) => alert.kind === 'tenant_no_visit_pick');
+  const slowToOffer = slowAlerts.length;
+  const tenantToPick = pickAlerts.length;
   const today = dayOf(now, timeZone);
   const tomorrow = addDays(today, 1);
   const inWindow = view.calendar.filter((b) => {
@@ -321,32 +327,44 @@ function glance(view: Dashboard, filter: Filter, now: Date, timeZone: string, pm
   const todayUnconfirmed = unconfirmed.filter((b) => dayOf(b.start, timeZone) === today).length;
   const tomorrowUnconfirmed = unconfirmed.length - todayUnconfirmed;
 
-  const received = tradies.reduce((sum, t) => sum + (t.quoting?.received ?? 0), 0);
+  const firm = tradies.reduce((sum, t) => sum + (t.quoting?.firm ?? 0), 0);
   const asked = tradies.reduce((sum, t) => sum + (t.quoting?.asked ?? 0), 0);
   const oldest = (items: { reportedAt: string }[]) => (items.length ? ageOf(items.reduce((oldest, t) => (t.reportedAt < oldest ? t.reportedAt : oldest), items[0]!.reportedAt), now) : '');
   const oldestFirst = (items: { at: string }[]) => [...items].sort((a, b) => a.at.localeCompare(b.at));
   const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+  // Visit times: the approved Tickets plus any Ticket a slow-to-offer or tenant-to-pick
+  // alert names, once each, so the count and its sub-line describe the same set.
+  const visitIds = new Set(visits.map((t) => t.ticketId));
+  for (const alert of [...slowAlerts, ...pickAlerts]) visitIds.add(alert.ticketId);
+  const visitTickets = view.tickets.filter((t) => visitIds.has(t.ticketId));
 
   // What the visit rows wait on, with the zero clauses left out.
   const visitParts = [slowToOffer ? `${plural(slowToOffer, 'Tradie', 'Tradies')} slow to offer` : '', tenantToPick ? `${plural(tenantToPick, 'Tenant', 'Tenants')} yet to pick` : ''].filter(Boolean);
   const confirmParts = [todayUnconfirmed ? `today ${todayUnconfirmed}` : '', tomorrowUnconfirmed ? `tomorrow ${tomorrowUnconfirmed}` : ''].filter(Boolean);
   const ownerParts = [owners.length ? `oldest opened ${oldest(owners)}` : '', forwarded.length ? `${plural(forwarded.length, 'receipt', 'receipts')} with the Owner` : ''].filter(Boolean);
   const ownerCount = owners.length + forwarded.length;
+  // The quoting row waits on Firm Quotes: say how many of the Tradies asked have given one.
+  const quotingSub = asked
+    ? `${firm} ${firm === 1 ? 'Firm Quote' : 'Firm Quotes'} of ${asked} in · oldest opened ${oldest(tradies)}`
+    : `No Quote Requests yet · oldest opened ${oldest(tradies)}`;
 
   const rows: GlanceItem[] = [
     {
       cls: 'is-tradies',
       label: 'Tradies quoting',
       short: 'Tradies',
+      none: 'Tradies to quote',
       count: tradies.length,
       href: `/tickets?stage=quoting${q}`,
-      sub: `${received} of ${asked} Quotes in · oldest opened ${oldest(tradies)}`,
+      sub: quotingSub,
       items: oldestFirst(tradies.map((t) => ({ at: t.reportedAt }))),
     },
     {
       cls: 'is-owners',
       label: 'Owners approving',
       short: 'Owners',
+      none: 'Owners approving',
       count: ownerCount,
       // A receipt with the Owner lives on Approvals; a Ticket waiting on the Owner lives on the Tickets list.
       href: forwarded.length && !owners.length ? '/approvals#reimbursements' : `/tickets?stage=awaiting_owner${q}`,
@@ -358,15 +376,17 @@ function glance(view: Dashboard, filter: Filter, now: Date, timeZone: string, pm
       cls: 'is-visits',
       label: 'Visit times being arranged',
       short: 'Visit times',
-      count: visits.length,
+      none: 'visit times',
+      count: visitIds.size,
       href: `/tickets?stage=approved${q}`,
-      sub: visitParts.length ? visitParts.join(' · ') : `oldest opened ${oldest(visits)}`,
-      items: oldestFirst(visits.map((t) => ({ at: t.reportedAt }))),
+      sub: visitParts.length ? visitParts.join(' · ') : `oldest opened ${oldest(visitTickets)}`,
+      items: oldestFirst(visitTickets.map((t) => ({ at: t.reportedAt }))),
     },
     {
       cls: 'is-confirm',
       label: 'Visits not confirmed',
       short: 'Confirm',
+      none: 'visit confirmations',
       count: unconfirmed.length,
       href: `/calendar?view=day&date=${today}&status=not_confirmed${q}`,
       sub: confirmParts.join(' · '),
@@ -377,6 +397,7 @@ function glance(view: Dashboard, filter: Filter, now: Date, timeZone: string, pm
       cls: 'is-receipts',
       label: 'Receipts awaited',
       short: 'Receipts',
+      none: 'receipts',
       count: receipts.length,
       href: '/approvals#reimbursements',
       sub: `oldest opened ${oldest(receipts)}`,
@@ -384,14 +405,15 @@ function glance(view: Dashboard, filter: Filter, now: Date, timeZone: string, pm
     },
   ];
 
-  const nothing = rows.every((row) => row.count === 0);
-  return html`<section class="glance${nothing ? ' is-clear' : ''}" aria-label="Waiting on others">
-    <h3 class="glance-title">Waiting on others</h3>
-    ${nothing
-      ? html`<p class="glance-clear">Nothing is waiting on Tradies, Owners or Tenants.</p>`
-      : html`<ul class="glance-list">
-          ${rows.map((row) => glanceRow(row, now))}
-        </ul>`}
+  const shown = rows.filter((row) => row.count > 0);
+  const hidden = rows.filter((row) => row.count === 0);
+  return html`<section class="glance${shown.length ? '' : ' is-clear'}" aria-label="Waiting on others">
+    <h2 class="glance-title">Waiting on others</h2>
+    ${shown.length
+      ? html`<ul class="glance-list">
+          ${shown.map((row) => glanceRow(row, now))}
+        </ul>${hidden.length ? html`<p class="glance-none">Nothing waiting on ${orList(hidden.map((row) => row.none))}.</p>` : ''}`
+      : html`<p class="glance-clear">Nothing is waiting on Tradies, Owners or Tenants.</p>`}
   </section>`;
 }
 
@@ -400,9 +422,11 @@ function glanceRow(item: GlanceItem, now: Date): Html {
   return html`<li class="${item.cls}"><a href="${item.href}" class="glance-row${item.count === 0 ? ' is-zero' : ''}">
     <span class="glance-count">${item.count}</span>
     <span class="glance-body">
-      <span class="glance-label">${item.label}</span>
-      <span class="glance-label-short" aria-hidden="true">${item.short}</span>
-      ${pips(item.items, item.count, now)}
+      <span class="glance-line">
+        <span class="glance-label">${item.label}</span>
+        <span class="glance-label-short" aria-hidden="true">${item.short}</span>
+        ${pips(item.items, item.count, now)}
+      </span>
       <span class="glance-sub">${item.count === 0 ? 'None' : item.sub}${item.chips?.length ? html` ${item.chips}` : ''}</span>
     </span>
     <span class="glance-go">${icon('caret-right', { size: 'size-4' })}</span>
@@ -426,17 +450,18 @@ function isStale(at: string, now: Date): boolean {
 /**
  * Maintenance Requests (oldest first, as the core orders them), the Urgent Repair
  * receipts to review, then the Tickets waiting on a Quote decision, then alerts: the
- * things only the Property Manager can do, each a soft row with its action. When
- * there are none one quiet line says so. `shareLink` is the Agency-wide list of
+ * things only the Property Manager can do, each a soft row with its action. Every
+ * group has its own sub-heading, so a heading always sits with the rows it names.
+ * When there are none one quiet line says so. `shareLink` is the Agency-wide list of
  * Maintenance Requests, which a Share button passes on when there are any.
  */
-function doNext(n: Decided & { view: Dashboard; toReview: UrgentRepair[]; total: number; q: string; timeZone: string; now: Date; shareLink: string }): Html {
-  const { view, q, timeZone, now, shareLink, toReview, total } = n;
+function doNext(n: Decided & { view: Dashboard; toReview: UrgentRepair[]; alerts: Alert[]; total: number; q: string; timeZone: string; now: Date; shareLink: string }): Html {
+  const { view, q, timeZone, now, shareLink, toReview, alerts, total } = n;
   const requests = view.maintenanceRequests;
   const group = (id: string, title: string, rows: Html[]) =>
     rows.length ? html`<div id="${id}" class="do-next-list"><h3 class="do-next-sub">${title}</h3>${rows}</div>` : '';
   return section({
-    title: html`Do next <span class="count-chip">${total}</span>`,
+    title: html`Do next <span class="count-chip is-decision">${total}</span>`,
     id: 'decisions',
     actions: requests.length
       ? shareButton({
@@ -448,14 +473,13 @@ function doNext(n: Decided & { view: Dashboard; toReview: UrgentRepair[]; total:
       : undefined,
     body: html`<div class="do-next">
       ${toReview.length ? html`<div id="urgent-repairs" class="do-next-urgent"><h3 class="do-next-sub">Urgent Repairs</h3>${urgentRepairsList(toReview, timeZone)}</div>` : ''}
-      <div id="requests" class="do-next-list">
-        ${requests.map((r) => requestRow(r, q, now))}
-      </div>
+      ${requests.length ? html`<div id="requests" class="do-next-list"><h3 class="do-next-sub">Maintenance Requests to confirm</h3>${requests.map((r) => requestRow(r, q, now))}</div>` : ''}
       ${group('quotes-to-check', 'Quotes to check', n.toCheck.map((t) => ticketDecisionRow(t, 'check_quotes', now)))}
       ${group('inspections', 'Site Inspections to book', n.toBook.map((t) => ticketDecisionRow(t, 'book_inspection', now)))}
-      ${group('quotes-to-choose', 'Quotes to choose', n.toChoose.map((t) => ticketDecisionRow(t, 'choose_quote', now)))}
+      ${group('quotes-to-choose', 'Firm Quotes to choose', n.toChoose.map((t) => ticketDecisionRow(t, 'choose_quote', now)))}
       <div id="alerts" class="do-next-list">
-        ${view.alerts.map((a) => alertRow(a, timeZone))}
+        ${alerts.length ? html`<h3 class="do-next-sub">Alerts</h3>` : ''}
+        ${alerts.map((a) => alertRow(a, timeZone))}
       </div>
       ${total === 0 ? emptyState('No Maintenance Requests waiting for you. Nothing else needs you right now.') : ''}
       ${total > 0 && toReview.length === 0 ? html`<p id="urgent-repairs" class="do-next-clear">No Urgent Repair receipts to review</p>` : ''}
@@ -530,7 +554,7 @@ function alertRow(alert: Alert, timeZone: string): Html {
         detail: streetOf(alert.propertyAddress),
         badges: [badge('Approval', 'warning')],
         decision: true,
-        actions: alert.ownerPhone ? linkButton(`Call ${alert.ownerPhone}`, `tel:${alert.ownerPhone}`, { size: 'sm' }) : html`<span class="text-xs text-muted">No phone number on file</span>`,
+        actions: alert.ownerPhone ? linkButton(`Call ${alert.ownerName}`, `tel:${alert.ownerPhone}`, { size: 'sm', title: alert.ownerPhone }) : html`<span class="text-xs text-muted">No phone number on file</span>`,
       });
     case 'rating_due':
       return queueRow({
@@ -548,7 +572,7 @@ function alertRow(alert: Alert, timeZone: string): Html {
         detail: streetOf(alert.propertyAddress),
         badges: [badge('Visit', 'warning')],
         decision: true,
-        actions: linkButton('Open the Ticket', `/tickets/${alert.ticketId}#job-${alert.jobId}`, { size: 'sm' }),
+        actions: linkButton(`Chase ${alert.businessName}`, `/tickets/${alert.ticketId}#job-${alert.jobId}`, { size: 'sm' }),
       });
     case 'tenant_no_visit_pick':
       return queueRow({
@@ -557,7 +581,7 @@ function alertRow(alert: Alert, timeZone: string): Html {
         detail: streetOf(alert.propertyAddress),
         badges: [badge('Visit', 'warning')],
         decision: true,
-        actions: linkButton('Open the Ticket', `/tickets/${alert.ticketId}#job-${alert.jobId}`, { size: 'sm' }),
+        actions: linkButton('Ask the Tenant to pick', `/tickets/${alert.ticketId}#job-${alert.jobId}`, { size: 'sm' }),
       });
   }
 }
@@ -594,7 +618,7 @@ function inboxCard(threads: InboxThread[], total: number, timeZone: string): Htm
   const newest = threads.slice(0, 3);
   return html`<section class="inbox-card" id="inbox" aria-label="Inbox">
     <div class="inbox-card-head">
-      <h3 class="inbox-card-title">Inbox</h3>
+      <h2 class="inbox-card-title">Inbox</h2>
       ${threads.length ? html`<span class="inbox-card-count">${total} waiting</span>` : ''}
     </div>
     ${threads.length
@@ -604,7 +628,7 @@ function inboxCard(threads: InboxThread[], total: number, timeZone: string): Htm
               return html`<li><a class="inbox-preview" href="#inbox" data-inbox-open="${i}">
                 <span class="inbox-avatar" aria-hidden="true">${initialsOf(thread.personName ?? thread.address)}</span>
                 <span class="inbox-preview-main"><span class="inbox-preview-who">${thread.personName ?? thread.address}</span><span class="inbox-preview-text">${last?.text ?? thread.items[0]?.text ?? ''}</span></span>
-                <time class="inbox-preview-when" datetime="${thread.latestAt}">${formatWhen(thread.latestAt, timeZone)}</time>
+                <time class="inbox-preview-when" datetime="${thread.latestAt}"><span class="inbox-when-full">${formatWhen(thread.latestAt, timeZone)}</span><span class="inbox-when-short">${formatTime(thread.latestAt, timeZone)}</span></time>
               </a></li>`;
             })}
           </ul>
@@ -781,6 +805,7 @@ function ticketsByStage(tickets: BoardTicket[], filter: Filter, now: Date): Html
     actions: linkButton('See all Tickets', filter === 'all' ? '/tickets?filter=all' : '/tickets', { variant: 'ghost', size: 'sm' }),
     body: tickets.length
       ? html`<div class="stage-board">
+          <p class="stage-caption">All open Tickets by stage</p>
           <div class="stage-scale" aria-hidden="true">${STAGES.map((stage, i) => html`<i class="stage-${stage}" style="flex-grow:${counts[i]}"></i>`)}</div>
           <ul class="stage-counts">${STAGES.map((stage, i) => html`<li${counts[i] === 0 ? html` class="is-zero"` : ''}><b>${counts[i]}</b> ${STAGE_SHORT[stage]}</li>`)}</ul>
           <div class="stage-rows">${STAGES.flatMap((stage) => tickets.filter((t) => t.stage === stage).map((t) => ticketRow(t, now)))}</div>
@@ -815,7 +840,7 @@ function ticketRow(t: BoardTicket, now: Date): Html {
     </span>
     <span class="ticket-row-stage">
       <span class="stage-segs" aria-hidden="true">${STAGES.map((stage, i) => html`<i class="${i <= reached ? `on stage-${t.stage}` : ''}"></i>`)}</span>
-      <span class="ticket-row-stage-name">${STAGE_TITLE[t.stage]}</span>
+      <span class="ticket-row-stage-name">${STAGE_SHORT[t.stage]}</span>
     </span>
   </a>`;
 }
@@ -870,10 +895,12 @@ function shownDay(now: Date, timeZone: string, dayQuery: string | undefined) {
  * Under the strip, that day's visits in time order. The dashboard and `GET /next-7-days`
  * both draw this.
  */
-function nextSevenDays(bookings: Booking[], now: Date, timeZone: string, dayQuery: string | undefined, filter: Filter): Html {
+function nextSevenDays(bookings: Booking[], now: Date, timeZone: string, dayQuery: string | undefined, filter: Filter, pmId: number): Html {
   const { today, days, chosen } = shownDay(now, timeZone, dayQuery);
+  // Mine keeps the Property Manager's own visits; All keeps the Agency's.
+  const scoped = filter === 'mine' ? bookings.filter((b) => b.propertyManagerId === pmId) : bookings;
   const byDay = new Map<string, Booking[]>();
-  for (const b of bookings) {
+  for (const b of scoped) {
     const day = dayOf(b.start, timeZone);
     byDay.set(day, [...(byDay.get(day) ?? []), b]);
   }
@@ -881,7 +908,7 @@ function nextSevenDays(bookings: Booking[], now: Date, timeZone: string, dayQuer
   const dateOf = new Intl.DateTimeFormat('en-AU', { timeZone: 'UTC', day: 'numeric' });
   const visits = byDay.get(chosen) ?? [];
   // With nothing on the chosen day, say where the next visit is rather than leaving a dead end.
-  const next = visits.length ? undefined : [...bookings].sort((a, b) => a.start.localeCompare(b.start)).find((b) => dayOf(b.start, timeZone) >= chosen);
+  const next = visits.length ? undefined : [...scoped].sort((a, b) => a.start.localeCompare(b.start)).find((b) => dayOf(b.start, timeZone) >= chosen);
   return section({
     title: 'Next 7 days',
     id: 'next-7-days',
@@ -936,15 +963,18 @@ function ageOf(iso: string, now: Date) {
 
 // Urgent Repairs
 
-/** Urgent Repairs as a compact list: the issue (linked to its Reimbursement Request), where, who and when, then the Urgent badge and where the receipt stands. */
+/** Urgent Repairs as a compact list: the issue (linked to its Reimbursement Request), where, who and when, then the Urgent badge and where the receipt stands, with the receipt's review as the row's action. */
 function urgentRepairsList(repairs: UrgentRepair[], timeZone: string): Html {
   if (!repairs.length) return emptyState('No Urgent Repairs reported.');
-  return html`<ul class="grid gap-2">
+  return html`<ul class="urgent-list">
     ${repairs.map(
       (u) => html`<li class="urgent-item">
-        <p class="urgent-issue">${rowLink(u.description, `/reimbursements/${u.urgentRepairId}`)}</p>
-        <p class="urgent-meta">${u.propertyAddress} · ${u.tenantName} · ${formatWhen(u.reportedAt, timeZone)}</p>
-        <p class="urgent-foot">${urgencyBadge('urgent')}${reimbursementBadge(u.status)}<span class="urgent-receipts">${u.receipts === 1 ? '1 receipt' : u.receipts ? `${u.receipts} receipts` : 'No receipts yet'}</span></p>
+        <div class="urgent-main">
+          <p class="urgent-issue">${rowLink(u.description, `/reimbursements/${u.urgentRepairId}`)}</p>
+          <p class="urgent-meta">${streetOf(u.propertyAddress)} · ${u.tenantName} · ${formatWhen(u.reportedAt, timeZone)}</p>
+          <p class="urgent-foot">${urgencyBadge('urgent')}${reimbursementBadge(u.status)}<span class="urgent-receipts">${u.receipts === 1 ? '1 receipt' : u.receipts ? `${u.receipts} receipts` : 'No receipts yet'}</span></p>
+        </div>
+        <div class="urgent-actions">${linkButton('Review the receipt', `/reimbursements/${u.urgentRepairId}`, { size: 'sm' })}</div>
       </li>`,
     )}
   </ul>`;
