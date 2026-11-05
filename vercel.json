@@ -6,7 +6,7 @@
   "functions": {
     "api/index.ts": {
       "maxDuration": 300,
-      "includeFiles": "{src/web/static/**,src/demo/sample-photos/**,node_modules/daisyui/**,node_modules/maplibre-gl/{package.json,dist/maplibre-gl{,-worker}.mjs,dist/maplibre-gl.css},node_modules/@fontsource-variable/{bricolage-grotesque,public-sans}/**,node_modules/@phosphor-icons/core/assets/**}"
+      "includeFiles": "{src/web/static/**,src/demo/sample-photos/**,node_modules/{daisyui/**,maplibre-gl/{package.json,dist/maplibre-gl{,-worker}.mjs,dist/maplibre-gl.css},@fontsource-variable/{bricolage-grotesque,public-sans}/**,@phosphor-icons/core/assets/**}}"
     }
   },
   "crons": [{ "path": "/api/cron/worker", "schedule": "0 6 * * *" }]
