@@ -7606,6 +7606,7 @@
 
     /* ----- Dispatch, soft cards: the map card beside Today at a glance and To dispatch, Properties under them. */
     .dispatch-top {
+      --dispatch-h: 43rem; /* the map card and the right column share one height from 64rem */
       display: grid;
       grid-template-columns: minmax(0, 1fr);
       gap: 16px;
@@ -7679,7 +7680,7 @@
     /* From 64rem the card sets the height and the stage fills it. This comes after the rule above so it wins. */
     @media (min-width: 64rem) {
       .dispatch-mapcard {
-        height: 43rem;
+        height: var(--dispatch-h);
         max-height: none;
         position: sticky;
         top: 76px;
@@ -7854,14 +7855,14 @@
       display: grid;
       gap: 16px;
     }
-    /* From 64rem the right column fills the window: Today at a glance keeps its natural
-       height and To dispatch takes the rest, its header fixed while its cards scroll. */
+    /* From 64rem the right column is as tall as the map card beside it: Today at a glance
+       keeps its natural height and To dispatch takes the rest, its header fixed while its
+       cards scroll. Sharing the map's height keeps both bottoms level whatever the header does. */
     @media (min-width: 64rem) {
       .dispatch-right {
         display: flex;
         flex-direction: column;
-        height: calc(100dvh - 9.5rem);
-        min-height: 30rem;
+        height: var(--dispatch-h);
       }
       .dispatch-right > .soft-card:first-child {
         flex: none;
@@ -7872,29 +7873,16 @@
         flex: 1 1 0;
         min-height: 0;
       }
-      #to-dispatch > .dispatch-queue,
-      #to-dispatch > .empty-state {
+      #to-dispatch > .dispatch-queue {
+        align-content: start;
         min-height: 0;
         overflow-y: auto;
         padding-right: 4px;
         scrollbar-width: thin;
       }
-      #to-dispatch > .dispatch-queue {
-        align-content: start;
-      }
-    }
-    /* A short window scrolls the page instead of squeezing the queue, but the list still
-       stops at a fixed height so the page can't run on. */
-    @media (min-width: 64rem) and (max-height: 47.99rem) {
-      .dispatch-right {
-        height: auto;
-      }
-      #to-dispatch {
-        flex: none;
-      }
-      #to-dispatch > .dispatch-queue,
+      /* One sentence: it keeps its own height rather than stretching into a tall empty box. */
       #to-dispatch > .empty-state {
-        max-height: 36rem;
+        align-self: start;
       }
     }
     .dispatch-stack .dispatch-address .entity-link {
