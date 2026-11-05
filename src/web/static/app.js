@@ -369,8 +369,8 @@ try {
 })();
 
 // === password ===
-// The Show / Hide button inside a password field (the sign-up form). It says both what it
-// does and whether the password is showing, and never changes what the field posts.
+// The Show / Hide button inside a password field (the sign-up form). Its label and
+// text say what pressing it will do, and it never changes what the field posts.
 onContent((root) => {
   for (const toggle of root.querySelectorAll('[data-reveal]')) {
     if (toggle.dataset.ready) continue;
@@ -380,7 +380,6 @@ onContent((root) => {
     toggle.addEventListener('click', () => {
       const showing = input.type === 'text';
       input.type = showing ? 'password' : 'text';
-      toggle.setAttribute('aria-pressed', String(!showing));
       toggle.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
       toggle.textContent = showing ? 'Show' : 'Hide';
     });

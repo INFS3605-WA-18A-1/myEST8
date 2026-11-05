@@ -21,6 +21,8 @@ export type NextStep = { text: string; request?: boolean };
 export function authPage(o: {
   title: string;
   subtitle: string;
+  /** One quiet line under the subtitle on phones, such as how long setup takes. */
+  phoneNote?: string;
   flash?: Flash | null;
   size: 'login' | 'signup';
   form: Html;
@@ -47,6 +49,7 @@ export function authPage(o: {
               <div class="au-head">
                 <h1 class="au-title">${o.title}</h1>
                 <p class="au-lead">${o.subtitle}</p>
+                ${o.phoneNote ? html`<p class="au-lead au-phone-note">${o.phoneNote}</p>` : ''}
               </div>
               ${o.form}
             </div>

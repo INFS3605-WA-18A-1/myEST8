@@ -61,7 +61,8 @@ function landingPage(o: { demo: boolean }): Html {
           <div class="lp-wrap lp-bar-inner">
             <a href="/" class="logotype lp-home" aria-label="myEST8 home">${logo()}</a>
             <nav class="lp-bar-links" aria-label="Page">
-              ${linkButton('How it works', '#example', { variant: 'ghost', size: 'sm' })} ${linkButton('A repair, start to finish', '#repair', { variant: 'ghost', size: 'sm' })}
+              ${linkButton('Their words, your request', '#example', { variant: 'ghost', size: 'sm' })}
+              ${linkButton('A repair, start to finish', '#repair', { variant: 'ghost', size: 'sm' })}
               ${linkButton('What it handles', '#handled', { variant: 'ghost', size: 'sm' })}
             </nav>
             <nav class="lp-bar-actions" aria-label="Account">
@@ -81,8 +82,9 @@ function landingPage(o: { demo: boolean }): Html {
 /**
  * "Narrow talk, wide headline": the headline wide on the right, two lines, the
  * second carrying the Wattle decision stripe a decision row has on the dashboard.
- * The narrow left column says what myEST8 is and holds the ways in. Under the
- * headline, a Newtown terrace street, with the count of decisions on its corner.
+ * The narrow left column says what myEST8 is, holds the ways in, and ends on the
+ * count of decisions a repair asks of the Property Manager. Under the headline,
+ * a Newtown terrace street.
  */
 function hero(): Html {
   return html`<section class="lp-hero" aria-labelledby="lp-title">
@@ -97,10 +99,10 @@ function hero(): Html {
         </p>
         <div class="lp-actions">${linkButton(SIGN_UP, '/signup', { variant: 'primary', size: 'lg' })} ${linkButton('Sign in', '/login', { size: 'lg' })}</div>
         <p class="lp-note">Tenants, Tradies and Property Owners never need an account. They reply by text or email.</p>
+        <p class="lp-figure-block"><span class="lp-figure-num num">2</span><span>decisions on a typical repair. myEST8 chases the rest.</span></p>
       </div>
       <figure class="lp-hero-figure">
         <div class="lp-hero-photo">${photo('newtown-terraces.jpg', 'A row of rendered terrace houses with iron lace balconies in Newtown, Sydney', 1339, 1200, { eager: true })}</div>
-        <p class="lp-figure-block"><span class="lp-figure-num num">2</span><span>decisions on a typical repair. myEST8 chases the rest.</span></p>
         <figcaption class="lp-caption">Terrace houses in Newtown, Sydney.</figcaption>
       </figure>
     </div>
@@ -436,14 +438,15 @@ const PEOPLE = [
  * Manager (each with the Wattle stripe), what myEST8 does, and who never signs in.
  */
 function handled(): Html {
-  const slot = (name: string, alt: string, w: number, h: number) => html`<span class="lp-slot">${photo(name, alt, w, h, { immediate: true })}</span>`;
+  const slot = (name: string, alt: string, w: number, h: number, crop: string) =>
+    html`<span class="lp-slot ${crop}">${photo(name, alt, w, h, { immediate: true })}</span>`;
   return html`<section class="lp-handled" id="handled" aria-labelledby="handled-title">
     <div class="lp-wrap">
       <h2 id="handled-title" class="sr-only">What myEST8 handles</h2>
       <p class="lp-statement" data-rise>
-        myEST8 texts the Tenant ${slot('dripping-tap.jpg', 'A dripping tap', 1200, 798)}, chases Tradies
-        ${slot('plumber-under-sink.jpg', 'A plumber working under a kitchen sink', 1400, 1084)} for Quotes, and asks the Owner
-        ${slot('ultimo-terrace.jpg', 'A terrace house in Ultimo, Sydney', 900, 1304)} before going over budget.
+        myEST8 texts the Tenant ${slot('dripping-tap.jpg', 'A dripping tap', 1200, 798, 'is-tap')}, chases Tradies
+        ${slot('plumber-under-sink.jpg', 'A plumber working under a kitchen sink', 1400, 1084, 'is-plumber')} for Quotes, and asks the Owner
+        ${slot('ultimo-terrace.jpg', 'A terrace house in Ultimo, Sydney', 900, 1304, 'is-terrace')} before going over budget.
       </p>
       <div class="lp-handled-grid">
         <div data-rise>

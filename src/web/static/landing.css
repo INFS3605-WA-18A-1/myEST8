@@ -103,7 +103,9 @@ body.lp {
 .lp-bar-links {
   display: none;
 }
-@media (min-width: 64rem) {
+/* The page nav needs the wide desktop bar: below 1280 its three labels and the
+   account buttons would meet in the middle. The ways in stay on the bar at every width. */
+@media (min-width: 80rem) {
   .lp-bar-links {
     display: flex;
     gap: 4px;
@@ -248,8 +250,8 @@ body.lp {
 }
 @media (min-width: 64rem) {
   .lp-hero-photo {
-    aspect-ratio: auto;
-    height: max(420px, 62vh);
+    aspect-ratio: 3 / 2;
+    height: auto;
   }
 }
 .lp-hero-photo img {
@@ -259,18 +261,16 @@ body.lp {
   object-fit: cover;
   object-position: 50% 60%;
 }
-/* The count of decisions, a Night block on the photograph's top-left corner, with the
-   Wattle decision stripe beside it (never Wattle type). */
+/* The count of decisions, a Night block under the words, with the Wattle decision
+   stripe beside it (never Wattle type). It carries the left column down towards the
+   photograph's foot, so the words never leave a bare band beside the picture. */
 .lp-figure-block {
-  position: absolute;
-  top: 0;
-  left: 0;
-  z-index: 1;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  width: min(62%, 280px);
-  padding: 18px 20px 20px 16px;
+  width: 100%;
+  max-width: 26em;
+  padding: 20px 22px 22px 18px;
   background: var(--ink);
   border-left: 4px solid var(--hivis);
   color: var(--surface);
@@ -279,7 +279,7 @@ body.lp {
 }
 .lp-figure-num {
   font-family: var(--font-head);
-  font-size: 36px;
+  font-size: clamp(56px, 6vw, 88px);
   font-weight: 700;
   line-height: 1;
   color: var(--surface);
@@ -372,9 +372,6 @@ body.lp {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   grid-template-areas: 'title' 'in' 'out';
-  margin-top: 96px;
-}
-.lp-demo + .lp-example {
   margin-top: 0;
 }
 @media (min-width: 64rem) {
@@ -407,33 +404,32 @@ body.lp {
     padding-inline: 32px;
   }
 }
-@media (min-width: 48rem) and (max-width: 63.99rem) {
-  .lp-example > .lp-split-title {
-    padding-inline: 32px;
-  }
-}
 @media (min-width: 64rem) {
   .lp-example-in,
   .lp-example-out {
     padding: 96px 32px 128px;
   }
   .lp-example-in {
+    padding-top: 64px;
     padding-left: max(32px, calc((100vw - 1376px) / 2 + 32px));
   }
   .lp-example-out {
     padding-right: max(32px, calc((100vw - 1376px) / 2 + 32px));
     align-items: flex-start;
+    justify-content: center;
   }
 }
 
-/* The title in two halves, above the two fields, on the page's own gutter. */
+/* The title in two halves, above the two fields, on the page's own gutter. The
+   padding is the section's whole breath: 64px off a section above it on phones and
+   96px from 40rem, then 32px down to the fields. */
 .lp-split-title {
   grid-area: title;
   display: flex;
   flex-wrap: wrap;
   column-gap: 0.28em;
   margin: 0 0 32px;
-  padding: 0 20px;
+  padding: 64px 20px 0;
   font-family: var(--font-head);
   font-size: clamp(40px, 6vw, 96px);
   font-weight: 700;
@@ -442,15 +438,14 @@ body.lp {
   color: var(--ink);
   text-wrap: balance;
 }
-@media (min-width: 48rem) {
+@media (min-width: 40rem) {
   .lp-split-title {
-    padding-inline: 32px;
+    padding: 96px 32px 0;
   }
 }
 @media (min-width: 64rem) {
   .lp-split-title {
-    margin-bottom: 0;
-    padding: 0 max(32px, calc((100vw - 1376px) / 2 + 32px)) 40px;
+    padding: 96px max(32px, calc((100vw - 1376px) / 2 + 32px)) 0;
   }
 }
 
@@ -602,7 +597,7 @@ body.lp {
   padding: 20px 22px 22px 24px;
   background: var(--surface);
   border: 1px solid var(--line); /* taste-skill-ignore: the app's own row border, inside data-ui */
-  border-left: 6px solid var(--hivis);
+  border-left: 4px solid var(--hivis);
   border-radius: 8px;
 }
 .lp-request.is-urgent {
@@ -887,9 +882,9 @@ body.lp {
 }
 .lp-slot {
   display: inline-block;
-  width: 1.9em;
-  height: 1em;
-  vertical-align: -0.12em;
+  width: 2.6em;
+  height: 1.25em;
+  vertical-align: -0.22em;
   overflow: hidden;
   border-radius: 0.18em;
 }
@@ -898,6 +893,18 @@ body.lp {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+/* The photographs set in the line are small, so each keeps its subject in the crop
+   and the tap, which is a dark close-up, is lifted to read beside the others. */
+.lp-slot.is-tap img {
+  object-position: 50% 8%;
+  filter: brightness(1.32) saturate(1.08);
+}
+.lp-slot.is-plumber img {
+  object-position: 50% 0%;
+}
+.lp-slot.is-terrace img {
+  object-position: 50% 0%;
 }
 .lp-handled-grid {
   display: grid;
@@ -928,7 +935,7 @@ body.lp {
   flex-direction: column;
   gap: 4px;
   padding-left: 20px;
-  border-left: 6px solid var(--hivis);
+  border-left: 4px solid var(--hivis);
 }
 .lp-decision-title {
   font-weight: 600;

@@ -11,7 +11,9 @@ describe('signing up', () => {
     expect(page).not.toContain('name="confirmPassword"');
     expect(page).toContain('data-reveal="field-password"');
     expect(page).toContain('aria-label="Show password"');
-    expect(page).toContain('aria-pressed="false"');
+    // The label says what pressing it will do; there is no second pressed state.
+    expect(page).not.toMatch(/data-reveal="field-password"[^>]*aria-pressed/);
+    expect(page).toContain('Setup takes about 10 minutes.');
     expect(page).toContain('<option value="Australia/Sydney" selected>');
     expect(page).toContain('<option value="Australia/Perth"');
     expect(page).toContain('href="/login"');

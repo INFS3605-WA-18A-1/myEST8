@@ -82,6 +82,7 @@ function signUpPage(o: { values?: Values; errors?: Errors; flash?: Flash; shareL
   return authPage({
     title: 'Create your Agency’s account',
     subtitle: 'You become its first Property Manager. A short guide then helps you set up the rest.',
+    phoneNote: 'Setup takes about 10 minutes.',
     flash: o.flash ?? null,
     size: 'signup',
     footer: SIGNED_OUT_FOOTER,
@@ -110,7 +111,7 @@ function signUpPage(o: { values?: Values; errors?: Errors; flash?: Flash; shareL
               autocomplete: 'new-password',
               hint: `At least ${MIN_PASSWORD_LENGTH} characters.`,
               error: errors.password,
-              suffix: html`<button type="button" class="password-toggle" data-reveal="field-password" aria-pressed="false" aria-label="Show password">Show</button>`,
+              suffix: html`<button type="button" class="password-toggle" data-reveal="field-password" aria-label="Show password">Show</button>`,
             })}
           </div>
         </fieldset>
@@ -151,9 +152,9 @@ function signUpPage(o: { values?: Values; errors?: Errors; flash?: Flash; shareL
         })}
       </aside>`,
     steps: [
-      { text: 'Your account and your Agency are created, and you are signed in.' },
+      { text: 'We create your account and your Agency, and sign you in.' },
       {
-        text: "First, connect the Agency's email. It is required and takes about 2 minutes: myEST8 reads the mail Tenants send. Then add your team, your Tradies and your first Property.",
+        text: 'Connect the Agency’s email first (required, about 2 minutes) so myEST8 can read what Tenants send. Then add your team, your Tradies and your first Property.',
       },
       { text: 'Tenants can then text in a repair, and it reaches you as a Maintenance Request to confirm.', request: true },
     ],

@@ -177,6 +177,15 @@ body.au {
   line-height: 1.5;
   color: var(--muted);
 }
+/* The sign-up's time estimate, under the subtitle while the panel's steps are below the form. */
+.au-phone-note {
+  font-size: 15px;
+}
+@media (min-width: 64rem) {
+  .au-phone-note {
+    display: none;
+  }
+}
 
 .au-form {
   display: flex;
@@ -266,8 +275,15 @@ body.au {
 }
 @media (max-width: 40rem), (pointer: coarse) {
   .password-toggle {
-    min-height: 36px;
+    min-height: 44px;
   }
+}
+/* Without JavaScript there is nothing to reveal, so the toggle leaves the field alone. */
+html:not(.js) .field-suffix {
+  display: none;
+}
+html:not(.js) .field-control .input {
+  padding-right: 12px;
 }
 
 /* The other way in, under a hairline: a sentence, then a small secondary button. */
@@ -327,10 +343,10 @@ body.au {
     position: sticky;
     top: 0;
     max-width: none;
-    /* The thesis starts on the form h1's line, and the "What happens next" block sits at
-       the panel's foot, so the empty third is shared top and bottom rather than pooled. */
-    justify-content: space-between;
-    gap: 48px;
+    /* The thesis starts on the form h1's line, and "What happens next" follows it
+       after one clear breath; the rest of the Night column stays quiet below. */
+    justify-content: flex-start;
+    gap: 64px;
     min-height: 100vh;
     min-height: 100dvh;
     padding: 96px 48px 56px;
@@ -345,7 +361,7 @@ body.au {
 /* The landing page's three sentences, sized to the panel so each stays on one line. */
 .au-thesis {
   font-family: var(--font-head);
-  font-size: clamp(26px, 7.6cqi, 46px);
+  font-size: clamp(26px, 5.6cqi, 28px);
   font-weight: 700;
   line-height: 1.06;
   letter-spacing: -0.01em;
