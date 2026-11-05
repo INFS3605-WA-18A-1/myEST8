@@ -80,25 +80,41 @@ const TRADIE_ADDRESSES: Record<string, string> = {
 /** What the seed created: the Agency, who can sign in, and the ids a test or script may need. */
 export type DemoSeed = Awaited<ReturnType<typeof seedDemo>>;
 
+/** An Agency that signed up, to seed instead of Harbour Realty (UAT, src/demo/uat.ts). */
+export type SeedInto = {
+  agencyId: number;
+  /** Who signed up: they take Alice's place. */
+  propertyManagerId: number;
+  /** Bob's email, unique to this Agency. He is added with no password, so no one signs in as him. */
+  colleagueEmail: string;
+  /** The Agency's channel addresses while the stories play, in place of Harbour Realty's. */
+  channels: Partial<Record<ChannelType, string>>;
+};
+
 /**
  * Adds Harbour Realty: two Property Managers with five Properties each, their
  * Owners and Tenants, a Building Manager, and seventeen Tradies. The Tradies'
  * Google listings exist only in the mock Places API, so with
  * `googleListings: false` (real Google) they are added as not on Google.
+ * With `into`, the same people and Properties go into an Agency that signed up,
+ * and no one gets a demo sign-in.
  */
-export async function seedDemo(app: App, options: { googleListings?: boolean } = {}) {
+export async function seedDemo(app: App, options: { googleListings?: boolean; into?: SeedInto } = {}) {
   const googleListings = options.googleListings ?? true;
-  const agencyId = await app.setup.createAgency({ name: 'Harbour Realty', timeZone: DEMO_TIME_ZONE });
-  const logins = [
-    { name: 'Alice Archer', email: 'alice@harbour.example', password: DEMO_PASSWORD },
-    { name: 'Bob Baker', email: 'bob@harbour.example', password: DEMO_PASSWORD },
-  ];
-  const aliceId = await app.setup.addPropertyManager(agencyId, logins[0]!);
-  const bobId = await app.setup.addPropertyManager(agencyId, logins[1]!);
+  const { into } = options;
+  const agencyId = into?.agencyId ?? (await app.setup.createAgency({ name: 'Harbour Realty', timeZone: DEMO_TIME_ZONE }));
+  const logins = into
+    ? []
+    : [
+        { name: 'Alice Archer', email: 'alice@harbour.example', password: DEMO_PASSWORD },
+        { name: 'Bob Baker', email: 'bob@harbour.example', password: DEMO_PASSWORD },
+      ];
+  const aliceId = into?.propertyManagerId ?? (await app.setup.addPropertyManager(agencyId, logins[0]!));
+  const bobId = await app.setup.addPropertyManager(agencyId, into ? { name: 'Bob Baker', email: into.colleagueEmail } : logins[1]!);
   const alice = await app.asPropertyManager(aliceId);
   const bob = await app.asPropertyManager(bobId);
 
-  for (const [channelType, address] of Object.entries(DEMO_CHANNELS) as [ChannelType, string][]) {
+  for (const [channelType, address] of Object.entries(into?.channels ?? DEMO_CHANNELS) as [ChannelType, string][]) {
     await alice.connectChannel(channelType, address);
   }
 
