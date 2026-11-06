@@ -116,7 +116,7 @@ describe('Maintenance Requests on the dashboard', () => {
 
     expect(after).toContain('Now an Urgent Repair');
     expect(after).toContain('No Maintenance Requests waiting for you.');
-    expect(after).toContain('Receipts awaited');
+    expect(after).toContain('Receipt awaited');
   });
 
   test("a Tenant's photo is shown with its checks and served only to signed-in Property Managers", async () => {
@@ -168,8 +168,8 @@ describe('the count strip and Needs your attention', () => {
 
     expect(row).toContain('href="/tickets?stage=quoting"');
     expect(row).toContain('<span class="glance-count">1</span>');
-    expect(row).toContain('<span class="glance-label">Tradies quoting</span>');
-    expect(row).toContain('<span class="glance-sub">0 Firm Quotes of 2 in · oldest opened ');
+    expect(row).toContain('<span class="glance-label">Tradie quoting</span>');
+    expect(row).toContain('0 of 2 Tradies have quoted · oldest\u00a0');
   });
 
   test('on All the rows that are shown keep the filter in their link', async () => {
@@ -182,7 +182,7 @@ describe('the count strip and Needs your attention', () => {
     expect(glanceRowOf(all, 'is-tradies')).toContain('href="/tickets?stage=quoting&amp;filter=all"');
     // The other rows have nothing waiting, so they are left out and named in one quiet line.
     expect(all).not.toContain('<li class="is-owners">');
-    expect(all).toContain('Nothing waiting on Owners approving, visit times, visit confirmations or receipts.');
+    expect(all).toContain('Nothing waiting on Owners approving, visits to arrange, visit confirmations or receipts.');
   });
 
   test('a Ticket opened more than seven days ago turns its pip stale', async () => {
@@ -203,8 +203,8 @@ describe('the count strip and Needs your attention', () => {
     const row = glanceRowOf(await page(w, '/', cookie), 'is-confirm');
 
     expect(row).toContain('<span class="glance-count">1</span>');
-    expect(row).toContain('<span class="glance-label">Visits not confirmed</span>');
-    expect(row).toContain('<span class="glance-sub">today 1');
+    expect(row).toContain('<span class="glance-label">Visit not confirmed</span>');
+    expect(row).toContain('<span class="glance-sub">1 visit today');
     expect(row).toContain('status=not_confirmed');
   });
 
@@ -241,7 +241,7 @@ describe('the count strip and Needs your attention', () => {
     expect(dashboard).toContain('Site Inspection to book');
     expect(dashboard.match(/id="inbox"/g)).toHaveLength(1);
     // The bar is captioned for what it counts; there is no "All open Tickets" tab or second list.
-    expect(dashboard).toContain('<p class="stage-caption">All open Tickets by stage</p>');
+    expect(dashboard).toContain('<p class="stage-caption">Your open Tickets by stage</p>');
     expect(dashboard).not.toContain('All open Tickets</a>');
     expect(dashboard.match(/id="tickets"/g)).toHaveLength(1);
   });
@@ -258,12 +258,12 @@ describe('Waiting on others and the inbox modal', () => {
     expect(dashboard).toContain('<section class="glance" aria-label="Waiting on others">');
     expect(dashboard).toContain('<h2 class="glance-title">Waiting on others</h2>');
     expect(glanceRowOf(dashboard, 'is-tradies')).toContain('href="/tickets?stage=quoting"');
-    expect(dashboard).toContain('<span class="glance-label">Tradies quoting</span>');
+    expect(dashboard).toContain('<span class="glance-label">Tradie quoting</span>');
     // Nothing is waiting on the other four, so they are named in one quiet line instead of four zero rows.
     for (const cls of ['is-owners', 'is-visits', 'is-confirm', 'is-receipts']) {
       expect(dashboard).not.toContain(`<li class="${cls}">`);
     }
-    expect(dashboard).toContain('Nothing waiting on Owners approving, visit times, visit confirmations or receipts.');
+    expect(dashboard).toContain('Nothing waiting on Owners approving, visits to arrange, visit confirmations or receipts.');
   });
 
   test('the inbox modal lists the unknown sender and keeps their triage actions', async () => {
@@ -351,9 +351,9 @@ describe('Tickets on the dashboard', () => {
     const docketOf = (page: string) => inBoard(page, job.ticketId);
 
     const board = await page(w, '/', cookie);
-    expect(board).toContain('<li><b>1</b> Quoting</li>');
+    expect(board).toContain('<span class="stage-count"><b>1</b> Quoting</span>');
     expect(board).toContain('href="/tickets"');
-    expect(board).toContain('All open Tickets by stage');
+    expect(board).toContain('Your open Tickets by stage');
     expect(board).not.toContain('All open Tickets</a>');
     const asked = docketOf(board);
     expect(asked).toContain('class="ticket-row"');
