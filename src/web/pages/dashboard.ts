@@ -130,7 +130,7 @@ export function dashboardPages() {
       page({
         title: 'Dashboard',
         heading: `Hi, ${firstName}`,
-        subtitle: helloLine(waiting, view.inbox.length),
+        subtitle: helloLine(waiting, view.inbox.length, filter),
         pm,
         active: 'dashboard',
         flash: flashFrom(c.req.url),
@@ -142,7 +142,7 @@ export function dashboardPages() {
         body: html`
           <div class="dashboard-desk">
             <div class="dash-col">
-              ${doNext({ view, ...decided, toReview, alerts, total: waiting, q, timeZone, now, shareLink: shareUrl(c, '/?filter=all#requests') })}
+              ${doNext({ view, ...decided, toReview, alerts, total: waiting, q, filter, timeZone, now, shareLink: shareUrl(c, '/?filter=all#requests') })}
               ${glance(view, filter, now, timeZone, pm.id)}
             </div>
             <div class="dash-col">
@@ -261,9 +261,18 @@ function idParam(c: Context<WebEnv>, name: string) {
 
 // Greeting and glance
 
-/** "4 things need you today · 4 messages in the inbox": the line under "Hi, Alice". */
-function helloLine(things: number, inbox: number): string {
-  const waiting = things === 0 ? 'Nothing needs you right now' : `${things} ${things === 1 ? 'thing needs' : 'things need'} you today`;
+/**
+ * "4 things need you today · 4 messages in the inbox": the line under "Hi, Alice".
+ * On All it is the team's work, so it says so ("11 things need the team today").
+ */
+function helloLine(things: number, inbox: number, filter: Filter): string {
+  const team = filter === 'all';
+  const waiting =
+    things === 0
+      ? team
+        ? 'Nothing needs the team right now'
+        : 'Nothing needs you right now'
+      : `${things} ${things === 1 ? 'thing needs' : 'things need'} ${team ? 'the team' : 'you'} today`;
   const messages = inbox ? ` · ${inbox} ${inbox === 1 ? 'message' : 'messages'} in the inbox` : '';
   return `${waiting}${messages}`;
 }
@@ -329,7 +338,9 @@ function glance(view: Dashboard, filter: Filter, now: Date, timeZone: string, pm
 
   const firm = tradies.reduce((sum, t) => sum + (t.quoting?.firm ?? 0), 0);
   const asked = tradies.reduce((sum, t) => sum + (t.quoting?.asked ?? 0), 0);
-  const oldest = (items: { reportedAt: string }[]) => (items.length ? ageOf(items.reduce((oldest, t) => (t.reportedAt < oldest ? t.reportedAt : oldest), items[0]!.reportedAt), now) : '');
+  /** "3 days", "5 hours": how long the oldest item has waited, for a sub-line. */
+  const oldestWait = (items: { reportedAt: string }[]) =>
+    items.length ? ageOf(items.reduce((oldest, t) => (t.reportedAt < oldest ? t.reportedAt : oldest), items[0]!.reportedAt), now).replace(/ ago$/, '').replace(/^Just now$/, 'just now') : '';
   const oldestFirst = (items: { at: string }[]) => [...items].sort((a, b) => a.at.localeCompare(b.at));
   const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
@@ -341,19 +352,22 @@ function glance(view: Dashboard, filter: Filter, now: Date, timeZone: string, pm
 
   // What the visit rows wait on, with the zero clauses left out.
   const visitParts = [slowToOffer ? `${plural(slowToOffer, 'Tradie', 'Tradies')} slow to offer` : '', tenantToPick ? `${plural(tenantToPick, 'Tenant', 'Tenants')} yet to pick` : ''].filter(Boolean);
-  const confirmParts = [todayUnconfirmed ? `today ${todayUnconfirmed}` : '', tomorrowUnconfirmed ? `tomorrow ${tomorrowUnconfirmed}` : ''].filter(Boolean);
-  const ownerParts = [owners.length ? `oldest opened ${oldest(owners)}` : '', forwarded.length ? `${plural(forwarded.length, 'receipt', 'receipts')} with the Owner` : ''].filter(Boolean);
+  const confirmParts = [
+    todayUnconfirmed ? `${plural(todayUnconfirmed, 'visit', 'visits')} today` : '',
+    tomorrowUnconfirmed ? `${plural(tomorrowUnconfirmed, 'visit', 'visits')} tomorrow` : '',
+  ].filter(Boolean);
+  const ownerParts = [owners.length ? `oldest\u00A0${oldestWait(owners)}` : '', forwarded.length ? `${plural(forwarded.length, 'receipt', 'receipts')} with the Owner` : ''].filter(Boolean);
   const ownerCount = owners.length + forwarded.length;
   // The quoting row waits on Firm Quotes: say how many of the Tradies asked have given one.
   const quotingSub = asked
-    ? `${firm} ${firm === 1 ? 'Firm Quote' : 'Firm Quotes'} of ${asked} in · oldest opened ${oldest(tradies)}`
-    : `No Quote Requests yet · oldest opened ${oldest(tradies)}`;
+    ? `${firm} of ${asked} ${asked === 1 ? 'Tradie' : 'Tradies'} ${firm === 1 || asked === 1 ? 'has' : 'have'} quoted · oldest\u00A0${oldestWait(tradies)}`
+    : `No Quote Requests sent yet · oldest\u00A0${oldestWait(tradies)}`;
 
   const rows: GlanceItem[] = [
     {
       cls: 'is-tradies',
-      label: 'Tradies quoting',
-      short: 'Tradies',
+      label: `${tradies.length === 1 ? 'Tradie' : 'Tradies'} quoting`,
+      short: tradies.length === 1 ? 'Tradie' : 'Tradies',
       none: 'Tradies to quote',
       count: tradies.length,
       href: `/tickets?stage=quoting${q}`,
@@ -362,45 +376,45 @@ function glance(view: Dashboard, filter: Filter, now: Date, timeZone: string, pm
     },
     {
       cls: 'is-owners',
-      label: 'Owners approving',
-      short: 'Owners',
+      label: `${ownerCount === 1 ? 'Owner' : 'Owners'} approving`,
+      short: ownerCount === 1 ? 'Owner' : 'Owners',
       none: 'Owners approving',
       count: ownerCount,
       // A receipt with the Owner lives on Approvals; a Ticket waiting on the Owner lives on the Tickets list.
       href: forwarded.length && !owners.length ? '/approvals#reimbursements' : `/tickets?stage=awaiting_owner${q}`,
       sub: ownerParts.join(' · '),
       items: oldestFirst([...owners.map((t) => ({ at: t.reportedAt })), ...forwarded.map((u) => ({ at: u.reportedAt }))]),
-      chips: ownerNoReply ? [badge(`${ownerNoReply} not replying`, 'warning', { outline: true })] : [],
+      chips: ownerNoReply ? [badge(`${plural(ownerNoReply, 'Owner', 'Owners')} not replying`, 'warning', { outline: true })] : [],
     },
     {
       cls: 'is-visits',
-      label: 'Visit times being arranged',
-      short: 'Visit times',
-      none: 'visit times',
+      label: visitIds.size === 1 ? 'Visit to arrange' : 'Visits to arrange',
+      short: visitIds.size === 1 ? 'Visit' : 'Visit times',
+      none: 'visits to arrange',
       count: visitIds.size,
       href: `/tickets?stage=approved${q}`,
-      sub: visitParts.length ? visitParts.join(' · ') : `oldest opened ${oldest(visitTickets)}`,
+      sub: visitParts.length ? visitParts.join(' · ') : `oldest\u00A0${oldestWait(visitTickets)}`,
       items: oldestFirst(visitTickets.map((t) => ({ at: t.reportedAt }))),
     },
     {
       cls: 'is-confirm',
-      label: 'Visits not confirmed',
+      label: unconfirmed.length === 1 ? 'Visit not confirmed' : 'Visits not confirmed',
       short: 'Confirm',
       none: 'visit confirmations',
       count: unconfirmed.length,
       href: `/calendar?view=day&date=${today}&status=not_confirmed${q}`,
       sub: confirmParts.join(' · '),
       items: oldestFirst(unconfirmed.map((b) => ({ at: b.start }))),
-      chips: reschedules.length ? [badge(`${reschedules.length} reschedule asked`, 'warning', { outline: true })] : [],
+      chips: reschedules.length ? [badge(`${plural(reschedules.length, 'reschedule', 'reschedules')} asked`, 'warning', { outline: true })] : [],
     },
     {
       cls: 'is-receipts',
-      label: 'Receipts awaited',
-      short: 'Receipts',
+      label: receipts.length === 1 ? 'Receipt awaited' : 'Receipts awaited',
+      short: receipts.length === 1 ? 'Receipt' : 'Receipts',
       none: 'receipts',
       count: receipts.length,
       href: '/approvals#reimbursements',
-      sub: `oldest opened ${oldest(receipts)}`,
+      sub: `oldest\u00A0${oldestWait(receipts)}`,
       items: oldestFirst(receipts.map((u) => ({ at: u.reportedAt }))),
     },
   ];
@@ -453,15 +467,16 @@ function isStale(at: string, now: Date): boolean {
  * things only the Property Manager can do, each a soft row with its action. Every
  * group has its own sub-heading, so a heading always sits with the rows it names.
  * When there are none one quiet line says so. `shareLink` is the Agency-wide list of
- * Maintenance Requests, which a Share button passes on when there are any.
+ * Maintenance Requests, which a Share button passes on when there are any. On All the
+ * card is the team's work, so it is headed "Needs a Property Manager".
  */
-function doNext(n: Decided & { view: Dashboard; toReview: UrgentRepair[]; alerts: Alert[]; total: number; q: string; timeZone: string; now: Date; shareLink: string }): Html {
-  const { view, q, timeZone, now, shareLink, toReview, alerts, total } = n;
+function doNext(n: Decided & { view: Dashboard; toReview: UrgentRepair[]; alerts: Alert[]; total: number; q: string; filter: Filter; timeZone: string; now: Date; shareLink: string }): Html {
+  const { view, q, filter, timeZone, now, shareLink, toReview, alerts, total } = n;
   const requests = view.maintenanceRequests;
   const group = (id: string, title: string, rows: Html[]) =>
     rows.length ? html`<div id="${id}" class="do-next-list"><h3 class="do-next-sub">${title}</h3>${rows}</div>` : '';
   return section({
-    title: html`Do next <span class="count-chip is-decision">${total}</span>`,
+    title: html`${filter === 'all' ? 'Needs a Property Manager' : 'Do next'} <span class="count-chip is-decision">${total}</span>`,
     id: 'decisions',
     actions: requests.length
       ? shareButton({
@@ -481,7 +496,13 @@ function doNext(n: Decided & { view: Dashboard; toReview: UrgentRepair[]; alerts
         ${alerts.length ? html`<h3 class="do-next-sub">Alerts</h3>` : ''}
         ${alerts.map((a) => alertRow(a, timeZone))}
       </div>
-      ${total === 0 ? emptyState('No Maintenance Requests waiting for you. Nothing else needs you right now.') : ''}
+      ${total === 0
+        ? emptyState(
+            filter === 'all'
+              ? 'No Maintenance Requests waiting for a Property Manager. Nothing else needs one right now.'
+              : 'No Maintenance Requests waiting for you. Nothing else needs you right now.',
+          )
+        : ''}
       ${total > 0 && toReview.length === 0 ? html`<p id="urgent-repairs" class="do-next-clear">No Urgent Repair receipts to review</p>` : ''}
     </div>`,
   });
@@ -799,15 +820,20 @@ function triageCard(item: InboxItem, people: Person[], timeZone: string, q: stri
  */
 function ticketsByStage(tickets: BoardTicket[], filter: Filter, now: Date): Html {
   const counts = STAGES.map((stage) => tickets.filter((t) => t.stage === stage).length);
+  // The bar and the counts share five tracks: a stage's weight is its count, and a zero stage
+  // keeps a track as wide as its label. Every count then sits under its own segment.
+  const tracks = counts.map((count) => `minmax(max-content, ${Math.max(count, 1)}fr)`).join(' ');
   return section({
     title: 'Tickets by stage',
     id: 'tickets',
     actions: linkButton('See all Tickets', filter === 'all' ? '/tickets?filter=all' : '/tickets', { variant: 'ghost', size: 'sm' }),
     body: tickets.length
       ? html`<div class="stage-board">
-          <p class="stage-caption">All open Tickets by stage</p>
-          <div class="stage-scale" aria-hidden="true">${STAGES.map((stage, i) => html`<i class="stage-${stage}" style="flex-grow:${counts[i]}"></i>`)}</div>
-          <ul class="stage-counts">${STAGES.map((stage, i) => html`<li${counts[i] === 0 ? html` class="is-zero"` : ''}><b>${counts[i]}</b> ${STAGE_SHORT[stage]}</li>`)}</ul>
+          <p class="stage-caption">${filter === 'mine' ? 'Your open Tickets by stage' : 'Open Tickets by stage'}</p>
+          <div class="stage-chart" style="grid-template-columns:${tracks}">
+            ${STAGES.map((stage, i) => html`<i class="stage-seg stage-${stage}${counts[i] === 0 ? ' is-zero' : ''}" aria-hidden="true"></i>`)}
+            ${STAGES.map((stage, i) => html`<span class="stage-count${counts[i] === 0 ? ' is-zero' : ''}"><b>${counts[i]}</b> ${STAGE_SHORT[stage]}</span>`)}
+          </div>
           <div class="stage-rows">${STAGES.flatMap((stage) => tickets.filter((t) => t.stage === stage).map((t) => ticketRow(t, now)))}</div>
         </div>`
       : emptyState(filter === 'mine' ? 'No open Tickets on your Properties. Confirming a Maintenance Request opens one.' : 'No open Tickets. Confirming a Maintenance Request opens one.'),
@@ -827,22 +853,44 @@ function quotingStatus(t: Pick<BoardTicket, 'quoting' | 'decision'>): string | n
   return `${q.received} of ${of} ${of === 1 ? 'Estimate' : 'Estimates'} in${q.firm ? `, ${q.firm} ${q.firm === 1 ? 'Firm Quote' : 'Firm Quotes'}` : ''}`;
 }
 
-/** One Ticket as a soft row: its number, the issue and where, and how far along it is (filled segments up to its stage, then the stage's name). */
+/**
+ * One Ticket as a soft row: its number, the issue and where, and how far along it is
+ * (filled segments up to its stage, then the stage's name). A Done Ticket whose Jobs are
+ * all finished reads as closed work rather than live work: "Done · ready to close" and a
+ * secondary Close ticket link, which opens the Ticket (closing is confirmed there), so
+ * nothing here posts a destructive change by accident.
+ */
 function ticketRow(t: BoardTicket, now: Date): Html {
   const quoting = quotingStatus(t);
   const reached = STAGES.indexOf(t.stage);
   const street = t.propertyAddress.replace(/\s+[A-Z]{2,3}\s+\d{4}$/, '').split(',')[0]!;
-  return html`<a href="/tickets/${t.ticketId}" class="ticket-row${t.decision !== null ? ' is-decision' : ''}">
+  // stageOf only says done when every Job is done or cancelled, so a done Ticket can be closed.
+  const readyToClose = t.stage === 'done';
+  const issue = html`${t.description}${t.unreadMessages ? html`<span class="unread-dot" aria-hidden="true"></span><span class="sr-only">unread messages</span>` : ''}`;
+  const sub = html`${street} · ${ageOf(t.reportedAt, now)}${quoting ? html` · ${quoting}` : ''}${t.urgency === 'urgent' || t.urgency === 'high' ? html` · <span class="ticket-row-urgency is-${t.urgency}">${humanise(t.urgency)}</span>` : ''}`;
+  const stage = html`<span class="ticket-row-stage">
+      <span class="stage-segs" aria-hidden="true">${STAGES.map((s, i) => html`<i class="${i <= reached ? `on stage-${t.stage}` : ''}"></i>`)}</span>
+      <span class="ticket-row-stage-name">${readyToClose ? 'Done · ready to close' : STAGE_SHORT[t.stage]}</span>
+      ${readyToClose ? linkButton('Close ticket', `/tickets/${t.ticketId}`, { variant: 'secondary', size: 'sm' }) : ''}
+    </span>`;
+  if (!readyToClose) {
+    return html`<a href="/tickets/${t.ticketId}" class="ticket-row${t.decision !== null ? ' is-decision' : ''}">
     <span class="ticket-row-id">#${t.ticketId}</span>
     <span class="ticket-row-main">
-      <span class="ticket-row-title">${t.description}${t.unreadMessages ? html`<span class="unread-dot" aria-hidden="true"></span><span class="sr-only">unread messages</span>` : ''}</span>
-      <span class="ticket-row-sub">${street} · ${ageOf(t.reportedAt, now)}${quoting ? html` · ${quoting}` : ''}${t.urgency === 'urgent' || t.urgency === 'high' ? html` · <span class="ticket-row-urgency is-${t.urgency}">${humanise(t.urgency)}</span>` : ''}</span>
+      <span class="ticket-row-title">${issue}</span>
+      <span class="ticket-row-sub">${sub}</span>
     </span>
-    <span class="ticket-row-stage">
-      <span class="stage-segs" aria-hidden="true">${STAGES.map((stage, i) => html`<i class="${i <= reached ? `on stage-${t.stage}` : ''}"></i>`)}</span>
-      <span class="ticket-row-stage-name">${STAGE_SHORT[t.stage]}</span>
-    </span>
+    ${stage}
   </a>`;
+  }
+  return html`<div class="ticket-row is-done">
+    <span class="ticket-row-id">#${t.ticketId}</span>
+    <span class="ticket-row-main">
+      <a class="ticket-row-title" href="/tickets/${t.ticketId}">${issue}</a>
+      <span class="ticket-row-sub">${sub}</span>
+    </span>
+    ${stage}
+  </div>`;
 }
 
 // Next 7 days

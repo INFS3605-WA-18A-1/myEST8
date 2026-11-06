@@ -157,8 +157,10 @@ function userMenu(name: string): Html {
 /**
  * The page header, the first row of the content column: the menu button (drawer only)
  * and the page title (the page's only <h1>) on the left; the page's controls, today's
- * date and the user menu on the right of the same row. On phones the row wraps, the
- * title first and the controls under it.
+ * date and the user menu on the right of the same row; then the subtitle and its buttons
+ * under the title. On phones the title, subtitle and actions share the title's grid
+ * column, so they start at the same edge past the menu button, and the date joins the
+ * control row.
  */
 function pageHeader(
   title: string,
@@ -173,30 +175,32 @@ function pageHeader(
     heading?: Html | string;
     /** A short title ("Ticket #1") that must not wrap. */
     titleNowrap?: boolean;
+    /** A line under the title (and its buttons). */
+    subtitle?: Html | string;
+    /** Buttons beside the subtitle. */
+    actions?: Html;
   },
 ): Html {
-  return html`<header class="page-header${o.back ? ' has-back' : ''}">
+  const meta = o.subtitle || o.actions;
+  const controls = o.controls || o.today;
+  return html`<header class="page-header${o.back ? ' has-back' : ''}${meta ? ' has-meta' : ''}">
     ${o.back ? html`<a class="page-back" href="${o.back.href}">${icon('caret-left', { size: 'size-3.5' })}${o.back.label}</a>` : ''}
     <div class="page-header-lead">
       ${o.menu ? html`<button type="button" class="menu-button" data-drawer-toggle aria-controls="rail" aria-expanded="false" aria-label="Menu">${ICON.menu}</button>` : ''}
       <h1 class="page-title${o.titleNowrap ? ' is-nowrap' : ''}">${o.heading ?? title}</h1>
       ${o.titleExtra ?? ''}
     </div>
-    ${o.controls ? html`<div class="page-header-controls">${o.controls}</div>` : ''}
+    ${controls ? html`<div class="page-header-controls">${o.controls ?? ''}${o.today ? html`<time class="page-header-date">${icon('calendar-blank', { size: 'size-4' })}${o.today}</time>` : ''}</div>` : ''}
     <div class="page-header-end">
-      ${o.today ? html`<time class="page-header-date">${icon('calendar-blank', { size: 'size-4' })}${o.today}</time>` : ''}
       ${o.pm ? html`<a class="page-header-bell" href="/#alerts" aria-label="Alerts" title="Alerts">${icon('bell', { size: 'size-5' })}</a>${userMenu(o.pm.name)}` : ''}
     </div>
+    ${meta
+      ? html`<div class="page-header-meta">
+          ${o.subtitle ? html`<p class="page-subtitle">${o.subtitle}</p>` : ''}
+          ${o.actions ? html`<div class="page-actions">${o.actions}</div>` : ''}
+        </div>`
+      : ''}
   </header>`;
-}
-
-/** The subtitle and buttons under the page header (nothing when a page has neither). */
-function contentHead(subtitle: Html | string | undefined, actions: Html | undefined): Html | string {
-  if (!subtitle && !actions) return '';
-  return html`<div class="page-head">
-    ${subtitle ? html`<p class="page-subtitle">${subtitle}</p>` : html`<span></span>`}
-    ${actions ? html`<div class="page-actions">${actions}</div>` : ''}
-  </div>`;
 }
 
 /**
@@ -247,9 +251,19 @@ export function page(o: {
           ${withRail ? rail(o.active, o.shell?.agencyName, o.navCounts ?? o.shell?.counts ?? {}, o.demo ?? o.shell?.demo ?? false, o.shell?.setupHref) : ''}
           <div class="app-main">
             <main id="main" class="app-content">
-              ${pageHeader(o.title, { menu: withRail, controls: o.controls, today: o.shell?.today, pm: o.pm, back: o.back, titleExtra: o.titleExtra, heading: o.heading, titleNowrap: o.titleNowrap })}
+              ${pageHeader(o.title, {
+                menu: withRail,
+                controls: o.controls,
+                today: o.shell?.today,
+                pm: o.pm,
+                back: o.back,
+                titleExtra: o.titleExtra,
+                heading: o.heading,
+                titleNowrap: o.titleNowrap,
+                subtitle: o.subtitle,
+                actions: o.actions,
+              })}
               ${o.flash ? flashMessage(o.flash) : ''}
-              ${contentHead(o.subtitle, o.actions)}
               <div class="app-body-stack">${o.body}</div>
             </main>
           </div>
