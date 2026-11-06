@@ -371,15 +371,18 @@ const STRETCHES: Stretch[] = [
  * "Stages as one bar": the repair's progress bar, enlarged until it spans the page.
  * Its three stretches are exactly as wide as the minutes they took (88, 374 and
  * 2531), so the two days fill most of it and the hour and a half is a sliver. The
- * bar holds no text; the durations head the three columns under it, each with the
- * chip that matches its stretch, and the caption names the two Wattle seams.
- * The bar is a picture (data-ui, hidden from screen readers, which read the
- * ordered list under it); the list holds every stage with its time.
+ * bar holds no text: the key above it gives each colour its duration, the caption
+ * names the Wattle seams, and the ordered list below holds every stage.
+ * The bar is a picture (data-ui, hidden from screen readers, which read the key
+ * and the ordered list).
  */
 function repair(): Html {
   return html`<section class="lp-repair lp-wrap" id="repair" aria-labelledby="repair-title">
     <h2 id="repair-title" class="lp-h2" data-rise>One leak, report to done</h2>
     <p class="lp-repair-lead" data-rise>Reported on Monday at 7:42 am, fixed on Wednesday morning. The Property Manager made two decisions.</p>
+    <ul class="lp-bar-key" role="list" data-rise>
+      ${STRETCHES.map((s) => html`<li><span class="lp-bar-chip ${s.tone}" aria-hidden="true"></span>${s.length}</li>`)}
+    </ul>
     <div class="lp-bar-chart" data-ui data-rise aria-hidden="true">
       ${STRETCHES.map(
         (s, i) => html`${i > 0 ? html`<span class="lp-seam"></span>` : ''}
@@ -390,7 +393,6 @@ function repair(): Html {
     <ol class="lp-stretches" role="list">
       ${STRETCHES.map(
         (s) => html`<li class="lp-stretch" data-rise>
-          <p class="lp-stretch-length"><span class="lp-stretch-chip ${s.tone}" aria-hidden="true"></span>${s.length}</p>
           <p class="lp-stretch-summary">${s.summary}</p>
           <ol class="lp-stages">
             ${s.stages.map((st) => html`<li><span class="lp-when num">${st.when}</span><span>${st.what}</span></li>`)}

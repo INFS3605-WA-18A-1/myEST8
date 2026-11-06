@@ -213,15 +213,17 @@ body.lp {
 @media (min-width: 64rem) {
   .lp-intro {
     padding-top: 0;
+    /* The block's foot is the photograph's foot, not the caption's. The caption's
+       line (12px above it, 22px tall) is reserved here, so the intro's content ends
+       exactly on the photo's bottom edge. */
+    padding-bottom: 34px;
     max-width: 26em;
-    /* The count block fills the column down to the photograph's foot, so the two
-       columns of the hero close together and the Night panel has a reason to be tall.
-       Its number stays at the top, its sentence sits on the bottom line. */
     justify-content: flex-start;
   }
+  /* The count block keeps its own height and is anchored to that foot line: it must
+     not stretch into a tall Night panel. */
   .lp-intro .lp-figure-block {
-    flex: 1 1 auto;
-    justify-content: space-between;
+    margin-top: auto;
   }
 }
 .lp-lead {
@@ -759,15 +761,39 @@ body.lp {
 }
 /*
  * The bar: three flat stretches whose widths are exactly the minutes they took
- * (88, 374, 2531), so the two days fill most of it. It holds no text: the
- * durations head the three columns under it, and the caption below names the
- * Wattle seams, which are the Property Manager's two decisions. The same bar at
- * every width; on a phone the hour and a half is honestly a sliver.
+ * (88, 374, 2531), so the two days fill most of it. It holds no text: the key
+ * above it gives each colour its duration, so a label can never sit under the
+ * wrong stretch, and the caption names the Wattle seams, which are the Property
+ * Manager's two decisions. The same bar at every width; on a phone the hour and a
+ * half is honestly a sliver.
  */
+.lp-bar-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  margin: 96px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.lp-bar-key li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.lp-bar-chip {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-sm);
+}
 .lp-bar-chart {
   display: flex;
   align-items: stretch;
-  margin-top: 96px;
+  /* The seams rise 40px above the bar; the key above must clear them. */
+  margin-top: 52px;
   height: max(120px, 15vh);
 }
 .lp-segment {
@@ -776,19 +802,20 @@ body.lp {
   min-height: 0;
 }
 .lp-segment.is-light,
-.lp-stretch-chip.is-light {
+.lp-bar-chip.is-light {
   background: var(--info-bg);
 }
 /* The pale stretch needs its hairline to read on the white section. */
-.lp-segment.is-light {
+.lp-segment.is-light,
+.lp-bar-chip.is-light {
   box-shadow: inset 0 0 0 1px var(--line);
 }
 .lp-segment.is-action,
-.lp-stretch-chip.is-action {
+.lp-bar-chip.is-action {
   background: var(--action);
 }
 .lp-segment.is-night,
-.lp-stretch-chip.is-night {
+.lp-bar-chip.is-night {
   background: var(--ink);
 }
 /* A decision seam: no time passes, so it takes no width from the scale, and the
@@ -801,7 +828,7 @@ body.lp {
 }
 .lp-bar-caption {
   margin-top: 20px;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--muted);
 }
 .lp-stretches {
@@ -817,31 +844,12 @@ body.lp {
     gap: 32px;
   }
 }
-/* The duration heads its column, with the chip that matches its stretch of the bar. */
-.lp-stretch-length {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-family: var(--font-head);
-  font-size: clamp(22px, 2vw, 30px);
-  font-weight: 600;
-  line-height: 1.1;
-  letter-spacing: -0.01em;
-}
-.lp-stretch-chip {
-  flex: 0 0 auto;
-  width: 12px;
-  height: 12px;
-  border-radius: var(--radius-sm);
-}
-/* The pale stretch needs its hairline to read on the white section, as the bar's does not. */
-.lp-stretch-chip.is-light {
-  box-shadow: inset 0 0 0 1px var(--line);
-}
 .lp-stretch-summary {
-  margin: 8px 0 16px;
-  font-size: 16px;
-  line-height: 1.45;
+  margin: 0 0 16px;
+  font-family: var(--font-head);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.25;
 }
 .lp-stages {
   display: flex;
@@ -862,9 +870,14 @@ body.lp {
   color: var(--muted);
 }
 @media (max-width: 47.99rem) {
+  .lp-bar-key {
+    margin-top: 48px;
+    gap: 6px 16px;
+  }
   .lp-bar-chart {
     height: 56px;
-    margin-top: 56px;
+    /* The seams rise 24px above the phone bar. */
+    margin-top: 32px;
   }
   .lp-seam {
     flex-basis: 8px;
@@ -888,24 +901,28 @@ body.lp {
     padding-block: 120px;
   }
 }
-/* The section's one statement: type alone carries it, so it is the page's pull quote. */
+/* The section's one statement: type alone carries it, so it is the page's pull quote.
+   `--statement-size` is shared with the photo strip so both close on one measure. */
+.lp-handled {
+  --statement-size: clamp(28px, 3.2vw, 44px);
+}
 .lp-statement {
   max-width: 24em;
   font-family: var(--font-head);
-  font-size: clamp(28px, 3.2vw, 44px);
+  font-size: var(--statement-size);
   font-weight: 600;
   line-height: 1.14;
   letter-spacing: -0.015em;
   color: var(--ink);
   text-wrap: balance;
 }
-/* The three photographs in one clean strip under the statement: 1:1 crops, a 4px
-   radius each, a 1px Paper gap, at a size where each subject reads. */
+/* The three photographs in one clean strip under the statement, as wide as the
+   statement's measure: 1:1 crops, a 4px radius each, a 1px Paper gap. */
 .lp-statement-photos {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1px;
-  max-width: 40rem;
+  max-width: calc(var(--statement-size) * 24);
   margin-top: 32px;
 }
 .lp-statement-photo {
@@ -1189,9 +1206,8 @@ body.lp {
 .lp-intro {
   animation: lp-fade-up 700ms var(--ease-out) 420ms both;
 }
-.lp-figure-block {
-  animation: lp-fade-up 700ms var(--ease-out) 600ms both;
-}
+/* The count block is inside the intro's fade: it has no second, later fade of its
+   own, so it is solid Night by the time the rest of the column is. */
 /* The one moving picture: the hero photograph settles slowly into place. */
 .lp-hero-photo img {
   animation: lp-drift 2400ms var(--ease-out) both;
@@ -1225,7 +1241,6 @@ html.js .lp .lp-bar-chart.is-in .lp-segment:nth-child(5) {
 @media (prefers-reduced-motion: reduce) {
   .lp-line > span,
   .lp-intro,
-  .lp-figure-block,
   .lp-hero-photo img,
   .lp-example [data-example],
   html.js .lp [data-rise].is-in,

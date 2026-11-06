@@ -101,11 +101,10 @@ describe('the landing page', () => {
 
     const stretches = [...repair.matchAll(/<span class="lp-segment ([^"]*)" style="--grow: (\d+)"><\/span>/g)];
     expect(stretches.map((m) => m[2]), 'the stretches carry their real minutes, not a clamped width').toEqual(['88', '374', '2531']);
-    // The bar holds no text: the durations head the columns under it instead.
-    expect(repair).not.toMatch(/--grow: 520/);
-    // Every duration is visible in its column, with the chip that matches its stretch.
-    expect(repair).toContain('<span class="lp-stretch-chip');
-    for (const duration of ['An hour and a half', 'Six hours', 'Two days']) expect(visible(repair)).toContain(duration);
+    // The key above the bar ties each colour to its duration, so no label sits under the wrong stretch.
+    const key = repair.match(/<ul class="lp-bar-key"[^>]*>([\s\S]*?)<\/ul>/)?.[1] ?? '';
+    expect(key.match(/class="lp-bar-chip/g)).toHaveLength(3);
+    for (const duration of ['An hour and a half', 'Six hours', 'Two days']) expect(key).toContain(duration);
     expect(visible(repair)).toContain('To scale');
     // The last stretch is the widest by an order of magnitude: 2531 is about 85% of 2993.
     const [first, second, last] = stretches.map((m) => Number(m[2]));
