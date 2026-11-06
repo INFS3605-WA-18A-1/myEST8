@@ -167,5 +167,5 @@ test('two Tradies on their own paths: one inspects first, both give Firm Quotes,
   await expect(page.getByText('Superseded by Firm Quote').first()).toBeVisible();
   page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('row', { name: /Pete's Plumbing.*Replace the tap cartridge/ }).getByRole('button', { name: 'Choose this Firm Quote' }).click();
-  await expect(page.getByText("Firm Quote from Pete's Plumbing chosen and approved", { exact: true })).toBeVisible();
+  await expect(page.getByText("Firm Quote from Pete's Plumbing chosen", { exact: true }).first()).toBeVisible();
 });

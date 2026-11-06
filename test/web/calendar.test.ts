@@ -730,6 +730,12 @@ describe('Schedule: filters, the small month and the Picked visit panel', () => 
 
     const all = await page(w, '/calendar?view=day&date=2026-10-13', cookie);
     expect(all.match(/class="schedule-block[ "]/g) ?? []).toHaveLength(2);
+    // Visit kind holds the two kinds only: Status is the single state control.
+    expect(all).toContain('<h2 id="types-title">Visit kind</h2>');
+    expect(all).toContain('data-hide-key="work-order"');
+    expect(all).toContain('data-hide-key="inspection"');
+    expect(all).not.toContain('data-hide-key="not_confirmed"');
+    expect(all).not.toContain('data-hide-key="reschedule_requested"');
 
     const pete = await page(w, `/calendar?view=day&date=2026-10-13&tradie=${w.tradies.pete.id}`, cookie);
     expect(pete.match(/class="schedule-block[ "]/g) ?? []).toHaveLength(1);
@@ -742,6 +748,14 @@ describe('Schedule: filters, the small month and the Picked visit panel', () => 
 
     const none = await page(w, '/calendar?view=day&date=2026-10-13&status=done', cookie);
     expect(none.match(/class="schedule-block[ "]/g) ?? []).toHaveLength(0);
+    expect(visible(none)).toContain('No visits match these filters.');
+    expect(none).toContain('>Clear</a>');
+    expect(none).toContain('href="/calendar?view=day&amp;date=2026-10-13"');
+    // The small month's dots follow the Status filter too, so they never contradict an empty grid.
+    const mini = none.slice(none.indexOf('<section class="schedule-mini"'), none.indexOf('</section>', none.indexOf('<section class="schedule-mini"')));
+    expect(mini).not.toContain('has-visits');
+    // The rail's count follows the same filter, so it does not list visits the grid leaves out.
+    expect(visible(none)).toContain('No visits that day.');
     expect(visible(none)).toContain('Nothing booked on Tuesday 13 October.');
   });
 
@@ -754,6 +768,7 @@ describe('Schedule: filters, the small month and the Picked visit panel', () => 
     const mini = html.slice(html.indexOf('<section class="schedule-mini"'), html.indexOf('</section>', html.indexOf('<section class="schedule-mini"')));
 
     expect(visible(mini)).toContain('October 2026');
+    expect(visible(mini)).toContain('Pick a day');
     // Pete's visit is on Tuesday 13 October; the week of the 12th is tinted.
     expect(mini).toMatch(/<a class="schedule-mini-day is-shown has-visits" href="\/calendar\?view=day&amp;date=2026-10-13"/);
     expect(mini).toMatch(/<a class="schedule-mini-day is-shown" href="\/calendar\?view=day&amp;date=2026-10-14"/);

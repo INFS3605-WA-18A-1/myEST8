@@ -47,7 +47,7 @@ export function serverWhatsappPanel(o: { from: Origin; number: string | null; cu
   const hint = html`<p class="mt-2 text-sm text-muted" data-whatsapp-window>${WHATSAPP_WINDOW_HINT}</p>`;
   if (o.number === null) {
     return html`<div data-server-whatsapp="unavailable">
-      ${button('Connect WhatsApp', { variant: 'secondary', size: 'sm', type: 'button', disabled: true })}
+      <button type="button" class="btn btn-secondary btn-sm setup-connect-whatsapp" disabled>Connect WhatsApp</button>
       <p class="mt-2 text-sm text-muted" data-whatsapp-unavailable>WhatsApp isn't set up on this server yet, so it can't be connected.</p>
       ${hint}
     </div>`;
