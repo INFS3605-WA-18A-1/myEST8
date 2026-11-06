@@ -180,7 +180,8 @@ body.lp {
 .lp-line > span {
   display: block;
 }
-/* "You decide." carries the decision stripe, out in the gutter so the lines stay flush. */
+/* "You decide." carries the decision stripe, out in the gutter so the lines stay flush.
+   The stripe is the 4px Wattle edge a dashboard decision row has, at every width. */
 .lp-line.is-you {
   position: relative;
   overflow: visible;
@@ -190,16 +191,14 @@ body.lp {
   position: absolute;
   top: 0.12em;
   bottom: 0.14em;
-  left: -14px;
-  width: 6px;
-  border-radius: 3px;
+  left: -12px;
+  width: 4px;
+  border-radius: var(--radius-sm);
   background: var(--hivis);
 }
 @media (min-width: 64rem) {
   .lp-line.is-you::before {
-    left: -24px;
-    width: 10px;
-    border-radius: 5px;
+    left: -18px;
   }
 }
 
@@ -215,6 +214,14 @@ body.lp {
   .lp-intro {
     padding-top: 0;
     max-width: 26em;
+    /* The count block fills the column down to the photograph's foot, so the two
+       columns of the hero close together and the Night panel has a reason to be tall.
+       Its number stays at the top, its sentence sits on the bottom line. */
+    justify-content: flex-start;
+  }
+  .lp-intro .lp-figure-block {
+    flex: 1 1 auto;
+    justify-content: space-between;
   }
 }
 .lp-lead {
@@ -394,9 +401,21 @@ body.lp {
   grid-area: out;
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 16px;
   padding: 40px 20px 64px;
   background: var(--surface);
+}
+/* The label and the card close on the Night field's first line from 64rem: both
+   fields start 64px down, and the card is centred in the field's inner measure. */
+.lp-example-out > * {
+  width: 100%;
+  max-width: 560px;
+}
+.lp-example-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
 }
 @media (min-width: 48rem) {
   .lp-example-in,
@@ -414,9 +433,10 @@ body.lp {
     padding-left: max(32px, calc((100vw - 1376px) / 2 + 32px));
   }
   .lp-example-out {
+    padding-top: 64px;
     padding-right: max(32px, calc((100vw - 1376px) / 2 + 32px));
-    align-items: flex-start;
-    justify-content: center;
+    align-items: center;
+    justify-content: flex-start;
   }
 }
 
@@ -588,7 +608,7 @@ body.lp {
 /* What the Property Manager gets: a decision row, so it has the Wattle stripe, at the app's own size. */
 .lp-result {
   width: 100%;
-  max-width: 520px;
+  max-width: 560px;
 }
 .lp-request {
   display: flex;
@@ -738,59 +758,56 @@ body.lp {
   line-height: 1.45;
 }
 /*
- * The bar: three flat stretches whose widths follow their real durations, and
- * between them the Wattle seams that are the Property Manager's decisions, each
- * named above the bar. Phones turn it upright.
+ * The bar: three flat stretches whose widths are exactly the minutes they took
+ * (88, 374, 2531), so the two days fill most of it. It holds no text: the
+ * durations head the three columns under it, and the caption below names the
+ * Wattle seams, which are the Property Manager's two decisions. The same bar at
+ * every width; on a phone the hour and a half is honestly a sliver.
  */
 .lp-bar-chart {
   display: flex;
   align-items: stretch;
   margin-top: 96px;
-  height: max(160px, 24vh);
+  height: max(120px, 15vh);
 }
 .lp-segment {
   flex: var(--grow) 1 0;
-  min-width: 0;
-  padding: 20px;
-  font-family: var(--font-head);
-  font-size: clamp(20px, 2vw, 30px);
-  font-weight: 600;
-  line-height: 1.1;
-  letter-spacing: -0.01em;
+  min-width: 2px;
+  min-height: 0;
 }
-.lp-segment.is-light {
+.lp-segment.is-light,
+.lp-stretch-chip.is-light {
   background: var(--info-bg);
-  color: var(--ink);
 }
-.lp-segment.is-action {
+/* The pale stretch needs its hairline to read on the white section. */
+.lp-segment.is-light {
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.lp-segment.is-action,
+.lp-stretch-chip.is-action {
   background: var(--action);
-  color: var(--surface);
 }
-.lp-segment.is-night {
+.lp-segment.is-night,
+.lp-stretch-chip.is-night {
   background: var(--ink);
-  color: var(--surface);
 }
+/* A decision seam: no time passes, so it takes no width from the scale, and the
+   Wattle band rises above the bar like a flag on the timeline. */
 .lp-seam {
-  position: relative;
   flex: 0 0 10px;
   margin-top: -40px;
   background: var(--hivis);
-  border-radius: 5px 5px 0 0;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
 }
-.lp-seam > span {
-  position: absolute;
-  top: 0;
-  left: 18px;
-  white-space: nowrap;
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 1.2;
-  color: var(--ink);
+.lp-bar-caption {
+  margin-top: 20px;
+  font-size: 14px;
+  color: var(--muted);
 }
 .lp-stretches {
   display: grid;
   gap: 40px;
-  margin: 40px 0 0;
+  margin: 48px 0 0;
   padding: 0;
   list-style: none;
 }
@@ -800,12 +817,31 @@ body.lp {
     gap: 32px;
   }
 }
-.lp-stretch-summary {
-  margin-bottom: 16px;
+/* The duration heads its column, with the chip that matches its stretch of the bar. */
+.lp-stretch-length {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   font-family: var(--font-head);
-  font-size: 20px;
+  font-size: clamp(22px, 2vw, 30px);
   font-weight: 600;
-  line-height: 1.25;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+.lp-stretch-chip {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-sm);
+}
+/* The pale stretch needs its hairline to read on the white section, as the bar's does not. */
+.lp-stretch-chip.is-light {
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.lp-stretch-summary {
+  margin: 8px 0 16px;
+  font-size: 16px;
+  line-height: 1.45;
 }
 .lp-stages {
   display: flex;
@@ -827,33 +863,15 @@ body.lp {
 }
 @media (max-width: 47.99rem) {
   .lp-bar-chart {
-    flex-direction: column;
-    height: auto;
-    margin-top: 48px;
-  }
-  .lp-segment {
-    flex: 0 0 auto;
-    min-height: calc(var(--grow) * 0.08px);
-    padding: 16px 20px;
-    font-family: var(--font-body);
-    font-size: 20px;
+    height: 56px;
+    margin-top: 56px;
   }
   .lp-seam {
-    flex: 0 0 8px;
-    margin: 0 0 0 0;
-    border-radius: 0;
+    flex-basis: 8px;
+    margin-top: -24px;
   }
-  .lp-seam > span {
-    position: static;
-    display: block;
-    padding: 12px 0 12px 0;
-    background: var(--page);
-  }
-  .lp-seam {
-    flex-basis: auto;
-    background: none;
-    border-left: 8px solid var(--hivis);
-    padding-left: 12px;
+  .lp-bar-caption {
+    margin-top: 16px;
   }
 }
 
@@ -870,41 +888,46 @@ body.lp {
     padding-block: 120px;
   }
 }
-/* One statement with three photographs set in its line, after the nouns they show. */
+/* The section's one statement: type alone carries it, so it is the page's pull quote. */
 .lp-statement {
-  max-width: 30em;
+  max-width: 24em;
   font-family: var(--font-head);
-  font-size: clamp(24px, 2.6vw, 36px);
-  font-weight: 500;
-  line-height: 1.3;
+  font-size: clamp(28px, 3.2vw, 44px);
+  font-weight: 600;
+  line-height: 1.14;
   letter-spacing: -0.015em;
   color: var(--ink);
+  text-wrap: balance;
 }
-.lp-slot {
-  display: inline-block;
-  width: 2.6em;
-  height: 1.25em;
-  vertical-align: -0.22em;
+/* The three photographs in one clean strip under the statement: 1:1 crops, a 4px
+   radius each, a 1px Paper gap, at a size where each subject reads. */
+.lp-statement-photos {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  max-width: 40rem;
+  margin-top: 32px;
+}
+.lp-statement-photo {
+  aspect-ratio: 1;
   overflow: hidden;
-  border-radius: 0.18em;
+  border-radius: var(--radius-sm);
+  background: var(--page);
 }
-.lp-slot img {
+.lp-statement-photo img {
   display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
-/* The photographs set in the line are small, so each keeps its subject in the crop
-   and the tap, which is a dark close-up, is lifted to read beside the others. */
-.lp-slot.is-tap img {
+.lp-statement-photo.is-tap img {
   object-position: 50% 8%;
-  filter: brightness(1.32) saturate(1.08);
 }
-.lp-slot.is-plumber img {
+.lp-statement-photo.is-plumber img {
   object-position: 50% 0%;
 }
-.lp-slot.is-terrace img {
-  object-position: 50% 0%;
+.lp-statement-photo.is-terrace img {
+  object-position: 50% 20%;
 }
 .lp-handled-grid {
   display: grid;
@@ -1001,6 +1024,14 @@ body.lp {
   object-fit: cover;
   aspect-ratio: 4 / 3;
 }
+/* Each photograph keeps its subject in the crop: the balcony its wall and window,
+   the plumber his head and hands. */
+.lp-strip img:nth-child(2) {
+  object-position: 50% 20%;
+}
+.lp-strip img:nth-child(3) {
+  object-position: 50% 40%;
+}
 .lp-strip img:first-child {
   grid-column: 1 / -1;
 }
@@ -1014,6 +1045,12 @@ body.lp {
   }
   .lp-strip img:first-child {
     grid-column: auto;
+  }
+}
+/* On a phone the plumber's box is short: keep the whole head. */
+@media (max-width: 47.99rem) {
+  .lp-strip img:nth-child(3) {
+    object-position: 50% 0%;
   }
 }
 .lp-close-field {
@@ -1098,6 +1135,20 @@ body.lp {
 .lp-footer-ways {
   font-size: 16px;
 }
+.lp-footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 12px;
+}
+/* Ghost buttons on Night: the footer's quiet ways into the terms, not a call to action. */
+.lp-footer .btn-ghost {
+  color: var(--rail-text);
+}
+.lp-footer .btn-ghost:hover {
+  background: var(--rail-current);
+  color: var(--surface);
+}
 .lp-credits {
   max-width: 64ch;
   font-size: 14px;
@@ -1159,10 +1210,10 @@ html.js .lp .lp-bar-chart.is-in .lp-segment {
   transform-origin: left center;
   animation: lp-grow 900ms var(--ease-emphasis) both;
 }
-html.js .lp .lp-bar-chart.is-in .lp-segment:nth-of-type(2) {
+html.js .lp .lp-bar-chart.is-in .lp-segment:nth-child(3) {
   animation-delay: 120ms;
 }
-html.js .lp .lp-bar-chart.is-in .lp-segment:nth-of-type(3) {
+html.js .lp .lp-bar-chart.is-in .lp-segment:nth-child(5) {
   animation-delay: 240ms;
 }
 @keyframes lp-grow {

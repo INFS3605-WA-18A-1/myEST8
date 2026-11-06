@@ -62,8 +62,8 @@ function landingPage(o: { demo: boolean }): Html {
             <a href="/" class="logotype lp-home" aria-label="myEST8 home">${logo()}</a>
             <nav class="lp-bar-links" aria-label="Page">
               ${linkButton('Their words, your request', '#example', { variant: 'ghost', size: 'sm' })}
-              ${linkButton('A repair, start to finish', '#repair', { variant: 'ghost', size: 'sm' })}
-              ${linkButton('What it handles', '#handled', { variant: 'ghost', size: 'sm' })}
+              ${linkButton('One leak, report to done', '#repair', { variant: 'ghost', size: 'sm' })}
+              ${linkButton('What myEST8 handles', '#handled', { variant: 'ghost', size: 'sm' })}
             </nav>
             <nav class="lp-bar-actions" aria-label="Account">
               ${linkButton('Sign in', '/login', { variant: 'ghost', size: 'sm' })}
@@ -315,6 +315,7 @@ function example(): Html {
       )}
     </div>
     <div class="lp-example-out">
+      <p class="lp-example-label">What myEST8 makes of it</p>
       ${EXAMPLES.map((e) => html`<div class="lp-result" data-example="${e.id}">${e.result}</div>`)}
       <p class="lp-caption">The marked words are where myEST8 found the Trade and the Urgency.</p>
     </div>
@@ -366,11 +367,12 @@ const STRETCHES: Stretch[] = [
   },
 ];
 
-/** The two calls the Property Manager made, the Wattle seams between the stretches. */
-const DECISIONS_MADE = ['You confirm', 'You choose the Quote'];
-
 /**
  * "Stages as one bar": the repair's progress bar, enlarged until it spans the page.
+ * Its three stretches are exactly as wide as the minutes they took (88, 374 and
+ * 2531), so the two days fill most of it and the hour and a half is a sliver. The
+ * bar holds no text; the durations head the three columns under it, each with the
+ * chip that matches its stretch, and the caption names the two Wattle seams.
  * The bar is a picture (data-ui, hidden from screen readers, which read the
  * ordered list under it); the list holds every stage with its time.
  */
@@ -380,14 +382,15 @@ function repair(): Html {
     <p class="lp-repair-lead" data-rise>Reported on Monday at 7:42 am, fixed on Wednesday morning. The Property Manager made two decisions.</p>
     <div class="lp-bar-chart" data-ui data-rise aria-hidden="true">
       ${STRETCHES.map(
-        (s, i) => html`${i > 0 ? html`<span class="lp-seam"><span>${DECISIONS_MADE[i - 1]}</span></span>` : ''}
-          <span class="lp-segment ${s.tone}" style="--grow: ${Math.max(s.minutes, 520)}"><span>${s.length}</span></span>`,
+        (s, i) => html`${i > 0 ? html`<span class="lp-seam"></span>` : ''}
+          <span class="lp-segment ${s.tone}" style="--grow: ${s.minutes}"></span>`,
       )}
     </div>
+    <p class="lp-bar-caption" data-rise>To scale. The Wattle seams are your two decisions: you confirm the Request, then choose the Quote.</p>
     <ol class="lp-stretches" role="list">
       ${STRETCHES.map(
-        (s) => html`<li class="lp-stretch" style="--grow: ${Math.max(s.minutes, 520)}" data-rise>
-          <p class="sr-only">${s.length}.</p>
+        (s) => html`<li class="lp-stretch" data-rise>
+          <p class="lp-stretch-length"><span class="lp-stretch-chip ${s.tone}" aria-hidden="true"></span>${s.length}</p>
           <p class="lp-stretch-summary">${s.summary}</p>
           <ol class="lp-stages">
             ${s.stages.map((st) => html`<li><span class="lp-when num">${st.when}</span><span>${st.what}</span></li>`)}
@@ -433,21 +436,30 @@ const PEOPLE = [
 ];
 
 /**
- * "Paragraph with picture words": one statement with three photographs set in it
- * after the nouns they show. Under it, the calls that wait for the Property
+ * The statement's three photographs as one clean strip under it: the Tenant's tap,
+ * a Tradie under a sink, the Owner's terrace. Decorative (the sentence beside them
+ * carries the meaning), so each has an empty alt.
+ */
+function statementPhotos(): Html {
+  const shot = (name: string, w: number, h: number, crop: string) =>
+    html`<span class="lp-statement-photo ${crop}">${photo(name, '', w, h, { immediate: true })}</span>`;
+  return html`<div class="lp-statement-photos" data-rise>
+    ${shot('dripping-tap.jpg', 1200, 798, 'is-tap')} ${shot('plumber-under-sink.jpg', 1400, 1084, 'is-plumber')}
+    ${shot('ultimo-terrace.jpg', 900, 1304, 'is-terrace')}
+  </div>`;
+}
+
+/**
+ * "A statement, then the work": one statement in display type with its three
+ * photographs in a strip under it. Under them, the calls that wait for the Property
  * Manager (each with the Wattle stripe), what myEST8 does, and who never signs in.
  */
 function handled(): Html {
-  const slot = (name: string, alt: string, w: number, h: number, crop: string) =>
-    html`<span class="lp-slot ${crop}">${photo(name, alt, w, h, { immediate: true })}</span>`;
   return html`<section class="lp-handled" id="handled" aria-labelledby="handled-title">
     <div class="lp-wrap">
       <h2 id="handled-title" class="sr-only">What myEST8 handles</h2>
-      <p class="lp-statement" data-rise>
-        myEST8 texts the Tenant ${slot('dripping-tap.jpg', 'A dripping tap', 1200, 798, 'is-tap')}, chases Tradies
-        ${slot('plumber-under-sink.jpg', 'A plumber working under a kitchen sink', 1400, 1084, 'is-plumber')} for Quotes, and asks the Owner
-        ${slot('ultimo-terrace.jpg', 'A terrace house in Ultimo, Sydney', 900, 1304, 'is-terrace')} before going over budget.
-      </p>
+      <p class="lp-statement" data-rise>myEST8 texts the Tenant, chases Tradies for Quotes, and asks the Owner before going over budget.</p>
+      ${statementPhotos()}
       <div class="lp-handled-grid">
         <div data-rise>
           <h3 class="lp-h3">Waiting for your decision</h3>
@@ -522,13 +534,19 @@ const CREDITS = [
   { title: 'Plumber uses two wrenches to tighten a fitting', by: 'Tomwsulcer', licence: 'CC0' },
 ];
 
-/** "Name first": the wordmark at full width, what myEST8 is, then the photo credits. */
+/** "Name first": the wordmark at full width, what myEST8 is and the terms, then the photo credits. */
 function footer(): Html {
   return html`<footer class="lp-footer">
     <div class="lp-wrap">
       <p class="lp-footer-name" aria-hidden="true">${logo()}</p>
       <div class="lp-footer-row">
-        <p class="lp-footer-ways">${SIGNED_OUT_FOOTER}</p>
+        <div class="lp-footer-ways">
+          <p>${SIGNED_OUT_FOOTER}</p>
+          <nav class="lp-footer-links" aria-label="Terms and privacy">
+            ${linkButton('Terms of use', '/terms', { variant: 'ghost', size: 'sm' })}
+            ${linkButton('Privacy Policy', '/privacy', { variant: 'ghost', size: 'sm' })}
+          </nav>
+        </div>
         <div class="lp-credits">
           <h2 class="lp-credits-title">Photographs</h2>
           <p>

@@ -93,6 +93,53 @@ describe('the landing page', () => {
     expect(section(page, 'repair')).not.toMatch(/<(a|button|input|select|textarea)[\s>]/);
   });
 
+  test('the repair bar is to scale: 88, 374 and 2531 minutes, so the two days fill most of it', async () => {
+    const w = await webWorld();
+
+    const page = await (await w.get('/')).text();
+    const repair = section(page, 'repair');
+
+    const stretches = [...repair.matchAll(/<span class="lp-segment ([^"]*)" style="--grow: (\d+)"><\/span>/g)];
+    expect(stretches.map((m) => m[2]), 'the stretches carry their real minutes, not a clamped width').toEqual(['88', '374', '2531']);
+    // The bar holds no text: the durations head the columns under it instead.
+    expect(repair).not.toMatch(/--grow: 520/);
+    // Every duration is visible in its column, with the chip that matches its stretch.
+    expect(repair).toContain('<span class="lp-stretch-chip');
+    for (const duration of ['An hour and a half', 'Six hours', 'Two days']) expect(visible(repair)).toContain(duration);
+    expect(visible(repair)).toContain('To scale');
+    // The last stretch is the widest by an order of magnitude: 2531 is about 85% of 2993.
+    const [first, second, last] = stretches.map((m) => Number(m[2]));
+    expect(last!).toBeGreaterThan(second! * 6);
+    expect(second!).toBeGreaterThan(first! * 4);
+  });
+
+  test('the nav names the sections it lands on', async () => {
+    const w = await webWorld();
+
+    const page = await (await w.get('/')).text();
+    const bar = page.match(/<nav class="lp-bar-links"[\s\S]*?<\/nav>/)?.[0] ?? '';
+
+    expect(bar).toContain('>One leak, report to done</a>');
+    expect(bar).toContain('>What myEST8 handles</a>');
+    expect(bar).toContain('>Their words, your request</a>');
+    expect(bar).not.toContain('A repair, start to finish');
+    expect(bar).not.toContain('>What it handles</a>');
+  });
+
+  test('the statement carries the section, with its photographs in one strip beneath it', async () => {
+    const w = await webWorld();
+
+    const page = await (await w.get('/')).text();
+
+    const handled = section(page, 'handled');
+    expect(visible(handled).replace(/\s+/g, ' ')).toContain('myEST8 texts the Tenant, chases Tradies for Quotes, and asks the Owner before going over budget.');
+    // No photographs set in the sentence: the three sit in one clean strip under it, and are decorative.
+    expect(handled).not.toContain('lp-slot');
+    const strip = handled.match(/<div class="lp-statement-photos"[\s\S]*?<\/div>/)?.[0] ?? '';
+    expect(strip.match(/<img/g)).toHaveLength(3);
+    expect(strip.match(/alt=""/g)).toHaveLength(3);
+  });
+
   test('says how each person who never signs in takes part, as the app really reaches them', async () => {
     const w = await webWorld();
 
@@ -120,7 +167,7 @@ describe('the landing page', () => {
     const page = await (await w.get('/')).text();
 
     const photos = [...new Set([...page.matchAll(/src="\/assets\/(landing-[a-z-]+\.jpg)"/g)].map((m) => m[1]!))];
-    expect(photos.length).toBeGreaterThanOrEqual(6);
+    expect(photos).toHaveLength(7);
     for (const name of photos) {
       const res = await w.get(`/assets/${name}`);
       expect(res.status, name).toBe(200);

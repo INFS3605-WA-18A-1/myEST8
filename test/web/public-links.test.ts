@@ -33,6 +33,8 @@ async function publicPages() {
     ['the sign-in page after a refusal', await (await plain.web.request('/login', { method: 'POST', body: new URLSearchParams({ email: 'a@b.example', password: 'nope' }) })).text()],
     ['the sign-up page', await (await plain.get('/signup')).text()],
     ['the sign-up page after a refusal', await (await plain.post('/signup', signUpFields({ email: 'not-an-email' }))).text()],
+    ['the Terms of use', await (await plain.get('/terms')).text()],
+    ['the Privacy Policy', await (await plain.get('/privacy')).text()],
   ] as const;
 }
 

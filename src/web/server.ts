@@ -12,6 +12,7 @@ import { authRoutes, requirePropertyManager, type Sessions } from './auth.ts';
 import { NO_CONNECTORS, type ChannelConnectors } from './connectors.ts';
 import type { WebEnv } from './env.ts';
 import { landingRoutes } from './pages/landing.ts';
+import { legalRoutes } from './pages/legal.ts';
 import { quoteFormPages } from './pages/quote-form.ts';
 import { visitConfirmPages } from './pages/visit-confirm.ts';
 import { visitOfferPages } from './pages/visit-offer.ts';
@@ -72,6 +73,8 @@ export function createWebApp(deps: {
   web.route('/', createHttpApp(deps.app, deps));
   web.route('/', authRoutes(deps.app, deps.sessions));
   web.route('/', signupRoutes(deps.app, deps.sessions));
+  // The two public pages an account agrees to (/terms, /privacy): no session needed.
+  web.route('/', legalRoutes());
   // Signed out, / is the landing page; signed in, it falls through to the dashboard.
   web.route('/', landingRoutes(deps.app, deps.sessions, { demo: deps.demoSignIns ?? !!deps.demo }));
 
