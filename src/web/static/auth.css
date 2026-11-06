@@ -177,23 +177,29 @@ body.au {
   line-height: 1.5;
   color: var(--muted);
 }
-/* The sign-up's time estimate, under the subtitle while the panel's steps are below the form. */
-.au-phone-note {
-  font-size: 15px;
-}
-@media (min-width: 64rem) {
-  .au-phone-note {
-    display: none;
-  }
-}
 
 .au-form {
   display: flex;
   flex-direction: column;
   gap: 24px;
 }
-.au-form > .btn {
+.au-submit {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   margin-top: 4px;
+}
+/* The consent under Create account: a quiet sentence, then the two ways to read it. */
+.au-consent {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.au-consent-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: -4px;
 }
 .au-fieldset {
   display: flex;
@@ -254,6 +260,7 @@ body.au {
   right: 6px;
   translate: 0 -50%;
 }
+/* The Show / Hide control inside the password box: a small outlined control, not a second field. */
 .password-toggle {
   min-height: 32px;
   padding: 0 10px;
@@ -262,12 +269,16 @@ body.au {
   font-weight: 600;
   color: var(--action);
   cursor: pointer;
-  background: transparent;
-  border: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: var(--radius-btn);
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
 }
 .password-toggle:hover {
-  background: var(--page);
+  border-color: var(--action);
+  background: var(--info-bg);
 }
 .password-toggle:focus-visible {
   outline: 2px solid var(--action);
@@ -357,6 +368,20 @@ html:not(.js) .field-control .input {
     padding-inline: 64px;
   }
 }
+/* The end of the panel's steps: on a wide screen it closes the column at the foot,
+   so the space under the steps reads as the panel's own margin. On a phone it
+   follows the request card. */
+.au-panel-foot {
+  max-width: 38ch;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--rail-muted);
+}
+@media (min-width: 64rem) {
+  .au-panel-foot {
+    margin-top: auto;
+  }
+}
 
 /* The landing page's three sentences, sized to the panel so each stays on one line. */
 .au-thesis {
@@ -373,7 +398,8 @@ html:not(.js) .field-control .input {
 .au-line + .au-line {
   margin-top: 0.06em;
 }
-/* "You decide." carries the decision stripe, out in the gutter so the lines stay aligned. */
+/* "You decide." carries the decision stripe, out in the gutter so the lines stay aligned.
+   It is the same 4px Wattle edge a decision row has, at every width. */
 .au-line.is-you {
   position: relative;
 }
@@ -384,14 +410,12 @@ html:not(.js) .field-control .input {
   bottom: 0.1em;
   left: -12px;
   width: 4px;
-  border-radius: 2px;
+  border-radius: var(--radius-sm);
   background: var(--hivis);
 }
 @media (min-width: 40rem) {
   .au-line.is-you::before {
     left: -20px;
-    width: 6px;
-    border-radius: 3px;
   }
 }
 
@@ -404,11 +428,6 @@ html:not(.js) .field-control .input {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-  color: var(--rail-muted);
-}
-.au-next-note {
-  margin: 0;
-  font-size: 13px;
   color: var(--rail-muted);
 }
 

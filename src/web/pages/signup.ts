@@ -82,7 +82,6 @@ function signUpPage(o: { values?: Values; errors?: Errors; flash?: Flash; shareL
   return authPage({
     title: 'Create your Agency’s account',
     subtitle: 'You become its first Property Manager. A short guide then helps you set up the rest.',
-    phoneNote: 'Setup takes about 10 minutes.',
     flash: o.flash ?? null,
     size: 'signup',
     footer: SIGNED_OUT_FOOTER,
@@ -138,25 +137,32 @@ function signUpPage(o: { values?: Values; errors?: Errors; flash?: Flash; shareL
             })}
           </div>
         </fieldset>
-        ${button('Create account', { size: 'lg', block: true })}
+        <div class="au-submit">
+          ${button('Create account', { size: 'lg', block: true })}
+          <p class="au-consent">By creating an account you agree to the Terms of use and Privacy Policy.</p>
+          <div class="au-consent-links">
+            ${linkButton('Terms of use', '/terms', { variant: 'ghost', size: 'sm' })}
+            ${linkButton('Privacy Policy', '/privacy', { variant: 'ghost', size: 'sm' })}
+          </div>
+        </div>
       </form>
       ${otherWay({ text: 'Already have an account?', button: linkButton('Sign in', '/login', { variant: 'secondary', size: 'sm' }) })}
       <aside class="au-share" aria-label="Someone else setting up the Agency">
         <p class="au-other-text">One Property Manager creates the account, then adds the rest of the Agency from the setup guide. Is someone else doing that?</p>
+        <p class="au-other-text">Send them the sign-up link: the button opens a panel to copy it, or send it by email or text.</p>
         ${shareButton({
           title: 'Set up myEST8 for our Agency',
           text: 'Here’s the sign-up page for myEST8. One of us creates the Agency’s account, then adds the rest of us as Property Managers.',
           url: o.shareLink,
-          label: 'Send this page to them',
+          label: 'Send them the sign-up link',
           align: 'start',
         })}
       </aside>`,
     steps: [
-      { text: 'We create your account and your Agency, and sign you in.' },
-      {
-        text: 'Connect the Agency’s email first (required, about 2 minutes) so myEST8 can read what Tenants send. Then add your team, your Tradies and your first Property.',
-      },
-      { text: 'Tenants can then text in a repair, and it reaches you as a Maintenance Request to confirm.', request: true },
+      { text: 'Create your account and your Agency. myEST8 signs you in.' },
+      { text: 'Connect the Agency’s email (required, about 2 minutes) so myEST8 can read what Tenants send.' },
+      { text: 'Add your team, your Tradies and your first Property.' },
+      { text: 'The first Tenant text arrives as a Maintenance Request to confirm.', request: true },
     ],
     stepsNote: 'The whole setup guide takes about 10 minutes.',
   });

@@ -13,7 +13,7 @@ describe('signing up', () => {
     expect(page).toContain('aria-label="Show password"');
     // The label says what pressing it will do; there is no second pressed state.
     expect(page).not.toMatch(/data-reveal="field-password"[^>]*aria-pressed/);
-    expect(page).toContain('Setup takes about 10 minutes.');
+    expect(page).toContain('The whole setup guide takes about 10 minutes.');
     expect(page).toContain('<option value="Australia/Sydney" selected>');
     expect(page).toContain('<option value="Australia/Perth"');
     expect(page).toContain('href="/login"');
@@ -108,5 +108,58 @@ describe('signing up', () => {
 
     expect(res.status).toBe(303);
     expect(res.headers.get('location')).toBe('/');
+  });
+
+  test('the four steps keep their four jobs apart, and the 10 minutes appear once', async () => {
+    const w = await webWorld();
+
+    const raw = await (await w.get('/signup')).text();
+    const page = visible(raw).replace(/\s+/g, ' ');
+
+    const steps = [
+      'Create your account and your Agency. myEST8 signs you in.',
+      'Connect the Agency’s email (required, about 2 minutes) so myEST8 can read what Tenants send.',
+      'Add your team, your Tradies and your first Property.',
+      'The first Tenant text arrives as a Maintenance Request to confirm.',
+    ];
+    for (const step of steps) expect(page).toContain(step);
+    // Four numbered steps, not one step bundling four jobs.
+    expect(raw.match(/class="au-step-num/g)).toHaveLength(4);
+    // The estimate is said once, beside the lead, at every width.
+    expect(page.match(/about 10 minutes/g)).toHaveLength(1);
+  });
+
+  test('creating an account agrees to the Terms of use and Privacy Policy, both public pages', async () => {
+    const w = await webWorld();
+
+    const page = await (await w.get('/signup')).text();
+
+    expect(visible(page)).toContain('By creating an account you agree to the Terms of use and Privacy Policy.');
+    expect(page).toMatch(/<a href="\/terms"[^>]*class="[^"]*btn[^"]*"[^>]*>Terms of use<\/a>/);
+    expect(page).toMatch(/<a href="\/privacy"[^>]*class="[^"]*btn[^"]*"[^>]*>Privacy Policy<\/a>/);
+
+    for (const [path, title, honest] of [
+      ['/terms', 'Terms of use', 'university project'],
+      ['/privacy', 'Privacy Policy', 'student project'],
+    ] as const) {
+      const res = await w.get(path);
+      expect(res.status, path).toBe(200);
+      const legal = await res.text();
+      expect(legal).toContain(`<h1 class="page-title">${title}</h1>`);
+      expect(legal).toContain(honest);
+      // The public bar and a way home, as on every signed-out page.
+      expect(legal).toContain('class="public-bar"');
+      expect(legal).toMatch(/<a href="\/"[^>]*btn[^>]*>Home<\/a>/);
+    }
+  });
+
+  test('the share label says what pressing it does', async () => {
+    const w = await webWorld();
+
+    const page = visible(await (await w.get('/signup')).text()).replace(/\s+/g, ' ');
+
+    expect(page).toContain('Send them the sign-up link');
+    expect(page).toContain('the button opens a panel to copy it, or send it by email or text');
+    expect(page).not.toContain('Send this page to them');
   });
 });
