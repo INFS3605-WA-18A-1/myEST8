@@ -320,6 +320,7 @@ function example(): Html {
         ${EXAMPLES.map((e) => html`<div class="lp-result" data-example="${e.id}">${e.result}</div>`)}
         <p class="lp-caption">The marked words are where myEST8 found the Trade and the Urgency.</p>
       </div>
+      <p class="lp-example-close">One Confirm, and myEST8 chases the Quotes.</p>
     </div>
   </section>`;
 }

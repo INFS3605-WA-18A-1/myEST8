@@ -6223,17 +6223,25 @@
         border-bottom: 0;
       }
       .setup-compact .table-frame.is-labelled tbody td[data-label] {
-        display: inline;
+        display: inline-block;
         padding: 0;
         margin-inline-end: 8px;
+        vertical-align: top;
         font-size: 13px;
         line-height: 1.5;
         color: var(--muted);
       }
       .setup-compact .table-frame.is-labelled tbody td[data-label]::before {
-        content: attr(data-label) ': ';
+        content: attr(data-label) ':';
+        display: inline-block;
+        margin-inline-end: 5px;
         font-weight: 500;
         color: var(--muted);
+        white-space: nowrap;
+      }
+      /* The label already says "Google rating", so the chip inside does not repeat it. */
+      .setup-compact .table-frame.is-labelled tbody td[data-label='Google rating'] .metric-source {
+        display: none;
       }
       .setup-compact .table-frame.is-labelled tbody td[data-label]:last-child {
         margin-inline-end: 0;
@@ -8100,6 +8108,7 @@
     .schedule-slots {
       display: grid;
       grid-row: 2 / -1;
+      grid-template-columns: minmax(0, 1fr);
       grid-template-rows: subgrid;
       min-width: 0;
       margin: 0;
@@ -8148,6 +8157,7 @@
     .schedule-block {
       position: relative;
       z-index: 2;
+      width: 100%;
       min-width: 0;
       margin: 1px 0;
     }

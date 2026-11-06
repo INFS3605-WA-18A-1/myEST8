@@ -620,9 +620,12 @@ const CHANNEL: Record<string, { label: string; icon: string }> = {
   whatsapp: { label: 'WhatsApp', icon: 'whatsapp-logo' },
 };
 
-/** Initials for an avatar, or "+" for a number with no name. */
+/** Initials for an avatar; a number with no name uses its last two digits, never a bare "+". */
 function initialsOf(name: string): string {
-  return name.replace(/[^A-Za-z ]/g, '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('') || '+';
+  const letters = name.replace(/[^A-Za-z ]/g, '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('');
+  if (letters) return letters;
+  const digits = name.replace(/\D/g, '');
+  return digits.slice(-2) || '+';
 }
 
 /** The last thing said in a conversation. */

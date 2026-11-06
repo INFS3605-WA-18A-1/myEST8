@@ -425,6 +425,17 @@ body.lp {
   gap: 16px;
   min-height: 0;
 }
+/* The closing line sits on the field's foot, so the white half has a bottom edge of
+   content rather than a blank run into the next section. */
+.lp-example-close {
+  width: 100%;
+  max-width: 560px;
+  margin: 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  font-size: 14px;
+  color: var(--muted);
+}
 .lp-example-label {
   font-size: 14px;
   font-weight: 600;

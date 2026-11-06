@@ -456,8 +456,8 @@ function peopleArea(agency: Agency, shownFor: (key: FormKey) => Shown): Html {
     </div>
     <div class="setup-people-col">
       <h3 class="section-title">Building Managers</h3>
-      <p class="text-sm text-muted">For strata Properties: Common Area issues go to the Building Manager.</p>
       <div class="setup-people-table">${peopleTable(agency.buildingManagers, 'No Building Managers yet.', '/building-managers', 'Building Managers')}</div>
+      <p class="text-sm text-muted">For strata Properties: Common Area issues go to the Building Manager.</p>
       ${addForm(
         'Add a Building Manager',
         buildingManager.open,
