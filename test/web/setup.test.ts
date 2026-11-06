@@ -26,7 +26,12 @@ describe('the onboarding guide', () => {
     const setup = await page(w, '/setup', cookie);
 
     for (const text of ['id="channels"', 'id="people"', 'id="tradies"', 'id="properties"', 'id="tenants"', 'Forward', 'Resend']) expect(setup).toContain(text);
-    for (const text of ['Set up myEST8', 'aria-label="Setup areas"', 'href="#tradies"', 'href="#properties"', 'Use the step-by-step guide']) expect(setup).toContain(text);
+    expect(setup).toContain('<h1 class="page-title">Agency setup</h1>');
+    for (const text of ['aria-label="Setup areas"', 'href="#tradies"', 'href="#properties"', 'Use the step-by-step guide']) expect(setup, text).toContain(text);
+    expect(setup).toContain('Everything is connected. Add people and Properties here; open a row in Profiles to change it.');
+    // Each row opens its profile: an Owner, a Tradie, a Property and a Tenant.
+    for (const path of ['href="/owners/', 'href="/tradies/', 'href="/properties/', 'href="/tenants/']) expect(setup, path).toContain(path);
+    expect(setup).toContain('class="row-link"');
     expect(setup).not.toContain('WhatsApp sandbox');
     expect(setup).not.toContain('/webhooks/twilio');
     expect(setup).not.toContain('/webhooks/sendgrid');
@@ -170,7 +175,7 @@ describe('the onboarding guide', () => {
     expect(refused.location).toMatch(/^\/setup\?form=tradie&google=lucky&error=/);
     expect(refused.page).toContain('Link the Tradie to their Google listing, or mark them as not on Google');
     expect(refused.page).toContain('/setup?google=lucky&amp;place=place-lucky#tradies');
-    expect(refused.page).toMatch(/<details class="mt-4" open>\s*<summary[^>]*>Add a Tradie/);
+    expect(refused.page).toMatch(/<details class="mt-4" open>\s*<summary[^>]*>[\s\S]*?Add a Tradie/);
 
     const added = await submit(w, '/setup/tradies?from=setup&google=lucky', { ...tradie, placeId: 'place-lucky' }, cookie);
     expect(added.location).toMatch(/^\/setup\?ok=/);

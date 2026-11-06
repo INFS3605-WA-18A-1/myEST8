@@ -242,11 +242,12 @@ describe('ui', () => {
     expect(out).not.toContain('target=');
   });
 
-  it('gives links in a chat bubble the bubble’s own text colour, so they read on Harbour', async () => {
+  it('gives links in a chat bubble the bubble’s own text colour, so they read on every tint', async () => {
     const out = await render(chatBubble({ side: 'end', header: 'Alice', text: 'See https://myest8.test/t/abc' }));
-    expect(out).toContain('chat-bubble-primary');
+    expect(out).toContain('chat-bubble-own');
     const css = await (await assetRoutes().request('/assets/app.css')).text();
     expect(css).toMatch(/\.chat-bubble a:not\(\.btn\) \{\s*color: inherit;\s*text-decoration: underline;/);
+    expect(css).toMatch(/\.chat-end \.chat-bubble\.chat-bubble-own \{\s*background-color: var\(--info-bg\);\s*color: var\(--ink\);/);
   });
 
   it('links each photo to its full image in the same tab, with no hint about a new one', async () => {

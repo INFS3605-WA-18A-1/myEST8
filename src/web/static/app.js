@@ -368,6 +368,24 @@ try {
   });
 })();
 
+// === password ===
+// The Show / Hide button inside a password field (the sign-up form). Its label and
+// text say what pressing it will do, and it never changes what the field posts.
+onContent((root) => {
+  for (const toggle of root.querySelectorAll('[data-reveal]')) {
+    if (toggle.dataset.ready) continue;
+    toggle.dataset.ready = '1';
+    const input = document.getElementById(toggle.dataset.reveal);
+    if (!(input instanceof HTMLInputElement)) continue;
+    toggle.addEventListener('click', () => {
+      const showing = input.type === 'text';
+      input.type = showing ? 'password' : 'text';
+      toggle.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+      toggle.textContent = showing ? 'Show' : 'Hide';
+    });
+  }
+});
+
 // === landing ===
 // The landing page's sections rise into view as they reach the screen, their parts
 // in reading order. landing.css only hides [data-rise] when this file has run
@@ -384,6 +402,11 @@ try {
   for (const section of new Set(parts.map((el) => el.closest('section, aside') ?? document.body))) {
     parts.filter((el) => (el.closest('section, aside') ?? document.body) === section).forEach((el, i) => el.style.setProperty('--rise-i', String(i)));
   }
+  // Anything already on screen (or above it, after a hash jump) is shown at once: a
+  // deep link must never land on a hidden section, and a full-page capture or print
+  // must not leave blank bands.
+  const inView = (el) => el.getBoundingClientRect().top < window.innerHeight + 200;
+  parts.filter(inView).forEach(show);
   const seen = new IntersectionObserver(
     (entries) => {
       for (const entry of entries) {
@@ -392,9 +415,11 @@ try {
         seen.unobserve(entry.target);
       }
     },
-    { rootMargin: '0px 0px -10% 0px' },
+    { rootMargin: '0px 0px 200px 0px' },
   );
-  parts.forEach((el) => seen.observe(el));
+  for (const el of parts) if (!el.classList.contains('is-in')) seen.observe(el);
+  // A link to a section further down scrolls first, then its parts are in view.
+  window.addEventListener('hashchange', () => requestAnimationFrame(() => parts.filter(inView).forEach(show)));
 })();
 
 // === import ===
@@ -738,7 +763,7 @@ onContent((root) => {
 // === schedule: picked visit and visit types ===
 // Clicking a visit on the grid shows its details in the Picked visit panel instead of
 // opening its Ticket, when the screen is 1280px or wider. The panel's Open Ticket
-// button, a modified click and a narrow screen all still go to the Ticket. The Visit types
+// button, a modified click and a narrow screen all still go to the Ticket. The Visit kind
 // boxes hide the blocks of a kind by setting data-hide on the Schedule; both are hidden
 // until this file runs, since neither does anything without it.
 onContent((root) => {
@@ -1791,11 +1816,20 @@ onContent((root) => {
     if (selected) selectTab(selected);
   }
   for (const msgs of root.querySelectorAll('[data-msgs]')) {
-    const body = msgs.querySelector('.section-body');
+    const body = msgs.querySelector('.message-scroll') ?? msgs.querySelector('.section-body');
     const toggle = msgs.querySelector('[data-msgs-toggle]');
     if (!body || !toggle) continue;
-    // The short view ends at the newest message; the button is only for a log longer than it.
-    body.scrollTop = body.scrollHeight;
+    // The short view starts at the top of the newest message, not halfway through it:
+    // a bubble taller than the frame reads from its first line. The 32px keeps the
+    // bubble's header clear of the top fade, where the text would fall below 4.5:1.
+    const newest = () => {
+      const bubbles = body.querySelectorAll('.chat');
+      const last = bubbles[bubbles.length - 1];
+      if (!last) return;
+      const top = last.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop;
+      body.scrollTop = Math.max(0, top - 32);
+    };
+    newest();
     toggle.hidden = body.scrollHeight <= body.clientHeight + 4;
   }
   // A slider under the Timeline board that scrolls it sideways (and follows it), shown
@@ -1811,6 +1845,14 @@ onContent((root) => {
     slider.value = '0';
     slider.setAttribute('aria-label', 'Scroll the Timeline sideways');
     board.after(slider);
+    // Open on the stage the Job is at (or the last one when it is done), aligned to the
+    // start of its column: at 1440 the later columns would otherwise sit off-screen, and
+    // an 8px nudge left the previous stage's arrow clipped at the edge.
+    const current = board.querySelector('[data-current]');
+    if (current) {
+      const left = current.getBoundingClientRect().left - board.getBoundingClientRect().left + board.scrollLeft;
+      board.scrollLeft = Math.max(0, Math.round(left));
+    }
     const sync = () => {
       const max = board.scrollWidth - board.clientWidth;
       slider.hidden = max <= 4;
@@ -1868,7 +1910,13 @@ document.addEventListener('click', (event) => {
     const msgs = toggle.closest('[data-msgs]');
     const open = msgs?.classList.toggle('is-open');
     toggle.setAttribute('aria-expanded', String(Boolean(open)));
-    if (!open) msgs.querySelector('.section-body')?.scrollTo({ top: 1e9 });
+    if (!open) {
+      // Back to the short view, starting at the newest message's first line.
+      const body = msgs.querySelector('.message-scroll') ?? msgs.querySelector('.section-body');
+      const bubbles = body?.querySelectorAll('.chat') ?? [];
+      const last = bubbles[bubbles.length - 1];
+      if (body && last) body.scrollTop = Math.max(0, last.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop - 32);
+    }
     toggle.textContent = open ? 'Show fewer messages' : 'Show the whole conversation';
   }
 });

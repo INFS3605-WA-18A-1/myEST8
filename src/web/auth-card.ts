@@ -25,6 +25,8 @@ export function authPage(o: {
   size: 'login' | 'signup';
   form: Html;
   steps: NextStep[];
+  /** One quiet line at the foot of the panel, such as how long the whole guide takes. */
+  stepsNote?: string;
   footer: string;
 }): Html {
   return html`<!doctype html>
@@ -49,7 +51,7 @@ export function authPage(o: {
               ${o.form}
             </div>
           </main>
-          ${panel(o.steps)}
+          ${panel(o.steps, o.stepsNote)}
           <footer class="au-footer">${o.footer}</footer>
         </div>
       </body>
@@ -60,11 +62,11 @@ export function authPage(o: {
  * The panel: the landing page's three-line thesis, where "You decide."
  * carries the Wattle decision stripe, then the steps in order when there are any.
  */
-function panel(steps: NextStep[]): Html {
+function panel(steps: NextStep[], stepsNote?: string): Html {
   return html`<aside class="au-panel"${steps.length ? html` aria-labelledby="next-heading"` : html` aria-label="About myEST8"`}>
     <div class="au-panel-inner">
       <p class="au-thesis">
-        <span class="au-line">Tenants text the problem.</span>
+        <span class="au-line">Tenants text.</span>
         <span class="au-line is-you">You decide.</span>
         <span class="au-line">myEST8 does the chasing.</span>
       </p>
@@ -82,6 +84,7 @@ function panel(steps: NextStep[]): Html {
           )}
         </ol>
       </div>` : ''}
+      ${steps.length && stepsNote ? html`<p class="au-panel-foot">${stepsNote}</p>` : ''}
     </div>
   </aside>`;
 }

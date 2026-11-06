@@ -11,7 +11,6 @@ export function signUpFields(changes: Record<string, string> = {}) {
     name: 'Sam Sun',
     email: 'sam@sunrise.example',
     password: 'sunrise-2026',
-    confirmPassword: 'sunrise-2026',
     agencyName: 'Sunrise Realty',
     timeZone: 'Australia/Brisbane',
     ...changes,

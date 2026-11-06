@@ -142,8 +142,6 @@ describe('Schedule: the week', () => {
     const html = await page(w, '/calendar?week=2026-10-12', cookie);
 
     const summary = visible(summaryOf(html));
-    // The count is in the Visits tile on the left; the summary keeps the flags.
-    expect(visible(html)).toContain('Visits 1 booked');
     expect(summary).toContain('1 reschedule request waiting on you');
     // Each day with visits says how many, beside its name.
     expect(visible(week(html))).toMatch(/Tue 13 Tuesday 13 October 1 visit/);
@@ -226,24 +224,26 @@ describe('Schedule: Site Inspections and who is free', () => {
     expect(html).toContain(`href="/tickets/${job.ticketId}#job-${job.jobId}"`);
   });
 
-  test('every Tradie is free today when none is booked, and another week calls none of them free', async () => {
+  test('the Tradies rail counts who is free today, and a later week names the Tradies it has', async () => {
     const w = await webWorld();
     await bookedTap(w);
     const cookie = await w.signIn();
 
     const free = visible(freePanel(await page(w, '/calendar', cookie)));
-    // Now is Saturday 10 October; Pete's visit is on Tuesday, so every Tradie is free today.
-    expect(free).toContain('Tradies (6 free today)');
-    expect(free).toContain("Pete's Plumbing");
+    // Now is Saturday 10 October; Pete's visit is on Tuesday, so every Tradie is free today
+    // and this week has no visits, so only the count is listed.
+    expect(free).toContain('No visits this week.');
+    expect(free).toContain('Every Tradie is free today');
 
-    // Another week has no today, so no Tradie is called free; the list stays, with each one's visits that week.
+    // Another week has no today, so nobody is called free; the rail lists the Tradies with visits that week.
     const next = freePanel(await page(w, '/calendar?view=week&date=2026-10-19', cookie));
     expect(next).not.toContain('schedule-free-tag');
     expect(visible(next)).not.toContain('free today');
-    expect(visible(next)).toContain("Pete's Plumbing No visits this week");
+    expect(visible(next)).toContain('No visits this week.');
+    expect(visible(next)).toContain('6 Tradies in the Agency');
   });
 
-  test('the Tradies list tags each Tradie free today, and lists the one booked today first, untagged', async () => {
+  test('the Tradies rail lists the one booked today first, and counts the rest free', async () => {
     const w = await webWorld();
     await bookedTap(w);
     // Pete's visit is Tuesday 13 October at 9 am. Move to that morning, so today is a day he is booked.
@@ -253,22 +253,15 @@ describe('Schedule: Site Inspections and who is free', () => {
     const panel = freePanel(await page(w, '/calendar', cookie));
     const text = visible(panel);
 
-    expect(text).toContain('Tradies (5 free today)');
-    // Pete is booked today, so he has no Free tag, and he comes first; the rest are free, by business name.
+    expect(text).toContain('5 Tradies free today');
+    // Only the Tradies with a visit in the period are listed: Pete, with no Free tag, and no one else.
     const entries = panel.split('<li>').slice(1);
-    const pete = entries.find((e) => e.includes('Pete'))!;
+    expect(entries).toHaveLength(1);
+    const pete = entries[0]!;
+    expect(pete).toContain('Pete');
     expect(pete).not.toContain('schedule-free-tag');
     expect(visible(pete)).toContain('1 visit this week');
-    expect(entries.filter((e) => e.includes('schedule-free-tag'))).toHaveLength(5);
-    expect(entries[0]).toContain('Pete');
-    const names = ['Drip Doctors', 'Flow Bros', "Nina's Plumbing", 'Quick Pipes', 'Sparky Sam'];
-    let at = -1;
-    for (const name of names) {
-      const found = text.indexOf(name);
-      expect(found, name).toBeGreaterThan(at);
-      at = found;
-    }
-    expect(panel).toContain('aria-hidden="true">DD</span>');
+    expect(panel).toContain('aria-hidden="true">PP</span>');
   });
 
   test('with everyone booked, no Tradie is tagged free', async () => {
@@ -291,8 +284,8 @@ describe('Schedule: Site Inspections and who is free', () => {
 
     const text = visible(freePanel(await page(w, '/calendar', cookie)));
 
-    expect(text).toContain('Tradies (0 free today)');
-    expect(text).not.toContain('Free ');
+    expect(text).toContain('0 Tradies free today');
+    expect(text).not.toContain('schedule-free-tag');
   }, 60_000);
 
   test('the grid is the target the page can jump to', async () => {
@@ -379,7 +372,7 @@ describe('Schedule: the Day', () => {
     const html = await page(w, '/calendar?view=day&date=2026-10-13', cookie);
 
     expect(visible(html)).toContain('Tuesday 13 October');
-    expect(visible(html)).toContain('Visits 2 booked');
+    expect(html.match(/class="schedule-block[ "]/g) ?? []).toHaveLength(2);
     const g = grid(html, 'day');
     expect(g).toMatch(/role="region" aria-label="Tuesday 13 October, hour by hour\. Visits at the same time sit side by side: scroll sideways to see them all\." tabindex="0"/);
     expect(g).toContain('--slots: 48; --cols: 2');
@@ -549,7 +542,7 @@ describe('Schedule: the toolbar', () => {
 
     expect(html).toContain('<nav class="segmented" aria-label="Whose visits">');
     expect(html).not.toContain('schedule-toolbar-end');
-    const form = html.slice(html.indexOf('<form method="get" action="/calendar" class="schedule-filters"'), html.indexOf('</form>', html.indexOf('class="schedule-filters"')));
+    const form = html.slice(html.indexOf('<form method="get" action="/calendar" class="schedule-filters is-desk"'), html.indexOf('</form>', html.indexOf('class="schedule-filters is-desk"')));
     expect(form).toContain('data-autosubmit');
     expect(form).toContain('name="view" value="day"');
     expect(form).toContain('name="date" value="2026-10-13"');
@@ -714,7 +707,7 @@ describe('Schedule: views and links', () => {
     expect(tabsAt).toBeGreaterThan(-1);
     const nav = html.slice(tabsAt, html.indexOf('</nav>', tabsAt));
     expect(nav).toContain('href="/calendar?view=day&amp;date=2026-10-19&amp;filter=all"');
-    expect(nav).toMatch(/href="\/calendar\?view=week&amp;date=2026-10-19&amp;filter=all" class="tab[^"]*tab-active[^"]*" aria-current="page"/);
+    expect(nav).toMatch(/href="\/calendar\?view=week&amp;date=2026-10-19&amp;filter=all" class="segmented-item" aria-current="page"/);
     expect(nav).toContain('href="/calendar?view=month&amp;date=2026-10-19&amp;filter=all"');
   });
 
@@ -730,16 +723,22 @@ describe('Schedule: views and links', () => {
 });
 
 describe('Schedule: filters, the small month and the Picked visit panel', () => {
-  test('the Tradie and Status filters narrow the grid and the Visits count, and the links keep them', async () => {
+  test('the Tradie and Status filters narrow the grid, and the links keep them', async () => {
     const w = await webWorld();
     const { tap, fan } = await busyTuesday(w);
     const cookie = await w.signIn();
 
     const all = await page(w, '/calendar?view=day&date=2026-10-13', cookie);
-    expect(visible(all)).toContain('Visits 2 booked');
+    expect(all.match(/class="schedule-block[ "]/g) ?? []).toHaveLength(2);
+    // Visit kind holds the two kinds only: Status is the single state control.
+    expect(all).toContain('<h2 id="types-title">Visit kind</h2>');
+    expect(all).toContain('data-hide-key="work-order"');
+    expect(all).toContain('data-hide-key="inspection"');
+    expect(all).not.toContain('data-hide-key="not_confirmed"');
+    expect(all).not.toContain('data-hide-key="reschedule_requested"');
 
     const pete = await page(w, `/calendar?view=day&date=2026-10-13&tradie=${w.tradies.pete.id}`, cookie);
-    expect(visible(pete)).toContain('Visits 1 booked');
+    expect(pete.match(/class="schedule-block[ "]/g) ?? []).toHaveLength(1);
     expect(pete).toContain(`href="/tickets/${tap.ticketId}"`);
     expect(pete).not.toContain(`href="/tickets/${fan.ticketId}"`);
     // The next-day link keeps the filter; the selected Tradie links back to everyone.
@@ -748,7 +747,16 @@ describe('Schedule: filters, the small month and the Picked visit panel', () => 
     expect(pete).toContain('aria-current="true"');
 
     const none = await page(w, '/calendar?view=day&date=2026-10-13&status=done', cookie);
-    expect(visible(none)).toContain('Visits 0 booked');
+    expect(none.match(/class="schedule-block[ "]/g) ?? []).toHaveLength(0);
+    expect(visible(none)).toContain('No visits match these filters.');
+    expect(none).toContain('>Clear</a>');
+    expect(none).toContain('href="/calendar?view=day&amp;date=2026-10-13"');
+    // The small month's dots follow the Status filter too, so they never contradict an empty grid.
+    const mini = none.slice(none.indexOf('<section class="schedule-mini"'), none.indexOf('</section>', none.indexOf('<section class="schedule-mini"')));
+    expect(mini).not.toContain('has-visits');
+    // The rail's count follows the same filter, so it does not list visits the grid leaves out.
+    expect(visible(none)).toContain('No visits that day.');
+    expect(visible(none)).toContain('Nothing booked on Tuesday 13 October.');
   });
 
   test('the small month links each day to its Day, marks the days with visits and tints the period shown', async () => {
@@ -760,6 +768,7 @@ describe('Schedule: filters, the small month and the Picked visit panel', () => 
     const mini = html.slice(html.indexOf('<section class="schedule-mini"'), html.indexOf('</section>', html.indexOf('<section class="schedule-mini"')));
 
     expect(visible(mini)).toContain('October 2026');
+    expect(visible(mini)).toContain('Pick a day');
     // Pete's visit is on Tuesday 13 October; the week of the 12th is tinted.
     expect(mini).toMatch(/<a class="schedule-mini-day is-shown has-visits" href="\/calendar\?view=day&amp;date=2026-10-13"/);
     expect(mini).toMatch(/<a class="schedule-mini-day is-shown" href="\/calendar\?view=day&amp;date=2026-10-14"/);

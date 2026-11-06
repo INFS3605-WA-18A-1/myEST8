@@ -50,7 +50,6 @@ export async function signUp(page: Page, agency: { agencyName: string; name: str
   await page.getByRole('textbox', { name: 'Your name' }).fill(agency.name);
   await page.getByRole('textbox', { name: 'Work email' }).fill(agency.email);
   await page.getByRole('textbox', { name: 'Password', exact: true }).fill(agency.password);
-  await page.getByRole('textbox', { name: 'Confirm password' }).fill(agency.password);
   await page.getByRole('textbox', { name: 'Agency name' }).fill(agency.agencyName);
   await page.getByRole('button', { name: 'Create account' }).click();
 }

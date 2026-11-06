@@ -32,7 +32,8 @@ function holds(current: string | undefined, number: string): boolean {
 
 /** WhatsApp's chip: not offered here, connected (proved: the number is the server's), or not connected yet. Optional, so never a warning. */
 export function whatsappChip(number: string | null, current: AgencyChannel | undefined, o: { outline?: boolean } = {}): Html {
-  if (number === null) return badge('Not available here', 'neutral', { wrap: true, outline: o.outline });
+  // Not set up on this server: the panel says so in words; a "Not available here" tag on the heading only repeats it.
+  if (number === null) return html``;
   if (current && holds(current.address, number)) return badge('Connected', 'success', { wrap: true });
   return badge('Not connected', 'neutral', { wrap: true, outline: o.outline });
 }
@@ -46,7 +47,7 @@ export function serverWhatsappPanel(o: { from: Origin; number: string | null; cu
   const hint = html`<p class="mt-2 text-sm text-muted" data-whatsapp-window>${WHATSAPP_WINDOW_HINT}</p>`;
   if (o.number === null) {
     return html`<div data-server-whatsapp="unavailable">
-      ${button('Connect WhatsApp', { variant: 'secondary', size: 'sm', type: 'button', disabled: true })}
+      <button type="button" class="btn btn-secondary btn-sm setup-connect-whatsapp" disabled>Connect WhatsApp</button>
       <p class="mt-2 text-sm text-muted" data-whatsapp-unavailable>WhatsApp isn't set up on this server yet, so it can't be connected.</p>
       ${hint}
     </div>`;

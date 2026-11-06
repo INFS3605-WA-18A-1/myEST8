@@ -1,0 +1,69 @@
+/*
+ * The legal pages (/terms, /privacy) in pages/legal.ts. Loaded only there, after
+ * app.css. They sit on the public page frame (public-bar, public-main,
+ * public-footer in app.css), so this file only sets the prose: one document
+ * column, section headings, lists, and the quiet way back in at the end.
+ * Colours are app.css's tokens only (docs/design-system.md).
+ */
+
+.legal {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  max-width: 62ch;
+}
+.legal-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.legal h2 {
+  margin: 0;
+  font-family: var(--font-head);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.legal p,
+.legal li {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+.legal ul {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding-left: 1.2em;
+}
+/* The end of the document: a hairline, then the way into the product. */
+.legal-end {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+.legal-end-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+/* One button on a phone, side by side from 40rem. */
+@media (max-width: 39.99rem) {
+  .legal-end-actions > .btn {
+    flex: 1 1 100%;
+  }
+}
+/* The two documents link to each other from the footer, never from the prose. */
+.legal-footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 8px;
+}

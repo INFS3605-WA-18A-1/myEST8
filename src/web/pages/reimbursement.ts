@@ -167,7 +167,15 @@ function body(r: Reimbursement, timeZone: string, now: Date): Html {
         ${nextCard(r, timeZone)} ${receiptsCard(r)} ${timelineCard(r, timeZone)}
       </div>
       <div class="reimbursement-side">
-        ${detailsCard(r)} ${messageLog(r.messages, { timeZone, markRead: `/reimbursements/${r.urgentRepairId}/read` })}
+        ${detailsCard(r)}
+        ${messageLog(r.messages, {
+          timeZone,
+          markRead: `/reimbursements/${r.urgentRepairId}/read`,
+          contacts: [
+            { name: r.tenant.name, role: 'Tenant', mobile: r.tenant.mobile, email: r.tenant.email },
+            { name: r.owner.name, role: 'Property Owner', mobile: r.owner.mobile, email: r.owner.email },
+          ],
+        })}
       </div>
     </div>`;
 }
