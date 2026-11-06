@@ -763,7 +763,7 @@ onContent((root) => {
 // === schedule: picked visit and visit types ===
 // Clicking a visit on the grid shows its details in the Picked visit panel instead of
 // opening its Ticket, when the screen is 1280px or wider. The panel's Open Ticket
-// button, a modified click and a narrow screen all still go to the Ticket. The Visit types
+// button, a modified click and a narrow screen all still go to the Ticket. The Visit kind
 // boxes hide the blocks of a kind by setting data-hide on the Schedule; both are hidden
 // until this file runs, since neither does anything without it.
 onContent((root) => {
@@ -1820,14 +1820,14 @@ onContent((root) => {
     const toggle = msgs.querySelector('[data-msgs-toggle]');
     if (!body || !toggle) continue;
     // The short view starts at the top of the newest message, not halfway through it:
-    // a bubble taller than the frame reads from its first line. The 28px keeps the
+    // a bubble taller than the frame reads from its first line. The 32px keeps the
     // bubble's header clear of the top fade, where the text would fall below 4.5:1.
     const newest = () => {
       const bubbles = body.querySelectorAll('.chat');
       const last = bubbles[bubbles.length - 1];
       if (!last) return;
       const top = last.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop;
-      body.scrollTop = Math.max(0, top - 28);
+      body.scrollTop = Math.max(0, top - 32);
     };
     newest();
     toggle.hidden = body.scrollHeight <= body.clientHeight + 4;
@@ -1845,12 +1845,13 @@ onContent((root) => {
     slider.value = '0';
     slider.setAttribute('aria-label', 'Scroll the Timeline sideways');
     board.after(slider);
-    // Open on the stage the Job is at (or the last one when it is done): at 1440 the
-    // later columns would otherwise sit off-screen with no sign that they are there.
+    // Open on the stage the Job is at (or the last one when it is done), aligned to the
+    // start of its column: at 1440 the later columns would otherwise sit off-screen, and
+    // an 8px nudge left the previous stage's arrow clipped at the edge.
     const current = board.querySelector('[data-current]');
     if (current) {
       const left = current.getBoundingClientRect().left - board.getBoundingClientRect().left + board.scrollLeft;
-      board.scrollLeft = Math.max(0, left - 8);
+      board.scrollLeft = Math.max(0, Math.round(left));
     }
     const sync = () => {
       const max = board.scrollWidth - board.clientWidth;
@@ -1914,7 +1915,7 @@ document.addEventListener('click', (event) => {
       const body = msgs.querySelector('.message-scroll') ?? msgs.querySelector('.section-body');
       const bubbles = body?.querySelectorAll('.chat') ?? [];
       const last = bubbles[bubbles.length - 1];
-      if (body && last) body.scrollTop = Math.max(0, last.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop - 28);
+      if (body && last) body.scrollTop = Math.max(0, last.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop - 32);
     }
     toggle.textContent = open ? 'Show fewer messages' : 'Show the whole conversation';
   }

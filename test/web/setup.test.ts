@@ -26,9 +26,12 @@ describe('the onboarding guide', () => {
     const setup = await page(w, '/setup', cookie);
 
     for (const text of ['id="channels"', 'id="people"', 'id="tradies"', 'id="properties"', 'id="tenants"', 'Forward', 'Resend']) expect(setup).toContain(text);
-    expect(setup).toContain('Agency setup');
+    expect(setup).toContain('<h1 class="page-title">Settings</h1>');
     for (const text of ['aria-label="Setup areas"', 'href="#tradies"', 'href="#properties"', 'Use the step-by-step guide']) expect(setup, text).toContain(text);
-    expect(setup).toContain('Everything is connected. Add or change people here.');
+    expect(setup).toContain('Everything is connected. Add people and Properties here; open a row in Profiles to change it.');
+    // Each row opens its profile: an Owner, a Tradie, a Property and a Tenant.
+    for (const path of ['href="/owners/', 'href="/tradies/', 'href="/properties/', 'href="/tenants/']) expect(setup, path).toContain(path);
+    expect(setup).toContain('class="row-link"');
     expect(setup).not.toContain('WhatsApp sandbox');
     expect(setup).not.toContain('/webhooks/twilio');
     expect(setup).not.toContain('/webhooks/sendgrid');

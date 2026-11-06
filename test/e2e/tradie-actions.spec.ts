@@ -177,7 +177,7 @@ test("a Work Order email's buttons open their pages, and Mark job done records i
   await eventually(page, () => expect(page.getByRole('button', { name: 'Choose this Firm Quote' }).first()).toBeVisible({ timeout: 1_000 }));
   page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('row', { name: /Pete's Plumbing.*Replace the tap washer/ }).getByRole('button', { name: 'Choose this Firm Quote' }).click();
-  await expect(page.getByText("Firm Quote from Pete's Plumbing chosen and approved", { exact: true })).toBeVisible();
+  await expect(page.getByText("Firm Quote from Pete's Plumbing chosen", { exact: true }).first()).toBeVisible();
 
   await bookWorkOrder(page, ticketUrl);
 

@@ -27,7 +27,7 @@ import { serverSmsPanel } from './server-sms.ts';
 import { serverWhatsappPanel, whatsappChip } from './server-whatsapp.ts';
 import { channelName, laterChannelList, WORKING_CHANNELS } from './channel-options.ts';
 import { smsNumberPanel, smsNumbersOffered } from './sms-number.ts';
-import { alert, button, emptyState, field, flashFrom, formatMoney, linkButton, page, section, table, type Flash, type Html } from '../ui.ts';
+import { alert, button, contactLink, emptyState, field, flashFrom, formatMoney, linkButton, page, rowLink, section, table, type Flash, type Html } from '../ui.ts';
 import { addBuildingManagerPage, addOwnerPage, type AddPersonRefusal } from './owners.ts';
 import { addPropertyPage, type AddPropertyRefusal } from './properties.ts';
 import { addTenantPage, type AddRefusal } from './tenants.ts';
@@ -122,12 +122,14 @@ export function setupPages(o: { connectors?: ChannelConnectors } = {}) {
 
     return c.html(
       page({
-        title: complete ? 'Agency setup' : 'Set up myEST8',
+        title: complete ? 'Settings' : 'Set up myEST8',
         pm,
         active: 'settings',
         flash,
         shell: await shellInfo(c),
-        subtitle: complete ? 'Everything is connected. Add or change people here.' : 'Work through these areas once. Come back any time to add more.',
+        subtitle: complete
+          ? 'Everything is connected. Add people and Properties here; open a row in Profiles to change it.'
+          : 'Work through these areas once. Come back any time to add more.',
         actions: linkButton('Use the step-by-step guide', '/welcome', { variant: 'secondary', size: 'sm' }),
         body: html`
           ${areasNav(agency, channels, connectors.unavailable)}
@@ -326,6 +328,7 @@ function areasNav(agency: Agency, channels: AgencyChannel[], unavailable: readon
             <span class="setup-area-mark" aria-hidden="true">${icon(has ? 'check-circle' : 'circle', { size: 'size-5' })}</span>
             <span class="setup-area-name">${title}</span>
             <span class="setup-area-state">${has ?? 'None yet'}</span>
+            <span class="setup-area-go" aria-hidden="true">${icon('caret-right', { size: 'size-4' })}</span>
           </a>
         </li>`;
       })}
@@ -470,7 +473,7 @@ async function tradiesArea(c: Context<WebEnv>, agency: Agency, choice: ListingCh
   const { actions } = c.var;
   return html`
     <p class="text-sm">Add the Tradies the Agency already uses. They're shared by every Property Manager. Each Tradie's page is under <a class="link" href="/profiles">Profiles</a>.</p>
-    ${await tradiesTable(actions, agency.tradies.slice(0, 5))}
+    <div class="setup-compact">${await tradiesTable(actions, agency.tradies.slice(0, 5))}</div>
     ${seeAllIn(agency.tradies.length, 'Tradie', 'Tradies', '/profiles')}
     ${addForm(
       'Add a Tradie',
@@ -494,19 +497,19 @@ function propertiesArea(agency: Agency, myId: number, shown: Shown): Html {
     return person ? (person.businessName ?? person.name) : '—';
   };
   const rows = agency.properties.slice(0, 5).map((p) => [
-    html`${p.address}`,
+    rowLink(p.address, `/properties/${p.id}`),
     html`${agency.propertyManagers.find((m) => m.id === p.propertyManagerId)?.name ?? '—'}`,
     html`${nameOf(agency.owners, p.ownerId)}`,
     html`${formatMoney(p.maxRepairCostCents)}`,
     html`${agency.tenants.filter((t) => t.propertyId === p.id).map((t) => t.name).join(', ') || '—'}`,
     html`${p.nominatedTradieIds.map((id) => nameOf(agency.tradies, id)).join(', ') || 'None'}`,
-    html`${nameOf(agency.buildingManagers, p.buildingManagerId)}`,
+    html`${nameOf(agency.buildingManagers, p.buildingManagerId) === '—' ? emptyValue() : nameOf(agency.buildingManagers, p.buildingManagerId)}`,
   ]);
   return html`
     <p class="text-sm">Each Property has one Property Owner and is assigned to one Property Manager. Open one from <a class="link" href="/properties">Properties</a>.</p>
-    ${agency.properties.length
+    <div class="setup-compact">${agency.properties.length
       ? table(['Address', 'Property Manager', 'Property Owner', 'Max Repair Cost', 'Tenants', 'Nominated Tradies', 'Building Manager'], rows, { caption: 'Properties', stack: 'labelled' })
-      : emptyState('No Properties yet.')}
+      : emptyState('No Properties yet.')}</div>
     ${seeAllIn(agency.properties.length, 'Property', 'Properties', '/properties')}
     ${addForm(
       'Add a Property',
@@ -567,19 +570,19 @@ function propertiesArea(agency: Agency, myId: number, shown: Shown): Html {
 function tenantsArea(agency: Agency, shown: Shown): Html {
   const addressOf = (id: number | null) => agency.properties.find((p) => p.id === id)?.address ?? '—';
   return html`
-    ${agency.tenants.length
+    <div class="setup-compact">${agency.tenants.length
       ? table(
           ['Name', 'Property', 'Mobile', 'Email', 'Tenancy start'],
           agency.tenants.slice(0, 5).map((t) => [
-            html`${t.name}`,
+            rowLink(t.name, `/tenants/${t.id}`),
             html`${addressOf(t.propertyId)}`,
-            html`${t.mobile ?? '—'}`,
-            html`${t.email ?? '—'}`,
+            html`${t.mobile ? contactLink('mobile', t.mobile) : emptyValue()}`,
+            html`${t.email ? contactLink('email', t.email) : emptyValue()}`,
             html`${formatDate(t.tenancyStart)}`,
           ]),
           { caption: 'Tenants', stack: 'labelled' },
         )
-      : emptyState('Tenants appear here once you add them. Add a Property first.')}
+      : emptyState('Tenants appear here once you add them. Add a Property first.')}</div>
     ${seeAllIn(agency.tenants.length, 'Tenant', 'Tenants', '/tenants')}
     ${addForm(
       'Add a Tenant',
@@ -611,17 +614,22 @@ function tenantsArea(agency: Agency, shown: Shown): Html {
 
 function peopleTable(people: Person[], empty: string, href: string, name: string): Html {
   if (!people.length) return emptyState(empty);
-  return html`${table(
+  return html`<div class="setup-compact">${table(
     ['Name', 'Mobile', 'Email'],
-    people.slice(0, 5).map((p) => [html`${p.name}`, html`${p.mobile ?? '—'}`, html`${p.email ?? '—'}`]),
+    people.slice(0, 5).map((p) => [rowLink(p.name, `${href}/${p.id}`), html`${p.mobile ? contactLink('mobile', p.mobile) : emptyValue()}`, html`${p.email ? contactLink('email', p.email) : emptyValue()}`]),
     { stack: 'labelled' },
   )}
-  ${seeAllIn(people.length, name.replace(/s$/, ''), name, href)}`;
+  ${seeAllIn(people.length, name.replace(/s$/, ''), name, href)}</div>`;
 }
 
 /** "See all 17 Tradies": the way from a five-row setup list to the page that holds them all. */
 function seeAllIn(count: number, one: string, many: string, href: string): Html {
   return count > 5 ? html`<p class="setup-see-all"><a class="setup-link" href="${href}">See all ${count} ${count === 1 ? one : many}</a></p>` : html``;
+}
+
+/** A dash, marked so a phone leaves the empty value out instead of printing a labelled row. */
+function emptyValue(): Html {
+  return html`<span class="setup-empty">—</span>`;
 }
 
 /** A calendar date as people read it: "2026-09-01" is "1 Sep 2026". */

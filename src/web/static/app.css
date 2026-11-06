@@ -3193,6 +3193,13 @@
       gap: 12px;
       min-width: 0;
     }
+    /* A title can carry two labels (the Ticket's Urgency and its state): one flex row, wrapping. */
+    .page-header-lead > .page-title-badges {
+      display: inline-flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+    }
     /* On a phone the menu button holds the top-left; the title takes the rest of the row
        and the Urgency badge sits under it, so a long title never shares a line with both. */
     @container content (max-width: 39.99rem) {
@@ -3218,6 +3225,13 @@
         grid-row: 1;
       }
       .page-header-lead > .badge {
+        grid-column: 2;
+        grid-row: 2;
+        justify-self: start;
+        align-self: start;
+      }
+      /* The Urgency badge and the Ticket's state share the line under the title. */
+      .page-header-lead > .page-title-badges {
         grid-column: 2;
         grid-row: 2;
         justify-self: start;
@@ -5938,7 +5952,7 @@
     }
     .setup-area {
       display: grid;
-      grid-template-columns: 20px minmax(0, 1fr);
+      grid-template-columns: 20px minmax(0, 1fr) 20px;
       column-gap: 8px;
       align-content: start;
       width: 100%;
@@ -5954,12 +5968,27 @@
       color: var(--action);
       text-decoration: underline;
     }
-    /* The 20px mark centres on the name's first line (14px at 1.3), so it sits 0.9px above it. */
+    /* The 20px mark sits centred on the name and state, and the chevron says the tile goes somewhere. */
     .setup-area-mark {
       display: flex;
-      align-self: start;
-      grid-row: span 2;
-      margin-top: calc((14px * 1.3 - 20px) / 2);
+      align-self: center;
+      grid-column: 1;
+      grid-row: 1 / span 2;
+    }
+    .setup-area-name,
+    .setup-area-state {
+      grid-column: 2;
+    }
+    .setup-area-go {
+      display: flex;
+      align-self: center;
+      grid-column: 3;
+      grid-row: 1 / span 2;
+      justify-content: flex-end;
+      color: var(--control);
+    }
+    .setup-area:hover .setup-area-go {
+      color: var(--action);
     }
     .setup-area.is-done .setup-area-mark {
       color: var(--done);
@@ -6008,6 +6037,83 @@
     .setup-see-all {
       margin: 12px 0 0;
       font-size: 13px;
+    }
+    /* On a phone and any touch screen the "Add a …" disclosures and "See all" links are 44px
+       rows; the Connect WhatsApp button keeps a solid edge even while it cannot be used. */
+    @media (pointer: coarse), (max-width: 40rem) {
+      .setup-disclosure {
+        min-height: 44px;
+      }
+      .setup-see-all {
+        margin-top: 4px;
+      }
+      .setup-see-all .setup-link {
+        display: inline-flex;
+        align-items: center;
+        min-height: 44px;
+      }
+    }
+    .setup-connect-whatsapp.btn:disabled {
+      border-style: solid;
+    }
+    /* Setup's tables line every header up with its values; a numeric column is not right-aligned
+       while its heading stays left. On a phone each record is one compact row: the name, then
+       one muted summary line, never a stack of repeated column labels or empty values. */
+    .setup-compact .table :where(th, td) {
+      text-align: left;
+    }
+    /* The desktop column heading already says "Google rating", so the chip drops its word there;
+       the phone list keeps it, because the headings are gone. */
+    @media (min-width: 40rem) {
+      .setup-compact .table .metric-source {
+        display: none;
+      }
+    }
+    @media (max-width: 39.99rem) {
+      .setup-compact .table-frame.is-labelled tbody {
+        gap: 0;
+      }
+      .setup-compact .table-frame.is-labelled tbody tr {
+        display: block;
+        padding: 10px 0;
+        background: transparent;
+        border: 0;
+        border-bottom: 1px solid var(--line);
+        border-radius: 0;
+      }
+      .setup-compact .table-frame.is-labelled tbody tr:last-child {
+        border-bottom: 0;
+      }
+      .setup-compact .table-frame.is-labelled tbody td[data-label] {
+        display: inline;
+        padding: 0;
+        margin-inline-end: 8px;
+        font-size: 13px;
+        line-height: 1.5;
+        color: var(--muted);
+      }
+      .setup-compact .table-frame.is-labelled tbody td[data-label]::before {
+        content: none;
+      }
+      .setup-compact .table-frame.is-labelled tbody td[data-label]:last-child {
+        margin-inline-end: 0;
+      }
+      .setup-compact .table-frame.is-labelled tbody td:first-child {
+        display: block;
+        margin: 0 0 2px;
+        font-size: 15px;
+        font-weight: 600;
+      }
+      .setup-compact .table-frame.is-labelled tbody td:has(> .setup-empty) {
+        display: none;
+      }
+      .setup-compact .table-frame.is-labelled tbody :is(.badge, .metric, .contact-link) {
+        display: inline-flex;
+        vertical-align: middle;
+      }
+      .setup-compact .table-frame.is-labelled tbody .badge {
+        margin: 0 2px 0 0;
+      }
     }
     /* Property Owners and Building Managers in two headed columns, a hairline between,
        not two cards each holding a table. */
@@ -6113,8 +6219,8 @@
   @layer app {
     /* Under the title: the Summary band, the Jobs, what the Tenant reported and the Progress
        in the main column, and a Night column beside them. One column on phones, in the order
-       the work is read: the Summary, Next, the Jobs, the report, the Progress, the messages,
-       the people, the costs, the details. */
+       the work is read: the Summary, the people, Next, the Jobs, the report, the Progress,
+       the messages, the costs, the details. */
     .ticket-layout,
     .ticket-jobs,
     .ticket-report {
@@ -6122,33 +6228,42 @@
       gap: 16px;
       min-width: 0;
     }
+    /* The Job card hugs its content even when the Tenant card beside it is taller, so no
+       blank block is painted under "More about this Job". */
+    .ticket-jobs {
+      align-content: start;
+    }
+    .ticket-jobs > .ticket-job {
+      align-self: start;
+    }
     .ticket-main,
     .ticket-side {
       display: contents;
     }
-    /* People and the two costs are one panel on a phone, not two tiles and an avatar line
-       floating on Sand. From 64rem the panel dissolves and its parts join the side column. */
+    /* People and the two costs are their own cards on a phone, with the people right under
+       the Summary; from 64rem both join the side column as one panel. */
     .ticket-people-costs {
-      order: 7;
-      display: grid;
+      display: contents;
+    }
+    .ticket-people {
+      order: 2;
       min-width: 0;
-      overflow: hidden;
-      background: var(--surface);
-      border-radius: var(--radius-card);
-      box-shadow: var(--shadow-soft);
     }
-    .ticket-people-costs > * + * {
-      border-top: 1px solid var(--line);
+    .ticket-costs-slot {
+      order: 7;
+      min-width: 0;
     }
-    .ticket-people-costs .ticket-people-card {
-      border-radius: 0;
-    }
-    .ticket-people-costs .ticket-costs-slot {
-      padding: 14px 16px;
+    @media (max-width: 63.99rem) {
+      .ticket-costs-slot {
+        padding: 14px 16px;
+        background: var(--surface);
+        border-radius: var(--radius-card);
+        box-shadow: var(--shadow-soft);
+      }
     }
     .ticket-hero { order: 1; }
-    .ticket-next-slot { order: 2; }
-    .ticket-pair { order: 3; }
+    .ticket-next-slot { order: 3; }
+    .ticket-pair { order: 4; }
     .ticket-history { order: 5; min-width: 0; }
     .ticket-messages { order: 6; min-width: 0; }
     .ticket-details { order: 9; }
@@ -6187,6 +6302,12 @@
       /* Its children join the side column as if the panel were not there. */
       .ticket-people-costs {
         display: contents;
+      }
+      .ticket-people-costs > * + * {
+        border-top: 1px solid var(--line);
+      }
+      .ticket-people-costs .ticket-people-card {
+        border-radius: 0;
       }
       .ticket-side .section {
         padding: 14px 16px;
@@ -6282,18 +6403,18 @@
       --pct: 0;
       display: grid;
       place-items: center;
-      width: 132px;
-      height: 132px;
-      background: radial-gradient(closest-side, var(--surface) 76%, transparent 78%), conic-gradient(var(--action) calc(var(--pct) * 1%), var(--track) 0);
+      width: 88px;
+      height: 88px;
+      background: radial-gradient(closest-side, var(--surface) 88%, transparent 90%), conic-gradient(var(--action) calc(var(--pct) * 1%), var(--track) 0);
       border-radius: 50%;
     }
     .ticket-ring.is-done {
-      background: radial-gradient(closest-side, var(--surface) 76%, transparent 78%), conic-gradient(var(--done) calc(var(--pct) * 1%), var(--track) 0);
+      background: radial-gradient(closest-side, var(--surface) 88%, transparent 90%), conic-gradient(var(--done) calc(var(--pct) * 1%), var(--track) 0);
     }
     .ticket-ring-label {
-      max-width: 88px;
+      max-width: 64px;
       font-family: var(--font-head);
-      font-size: 15px;
+      font-size: 16px;
       overflow-wrap: anywhere;
       font-weight: 700;
       line-height: 1.15;
@@ -6363,11 +6484,102 @@
       background: var(--surface);
       border-radius: var(--radius-card);
     }
+    /* The Ticket's people are a list under the heading, not an avatar row beside it. */
+    .ticket-people-card.is-list {
+      display: grid;
+      align-content: start;
+      justify-content: stretch;
+      gap: 10px;
+    }
     .ticket-people-title {
       margin: 0;
       font-family: var(--font-head);
       font-size: 16px;
       font-weight: 600;
+    }
+    /* Who is on the Ticket: a full name and role per row, each a link to that profile, and
+       the Tenant's text and email a tap away so the Property Manager can reach them. */
+    .ticket-people-list {
+      display: grid;
+      gap: 2px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .ticket-person {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      min-width: 0;
+    }
+    .ticket-person-link {
+      display: flex;
+      flex: 1 1 auto;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+      padding: 4px;
+      border-radius: var(--radius-sm);
+      color: inherit;
+      text-decoration: none;
+    }
+    .ticket-person-link:hover .ticket-person-name {
+      color: var(--action);
+      text-decoration: underline;
+    }
+    .ticket-person:first-child .ticket-person-avatar {
+      color: var(--ink);
+      background: var(--amber-bg);
+    }
+    .ticket-person:nth-child(2) .ticket-person-avatar {
+      background: var(--ink);
+    }
+    .ticket-person-avatar {
+      display: grid;
+      flex: none;
+      place-items: center;
+      width: 32px;
+      height: 32px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--surface);
+      background: var(--action);
+      border-radius: 50%;
+    }
+    .ticket-person-text {
+      display: grid;
+      gap: 1px;
+      min-width: 0;
+    }
+    .ticket-person-name {
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.3;
+      overflow-wrap: anywhere;
+    }
+    .ticket-person-role {
+      font-size: 12px;
+      line-height: 1.3;
+      color: var(--muted);
+    }
+    .ticket-person-contact {
+      display: inline-flex;
+      flex: none;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-sm);
+      color: var(--action);
+    }
+    .ticket-person-contact:hover {
+      background: var(--info-bg);
+    }
+    @media (pointer: coarse), (max-width: 40rem) {
+      .ticket-person-contact {
+        width: 44px;
+        height: 44px;
+      }
     }
     .ticket-avatars {
       display: flex;
@@ -6788,7 +7000,7 @@
       border-radius: 50%;
       background: var(--action);
       color: var(--surface);
-      font-size: 11px;
+      font-size: 12px;
       font-weight: 600;
       letter-spacing: 0.02em;
     }
@@ -6799,6 +7011,14 @@
     }
     .schedule-main {
       min-width: 0;
+    }
+    /* Filters that leave nothing: say so, and offer the way back, rather than an empty grid. */
+    .schedule-none {
+      margin: 0 0 12px;
+      padding: 12px 16px;
+      font-size: 14px;
+      background: var(--page);
+      border-radius: var(--radius-sm);
     }
     .booking-reschedule {
       font-weight: 600;
@@ -7001,13 +7221,25 @@
       background-image: repeating-linear-gradient(135deg, rgb(141 150 158 / 0.14) 0 6px, transparent 6px 12px);
     }
 
-    /* The small month. */
+    /* The small month. Its heading says what the block is for, with the month under it, so the
+       month is not read twice against the period heading beside it. */
     .schedule-mini-head {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 8px;
       margin-bottom: 8px;
+    }
+    .schedule-mini-title {
+      display: grid;
+      gap: 1px;
+      min-width: 0;
+    }
+    .schedule-mini-month {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.2;
+      color: var(--muted);
     }
     .schedule-mini-nav {
       display: inline-flex;
@@ -7021,6 +7253,12 @@
       border-radius: 50%;
       background: var(--surface);
       color: var(--ink);
+    }
+    @media (pointer: coarse), (max-width: 40rem) {
+      .schedule-mini-arrow {
+        width: 44px;
+        height: 44px;
+      }
     }
     .schedule-mini-arrow:hover {
       background: var(--info-bg);
@@ -7092,7 +7330,7 @@
       background: var(--surface);
     }
 
-    /* Visit types. */
+    /* Visit kind: the two kinds of visit, not the states (Status is the one state control). */
     .schedule-types {
       display: flex;
       flex-direction: column;
@@ -7110,9 +7348,18 @@
       color: var(--ink);
       cursor: pointer;
     }
+    /* The boxes are the action colour, not the browser's blue. A phone gets a 44px row. */
+    .schedule-type input {
+      accent-color: var(--action);
+    }
+    @media (pointer: coarse), (max-width: 40rem) {
+      .schedule-type {
+        min-height: 44px;
+      }
+    }
     .schedule-swatch {
-      width: 9px;
-      height: 9px;
+      width: 12px;
+      height: 12px;
       border-radius: 2px;
       background: var(--action);
     }
@@ -7566,7 +7813,8 @@
     }
     .schedule-grid {
       --gutter: 3.5rem;
-      --slot: 0.75rem;
+      /* 14px a quarter-hour, so an hour is 56px: three lines of a visit block. */
+      --slot: 0.875rem;
       display: grid;
       grid-template-columns: var(--gutter) repeat(var(--cols), minmax(6rem, 1fr));
       grid-template-rows: auto repeat(var(--slots), minmax(var(--slot), auto));
@@ -7848,20 +8096,33 @@
       min-width: 0;
       overflow: hidden;
     }
-    .schedule-block.is-short .schedule-block-issue .line-clamp-2,
-    .schedule-block.is-tiny .schedule-block-issue .line-clamp-2 {
-      font-size: 12px;
-      line-height: 1.2;
+    /* The issue reads at 13px from up to three lines; an hour holds three lines in all, so
+       a short block keeps two lines of the issue and one of the Tradie. */
+    .schedule-block-issue .line-clamp-3 {
+      font-size: 13px;
+      line-height: 1.22;
     }
-    .schedule-block.is-tiny .schedule-block-issue .line-clamp-2 {
+    .schedule-block.is-short .schedule-block-issue .line-clamp-3,
+    .schedule-block.is-tiny .schedule-block-issue .line-clamp-3 {
+      -webkit-line-clamp: 3;
+      line-height: 1.05;
+    }
+    .schedule-block.is-tiny .schedule-block-issue .line-clamp-3 {
       -webkit-line-clamp: 1;
+      line-height: 1.15;
+    }
+    .schedule-block.is-short .schedule-block-link {
+      gap: 0;
+      padding: 2px 4px 2px 6px;
+      border-left-width: 3px;
     }
     .schedule-block.is-short .schedule-block-tradie {
       overflow: hidden;
-      font-size: 11px;
-      line-height: 1.2;
-      text-overflow: ellipsis;
+      font-size: 12px;
+      line-height: 1;
+      letter-spacing: -0.01em;
       white-space: nowrap;
+      text-overflow: ellipsis;
     }
     .schedule-block.is-reschedule .schedule-block-link,
     .schedule-chip.is-reschedule a {
@@ -8010,7 +8271,7 @@
       display: flex;
       align-items: center;
       gap: 4px;
-      font-size: 11px;
+      font-size: 12px;
       color: var(--muted);
     }
     .schedule-chip-name {
@@ -9111,14 +9372,14 @@
         grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
         align-items: stretch;
       }
-      /* The Job and the Tenant's report finish on the same line. */
+      /* The Job and the Tenant's report sit on the same row, but the Job card keeps its own
+         height: it must not paint an empty white block under "More about this Job". */
       .ticket-pair.is-paired > .ticket-jobs {
         display: flex;
         flex-direction: column;
-        align-content: normal;
       }
       .ticket-pair.is-paired > .ticket-jobs > .ticket-job {
-        flex: 1 1 auto;
+        flex: 0 0 auto;
       }
     }
     .ticket-pair > .ticket-jobs {
@@ -9152,6 +9413,9 @@
       background: var(--page);
       border-radius: var(--radius-sm);
     }
+    .ticket-tiles > .is-wide {
+      grid-column: 1 / -1;
+    }
     /* The Tenant's rating and yours read as one pair: full width, two equal tiles. */
     .ticket-tiles > .ticket-tiles-pair {
       grid-column: 1 / -1;
@@ -9179,7 +9443,8 @@
     .ticket-star {
       color: var(--amber);
     }
-    /* Progress: a green strip of where it stands, then the tabs and their views. */
+    /* Progress: a green band of where it stands across the top, then the tabs and their views.
+       The band runs the whole width so the timeline starts at the page's edge, not 176px in. */
     .ticket-progress {
       display: grid;
       grid-template-columns: minmax(0, 1fr);
@@ -9189,16 +9454,11 @@
       border-radius: var(--radius-card);
       box-shadow: var(--shadow-soft);
     }
-    @media (min-width: 48rem) {
-      .ticket-progress {
-        grid-template-columns: 11rem minmax(0, 1fr);
-      }
-    }
     .ticket-progress-strip {
-      display: grid;
-      align-content: start;
+      display: flex;
+      align-items: center;
       gap: 12px;
-      padding: 16px;
+      padding: 10px 16px;
       background: var(--done-bg);
     }
     .ticket-progress-line {
@@ -9206,12 +9466,12 @@
       align-items: flex-start;
       gap: 6px;
       margin: 0;
-      padding: 10px 10px;
-      font-size: 13px;
+      padding: 0;
+      font-size: 14px;
       font-weight: 600;
       line-height: 1.4;
       color: var(--ink);
-      background: var(--surface);
+      background: transparent;
       border-radius: var(--radius-sm);
     }
     .ticket-progress-line svg {
@@ -9258,6 +9518,17 @@
       color: var(--ink);
       background: var(--page);
       border-bottom-color: var(--ink);
+    }
+    /* On a phone and any touch screen the Progress tabs and its tools are 44px targets. */
+    @media (pointer: coarse), (max-width: 40rem) {
+      .ticket-tab {
+        min-height: 44px;
+        padding: 10px 14px;
+      }
+      .ticket-progress-tools .icon-btn {
+        width: 44px;
+        height: 44px;
+      }
     }
     html:not(.js) .ticket-pane + .ticket-pane {
       padding-top: 16px;
@@ -9461,11 +9732,11 @@
       border-radius: 50%;
     }
     /* The message log stays short (starting at the newest message) until "Show the whole
-       conversation"; both edges fade so a clipped line never reads as the start or the end. */
+       conversation"; both edges fade over 32px so a clipped line never reads as the start or the end. */
     html.js .ticket-msgs:not(.is-open) .message-scroll {
       max-height: 12rem;
       overflow-y: auto;
-      mask-image: linear-gradient(to bottom, transparent, var(--ink) 24px, var(--ink) calc(100% - 24px), transparent);
+      mask-image: linear-gradient(to bottom, transparent, var(--ink) 32px, var(--ink) calc(100% - 32px), transparent);
     }
     .ticket-msgs {
       display: grid;
@@ -9634,7 +9905,7 @@
       height: 64px;
       overflow: hidden;
       background: var(--surface);
-      border-radius: 8px;
+      border-radius: var(--radius-sm);
     }
     .tk-photo img {
       width: 100%;
@@ -9663,7 +9934,7 @@
       width: 64px;
       height: 64px;
       background: var(--surface);
-      border-radius: 8px;
+      border-radius: var(--radius-sm);
     }
     .tk-request-main {
       display: grid;
@@ -9738,7 +10009,7 @@
       height: 96px;
       overflow: hidden;
       background: var(--page);
-      border-radius: 8px;
+      border-radius: var(--radius-sm);
     }
     .tk-card-photo img {
       width: 100%;
@@ -9769,10 +10040,10 @@
     .tk-facts > div {
       padding: 6px 10px;
       background: var(--page);
-      border-radius: 8px;
+      border-radius: var(--radius-sm);
     }
     .tk-facts dt {
-      font-size: 11px;
+      font-size: 12px;
       color: var(--muted);
     }
     .tk-facts dd {
@@ -9835,7 +10106,7 @@
       width: 14px;
       height: 8px;
       background: var(--sc);
-      border-radius: 3px;
+      border-radius: 2px;
     }
     @media (max-width: 39.99rem) {
       .tk-bar .filter-bar.is-compact {
@@ -11467,7 +11738,7 @@
       place-items: center;
       width: 32px;
       height: 32px;
-      font-size: 11px;
+      font-size: 12px;
       font-weight: 700;
       color: var(--surface);
       background: var(--ink);

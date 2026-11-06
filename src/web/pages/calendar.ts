@@ -4,7 +4,7 @@
 //
 // The page is one white card. Beside the title sit the Tradie, Property and Status
 // filters; Mine / All and Share are in the page header. On the left (a Paper rail) are a
-// small month, the Visit types boxes and the Tradies; in the middle
+// small month, the Visit kind boxes and the Tradies; in the middle
 // the toolbar (Today, Day / Week / Month, the period and its arrows) over the grid; on
 // the right the Picked visit panel, which app.js fills when a visit is clicked. Week is
 // an hour-by-hour grid, Monday to Sunday, each day a small weekday over a large date. A
@@ -93,7 +93,11 @@ export function calendarPages() {
     };
     const every = await actions.calendar({ from: startOfDay(first, timeZone).toISOString(), to: startOfDay(addDays(days.at(-1)!, 1), timeZone).toISOString() });
     const scoped = filter === 'mine' ? every.filter((b) => b.propertyManagerId === pm.id) : every;
-    const bookings = scoped.filter((b) => (!q.tradie || b.tradieId === q.tradie) && (!q.property || b.propertyId === q.property) && (!q.status || b.visit === q.status));
+    // Status is the one state control: the Tradie and Property filters narrow it too, and the
+    // small month's dots and the rail's counts follow the same set so nothing contradicts the grid.
+    const matches = (b: Booking) => (!q.tradie || b.tradieId === q.tradie) && (!q.property || b.propertyId === q.property) && (!q.status || b.visit === q.status);
+    const filtered = Boolean(q.tradie || q.property || q.status);
+    const bookings = scoped.filter(matches);
     const hidden = every.length - scoped.length;
     const byDay = bookingsByDay(bookings, first, timeZone);
     const ctx: Ctx = { timeZone, filter, meId: pm.id, today, now: actions.now(), q };
@@ -104,7 +108,8 @@ export function calendarPages() {
     const monthFirst = `${anchor.slice(0, 7)}-01`;
     const monthNext = `${addDays(monthFirst, 32).slice(0, 7)}-01`;
     const monthEvery = view === 'month' ? every : await actions.calendar({ from: startOfDay(monthFirst, timeZone).toISOString(), to: startOfDay(monthNext, timeZone).toISOString() });
-    const visitDays = new Set((filter === 'mine' ? monthEvery.filter((b) => b.propertyManagerId === pm.id) : monthEvery).map((b) => dayOf(b.start, timeZone)));
+    const monthScoped = filter === 'mine' ? monthEvery.filter((b) => b.propertyManagerId === pm.id) : monthEvery;
+    const visitDays = new Set(monthScoped.filter(matches).map((b) => dayOf(b.start, timeZone)));
     const properties = [...new Map(scoped.map((b) => [b.propertyId, streetOf(b.propertyAddress)])).entries()].sort((a, b) => a[1].localeCompare(b[1], 'en'));
 
     return c.html(
@@ -126,7 +131,7 @@ export function calendarPages() {
           <div class="schedule-shell" data-schedule-shell>
             <div class="schedule-rail">
               ${miniMonth(monthFirst, period, visitDays, ctx)}
-              ${visitTypes()}
+              ${visitKinds()}
               ${tradieList(directory, every, bookings, period, today, ctx)}
             </div>
             <div class="schedule-center">
@@ -136,7 +141,10 @@ export function calendarPages() {
                 pm.id,
                 hidden ? html`${hidden} more ${hidden === 1 ? 'visit' : 'visits'} ${period.noun} on other Property Managers’ Properties. <a class="link" href="${hrefFor(view, first, 'all', q)}">Show all</a>` : '',
               )}
-              <div class="schedule-main" id="schedule" tabindex="-1">${view === 'day' ? dayView(first, byDay.get(first) ?? [], ctx) : view === 'week' ? weekView(days, byDay, ctx) : monthView(period, byDay, ctx)}</div>
+              <div class="schedule-main" id="schedule" tabindex="-1">
+                ${filtered && !bookings.length ? html`<p class="schedule-none">No visits match these filters. <a class="link" href="${hrefFor(view, first, filter)}">Clear</a></p>` : ''}
+                ${view === 'day' ? dayView(first, byDay.get(first) ?? [], ctx) : view === 'week' ? weekView(days, byDay, ctx) : monthView(period, byDay, ctx)}
+              </div>
             </div>
             ${pickPanel(bookings, directory, ctx)}
           </div>
@@ -374,8 +382,8 @@ function visitBlock(b: Booking, style: string, rows: number, ctx: Ctx): Html {
     <a class="schedule-block-link" href="${ticketHref(b)}" aria-label="${blockName(b, ctx)}">
       <span class="schedule-block-time num">${tradeIcon(b.trade)}<time datetime="${b.start}">${formatTime(b.start, ctx.timeZone)}</time><span class="schedule-block-end"> – <time datetime="${b.end}">${formatTime(b.end, ctx.timeZone)}</time></span></span>
       ${kind ? html`<span class="schedule-marker">${kind}</span>` : ''}
-      <span class="schedule-block-issue">${clip(b.issue, { lines: 2 })}</span>
-      <span class="schedule-block-tradie">${b.businessName}</span>
+      <span class="schedule-block-issue">${clip(b.issue, { lines: 3 })}</span>
+      <span class="schedule-block-tradie" title="${b.businessName}">${b.businessName}</span>
       ${words ? html`<span class="schedule-block-meta">${words}</span>` : ''}
     </a>
   </li>`;
@@ -403,7 +411,7 @@ function dayBlock(b: Booking, style: string, ctx: Ctx): Html {
     <div class="schedule-block-link">
       <span class="schedule-block-time num">${tradeIcon(b.trade)}<time datetime="${b.start}">${formatTime(b.start, ctx.timeZone)}</time><span class="schedule-block-end"> – <time datetime="${b.end}">${formatTime(b.end, ctx.timeZone)}</time></span></span>
       ${kind ? html`<span class="schedule-marker">${kind}</span>` : ''}
-      <a class="schedule-block-issue" href="${ticketHref(b)}" aria-label="${name}">${clip(b.issue, { lines: 2 })}</a>
+      <a class="schedule-block-issue" href="${ticketHref(b)}" aria-label="${name}">${clip(b.issue, { lines: 3 })}</a>
       <a class="schedule-block-tradie" href="/tradies/${b.tradieId}">${b.businessName}</a>
       <span class="schedule-block-place">${place}</span>
       ${ctx.filter === 'all' ? html`<span class="schedule-block-meta"><span class="sr-only">Property Manager: </span>${b.propertyManager}</span>` : ''}
@@ -646,7 +654,10 @@ function miniMonth(monthFirst: string, p: Period, visitDays: Set<string>, ctx: C
   const shown = new Set(p.days);
   return html`<section class="schedule-mini" aria-labelledby="mini-title">
     <header class="schedule-mini-head">
-      <h2 id="mini-title">${monthName(monthFirst)}</h2>
+      <div class="schedule-mini-title">
+        <h2 id="mini-title">Pick a day</h2>
+        <p class="schedule-mini-month">${monthName(monthFirst)}</p>
+      </div>
       <span class="schedule-mini-nav">
         <a class="schedule-mini-arrow" href="${hrefFor(p.view, previous, ctx.filter, ctx.q)}" aria-label="Previous month">${icon('arrow-left', { size: 'size-4' })}</a>
         <a class="schedule-mini-arrow" href="${hrefFor(p.view, next, ctx.filter, ctx.q)}" aria-label="Next month">${icon('arrow-right', { size: 'size-4' })}</a>
@@ -665,17 +676,16 @@ function miniMonth(monthFirst: string, p: Period, visitDays: Set<string>, ctx: C
 /**
  * The boxes under the month: which kinds of visit the grid shows. They work in the
  * browser (app.js hides the blocks); a box with no script behind it would be a
- * promise, so the whole group is hidden until app.js unhides it.
+ * promise, so the whole group is hidden until app.js unhides it. Status is not a kind:
+ * the Status filter beside the title is the one state control.
  */
-function visitTypes(): Html {
+function visitKinds(): Html {
   const box = (key: string, label: string, swatch: string) => html`<label class="schedule-type"><input type="checkbox" data-hide-key="${key}" checked /><span class="schedule-swatch ${swatch}" aria-hidden="true"></span>${label}</label>`;
   return html`<section class="schedule-types" aria-labelledby="types-title" data-needs-script hidden>
-    <h2 id="types-title">Visit types</h2>
+    <h2 id="types-title">Visit kind</h2>
     <label class="schedule-type"><input type="checkbox" data-hide-all checked />Select all</label>
     ${box('work-order', 'Work Orders', 'is-work')}
     ${box('inspection', 'Site Inspections', 'is-inspection')}
-    ${box('not_confirmed', 'Not confirmed yet', 'is-unconfirmed')}
-    ${box('reschedule_requested', 'Reschedule requested', 'is-reschedule')}
   </section>`;
 }
 

@@ -709,7 +709,7 @@ export async function tradiesTable(actions: PropertyManagerActions, tradies: Per
       html`${t.name}`,
       html`${t.trades.map((trade) => html`${badge(humanise(trade))} `)}`,
       ratingChip({ source: 'myEST8', rating: average, count, named: false }),
-      ratingChip({ source: 'Google', rating: t.googleRating, count: t.googleReviewCount ?? 0, onGoogle: !!t.googlePlaceId, named: false }),
+      ratingChip({ source: 'Google', rating: t.googleRating, count: t.googleReviewCount ?? 0, onGoogle: !!t.googlePlaceId, named: true }),
     ];
   });
   return table(['Business', 'Name', 'Trades', 'myEST8 rating', 'Google rating'], rows, { stack: 'labelled', caption: 'Tradies' });

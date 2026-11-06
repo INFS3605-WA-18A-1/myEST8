@@ -76,7 +76,11 @@ export function simulatorPages(demo: DemoControls) {
     const contacts = await demo.contacts(me);
     const connected = (await c.get('actions').channels()).map((ch) => ch.type);
     const missing = (Object.keys(CHANNEL_LABEL) as ChannelType[]).filter((ch) => !connected.includes(ch));
-    const selected = contacts.find((p) => String(p.personId) === c.req.query('contact')) ?? null;
+    // Open on the first person in the same order the list shows them, so the phone and the
+    // thread are not an empty column on arrival.
+    const asked = c.req.query('contact');
+    const ordered = GROUPS.flatMap(([role]) => contacts.filter((p) => p.role === role));
+    const selected = (asked ? contacts.find((p) => String(p.personId) === asked) : ordered[0]) ?? null;
     const query = (c.req.query('q') ?? '').trim();
 
     return c.html(
@@ -92,6 +96,7 @@ export function simulatorPages(demo: DemoControls) {
           outbox: await demo.outbox(me),
           inbound: await demo.inbound(me),
           selected,
+          explicit: Boolean(asked),
           query,
           showAll: c.req.query('all') === '1',
           limit: feedLimit(c.req.query('feed')),
@@ -153,6 +158,8 @@ function simulatorBody(o: {
   outbox: DemoOutboundMessage[];
   inbound: DemoInboundMessage[];
   selected: DemoContact | null;
+  /** Whether the visitor picked the person (a default pick keeps the whole feed on show). */
+  explicit: boolean;
   query: string;
   showAll: boolean;
   limit: number;
@@ -164,8 +171,9 @@ function simulatorBody(o: {
   const sent = sentCounts(contacts, o.outbox);
   const thread = selected ? threadOf(selected, o.outbox, o.inbound) : [];
 
-  // The feed: newest first, for the selected contact unless "All contacts" is on.
-  const scoped = selected && !o.showAll ? o.outbox.filter((m) => addressed(selected, m)) : o.outbox;
+  // The feed: newest first, for the selected contact unless "All contacts" is on (a default
+  // pick on arrival leaves every contact's messages on show).
+  const scoped = selected && o.explicit && !o.showAll ? o.outbox.filter((m) => addressed(selected, m)) : o.outbox;
   const newest = scoped.toReversed();
   const feed = { total: newest.length, items: newest.slice(0, o.limit), limit: o.limit, selected, showAll: o.showAll, query };
 
