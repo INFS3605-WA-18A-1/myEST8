@@ -152,7 +152,7 @@ describe('the Reimbursement Request page', () => {
     const { id } = await tomsBurstPipe(w);
 
     const dashboard = await page(w, '/', cookie);
-    expect(dashboard).toContain('Receipts awaited');
+    expect(dashboard).toContain('Receipt awaited');
     expect(dashboard).toContain('href="/approvals#reimbursements"');
 
     const approvals = await page(w, '/approvals', cookie);
