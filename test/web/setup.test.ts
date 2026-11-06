@@ -26,7 +26,7 @@ describe('the onboarding guide', () => {
     const setup = await page(w, '/setup', cookie);
 
     for (const text of ['id="channels"', 'id="people"', 'id="tradies"', 'id="properties"', 'id="tenants"', 'Forward', 'Resend']) expect(setup).toContain(text);
-    expect(setup).toContain('<h1 class="page-title">Settings</h1>');
+    expect(setup).toContain('<h1 class="page-title">Agency setup</h1>');
     for (const text of ['aria-label="Setup areas"', 'href="#tradies"', 'href="#properties"', 'Use the step-by-step guide']) expect(setup, text).toContain(text);
     expect(setup).toContain('Everything is connected. Add people and Properties here; open a row in Profiles to change it.');
     // Each row opens its profile: an Owner, a Tradie, a Property and a Tenant.

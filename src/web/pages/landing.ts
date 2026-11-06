@@ -316,8 +316,10 @@ function example(): Html {
     </div>
     <div class="lp-example-out">
       <p class="lp-example-label">What myEST8 makes of it</p>
-      ${EXAMPLES.map((e) => html`<div class="lp-result" data-example="${e.id}">${e.result}</div>`)}
-      <p class="lp-caption">The marked words are where myEST8 found the Trade and the Urgency.</p>
+      <div class="lp-example-body">
+        ${EXAMPLES.map((e) => html`<div class="lp-result" data-example="${e.id}">${e.result}</div>`)}
+        <p class="lp-caption">The marked words are where myEST8 found the Trade and the Urgency.</p>
+      </div>
     </div>
   </section>`;
 }

@@ -169,7 +169,7 @@ describe('the count strip and Needs your attention', () => {
     expect(row).toContain('href="/tickets?stage=quoting"');
     expect(row).toContain('<span class="glance-count">1</span>');
     expect(row).toContain('<span class="glance-label">Tradie quoting</span>');
-    expect(row).toContain('0 of 2 Tradies have quoted · oldest\u00a0');
+    expect(row).toContain('0 Firm Quotes of 2 in · oldest\u00a0');
   });
 
   test('on All the rows that are shown keep the filter in their link', async () => {

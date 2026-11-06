@@ -414,6 +414,17 @@ body.lp {
   width: 100%;
   max-width: 560px;
 }
+/* The label keeps the field's first line; the request and its note sit as one group in
+   the field's spare height, so the white half reads composed rather than half empty. */
+.lp-example-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  min-height: 0;
+}
 .lp-example-label {
   font-size: 14px;
   font-weight: 600;
@@ -438,7 +449,6 @@ body.lp {
     padding-top: 64px;
     padding-right: max(32px, calc((100vw - 1376px) / 2 + 32px));
     align-items: center;
-    justify-content: flex-start;
   }
 }
 
@@ -850,6 +860,13 @@ body.lp {
   font-size: 20px;
   font-weight: 600;
   line-height: 1.25;
+}
+/* On the three-column log, a two-line heading in one column must not push its
+   timestamps below the other two: every column reserves the same two lines. */
+@media (min-width: 48rem) {
+  .lp-stretch-summary {
+    min-height: 2.5em;
+  }
 }
 .lp-stages {
   display: flex;

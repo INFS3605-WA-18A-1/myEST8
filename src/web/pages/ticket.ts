@@ -510,8 +510,9 @@ function ticketDone(t: TicketView, x: Extras): boolean {
 
 /** Beside the Urgency: the state a phone cannot read from the hidden stage ring. */
 function ticketStateChip(t: TicketView, x: Extras): Html {
-  if (t.status === 'open') return stagesComplete(t, x) ? badge('Done · ready to close', 'success') : nothing;
-  return stagesComplete(t, x) ? badge('Closed', 'neutral') : nothing;
+  const chip = t.status === 'open' ? (stagesComplete(t, x) ? badge('Done · ready to close', 'success') : nothing) : stagesComplete(t, x) ? badge('Closed', 'neutral') : nothing;
+  // The stage ring already says Done on a wide screen; the badge is the phone's only status.
+  return chip === nothing ? nothing : html`<span class="ticket-state-phone">${chip}</span>`;
 }
 
 /** The Summary, its address and status, the stage ring, and (open Tickets) the tile that adds another Job. */

@@ -360,14 +360,14 @@ function glance(view: Dashboard, filter: Filter, now: Date, timeZone: string, pm
   const ownerCount = owners.length + forwarded.length;
   // The quoting row waits on Firm Quotes: say how many of the Tradies asked have given one.
   const quotingSub = asked
-    ? `${firm} of ${asked} ${asked === 1 ? 'Tradie' : 'Tradies'} ${firm === 1 || asked === 1 ? 'has' : 'have'} quoted · oldest\u00A0${oldestWait(tradies)}`
+    ? `${plural(firm, 'Firm Quote', 'Firm Quotes')} of ${asked} in · oldest\u00A0${oldestWait(tradies)}`
     : `No Quote Requests sent yet · oldest\u00A0${oldestWait(tradies)}`;
 
   const rows: GlanceItem[] = [
     {
       cls: 'is-tradies',
       label: `${tradies.length === 1 ? 'Tradie' : 'Tradies'} quoting`,
-      short: tradies.length === 1 ? 'Tradie' : 'Tradies',
+      short: tradies.length === 1 ? 'Tradie quoting' : 'Tradies quoting',
       none: 'Tradies to quote',
       count: tradies.length,
       href: `/tickets?stage=quoting${q}`,
@@ -377,7 +377,7 @@ function glance(view: Dashboard, filter: Filter, now: Date, timeZone: string, pm
     {
       cls: 'is-owners',
       label: `${ownerCount === 1 ? 'Owner' : 'Owners'} approving`,
-      short: ownerCount === 1 ? 'Owner' : 'Owners',
+      short: ownerCount === 1 ? 'Owner approving' : 'Owners approving',
       none: 'Owners approving',
       count: ownerCount,
       // A receipt with the Owner lives on Approvals; a Ticket waiting on the Owner lives on the Tickets list.
@@ -389,7 +389,7 @@ function glance(view: Dashboard, filter: Filter, now: Date, timeZone: string, pm
     {
       cls: 'is-visits',
       label: visitIds.size === 1 ? 'Visit to arrange' : 'Visits to arrange',
-      short: visitIds.size === 1 ? 'Visit' : 'Visit times',
+      short: visitIds.size === 1 ? 'Visit to arrange' : 'Visits to arrange',
       none: 'visits to arrange',
       count: visitIds.size,
       href: `/tickets?stage=approved${q}`,
@@ -399,7 +399,7 @@ function glance(view: Dashboard, filter: Filter, now: Date, timeZone: string, pm
     {
       cls: 'is-confirm',
       label: unconfirmed.length === 1 ? 'Visit not confirmed' : 'Visits not confirmed',
-      short: 'Confirm',
+      short: unconfirmed.length === 1 ? 'Visit unconfirmed' : 'Visits unconfirmed',
       none: 'visit confirmations',
       count: unconfirmed.length,
       href: `/calendar?view=day&date=${today}&status=not_confirmed${q}`,
@@ -410,7 +410,7 @@ function glance(view: Dashboard, filter: Filter, now: Date, timeZone: string, pm
     {
       cls: 'is-receipts',
       label: receipts.length === 1 ? 'Receipt awaited' : 'Receipts awaited',
-      short: receipts.length === 1 ? 'Receipt' : 'Receipts',
+      short: receipts.length === 1 ? 'Receipt awaited' : 'Receipts awaited',
       none: 'receipts',
       count: receipts.length,
       href: '/approvals#reimbursements',
@@ -467,8 +467,8 @@ function isStale(at: string, now: Date): boolean {
  * things only the Property Manager can do, each a soft row with its action. Every
  * group has its own sub-heading, so a heading always sits with the rows it names.
  * When there are none one quiet line says so. `shareLink` is the Agency-wide list of
- * Maintenance Requests, which a Share button passes on when there are any. On All the
- * card is the team's work, so it is headed "Needs a Property Manager".
+ * Maintenance Requests, which a Share button passes on when there are any. The card keeps
+ * the name "Do next" on Mine and All; the subtitle says whose work the count covers.
  */
 function doNext(n: Decided & { view: Dashboard; toReview: UrgentRepair[]; alerts: Alert[]; total: number; q: string; filter: Filter; timeZone: string; now: Date; shareLink: string }): Html {
   const { view, q, filter, timeZone, now, shareLink, toReview, alerts, total } = n;
@@ -476,7 +476,7 @@ function doNext(n: Decided & { view: Dashboard; toReview: UrgentRepair[]; alerts
   const group = (id: string, title: string, rows: Html[]) =>
     rows.length ? html`<div id="${id}" class="do-next-list"><h3 class="do-next-sub">${title}</h3>${rows}</div>` : '';
   return section({
-    title: html`${filter === 'all' ? 'Needs a Property Manager' : 'Do next'} <span class="count-chip is-decision">${total}</span>`,
+    title: html`Do next <span class="count-chip is-decision">${total}</span>`,
     id: 'decisions',
     actions: requests.length
       ? shareButton({

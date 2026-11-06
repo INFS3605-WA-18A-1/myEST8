@@ -122,7 +122,7 @@ export function setupPages(o: { connectors?: ChannelConnectors } = {}) {
 
     return c.html(
       page({
-        title: complete ? 'Settings' : 'Set up myEST8',
+        title: complete ? 'Agency setup' : 'Set up myEST8',
         pm,
         active: 'settings',
         flash,

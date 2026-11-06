@@ -1506,15 +1506,15 @@
       padding-left: 10px;
     }
     .do-next .queue-thumb {
-      flex: 0 0 20px;
-      width: 20px;
-      height: 20px;
+      flex: 0 0 32px;
+      width: 32px;
+      height: 32px;
       border-radius: var(--radius-sm);
     }
     /* A row without a photo still holds the thumb column, so every row's title starts at one edge. */
     .do-next .queue-row:not(:has(> .queue-thumb))::before {
       content: '';
-      flex: 0 0 20px;
+      flex: 0 0 32px;
     }
     .do-next .queue-main {
       display: grid;
@@ -1845,11 +1845,13 @@
       margin-left: 6px;
     }
     .ticket-row-sub {
+      display: -webkit-box;
       overflow: hidden;
       font-size: 12.5px;
       color: var(--muted);
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      white-space: normal;
     }
     .ticket-row-urgency {
       font-weight: 600;
@@ -3233,6 +3235,12 @@
       align-items: center;
       gap: 6px;
     }
+    /* The Ticket's state is only needed where the progress ring is hidden. */
+    @media (min-width: 40rem) {
+      .ticket-state-phone {
+        display: none;
+      }
+    }
     .page-header-end {
       grid-area: end;
       display: flex;
@@ -3351,10 +3359,10 @@
         grid-template-areas: none;
         column-gap: 12px;
       }
-      /* The way back sits above the title, in the title's column. */
+      /* The way back sits under the title, in the title's column, as the design specifies. */
       .page-header > .page-back {
         grid-column: 2;
-        grid-row: 1;
+        grid-row: 2;
         min-height: 44px;
       }
       .page-header-lead,
@@ -3369,10 +3377,6 @@
       .page-header-lead > .page-title {
         grid-column: 2;
         grid-row: 1;
-      }
-      .page-header.has-back .page-header-lead > .menu-button,
-      .page-header.has-back .page-header-lead > .page-title {
-        grid-row: 2;
       }
       /* The badge takes the row under the title; the subtitle starts at the title's edge and
          runs to the page's right edge (it is below the bell and menu row, so nothing collides). */
@@ -3392,11 +3396,37 @@
         grid-row: 1;
       }
       .page-header.has-back .page-header-end {
-        grid-row: 2;
+        grid-row: 1;
       }
       .page-header-controls,
       .page-header-meta > .page-actions {
         grid-column: 1 / -1;
+      }
+      /* Without a way back the sentence comes straight under the title, then the controls. */
+      .page-header:not(.has-back) .page-header-meta > .page-subtitle {
+        grid-row: 2;
+      }
+      .page-header:not(.has-back):has(.page-subtitle) .page-header-controls {
+        grid-row: 3;
+      }
+      .page-header:not(.has-back):not(:has(.page-subtitle)) .page-header-controls {
+        grid-row: 2;
+      }
+      /* A page with a way back has more rows: title, back, badges, subtitle, actions.
+         The date takes the badges' row in the end column, so it never sits under the avatar. */
+      .page-header.has-back .page-header-controls {
+        grid-column: 3;
+        grid-row: 3;
+      }
+      .page-header.has-back .page-header-lead > .badge,
+      .page-header.has-back .page-header-lead > .page-title-badges {
+        grid-row: 3;
+      }
+      .page-header.has-back .page-header-meta > .page-subtitle {
+        grid-row: 4;
+      }
+      .page-header.has-back .page-header-meta > .page-actions {
+        grid-row: 5;
       }
       .page-header-meta > .page-actions {
         grid-column: 2 / -1;
@@ -6201,7 +6231,9 @@
         color: var(--muted);
       }
       .setup-compact .table-frame.is-labelled tbody td[data-label]::before {
-        content: none;
+        content: attr(data-label) ': ';
+        font-weight: 500;
+        color: var(--muted);
       }
       .setup-compact .table-frame.is-labelled tbody td[data-label]:last-child {
         margin-inline-end: 0;
@@ -6218,6 +6250,16 @@
       .setup-compact .table-frame.is-labelled tbody :is(.badge, .metric, .contact-link) {
         display: inline-flex;
         vertical-align: middle;
+      }
+      /* The phone and email links in a compact row need a thumb-sized target, not just
+         the height of 13px text. The negative margin keeps the row visually compact. */
+      .setup-compact .table-frame.is-labelled tbody .contact-link {
+        position: relative;
+        z-index: 1;
+        align-items: center;
+        min-height: 44px;
+        margin-block: -12px;
+        padding-block: 12px;
       }
       .setup-compact .table-frame.is-labelled tbody .badge {
         margin: 0 2px 0 0;
@@ -8212,8 +8254,8 @@
     }
     .schedule-block.is-short .schedule-block-issue .line-clamp-3,
     .schedule-block.is-tiny .schedule-block-issue .line-clamp-3 {
-      -webkit-line-clamp: 3;
-      line-height: 1.05;
+      -webkit-line-clamp: 2;
+      line-height: 1.15;
     }
     .schedule-block.is-tiny .schedule-block-issue .line-clamp-3 {
       -webkit-line-clamp: 1;
@@ -8226,6 +8268,7 @@
     }
     .schedule-block.is-short .schedule-block-tradie {
       overflow: hidden;
+      margin-top: auto;
       font-size: 12px;
       line-height: 1;
       letter-spacing: -0.01em;
@@ -9493,7 +9536,17 @@
         flex-direction: column;
       }
       .ticket-pair.is-paired > .ticket-jobs > .ticket-job {
-        flex: 0 0 auto;
+        display: flex;
+        flex: 1 1 auto;
+        flex-direction: column;
+      }
+      .ticket-pair.is-paired > .ticket-jobs > .ticket-job > .section-body {
+        flex: 1;
+      }
+      /* The folded details sit on the card's foot line, so the Job and the Tenant's
+         report finish together without a blank block under the link. */
+      .ticket-pair.is-paired > .ticket-jobs > .ticket-job > .section-body > :last-child {
+        margin-top: auto;
       }
     }
     .ticket-pair > .ticket-jobs {
