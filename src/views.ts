@@ -693,6 +693,7 @@ export function createViews(ctx: Context) {
               return {
                 ...q,
                 ticketId: ticket.id,
+                propertyId: ticket.propertyId,
                 propertyAddress: (await profiles.property(ticket.propertyId)).address,
                 description: (await tickets.issue(ticket.issueId)).description,
                 outcome,

@@ -70,6 +70,9 @@ describe('Tradies', () => {
     const page = await (await w.get(`/tradies/${w.ids.pete}`, cookie)).text();
     const text = visible(page);
     for (const heading of ['From Property Managers', 'From Tenants', 'Previous Quotes', 'Upcoming bookings', 'Business address']) expect(text).toContain(heading);
+    // The card's top: a way back and where the page sits.
+    expect(page).toContain('<nav class="page-crumbs" aria-label="Breadcrumb">');
+    expect(page).toContain('href="/profiles"');
     expect(page).toContain('Back to Tradies');
   });
 
@@ -90,15 +93,15 @@ describe('Tradies', () => {
     const page = await (await w.get(`/tradies/${w.ids.pete}`, cookie)).text();
     const text = visible(page);
     // The starting rating (4), the Property Manager's 3 and the Tenant's 5 make the myEST8 rating; each source is also shown on its own.
-    expect(text).toContain('myEST8 rating 4.0 From 3 ratings, including the starting rating');
-    expect(text).toContain('From Property Managers 3.0 1 rating');
-    expect(text).toContain('From Tenants 5.0 1 rating');
-    expect(text).toContain('Google rating 4.8 120 reviews');
-    const at = (heading: string) => page.indexOf(`<h2 class="section-title">${heading}</h2>`);
+    expect(text).toContain('myEST8 rating 4.0 From 3 ratings, incl. the starting rating');
+    expect(text).toContain('From Property Managers 3.0 · 1 rating');
+    expect(text).toContain('From Tenants 5.0 · 1 rating');
+    expect(text).toContain('Google rating 4.8 · 120 reviews');
+    const at = (heading: string) => page.indexOf(`<h2 class="tradie-pane-title">${heading}</h2>`);
     expect(at('Previous Quotes')).toBeGreaterThan(-1);
     expect(at('Previous Quotes')).toBeLessThan(at('Upcoming bookings'));
     expect(at('Upcoming bookings')).toBeLessThan(at('Ratings'));
-    expect(at('Ratings')).toBeLessThan(at('Business address'));
+    expect(page.indexOf('id="business-address"')).toBeGreaterThan(at('Ratings'));
   });
 
   test('a Tradie nobody has rated yet says so for each source', async () => {
@@ -121,6 +124,31 @@ describe('Tradies', () => {
     expect(visible(page)).toContain('Business address saved');
     expect(page).toContain('4 Illawarra Rd, Marrickville NSW 2204');
     expect(visible(page)).toContain('On the Dispatch map.');
+    // The service area picture opens this Tradie's pin on the Dispatch map.
+    expect(page).toContain(`<a class="tradie-map" href="/dispatch#panel-tradie-${w.ids.pete}"`);
+  });
+
+  test('a Tradie the map cannot place is not a link to it, and asks for an address', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+    const page = await (await w.get(`/tradies/${w.ids.dana}`, cookie)).text();
+    expect(page).not.toContain(`/dispatch#panel-tradie-${w.ids.dana}`);
+    expect(visible(page)).toContain('Not on the map yet');
+    expect(visible(page)).toContain('Add a service area');
+  });
+
+  test('the top of the card steps to the Tradie before and after in the directory, and calls the contact', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+    const directory = await w.alice.tradieDirectory();
+    const middle = directory[1]!;
+    const page = await (await w.get(`/tradies/${middle.tradieId}`, cookie)).text();
+    expect(page).toContain(`href="/tradies/${directory[0]!.tradieId}" aria-label="Previous Tradie:`);
+    expect(page).toContain(`href="/tradies/${directory[2]!.tradieId}" aria-label="Next Tradie:`);
+    const first = await (await w.get(`/tradies/${directory[0]!.tradieId}`, cookie)).text();
+    expect(first).not.toContain('aria-label="Previous Tradie:');
+    expect(first).toContain('aria-label="Next Tradie:');
+    expect(page).toMatch(/href="tel:\+?\d+">[^]*?Call /);
   });
 
   test('an unknown Tradie is a 404', async () => {
@@ -232,8 +260,8 @@ describe('removing a Tradie', () => {
     expect(form).toContain("data-confirm=\"Nina's Plumbing won't be offered for new Jobs. Their past Quotes and ratings stay on the Tickets they belong to.\"");
     expect(form).toContain('btn-danger');
     expect(visible(form)).toContain('Remove Tradie');
-    // The button sits in the page's actions, beside Back to Tradies.
-    expect(page.indexOf('Remove Tradie')).toBeLessThan(page.indexOf('Back to Tradies'));
+    // The button sits in the card's top row, with the Call button.
+    expect(page.indexOf('Remove Tradie')).toBeLessThan(page.indexOf('>Call '));
   });
 
   test('confirming goes to the list with the flash, and the Tradie is gone from the list, Dispatch and the Property pickers', async () => {
