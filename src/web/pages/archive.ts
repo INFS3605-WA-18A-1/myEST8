@@ -181,13 +181,6 @@ function outcomeOf(t: ClosedTicket): { badge: Html; note: string } {
   return { badge: badge('Closed', 'neutral'), note: '' };
 }
 
-/** "Resolved in 3 days", from when it was reported to when it was closed. */
-function resolvedIn(t: ClosedTicket): string {
-  if (!t.closedAt) return '';
-  const days = Math.floor((new Date(t.closedAt).getTime() - new Date(t.reportedAt ?? t.closedAt).getTime()) / DAY);
-  return days < 1 ? 'Resolved the same day' : `Resolved in ${days} day${days === 1 ? '' : 's'}`;
-}
-
 /** The month a Ticket was closed in, as its group's heading: "This month" or "October 2026". */
 function monthOf(t: ClosedTicket, now: Date, timeZone: string): string {
   if (!t.closedAt) return 'Closed earlier';
@@ -219,13 +212,12 @@ function closedList(tickets: ClosedTicket[], o: { all: boolean; now: Date; timeZ
 
 /**
  * One closed Ticket: its photo; "Ticket #5", its Trades and, only when it was High or Urgent, its Urgency;
- * the issue (two lines at most) as the row's link; the address; how it ended with the time it took;
+ * the issue (two lines at most) as the row's link; the address; how it ended;
  * and when it was closed. The whole row is the link to the Ticket.
  */
 function closedRow(t: ClosedTicket, o: { all: boolean; now: Date; timeZone: string }): Html {
   const outcome = outcomeOf(t);
   const trades = [...new Set(t.jobs.map((j) => humanise(j.trade)))].join(', ');
-  const note = [resolvedIn(t), outcome.note].filter(Boolean).join(' · ');
   return html`<li class="ar-row">
     <div class="queue-thumb ar-thumb">${issueThumb(t.photos)}</div>
     <div class="ar-main">
@@ -238,7 +230,7 @@ function closedRow(t: ClosedTicket, o: { all: boolean; now: Date; timeZone: stri
       <a href="/tickets/${t.ticketId}" class="ar-issue">${clip(t.description, { lines: 2 })}</a>
       <p class="ar-address">${entityLink('property', t.propertyAddress, `/properties/${t.propertyId}`)}${o.all ? html`<span class="ar-manager">${t.propertyManager}</span>` : ''}</p>
     </div>
-    <div class="ar-outcome">${outcome.badge}${note ? html`<span class="ar-note">${note}</span>` : ''}</div>
+    <div class="ar-outcome">${outcome.badge}${outcome.note ? html`<span class="ar-note">${outcome.note}</span>` : ''}</div>
     <div class="ar-closed">
       <span class="ar-ago">${formatAge(t.closedAt, o.now)}</span>
       <span class="ar-date">${formatDay(t.closedAt, o.timeZone)}</span>

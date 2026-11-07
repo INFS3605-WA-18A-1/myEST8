@@ -326,7 +326,6 @@ describe('Archive', () => {
     expect(tap).toBeGreaterThan(leak);
     expect(html).not.toContain(`href="/tickets/${ids.fan}"`);
     expect(visible(archiveRowOf(html, ids.tap))).toMatch(/Plumbing[\s\S]*Cancelled/);
-    expect(visible(archiveRowOf(html, ids.tap))).toMatch(/Resolved/);
     expect(archiveRowOf(html, ids.tap)).toContain('queue-thumb');
   });
 
