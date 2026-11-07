@@ -26,7 +26,7 @@ test('Profiles opens from the side menu, and Add profile leads to a new Tenant',
   expect(await overflow(page)).toBeLessThanOrEqual(0);
 });
 
-test('a Property photo sits at the left of the household card, clear of the words, and a phone does not scroll sideways', async ({ page }) => {
+test('a Property photo is a strip on the right of the household card, the words clear of all but its fade, and a phone does not scroll sideways', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 900 });
   await signIn(page);
   await page.goto('/profiles?filter=all');
@@ -44,11 +44,15 @@ test('a Property photo sits at the left of the household card, clear of the word
     slots += 1;
     const cardBox = await rect(card);
     const slotBox = await rect(slot);
-    const mainBox = await rect(card.locator('.household-main'));
-    expect(slotBox.x, 'inside the card on the left').toBeGreaterThanOrEqual(cardBox.x);
+    // A photo's words may run 1rem into the start of its fade; an empty slot keeps clear.
+    const keep = (await slot.evaluate((el) => el.classList.contains('is-empty'))) ? 0 : 16;
+    expect(slotBox.x + slotBox.width, 'inside the card on the right').toBeLessThanOrEqual(cardBox.x + cardBox.width + 1);
     expect(slotBox.y, 'inside the card at the top').toBeGreaterThanOrEqual(cardBox.y);
-    expect(slotBox.x + slotBox.width, 'clear of the words').toBeLessThanOrEqual(mainBox.x + 1);
-    expect(mainBox.x + mainBox.width, 'words stay in the card').toBeLessThanOrEqual(cardBox.x + cardBox.width + 1);
+    for (const part of ['.household-main', '.household-status']) {
+      const box = await rect(card.locator(part));
+      expect(box.x, `${part} stays in the card`).toBeGreaterThanOrEqual(cardBox.x);
+      expect(box.x + box.width, `${part} clear of the photo`).toBeLessThanOrEqual(slotBox.x + keep + 1);
+    }
   }
   expect(slots).toBeGreaterThan(0);
 

@@ -1,7 +1,6 @@
 // The Profiles page: one white card under the title. Its top band holds the search, Mine /
-// All and Add profile. Below, one household per Property on the left (the Property's photo,
-// its Owner and people, how many Tickets are open and the worst Urgency, and the open
-// Tickets behind a Ticket history toggle), and on the right the Tradies and the people
+// All and Add profile. Below, one household per Property on the left (its Owner and people, how many Tickets are open and the worst Urgency, and the open
+// Tickets behind a Ticket history toggle, the Property's photo along its right edge), and on the right the Tradies and the people
 // linked to no Property. Mine is this Property Manager's Properties; Tradies are the
 // Agency's either way. The chips in the header are the lists for each kind of profile.
 // Adding anyone starts from the menu, on that profile's own page.
@@ -170,11 +169,12 @@ function shortDate(iso: string, timeZone: string): string {
 }
 
 /**
- * One household. On the left the Property's photo, the one found for its address (or a
- * link to add one when it has none); beside it the Owner and any approvals waiting, the
- * address, and the Tenants and Building Manager; then two tiles, how many Tickets are open
- * and the worst Urgency, and an arrow to the Property. A Ticket history button under the people
- * opens the open Tickets across the card, each a row to its Ticket. On a phone the photo is a band on top.
+ * One household: the Owner and any approvals waiting, the address, and the Tenants and
+ * Building Manager; then two tiles, how many Tickets are open and the worst Urgency, and an
+ * arrow to the Property. The Property's photo, the one found for its address, is a strip on
+ * the card's right edge fading into the card (a link to add one when it has none). A Ticket
+ * history button under the people opens the open Tickets across the card, each a row to its
+ * Ticket. On a phone the photo is a band on top.
  */
 function householdCard(household: Household, timeZone: string): Html {
   const waiting = household.owner.approvalsWaiting;

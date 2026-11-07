@@ -11671,16 +11671,26 @@
       min-width: 0;
     }
 
-    /* A household: the photo, the place and its people, two tiles, and the toggle for its Tickets. */
+    /* A household: the place and its people, two tiles, and the toggle for its Tickets. The
+       Property's photo is a strip on the card's right edge: flush with the top, right and
+       bottom, its left edge fading into the card's own --surface. --household-photo-width is
+       the whole strip; the words reach --household-photo-keep into it, still inside the
+       covered start of the fade, which finishes at --household-photo-fade. The photo's grid
+       column is the strip less that overlap, the 16px gap and the card's 8px padding. */
     .household {
+      --household-photo-width: 13rem;
+      --household-photo-fade: 4.75rem;
+      --household-photo-keep: 1rem;
+      --household-photo-column: calc(var(--household-photo-width) - var(--household-photo-keep) - 24px);
       display: grid;
-      grid-template-columns: 11rem minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1fr) var(--household-photo-column);
       grid-template-areas:
-        'photo main'
-        'photo status'
+        'main photo'
+        'status photo'
         'history history';
       gap: 8px 16px;
       min-width: 0;
+      overflow: hidden;
       padding: 8px;
       border: 1px solid var(--line);
       border-radius: 16px;
@@ -11688,22 +11698,45 @@
     }
     @media (min-width: 80rem) {
       .household {
-        grid-template-columns: 10.5rem minmax(0, 1fr) auto;
+        grid-template-columns: minmax(0, 1fr) auto var(--household-photo-column);
         grid-template-areas:
-          'photo main status'
+          'main status photo'
           'history history history';
       }
     }
+    /* The words and tiles sit above the start of the fade. */
+    .household-main,
+    .household-status {
+      position: relative;
+      z-index: 1;
+    }
     .household-photo-slot {
       position: relative;
+      z-index: 0;
       grid-area: photo;
       align-self: stretch;
       display: block;
-      width: 100%;
       min-height: 7.5rem;
       overflow: hidden;
       border-radius: 12px;
-      background: #e6e1d6;
+      background: var(--surface);
+    }
+    /* A real photo bleeds to the card's edges. The gradient is --surface, the card's own
+       background, so the fade is into the card and not a painted white. With the Ticket
+       history open the strip stops above it; closed, it runs to the card's bottom edge. */
+    .household-photo-slot:not(.is-empty) {
+      margin: -8px -8px -8px calc(-16px - var(--household-photo-keep));
+      border-radius: 0;
+    }
+    .household:has(.household-history-panel:not([hidden])) .household-photo-slot:not(.is-empty) {
+      margin-bottom: 0;
+    }
+    .household-photo-slot:not(.is-empty)::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to right, var(--surface) 0, var(--surface) 0.25rem, transparent var(--household-photo-fade));
+      pointer-events: none;
     }
     .household-photo {
       position: absolute;
@@ -12197,10 +12230,18 @@
           'status'
           'history';
       }
+      /* The strip becomes a band across the top, fading down into --surface. */
       .household-photo-slot {
         align-self: auto;
         min-height: 0;
         aspect-ratio: 16 / 7;
+      }
+      .household-photo-slot:not(.is-empty),
+      .household:has(.household-history-panel:not([hidden])) .household-photo-slot:not(.is-empty) {
+        margin: -8px -8px -12px;
+      }
+      .household-photo-slot:not(.is-empty)::after {
+        background: linear-gradient(to top, var(--surface) 0, var(--surface) 0.5rem, transparent 3rem);
       }
       .household-photo-slot.is-empty {
         aspect-ratio: auto;
