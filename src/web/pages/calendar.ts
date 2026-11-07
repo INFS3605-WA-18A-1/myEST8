@@ -18,7 +18,7 @@
 // one line ("Nothing booked Tue 13 – Wed 14"). Every visit on the grid is a list item
 // whose link names its time, what it is for and the Tradie, so the grid reads as text.
 // The rail sits left of the grid from 1024 px and under it below that. The Picked visit
-// panel opens from 1280 px, and is always shown from 1600 px; below 1280 px a visit is a
+// panel opens from 1280 px when a visit is picked, and is hidden until then; below 1280 px a visit is a
 // link to its Ticket.
 
 import { Hono } from 'hono';

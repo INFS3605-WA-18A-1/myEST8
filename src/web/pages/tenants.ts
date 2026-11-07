@@ -16,6 +16,7 @@ import { ActionError } from '../../shared.ts';
 import type { WebEnv } from '../env.ts';
 import { formAction } from '../forms.ts';
 import { shellInfo } from '../shell.ts';
+import { addButton, listFilter, mineAll, profileChips, profilesCard, type ProfileFilter } from '../profiles-frame.ts';
 import {
   alert,
   button,
@@ -62,21 +63,22 @@ export function tenantProfilePages() {
     const { actions, pm } = c.var;
     const filter: Filter = c.req.query('filter') === 'all' ? 'all' : 'mine';
     const flash = flashFrom(c.req.url);
-    const tenants = await actions.tenants({ filter });
+    const [tenants, overview] = await Promise.all([actions.tenants({ filter }), actions.profilesOverview({ filter })]);
     return c.html(
       page({
         title: 'Tenants',
+        heading: 'Profiles',
         pm,
         active: 'profiles',
         flash,
         shell: shellInfo(c),
         subtitle: tenants.length ? `${tenants.length} ${tenants.length === 1 ? 'Tenant' : 'Tenants'}${filter === 'mine' ? ' on your Properties' : ' in the Agency'}, by name.` : undefined,
-        actions: linkButton('Add a Tenant', '/tenants/new', { variant: 'primary', size: 'sm' }),
-        controls: segmented([
-          { label: 'Mine', href: hrefFor('mine'), active: filter === 'mine' },
-          { label: 'All', href: hrefFor('all'), active: filter === 'all' },
-        ]),
-        body: list(tenants, filter),
+        controls: profileChips('tenants', overview.counts, filter),
+        body: profilesCard({
+          search: listFilter('Filter Tenants', 'Name or address'),
+          end: html`${mineAll('/tenants', filter)}${addButton('Add a Tenant', '/tenants/new')}`,
+          body: list(tenants, filter),
+        }),
       }),
     );
   });

@@ -4734,78 +4734,6 @@
       background: var(--info-bg);
     }
 
-    /* The Properties tables. From 640px they are tables, their columns wide enough to
-       read; on phones each row is a block (like table({ stack: true }) in ui.ts, which
-       can't carry the row header and data-row these rows need), so nothing scrolls
-       sideways. */
-    @media (min-width: 640px) {
-      .dispatch-stack .dispatch-address {
-        min-width: 12rem;
-      }
-      .dispatch-stack .dispatch-tickets {
-        min-width: 16rem;
-      }
-    }
-    @media (max-width: 639.98px) {
-      .dispatch-stack {
-        overflow: visible;
-        background: transparent;
-        border: 0;
-        border-radius: 0;
-      }
-      .dispatch-stack :where(table, tbody) {
-        display: block;
-      }
-      .dispatch-stack thead {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
-      }
-      .dispatch-stack tbody {
-        display: grid;
-        gap: 8px;
-      }
-      .dispatch-stack tbody tr {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 6px 8px;
-        padding: 10px 12px;
-        background: var(--surface);
-        border: 1px solid var(--line);
-        border-radius: var(--radius-sm);
-      }
-      .dispatch-stack tbody :where(th, td) {
-        display: block;
-        height: auto;
-        min-width: 0;
-        padding: 0;
-        border: 0;
-        background: transparent;
-      }
-      /* A Property: its address, then the suburb with the worst urgency at the end, then its Tickets. */
-      .dispatch-stack tbody th {
-        flex-basis: 100%;
-        font-size: 14px;
-      }
-      .dispatch-stack tbody td:nth-child(2) {
-        color: var(--muted);
-      }
-      .dispatch-stack tbody td.dispatch-tickets {
-        order: 1;
-        flex-basis: 100%;
-      }
-      .dispatch-stack tbody td:nth-child(4) {
-        margin-left: auto;
-      }
-      .dispatch-stack tbody tr[data-selected] {
-        background: var(--info-bg);
-        border-color: var(--action);
-      }
-    }
   }
 }
 
@@ -5869,42 +5797,607 @@
       color: var(--muted);
     }
 
-    /* A Tradie's profile (pages/tradie.ts): the Trades and contact details beside the
-       four ratings (myEST8, Property Managers', Tenants', Google) from 1024px. */
-    .tradie-head {
-      display: grid;
-      gap: 16px;
-    }
-    .tradie-head > .inline-edit-form {
-      min-width: 0;
-    }
-    .tradie-facts {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr));
-      gap: 12px 24px;
-      margin: 0;
-    }
-    .tradie-facts > div {
+    /* A Tradie's profile (pages/tradie.ts): one soft card. The business, who to call and the
+       myEST8 rating across the top; under it the tabs (Previous Quotes, Jobs, Ratings) beside a
+       column with the contact details, the Trades and the service area from 1024px. */
+    .page-crumbs ol {
       display: flex;
-      flex-direction: column;
-      gap: 4px;
-      min-width: 0;
-    }
-    .tradie-facts dt {
-      font-size: 12px;
-      font-weight: 500;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px 6px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      font-size: 14px;
       color: var(--muted);
     }
-    .tradie-facts dd {
-      margin: 0;
-      font-size: 14px;
+    .page-crumbs li {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .page-crumbs a {
+      color: var(--muted);
+      text-decoration: none;
+    }
+    .page-crumbs a:hover {
+      color: var(--ink);
+      text-decoration: underline;
+    }
+    .page-crumbs [aria-current='page'] {
+      color: var(--ink);
+      font-weight: 600;
+    }
+    .tradie-card {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      min-width: 0;
+      padding: 20px;
+      border-radius: 28px;
+      background: var(--surface);
+      box-shadow: var(--shadow-soft);
+    }
+    .tradie-hero {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px 16px;
       min-width: 0;
     }
-    @media (min-width: 1024px) {
-      .tradie-head {
-        grid-template-columns: minmax(14rem, 1fr) minmax(0, 2.4fr);
+    .tradie-back,
+    .tradie-step {
+      display: inline-grid;
+      place-items: center;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: var(--page);
+      color: var(--ink);
+      text-decoration: none;
+    }
+    .tradie-back:hover,
+    .tradie-step:hover {
+      background: #e8e2d6;
+    }
+    .tradie-hero-avatar {
+      display: inline-grid;
+      place-items: center;
+      flex: none;
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      background: var(--action);
+      color: var(--surface);
+      font-family: var(--font-head);
+      font-size: 26px;
+      font-weight: 700;
+    }
+    .tradie-hero-text {
+      flex: 1 1 14rem;
+      min-width: 0;
+    }
+    .tradie-name {
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 32px;
+      font-weight: 700;
+      line-height: 1.15;
+      overflow-wrap: anywhere;
+    }
+    .tradie-hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px 8px;
+      margin: 6px 0 0;
+      font-size: 14px;
+      color: var(--muted);
+    }
+    .tradie-hero-meta strong {
+      color: var(--ink);
+    }
+    .tradie-onlist {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 10px;
+      border-radius: 999px;
+      background: #e3f0e6;
+      color: #1d5a31;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .tradie-hero-rating {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .tradie-hero-rating svg {
+      color: #c98a00;
+    }
+    .tradie-hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin-left: auto;
+    }
+    .tradie-steps {
+      display: inline-flex;
+      gap: 2px;
+    }
+    .tradie-step {
+      width: 40px;
+      height: 36px;
+      border-radius: 10px;
+    }
+    .tradie-step.is-off {
+      opacity: 0.35;
+    }
+    .tradie-board {
+      display: grid;
+      gap: 20px;
+      min-width: 0;
+    }
+    @media (min-width: 64rem) {
+      .tradie-board {
+        grid-template-columns: minmax(0, 1fr) 21rem;
         align-items: start;
       }
+    }
+    .tradie-main {
+      min-width: 0;
+    }
+    .tradie-tablist {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 20px;
+      border-bottom: 1px solid var(--line);
+    }
+    .tradie-tab {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 2px;
+      margin-bottom: -1px;
+      border: 0;
+      border-bottom: 2px solid transparent;
+      background: transparent;
+      color: var(--muted);
+      font: inherit;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .tradie-tab:hover {
+      color: var(--ink);
+    }
+    .tradie-tab[aria-selected='true'] {
+      color: var(--action);
+      border-bottom-color: var(--action);
+    }
+    .tradie-tab-count {
+      min-width: 22px;
+      padding: 0 6px;
+      border-radius: 999px;
+      background: var(--page);
+      color: var(--ink);
+      font-size: 12px;
+      line-height: 20px;
+      text-align: center;
+    }
+    .tradie-tab[aria-selected='true'] .tradie-tab-count {
+      background: var(--info-bg);
+      color: var(--action);
+    }
+    @media (pointer: coarse), (max-width: 40rem) {
+      .tradie-tab {
+        min-height: 44px;
+      }
+    }
+    .tradie-pane {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      padding-top: 16px;
+      min-width: 0;
+    }
+    .tradie-pane[hidden] {
+      display: none;
+    }
+    html:not(.js) .tradie-pane + .tradie-pane {
+      margin-top: 8px;
+      border-top: 1px solid var(--line);
+    }
+    .tradie-pane-title {
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 18px;
+      font-weight: 600;
+    }
+    html.js .tradie-pane-title {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+    .tradie-insight {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px 20px;
+      padding: 16px 20px;
+      border-radius: 16px;
+      background: var(--page);
+    }
+    .tradie-insight-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex: none;
+      margin: 0;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: var(--surface);
+      color: var(--action);
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .tradie-insight .profile-read {
+      flex: 1 1 16rem;
+    }
+    .tradie-insight .profile-read-sentence {
+      font-size: 18px;
+    }
+    .tradie-filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .tradie-search {
+      position: relative;
+      flex: 1 1 12rem;
+      min-width: 0;
+    }
+    .tradie-search > svg {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      translate: 0 -50%;
+      color: var(--muted);
+      pointer-events: none;
+    }
+    .tradie-search .input {
+      width: 100%;
+      padding-left: 36px;
+      border-radius: 12px;
+    }
+    .tradie-select .select {
+      border-radius: 12px;
+    }
+    .tradie-rating {
+      display: grid;
+      gap: 16px 32px;
+      align-items: center;
+      padding: 4px 0;
+    }
+    @media (min-width: 40rem) {
+      .tradie-rating {
+        grid-template-columns: minmax(11rem, 14rem) minmax(0, 1fr);
+      }
+    }
+    .tradie-rating-label,
+    .tradie-rating-hint {
+      margin: 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .tradie-rating-score {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 2px 0;
+    }
+    .tradie-rating-score strong {
+      font-family: var(--font-head);
+      font-size: 40px;
+      font-weight: 700;
+      line-height: 1;
+    }
+    .tradie-stars {
+      display: inline-flex;
+      color: #c98a00;
+    }
+    .tradie-bars {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .tradie-bar-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 4px 12px;
+      font-size: 13px;
+    }
+    .tradie-bar-label {
+      font-weight: 500;
+    }
+    .tradie-bar-value {
+      color: var(--muted);
+      text-align: right;
+    }
+    .tradie-bar-value strong {
+      color: var(--ink);
+    }
+    .tradie-bar {
+      grid-column: 1 / -1;
+      appearance: none;
+      width: 100%;
+      height: 8px;
+      border: 0;
+      border-radius: 999px;
+      background: var(--line);
+      overflow: hidden;
+      color: var(--ink);
+    }
+    .tradie-bar::-webkit-progress-bar {
+      background: var(--line);
+    }
+    .tradie-bar::-webkit-progress-value {
+      background: var(--ink);
+      border-radius: 999px;
+    }
+    .tradie-bar::-moz-progress-bar {
+      background: var(--ink);
+      border-radius: 999px;
+    }
+    .is-google .tradie-bar::-webkit-progress-value {
+      background: #8d97a3;
+    }
+    .is-google .tradie-bar::-moz-progress-bar {
+      background: #8d97a3;
+    }
+    .tradie-quotes {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .tradie-quote {
+      display: grid;
+      gap: 6px;
+      padding: 16px 0;
+      border-top: 1px solid var(--line);
+      min-width: 0;
+    }
+    .tradie-quote[hidden] {
+      display: none;
+    }
+    .tradie-quote-top {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px 12px;
+    }
+    .tradie-quote-title {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 4px 8px;
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 17px;
+      font-weight: 600;
+    }
+    .tradie-quote-title a {
+      color: var(--ink);
+      text-decoration: none;
+    }
+    .tradie-quote-title a:hover {
+      text-decoration: underline;
+    }
+    .tradie-quote-trade {
+      font-family: var(--font-body);
+      font-size: 13px;
+      font-weight: 400;
+      color: var(--muted);
+    }
+    .tradie-quote-trade::before {
+      content: '· ';
+    }
+    .tradie-quote-property {
+      margin: 0;
+      padding-left: 10px;
+      border-left: 2px solid var(--hivis);
+      font-size: 13px;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+    .tradie-quote-text {
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 3;
+      overflow: hidden;
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .tradie-quote-foot {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 16px;
+      margin-top: 4px;
+    }
+    .tradie-quote-when {
+      flex: 1 1 10rem;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .tradie-quote-price {
+      font-family: var(--font-head);
+      font-size: 22px;
+      font-weight: 600;
+    }
+    .tradie-quotes-none {
+      margin: 12px 0 0;
+      color: var(--muted);
+    }
+    .tradie-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    .tradie-side {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      min-width: 0;
+    }
+    .tradie-side-card {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      min-width: 0;
+      padding: 16px 18px 18px;
+      border: 1px solid var(--line);
+      border-top: 3px solid var(--ink);
+      border-radius: 16px;
+      background: var(--surface);
+    }
+    .tradie-side-card > .inline-edit-form,
+    .tradie-side-card .inline-edit-fields {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      min-width: 0;
+    }
+    .tradie-side-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .tradie-side-head .inline-edit-tools {
+      width: auto;
+    }
+    .tradie-side-title {
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 18px;
+      font-weight: 600;
+    }
+    .tradie-side-sub {
+      margin: 0 0 8px;
+      font-family: var(--font-head);
+      font-size: 15px;
+      font-weight: 600;
+    }
+    .tradie-side-block {
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
+    }
+    .tradie-facts {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin: 0;
+    }
+    .tradie-fact {
+      display: grid;
+      grid-template-columns: 7.5rem minmax(0, 1fr);
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+    }
+    .tradie-facts.is-stacked .tradie-fact {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 2px;
+    }
+    .tradie-fact dt {
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .tradie-fact dd {
+      margin: 0;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+    .tradie-trades {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .tradie-map {
+      position: relative;
+      display: block;
+      height: 110px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow: hidden;
+      color: inherit;
+      text-decoration: none;
+    }
+    a.tradie-map:hover {
+      border-color: var(--action);
+    }
+    .tradie-map-art {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    .tradie-map-pin {
+      position: absolute;
+      left: 50%;
+      top: 44%;
+      translate: -50% -50%;
+      display: grid;
+      place-items: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--ink);
+      color: #fff;
+      box-shadow: 0 2px 6px rgb(0 0 0 / 0.25);
+    }
+    .tradie-map.is-off .tradie-map-pin {
+      display: none;
+    }
+    .tradie-map-note {
+      position: absolute;
+      left: 50%;
+      bottom: 10px;
+      translate: -50% 0;
+      padding: 2px 10px;
+      border-radius: 999px;
+      background: #fff;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .tradie-map-note.is-warn {
+      top: 50%;
+      bottom: auto;
+      translate: -50% -50%;
+      background: #fbeed2;
+      color: #7a4b00;
+    }
+    .tradie-map-link {
+      margin: 0;
+      font-size: 14px;
+    }
+    .tradie-address {
+      display: grid;
+      gap: 10px;
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
     }
 
     /* The Tradies directory's Trade filter (pages/tradie.ts): one link per Trade with how
@@ -7204,21 +7697,16 @@
       box-shadow: var(--shadow-soft);
       overflow: hidden;
     }
-    /* The Picked visit panel opens when a visit is picked. On a very wide screen it is
-       always there, with a line saying so. */
+    /* The Picked visit panel opens only when a visit is picked; until then the grid has the width. */
     .schedule-shell.has-pick:not(.is-open) .schedule-pick {
       display: none;
     }
     .schedule-shell.has-pick.is-open {
       grid-template-columns: 17rem minmax(0, 1fr) 19.5rem;
     }
-    @media (min-width: 100rem) {
-      .schedule-shell.has-pick {
-        grid-template-columns: 17rem minmax(0, 1fr) 19.5rem;
-      }
-      .schedule-shell.has-pick:not(.is-open) .schedule-pick {
-        display: flex;
-      }
+    /* The Schedule uses the whole window: no 1280px column, and the grid as tall as the screen allows. */
+    .app-content:has(> .schedule-shell, .schedule-shell) {
+      max-width: none;
     }
     .schedule-rail {
       display: flex;
@@ -7950,7 +8438,7 @@
     .schedule-scroll {
       position: relative;
       min-width: 0;
-      max-height: min(40rem, calc(100dvh - 16rem));
+      height: max(28rem, calc(100dvh - 15rem));
       overflow: auto;
       background: var(--surface);
     }
@@ -7975,13 +8463,15 @@
       --slot: 0.875rem;
       display: grid;
       grid-template-columns: var(--gutter) repeat(var(--cols), minmax(6rem, 1fr));
-      grid-template-rows: auto repeat(var(--slots), minmax(var(--slot), auto));
+      /* The quarter-hours stretch to fill a tall window, so the day reaches the bottom of the grid. */
+      grid-template-rows: auto repeat(var(--slots), minmax(var(--slot), 1fr));
+      min-height: 100%;
     }
     /* The Day has no row of day names, and each lane is wide enough for a whole card. */
     .schedule-grid.is-day {
       --slot: 1.25rem;
       grid-template-columns: var(--gutter) repeat(var(--cols), minmax(14rem, 1fr));
-      grid-template-rows: repeat(var(--slots), minmax(var(--slot), auto));
+      grid-template-rows: repeat(var(--slots), minmax(var(--slot), 1fr));
     }
     .schedule-hours {
       z-index: 1;
@@ -8524,13 +9014,6 @@
       }
     }
 
-    /* Dispatch: the ratings side by side, and the disclosure under the Properties table. */
-    .dispatch-more {
-      margin-top: 12px;
-    }
-    .dispatch-more[open] > summary {
-      margin-bottom: 8px;
-    }
 
     /* ----- Dispatch, soft cards: the map card beside Today at a glance and To dispatch, Properties under them. */
     .dispatch-top {
@@ -8813,12 +9296,6 @@
         align-self: start;
       }
     }
-    .dispatch-stack .dispatch-address .entity-link {
-      border: 0;
-      background: transparent;
-      padding: 0;
-      font-weight: 600;
-    }
     .dispatch-card-legend strong {
       font-size: 14px;
       color: var(--ink);
@@ -8827,21 +9304,62 @@
       font-size: 13px;
     }
 
-    /* Properties: filter tabs and a search over the table, a soft row for each Property. */
+    /* Properties, the map's list. A band under the title holds the search (left) and the
+       All / Open tickets / High & urgent tabs (right); both need JavaScript. */
+    .dispatch-props .soft-head {
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 4px 16px;
+    }
+    .dispatch-props-note {
+      margin: 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
     .dispatch-filters {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
+      justify-content: space-between;
       gap: 8px 12px;
+      margin-bottom: 16px;
+      padding: 8px;
+      border-radius: 16px;
+      background: var(--surface-band);
     }
     html:not(.js) .dispatch-filters {
       display: none;
     }
+    .dispatch-search {
+      position: relative;
+      flex: 1 1 16rem;
+      max-width: 26rem;
+      color: var(--muted);
+    }
+    .dispatch-search > svg {
+      position: absolute;
+      top: 50%;
+      left: 12px;
+      translate: 0 -50%;
+      pointer-events: none;
+    }
+    .dispatch-search input {
+      width: 100%;
+      min-height: 40px;
+      padding: 0 12px 0 36px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface);
+      color: var(--ink);
+      font: inherit;
+      font-size: 14px;
+    }
     .dispatch-tabs {
       display: inline-flex;
       padding: 3px;
+      border: 1px solid var(--line);
       border-radius: var(--radius-pill);
-      background: var(--surface-band);
+      background: var(--surface);
     }
     .dispatch-tab {
       min-height: 32px;
@@ -8851,6 +9369,7 @@
       background: transparent;
       font: inherit;
       font-size: 13px;
+      white-space: nowrap;
       cursor: pointer;
     }
     .dispatch-tab[aria-pressed='true'] {
@@ -8863,59 +9382,263 @@
       transition-duration: var(--dur-fast);
       transition-timing-function: var(--ease-out);
     }
-    .dispatch-search input {
-      min-height: 38px;
-      width: min(16rem, 100%);
-      padding: 0 14px;
+
+    /* One card per Property, two across from 1280px. A card's photo is the Profiles strip: on
+       the right edge, flush with the top, right and bottom, its left edge fading into
+       --surface (the shared fade is with .household's, below). --photo-width is the whole
+       strip; the words and Ticket rows stop --photo-keep into it (0: where its fade starts). */
+    .dispatch-cards {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 12px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    @media (min-width: 80rem) {
+      .dispatch-cards {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+    .dispatch-cards > li {
+      display: flex;
+      min-width: 0;
+    }
+    .dispatch-cards > li[hidden] {
+      display: none;
+    }
+    .dispatch-card {
+      --photo-width: 10rem;
+      --photo-fade: 5.5rem;
+      --photo-keep: 0rem;
+      display: grid;
+      flex: 1;
+      grid-template-columns: minmax(0, 1fr);
+      column-gap: 16px;
+      min-width: 0;
+      overflow: hidden;
+      padding: 12px 14px;
       border: 1px solid var(--line);
-      border-radius: var(--radius-pill);
+      border-radius: 16px;
       background: var(--surface);
-      font: inherit;
-      font-size: 14px;
+      transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
     }
-    .soft-card .dispatch-stack {
-      border: 0;
-      border-radius: 0;
-      background: transparent;
+    .dispatch-card.has-photo {
+      grid-template-columns: minmax(0, 1fr) calc(var(--photo-width) - var(--photo-keep) - 30px);
     }
-    .soft-card .dispatch-stack thead th {
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--muted);
-      background: transparent;
+    .dispatch-card:hover {
+      border-color: #cfc8bb;
     }
-    .dispatch-stack tr[hidden] {
-      display: none !important;
+    /* Picked on the map, or by its address. */
+    .dispatch-cards > li[data-selected] .dispatch-card {
+      border-color: var(--action);
+      box-shadow: 0 0 0 1px var(--action);
     }
-    /* The address in the Properties table: a house in a rounded square, coloured by the worst Urgency. */
-    .dispatch-stack .dispatch-address .entity-link {
+    .dispatch-card-main {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 0;
+    }
+    .dispatch-card-photo {
+      position: relative;
+      z-index: 0;
+      min-height: 6rem;
+      margin: -12px -14px -12px calc(-16px - var(--photo-keep));
+      overflow: hidden;
+    }
+    .dispatch-card-photo img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .dispatch-card-top {
+      display: flex;
+      flex-wrap: wrap;
       align-items: center;
+      gap: 4px 8px;
+      min-height: 22px;
+      margin: 0;
+      font-size: 13px;
     }
-    .dispatch-stack .dispatch-address .entity-link svg {
-      flex: none;
-      margin-block-start: 0;
-      width: 34px !important;
-      height: 34px !important;
-      padding: 8px;
-      box-sizing: border-box;
-      border-radius: var(--radius-sm);
-      background: var(--surface-band);
+    .dispatch-card-suburb {
       color: var(--muted);
     }
-    .dispatch-stack tr[data-urgency='routine'] .dispatch-address .entity-link svg {
-      background: var(--info-bg);
-      color: var(--action);
+    .dispatch-card-count {
+      margin-left: auto;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
     }
-    .dispatch-stack tr[data-urgency='high'] .dispatch-address .entity-link svg {
-      background: var(--high);
-      color: var(--surface);
+    .dispatch-card-address {
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 17px;
+      font-weight: 600;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
     }
-    .dispatch-stack tr[data-urgency='urgent'] .dispatch-address .entity-link svg {
-      background: var(--urgent);
-      color: var(--surface);
+    .dispatch-prop {
+      color: var(--ink);
+      text-decoration: none;
     }
-    .dispatch-stack .dispatch-address .entity-link {
+    .dispatch-prop:hover,
+    .dispatch-prop[aria-current] {
+      text-decoration: underline;
+    }
+    .dispatch-not-found,
+    .dispatch-card-calm {
+      margin: 0;
+    }
+    .dispatch-card-calm {
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .dispatch-tix {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .dispatch-tix li {
+      min-width: 0;
+    }
+    /* A Ticket row: its number, its words on one line and its Urgency in words. */
+    .dispatch-tix-line {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
       gap: 10px;
+      min-height: 36px;
+      padding: 6px 8px 6px 6px;
+      border-radius: 10px;
+      background: var(--page);
+      color: var(--ink);
+      font-size: 14px;
+      line-height: 1.35;
+      text-decoration: none;
+    }
+    .dispatch-tix-line:hover {
+      background: #ebe5d8;
+    }
+    .dispatch-tix-num {
+      padding: 1px 7px;
+      border-radius: 7px;
+      background: var(--surface);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .dispatch-tix-text {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .dispatch-card.is-full .dispatch-tix-line {
+      align-items: start;
+    }
+    .dispatch-card.is-full .dispatch-tix-text {
+      overflow: visible;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+    .dispatch-tix-more {
+      display: inline-flex;
+      align-self: flex-start;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 0;
+      border: 0;
+      background: transparent;
+      color: var(--action);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .dispatch-tix-more[hidden] {
+      display: none;
+    }
+    .dispatch-tix-more:hover {
+      text-decoration: underline;
+    }
+    .dispatch-tix-more svg {
+      transition: rotate var(--dur-fast) var(--ease-out);
+    }
+    .dispatch-tix-more[aria-expanded='true'] svg {
+      rotate: 180deg;
+    }
+    @media (pointer: coarse) {
+      .dispatch-tix-more {
+        min-height: 44px;
+      }
+    }
+    /* The Properties with nothing open: the same cards, a little smaller, behind a quiet button. */
+    .dispatch-cards.is-quiet .dispatch-card {
+      --photo-width: 8.5rem;
+    }
+    .dispatch-more {
+      margin-top: 16px;
+    }
+    .dispatch-more > summary {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 40px;
+      padding: 0 14px;
+      border-radius: var(--radius-pill);
+      color: var(--action);
+      font-size: 13px;
+      font-weight: 600;
+      list-style: none;
+      cursor: pointer;
+    }
+    .dispatch-more > summary::-webkit-details-marker {
+      display: none;
+    }
+    .dispatch-more > summary:hover {
+      background: var(--page);
+    }
+    .dispatch-more > summary svg {
+      transition: rotate var(--dur-fast) var(--ease-out);
+    }
+    .dispatch-more[open] > summary {
+      margin-bottom: 12px;
+    }
+    .dispatch-more[open] > summary svg {
+      rotate: 180deg;
+    }
+    /* Phones: the strip is a band on top, the search and the tabs each take the width. */
+    @media (max-width: 40rem) {
+      .dispatch-search {
+        flex-basis: 100%;
+        max-width: none;
+      }
+      .dispatch-tabs {
+        width: 100%;
+      }
+      .dispatch-tab {
+        flex: 1 1 auto;
+        padding: 0 6px;
+      }
+      .dispatch-card.has-photo {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .dispatch-card-photo {
+        grid-row: 1;
+        min-height: 0;
+        aspect-ratio: 16 / 6;
+        margin: -12px -14px -4px;
+      }
+      .dispatch-tix-line {
+        min-height: 44px;
+      }
     }
 
     /* A Work Order's free times: one line of quick choices. The one in the Start box is filled. */
@@ -8964,28 +9687,6 @@
       scale: 0.96;
       transition-duration: var(--dur-fast);
       transition-timing-function: var(--ease-out);
-    }
-    .dispatch-go-cell {
-      width: 56px;
-      text-align: right;
-    }
-    .dispatch-go {
-      display: inline-grid;
-      width: 36px;
-      height: 36px;
-      place-items: center;
-      border: 1px solid var(--line);
-      border-radius: 50%;
-      color: var(--ink);
-      transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), scale var(--dur-slow) var(--ease-spring);
-    }
-    .dispatch-go:active {
-      scale: 0.96;
-      transition-duration: var(--dur-fast);
-      transition-timing-function: var(--ease-out);
-    }
-    .dispatch-go:hover {
-      background: var(--info-bg);
     }
     /* The header's search and filters. */
     .dispatch-controls {
@@ -9197,35 +9898,6 @@
       flex-wrap: wrap;
       gap: 8px;
     }
-    .dispatch-foot {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px 16px;
-      margin-top: 8px;
-    }
-    .dispatch-foot .dispatch-more {
-      margin-top: 0;
-    }
-    .dispatch-foot .dispatch-more[open] {
-      flex-basis: 100%;
-    }
-    .dispatch-showing {
-      margin: 0;
-      font-size: 13px;
-      color: var(--muted);
-    }
-    .dispatch-more > summary {
-      display: inline-flex;
-      align-items: center;
-      min-height: 40px;
-      padding: 0 16px;
-      border: 1px solid var(--line);
-      border-radius: var(--radius-pill);
-      background: var(--surface);
-      list-style: none;
-    }
     .glance-tile.is-warm::after {
       content: '\2197';
       margin-left: auto;
@@ -9233,9 +9905,6 @@
       color: var(--high);
     }
     @media (max-width: 639.98px) {
-      .dispatch-go-cell {
-        display: none;
-      }
       .glance-tile-value {
         font-size: 26px;
       }
@@ -10777,48 +11446,16 @@
       }
     }
 
-    /* Hover and press fills on this page are squircles, inset from the card's edges: a row
-       reads as one target without becoming a full-bleed stripe. Where corner-shape is not
-       supported the same box is a 10px rounded rectangle. Cards keep their 8px radius, so
-       shape still says what a thing is. */
-    .add-menu-panel a,
-    .household-owner > a:not(.household-waiting),
-    .household-person,
-    .household-ticket,
-    .tradie-rows > li,
-    .unlinked-list > li {
+    /* The Add profile menu's rows fill on hover and press. */
+    .add-menu-panel a {
       border-radius: var(--radius-sm);
       transition: background-color var(--dur-fast) var(--ease-out);
     }
-    @supports (corner-shape: squircle) {
-      .add-menu-panel a,
-      .household-owner > a:not(.household-waiting),
-      .household-person,
-      .household-ticket,
-      .tradie-rows > li,
-      .unlinked-list > li {
-        border-radius: var(--radius-sm);
-        corner-shape: squircle;
-      }
-    }
-    .add-menu-panel a:hover,
-    .household-owner > a:not(.household-waiting):hover,
-    .household-person:hover,
-    .household-ticket:hover,
-    .tradie-rows > li:hover,
-    .unlinked-list > li:hover {
+    .add-menu-panel a:hover {
       background: var(--page);
     }
-    .add-menu-panel a:active,
-    .household-owner > a:not(.household-waiting):active,
-    .household-person:has(> a:active),
-    .household-ticket:active,
-    .tradie-rows > li:has(> a:active),
-    .unlinked-list > li:has(> a:active) {
+    .add-menu-panel a:active {
       background: var(--line);
-    }
-    .household-people > li.is-quiet .household-person:hover {
-      background: transparent;
     }
 
     /* Add profile: one target that looks split, the label with a plus, then a chevron behind a hairline. */
@@ -10887,465 +11524,857 @@
       }
     }
 
-    /* The board: households take two thirds from 1024px, Tradies the rest. */
-    .profiles-board {
+    /* The Profiles page as one white card (pages/profiles.ts): a grey band with the search,
+       Mine / All and Add profile; households on the left; Tradies and the people with no
+       Property in a Paper column on the right. No overflow clipping on the card, so the
+       Add profile menu can open past its edge. */
+    .profiles-chips {
       display: flex;
-      flex-direction: column;
-      gap: 32px;
-      min-width: 0;
+      flex-wrap: wrap;
+      gap: 4px;
+      padding: 4px;
+      border-radius: 999px;
+      background: var(--surface);
+      box-shadow: var(--shadow-soft);
     }
-    @media (min-width: 1024px) {
-      .profiles-board {
-        display: grid;
-        grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-        align-items: start;
-        gap: 24px;
+    .profiles-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 32px;
+      padding: 0 14px;
+      border-radius: 999px;
+      color: var(--ink);
+      font-size: 14px;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    .profiles-chip:hover {
+      background: var(--page);
+    }
+    .profiles-chip .num {
+      font-weight: 700;
+    }
+    .profiles-chip.is-active {
+      background: var(--ink);
+      color: var(--surface);
+      font-weight: 600;
+    }
+    @media (max-width: 40rem), (pointer: coarse) {
+      .profiles-chip {
+        min-height: 40px;
       }
     }
-    .profiles-main,
-    .profiles-households,
-    .profiles-tradies {
+    .profiles-card {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: var(--surface);
+      box-shadow: var(--shadow-soft);
+    }
+    .profiles-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 16px;
+      border-radius: 18px 18px 0 0;
+      background: #e8ecf0;
+      border-bottom: 1px solid var(--line);
+    }
+    .profiles-toolbar .profiles-search {
+      flex: 1 1 18rem;
+      max-width: 26rem;
+    }
+    .profiles-toolbar-end {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+    }
+    /* The Properties the Profiles search offers drop down under its field. */
+    .profiles-search-field {
+      position: relative;
+    }
+    .profiles-search-field .search-suggest-list {
+      top: calc(100% + 6px);
+      left: -1px;
+      width: min(26rem, calc(100vw - 32px));
+      cursor: default;
+    }
+
+    /* A list page (Properties, Tenants, Property Owners, Tradies, Building Managers) in the
+       same card as /profiles: its table sits flat inside it, no second frame, with taller
+       rows like the households. The toolbar's search hides the rows that don't match. */
+    .profiles-list {
       display: flex;
       flex-direction: column;
       gap: 16px;
       min-width: 0;
+      padding: 16px 20px 20px;
+    }
+    .profiles-list .table-frame {
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+    }
+    .profiles-list .table :where(thead) th {
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .profiles-list .table tbody :where(th, td) {
+      height: 56px;
+      padding: 10px 12px;
+      font-size: 14px;
+    }
+    .profiles-list .table tbody tr:last-child :where(th, td) {
+      border-bottom: 0;
+    }
+    .profiles-list .table tbody tr:hover {
+      background: var(--page);
+    }
+    .profiles-list .table tbody :where(th, td):first-child {
+      font-weight: 600;
+    }
+    .profiles-list .table tbody tr[hidden] {
+      display: none;
+    }
+    .profiles-list-none {
+      margin: 0;
+      padding: 24px 0;
+      font-size: 14px;
+      text-align: center;
+      color: var(--muted);
+    }
+    .profiles-list-none[hidden] {
+      display: none;
+    }
+    @media (max-width: 639.98px) {
+      .profiles-list {
+        padding: 12px;
+      }
+      .profiles-list .table tbody :where(th, td) {
+        height: auto;
+        padding: 0;
+      }
+    }
+    .profiles-board {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    @media (min-width: 64rem) {
+      .profiles-board {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 22rem;
+        align-items: stretch;
+      }
+    }
+    .profiles-main,
+    .profiles-households {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      min-width: 0;
     }
     .profiles-main {
-      gap: 32px;
+      padding: 20px;
     }
-    /* 28px between cards leaves the next Owner tab, which rises 12px above its card, clear air. */
+    .profiles-side {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      min-width: 0;
+      padding: 20px;
+      background: var(--page);
+      border-top: 1px solid var(--line);
+      border-radius: 0 0 18px 18px;
+    }
+    @media (min-width: 64rem) {
+      .profiles-side {
+        border-top: 0;
+        border-left: 1px solid var(--line);
+        border-radius: 0 0 18px 0;
+      }
+    }
+    .profiles-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .profiles-title {
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 20px;
+      font-weight: 600;
+      line-height: 1.2;
+      color: var(--ink);
+    }
+    .profiles-title .num {
+      font-family: var(--font-body);
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--muted);
+    }
+    .profiles-note,
+    .tradies-note {
+      margin: 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .profiles-seeall {
+      font-size: 13px;
+      font-weight: 600;
+    }
     .household-list {
       display: flex;
       flex-direction: column;
-      gap: 28px;
+      gap: 14px;
       min-width: 0;
-      padding-top: 12px;
     }
 
-    /* A household: the Owner's tab, then the place and its people beside what is wrong there.
-       A photo, when there is one, is a strip on the right: full height, flush with the top,
-       bottom and right, clipped to the card's 8px corners. Its left edge fades into the
-       card's own --surface. --household-photo-fade is where that fade finishes and the
-       photo is fully visible; the words stop at --household-photo-keep, still inside the
-       covered part of the fade. No photo: these variables change nothing. */
+    /* A household: the place and its people, two tiles, and the toggle for its Tickets. The
+       Property's photo is a strip on the card's right edge: flush with the top, right and
+       bottom, its left edge fading into the card's own --surface. --household-photo-width is
+       the whole strip; the words, tiles and buttons stop --household-photo-keep into it (0:
+       they end where the fade starts), and the fade finishes at --household-photo-fade. The photo's grid
+       column is the strip less that overlap, the 16px gap and the card's 8px padding. */
     .household {
       --household-photo-width: 13rem;
-      --household-photo-fade: 4.75rem;
-      --household-photo-keep: 1rem;
-      --household-photo-band: 8.5rem;
-      position: relative;
-      container-type: inline-size;
-      min-width: 0;
-      padding: 24px 12px 12px;
-      background: var(--surface);
-      border-radius: var(--radius-card);
-      box-shadow: var(--shadow-soft);
-    }
-    .household-owner {
-      position: absolute;
-      top: 0;
-      left: 20px;
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 6px;
-      max-width: calc(100% - 40px);
-      margin: 0;
-      padding: 2px 4px 2px 10px;
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: var(--radius-sm);
-      font-size: 13px;
-      font-weight: 500;
-      transform: translateY(-50%);
-    }
-    .household-owner > a:not(.household-waiting) {
-      padding: 1px 6px;
-    }
-    .household-waiting {
-      margin-right: 2px;
-      padding: 1px 6px;
-      border-radius: var(--radius-sm);
-      background: var(--hivis);
-      color: var(--ink);
-      font-size: 12px;
-      font-weight: 500;
-      text-decoration: none;
-    }
-    a.household-waiting:hover {
-      color: var(--ink);
-      text-decoration: underline;
-    }
-    .household-body {
+      --household-photo-fade: 6rem;
+      --household-photo-keep: 0rem;
+      --household-photo-column: calc(var(--household-photo-width) - var(--household-photo-keep) - 24px);
+      --photo-fade: var(--household-photo-fade);
       display: grid;
-      grid-template-columns: minmax(0, 1fr);
-      gap: 12px;
+      grid-template-columns: minmax(0, 1fr) var(--household-photo-column);
+      grid-template-areas:
+        'owner photo'
+        'who photo'
+        'status photo'
+        'foot photo'
+        'history history';
+      gap: 8px 16px;
       min-width: 0;
+      overflow: hidden;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--surface);
     }
-    /* The words sit above the photo. The right padding is the fully visible strip, less the
-       card's 12px padding, so only the still-covered start of the fade can run under them. */
-    .household:has(.household-photo-slot) .household-body {
-      position: relative;
-      z-index: 1;
-      padding-right: calc(var(--household-photo-width) - var(--household-photo-keep) - 12px);
-    }
-    .household:has(.household-photo-slot) .household-owner {
-      z-index: 2;
-    }
-    /* Wide enough for both: the people on the left, the open Tickets in a column on the right. */
-    @container (min-width: 36rem) {
-      .household-body {
-        grid-template-columns: minmax(0, 5fr) minmax(16rem, 6fr);
-        align-items: start;
-        gap: 24px;
+    @media (min-width: 80rem) {
+      .household {
+        grid-template-columns: minmax(0, 1fr) auto var(--household-photo-column);
+        grid-template-areas:
+          'owner owner photo'
+          'who status photo'
+          'foot foot photo'
+          'history history history';
       }
     }
-    /* The photo fills the card's right edge. The gradient is --surface, the card's own
-       background, so the fade is into the card and not a painted white. It does not take
-       clicks; the words above it do. */
-    .household-photo-slot {
-      position: absolute;
-      z-index: 0;
-      top: 0;
-      right: 0;
-      bottom: 0;
-      width: var(--household-photo-width);
-      overflow: hidden;
-      border-radius: 0 8px 8px 0;
-      background: var(--surface);
-      pointer-events: none;
+    /* The words and tiles sit above the start of the fade. */
+    .household-owner,
+    .household-who,
+    .household-status,
+    .household-foot {
+      position: relative;
+      z-index: 1;
     }
-    .household-photo-slot::after {
+    .household-photo-slot {
+      position: relative;
+      z-index: 0;
+      grid-area: photo;
+      align-self: stretch;
+      display: block;
+      min-height: 7.5rem;
+      overflow: hidden;
+      border-radius: 12px;
+      background: var(--surface);
+    }
+    /* A real photo bleeds to the card's edges. The gradient is --surface, the card's own
+       background, so the fade is into the card and not a painted white. With the Ticket
+       history open the strip stops above it; closed, it runs to the card's bottom edge. */
+    .household-photo-slot:not(.is-empty) {
+      /* Closed, the history row is empty but its 8px gap is still there: cover it too. */
+      margin: -8px -8px -16px calc(-16px - var(--household-photo-keep));
+      border-radius: 0;
+    }
+    .household:has(.household-history-panel:not([hidden])) .household-photo-slot:not(.is-empty) {
+      margin-bottom: 0;
+    }
+    .household-photo-slot:not(.is-empty)::after,
+    .dispatch-card-photo::after {
       content: '';
       position: absolute;
       inset: 0;
-      background: linear-gradient(to right, var(--surface) 0, var(--surface) 0.25rem, transparent var(--household-photo-fade));
+      /* An eased fade: more stops through the middle, so there is no visible edge where the
+         photo starts to show. */
+      background: linear-gradient(
+        to right,
+        var(--surface) 0,
+        var(--surface) 0.25rem,
+        color-mix(in oklab, var(--surface) 94%, transparent) calc(var(--photo-fade) * 0.2),
+        color-mix(in oklab, var(--surface) 80%, transparent) calc(var(--photo-fade) * 0.36),
+        color-mix(in oklab, var(--surface) 58%, transparent) calc(var(--photo-fade) * 0.52),
+        color-mix(in oklab, var(--surface) 34%, transparent) calc(var(--photo-fade) * 0.68),
+        color-mix(in oklab, var(--surface) 14%, transparent) calc(var(--photo-fade) * 0.84),
+        transparent var(--photo-fade)
+      );
+      pointer-events: none;
     }
     .household-photo {
       position: absolute;
       inset: 0;
+      display: block;
       width: 100%;
       height: 100%;
       object-fit: cover;
     }
-    .household-place,
-    .household-tickets {
+    .household-photo-slot.is-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      border: 1.5px dashed #c9c3b8;
+      background: #f6f2ea;
+      color: var(--muted);
+      font-size: 13px;
+      text-decoration: none;
+    }
+    .household-photo-slot.is-empty .household-photo {
+      display: none;
+    }
+    .household-photo-slot.is-empty:has(.household-photo)::after {
+      content: 'Photo unavailable';
+    }
+    .household-photo-slot.is-empty:hover {
+      border-color: var(--action);
+      color: var(--action);
+    }
+    .household-owner {
+      grid-area: owner;
+      padding-top: 4px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      margin: 0;
+      font-size: 12px;
+    }
+    .household-role {
+      color: var(--muted);
+    }
+    .household-owner > a:not(.household-waiting) {
+      font-weight: 600;
+      color: var(--ink);
+      text-decoration: none;
+    }
+    .household-owner > a:not(.household-waiting):hover {
+      text-decoration: underline;
+    }
+    .household-owner > .household-role {
+      padding: 2px 0 2px 10px;
+    }
+    .household-owner:has(> .household-role) {
+      width: fit-content;
+      max-width: 100%;
+    }
+    .household-waiting {
+      padding: 2px 10px;
+      border-radius: 999px;
+      background: var(--hivis);
+      color: var(--ink);
+      font-weight: 600;
+      text-decoration: none;
+    }
+    a.household-waiting:hover {
+      text-decoration: underline;
+    }
+    .household-who {
+      grid-area: who;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 0;
+    }
+    .household-foot {
+      grid-area: foot;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 16px;
       min-width: 0;
     }
     .household-address {
       margin: 0;
-      padding: 0 8px;
-      min-width: 0;
       font-family: var(--font-head);
-      font-size: 16px;
+      font-size: 18px;
       font-weight: 600;
-      line-height: 1.3;
-    }
-    /* Record links are Night. Harbour stays on actions: the count sentence, See all, Add a Tenant, Add profile. */
-    .household-address a,
-    .household-owner > a:not(.household-waiting),
-    .household-person > a,
-    .household-manager a,
-    .tradie-rows > li > a,
-    .unlinked-list a {
-      color: var(--ink);
-      font-family: var(--font-body);
-      font-weight: 500;
-      text-decoration: none;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
     }
     .household-address a {
-      font-family: inherit;
-      font-weight: inherit;
-    }
-    /* A link that is the whole row's target fills the row on hover (above); the address and
-       the Building Manager are links in a line, so they underline. */
-    .household-address a:hover,
-    .household-manager a:hover {
       color: var(--ink);
+      text-decoration: none;
+    }
+    .household-address a:hover {
       text-decoration: underline;
-      text-underline-offset: 2px;
-    }
-    .household-owner > a:not(.household-waiting):hover,
-    .household-person > a:hover,
-    .tradie-rows > li > a:hover,
-    .unlinked-list a:hover {
-      color: var(--ink);
     }
     .household-suburb {
       font-family: var(--font-body);
-      font-size: 13px;
+      font-size: 14px;
       font-weight: 400;
       color: var(--muted);
     }
-
-    /* Tenants hang off the address on 1px Line connectors drawn as borders. The stub runs
-       into the row's fill, so the branch leads to the person. */
     .household-people {
-      list-style: none;
-      margin: 6px 0 0 16px;
-      padding: 0;
-    }
-    .household-people > li {
-      position: relative;
-      min-width: 0;
-      padding-left: 12px;
-    }
-    .household-people > li::before {
-      content: '';
-      position: absolute;
-      left: 0;
-      top: 0;
-      bottom: 0;
-      border-left: 1px solid var(--line);
-    }
-    .household-people > li::after {
-      content: '';
-      position: absolute;
-      left: 0;
-      top: 50%;
-      width: 12px;
-      border-top: 1px solid var(--line);
-    }
-    .household-people > li:last-child::before {
-      bottom: auto;
-      height: 50%;
-    }
-    .household-person {
-      position: relative;
       display: flex;
       flex-wrap: wrap;
+      gap: 6px 10px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .household-person {
+      display: flex;
       align-items: center;
-      gap: 4px 8px;
+      gap: 6px;
       min-width: 0;
-      min-height: 34px;
-      padding: 4px 8px;
+      font-size: 14px;
+    }
+    .household-person > a {
+      color: var(--ink);
+      text-decoration: none;
+    }
+    .household-person > a:hover {
+      text-decoration: underline;
+    }
+    .household-person .is-empty + span,
+    .household-people .is-quiet {
+      color: var(--muted);
+    }
+    .household-avatar {
+      display: inline-grid;
+      flex: none;
+      place-items: center;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #e4ddcd;
+      color: var(--ink);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+    .household-avatar.is-empty {
+      border: 1px dashed #b8b2a6;
+      background: transparent;
+      color: var(--muted);
     }
     .household-count,
-    .household-calm,
-    .household-more {
+    .household-calm {
+      font-size: 12px;
       color: var(--muted);
-      font-size: 13px;
+    }
+    .household-calm {
+      margin: 0;
     }
     .household-manager {
       display: flex;
       flex-wrap: wrap;
-      align-items: baseline;
-      gap: 8px;
-      margin: 8px 8px 0;
-      padding-top: 10px;
-      border-top: 1px solid var(--line);
-      font-size: 14px;
-    }
-    .household-people .is-quiet,
-    .household-role {
-      color: var(--muted);
-    }
-    .household-role {
-      font-size: 13px;
-    }
-
-    /* The open Tickets: one row each, the Ticket's words then its Urgency at the end. */
-    .household-tickets ul {
-      list-style: none;
+      gap: 6px;
       margin: 0;
-      padding: 0;
-    }
-    .household-ticket {
-      display: flex;
-      align-items: flex-start;
-      gap: 8px;
-      min-width: 0;
-      min-height: 34px;
-      padding: 4px 8px;
-      color: var(--ink);
       font-size: 13px;
+    }
+    .household-manager a {
+      color: var(--ink);
       text-decoration: none;
     }
-    /* The icon and the badge sit on the first line of words that may take two. */
-    .household-ticket > svg {
-      margin-block-start: calc((1lh - 16px) / 2);
-      color: var(--action);
-    }
-    .household-ticket-title {
-      flex: 1;
-      min-width: 0;
-      display: -webkit-box;
-      -webkit-box-orient: vertical;
-      -webkit-line-clamp: 2;
-      overflow: hidden;
-      line-height: 1.45;
-    }
-    .household-ticket .badge {
-      flex: none;
-    }
-    .household-calm {
-      margin: 0;
-      padding: 7px 8px;
-    }
-    .household-more {
-      display: inline-block;
-      margin: 2px 8px 0;
-      color: var(--action);
+    .household-manager a:hover {
+      text-decoration: underline;
     }
 
-    /* Tradies: grouped by their first Trade, one row each, the rating at the end. */
-    .tradies-note {
-      margin: -4px 0 0;
+    /* The tiles run from the top of the address to the bottom of the Tenants. */
+    .household-status {
+      grid-area: status;
+      display: flex;
+      align-items: stretch;
+      gap: 8px;
+      min-width: 0;
+    }
+    .household-tile {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-width: 5.5rem;
+      padding: 4px 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface);
+      text-align: center;
+    }
+    .household-tile-value,
+    .household-tile-label {
+      margin: 0;
+    }
+    .household-tile-value {
+      font-family: var(--font-head);
+      font-size: 20px;
+      font-weight: 600;
+      line-height: 1.2;
+      color: var(--ink);
+    }
+    .household-tile-label {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .household-tile.is-urgent {
+      background: #fbe4e1;
+      border-color: transparent;
+    }
+    .household-tile.is-urgent .household-tile-value {
+      color: #b3261e;
+    }
+    .household-tile.is-high {
+      background: #fbefdc;
+      border-color: transparent;
+    }
+    .household-tile.is-high .household-tile-value {
+      color: #a8531a;
+    }
+    .household-tile.is-routine {
+      background: #edf0f3;
+      border-color: transparent;
+    }
+    .household-tile.is-clear {
+      background: #e3efe6;
+      border-color: transparent;
+    }
+    .household-tile.is-clear .household-tile-value {
+      color: #2d6a45;
+    }
+    /* View Property ends the row under the people, at its right. */
+    .household-go {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      min-height: 32px;
+      margin-left: auto;
+      padding: 0 4px 0 12px;
+      border-radius: 999px;
+      color: var(--action);
+      font-size: 13px;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .household-go:hover {
+      background: var(--page);
+    }
+
+    /* The Ticket history button under the people, and the open Tickets across the card. */
+    .household-history-toggle {
+      display: inline-flex;
+      align-items: center;
+      align-self: flex-start;
+      gap: 6px;
+      min-height: 32px;
+      padding: 0 12px;
+      border: 0;
+      border-radius: 999px;
+      background: var(--info-bg);
+      color: var(--action);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .household-history-toggle[hidden] {
+      display: none;
+    }
+    .household-history-toggle:hover {
+      background: #dbe7f2;
+    }
+    .household-history-toggle > svg:last-child {
+      transition: rotate var(--dur-fast) var(--ease-out);
+    }
+    .household-history-toggle[aria-expanded='true'] > svg:last-child {
+      rotate: 180deg;
+    }
+    .household-history-panel {
+      grid-area: history;
+      min-width: 0;
+      padding: 12px;
+      border-radius: 12px;
+      background: var(--page);
+    }
+    .household-history-panel[hidden] {
+      display: none;
+    }
+    .household-history-head {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 8px;
+      font-size: 13px;
+    }
+    .household-history-panel ul {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .household-ticket {
+      display: grid;
+      grid-template-columns: 2.5rem minmax(0, 1fr) auto auto auto;
+      align-items: center;
+      gap: 10px;
+      min-height: 44px;
+      padding: 8px 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--surface);
+      color: var(--ink);
+      font-size: 14px;
+      text-decoration: none;
+    }
+    .household-ticket:hover {
+      border-color: var(--action);
+    }
+    .household-ticket-id,
+    .household-ticket-date {
       color: var(--muted);
       font-size: 13px;
     }
-    .profiles-tradies .section-body {
-      gap: 16px;
+    .household-ticket-title {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
-    .tradie-group-title,
-    .unlinked-title {
+    .household-ticket > svg {
+      color: var(--muted);
+    }
+
+    /* Tradies. */
+    .profiles-tradies {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-width: 0;
+    }
+    .tradie-rows {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
       margin: 0;
-      font-family: var(--font-head);
-      font-size: 14px;
-      font-weight: 600;
-    }
-    .tradie-rows,
-    .unlinked-list {
-      list-style: none;
-      margin: 4px -8px 0;
       padding: 0;
+      list-style: none;
     }
     .tradie-rows > li {
       position: relative;
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      column-gap: 12px;
-      row-gap: 2px;
-      align-items: baseline;
-      min-width: 0;
-      padding: 7px 8px;
-    }
-    .unlinked-list > li {
-      position: relative;
       display: flex;
-      flex-wrap: wrap;
       align-items: center;
-      gap: 8px;
-      min-width: 0;
-      padding: 7px 8px;
+      gap: 10px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--surface);
     }
-    .tradie-rows > li > a {
-      grid-column: 1;
+    .tradie-rows > li:hover {
+      border-color: var(--action);
+    }
+    .tradie-avatar {
+      display: grid;
+      flex: none;
+      place-items: center;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: var(--action);
+      color: var(--surface);
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .tradie-text {
+      display: flex;
+      flex: 1 1 auto;
+      flex-direction: column;
       min-width: 0;
-      white-space: nowrap;
+    }
+    .tradie-text > a {
+      color: var(--ink);
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.25;
+      text-decoration: none;
+    }
+    .tradie-text > a::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 14px;
+    }
+    .tradie-text > a:focus-visible {
+      outline: none;
+    }
+    .tradie-text > a:focus-visible::after {
+      outline: 2px solid var(--action);
+      outline-offset: 2px;
+    }
+    .tradie-trades {
       overflow: hidden;
       text-overflow: ellipsis;
-    }
-    .tradie-rows .tradie-rating {
-      grid-column: 2;
-      justify-self: end;
+      white-space: nowrap;
+      font-size: 12px;
+      color: var(--muted);
     }
     .tradie-extra {
       display: flex;
       flex-wrap: wrap;
-      align-items: center;
-      gap: 8px;
-      grid-column: 1 / -1;
-    }
-    .tradie-jobs {
+      gap: 6px;
+      margin-top: 2px;
+      font-size: 12px;
       color: var(--muted);
+    }
+    .tradie-rows .tradie-rating {
+      display: inline-flex;
+      flex: none;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #fbf3e0;
       font-size: 13px;
     }
-    .profiles-unlinked .section-body {
-      gap: 16px;
+    .tradie-rows .tradie-rating > svg {
+      color: var(--hivis);
+    }
+    .tradie-add {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      min-height: 40px;
+      border: 1.5px dashed #c9c3b8;
+      border-radius: 12px;
+      color: var(--action);
+      font-size: 14px;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .tradie-add:hover {
+      border-color: var(--action);
+      background: var(--surface);
     }
 
-    /* The name is the row's link and covers the row, so the whole fill is one target; the
-       other things in the row (a count, a chip, Add a Tenant) sit above it. */
-    .household-person > a::after,
-    .tradie-rows > li > a::after,
-    .unlinked-list > li > a::after {
-      content: '';
-      position: absolute;
-      inset: 0;
-      border-radius: inherit;
+    /* People with no Property. */
+    .profiles-unlinked {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding-top: 20px;
+      border-top: 1px solid var(--line);
     }
-    .household-person > :not(a),
-    .tradie-rows > li > :not(a) {
-      position: relative;
-      z-index: 1;
+    .profiles-unlinked .profiles-title {
+      font-size: 17px;
     }
-    .household-person > a:focus-visible,
-    .tradie-rows > li > a:focus-visible,
-    .unlinked-list > li > a:focus-visible {
-      outline: none;
+    .unlinked-title {
+      margin: 0 0 6px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--muted);
     }
-    .household-person > a:focus-visible::after,
-    .tradie-rows > li > a:focus-visible::after,
-    .unlinked-list > li > a:focus-visible::after {
-      outline: 2px solid var(--action);
-      outline-offset: 0;
+    .unlinked-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 0 0 6px;
+      padding: 0;
+      list-style: none;
+    }
+    .unlinked-list a {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 36px;
+      padding: 0 14px 0 6px;
+      border-radius: 999px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      color: var(--ink);
+      font-size: 14px;
+      text-decoration: none;
+    }
+    .unlinked-list a:hover {
+      border-color: var(--action);
     }
 
-    /* Phones: the Owner is the card's first row, every row is 44px, the Tickets follow the people. */
-    @media (max-width: 40rem), (pointer: coarse) {
-      .household {
-        padding-top: 8px;
-      }
-      .household-list {
-        gap: 16px;
-        padding-top: 0;
-      }
-      .household-owner {
-        position: static;
-        transform: none;
-        max-width: none;
-        margin: 0 0 4px;
-        padding: 0 0 0 8px;
-        background: transparent;
-        border: 0;
-      }
-      .household-owner > a:not(.household-waiting) {
-        display: inline-flex;
-        align-items: center;
-        min-height: 44px;
-        padding-inline: 8px;
-      }
-      .household-address a,
-      .household-manager a {
-        display: inline-flex;
-        align-items: center;
-        min-height: 44px;
-      }
-      .household-person,
-      .household-ticket,
-      .tradie-rows > li,
-      .unlinked-list > li {
-        min-height: 44px;
-      }
-      .household-tickets,
-      .household-calm {
-        padding-top: 4px;
-        border-top: 1px solid var(--line);
-        margin-inline: 8px;
-      }
-      .household-tickets ul {
-        margin-inline: -8px;
-      }
-    }
-    /* A narrow window stacks the card, so the photo becomes a full-width band on the
-       bottom. The words stay above it; the band fades upward into --surface. The Owner
-       stays the first row. This is the width, not a coarse pointer: a wide touch screen
-       keeps the strip on the right. The card's 12px bottom padding is part of the band. */
+    /* Phones: the photo is a band across the top, the tiles sit under the words, every row is 44px. */
     @media (max-width: 40rem) {
-      .household:has(.household-photo-slot) .household-body {
-        padding-right: 0;
-        padding-bottom: calc(var(--household-photo-band) - 12px);
+      .profiles-main,
+      .profiles-side {
+        padding: 12px;
       }
+      .household {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas:
+          'photo'
+          'owner'
+          'who'
+          'status'
+          'foot'
+          'history';
+      }
+      /* The strip becomes a band across the top, fading down into --surface. */
       .household-photo-slot {
-        top: auto;
-        left: 0;
-        width: auto;
-        height: var(--household-photo-band);
-        border-radius: 0 0 8px 8px;
+        align-self: auto;
+        min-height: 0;
+        aspect-ratio: 16 / 7;
       }
-      .household-photo-slot::after {
-        background: linear-gradient(to bottom, var(--surface) 0, var(--surface) 0.5rem, transparent 3rem);
+      .household-photo-slot:not(.is-empty),
+      .household:has(.household-history-panel:not([hidden])) .household-photo-slot:not(.is-empty) {
+        margin: -8px -8px -12px;
+      }
+      .household-photo-slot:not(.is-empty)::after,
+      .dispatch-card-photo::after {
+        background: linear-gradient(
+          to top,
+          var(--surface) 0,
+          var(--surface) 0.5rem,
+          color-mix(in oklab, var(--surface) 80%, transparent) 1.25rem,
+          color-mix(in oklab, var(--surface) 45%, transparent) 2rem,
+          color-mix(in oklab, var(--surface) 15%, transparent) 2.75rem,
+          transparent 3.5rem
+        );
+      }
+      .household-photo-slot.is-empty {
+        aspect-ratio: auto;
+        min-height: 4.5rem;
+        flex-direction: row;
+      }
+      .household-owner,
+      .household-who,
+      .household-status,
+      .household-foot {
+        padding-inline: 4px;
+      }
+      .household-tile {
+        flex: 1 1 0;
+      }
+      .household-ticket {
+        grid-template-columns: minmax(0, 1fr) auto;
+      }
+      .household-ticket-id,
+      .household-ticket-date,
+      .household-ticket > svg {
+        display: none;
+      }
+      .household-history-toggle {
+        min-height: 44px;
       }
     }
   }

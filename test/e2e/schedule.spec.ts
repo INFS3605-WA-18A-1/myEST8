@@ -90,11 +90,13 @@ test('on a wide screen a visit opens in the Picked visit panel, and Open Ticket 
   await signIn(page);
   await page.goto('/calendar?view=month&filter=all');
 
+  // Nothing picked, no panel: the grid has the width.
   const panel = page.getByRole('complementary', { name: 'Picked visit' });
-  await expect(panel).toBeVisible();
+  await expect(panel).toBeHidden();
   const chip = page.locator('.schedule-chip[data-pick] a').first();
   test.skip((await chip.count()) === 0, 'no visit this month in the demo');
   await chip.click();
+  await expect(panel).toBeVisible();
   await expect(page).toHaveURL(/\/calendar/);
   const open = panel.getByRole('link', { name: /^Open Ticket #/ });
   await expect(open).toBeVisible();

@@ -149,7 +149,7 @@ test('signing out ends the session, and signing in again returns to the page the
   await page.getByRole('button', { name: 'Sign in' }).click();
   // Back to the page they asked for, signed in.
   await expect(page).toHaveURL(/\/properties$/);
-  await expect(page.getByRole('heading', { level: 1, name: 'Properties' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Profiles' })).toBeVisible();
 });
 
 test('a no-login Tenant link that does not exist says so, without a sign-in', async ({ page }) => {
