@@ -173,8 +173,8 @@ function shortDate(iso: string, timeZone: string): string {
  * One household. On the left the Property's photo, the one found for its address (or a
  * link to add one when it has none); beside it the Owner and any approvals waiting, the
  * address, and the Tenants and Building Manager; then two tiles, how many Tickets are open
- * and the worst Urgency, and an arrow to the Property. A Ticket history toggle under them
- * opens the open Tickets, each a row to its Ticket. On a phone the photo is a band on top.
+ * and the worst Urgency, and an arrow to the Property. A Ticket history button under the people
+ * opens the open Tickets across the card, each a row to its Ticket. On a phone the photo is a band on top.
  */
 function householdCard(household: Household, timeZone: string): Html {
   const waiting = household.owner.approvalsWaiting;
@@ -194,7 +194,7 @@ function householdCard(household: Household, timeZone: string): Html {
                 <div class="household-person">
                   <span class="household-avatar" aria-hidden="true">${initials(tenant.name)}</span>
                   <a href="/tenants/${tenant.id}">${tenant.name}</a>
-                  ${tenant.openTickets ? html`<span class="household-count">${tenant.openTickets === 1 ? '1 open Ticket' : `${tenant.openTickets} open Tickets`}</span>` : ''}
+                  ${tenant.openTickets && household.tenants.length > 1 ? html`<span class="household-count">${tenant.openTickets === 1 ? '1 open Ticket' : `${tenant.openTickets} open Tickets`}</span>` : ''}
                   ${tenant.concern ? badge('Concern', 'warning') : ''}
                 </div>
               </li>`,
@@ -205,7 +205,7 @@ function householdCard(household: Household, timeZone: string): Html {
         ? html`<p class="household-manager"><span class="household-role">Building Manager</span> <a href="/building-managers/${household.buildingManager.id}">${household.buildingManager.name}</a></p>`
         : ''}
       ${household.tenants.length ? '' : html`<div class="household-add"><a class="btn btn-primary btn-sm" href="/tenants/new">${icon('plus', { size: 'size-4' })}Add a Tenant</a></div>`}
-      ${household.tickets.length ? '' : html`<p class="household-calm">No open Tickets</p>`}
+      ${household.tickets.length ? historyToggle(household) : html`<p class="household-calm">No open Tickets</p>`}
     </div>
     ${householdTiles(household)}
     ${householdHistory(household, timeZone)}
@@ -227,9 +227,7 @@ function householdPhoto(household: Household): Html {
   </a>`;
 }
 
-const WORST_WORDS: Record<string, string> = { urgent: 'Most urgent', high: 'Worst urgency', routine: 'Worst urgency' };
-
-/** How many Tickets are open and the worst Urgency among them, then the way into the Property. */
+/** How many Tickets are open and the highest Urgency among them, then the way into the Property. */
 function householdTiles(household: Household): Html {
   const worst = household.worstUrgency;
   return html`<div class="household-status">
@@ -239,37 +237,39 @@ function householdTiles(household: Household): Html {
     </div>
     <div class="household-tile is-${worst ?? 'clear'}">
       <p class="household-tile-value">${worst ? humanise(worst) : 'Clear'}</p>
-      <p class="household-tile-label">${worst ? WORST_WORDS[worst] : 'Nothing to fix'}</p>
+      <p class="household-tile-label">${worst ? 'Urgency' : 'Nothing to fix'}</p>
     </div>
     <a class="household-go" href="/properties/${household.propertyId}" aria-label="Open ${household.address}">${icon('caret-right', { size: 'size-4' })}</a>
   </div>`;
 }
 
 /**
- * The open Tickets behind a toggle, High first: the number, its words, its Urgency and the
- * day it was reported, each row a link to the Ticket. None open: no toggle.
+ * The button under the people that shows the household's open Tickets. It needs app.js
+ * (hidden until it runs), so without a script the Tickets are simply listed.
+ */
+function historyToggle(household: Household): Html {
+  return html`<button type="button" class="household-history-toggle" aria-expanded="false" aria-controls="history-${household.propertyId}" data-history-toggle hidden>${icon('clock-counter-clockwise', { size: 'size-4' })}<span>Ticket history</span>${icon('caret-down', { size: 'size-3.5' })}</button>`;
+}
+
+/**
+ * The household's open Tickets, High first: the number, its words, its Urgency and the
+ * day it was reported, each row a link to the Ticket. They sit across the card's width
+ * under the photo and words. None open: nothing here.
  */
 function householdHistory(household: Household, timeZone: string): Html {
   if (!household.tickets.length) return html``;
-  const n = household.tickets.length;
-  return html`<details class="household-history">
-    <summary class="household-history-toggle">${icon('clock-counter-clockwise', { size: 'size-4' })}<span>Ticket history</span><span class="household-history-count num">${n} open</span>${icon('caret-down', { size: 'size-3.5' })}</summary>
-    <div class="household-history-panel">
-      <div class="household-history-head">
-        <span class="household-history-title">Open Tickets</span>
-        <a class="link" href="/tickets">Open all ${n} in Tickets</a>
-      </div>
-      <ul aria-label="Open Tickets">
-        ${household.tickets.map(
-          (ticket) => html`<li>
-            <a class="household-ticket" href="/tickets/${ticket.id}" title="${ticket.title}">
-              <span class="household-ticket-id num">#${ticket.id}</span><span class="household-ticket-title">${ticket.title}</span>${urgencyBadge(ticket.urgency)}<span class="household-ticket-date num">${shortDate(ticket.reportedAt, timeZone)}</span>${icon('caret-right', { size: 'size-4' })}
-            </a>
-          </li>`,
-        )}
-      </ul>
-    </div>
-  </details>`;
+  return html`<div class="household-history-panel" id="history-${household.propertyId}" data-history-panel>
+    <div class="household-history-head"><a class="link" href="/tickets">Open all in Tickets</a></div>
+    <ul aria-label="Open Tickets">
+      ${household.tickets.map(
+        (ticket) => html`<li>
+          <a class="household-ticket" href="/tickets/${ticket.id}" title="${ticket.title}">
+            <span class="household-ticket-id num">#${ticket.id}</span><span class="household-ticket-title">${ticket.title}</span>${urgencyBadge(ticket.urgency)}<span class="household-ticket-date num">${shortDate(ticket.reportedAt, timeZone)}</span>${icon('caret-right', { size: 'size-4' })}
+          </a>
+        </li>`,
+      )}
+    </ul>
+  </div>`;
 }
 
 function tradiesBlock(groups: TradieGroup[], q: string, filter: Filter): Html {

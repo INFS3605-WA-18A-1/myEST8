@@ -11003,7 +11003,7 @@
     /* A household: the photo, the place and its people, two tiles, and the toggle for its Tickets. */
     .household {
       display: grid;
-      grid-template-columns: 10.5rem minmax(0, 1fr);
+      grid-template-columns: 11rem minmax(0, 1fr);
       grid-template-areas:
         'photo main'
         'photo status'
@@ -11026,15 +11026,17 @@
     .household-photo-slot {
       position: relative;
       grid-area: photo;
-      align-self: start;
+      align-self: stretch;
       display: block;
       width: 100%;
-      aspect-ratio: 1;
+      min-height: 7.5rem;
       overflow: hidden;
       border-radius: 12px;
       background: #e6e1d6;
     }
     .household-photo {
+      position: absolute;
+      inset: 0;
       display: block;
       width: 100%;
       height: 100%;
@@ -11270,60 +11272,51 @@
       background: var(--page);
     }
 
-    /* The Ticket history toggle and its open Tickets. */
-    .household-history {
-      grid-area: history;
-      min-width: 0;
-    }
+    /* The Ticket history button under the people, and the open Tickets across the card. */
     .household-history-toggle {
       display: inline-flex;
       align-items: center;
+      align-self: flex-start;
       gap: 6px;
       min-height: 32px;
+      margin-top: auto;
       padding: 0 12px;
+      border: 0;
       border-radius: 999px;
       background: var(--info-bg);
       color: var(--action);
+      font: inherit;
       font-size: 13px;
       font-weight: 600;
       cursor: pointer;
-      list-style: none;
     }
-    .household-history-toggle::-webkit-details-marker {
+    .household-history-toggle[hidden] {
       display: none;
     }
-    .household-history-count {
-      padding: 0 8px;
-      border-radius: 999px;
-      background: var(--surface);
-      font-size: 12px;
+    .household-history-toggle:hover {
+      background: #dbe7f2;
     }
     .household-history-toggle > svg:last-child {
       transition: rotate var(--dur-fast) var(--ease-out);
     }
-    .household-history[open] .household-history-toggle > svg:last-child {
+    .household-history-toggle[aria-expanded='true'] > svg:last-child {
       rotate: 180deg;
     }
     .household-history-panel {
-      margin-top: 8px;
+      grid-area: history;
+      min-width: 0;
       padding: 12px;
       border-radius: 12px;
       background: var(--page);
     }
+    .household-history-panel[hidden] {
+      display: none;
+    }
     .household-history-head {
       display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      gap: 12px;
+      justify-content: flex-end;
       margin-bottom: 8px;
       font-size: 13px;
-    }
-    .household-history-title {
-      font-size: 12px;
-      font-weight: 600;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      color: var(--muted);
     }
     .household-history-panel ul {
       display: flex;
@@ -11534,6 +11527,8 @@
           'history';
       }
       .household-photo-slot {
+        align-self: auto;
+        min-height: 0;
         aspect-ratio: 16 / 7;
       }
       .household-photo-slot.is-empty {

@@ -206,12 +206,15 @@ describe('Profiles', () => {
 
     const page = await (await w.get('/profiles', cookie)).text();
     const king = page.split('<article class="household">').slice(1).find((card) => card.includes(KING_ST)) ?? '';
-    const tiles = visible(king.slice(king.indexOf('class="household-status"'), king.indexOf('</details>')));
+    const tiles = visible(king.slice(king.indexOf('class="household-status"'), king.indexOf('household-history-panel')));
     expect(tiles).toContain('1 Open Ticket');
-    expect(tiles).toContain('Worst urgency');
-    const toggle = king.slice(king.indexOf('<details class="household-history">'), king.indexOf('</details>'));
-    expect(visible(toggle)).toContain('Ticket history');
-    expect(visible(toggle)).toContain('1 open');
+    expect(tiles).toContain('Urgency');
+    expect(tiles).not.toContain('Worst');
+    expect(king).toContain('data-history-toggle');
+    expect(visible(king)).toContain('Ticket history');
+    const toggle = king.slice(king.indexOf('household-history-panel'));
+    expect(visible(toggle)).toContain('Open all in Tickets');
+    expect(visible(toggle)).not.toContain('Open all 1');
     expect(visible(toggle)).toContain(`#${tap.ticketId}`);
     expect(toggle).toContain(`class="household-ticket" href="/tickets/${tap.ticketId}"`);
     expect(toggle).toContain('href="/tickets"');

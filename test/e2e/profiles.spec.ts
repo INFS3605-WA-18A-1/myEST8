@@ -53,10 +53,10 @@ test('a Property photo sits at the left of the household card, clear of the word
   expect(slots).toBeGreaterThan(0);
 
   // Ticket history opens the open Tickets, each a link to its Ticket.
-  const toggle = page.locator('summary', { hasText: 'Ticket history' }).first();
+  const toggle = page.locator('.household-history-toggle').first();
   if ((await toggle.count()) > 0) {
     await toggle.click();
-    await expect(page.locator('.household-history[open] a.household-ticket').first()).toBeVisible();
+    await expect(page.locator('.household-history-panel:not([hidden]) a.household-ticket').first()).toBeVisible();
   }
 
   await page.setViewportSize({ width: 390, height: 844 });

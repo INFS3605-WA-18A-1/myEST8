@@ -809,6 +809,23 @@ onContent((root) => {
   }
 });
 
+// === Profiles: the Ticket history button ===
+// Each household lists its open Tickets under the card. With this file running the list is
+// folded away behind its Ticket history button; without it the Tickets are just listed.
+onContent((root) => {
+  for (const button of root.querySelectorAll('[data-history-toggle]')) {
+    const panel = root.querySelector(`#${button.getAttribute('aria-controls')}`);
+    if (!panel) continue;
+    button.hidden = false;
+    panel.hidden = true;
+    button.addEventListener('click', () => {
+      const open = panel.hidden;
+      panel.hidden = !open;
+      button.setAttribute('aria-expanded', String(open));
+    });
+  }
+});
+
 // === Profiles: a Property photo that will not load ===
 // A household's photo is found for its address. When the file is gone or the address finds
 // nothing, the broken picture is swapped for the quiet empty slot (a dashed box) rather
