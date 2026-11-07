@@ -18,6 +18,7 @@ import type { WebEnv } from '../env.ts';
 import { formAction, list, text } from '../forms.ts';
 import { icon } from '../icons.ts';
 import { shellInfo } from '../shell.ts';
+import { addButton, listFilter, profileChips, profileHref, profilesCard, type ProfileFilter } from '../profiles-frame.ts';
 import { alert, badge, button, contactLink, editSwap, emptyState, inlineEdit, field, flashFrom, formatMoney, formatWhen, humanise, linkButton, othersUsing, page, postButton, profileRead, ratingChip, rowLink, section, sharedAddressNote, table, ticketCell, type Html } from '../ui.ts';
 import { timeRange } from './calendar.ts';
 import { addTradieSection, contactControls, contactFrom, importPanel, listingChoice, saveDetails, tradesControl, tradieFields, valueOf, type DetailsEdit, type Errors, type Values } from './onboarding-forms.ts';
@@ -33,18 +34,25 @@ export function tradiePages() {
     const { actions, pm } = c.var;
     const trade = TRADES.find((t) => t === c.req.query('trade')) ?? null;
     const flash = flashFrom(c.req.url);
-    const everyone = await actions.tradieDirectory();
+    // Tradies are the Agency's either way; Mine or All is only carried on to the chips and Trades.
+    const filter: ProfileFilter = c.req.query('filter') === 'all' ? 'all' : 'mine';
+    const [everyone, overview] = await Promise.all([actions.tradieDirectory(), actions.profilesOverview({ filter })]);
     const tradies = trade ? everyone.filter((t) => t.trades.includes(trade)) : everyone;
     return c.html(
       page({
         title: 'Tradies',
+        heading: 'Profiles',
         pm,
         active: 'profiles',
         flash,
         shell: shellInfo(c),
         subtitle: 'Best myEST8 rating first. The two ratings are shown side by side, never combined.',
-        actions: linkButton('Add a Tradie', '/tradies/new', { variant: 'primary', size: 'sm' }),
-        body: html`${tradeFilter(everyone, trade)}${directory(tradies, trade)}`,
+        controls: profileChips('tradies', overview.counts, filter),
+        body: profilesCard({
+          search: listFilter('Filter Tradies', 'Business, name or Trade'),
+          end: addButton('Add a Tradie', '/tradies/new'),
+          body: html`${tradeFilter(everyone, trade, filter)}${directory(tradies, trade)}`,
+        }),
       }),
     );
   });
@@ -280,15 +288,16 @@ function serviceArea(t: TradieView, flash: ReturnType<typeof flashFrom>, form: s
 /**
  * The Trades as links, each with how many Tradies do it, so filtering is one click and
  * works without JavaScript. A Trade nobody does isn't offered, unless it's the one asked for.
+ * Each keeps All, when it is on, for the chips above.
  */
-function tradeFilter(everyone: DirectoryEntry[], selected: Trade | null): Html {
+function tradeFilter(everyone: DirectoryEntry[], selected: Trade | null, filter: ProfileFilter): Html {
   const counts = TRADES.map((t) => ({ trade: t, count: everyone.filter((x) => x.trades.includes(t)).length })).filter((c) => c.count || c.trade === selected);
   const item = (label: string, href: string, count: number, active: boolean) =>
     html`<li><a href="${href}" class="trade-filter-item"${active ? html` aria-current="page"` : ''}>${label} <span class="trade-filter-count num">${count}</span></a></li>`;
   return html`<nav class="trade-filter" aria-label="Filter by Trade">
     <ul>
-      ${item('All Trades', '/tradies', everyone.length, selected === null)}
-      ${counts.map((c) => item(humanise(c.trade), `/tradies?trade=${c.trade}`, c.count, c.trade === selected))}
+      ${item('All Trades', profileHref('/tradies', filter), everyone.length, selected === null)}
+      ${counts.map((c) => item(humanise(c.trade), profileHref('/tradies', filter, { trade: c.trade }), c.count, c.trade === selected))}
     </ul>
   </nav>`;
 }

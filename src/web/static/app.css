@@ -7697,21 +7697,16 @@
       box-shadow: var(--shadow-soft);
       overflow: hidden;
     }
-    /* The Picked visit panel opens when a visit is picked. On a very wide screen it is
-       always there, with a line saying so. */
+    /* The Picked visit panel opens only when a visit is picked; until then the grid has the width. */
     .schedule-shell.has-pick:not(.is-open) .schedule-pick {
       display: none;
     }
     .schedule-shell.has-pick.is-open {
       grid-template-columns: 17rem minmax(0, 1fr) 19.5rem;
     }
-    @media (min-width: 100rem) {
-      .schedule-shell.has-pick {
-        grid-template-columns: 17rem minmax(0, 1fr) 19.5rem;
-      }
-      .schedule-shell.has-pick:not(.is-open) .schedule-pick {
-        display: flex;
-      }
+    /* The Schedule uses the whole window: no 1280px column, and the grid as tall as the screen allows. */
+    .app-content:has(> .schedule-shell, .schedule-shell) {
+      max-width: none;
     }
     .schedule-rail {
       display: flex;
@@ -8443,7 +8438,7 @@
     .schedule-scroll {
       position: relative;
       min-width: 0;
-      max-height: min(40rem, calc(100dvh - 16rem));
+      height: max(28rem, calc(100dvh - 15rem));
       overflow: auto;
       background: var(--surface);
     }
@@ -8468,13 +8463,15 @@
       --slot: 0.875rem;
       display: grid;
       grid-template-columns: var(--gutter) repeat(var(--cols), minmax(6rem, 1fr));
-      grid-template-rows: auto repeat(var(--slots), minmax(var(--slot), auto));
+      /* The quarter-hours stretch to fill a tall window, so the day reaches the bottom of the grid. */
+      grid-template-rows: auto repeat(var(--slots), minmax(var(--slot), 1fr));
+      min-height: 100%;
     }
     /* The Day has no row of day names, and each lane is wide enough for a whole card. */
     .schedule-grid.is-day {
       --slot: 1.25rem;
       grid-template-columns: var(--gutter) repeat(var(--cols), minmax(14rem, 1fr));
-      grid-template-rows: repeat(var(--slots), minmax(var(--slot), auto));
+      grid-template-rows: repeat(var(--slots), minmax(var(--slot), 1fr));
     }
     .schedule-hours {
       z-index: 1;
@@ -9389,7 +9386,7 @@
     /* One card per Property, two across from 1280px. A card's photo is the Profiles strip: on
        the right edge, flush with the top, right and bottom, its left edge fading into
        --surface (the shared fade is with .household's, below). --photo-width is the whole
-       strip; the words reach --photo-keep into the start of its fade. */
+       strip; the words and Ticket rows stop --photo-keep into it (0: where its fade starts). */
     .dispatch-cards {
       display: grid;
       grid-template-columns: minmax(0, 1fr);
@@ -9413,7 +9410,7 @@
     .dispatch-card {
       --photo-width: 10rem;
       --photo-fade: 5.5rem;
-      --photo-keep: 1rem;
+      --photo-keep: 0rem;
       display: grid;
       flex: 1;
       grid-template-columns: minmax(0, 1fr);
@@ -11596,6 +11593,74 @@
       align-items: center;
       gap: 12px;
     }
+    /* The Properties the Profiles search offers drop down under its field. */
+    .profiles-search-field {
+      position: relative;
+    }
+    .profiles-search-field .search-suggest-list {
+      top: calc(100% + 6px);
+      left: -1px;
+      width: min(26rem, calc(100vw - 32px));
+      cursor: default;
+    }
+
+    /* A list page (Properties, Tenants, Property Owners, Tradies, Building Managers) in the
+       same card as /profiles: its table sits flat inside it, no second frame, with taller
+       rows like the households. The toolbar's search hides the rows that don't match. */
+    .profiles-list {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      min-width: 0;
+      padding: 16px 20px 20px;
+    }
+    .profiles-list .table-frame {
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+    }
+    .profiles-list .table :where(thead) th {
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .profiles-list .table tbody :where(th, td) {
+      height: 56px;
+      padding: 10px 12px;
+      font-size: 14px;
+    }
+    .profiles-list .table tbody tr:last-child :where(th, td) {
+      border-bottom: 0;
+    }
+    .profiles-list .table tbody tr:hover {
+      background: var(--page);
+    }
+    .profiles-list .table tbody :where(th, td):first-child {
+      font-weight: 600;
+    }
+    .profiles-list .table tbody tr[hidden] {
+      display: none;
+    }
+    .profiles-list-none {
+      margin: 0;
+      padding: 24px 0;
+      font-size: 14px;
+      text-align: center;
+      color: var(--muted);
+    }
+    .profiles-list-none[hidden] {
+      display: none;
+    }
+    @media (max-width: 639.98px) {
+      .profiles-list {
+        padding: 12px;
+      }
+      .profiles-list .table tbody :where(th, td) {
+        height: auto;
+        padding: 0;
+      }
+    }
     .profiles-board {
       display: flex;
       flex-direction: column;
@@ -11675,13 +11740,13 @@
     /* A household: the place and its people, two tiles, and the toggle for its Tickets. The
        Property's photo is a strip on the card's right edge: flush with the top, right and
        bottom, its left edge fading into the card's own --surface. --household-photo-width is
-       the whole strip; the words reach --household-photo-keep into it, still inside the
-       covered start of the fade, which finishes at --household-photo-fade. The photo's grid
+       the whole strip; the words, tiles and buttons stop --household-photo-keep into it (0:
+       they end where the fade starts), and the fade finishes at --household-photo-fade. The photo's grid
        column is the strip less that overlap, the 16px gap and the card's 8px padding. */
     .household {
       --household-photo-width: 13rem;
       --household-photo-fade: 6rem;
-      --household-photo-keep: 1rem;
+      --household-photo-keep: 0rem;
       --household-photo-column: calc(var(--household-photo-width) - var(--household-photo-keep) - 24px);
       --photo-fade: var(--household-photo-fade);
       display: grid;

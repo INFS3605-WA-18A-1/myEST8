@@ -23,7 +23,7 @@ test('the Property dropdown finds a Property by its postcode and the Tenant is a
 
   await expect(page.getByText(`${name} added as a Tenant`)).toBeVisible();
   // Glebe is another Property Manager's, so the Tenant shows under All.
-  await page.getByRole('link', { name: 'All', exact: true }).click();
+  await page.locator('.profiles-toolbar').getByRole('link', { name: 'All', exact: true }).click();
   await expect(page.getByRole('row', { name: new RegExp(name) })).toContainText('21 Glebe Point Rd');
 });
 

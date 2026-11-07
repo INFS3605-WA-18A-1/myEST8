@@ -8,7 +8,7 @@ describe('Properties', () => {
     await tomsTapTicket(w);
     const cookie = await w.signIn();
 
-    const res = await w.get('/properties', cookie);
+    const res = await w.get('/properties?filter=all', cookie);
     expect(res.status).toBe(200);
     const page = await res.text();
     expect(page).toContain('2 Properties managed by the Agency.');

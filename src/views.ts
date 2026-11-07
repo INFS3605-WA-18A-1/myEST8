@@ -275,11 +275,29 @@ export function createViews(ctx: Context) {
      * The header search's suggestions: Properties whose address or suburb matches, and
      * Tickets whose number or Summary/description matches, capped at eight and mixing
      * the two kinds so neither crowds the other out. Only the Agency's own records:
-     * this runs for a signed-in Property Manager and never leaves their Agency.
+     * this runs for a signed-in Property Manager and never leaves their Agency. With
+     * `kind` 'property' (the Profiles search) it is the Properties alone, up to eight.
      */
-    async searchSuggest(agencyId: number, rawQuery: string) {
+    async searchSuggest(agencyId: number, rawQuery: string, kind?: 'property') {
       const query = rawQuery.trim().toLowerCase();
       if (query.length < 2) return [];
+      if (kind === 'property') {
+        const properties = await profiles.properties(agencyId);
+        const rank = (property: (typeof properties)[number]) => {
+          const address = property.address.toLowerCase();
+          const suburb = property.suburb.toLowerCase();
+          if (address.startsWith(query)) return 0;
+          if (suburb.startsWith(query)) return 1;
+          if (address.includes(query) || suburb.includes(query)) return 2;
+          return -1;
+        };
+        return properties
+          .map((property) => ({ property, rank: rank(property) }))
+          .filter((hit) => hit.rank >= 0)
+          .sort((a, b) => a.rank - b.rank || a.property.address.localeCompare(b.property.address))
+          .slice(0, 8)
+          .map(({ property }) => ({ type: 'property' as const, label: property.address, sub: property.suburb, href: `/properties/${property.id}` }));
+      }
       const words = query.replace(/^#/, '');
       const number = /^\d+$/.test(words) ? Number(words) : null;
       const [properties, allTickets] = await Promise.all([profiles.properties(agencyId), tickets.list(agencyId, null)]);

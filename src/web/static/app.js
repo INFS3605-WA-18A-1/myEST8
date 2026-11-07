@@ -826,6 +826,28 @@ onContent((root) => {
   }
 });
 
+// === Profiles lists: the toolbar's search narrows the rows ===
+// On Properties, Tenants, Property Owners, Tradies and Building Managers the search hides the
+// rows that don't hold every word typed, and says so when none is left. Without this file
+// the box is hidden and every row shows.
+onContent((root) => {
+  for (const input of root.querySelectorAll('input[data-list-filter]')) {
+    const scope = input.closest('.profiles-card')?.querySelector('[data-list-scope]');
+    if (!scope) continue;
+    const none = scope.querySelector('[data-list-none]');
+    input.addEventListener('input', () => {
+      const words = input.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      let shown = 0;
+      for (const row of scope.querySelectorAll('tbody tr')) {
+        const text = row.textContent.toLowerCase();
+        row.hidden = !words.every((word) => text.includes(word));
+        if (!row.hidden) shown++;
+      }
+      if (none) none.hidden = shown > 0 || !words.length;
+    });
+  }
+});
+
 // === Profiles: a Property photo that will not load ===
 // A household's photo is found for its address. When the file is gone or the address finds
 // nothing, the broken picture is swapped for the quiet empty slot (a dashed box) rather
@@ -1128,7 +1150,8 @@ onContent((root) => {
 
 // === predictive header search ===
 // The Dispatch search box (input[data-search-suggest]) offers matching Properties
-// and Tickets as the Property Manager types, from /search/suggest. Arrow keys move,
+// and Tickets as the Property Manager types, from /search/suggest; the Profiles search
+// (data-search-suggest="property") offers Properties only. Arrow keys move,
 // Enter picks, Escape closes, a click picks. Without this file Enter still submits
 // the ordinary search form.
 (() => {
@@ -1226,7 +1249,8 @@ onContent((root) => {
         timer = window.setTimeout(async () => {
           let suggestions = [];
           try {
-            const response = await fetch(`/search/suggest?q=${encodeURIComponent(query)}`, { headers: { accept: 'application/json' } });
+            const kind = input.dataset.searchSuggest ? `&kind=${encodeURIComponent(input.dataset.searchSuggest)}` : '';
+            const response = await fetch(`/search/suggest?q=${encodeURIComponent(query)}${kind}`, { headers: { accept: 'application/json' } });
             const body = response.ok ? await response.json() : [];
             if (Array.isArray(body)) suggestions = body;
           } catch {

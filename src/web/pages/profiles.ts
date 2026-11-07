@@ -11,7 +11,8 @@ import type { PropertyManagerActions } from '../../app.ts';
 import type { WebEnv } from '../env.ts';
 import { shellInfo } from '../shell.ts';
 import { icon } from '../icons.ts';
-import { badge, emptyState, humanise, linkButton, page, segmented, urgencyBadge, type Html } from '../ui.ts';
+import { mineAll, profileChips, profilesCard } from '../profiles-frame.ts';
+import { badge, emptyState, humanise, linkButton, page, urgencyBadge, type Html } from '../ui.ts';
 
 type Overview = Awaited<ReturnType<PropertyManagerActions['profilesOverview']>>;
 type Household = Overview['households'][number];
@@ -50,29 +51,19 @@ export function profilePages() {
         active: 'profiles',
         shell: shellInfo(c),
         subtitle: summary(counts, filter, q),
-        controls: profileChips(counts, filter, q),
-        body: html`<div class="profiles-card">
-          <div class="profiles-toolbar">
-            ${search(filter, q)}
-            <div class="profiles-toolbar-end">
-              ${segmented(
-                [
-                  { label: 'Mine', href: hrefFor('mine', q), active: filter === 'mine' },
-                  { label: 'All', href: hrefFor('all', q), active: filter === 'all' },
-                ],
-                'Whose Properties',
-              )}
-              ${addMenu()}
-            </div>
-          </div>
-          <div class="profiles-board">
+        controls: profileChips('all', overview.counts, filter),
+        body: profilesCard({
+          search: search(filter, q),
+          end: html`${mineAll('/profiles', filter, { q })}${addMenu()}`,
+          flush: true,
+          body: html`<div class="profiles-board">
             <div class="profiles-main">${householdsBlock(households, q, filter, timeZone)}</div>
             <aside class="profiles-side" aria-label="Tradies and people without a Property">
               ${tradiesBlock(tradies, q, filter)}
               ${unlinkedBlock(unlinked)}
             </aside>
-          </div>
-        </div>`,
+          </div>`,
+        }),
       }),
     );
   });
@@ -90,15 +81,32 @@ function hrefFor(filter: Filter, q: string): string {
 
 /**
  * Search: one field with a magnifier, sent with Enter (a form with one text field submits
- * without a button). While a search is on, a Clear link puts the whole page back.
+ * without a button). As you type it offers matching Properties (static/app.js, from
+ * /search/suggest?kind=property); picking one opens it. While a search is on, a Clear link
+ * puts the whole page back.
  */
 function search(filter: Filter, q: string): Html {
   return html`<form method="get" action="/profiles" class="profiles-search" role="search">
     <label class="profiles-search-field">
       <span class="sr-only">Search Profiles</span>
       ${icon('magnifying-glass', { size: 'size-4' })}
-      <input type="search" name="q" value="${q}" placeholder="Address, name or Trade" autocomplete="off" />
+      <input
+        type="search"
+        name="q"
+        value="${q}"
+        placeholder="Address, name or Trade"
+        autocomplete="off"
+        role="combobox"
+        aria-autocomplete="list"
+        aria-expanded="false"
+        aria-controls="profiles-suggest-list"
+        data-search-suggest="property"
+      />
+      <ul id="profiles-suggest-list" class="combobox-list search-suggest-list" role="listbox" aria-label="Matching Properties" hidden></ul>
     </label>
+    <template id="search-suggest-icons">
+      <span class="search-suggest-icon" data-icon="property">${icon('house', { size: 'size-4' })}</span>
+    </template>
     ${filter === 'all' ? html`<input type="hidden" name="filter" value="all" />` : ''}
     ${q ? html`<a class="btn btn-ghost btn-sm" href="${hrefFor(filter, '')}">Clear</a>` : ''}
   </form>`;
@@ -115,19 +123,6 @@ function addMenu(): Html {
       ${ADD.map((item) => html`<a href="${item.href}">${item.label}</a>`)}
     </nav>
   </details>`;
-}
-
-/** The kinds of profile as chips beside the title: each opens its list; All is this page. */
-function profileChips(counts: Counts, filter: Filter, q: string): Html {
-  const chip = (label: string, href: string, n: number | null, active = false) => html`<a class="profiles-chip${active ? ' is-active' : ''}" href="${href}" ${active ? html`aria-current="page"` : ''}>${label}${n ? html` <span class="num">${n}</span>` : ''}</a>`;
-  return html`<nav class="profiles-chips" aria-label="Profile types">
-    ${chip('All', hrefFor(filter, q), null, true)}
-    ${chip('Properties', '/properties', counts.properties)}
-    ${chip('Tenants', filter === 'all' ? '/tenants?filter=all' : '/tenants', counts.tenants)}
-    ${chip('Property Owners', '/owners', counts.owners)}
-    ${chip('Tradies', '/tradies', counts.tradies)}
-    ${chip('Building Managers', '/building-managers', counts.buildingManagers)}
-  </nav>`;
 }
 
 function householdsBlock(households: Household[], q: string, filter: Filter, timeZone: string): Html {

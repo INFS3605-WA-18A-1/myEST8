@@ -16,6 +16,7 @@ import { cents, files, list as listOf, text, type FormValues } from '../forms.ts
 import { icon } from '../icons.ts';
 import type { WebEnv } from '../env.ts';
 import { shellInfo } from '../shell.ts';
+import { addButton, listFilter, mineAll, profileChips, profilesCard, type ProfileFilter } from '../profiles-frame.ts';
 import { streamOf } from '../stream.ts';
 import { alert, badge, button, contactLink, emptyState, entityLink, field, inlineEdit, flashFrom, formatAge, formatMoney, humanise, linkButton, page, postButton, rowLink, section, sectionHeader, statusBadge, table, ticketCell, urgencyBadge, withFlash, type Html } from '../ui.ts';
 import { chosenId, importPanel, nominatedFrom, postedLocation, propertyFields, propertyPlaceFields, saveDetails, tradiePicker, valueOf, type DetailsEdit, type Errors, type Values } from './onboarding-forms.ts';
@@ -41,19 +42,28 @@ export function propertyPages() {
     }
   });
 
+  // A Profiles page: Mine is the Properties this Property Manager looks after, All the Agency's.
   pages.get('/', async (c) => {
     const { actions, pm } = c.var;
-    const properties = await actions.propertyOverviews();
+    const filter: ProfileFilter = c.req.query('filter') === 'all' ? 'all' : 'mine';
+    const [everything, records, overview] = await Promise.all([actions.propertyOverviews(), actions.properties(), actions.profilesOverview({ filter })]);
+    const mine = new Set(records.filter((p) => p.propertyManagerId === pm.id).map((p) => p.id));
+    const properties = filter === 'mine' ? everything.filter((p) => mine.has(p.propertyId)) : everything;
     return c.html(
       page({
         title: 'Properties',
+        heading: 'Profiles',
         pm,
         active: 'profiles',
         flash: flashFrom(c.req.url),
         shell: shellInfo(c),
-        subtitle: `${properties.length} ${properties.length === 1 ? 'Property' : 'Properties'} managed by the Agency.`,
-        actions: linkButton('Add a Property', '/properties/new', { variant: 'primary', size: 'sm' }),
-        body: list(properties),
+        subtitle: `${properties.length} ${properties.length === 1 ? 'Property' : 'Properties'}${filter === 'mine' ? ' you look after' : ' managed by the Agency'}.`,
+        controls: profileChips('properties', overview.counts, filter),
+        body: profilesCard({
+          search: listFilter('Filter Properties', 'Address, Owner or Tenant'),
+          end: html`${mineAll('/properties', filter)}${addButton('Add a Property', '/properties/new')}`,
+          body: list(properties, filter),
+        }),
       }),
     );
   });
@@ -268,7 +278,8 @@ function photoBlock(p: PropertyView): Html {
   });
 }
 
-function list(properties: Overview[]): Html {
+function list(properties: Overview[], filter: ProfileFilter): Html {
+  if (!properties.length && filter === 'mine') return emptyState('You look after no Properties yet.', linkButton('Show all Properties', '/properties?filter=all'));
   if (!properties.length) return emptyState('No Properties yet. Add the first one to start taking reports.', linkButton('Add a Property', '/properties/new', { variant: 'primary' }));
   return table(
     ['Property', 'Open Tickets', 'Max Repair Cost', 'Property Owner', 'Tenants', 'Property Manager'],

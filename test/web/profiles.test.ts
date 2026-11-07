@@ -123,11 +123,11 @@ describe('Profiles', () => {
     expect(all).toContain('Bella Bui');
     expect(all).toContain('>2 Properties</a>, <a href="/tenants?filter=all">3 Tenants</a>, <a href="/owners">2 Property Owners</a>, <a href="/building-managers">1 Building Manager</a> and <a href="/tradies">6 Tradies</a>');
     expect(all).toContain('href="/tenants?filter=all"');
-    expect(all).toContain('href="/properties"');
-    expect(all).not.toContain('href="/properties?filter=all"');
-    expect(all).not.toContain('href="/owners?filter=all"');
-    expect(all).not.toContain('href="/building-managers?filter=all"');
-    expect(all).not.toContain('href="/tradies?filter=all"');
+    // The chips keep All, so every list opens on All too (Tradies, the Agency's either way, carry it on).
+    expect(all).toContain('href="/properties?filter=all"');
+    expect(all).toContain('href="/owners?filter=all"');
+    expect(all).toContain('href="/building-managers?filter=all"');
+    expect(all).toContain('href="/tradies?filter=all"');
   });
 
   test('lists former Tenants and people with no Property', async () => {
