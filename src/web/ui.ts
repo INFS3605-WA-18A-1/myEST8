@@ -170,6 +170,8 @@ function pageHeader(
     today?: string;
     pm?: { name: string } | null;
     back?: { label: string; href: string };
+    /** Where the page sits, in place of the title: the page then carries its own h1 (a profile's card). */
+    crumbs?: { label: string; href?: string }[];
     titleExtra?: Html;
     /** The h1's words when they differ from the document's title (the dashboard's "Hi, Alice"). */
     heading?: Html | string;
@@ -187,8 +189,9 @@ function pageHeader(
     ${o.back ? html`<a class="page-back" href="${o.back.href}">${icon('caret-left', { size: 'size-3.5' })}${o.back.label}</a>` : ''}
     <div class="page-header-lead">
       ${o.menu ? html`<button type="button" class="menu-button" data-drawer-toggle aria-controls="rail" aria-expanded="false" aria-label="Menu">${ICON.menu}</button>` : ''}
-      <h1 class="page-title${o.titleNowrap ? ' is-nowrap' : ''}">${o.heading ?? title}</h1>
-      ${o.titleExtra ?? ''}
+      ${o.crumbs
+        ? html`<nav class="page-crumbs" aria-label="Breadcrumb"><ol>${o.crumbs.map((c, i) => html`<li>${c.href ? html`<a href="${c.href}">${c.label}</a>` : html`<span aria-current="page">${c.label}</span>`}${i < o.crumbs!.length - 1 ? icon('caret-right', { size: 'size-3' }) : ''}</li>`)}</ol></nav>`
+        : html`<h1 class="page-title${o.titleNowrap ? ' is-nowrap' : ''}">${o.heading ?? title}</h1>${o.titleExtra ?? ''}`}
     </div>
     ${controls ? html`<div class="page-header-controls">${o.controls ?? ''}${o.today ? html`<time class="page-header-date">${icon('calendar-blank', { size: 'size-4' })}${o.today}</time>` : ''}</div>` : ''}
     <div class="page-header-end">
@@ -224,6 +227,8 @@ export function page(o: {
   controls?: Html;
   /** A link back to the list this page came from, above the title. */
   back?: { label: string; href: string };
+  /** Where the page sits, in place of the title: the page then carries its own h1. */
+  crumbs?: { label: string; href?: string }[];
   /** Beside the title, such as the Ticket's Urgency. */
   titleExtra?: Html;
   /** The h1's words when they differ from the document's title (the dashboard's "Hi, Alice"). */
@@ -257,6 +262,7 @@ export function page(o: {
                 today: o.shell?.today,
                 pm: o.pm,
                 back: o.back,
+                crumbs: o.crumbs,
                 titleExtra: o.titleExtra,
                 heading: o.heading,
                 titleNowrap: o.titleNowrap,

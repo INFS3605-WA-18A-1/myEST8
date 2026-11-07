@@ -5869,42 +5869,607 @@
       color: var(--muted);
     }
 
-    /* A Tradie's profile (pages/tradie.ts): the Trades and contact details beside the
-       four ratings (myEST8, Property Managers', Tenants', Google) from 1024px. */
-    .tradie-head {
-      display: grid;
-      gap: 16px;
-    }
-    .tradie-head > .inline-edit-form {
-      min-width: 0;
-    }
-    .tradie-facts {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr));
-      gap: 12px 24px;
-      margin: 0;
-    }
-    .tradie-facts > div {
+    /* A Tradie's profile (pages/tradie.ts): one soft card. The business, who to call and the
+       myEST8 rating across the top; under it the tabs (Previous Quotes, Jobs, Ratings) beside a
+       column with the contact details, the Trades and the service area from 1024px. */
+    .page-crumbs ol {
       display: flex;
-      flex-direction: column;
-      gap: 4px;
-      min-width: 0;
-    }
-    .tradie-facts dt {
-      font-size: 12px;
-      font-weight: 500;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px 6px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      font-size: 14px;
       color: var(--muted);
     }
-    .tradie-facts dd {
-      margin: 0;
-      font-size: 14px;
+    .page-crumbs li {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .page-crumbs a {
+      color: var(--muted);
+      text-decoration: none;
+    }
+    .page-crumbs a:hover {
+      color: var(--ink);
+      text-decoration: underline;
+    }
+    .page-crumbs [aria-current='page'] {
+      color: var(--ink);
+      font-weight: 600;
+    }
+    .tradie-card {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      min-width: 0;
+      padding: 20px;
+      border-radius: 28px;
+      background: var(--surface);
+      box-shadow: var(--shadow-soft);
+    }
+    .tradie-hero {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px 16px;
       min-width: 0;
     }
-    @media (min-width: 1024px) {
-      .tradie-head {
-        grid-template-columns: minmax(14rem, 1fr) minmax(0, 2.4fr);
+    .tradie-back,
+    .tradie-step {
+      display: inline-grid;
+      place-items: center;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: var(--page);
+      color: var(--ink);
+      text-decoration: none;
+    }
+    .tradie-back:hover,
+    .tradie-step:hover {
+      background: #e8e2d6;
+    }
+    .tradie-hero-avatar {
+      display: inline-grid;
+      place-items: center;
+      flex: none;
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      background: var(--action);
+      color: var(--surface);
+      font-family: var(--font-head);
+      font-size: 26px;
+      font-weight: 700;
+    }
+    .tradie-hero-text {
+      flex: 1 1 14rem;
+      min-width: 0;
+    }
+    .tradie-name {
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 32px;
+      font-weight: 700;
+      line-height: 1.15;
+      overflow-wrap: anywhere;
+    }
+    .tradie-hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px 8px;
+      margin: 6px 0 0;
+      font-size: 14px;
+      color: var(--muted);
+    }
+    .tradie-hero-meta strong {
+      color: var(--ink);
+    }
+    .tradie-onlist {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 10px;
+      border-radius: 999px;
+      background: #e3f0e6;
+      color: #1d5a31;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .tradie-hero-rating {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .tradie-hero-rating svg {
+      color: #c98a00;
+    }
+    .tradie-hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin-left: auto;
+    }
+    .tradie-steps {
+      display: inline-flex;
+      gap: 2px;
+    }
+    .tradie-step {
+      width: 40px;
+      height: 36px;
+      border-radius: 10px;
+    }
+    .tradie-step.is-off {
+      opacity: 0.35;
+    }
+    .tradie-board {
+      display: grid;
+      gap: 20px;
+      min-width: 0;
+    }
+    @media (min-width: 64rem) {
+      .tradie-board {
+        grid-template-columns: minmax(0, 1fr) 21rem;
         align-items: start;
       }
+    }
+    .tradie-main {
+      min-width: 0;
+    }
+    .tradie-tablist {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 20px;
+      border-bottom: 1px solid var(--line);
+    }
+    .tradie-tab {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 2px;
+      margin-bottom: -1px;
+      border: 0;
+      border-bottom: 2px solid transparent;
+      background: transparent;
+      color: var(--muted);
+      font: inherit;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .tradie-tab:hover {
+      color: var(--ink);
+    }
+    .tradie-tab[aria-selected='true'] {
+      color: var(--action);
+      border-bottom-color: var(--action);
+    }
+    .tradie-tab-count {
+      min-width: 22px;
+      padding: 0 6px;
+      border-radius: 999px;
+      background: var(--page);
+      color: var(--ink);
+      font-size: 12px;
+      line-height: 20px;
+      text-align: center;
+    }
+    .tradie-tab[aria-selected='true'] .tradie-tab-count {
+      background: var(--info-bg);
+      color: var(--action);
+    }
+    @media (pointer: coarse), (max-width: 40rem) {
+      .tradie-tab {
+        min-height: 44px;
+      }
+    }
+    .tradie-pane {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      padding-top: 16px;
+      min-width: 0;
+    }
+    .tradie-pane[hidden] {
+      display: none;
+    }
+    html:not(.js) .tradie-pane + .tradie-pane {
+      margin-top: 8px;
+      border-top: 1px solid var(--line);
+    }
+    .tradie-pane-title {
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 18px;
+      font-weight: 600;
+    }
+    html.js .tradie-pane-title {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+    .tradie-insight {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px 20px;
+      padding: 16px 20px;
+      border-radius: 16px;
+      background: var(--page);
+    }
+    .tradie-insight-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex: none;
+      margin: 0;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: var(--surface);
+      color: var(--action);
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .tradie-insight .profile-read {
+      flex: 1 1 16rem;
+    }
+    .tradie-insight .profile-read-sentence {
+      font-size: 18px;
+    }
+    .tradie-filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .tradie-search {
+      position: relative;
+      flex: 1 1 12rem;
+      min-width: 0;
+    }
+    .tradie-search > svg {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      translate: 0 -50%;
+      color: var(--muted);
+      pointer-events: none;
+    }
+    .tradie-search .input {
+      width: 100%;
+      padding-left: 36px;
+      border-radius: 12px;
+    }
+    .tradie-select .select {
+      border-radius: 12px;
+    }
+    .tradie-rating {
+      display: grid;
+      gap: 16px 32px;
+      align-items: center;
+      padding: 4px 0;
+    }
+    @media (min-width: 40rem) {
+      .tradie-rating {
+        grid-template-columns: minmax(11rem, 14rem) minmax(0, 1fr);
+      }
+    }
+    .tradie-rating-label,
+    .tradie-rating-hint {
+      margin: 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .tradie-rating-score {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 2px 0;
+    }
+    .tradie-rating-score strong {
+      font-family: var(--font-head);
+      font-size: 40px;
+      font-weight: 700;
+      line-height: 1;
+    }
+    .tradie-stars {
+      display: inline-flex;
+      color: #c98a00;
+    }
+    .tradie-bars {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .tradie-bar-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 4px 12px;
+      font-size: 13px;
+    }
+    .tradie-bar-label {
+      font-weight: 500;
+    }
+    .tradie-bar-value {
+      color: var(--muted);
+      text-align: right;
+    }
+    .tradie-bar-value strong {
+      color: var(--ink);
+    }
+    .tradie-bar {
+      grid-column: 1 / -1;
+      appearance: none;
+      width: 100%;
+      height: 8px;
+      border: 0;
+      border-radius: 999px;
+      background: var(--line);
+      overflow: hidden;
+      color: var(--ink);
+    }
+    .tradie-bar::-webkit-progress-bar {
+      background: var(--line);
+    }
+    .tradie-bar::-webkit-progress-value {
+      background: var(--ink);
+      border-radius: 999px;
+    }
+    .tradie-bar::-moz-progress-bar {
+      background: var(--ink);
+      border-radius: 999px;
+    }
+    .is-google .tradie-bar::-webkit-progress-value {
+      background: #8d97a3;
+    }
+    .is-google .tradie-bar::-moz-progress-bar {
+      background: #8d97a3;
+    }
+    .tradie-quotes {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .tradie-quote {
+      display: grid;
+      gap: 6px;
+      padding: 16px 0;
+      border-top: 1px solid var(--line);
+      min-width: 0;
+    }
+    .tradie-quote[hidden] {
+      display: none;
+    }
+    .tradie-quote-top {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px 12px;
+    }
+    .tradie-quote-title {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 4px 8px;
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 17px;
+      font-weight: 600;
+    }
+    .tradie-quote-title a {
+      color: var(--ink);
+      text-decoration: none;
+    }
+    .tradie-quote-title a:hover {
+      text-decoration: underline;
+    }
+    .tradie-quote-trade {
+      font-family: var(--font-body);
+      font-size: 13px;
+      font-weight: 400;
+      color: var(--muted);
+    }
+    .tradie-quote-trade::before {
+      content: '· ';
+    }
+    .tradie-quote-property {
+      margin: 0;
+      padding-left: 10px;
+      border-left: 2px solid var(--hivis);
+      font-size: 13px;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+    .tradie-quote-text {
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 3;
+      overflow: hidden;
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .tradie-quote-foot {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 16px;
+      margin-top: 4px;
+    }
+    .tradie-quote-when {
+      flex: 1 1 10rem;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .tradie-quote-price {
+      font-family: var(--font-head);
+      font-size: 22px;
+      font-weight: 600;
+    }
+    .tradie-quotes-none {
+      margin: 12px 0 0;
+      color: var(--muted);
+    }
+    .tradie-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    .tradie-side {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      min-width: 0;
+    }
+    .tradie-side-card {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      min-width: 0;
+      padding: 16px 18px 18px;
+      border: 1px solid var(--line);
+      border-top: 3px solid var(--ink);
+      border-radius: 16px;
+      background: var(--surface);
+    }
+    .tradie-side-card > .inline-edit-form,
+    .tradie-side-card .inline-edit-fields {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      min-width: 0;
+    }
+    .tradie-side-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .tradie-side-head .inline-edit-tools {
+      width: auto;
+    }
+    .tradie-side-title {
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 18px;
+      font-weight: 600;
+    }
+    .tradie-side-sub {
+      margin: 0 0 8px;
+      font-family: var(--font-head);
+      font-size: 15px;
+      font-weight: 600;
+    }
+    .tradie-side-block {
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
+    }
+    .tradie-facts {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin: 0;
+    }
+    .tradie-fact {
+      display: grid;
+      grid-template-columns: 7.5rem minmax(0, 1fr);
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+    }
+    .tradie-facts.is-stacked .tradie-fact {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 2px;
+    }
+    .tradie-fact dt {
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .tradie-fact dd {
+      margin: 0;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+    .tradie-trades {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .tradie-map {
+      position: relative;
+      display: block;
+      height: 110px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow: hidden;
+      color: inherit;
+      text-decoration: none;
+    }
+    a.tradie-map:hover {
+      border-color: var(--action);
+    }
+    .tradie-map-art {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    .tradie-map-pin {
+      position: absolute;
+      left: 50%;
+      top: 44%;
+      translate: -50% -50%;
+      display: grid;
+      place-items: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--ink);
+      color: #fff;
+      box-shadow: 0 2px 6px rgb(0 0 0 / 0.25);
+    }
+    .tradie-map.is-off .tradie-map-pin {
+      display: none;
+    }
+    .tradie-map-note {
+      position: absolute;
+      left: 50%;
+      bottom: 10px;
+      translate: -50% 0;
+      padding: 2px 10px;
+      border-radius: 999px;
+      background: #fff;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .tradie-map-note.is-warn {
+      top: 50%;
+      bottom: auto;
+      translate: -50% -50%;
+      background: #fbeed2;
+      color: #7a4b00;
+    }
+    .tradie-map-link {
+      margin: 0;
+      font-size: 14px;
+    }
+    .tradie-address {
+      display: grid;
+      gap: 10px;
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
     }
 
     /* The Tradies directory's Trade filter (pages/tradie.ts): one link per Trade with how

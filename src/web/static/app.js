@@ -1999,3 +1999,31 @@ document.addEventListener('keydown', (event) => {
   document.addEventListener('pointerup', end);
   document.addEventListener('pointercancel', end);
 }
+
+// === Tradie profile: filter the Quotes ===
+// Search, Trade and Outcome narrow the Quotes already in the page. Without this file the
+// filters are not shown and every Quote is listed.
+onContent((root) => {
+  for (const list of root.querySelectorAll('[data-quotes]')) {
+    const scope = list.closest('.tradie-pane') ?? root;
+    const search = scope.querySelector('[data-quote-search]');
+    const trade = scope.querySelector('[data-quote-trade]');
+    const outcome = scope.querySelector('[data-quote-outcome]');
+    if (!search && !trade && !outcome) continue;
+    const apply = () => {
+      const words = (search?.value ?? '').trim().toLowerCase();
+      let shown = 0;
+      for (const quote of list.querySelectorAll('[data-quote]')) {
+        const fits =
+          (!words || (quote.getAttribute('data-text') ?? '').includes(words)) &&
+          (!trade?.value || quote.getAttribute('data-trade') === trade.value) &&
+          (!outcome?.value || quote.getAttribute('data-outcome') === outcome.value);
+        quote.hidden = !fits;
+        if (fits) shown += 1;
+      }
+      const none = list.querySelector('[data-quotes-none]');
+      if (none) none.hidden = shown > 0;
+    };
+    for (const control of [search, trade, outcome]) control?.addEventListener(control === search ? 'input' : 'change', apply);
+  }
+});
