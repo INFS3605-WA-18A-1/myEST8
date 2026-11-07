@@ -2,19 +2,15 @@ import { expect, test, type Page } from '@playwright/test';
 import { signUp, unique } from './support/actions.ts';
 import { freePort, startDemo, uniqueSchema } from './support/server.ts';
 
-const LATER = ['Messenger', 'Telegram', 'WeChat', 'LINE'];
 const HINT = 'Tenants message first; replies are free for 24 hours, then myEST8 uses SMS or email.';
 const SPOKEN = '+1 555 123 4567';
 
-/** The four placeholders: disabled buttons that say Coming later, and not links. */
+/** Messenger, Telegram, WeChat and LINE: one muted line naming them, with no control at all. */
 async function expectLaterChannels(page: Page) {
   const later = page.locator('#later-channels');
   await expect(later.getByRole('link')).toHaveCount(0);
-  for (const name of LATER) {
-    const control = later.getByRole('button', { name });
-    await expect(control).toBeDisabled();
-    await expect(control).toContainText('Coming later');
-  }
+  await expect(later.getByRole('button')).toHaveCount(0);
+  await expect(later).toContainText("Messenger, Telegram, WeChat and LINE can't be connected yet.");
 }
 
 test('onboarding offers WhatsApp disabled, and the later channels are not links', async ({ page }) => {
@@ -50,7 +46,6 @@ test('Connect WhatsApp gives the Agency the server number, and Disconnect takes 
     await page.getByRole('textbox', { name: 'Your name' }).fill('Sam Sun');
     await page.getByRole('textbox', { name: 'Work email' }).fill(`sam-${id}@sunrise.example`);
     await page.getByRole('textbox', { name: 'Password', exact: true }).fill('sunrise-2026');
-    await page.getByRole('textbox', { name: 'Confirm password' }).fill('sunrise-2026');
     await page.getByRole('textbox', { name: 'Agency name' }).fill(`Sunrise Realty ${id}`);
     await page.getByRole('button', { name: 'Create account' }).click();
     await expect(page).toHaveURL(/\/welcome$/);

@@ -37,15 +37,15 @@ export function landingRoutes(app: App, sessions: Sessions, o: { demo: boolean }
 const SIGN_UP = 'Create your Agency’s account';
 
 /** One of the landing page's photographs, served from /assets/landing-<name>. */
-const photo = (name: string, alt: string, width: number, height: number, o: { eager?: boolean; className?: string } = {}) =>
+const photo = (name: string, alt: string, width: number, height: number, o: { eager?: boolean; immediate?: boolean; className?: string } = {}) =>
   html`<img
     src="/assets/landing-${name}"
     alt="${alt}"
     width="${width}"
     height="${height}"
     class="${o.className ?? ''}"
-    ${o.eager ? html`fetchpriority="high"` : html`loading="lazy"`}
-    decoding="async"
+    ${o.eager ? html`fetchpriority="high"` : o.immediate ? '' : html`loading="lazy"`}
+    decoding="${o.immediate ? 'sync' : 'async'}"
   />`;
 
 /** The landing page: the hero, the demo sign-ins (demo only), the live example, the repair, the chores, the way in, the credits. */
@@ -61,8 +61,9 @@ function landingPage(o: { demo: boolean }): Html {
           <div class="lp-wrap lp-bar-inner">
             <a href="/" class="logotype lp-home" aria-label="myEST8 home">${logo()}</a>
             <nav class="lp-bar-links" aria-label="Page">
-              ${linkButton('How it works', '#example', { variant: 'ghost', size: 'sm' })} ${linkButton('One repair', '#repair', { variant: 'ghost', size: 'sm' })}
-              ${linkButton('What it handles', '#handled', { variant: 'ghost', size: 'sm' })}
+              ${linkButton('Their words, your request', '#example', { variant: 'ghost', size: 'sm' })}
+              ${linkButton('One leak, report to done', '#repair', { variant: 'ghost', size: 'sm' })}
+              ${linkButton('What myEST8 handles', '#handled', { variant: 'ghost', size: 'sm' })}
             </nav>
             <nav class="lp-bar-actions" aria-label="Account">
               ${linkButton('Sign in', '/login', { variant: 'ghost', size: 'sm' })}
@@ -81,8 +82,9 @@ function landingPage(o: { demo: boolean }): Html {
 /**
  * "Narrow talk, wide headline": the headline wide on the right, two lines, the
  * second carrying the Wattle decision stripe a decision row has on the dashboard.
- * The narrow left column says what myEST8 is and holds the ways in. Under the
- * headline, a Newtown terrace street, with the count of decisions on its corner.
+ * The narrow left column says what myEST8 is, holds the ways in, and ends on the
+ * count of decisions a repair asks of the Property Manager. Under the headline,
+ * a Newtown terrace street.
  */
 function hero(): Html {
   return html`<section class="lp-hero" aria-labelledby="lp-title">
@@ -97,10 +99,10 @@ function hero(): Html {
         </p>
         <div class="lp-actions">${linkButton(SIGN_UP, '/signup', { variant: 'primary', size: 'lg' })} ${linkButton('Sign in', '/login', { size: 'lg' })}</div>
         <p class="lp-note">Tenants, Tradies and Property Owners never need an account. They reply by text or email.</p>
+        <p class="lp-figure-block"><span class="lp-figure-num num">2</span><span>decisions on a typical repair. myEST8 chases the rest.</span></p>
       </div>
       <figure class="lp-hero-figure">
         <div class="lp-hero-photo">${photo('newtown-terraces.jpg', 'A row of rendered terrace houses with iron lace balconies in Newtown, Sydney', 1339, 1200, { eager: true })}</div>
-        <p class="lp-figure-block"><span class="lp-figure-num num">2</span><span>decisions on a typical repair. myEST8 chases the rest.</span></p>
         <figcaption class="lp-caption">Terrace houses in Newtown, Sydney.</figcaption>
       </figure>
     </div>
@@ -286,8 +288,9 @@ const EXAMPLES: Example[] = [
  */
 function example(): Html {
   return html`<section class="lp-example" id="example" aria-labelledby="example-title">
+    <h2 id="example-title" class="lp-split-title"><span>Their words,</span> <span>your request</span></h2>
     <div class="lp-example-in">
-      <fieldset class="lp-choices" data-rise>
+      <fieldset class="lp-choices">
         <legend class="lp-choices-legend">What the Tenant texts</legend>
         ${EXAMPLES.map(
           (e, i) => html`<label class="lp-choice">
@@ -312,10 +315,13 @@ function example(): Html {
       )}
     </div>
     <div class="lp-example-out">
-      ${EXAMPLES.map((e) => html`<div class="lp-result" data-example="${e.id}">${e.result}</div>`)}
-      <p class="lp-caption">The marked words are where myEST8 found the Trade and the Urgency.</p>
+      <p class="lp-example-label">What myEST8 makes of it</p>
+      <div class="lp-example-body">
+        ${EXAMPLES.map((e) => html`<div class="lp-result" data-example="${e.id}">${e.result}</div>`)}
+        <p class="lp-caption">The marked words are where myEST8 found the Trade and the Urgency.</p>
+      </div>
+      <p class="lp-example-close">One Confirm, and myEST8 chases the Quotes.</p>
     </div>
-    <h2 id="example-title" class="lp-split-title"><span>Their words,</span> <span>your request</span></h2>
   </section>`;
 }
 
@@ -364,28 +370,32 @@ const STRETCHES: Stretch[] = [
   },
 ];
 
-/** The two calls the Property Manager made, the Wattle seams between the stretches. */
-const DECISIONS_MADE = ['You confirm', 'You choose the Quote'];
-
 /**
  * "Stages as one bar": the repair's progress bar, enlarged until it spans the page.
- * The bar is a picture (data-ui, hidden from screen readers, which read the
- * ordered list under it); the list holds every stage with its time.
+ * Its three stretches are exactly as wide as the minutes they took (88, 374 and
+ * 2531), so the two days fill most of it and the hour and a half is a sliver. The
+ * bar holds no text: the key above it gives each colour its duration, the caption
+ * names the Wattle seams, and the ordered list below holds every stage.
+ * The bar is a picture (data-ui, hidden from screen readers, which read the key
+ * and the ordered list).
  */
 function repair(): Html {
   return html`<section class="lp-repair lp-wrap" id="repair" aria-labelledby="repair-title">
     <h2 id="repair-title" class="lp-h2" data-rise>One leak, report to done</h2>
     <p class="lp-repair-lead" data-rise>Reported on Monday at 7:42 am, fixed on Wednesday morning. The Property Manager made two decisions.</p>
+    <ul class="lp-bar-key" role="list" data-rise>
+      ${STRETCHES.map((s) => html`<li><span class="lp-bar-chip ${s.tone}" aria-hidden="true"></span>${s.length}</li>`)}
+    </ul>
     <div class="lp-bar-chart" data-ui data-rise aria-hidden="true">
       ${STRETCHES.map(
-        (s, i) => html`${i > 0 ? html`<span class="lp-seam"><span>${DECISIONS_MADE[i - 1]}</span></span>` : ''}
-          <span class="lp-segment ${s.tone}" style="--grow: ${Math.max(s.minutes, 520)}"><span>${s.length}</span></span>`,
+        (s, i) => html`${i > 0 ? html`<span class="lp-seam"></span>` : ''}
+          <span class="lp-segment ${s.tone}" style="--grow: ${s.minutes}"></span>`,
       )}
     </div>
+    <p class="lp-bar-caption" data-rise>To scale. The Wattle seams are your two decisions: you confirm the Request, then choose the Quote.</p>
     <ol class="lp-stretches" role="list">
       ${STRETCHES.map(
-        (s) => html`<li class="lp-stretch" style="--grow: ${Math.max(s.minutes, 520)}" data-rise>
-          <p class="sr-only">${s.length}.</p>
+        (s) => html`<li class="lp-stretch" data-rise>
           <p class="lp-stretch-summary">${s.summary}</p>
           <ol class="lp-stages">
             ${s.stages.map((st) => html`<li><span class="lp-when num">${st.when}</span><span>${st.what}</span></li>`)}
@@ -405,7 +415,7 @@ const DECISIONS = [
     text: 'Check the summary, Trade and Urgency myEST8 filled in, edit them if you need to, and confirm. It becomes a Ticket.',
   },
   {
-    title: 'Book a Site Inspection when a Tradie needs one',
+    title: 'Sometimes: book a Site Inspection',
     text: 'Each Tradie gives an Estimate and says if they need to see the issue before a Firm Quote. Book their visit, or go ahead on an Estimate for a cheap routine Job.',
   },
   {
@@ -431,20 +441,30 @@ const PEOPLE = [
 ];
 
 /**
- * "Paragraph with picture words": one statement with three photographs set in it
- * after the nouns they show. Under it, the calls that wait for the Property
+ * The statement's three photographs as one clean strip under it: the Tenant's tap,
+ * a Tradie under a sink, the Owner's terrace. Decorative (the sentence beside them
+ * carries the meaning), so each has an empty alt.
+ */
+function statementPhotos(): Html {
+  const shot = (name: string, w: number, h: number, crop: string) =>
+    html`<span class="lp-statement-photo ${crop}">${photo(name, '', w, h, { immediate: true })}</span>`;
+  return html`<div class="lp-statement-photos" data-rise>
+    ${shot('dripping-tap.jpg', 1200, 798, 'is-tap')} ${shot('plumber-under-sink.jpg', 1400, 1084, 'is-plumber')}
+    ${shot('ultimo-terrace.jpg', 900, 1304, 'is-terrace')}
+  </div>`;
+}
+
+/**
+ * "A statement, then the work": one statement in display type with its three
+ * photographs in a strip under it. Under them, the calls that wait for the Property
  * Manager (each with the Wattle stripe), what myEST8 does, and who never signs in.
  */
 function handled(): Html {
-  const slot = (name: string, alt: string, w: number, h: number) => html`<span class="lp-slot">${photo(name, alt, w, h)}</span>`;
   return html`<section class="lp-handled" id="handled" aria-labelledby="handled-title">
     <div class="lp-wrap">
       <h2 id="handled-title" class="sr-only">What myEST8 handles</h2>
-      <p class="lp-statement" data-rise>
-        myEST8 texts the Tenant ${slot('dripping-tap.jpg', 'A dripping tap', 1200, 798)}, chases Tradies
-        ${slot('plumber-under-sink.jpg', 'A plumber working under a kitchen sink', 1400, 1084)} for Quotes, and asks the Owner
-        ${slot('ultimo-terrace.jpg', 'A terrace house in Ultimo, Sydney', 900, 1304)} before going over budget.
-      </p>
+      <p class="lp-statement" data-rise>myEST8 texts the Tenant, chases Tradies for Quotes, and asks the Owner before going over budget.</p>
+      ${statementPhotos()}
       <div class="lp-handled-grid">
         <div data-rise>
           <h3 class="lp-h3">Waiting for your decision</h3>
@@ -485,9 +505,9 @@ function handled(): Html {
 function closing(): Html {
   return html`<section class="lp-close" aria-labelledby="lp-close-title">
     <div class="lp-strip">
-      ${photo('king-street.jpg', 'Shops and terraces along King Street, Newtown', 1000, 1333)}
-      ${photo('wattle-street.jpg', 'Painted iron lace on a terrace balcony in Wattle Street, Ultimo', 1920, 1083)}
-      ${photo('plumber-wrenches.jpg', 'A plumber tightening a fitting with two wrenches', 1096, 894)}
+      ${photo('king-street.jpg', 'Shops and terraces along King Street, Newtown', 1000, 1333, { immediate: true })}
+      ${photo('wattle-street.jpg', 'Painted iron lace on a terrace balcony in Wattle Street, Ultimo', 1920, 1083, { immediate: true })}
+      ${photo('plumber-wrenches.jpg', 'A plumber tightening a fitting with two wrenches', 1096, 894, { immediate: true })}
     </div>
     <div class="lp-close-field">
       <div class="lp-wrap lp-close-inner">
@@ -519,13 +539,19 @@ const CREDITS = [
   { title: 'Plumber uses two wrenches to tighten a fitting', by: 'Tomwsulcer', licence: 'CC0' },
 ];
 
-/** "Name first": the wordmark at full width, what myEST8 is, then the photo credits. */
+/** "Name first": the wordmark at full width, what myEST8 is and the terms, then the photo credits. */
 function footer(): Html {
   return html`<footer class="lp-footer">
     <div class="lp-wrap">
       <p class="lp-footer-name" aria-hidden="true">${logo()}</p>
       <div class="lp-footer-row">
-        <p class="lp-footer-ways">${SIGNED_OUT_FOOTER}</p>
+        <div class="lp-footer-ways">
+          <p>${SIGNED_OUT_FOOTER}</p>
+          <nav class="lp-footer-links" aria-label="Terms and privacy">
+            ${linkButton('Terms of use', '/terms', { variant: 'ghost', size: 'sm' })}
+            ${linkButton('Privacy Policy', '/privacy', { variant: 'ghost', size: 'sm' })}
+          </nav>
+        </div>
         <div class="lp-credits">
           <h2 class="lp-credits-title">Photographs</h2>
           <p>

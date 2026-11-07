@@ -2,25 +2,11 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { signIn } from './support/actions.ts';
 
 // Open Profiles from the side menu, add a Tenant, and check a phone doesn't scroll sideways.
-// The Property photo is decorative (an empty alt), so the layout checks find the img itself.
+// The Property photo is decorative (an empty alt), so the layout checks find its slot.
 
 const overflow = (page: Page) => page.evaluate<number>('document.documentElement.scrollWidth - document.documentElement.clientWidth');
 
 const rect = async (locator: Locator) => (await locator.boundingBox())!;
-
-/** Where the photo's fade finishes and the picture is fully visible, in px from its left edge. */
-async function fadeWidth(card: Locator): Promise<number> {
-  return card.evaluate((el) => {
-    const view = el.ownerDocument.defaultView;
-    const probe = el.ownerDocument.createElement('div');
-    probe.style.position = 'absolute';
-    probe.style.width = (view?.getComputedStyle(el).getPropertyValue('--household-photo-fade') ?? '0').trim();
-    el.appendChild(probe);
-    const width = probe.getBoundingClientRect().width;
-    probe.remove();
-    return width;
-  });
-}
 
 test('Profiles opens from the side menu, and Add profile leads to a new Tenant', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -40,7 +26,7 @@ test('Profiles opens from the side menu, and Add profile leads to a new Tenant',
   expect(await overflow(page)).toBeLessThanOrEqual(0);
 });
 
-test('a Property photo sits flush on the household card, clear of the Ticket text, and a phone does not scroll sideways', async ({ page }) => {
+test('a Property photo is a strip on the right of the household card, the words clear of all but its fade, and a phone does not scroll sideways', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 900 });
   await signIn(page);
   await page.goto('/profiles?filter=all');
@@ -48,29 +34,34 @@ test('a Property photo sits flush on the household card, clear of the Ticket tex
   const cards = page.locator('article.household');
   await expect(cards.first()).toBeVisible();
   const count = await cards.count();
-  let photos = 0;
+  let slots = 0;
   for (let i = 0; i < count; i++) {
     const card = cards.nth(i);
-    const photo = card.locator('img.household-photo');
-    if ((await photo.count()) === 0) continue;
-    photos += 1;
     await card.scrollIntoViewIfNeeded();
-    await expect(photo).toBeVisible();
+    const slot = card.locator('.household-photo-slot');
+    // A Property with a photo shows it; one without shows a link to add one. Either way the slot is there.
+    await expect(slot).toBeVisible();
+    slots += 1;
     const cardBox = await rect(card);
-    const photoBox = await rect(photo);
-    expect(Math.abs(photoBox.y - cardBox.y), 'top').toBeLessThanOrEqual(1);
-    expect(Math.abs(photoBox.y + photoBox.height - (cardBox.y + cardBox.height)), 'bottom').toBeLessThanOrEqual(1);
-    expect(Math.abs(photoBox.x + photoBox.width - (cardBox.x + cardBox.width)), 'right').toBeLessThanOrEqual(1);
-
-    const unfadedLeft = photoBox.x + (await fadeWidth(card));
-    const list = card.getByRole('list', { name: 'Open Tickets' });
-    if ((await list.count()) > 0) expect((await rect(list)).x + (await rect(list)).width, 'open Tickets').toBeLessThanOrEqual(unfadedLeft + 1);
-    const calm = card.getByText('No open Tickets', { exact: true });
-    if ((await calm.count()) > 0) expect((await rect(calm)).x + (await rect(calm)).width, 'no open Tickets').toBeLessThanOrEqual(unfadedLeft + 1);
-    const more = card.getByRole('link', { name: /more open Ticket/ });
-    if ((await more.count()) > 0) expect((await rect(more)).x + (await rect(more)).width, 'more open Tickets').toBeLessThanOrEqual(unfadedLeft + 1);
+    const slotBox = await rect(slot);
+    // A photo's words may run 1rem into the start of its fade; an empty slot keeps clear.
+    const keep = (await slot.evaluate((el) => el.classList.contains('is-empty'))) ? 0 : 16;
+    expect(slotBox.x + slotBox.width, 'inside the card on the right').toBeLessThanOrEqual(cardBox.x + cardBox.width + 1);
+    expect(slotBox.y, 'inside the card at the top').toBeGreaterThanOrEqual(cardBox.y);
+    for (const part of ['.household-owner', '.household-who', '.household-status', '.household-foot']) {
+      const box = await rect(card.locator(part));
+      expect(box.x, `${part} stays in the card`).toBeGreaterThanOrEqual(cardBox.x);
+      expect(box.x + box.width, `${part} clear of the photo`).toBeLessThanOrEqual(slotBox.x + keep + 1);
+    }
   }
-  expect(photos).toBeGreaterThan(0);
+  expect(slots).toBeGreaterThan(0);
+
+  // Ticket history opens the open Tickets, each a link to its Ticket.
+  const toggle = page.locator('.household-history-toggle').first();
+  if ((await toggle.count()) > 0) {
+    await toggle.click();
+    await expect(page.locator('.household-history-panel:not([hidden]) a.household-ticket').first()).toBeVisible();
+  }
 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(cards.first()).toBeVisible();

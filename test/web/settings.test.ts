@@ -62,7 +62,7 @@ describe('Settings', () => {
 
     const channels = visible(await (await w.get('/settings?tab=channels', cookie)).text());
     expect(channels).toContain('Connect WhatsApp');
-    expect(channels).toContain('Coming later');
+    expect(channels).toContain("Messenger, Telegram, WeChat and LINE can't be connected yet.");
     expect(channels).toContain('Not tested');
     expect(channels).not.toContain('Manage channels');
     expect(channels).not.toContain('Connect a channel');

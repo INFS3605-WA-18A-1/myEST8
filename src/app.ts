@@ -223,7 +223,7 @@ export function createApp(
         file: (fileId: number) => files.getInAgency(agencyId, fileId),
         dashboard: ({ filter = 'mine' }: { filter?: 'mine' | 'all' } = {}) => views.dashboard(agencyId, propertyManagerId, filter),
         /** The header search's Properties and Tickets matching what was typed, capped at eight. */
-        searchSuggest: (query: string) => views.searchSuggest(agencyId, query),
+        searchSuggest: (query: string, kind?: 'property') => views.searchSuggest(agencyId, query, kind),
         /** The open inbox as conversations, each with its full message history. */
         inboxThreads: () => views.inboxThreads(agencyId),
         /** The Maintenance Requests waiting for review: the Property Manager's own (the default) or all of the Agency's, optionally by Urgency, Trade and Property. */

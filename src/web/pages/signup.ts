@@ -49,9 +49,6 @@ export function signupRoutes(app: App, sessions: Sessions) {
 
     const timeZone = text(form, 'timeZone');
     if (!TIME_ZONES.some((z) => z.value === timeZone)) return refused({ timeZone: 'Choose a time zone' });
-    if (password && password !== rawText(form, 'confirmPassword')) {
-      return refused({ confirmPassword: "The passwords don't match. Type the same password twice." });
-    }
 
     let propertyManagerId: number;
     try {
@@ -104,7 +101,7 @@ function signUpPage(o: { values?: Values; errors?: Errors; flash?: Flash; shareL
               error: errors.email,
             })}
           </div>
-          <div class="au-pair">
+          <div class="au-pair is-single">
             ${field({
               label: 'Password',
               name: 'password',
@@ -113,8 +110,8 @@ function signUpPage(o: { values?: Values; errors?: Errors; flash?: Flash; shareL
               autocomplete: 'new-password',
               hint: `At least ${MIN_PASSWORD_LENGTH} characters.`,
               error: errors.password,
+              suffix: html`<button type="button" class="password-toggle" data-reveal="field-password" aria-label="Show password">Show</button>`,
             })}
-            ${field({ label: 'Confirm password', name: 'confirmPassword', type: 'password', required: true, autocomplete: 'new-password', error: errors.confirmPassword })}
           </div>
         </fieldset>
         <fieldset class="au-fieldset">
@@ -140,23 +137,33 @@ function signUpPage(o: { values?: Values; errors?: Errors; flash?: Flash; shareL
             })}
           </div>
         </fieldset>
-        ${button('Create account', { size: 'lg', block: true })}
+        <div class="au-submit">
+          ${button('Create account', { size: 'lg', block: true })}
+          <p class="au-consent">By creating an account you agree to the Terms of use and Privacy Policy.</p>
+          <div class="au-consent-links">
+            ${linkButton('Terms of use', '/terms', { variant: 'ghost', size: 'sm' })}
+            ${linkButton('Privacy Policy', '/privacy', { variant: 'ghost', size: 'sm' })}
+          </div>
+        </div>
       </form>
-      ${otherWay({ text: 'Already have an account?', button: linkButton('Sign in', '/login', { variant: 'secondary', size: 'lg', block: true }) })}
+      ${otherWay({ text: 'Already have an account?', button: linkButton('Sign in', '/login', { variant: 'secondary', size: 'sm' }) })}
       <aside class="au-share" aria-label="Someone else setting up the Agency">
         <p class="au-other-text">One Property Manager creates the account, then adds the rest of the Agency from the setup guide. Is someone else doing that?</p>
+        <p class="au-other-text">Send them the sign-up link: the button opens a panel to copy it, or send it by email or text.</p>
         ${shareButton({
           title: 'Set up myEST8 for our Agency',
           text: 'Here’s the sign-up page for myEST8. One of us creates the Agency’s account, then adds the rest of us as Property Managers.',
           url: o.shareLink,
-          label: 'Send this page to them',
+          label: 'Send them the sign-up link',
           align: 'start',
         })}
       </aside>`,
     steps: [
-      { text: 'Your account and your Agency are created, and you are signed in.' },
-      { text: 'The setup guide adds your team, connects SMS and email, then adds your Tradies and your first Property.' },
-      { text: 'Tenants can then text in a repair, and it reaches you as a Maintenance Request to confirm.', request: true },
+      { text: 'Create your account and your Agency. myEST8 signs you in.' },
+      { text: 'Connect the Agency’s email (required, about 2 minutes) so myEST8 can read what Tenants send.' },
+      { text: 'Add your team, your Tradies and your first Property.' },
+      { text: 'The first Tenant text arrives as a Maintenance Request to confirm.', request: true },
     ],
+    stepsNote: 'The whole setup guide takes about 10 minutes.',
   });
 }

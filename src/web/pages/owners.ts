@@ -10,6 +10,7 @@ import { ActionError } from '../../shared.ts';
 import type { WebEnv } from '../env.ts';
 import { formAction } from '../forms.ts';
 import { shellInfo } from '../shell.ts';
+import { addButton, listFilter, mineAll, profileChips, profilesCard, type ProfileFilter } from '../profiles-frame.ts';
 import {
   alert,
   badge,
@@ -111,21 +112,32 @@ export function buildingManagerPages() {
 function listPages(kind: Kind) {
   const pages = new Hono<WebEnv>();
 
+  // A Profiles page: Mine is the people named on this Property Manager's Properties and those on
+  // none yet (as Profiles lists them, so someone just added is always there); All is the Agency's.
   pages.get('/', async (c) => {
     const { actions, pm } = c.var;
     const flash = flashFrom(c.req.url);
-    const [people, properties, channels] = await Promise.all([actions.people(kind.role), actions.properties(), actions.channels()]);
+    const filter: ProfileFilter = c.req.query('filter') === 'all' ? 'all' : 'mine';
+    const [everyone, properties, channels, overview] = await Promise.all([actions.people(kind.role), actions.properties(), actions.channels(), actions.profilesOverview({ filter })]);
+    const mine = properties.filter((p) => p.propertyManagerId === pm.id);
+    const people = filter === 'mine' ? everyone.filter((person) => kind.propertiesOf(mine, person.id).length || !kind.propertiesOf(properties, person.id).length) : everyone;
     const sms = channels.some((ch) => ch.type === 'sms');
+    const tab = kind.role === 'owner' ? 'owners' : 'building-managers';
     return c.html(
       page({
         title: kind.title,
+        heading: 'Profiles',
         pm,
         active: kind.nav,
         flash,
         shell: shellInfo(c),
-        subtitle: people.length ? `${people.length} ${people.length === 1 ? kind.singular : kind.title}, by name.` : undefined,
-        actions: linkButton(`Add a ${kind.singular}`, `${kind.path}/new`, { variant: 'primary', size: 'sm' }),
-        body: list(kind, people, properties, sms),
+        subtitle: people.length ? `${people.length} ${people.length === 1 ? kind.singular : kind.title}${filter === 'mine' ? ' on your Properties' : ''}, by name.` : undefined,
+        controls: profileChips(tab, overview.counts, filter),
+        body: profilesCard({
+          search: listFilter(`Filter ${kind.title}`, 'Name, mobile, email or address'),
+          end: html`${mineAll(kind.path, filter)}${addButton(`Add a ${kind.singular}`, `${kind.path}/new`)}`,
+          body: list(kind, people, properties, sms),
+        }),
       }),
     );
   });

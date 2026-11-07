@@ -157,35 +157,53 @@ function userMenu(name: string): Html {
 /**
  * The page header, the first row of the content column: the menu button (drawer only)
  * and the page title (the page's only <h1>) on the left; the page's controls, today's
- * date and the user menu on the right of the same row. On phones the row wraps, the
- * title first and the controls under it.
+ * date and the user menu on the right of the same row; then the subtitle and its buttons
+ * under the title. On phones the title, subtitle and actions share the title's grid
+ * column, so they start at the same edge past the menu button, and the date joins the
+ * control row.
  */
 function pageHeader(
   title: string,
-  o: { menu: boolean; controls?: Html; today?: string; pm?: { name: string } | null; back?: { label: string; href: string }; titleExtra?: Html },
+  o: {
+    menu: boolean;
+    controls?: Html;
+    today?: string;
+    pm?: { name: string } | null;
+    back?: { label: string; href: string };
+    /** Where the page sits, in place of the title: the page then carries its own h1 (a profile's card). */
+    crumbs?: { label: string; href?: string }[];
+    titleExtra?: Html;
+    /** The h1's words when they differ from the document's title (the dashboard's "Hi, Alice"). */
+    heading?: Html | string;
+    /** A short title ("Ticket #1") that must not wrap. */
+    titleNowrap?: boolean;
+    /** A line under the title (and its buttons). */
+    subtitle?: Html | string;
+    /** Buttons beside the subtitle. */
+    actions?: Html;
+  },
 ): Html {
-  return html`<header class="page-header${o.back ? ' has-back' : ''}">
+  const meta = o.subtitle || o.actions;
+  const controls = o.controls || o.today;
+  return html`<header class="page-header${o.back ? ' has-back' : ''}${meta ? ' has-meta' : ''}">
     ${o.back ? html`<a class="page-back" href="${o.back.href}">${icon('caret-left', { size: 'size-3.5' })}${o.back.label}</a>` : ''}
     <div class="page-header-lead">
       ${o.menu ? html`<button type="button" class="menu-button" data-drawer-toggle aria-controls="rail" aria-expanded="false" aria-label="Menu">${ICON.menu}</button>` : ''}
-      <h1 class="page-title">${title}</h1>
-      ${o.titleExtra ?? ''}
+      ${o.crumbs
+        ? html`<nav class="page-crumbs" aria-label="Breadcrumb"><ol>${o.crumbs.map((c, i) => html`<li>${c.href ? html`<a href="${c.href}">${c.label}</a>` : html`<span aria-current="page">${c.label}</span>`}${i < o.crumbs!.length - 1 ? icon('caret-right', { size: 'size-3' }) : ''}</li>`)}</ol></nav>`
+        : html`<h1 class="page-title${o.titleNowrap ? ' is-nowrap' : ''}">${o.heading ?? title}</h1>${o.titleExtra ?? ''}`}
     </div>
-    ${o.controls ? html`<div class="page-header-controls">${o.controls}</div>` : ''}
+    ${controls ? html`<div class="page-header-controls">${o.controls ?? ''}${o.today ? html`<time class="page-header-date">${icon('calendar-blank', { size: 'size-4' })}${o.today}</time>` : ''}</div>` : ''}
     <div class="page-header-end">
-      ${o.today ? html`<time class="page-header-date">${icon('calendar-blank', { size: 'size-4' })}${o.today}</time>` : ''}
       ${o.pm ? html`<a class="page-header-bell" href="/#alerts" aria-label="Alerts" title="Alerts">${icon('bell', { size: 'size-5' })}</a>${userMenu(o.pm.name)}` : ''}
     </div>
+    ${meta
+      ? html`<div class="page-header-meta">
+          ${o.subtitle ? html`<p class="page-subtitle">${o.subtitle}</p>` : ''}
+          ${o.actions ? html`<div class="page-actions">${o.actions}</div>` : ''}
+        </div>`
+      : ''}
   </header>`;
-}
-
-/** The subtitle and buttons under the page header (nothing when a page has neither). */
-function contentHead(subtitle: Html | string | undefined, actions: Html | undefined): Html | string {
-  if (!subtitle && !actions) return '';
-  return html`<div class="page-head">
-    ${subtitle ? html`<p class="page-subtitle">${subtitle}</p>` : html`<span></span>`}
-    ${actions ? html`<div class="page-actions">${actions}</div>` : ''}
-  </div>`;
 }
 
 /**
@@ -209,8 +227,14 @@ export function page(o: {
   controls?: Html;
   /** A link back to the list this page came from, above the title. */
   back?: { label: string; href: string };
+  /** Where the page sits, in place of the title: the page then carries its own h1. */
+  crumbs?: { label: string; href?: string }[];
   /** Beside the title, such as the Ticket's Urgency. */
   titleExtra?: Html;
+  /** The h1's words when they differ from the document's title (the dashboard's "Hi, Alice"). */
+  heading?: Html | string;
+  /** A short title ("Ticket #1") that must not wrap. */
+  titleNowrap?: boolean;
   /** The Agency's name for the rail and today's date for the page header. */
   shell?: ShellInfo;
   /** Counts shown beside rail links. */
@@ -232,9 +256,20 @@ export function page(o: {
           ${withRail ? rail(o.active, o.shell?.agencyName, o.navCounts ?? o.shell?.counts ?? {}, o.demo ?? o.shell?.demo ?? false, o.shell?.setupHref) : ''}
           <div class="app-main">
             <main id="main" class="app-content">
-              ${pageHeader(o.title, { menu: withRail, controls: o.controls, today: o.shell?.today, pm: o.pm, back: o.back, titleExtra: o.titleExtra })}
+              ${pageHeader(o.title, {
+                menu: withRail,
+                controls: o.controls,
+                today: o.shell?.today,
+                pm: o.pm,
+                back: o.back,
+                crumbs: o.crumbs,
+                titleExtra: o.titleExtra,
+                heading: o.heading,
+                titleNowrap: o.titleNowrap,
+                subtitle: o.subtitle,
+                actions: o.actions,
+              })}
               ${o.flash ? flashMessage(o.flash) : ''}
-              ${contentHead(o.subtitle, o.actions)}
               <div class="app-body-stack">${o.body}</div>
             </main>
           </div>
@@ -377,9 +412,9 @@ export function button(
   return html`<button type="${o.type ?? 'submit'}" class="${buttonClass(o.variant ?? 'primary', o.size, o.block)}" ${o.name ? html`name="${o.name}" value="${o.value ?? ''}"` : ''} ${o.disabled ? 'disabled' : ''} ${o.formaction ? html`formaction="${o.formaction}"` : ''}>${o.icon ? icon(o.icon, { size: 'size-4' }) : ''}${label}</button>`;
 }
 
-/** A link styled as a button. */
-export function linkButton(label: string, href: string, o: { variant?: Variant; size?: ButtonSize; block?: boolean } = {}): Html {
-  return html`<a href="${href}" class="${buttonClass(o.variant ?? 'secondary', o.size, o.block)}">${label}</a>`;
+/** A link styled as a button. `title` adds a tooltip (a phone number behind "Call Oscar"). */
+export function linkButton(label: string, href: string, o: { variant?: Variant; size?: ButtonSize; block?: boolean; title?: string } = {}): Html {
+  return html`<a href="${href}" class="${buttonClass(o.variant ?? 'secondary', o.size, o.block)}"${o.title ? html` title="${o.title}"` : ''}>${label}</a>`;
 }
 
 /** A one-click action: a small form that POSTs `fields` to `action`. `confirm` asks first (via app.js). */
@@ -862,6 +897,8 @@ export function field(o: {
   bare?: boolean;
   /** Extra classes on the control itself. */
   className?: string;
+  /** A control inside the field box, after the input (the password show/hide toggle). */
+  suffix?: Html;
 }): Html {
   const id = o.id ?? `field-${o.name}`;
   const type = o.type ?? 'text';
@@ -894,10 +931,12 @@ export function field(o: {
         : type === 'file'
           ? html`<input ${common} type="file" class="file-input w-full${invalid.replace('input', 'file-input')}" ${o.accept ? html`accept="${o.accept}"` : ''} />`
           : html`<input ${common} type="${type}" class="input w-full${invalid}" value="${o.value ?? ''}" placeholder="${o.placeholder ?? ''}" ${o.suggest ? 'data-address-suggest' : ''} ${o.autocomplete || o.suggest ? html`autocomplete="${o.suggest ? 'off' : o.autocomplete}"` : ''} ${o.step ? html`step="${o.step}"` : ''} ${o.min !== undefined ? html`min="${o.min}"` : ''} ${o.max !== undefined ? html`max="${o.max}"` : ''} />`;
-  if (o.bare) return html`<div class="fieldset">${control} ${error} ${hint}</div>`;
+  // A control in the field's box (the password toggle): the box is the positioning context.
+  const shown = o.suffix ? html`<div class="field-control">${control}<span class="field-suffix">${o.suffix}</span></div>` : control;
+  if (o.bare) return html`<div class="fieldset">${shown} ${error} ${hint}</div>`;
   return html`<div class="fieldset">
     <label for="${id}" class="field-label">${o.label}</label>
-    ${control} ${error} ${hint}
+    ${shown} ${error} ${hint}
   </div>`;
 }
 
@@ -988,12 +1027,12 @@ const BUBBLE_TONE: Record<Tone, string> = { neutral: '', info: 'chat-bubble-info
 /**
  * One message in a conversation (daisyUI chat, https://daisyui.com/components/chat/).
  * Line breaks in `text` are kept; when it is a string, links in it can be
- * followed. Without a tone, `end` bubbles are Harbour with white text and `start`
- * bubbles sit on Paper. Links in a bubble take its text colour, underlined, so
- * they read on every fill.
+ * followed. Without a tone, `end` bubbles are on the info tint with Night text:
+ * Harbour is for acting, and a message is not a button. `start` bubbles sit on Paper.
+ * Links in a bubble take its text colour, underlined, so they read on every fill.
  */
 export function chatBubble(o: { side: 'start' | 'end'; header: Html | string; text: Html | string; footer?: Html | string; tone?: Tone }): Html {
-  const tone = o.tone ? BUBBLE_TONE[o.tone] : o.side === 'end' ? 'chat-bubble-primary' : '';
+  const tone = o.tone ? BUBBLE_TONE[o.tone] : o.side === 'end' ? 'chat-bubble-own' : '';
   return html`<div class="chat ${o.side === 'end' ? 'chat-end' : 'chat-start'}">
     <div class="chat-header flex-wrap items-center">${o.header}</div>
     <div class="chat-bubble ${tone} whitespace-pre-wrap">${typeof o.text === 'string' ? linkified(o.text) : o.text}</div>

@@ -139,7 +139,12 @@ describe('the Ticket view', () => {
     expect(text).toContain('stages done');
     expect(text).toContain('Add another Job');
     expect(text).toContain('People on this Ticket');
-    expect(text).toContain('Tom Tran, Tenant');
+    // Each person is named in full, with their role, and linked to their profile; the Tenant can be texted from here.
+    expect(text).toContain('Tom Tran');
+    expect(text).toContain('Tenant');
+    expect(html).toMatch(/<a class="ticket-person-link" href="\/tenants\/\d+">/);
+    expect(html).toContain(`href="sms:${TOM}"`);
+    expect(html).toContain('aria-label="Text Tom Tran"');
     expect(html).toContain('class="ticket-cost is-max"');
     expect(html).toContain(`href="/properties/`);
     expect(text).toContain('Progress');
@@ -168,7 +173,7 @@ describe('the Ticket view', () => {
     expect(text).toContain('myEST8 4.0 (1) from 1 rating Google 4.8 (120) from 120 reviews Trade only');
     expect(text).toContain('Reported by the Tenant');
     expect(text).toContain('Confirmed as a Ticket');
-    expect(text).toContain(`From ${TOM}`);
+    expect(text).toContain('From Tom Tran (Tenant)');
   });
 
   test('an unknown Ticket is not found', async () => {
@@ -292,10 +297,10 @@ describe('Quotes', () => {
     expect(refused.error).toBe('Choose a Firm Quote once the Job has at least two, or record why you are going ahead with one');
 
     const approved = await submit(choose, { reason: 'Only plumber free this week' });
-    expect(approved.ok).toBe("Firm Quote from Pete's Plumbing chosen and approved");
+    expect(approved.ok).toBe("Firm Quote from Pete's Plumbing chosen");
     expect(approved.page.text).toContain('Approved');
     expect(approved.page.text).toContain('Gone ahead with one Quote: Only plumber free this week');
-    expect(approved.page.text).toContain("Firm Quote from Pete's Plumbing chosen and approved");
+    expect(approved.page.text).toContain("Firm Quote from Pete's Plumbing chosen");
     expect(approved.page.text).toContain('Repair Cost $190.00');
   });
 
@@ -455,7 +460,14 @@ describe('Work Orders', () => {
     const rated = await submit(formPosting(done.html, /\/rate$/), { score: 4 });
 
     expect(rated.ok).toBe("Pete's Plumbing rated 4 out of 5");
-    expect(rated.page.text).toContain("Pete's Plumbing was rated 4 out of 5.");
+    // The job is done: the header says so, and there is no Next or Add another Job left.
+    expect(done.text).toContain('Done · ready to close');
+    expect(done.text).not.toContain('Add another Job');
+    expect(nextStepOf(done.html)).toBeNull();
+    // The Job's tiles carry both ratings, so the page doesn't repeat the words.
+    expect(rated.page.text).toContain('Your rating');
+    expect(rated.page.text).toContain('4 out of 5');
+    expect(rated.page.text).not.toContain("You rated Pete's Plumbing");
   });
 });
 

@@ -39,7 +39,7 @@ import {
   type Flash,
   type Html,
 } from '../ui.ts';
-import { channelName, laterChannelList, LATER_CHANNELS_NOTE, WORKING_CHANNELS } from './channel-options.ts';
+import { channelName, laterChannelList, WORKING_CHANNELS } from './channel-options.ts';
 import { importPages, settingsImportPath } from './import.ts';
 import {
   CHANNELS,
@@ -302,10 +302,9 @@ async function channelsTab(actions: PropertyManagerActions, timeZone: string, co
       return section({ id: 'sms', title: channelName('sms'), actions: connectors.smsPhone || sms ? undefined : channelChip(current), body });
     }),
   );
-  // Quieter than the working channels: a muted heading and disabled tiles, not another section card.
+  // Quieter than the working channels: a muted heading and one line, not another section card.
   const later = html`<div id="later-channels" class="channel-later-group">
     <h2 class="channel-later-title">More channels</h2>
-    <p class="text-sm text-muted">${LATER_CHANNELS_NOTE}</p>
     ${laterChannelList()}
   </div>`;
   return html`${channelsSection}${panels}${later}`;

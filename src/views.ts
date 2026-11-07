@@ -99,15 +99,20 @@ export function createViews(ctx: Context) {
     return { propertyAddress: property.address, propertyManager: (await profiles.propertyManager(property.propertyManagerId)).name };
   };
 
-  const issueDetails = async (issue: Issue) => ({
-    description: issue.description,
-    answers: issue.answers,
-    photos: (await tickets.photos(issue.id)).map(({ photoId, fileId, metadata, reasons }) => ({ photoId, fileId, metadata, reasons })),
-    imageMatch: issue.imageMatch,
-    noPhotos: issue.noPhotos,
-    tenantId: issue.tenantId,
-    tenantName: (await profiles.person(issue.tenantId)).name,
-  });
+  const issueDetails = async (issue: Issue) => {
+    const tenant = await profiles.person(issue.tenantId);
+    return {
+      description: issue.description,
+      answers: issue.answers,
+      photos: (await tickets.photos(issue.id)).map(({ photoId, fileId, metadata, reasons }) => ({ photoId, fileId, metadata, reasons })),
+      imageMatch: issue.imageMatch,
+      noPhotos: issue.noPhotos,
+      tenantId: issue.tenantId,
+      tenantName: tenant.name,
+      tenantMobile: tenant.mobile,
+      tenantEmail: tenant.email,
+    };
+  };
 
   /**
    * Tickets as a list shows them, in the order given. Their jobs, issues (with unread
@@ -270,11 +275,29 @@ export function createViews(ctx: Context) {
      * The header search's suggestions: Properties whose address or suburb matches, and
      * Tickets whose number or Summary/description matches, capped at eight and mixing
      * the two kinds so neither crowds the other out. Only the Agency's own records:
-     * this runs for a signed-in Property Manager and never leaves their Agency.
+     * this runs for a signed-in Property Manager and never leaves their Agency. With
+     * `kind` 'property' (the Profiles search) it is the Properties alone, up to eight.
      */
-    async searchSuggest(agencyId: number, rawQuery: string) {
+    async searchSuggest(agencyId: number, rawQuery: string, kind?: 'property') {
       const query = rawQuery.trim().toLowerCase();
       if (query.length < 2) return [];
+      if (kind === 'property') {
+        const properties = await profiles.properties(agencyId);
+        const rank = (property: (typeof properties)[number]) => {
+          const address = property.address.toLowerCase();
+          const suburb = property.suburb.toLowerCase();
+          if (address.startsWith(query)) return 0;
+          if (suburb.startsWith(query)) return 1;
+          if (address.includes(query) || suburb.includes(query)) return 2;
+          return -1;
+        };
+        return properties
+          .map((property) => ({ property, rank: rank(property) }))
+          .filter((hit) => hit.rank >= 0)
+          .sort((a, b) => a.rank - b.rank || a.property.address.localeCompare(b.property.address))
+          .slice(0, 8)
+          .map(({ property }) => ({ type: 'property' as const, label: property.address, sub: property.suburb, href: `/properties/${property.id}` }));
+      }
       const words = query.replace(/^#/, '');
       const number = /^\d+$/.test(words) ? Number(words) : null;
       const [properties, allTickets] = await Promise.all([profiles.properties(agencyId), tickets.list(agencyId, null)]);
@@ -631,6 +654,7 @@ export function createViews(ctx: Context) {
             address: property.address,
             suburb: property.suburb,
             location: property.location,
+            photoUrl: propertyPhotoUrl(property.id, property.photoFileId),
             openTickets: openTickets.map(({ ticketId, description, urgency, reportedAt, jobs }) => ({ ticketId, description, urgency, reportedAt, jobs })),
             worstUrgency,
           };
@@ -688,6 +712,7 @@ export function createViews(ctx: Context) {
               return {
                 ...q,
                 ticketId: ticket.id,
+                propertyId: ticket.propertyId,
                 propertyAddress: (await profiles.property(ticket.propertyId)).address,
                 description: (await tickets.issue(ticket.issueId)).description,
                 outcome,
@@ -943,7 +968,7 @@ export function createViews(ctx: Context) {
             // What the open Tickets are about, High first, so the household shows what is wrong there.
             tickets: propertyTickets.map((ticket) => {
               const issue = openIssues.get(ticket.issueId);
-              return { id: ticket.id, title: issue ? (issue.summary ?? issue.description) : `Ticket #${ticket.id}`, urgency: ticket.urgency };
+              return { id: ticket.id, title: issue ? (issue.summary ?? issue.description) : `Ticket #${ticket.id}`, urgency: ticket.urgency, reportedAt: ticket.reportedAt };
             }),
             owner: {
               id: property.ownerId,
@@ -1041,7 +1066,7 @@ export function createViews(ctx: Context) {
         summaryBy: issue.summaryBy,
         propertyId: property.id,
         maxRepairCostCents: property.maxRepairCostCents,
-        owner: { personId: owner.id, name: owner.name },
+        owner: { personId: owner.id, name: owner.name, mobile: owner.mobile, email: owner.email },
         buildingManager: buildingManager ? { personId: buildingManager.id, name: buildingManager.name } : null,
         frequentIssues: await profiles.frequentIssues(property.id),
         repairCostCents: await modules.quotes.repairCost(ticket.id),

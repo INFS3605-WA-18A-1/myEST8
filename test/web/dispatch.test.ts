@@ -210,18 +210,25 @@ describe('Dispatch: the table of Properties', () => {
     const html = await dispatch(w, cookie);
 
     const properties = sectionText(html, 'properties');
-    const [table, quiet] = properties.split('<details');
-    for (const header of ['Address', 'Suburb', 'Open Tickets', 'Worst urgency']) expect(table).toContain(`>${header}</th>`);
-    expect(table).toContain(`href="#panel-property-${w.ids.kingSt}"`);
-    expect(table).not.toContain(`href="#panel-property-${w.ids.oceanAve}"`);
-    // The link to the Ticket is its issue; the number sits beside it.
-    expect(table).toMatch(new RegExp(`<a href="/tickets/${ticketId}"[^>]*>The kitchen tap is dripping</a>`));
-    expect(visible(table)).toContain(`#${ticketId}`);
-    expect(visible(table)).not.toContain(`Ticket ${ticketId}`);
-    expect(visible(table)).toContain('Newtown');
-    expect(visible(table)).toContain('Routine');
+    const [list, quiet] = properties.split('<details');
+    expect(list).toContain('aria-label="Properties with open Tickets, the most urgent first"');
+    expect(list).toContain(`href="#panel-property-${w.ids.kingSt}"`);
+    expect(list).not.toContain(`href="#panel-property-${w.ids.oceanAve}"`);
+    // Each Ticket is one row, a link to it: its number, its words and its Urgency. With one
+    // Ticket the Urgency is the card's chip, so the row says it only to a screen reader.
+    expect(list).toMatch(new RegExp(`<a class="dispatch-tix-line is-routine" href="/tickets/${ticketId}" title="The kitchen tap is dripping"><span class="dispatch-tix-num num">#${ticketId}</span><span class="dispatch-tix-text">The kitchen tap is dripping</span>`));
+    expect(visible(list)).toContain(`#${ticketId} The kitchen tap is dripping (Routine)`);
+    expect(visible(list)).not.toContain(`Ticket ${ticketId}`);
+    expect(visible(list)).toContain('Newtown');
+    // The card says its worst Urgency in words, and the address is its heading.
+    expect(list).toContain('data-urgency="routine"');
+    expect(list).toContain('urgency-badge urgency-routine');
+    expect(visible(list)).toContain('worst urgency Routine');
+    expect(list).toMatch(/<h3 class="dispatch-card-address"/);
+    expect(list).toContain('data-tix-more');
+    expect(visible(list)).toContain('Show full messages');
     // Ocean Ave has nothing open: it is under a disclosure, still able to pick its panel.
-    expect(visible(quiet!)).toContain('Show the 1 Property with no open Tickets');
+    expect(visible(quiet!)).toContain('1 Property with no open Tickets');
     expect(quiet).toContain(`href="#panel-property-${w.ids.oceanAve}"`);
   });
 
@@ -234,8 +241,8 @@ describe('Dispatch: the table of Properties', () => {
 
     const table = sectionText(html, 'properties');
     const row = table.slice(table.indexOf(UNKNOWN_ADDRESS));
-    expect(visible(row.slice(0, row.indexOf('</tr>')))).toContain('Address not found');
-    expect(visible(table.slice(table.indexOf(KING_ST), table.indexOf('</tr>', table.indexOf(KING_ST))))).not.toContain('Address not found');
+    expect(visible(row.slice(0, row.indexOf('</article>')))).toContain('Address not found');
+    expect(visible(table.slice(table.indexOf(KING_ST), table.indexOf('</article>', table.indexOf(KING_ST))))).not.toContain('Address not found');
     expect(pinData(html).properties.map((p) => p.id)).not.toContain(id);
   });
 
@@ -643,7 +650,7 @@ describe('Dispatch: what the page needs to run', () => {
     expect(html).not.toMatch(/\son[a-z]+="/);
     expect(html).toContain('id="dispatch-map"');
     expect(visible(html)).toContain('The map needs JavaScript');
-    expect(html).toContain('<table');
+    expect(html).toContain('id="properties"');
   });
 
   test('needs a signed-in Property Manager', async () => {

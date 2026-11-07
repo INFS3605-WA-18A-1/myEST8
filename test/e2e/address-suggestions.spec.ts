@@ -27,7 +27,7 @@ test('typing a demo address offers it, and choosing it by keyboard places the Pr
 
   await page.goto('/dispatch');
   // A Property with no open Tickets is folded away; the map still pins it.
-  await page.getByText(/^Show the \d+ Properties with no open Tickets$/).click();
+  await page.getByText(/^\d+ Properties with no open Tickets$/).click();
   await expect(page.getByRole('link', { name: '3 Parramatta Rd' })).toBeVisible();
   const data = JSON.parse((await page.locator('#dispatch-data').textContent()) ?? '{}') as {
     properties: { address: string; lat: number; lng: number }[];

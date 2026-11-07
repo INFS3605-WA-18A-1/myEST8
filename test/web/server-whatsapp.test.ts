@@ -8,7 +8,6 @@ type Web = Awaited<ReturnType<typeof webWorld>>;
 const NUMBER = '+15551234567';
 const SPOKEN = '+1 555 123 4567';
 const HINT = 'Tenants message first; replies are free for 24 hours, then myEST8 uses SMS or email.';
-const LATER = ['messenger', 'telegram', 'wechat', 'line'] as const;
 
 async function page(w: Web, path: string, cookie: string) {
   const res = await w.get(path, cookie);
@@ -42,20 +41,13 @@ function expectConnectOffer(html: string) {
   expect(connect).toEqual({ label: 'Connect WhatsApp', disabled: false });
 }
 
-/** Messenger, Telegram, WeChat and LINE: disabled buttons, "Coming later", and no link. */
+/** Messenger, Telegram, WeChat and LINE: one muted line naming them, with no control at all. */
 function expectLaterChannels(html: string) {
-  const list = html.match(/<ul class="channel-later-list"[\s\S]*?<\/ul>/)?.[0] ?? '';
-  expect(list, 'later channel list').not.toBe('');
-  expect(list).not.toContain('<a');
-  const buttons = buttonsOn(list);
-  expect(buttons.map((button) => button.label)).toEqual([
-    'Connect Messenger Coming later',
-    'Connect Telegram Coming later',
-    'Connect WeChat Coming later',
-    'Connect LINE Coming later',
-  ]);
-  expect(buttons.every((button) => button.disabled)).toBe(true);
-  for (const key of LATER) expect(list).toContain(`data-channel-later="${key}"`);
+  const line = html.match(/<p class="channel-later-note"[^>]*>[\s\S]*?<\/p>/)?.[0] ?? '';
+  expect(line, 'later channel line').not.toBe('');
+  expect(visible(line).trim()).toBe("Messenger, Telegram, WeChat and LINE can't be connected yet.");
+  expect(line).not.toContain('<a');
+  expect(buttonsOn(line)).toEqual([]);
 }
 
 describe("the server's WhatsApp number", () => {

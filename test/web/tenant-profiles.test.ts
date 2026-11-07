@@ -116,7 +116,7 @@ describe('links to Tenant profiles', () => {
     const w = await webWorld();
     const cookie = await w.signIn();
 
-    const list = await (await w.get('/properties', cookie)).text();
+    const list = await (await w.get('/properties?filter=all', cookie)).text();
     expect(list).toMatch(new RegExp(`<a class="entity-link entity-link-tenant" href="/tenants/${w.ids.tom}">.*<span>Tom Tran</span></a>`));
     expect(list).toContain(`href="/tenants/${w.ids.bella}"`);
 
