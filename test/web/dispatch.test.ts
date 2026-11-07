@@ -211,15 +211,20 @@ describe('Dispatch: the table of Properties', () => {
 
     const properties = sectionText(html, 'properties');
     const [table, quiet] = properties.split('<details');
-    for (const header of ['Address', 'Suburb', 'Open Tickets', 'Worst urgency']) expect(table).toContain(`>${header}</th>`);
+    for (const header of ['Address', 'Suburb', 'Open Tickets']) expect(table).toContain(`>${header}</th>`);
     expect(table).toContain(`href="#panel-property-${w.ids.kingSt}"`);
     expect(table).not.toContain(`href="#panel-property-${w.ids.oceanAve}"`);
-    // The link to the Ticket is its issue; the number sits beside it.
-    expect(table).toMatch(new RegExp(`<a href="/tickets/${ticketId}"[^>]*>The kitchen tap is dripping</a>`));
-    expect(visible(table)).toContain(`#${ticketId}`);
+    // Each Ticket is one line, a link to it: its number, its words and (for a screen reader) its Urgency, edged in that Urgency.
+    expect(table).toMatch(new RegExp(`<a class="dispatch-tix-line is-routine" href="/tickets/${ticketId}" title="The kitchen tap is dripping"><span class="dispatch-tix-num num">#${ticketId}</span><span class="dispatch-tix-text">The kitchen tap is dripping</span>`));
+    expect(visible(table)).toContain(`#${ticketId} The kitchen tap is dripping (Routine)`);
     expect(visible(table)).not.toContain(`Ticket ${ticketId}`);
     expect(visible(table)).toContain('Newtown');
-    expect(visible(table)).toContain('Routine');
+    // The house is in the worst Urgency's colour (the row says it), and the address is under the photo's place.
+    expect(table).toContain('data-urgency="routine"');
+    expect(visible(table)).toContain("worst urgency Routine");
+    expect(table).toContain('class="dispatch-photo"');
+    expect(table).toContain('data-tix-more');
+    expect(visible(table)).toContain('Show full messages');
     // Ocean Ave has nothing open: it is under a disclosure, still able to pick its panel.
     expect(visible(quiet!)).toContain('Show the 1 Property with no open Tickets');
     expect(quiet).toContain(`href="#panel-property-${w.ids.oceanAve}"`);

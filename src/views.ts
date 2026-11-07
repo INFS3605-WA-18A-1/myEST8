@@ -636,6 +636,7 @@ export function createViews(ctx: Context) {
             address: property.address,
             suburb: property.suburb,
             location: property.location,
+            photoUrl: propertyPhotoUrl(property.id, property.photoFileId),
             openTickets: openTickets.map(({ ticketId, description, urgency, reportedAt, jobs }) => ({ ticketId, description, urgency, reportedAt, jobs })),
             worstUrgency,
           };

@@ -39,6 +39,20 @@
   search.addEventListener('input', apply);
 })();
 
+// === The Properties table: "Show full messages" lets a Property's Ticket lines wrap (without JavaScript they stay one line each, the whole message in the link's title) ===
+(() => {
+  for (const button of document.querySelectorAll('[data-tix-more]')) {
+    const cell = button.closest('td');
+    if (!cell) continue;
+    button.addEventListener('click', () => {
+      const open = !cell.classList.contains('is-full');
+      cell.classList.toggle('is-full', open);
+      button.setAttribute('aria-expanded', String(open));
+      button.firstChild.textContent = open ? 'Hide full messages' : 'Show full messages';
+    });
+  }
+})();
+
 (() => {
   const dataElement = document.getElementById('dispatch-data');
   const mapElement = document.getElementById('dispatch-map');
