@@ -48,7 +48,7 @@ test('a Property photo is a strip on the right of the household card, the words 
     const keep = (await slot.evaluate((el) => el.classList.contains('is-empty'))) ? 0 : 16;
     expect(slotBox.x + slotBox.width, 'inside the card on the right').toBeLessThanOrEqual(cardBox.x + cardBox.width + 1);
     expect(slotBox.y, 'inside the card at the top').toBeGreaterThanOrEqual(cardBox.y);
-    for (const part of ['.household-main', '.household-status']) {
+    for (const part of ['.household-owner', '.household-who', '.household-status', '.household-foot']) {
       const box = await rect(card.locator(part));
       expect(box.x, `${part} stays in the card`).toBeGreaterThanOrEqual(cardBox.x);
       expect(box.x + box.width, `${part} clear of the photo`).toBeLessThanOrEqual(slotBox.x + keep + 1);

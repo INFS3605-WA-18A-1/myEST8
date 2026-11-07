@@ -1,6 +1,6 @@
 // The Dispatch map (src/web/pages/dispatch.ts). The page works without this file, as
-// a table with a panel per Property; this adds the MapLibre GL JS map, and makes the map
-// pins and the table rows pick the panel shown beside the map.
+// a list of Property cards with a panel per Property; this adds the MapLibre GL JS map, and
+// makes the map pins and the cards pick the panel shown beside the map.
 //
 // MapLibre draws the basemap (OpenFreeMap's Positron style) and works out which pins
 // overlap (a GeoJSON source with `cluster: true`). The pins and the groups themselves are
@@ -14,44 +14,75 @@
 //
 // This is an ES module, so MapLibre (an ES module too) is imported once the page has run
 // far enough to need it: if that, WebGL or the basemap's style fails, the map's place
-// says so and the table and panels still work.
+// says so and the list and panels still work.
 
-// === The Properties table's filter and search (progressive: without JavaScript the whole table shows) ===
+// === The Properties list's filter and search (progressive: without JavaScript every card shows) ===
 (() => {
   const tabs = [...document.querySelectorAll('[data-prop-filter]')];
   const search = document.querySelector('[data-prop-search]');
-  const table = document.getElementById('properties');
-  if (!tabs.length || !search || !table) return;
+  const section = document.getElementById('properties');
+  if (!tabs.length || !search || !section) return;
   let mode = 'all';
   function apply() {
     const words = search.value.trim().toLowerCase();
-    for (const row of table.querySelectorAll('tbody tr[data-row]')) {
+    for (const row of section.querySelectorAll('li[data-row]')) {
       const urgent = row.dataset.urgency === 'urgent' || row.dataset.urgency === 'high';
       const matchesTab = mode === 'all' || (mode === 'open' && 'urgency' in row.dataset && row.closest('details') === null) || (mode === 'urgent' && urgent);
-      const matchesText = !words || (row.querySelector('th')?.textContent || '').toLowerCase().includes(words);
+      const matchesText = !words || (row.querySelector('h3')?.textContent || '').toLowerCase().includes(words);
       row.hidden = !(matchesTab && matchesText);
     }
     // "Open tickets" and "High & urgent" leave the quiet Properties folded away.
-    for (const more of table.querySelectorAll('details.dispatch-more')) more.hidden = mode !== 'all' && !words;
+    for (const more of section.querySelectorAll('details.dispatch-more')) more.hidden = mode !== 'all' && !words;
     for (const tab of tabs) tab.setAttribute('aria-pressed', String(tab.dataset.propFilter === mode));
+    showCut();
   }
   for (const tab of tabs) tab.addEventListener('click', () => { mode = tab.dataset.propFilter; apply(); });
   search.addEventListener('input', apply);
 })();
 
-// === The Properties table: "Show full messages" lets a Property's Ticket lines wrap (without JavaScript they stay one line each, the whole message in the link's title) ===
+// === A Property card's "Show full messages": it lets the Ticket rows wrap. It shows only when one
+// of them is cut short (without JavaScript the rows stay one line each, the whole message in
+// the link's title), and is checked again when the window or the list changes. ===
+function showCut() {
+  for (const button of document.querySelectorAll('[data-tix-more]')) {
+    const card = button.closest('.dispatch-card');
+    if (!card || card.classList.contains('is-full')) continue;
+    button.hidden = ![...card.querySelectorAll('.dispatch-tix-text')].some((line) => line.scrollWidth > line.clientWidth + 1);
+  }
+}
 (() => {
   for (const button of document.querySelectorAll('[data-tix-more]')) {
-    const cell = button.closest('td');
-    if (!cell) continue;
+    const card = button.closest('.dispatch-card');
+    if (!card) continue;
     button.addEventListener('click', () => {
-      const open = !cell.classList.contains('is-full');
-      cell.classList.toggle('is-full', open);
+      const open = !card.classList.contains('is-full');
+      card.classList.toggle('is-full', open);
       button.setAttribute('aria-expanded', String(open));
       button.firstChild.textContent = open ? 'Hide full messages' : 'Show full messages';
     });
   }
+  showCut();
+  window.addEventListener('resize', showCut);
+  for (const more of document.querySelectorAll('details.dispatch-more')) more.addEventListener('toggle', showCut);
 })();
+
+// === A Property photo that will not load: the card drops its strip and the words take the width. ===
+document.addEventListener(
+  'error',
+  (event) => {
+    const strip = event.target instanceof HTMLImageElement ? event.target.closest('.dispatch-card-photo') : null;
+    if (!strip) return;
+    strip.closest('.dispatch-card')?.classList.remove('has-photo');
+    strip.remove();
+  },
+  true,
+);
+for (const img of document.querySelectorAll('.dispatch-card-photo img')) {
+  if (img.complete && img.currentSrc && img.naturalWidth === 0) {
+    img.closest('.dispatch-card')?.classList.remove('has-photo');
+    img.parentElement.remove();
+  }
+}
 
 (() => {
   const dataElement = document.getElementById('dispatch-data');
@@ -136,12 +167,13 @@
     for (const link of document.querySelectorAll(`[data-select="${key}"]`)) link.setAttribute('aria-current', 'true');
     if (map) showOnMap(key, !(from && from.dataset.pinKey));
 
-    // Picked from the table, the map and panel are above: scroll up to them.
+    // Picked from the list, the map and panel are above: scroll up to them.
     const board = side.parentElement;
-    if (from && from.closest('table') && board && board.getBoundingClientRect().top < 0) board.scrollIntoView({ block: 'start', behavior: reduceMotion ? 'auto' : 'smooth' });
+    if (sideBySide.matches && from && from.closest('.dispatch-cards') && board && board.getBoundingClientRect().top < 0) board.scrollIntoView({ block: 'start', behavior: reduceMotion ? 'auto' : 'smooth' });
     panel.querySelector('h2')?.focus({ preventScroll: true });
     // Stacked under the map (a phone), the panel can be off screen: bring it into view. Beside the map it already is.
-    if (!sideBySide.matches) panel.scrollIntoView({ block: 'nearest', behavior: reduceMotion ? 'auto' : 'smooth' });
+    // Picked from the list below, the panel is above and can be taller than the screen: show its top, not its foot.
+    if (!sideBySide.matches) panel.scrollIntoView({ block: from && from.closest('.dispatch-cards') ? 'start' : 'nearest', behavior: reduceMotion ? 'auto' : 'smooth' });
   }
 
   function clearSelection(returnFocus) {
@@ -198,7 +230,7 @@
     for (const entry of markers.values()) entry.shown = false;
     markers.clear();
     groups.clear();
-    mapElement.replaceChildren(note('The map could not load. The table below lists the same Properties, each with its Tickets and urgency.'));
+    mapElement.replaceChildren(note('The map could not load. The list below has the same Properties, each with its Tickets and urgency.'));
     mapElement.setAttribute('aria-label', 'Map (not available)');
   }
 

@@ -169,23 +169,24 @@ function shortDate(iso: string, timeZone: string): string {
 }
 
 /**
- * One household: the Owner and any approvals waiting, the address, and the Tenants and
- * Building Manager; then two tiles, how many Tickets are open and the worst Urgency, and an
- * arrow to the Property. The Property's photo, the one found for its address, is a strip on
- * the card's right edge fading into the card (a link to add one when it has none). A Ticket
- * history button under the people opens the open Tickets across the card, each a row to its
- * Ticket. On a phone the photo is a band on top.
+ * One household: the Owner and any approvals waiting, then the address over its Tenants
+ * with two tiles beside them, how many Tickets are open and the worst Urgency, as tall as
+ * those two lines. Under them the Building Manager, the Ticket history button and View
+ * Property. The Property's photo, the one found for its address, is a strip on the card's
+ * right edge fading into the card (a link to add one when it has none). The Ticket history
+ * button opens the open Tickets across the card, each a row to its Ticket. On a phone the
+ * photo is a band on top and the tiles follow the people.
  */
 function householdCard(household: Household, timeZone: string): Html {
   const waiting = household.owner.approvalsWaiting;
   return html`<article class="household">
     ${householdPhoto(household)}
-    <div class="household-main">
-      <p class="household-owner">
-        <span class="household-role">Owner</span>
-        <a href="/owners/${household.owner.id}">${household.owner.name}</a>
-        ${waiting ? html`<a class="household-waiting" href="/approvals">${waiting === 1 ? '1 approval waiting' : `${waiting} approvals waiting`}</a>` : ''}
-      </p>
+    <p class="household-owner">
+      <span class="household-role">Owner</span>
+      <a href="/owners/${household.owner.id}">${household.owner.name}</a>
+      ${waiting ? html`<a class="household-waiting" href="/approvals">${waiting === 1 ? '1 approval waiting' : `${waiting} approvals waiting`}</a>` : ''}
+    </p>
+    <div class="household-who">
       <h3 class="household-address"><a href="/properties/${household.propertyId}">${household.address}</a>${suburbOf(household)}</h3>
       <ul class="household-people">
         ${household.tenants.length
@@ -201,13 +202,16 @@ function householdCard(household: Household, timeZone: string): Html {
             )
           : html`<li class="is-quiet"><div class="household-person"><span class="household-avatar is-empty" aria-hidden="true">${icon('plus', { size: 'size-3' })}</span><span>No Tenants yet</span></div></li>`}
       </ul>
+    </div>
+    ${householdTiles(household)}
+    <div class="household-foot">
+      ${household.tickets.length ? historyToggle(household) : html`<p class="household-calm">No open Tickets</p>`}
       ${household.buildingManager
         ? html`<p class="household-manager"><span class="household-role">Building Manager</span> <a href="/building-managers/${household.buildingManager.id}">${household.buildingManager.name}</a></p>`
         : ''}
-      ${household.tenants.length ? '' : html`<div class="household-add"><a class="btn btn-primary btn-sm" href="/tenants/new">${icon('plus', { size: 'size-4' })}Add a Tenant</a></div>`}
-      ${household.tickets.length ? historyToggle(household) : html`<p class="household-calm">No open Tickets</p>`}
+      ${household.tenants.length ? '' : html`<a class="btn btn-primary btn-sm" href="/tenants/new">${icon('plus', { size: 'size-4' })}Add a Tenant</a>`}
+      <a class="household-go" href="/properties/${household.propertyId}">View Property<span class="sr-only"> ${household.address}</span>${icon('caret-right', { size: 'size-3.5' })}</a>
     </div>
-    ${householdTiles(household)}
     ${householdHistory(household, timeZone)}
   </article>`;
 }
@@ -227,7 +231,7 @@ function householdPhoto(household: Household): Html {
   </a>`;
 }
 
-/** How many Tickets are open and the highest Urgency among them, then the way into the Property. */
+/** How many Tickets are open and the highest Urgency among them. */
 function householdTiles(household: Household): Html {
   const worst = household.worstUrgency;
   return html`<div class="household-status">
@@ -239,7 +243,6 @@ function householdTiles(household: Household): Html {
       <p class="household-tile-value">${worst ? humanise(worst) : 'Clear'}</p>
       <p class="household-tile-label">${worst ? 'Urgency' : 'Nothing to fix'}</p>
     </div>
-    <a class="household-go" href="/properties/${household.propertyId}" aria-label="Open ${household.address}">${icon('caret-right', { size: 'size-4' })}</a>
   </div>`;
 }
 

@@ -9017,13 +9017,6 @@
       }
     }
 
-    /* Dispatch: the ratings side by side, and the disclosure under the Properties table. */
-    .dispatch-more {
-      margin-top: 12px;
-    }
-    .dispatch-more[open] > summary {
-      margin-bottom: 8px;
-    }
 
     /* ----- Dispatch, soft cards: the map card beside Today at a glance and To dispatch, Properties under them. */
     .dispatch-top {
@@ -9314,21 +9307,62 @@
       font-size: 13px;
     }
 
-    /* Properties: filter tabs and a search over the table, a soft row for each Property. */
+    /* Properties, the map's list. A band under the title holds the search (left) and the
+       All / Open tickets / High & urgent tabs (right); both need JavaScript. */
+    .dispatch-props .soft-head {
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 4px 16px;
+    }
+    .dispatch-props-note {
+      margin: 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
     .dispatch-filters {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
+      justify-content: space-between;
       gap: 8px 12px;
+      margin-bottom: 16px;
+      padding: 8px;
+      border-radius: 16px;
+      background: var(--surface-band);
     }
     html:not(.js) .dispatch-filters {
       display: none;
     }
+    .dispatch-search {
+      position: relative;
+      flex: 1 1 16rem;
+      max-width: 26rem;
+      color: var(--muted);
+    }
+    .dispatch-search > svg {
+      position: absolute;
+      top: 50%;
+      left: 12px;
+      translate: 0 -50%;
+      pointer-events: none;
+    }
+    .dispatch-search input {
+      width: 100%;
+      min-height: 40px;
+      padding: 0 12px 0 36px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface);
+      color: var(--ink);
+      font: inherit;
+      font-size: 14px;
+    }
     .dispatch-tabs {
       display: inline-flex;
       padding: 3px;
+      border: 1px solid var(--line);
       border-radius: var(--radius-pill);
-      background: var(--surface-band);
+      background: var(--surface);
     }
     .dispatch-tab {
       min-height: 32px;
@@ -9338,6 +9372,7 @@
       background: transparent;
       font: inherit;
       font-size: 13px;
+      white-space: nowrap;
       cursor: pointer;
     }
     .dispatch-tab[aria-pressed='true'] {
@@ -9350,123 +9385,126 @@
       transition-duration: var(--dur-fast);
       transition-timing-function: var(--ease-out);
     }
-    .dispatch-search input {
-      min-height: 38px;
-      width: min(16rem, 100%);
-      padding: 0 14px;
-      border: 1px solid var(--line);
-      border-radius: var(--radius-pill);
-      background: var(--surface);
-      font: inherit;
-      font-size: 14px;
+
+    /* One card per Property, two across from 1280px. A card's photo is the Profiles strip: on
+       the right edge, flush with the top, right and bottom, its left edge fading into
+       --surface (the shared fade is with .household's, below). --photo-width is the whole
+       strip; the words reach --photo-keep into the start of its fade. */
+    .dispatch-cards {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 12px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
     }
-    /* Properties: one row for each, its photo and address, its suburb, and its open Tickets as
-       lines edged in their Urgency. From 640px a table; on a phone each row is a block. */
-    .dispatch-props {
+    @media (min-width: 80rem) {
+      .dispatch-cards {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+    .dispatch-cards > li {
+      display: flex;
       min-width: 0;
     }
-    .dispatch-props-table {
-      width: 100%;
-      table-layout: fixed;
-      border-collapse: collapse;
-    }
-    .dispatch-props-table th,
-    .dispatch-props-table td {
-      padding: 16px 12px;
-      text-align: left;
-      vertical-align: top;
-    }
-    .dispatch-props-table thead th {
-      padding-block: 10px;
-      border-bottom: 1px solid var(--line);
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--muted);
-    }
-    .dispatch-props-table thead th:first-child,
-    .dispatch-props-table tbody th {
-      width: 13rem;
-    }
-    .dispatch-props-table thead th:nth-child(2),
-    .dispatch-props-table .dispatch-suburb {
-      width: 8.5rem;
-    }
-    .dispatch-props-table tbody tr {
-      border-top: 1px solid var(--line);
-    }
-    .dispatch-props-table tbody tr:first-child {
-      border-top: 0;
-    }
-    .dispatch-props-table tbody tr[hidden] {
+    .dispatch-cards > li[hidden] {
       display: none;
     }
-    .dispatch-props-table tbody tr[data-selected] {
-      background: var(--info-bg);
+    .dispatch-card {
+      --photo-width: 10rem;
+      --photo-fade: 5.5rem;
+      --photo-keep: 1rem;
+      display: grid;
+      flex: 1;
+      grid-template-columns: minmax(0, 1fr);
+      column-gap: 16px;
+      min-width: 0;
+      overflow: hidden;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--surface);
+      transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
     }
-    .dispatch-suburb {
-      font-size: 14px;
-      color: var(--muted);
+    .dispatch-card.has-photo {
+      grid-template-columns: minmax(0, 1fr) calc(var(--photo-width) - var(--photo-keep) - 30px);
     }
-    .dispatch-prop {
+    .dispatch-card:hover {
+      border-color: #cfc8bb;
+    }
+    /* Picked on the map, or by its address. */
+    .dispatch-cards > li[data-selected] .dispatch-card {
+      border-color: var(--action);
+      box-shadow: 0 0 0 1px var(--action);
+    }
+    .dispatch-card-main {
+      position: relative;
+      z-index: 1;
       display: flex;
       flex-direction: column;
-      gap: 10px;
-      color: var(--ink);
-      text-decoration: none;
+      gap: 8px;
+      min-width: 0;
     }
-    .dispatch-prop:hover .dispatch-prop-address {
-      text-decoration: underline;
-    }
-    .dispatch-prop-address {
-      font-size: 14px;
-      font-weight: 600;
-      line-height: 1.35;
-      overflow-wrap: anywhere;
-    }
-    .dispatch-photo {
+    .dispatch-card-photo {
       position: relative;
-      display: grid;
-      place-items: center;
-      width: 96px;
-      aspect-ratio: 3 / 2;
-      border-radius: 12px;
-      background: var(--surface-band);
-      color: var(--muted);
+      z-index: 0;
+      min-height: 6rem;
+      margin: -12px -14px -12px calc(-16px - var(--photo-keep));
+      overflow: hidden;
     }
-    .dispatch-photo img {
+    .dispatch-card-photo img {
       position: absolute;
       inset: 0;
       width: 100%;
       height: 100%;
-      border-radius: inherit;
       object-fit: cover;
     }
-    .dispatch-house {
-      position: absolute;
-      right: -6px;
-      bottom: -6px;
-      display: grid;
-      place-items: center;
-      width: 24px;
-      height: 24px;
-      border-radius: 8px;
-      background: var(--muted);
-      color: var(--surface);
-      box-shadow: 0 0 0 2px var(--surface);
+    .dispatch-card-top {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px 8px;
+      min-height: 22px;
+      margin: 0;
+      font-size: 13px;
     }
-    .dispatch-props-table tr[data-urgency='routine'] .dispatch-house {
-      background: var(--action);
+    .dispatch-card-suburb {
+      color: var(--muted);
     }
-    .dispatch-props-table tr[data-urgency='high'] .dispatch-house {
-      background: var(--high);
+    .dispatch-card-count {
+      margin-left: auto;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
     }
-    .dispatch-props-table tr[data-urgency='urgent'] .dispatch-house {
-      background: var(--urgent);
+    .dispatch-card-address {
+      margin: 0;
+      font-family: var(--font-head);
+      font-size: 17px;
+      font-weight: 600;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+    .dispatch-prop {
+      color: var(--ink);
+      text-decoration: none;
+    }
+    .dispatch-prop:hover,
+    .dispatch-prop[aria-current] {
+      text-decoration: underline;
+    }
+    .dispatch-not-found,
+    .dispatch-card-calm {
+      margin: 0;
+    }
+    .dispatch-card-calm {
+      font-size: 13px;
+      color: var(--muted);
     }
     .dispatch-tix {
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 6px;
       margin: 0;
       padding: 0;
       list-style: none;
@@ -9474,68 +9512,51 @@
     .dispatch-tix li {
       min-width: 0;
     }
+    /* A Ticket row: its number, its words on one line and its Urgency in words. */
     .dispatch-tix-line {
-      display: flex;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
       align-items: center;
-      gap: 12px;
-      min-width: 0;
-      padding: 8px 12px 8px 10px;
-      border-left: 3px solid var(--muted);
-      border-radius: 4px 12px 12px 4px;
+      gap: 10px;
+      min-height: 36px;
+      padding: 6px 8px 6px 6px;
+      border-radius: 10px;
       background: var(--page);
       color: var(--ink);
       font-size: 14px;
-      line-height: 1.4;
+      line-height: 1.35;
       text-decoration: none;
     }
     .dispatch-tix-line:hover {
-      filter: brightness(0.97);
-    }
-    .dispatch-tix-line.is-high {
-      border-left-color: var(--high);
-      background: var(--high-bg);
-    }
-    .dispatch-tix-line.is-urgent {
-      border-left-color: var(--urgent);
-      background: var(--urgent-bg);
+      background: #ebe5d8;
     }
     .dispatch-tix-num {
-      flex: none;
-      padding: 1px 8px;
-      border-radius: 8px;
-      background: #e4e8ec;
-      font-size: 13px;
+      padding: 1px 7px;
+      border-radius: 7px;
+      background: var(--surface);
+      font-size: 12px;
       font-weight: 600;
-    }
-    .is-high > .dispatch-tix-num {
-      background: #fbe0c4;
-      color: var(--high);
-    }
-    .is-urgent > .dispatch-tix-num {
-      background: #f9d4cf;
-      color: var(--urgent);
+      color: var(--muted);
     }
     .dispatch-tix-text {
-      flex: 1;
-      min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-    .dispatch-tickets.is-full .dispatch-tix-line {
-      align-items: flex-start;
+    .dispatch-card.is-full .dispatch-tix-line {
+      align-items: start;
     }
-    .dispatch-tickets.is-full .dispatch-tix-text {
+    .dispatch-card.is-full .dispatch-tix-text {
       overflow: visible;
       white-space: normal;
       overflow-wrap: anywhere;
     }
     .dispatch-tix-more {
       display: inline-flex;
+      align-self: flex-start;
       align-items: center;
       gap: 4px;
-      margin-top: 8px;
-      padding: 4px 0;
+      padding: 2px 0;
       border: 0;
       background: transparent;
       color: var(--action);
@@ -9543,6 +9564,9 @@
       font-size: 13px;
       font-weight: 600;
       cursor: pointer;
+    }
+    .dispatch-tix-more[hidden] {
+      display: none;
     }
     .dispatch-tix-more:hover {
       text-decoration: underline;
@@ -9558,59 +9582,65 @@
         min-height: 44px;
       }
     }
-    @media (max-width: 639.98px) {
-      .dispatch-props-table :where(table, thead, tbody, tr, th, td) {
-        display: block;
-      }
-      .dispatch-props-table thead {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
-      }
-      .dispatch-props-table tbody {
-        display: grid;
-        gap: 10px;
-      }
-      .dispatch-props-table tbody tr,
-      .dispatch-props-table tbody tr:first-child {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 6px 12px;
-        padding: 12px;
-        border: 1px solid var(--line);
-        border-radius: 16px;
-        background: var(--surface);
-      }
-      .dispatch-props-table tbody tr[data-selected] {
-        border-color: var(--action);
-      }
-      .dispatch-props-table tbody :where(th, td),
-      .dispatch-props-table tbody th {
-        width: auto;
-        min-width: 0;
-        padding: 0;
-      }
-      .dispatch-props-table tbody th {
-        flex: 1 1 12rem;
-      }
-      .dispatch-prop {
-        flex-direction: row;
-        align-items: center;
-      }
-      .dispatch-photo {
-        flex: none;
-        width: 72px;
-      }
-      .dispatch-props-table tbody td.dispatch-suburb {
-        order: 1;
-      }
-      .dispatch-props-table tbody td.dispatch-tickets {
-        order: 2;
+    /* The Properties with nothing open: the same cards, a little smaller, behind a quiet button. */
+    .dispatch-cards.is-quiet .dispatch-card {
+      --photo-width: 8.5rem;
+    }
+    .dispatch-more {
+      margin-top: 16px;
+    }
+    .dispatch-more > summary {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 40px;
+      padding: 0 14px;
+      border-radius: var(--radius-pill);
+      color: var(--action);
+      font-size: 13px;
+      font-weight: 600;
+      list-style: none;
+      cursor: pointer;
+    }
+    .dispatch-more > summary::-webkit-details-marker {
+      display: none;
+    }
+    .dispatch-more > summary:hover {
+      background: var(--page);
+    }
+    .dispatch-more > summary svg {
+      transition: rotate var(--dur-fast) var(--ease-out);
+    }
+    .dispatch-more[open] > summary {
+      margin-bottom: 12px;
+    }
+    .dispatch-more[open] > summary svg {
+      rotate: 180deg;
+    }
+    /* Phones: the strip is a band on top, the search and the tabs each take the width. */
+    @media (max-width: 40rem) {
+      .dispatch-search {
         flex-basis: 100%;
+        max-width: none;
+      }
+      .dispatch-tabs {
+        width: 100%;
+      }
+      .dispatch-tab {
+        flex: 1 1 auto;
+        padding: 0 6px;
+      }
+      .dispatch-card.has-photo {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .dispatch-card-photo {
+        grid-row: 1;
+        min-height: 0;
+        aspect-ratio: 16 / 6;
+        margin: -12px -14px -4px;
+      }
+      .dispatch-tix-line {
+        min-height: 44px;
       }
     }
 
@@ -9870,35 +9900,6 @@
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
-    }
-    .dispatch-foot {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px 16px;
-      margin-top: 8px;
-    }
-    .dispatch-foot .dispatch-more {
-      margin-top: 0;
-    }
-    .dispatch-foot .dispatch-more[open] {
-      flex-basis: 100%;
-    }
-    .dispatch-showing {
-      margin: 0;
-      font-size: 13px;
-      color: var(--muted);
-    }
-    .dispatch-more > summary {
-      display: inline-flex;
-      align-items: center;
-      min-height: 40px;
-      padding: 0 16px;
-      border: 1px solid var(--line);
-      border-radius: var(--radius-pill);
-      background: var(--surface);
-      list-style: none;
     }
     .glance-tile.is-warm::after {
       content: '\2197';
@@ -11679,14 +11680,17 @@
        column is the strip less that overlap, the 16px gap and the card's 8px padding. */
     .household {
       --household-photo-width: 13rem;
-      --household-photo-fade: 4.75rem;
+      --household-photo-fade: 6rem;
       --household-photo-keep: 1rem;
       --household-photo-column: calc(var(--household-photo-width) - var(--household-photo-keep) - 24px);
+      --photo-fade: var(--household-photo-fade);
       display: grid;
       grid-template-columns: minmax(0, 1fr) var(--household-photo-column);
       grid-template-areas:
-        'main photo'
+        'owner photo'
+        'who photo'
         'status photo'
+        'foot photo'
         'history history';
       gap: 8px 16px;
       min-width: 0;
@@ -11700,13 +11704,17 @@
       .household {
         grid-template-columns: minmax(0, 1fr) auto var(--household-photo-column);
         grid-template-areas:
-          'main status photo'
+          'owner owner photo'
+          'who status photo'
+          'foot foot photo'
           'history history history';
       }
     }
     /* The words and tiles sit above the start of the fade. */
-    .household-main,
-    .household-status {
+    .household-owner,
+    .household-who,
+    .household-status,
+    .household-foot {
       position: relative;
       z-index: 1;
     }
@@ -11725,17 +11733,31 @@
        background, so the fade is into the card and not a painted white. With the Ticket
        history open the strip stops above it; closed, it runs to the card's bottom edge. */
     .household-photo-slot:not(.is-empty) {
-      margin: -8px -8px -8px calc(-16px - var(--household-photo-keep));
+      /* Closed, the history row is empty but its 8px gap is still there: cover it too. */
+      margin: -8px -8px -16px calc(-16px - var(--household-photo-keep));
       border-radius: 0;
     }
     .household:has(.household-history-panel:not([hidden])) .household-photo-slot:not(.is-empty) {
       margin-bottom: 0;
     }
-    .household-photo-slot:not(.is-empty)::after {
+    .household-photo-slot:not(.is-empty)::after,
+    .dispatch-card-photo::after {
       content: '';
       position: absolute;
       inset: 0;
-      background: linear-gradient(to right, var(--surface) 0, var(--surface) 0.25rem, transparent var(--household-photo-fade));
+      /* An eased fade: more stops through the middle, so there is no visible edge where the
+         photo starts to show. */
+      background: linear-gradient(
+        to right,
+        var(--surface) 0,
+        var(--surface) 0.25rem,
+        color-mix(in oklab, var(--surface) 94%, transparent) calc(var(--photo-fade) * 0.2),
+        color-mix(in oklab, var(--surface) 80%, transparent) calc(var(--photo-fade) * 0.36),
+        color-mix(in oklab, var(--surface) 58%, transparent) calc(var(--photo-fade) * 0.52),
+        color-mix(in oklab, var(--surface) 34%, transparent) calc(var(--photo-fade) * 0.68),
+        color-mix(in oklab, var(--surface) 14%, transparent) calc(var(--photo-fade) * 0.84),
+        transparent var(--photo-fade)
+      );
       pointer-events: none;
     }
     .household-photo {
@@ -11768,15 +11790,9 @@
       border-color: var(--action);
       color: var(--action);
     }
-    .household-main {
-      grid-area: main;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      min-width: 0;
-      padding-top: 4px;
-    }
     .household-owner {
+      grid-area: owner;
+      padding-top: 4px;
       display: flex;
       flex-wrap: wrap;
       align-items: center;
@@ -11812,6 +11828,21 @@
     }
     a.household-waiting:hover {
       text-decoration: underline;
+    }
+    .household-who {
+      grid-area: who;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 0;
+    }
+    .household-foot {
+      grid-area: foot;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 16px;
+      min-width: 0;
     }
     .household-address {
       margin: 0;
@@ -11900,21 +11931,21 @@
     .household-manager a:hover {
       text-decoration: underline;
     }
-    .household-add {
-      margin-top: 2px;
-    }
 
+    /* The tiles run from the top of the address to the bottom of the Tenants. */
     .household-status {
       grid-area: status;
       display: flex;
-      align-items: flex-start;
+      align-items: stretch;
       gap: 8px;
       min-width: 0;
-      padding-top: 4px;
     }
     .household-tile {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
       min-width: 5.5rem;
-      padding: 8px 12px;
+      padding: 4px 12px;
       border: 1px solid var(--line);
       border-radius: 12px;
       background: var(--surface);
@@ -11960,16 +11991,18 @@
     .household-tile.is-clear .household-tile-value {
       color: #2d6a45;
     }
+    /* View Property ends the row under the people, at its right. */
     .household-go {
-      display: grid;
-      flex: none;
-      place-items: center;
-      align-self: center;
-      width: 40px;
-      height: 40px;
-      border: 1px solid var(--line);
-      border-radius: 50%;
-      color: var(--ink);
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      min-height: 32px;
+      margin-left: auto;
+      padding: 0 4px 0 12px;
+      border-radius: 999px;
+      color: var(--action);
+      font-size: 13px;
+      font-weight: 600;
       text-decoration: none;
     }
     .household-go:hover {
@@ -11983,7 +12016,6 @@
       align-self: flex-start;
       gap: 6px;
       min-height: 32px;
-      margin-top: auto;
       padding: 0 12px;
       border: 0;
       border-radius: 999px;
@@ -12226,8 +12258,10 @@
         grid-template-columns: minmax(0, 1fr);
         grid-template-areas:
           'photo'
-          'main'
+          'owner'
+          'who'
           'status'
+          'foot'
           'history';
       }
       /* The strip becomes a band across the top, fading down into --surface. */
@@ -12240,19 +12274,28 @@
       .household:has(.household-history-panel:not([hidden])) .household-photo-slot:not(.is-empty) {
         margin: -8px -8px -12px;
       }
-      .household-photo-slot:not(.is-empty)::after {
-        background: linear-gradient(to top, var(--surface) 0, var(--surface) 0.5rem, transparent 3rem);
+      .household-photo-slot:not(.is-empty)::after,
+      .dispatch-card-photo::after {
+        background: linear-gradient(
+          to top,
+          var(--surface) 0,
+          var(--surface) 0.5rem,
+          color-mix(in oklab, var(--surface) 80%, transparent) 1.25rem,
+          color-mix(in oklab, var(--surface) 45%, transparent) 2rem,
+          color-mix(in oklab, var(--surface) 15%, transparent) 2.75rem,
+          transparent 3.5rem
+        );
       }
       .household-photo-slot.is-empty {
         aspect-ratio: auto;
         min-height: 4.5rem;
         flex-direction: row;
       }
-      .household-main {
-        padding: 4px 4px 0;
-      }
-      .household-status {
-        padding: 0 4px;
+      .household-owner,
+      .household-who,
+      .household-status,
+      .household-foot {
+        padding-inline: 4px;
       }
       .household-tile {
         flex: 1 1 0;

@@ -2,12 +2,12 @@
 // for Quotes, or a Work Order to book once a Quote is approved) with the nearest
 // Tradies of the right Trade, a map of the Agency's Properties (a house each, larger and
 // redder by the worst Urgency among its open Tickets) and its Tradies (a wrench each),
-// a side panel for the one picked, and the table of the same Properties. Who is booked
+// a side panel for the one picked, and the list of the same Properties. Who is booked
 // when is the Schedule's (pages/calendar.ts).
 //
-// A map alone can't be used with a keyboard or a screen reader, so the table carries
+// A map alone can't be used with a keyboard or a screen reader, so the list carries
 // every fact the map does and every row picks its pin; the page works with JavaScript
-// off, as the table and per-Property panels reached by their row's link (:target).
+// off, as the list and per-Property panels reached by their card's link (:target).
 // static/dispatch-map.js adds the map: it reads the pin data from the
 // JSON block this page writes, draws the MapLibre map with a marker for each pin and
 // the Tradie search ring, and shows the panel of the pin or row picked.
@@ -91,7 +91,7 @@ export function dispatchPages() {
     // A Tradie with neither an address nor a Google listing isn't missing, just not on the map.
     const missing = everyProperty.some((p) => !p.location) || people.some((t) => !t.location && (t.businessAddress || t.googlePlaceId));
 
-    // The header's search, Region (the state in a Property's address) and Trade narrow the map, the queue and the table together.
+    // The header's search, Region (the state in a Property's address) and Trade narrow the map, the queue and the list together.
     const search = (c.req.query('q') ?? '').trim();
     const regions = [...new Set(everyProperty.map((p) => stateOf(p.address)).filter((r): r is string => r !== null))].sort();
     const region = regions.includes(c.req.query('region') ?? '') ? c.req.query('region')! : '';
@@ -168,22 +168,24 @@ export function dispatchPages() {
               </section>
             </div>
           </div>
-          <section id="properties" aria-labelledby="properties-title" class="soft-card">
+          <section id="properties" aria-labelledby="properties-title" class="soft-card dispatch-props">
             <div class="soft-head">
               <h2 id="properties-title" class="soft-title">Properties <span class="soft-count">${ordered.length}</span></h2>
-              <div class="dispatch-filters">
-                <div class="dispatch-tabs" role="group" aria-label="Show Properties">
-                  <button type="button" class="dispatch-tab" data-prop-filter="all" aria-pressed="true">All</button>
-                  <button type="button" class="dispatch-tab" data-prop-filter="open" aria-pressed="false">Open tickets</button>
-                  <button type="button" class="dispatch-tab" data-prop-filter="urgent" aria-pressed="false">High &amp; urgent</button>
-                </div>
-                <label class="dispatch-search">
-                  <span class="sr-only">Search address</span>
-                  <input type="search" placeholder="Search address" data-prop-search autocomplete="off" />
-                </label>
+              ${propertiesNote(ordered)}
+            </div>
+            <div class="dispatch-filters">
+              <label class="dispatch-search">
+                ${icon('magnifying-glass', { size: 'size-4' })}
+                <span class="sr-only">Search address</span>
+                <input type="search" placeholder="Search address" data-prop-search autocomplete="off" />
+              </label>
+              <div class="dispatch-tabs" role="group" aria-label="Show Properties">
+                <button type="button" class="dispatch-tab" data-prop-filter="all" aria-pressed="true">All</button>
+                <button type="button" class="dispatch-tab" data-prop-filter="open" aria-pressed="false">Open tickets</button>
+                <button type="button" class="dispatch-tab" data-prop-filter="urgent" aria-pressed="false">High &amp; urgent</button>
               </div>
             </div>
-            ${propertyTable(ordered)}
+            ${propertyList(ordered)}
           </section>
           ${pinIcons()}
           ${pinData(ordered, tradies)}
@@ -373,25 +375,25 @@ function pinIcons(): Html {
  * The map. Each pin says what it is in its own shape (a house or a wrench), and a
  * Property's house grows and reddens with the worst Urgency among its open Tickets, so
  * no key is needed; each pin's name says the same in words. Without JavaScript the map's
- * place says so and points to the table; static/dispatch-map.js says the same when the map
+ * place says so and points to the list; static/dispatch-map.js says the same when the map
  * can't run (no WebGL, or the basemap's style doesn't load).
  */
 function mapSection(): Html {
   return html`<section class="dispatch-map-section" aria-labelledby="dispatch-map-title">
     <h2 id="dispatch-map-title" class="sr-only">Map of Properties and Tradies</h2>
     <div id="dispatch-map" class="dispatch-map" role="region" aria-label="Map. Each pin is a Property or a Tradie: Tab to a pin and press Enter to open its details.">
-      <p class="dispatch-map-fallback">The map needs JavaScript. The table below lists the same Properties, each with its Tickets and urgency.</p>
+      <p class="dispatch-map-fallback">The map needs JavaScript. The list below has the same Properties, each with its Tickets and urgency.</p>
     </div>
   </section>`;
 }
 
 /**
  * The side column: a hint, then one panel per Property and per Tradie. Only the one picked
- * shows. With JavaScript the map and the table pick it; without, a row's link does (:target).
+ * shows. With JavaScript the map and the list pick it; without, a card's link does (:target).
  */
 function panels(properties: PropertyView[], tradies: TradieView[], bookings: Booking[], timeZone: string, anyTradieLocated: boolean): Html {
   return html`<aside id="dispatch-side" class="dispatch-side" aria-label="Details">
-    <p class="dispatch-panel-empty">Pick a Property or a Tradie on the map, or a Property in the table, to see its Tickets and the nearest Tradies.</p>
+    <p class="dispatch-panel-empty">Pick a Property or a Tradie on the map, or a Property in the list, to see its Tickets and the nearest Tradies.</p>
     ${properties.map((p) => propertyPanel(p, tradies, anyTradieLocated))}
     ${tradies.map((t) => tradiePanel(t, bookings.filter((b) => b.tradieId === t.tradieId), timeZone))}
   </aside>`;
@@ -503,82 +505,83 @@ function ratings(t: Pick<TradieView, 'myEst8Rating' | 'googleRating'>): Html {
   </span>`;
 }
 
+/** At the head's right: how many Properties have open Tickets, and how many of those are High or Urgent. */
+function propertiesNote(properties: PropertyView[]): Html {
+  const open = properties.filter((p) => p.openTickets.length).length;
+  const pressing = properties.filter((p) => p.worstUrgency === 'urgent' || p.worstUrgency === 'high').length;
+  if (!open) return html``;
+  return html`<p class="dispatch-props-note num">${open} with open Tickets${pressing ? ` · ${pressing} High or Urgent` : ''}</p>`;
+}
+
 /**
- * The Properties with open Tickets, the most urgent first. Each is one row: its photo with a
- * house in the colour of its worst Urgency, the address (the link that picks it) under it, the
- * suburb, and each open Ticket as one line with its number and an edge in its own Urgency.
- * Long messages are cut to a line; "Show full messages" (with JavaScript) lets them wrap. The
- * ones with nothing open fold into a disclosure under them.
+ * The map's list: every Property as a card, those with open Tickets first (the most urgent
+ * first), the ones with nothing open folded into a disclosure under them. Two columns of
+ * cards on a wide window. It is the map's keyboard and screen-reader equivalent: each card's
+ * address is the link that picks the Property and opens its panel beside the map.
  */
-function propertyTable(properties: PropertyView[]): Html {
+function propertyList(properties: PropertyView[]): Html {
   if (!properties.length) return emptyState('No Properties yet. Add one in Settings and it will appear here.');
   const open = properties.filter((p) => p.openTickets.length);
   const quiet = properties.filter((p) => !p.openTickets.length);
   return html`${open.length
-      ? html`<div class="dispatch-props">
-          <table class="dispatch-props-table">
-            <caption class="sr-only">Properties with open Tickets, the most urgent first. The link in each row opens its details beside the map.</caption>
-            <thead>
-              <tr>
-                <th scope="col">Address</th>
-                <th scope="col">Suburb</th>
-                <th scope="col">Open Tickets</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${open.map(
-                (p) => html`<tr data-row="property-${p.propertyId}" data-urgency="${p.worstUrgency ?? ''}">
-                  ${addressCell(p)}
-                  <td class="dispatch-suburb">${p.suburb}</td>
-                  <td class="dispatch-tickets">${ticketLines(p)}</td>
-                </tr>`,
-              )}
-            </tbody>
-          </table>
-        </div>`
+      ? html`<ul class="dispatch-cards" role="list" aria-label="Properties with open Tickets, the most urgent first">
+          ${open.map(propertyCard)}
+        </ul>`
       : emptyState('No open Tickets at any Property.')}
     ${quiet.length
-      ? html`<div class="dispatch-foot"><p class="dispatch-showing">Showing ${open.length} of ${properties.length} properties</p><details class="dispatch-more">
-          <summary class="cursor-pointer text-sm font-medium text-action">Show the ${quiet.length} ${quiet.length === 1 ? 'Property' : 'Properties'} with no open Tickets</summary>
-          <div class="dispatch-props">
-            <table class="dispatch-props-table is-quiet">
-              <caption class="sr-only">Properties with no open Tickets. The link in each row opens its details beside the map.</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Address</th>
-                  <th scope="col">Suburb</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${quiet.map((p) => html`<tr data-row="property-${p.propertyId}">${addressCell(p)}<td class="dispatch-suburb">${p.suburb}</td></tr>`)}
-              </tbody>
-            </table>
-          </div>
-        </details></div>`
+      ? html`<details class="dispatch-more">
+          <summary>${icon('caret-down', { size: 'size-3.5' })}${quiet.length} ${quiet.length === 1 ? 'Property' : 'Properties'} with no open Tickets</summary>
+          <ul class="dispatch-cards is-quiet" role="list" aria-label="Properties with no open Tickets">
+            ${quiet.map(propertyCard)}
+          </ul>
+        </details>`
       : ''}`;
 }
 
 const URGENCY_WORD: Record<string, string> = { urgent: 'Urgent', high: 'High', routine: 'Routine' };
 
-/** The Property's photo (a picture mark while it has none or it will not load), a house in its worst Urgency's colour, and the address that picks it. */
-function addressCell(p: PropertyView): Html {
-  return html`<th scope="row" class="dispatch-address">
-    <a class="dispatch-prop" href="#panel-property-${p.propertyId}" data-select="property-${p.propertyId}">
-      <span class="dispatch-photo">${icon('image', { size: 'size-5' })}${p.photoUrl ? html`<img src="${p.photoUrl}" alt="" width="640" height="400" loading="lazy" decoding="async" />` : ''}<span class="dispatch-house" aria-hidden="true">${icon('house-line', { size: 'size-3.5', weight: 'fill' })}</span></span>
-      <span class="dispatch-prop-address">${p.address}</span>${p.worstUrgency ? html`<span class="sr-only">, worst urgency ${URGENCY_WORD[p.worstUrgency]}</span>` : ''}
-    </a>
-    ${p.location ? '' : html`<span class="dispatch-not-found">${badge('Address not found', 'warning')}</span>`}
-  </th>`;
+/**
+ * One Property: its worst Urgency in words, the suburb and how many Tickets are open; the
+ * address, the link that picks it on the map ("Address not found" when the map could not
+ * place it); then each open Ticket as a row to it. The photo is a strip on the card's right
+ * edge fading into the card (a band on top on a phone); no photo, no strip. A quiet Property
+ * says "No open Tickets".
+ */
+function propertyCard(p: PropertyView): Html {
+  const n = p.openTickets.length;
+  return html`<li data-row="property-${p.propertyId}" ${p.worstUrgency ? html`data-urgency="${p.worstUrgency}"` : ''}>
+    <article class="dispatch-card${p.photoUrl ? ' has-photo' : ''}" aria-labelledby="prop-${p.propertyId}">
+      <div class="dispatch-card-main">
+        <p class="dispatch-card-top">
+          ${p.worstUrgency ? urgencyBadge(p.worstUrgency) : ''}
+          <span class="dispatch-card-suburb">${p.suburb}</span>
+          ${n ? html`<span class="dispatch-card-count num">${n} open</span>` : ''}
+        </p>
+        <h3 class="dispatch-card-address" id="prop-${p.propertyId}">
+          <a class="dispatch-prop" href="#panel-property-${p.propertyId}" data-select="property-${p.propertyId}">${p.address}</a>${p.worstUrgency ? html`<span class="sr-only">, worst urgency ${URGENCY_WORD[p.worstUrgency]}</span>` : ''}
+        </h3>
+        ${p.location ? '' : html`<p class="dispatch-not-found">${badge('Address not found', 'warning')}</p>`}
+        ${n ? ticketRows(p) : html`<p class="dispatch-card-calm">No open Tickets</p>`}
+      </div>
+      ${p.photoUrl ? html`<div class="dispatch-card-photo" aria-hidden="true"><img src="${p.photoUrl}" alt="" width="640" height="400" loading="lazy" decoding="async" /></div>` : ''}
+    </article>
+  </li>`;
 }
 
-/** Each open Ticket as one line: its number and its words, an edge in its Urgency (said in words for a screen reader), the whole line the link to the Ticket. */
-function ticketLines(p: PropertyView): Html {
-  return html`<ul class="dispatch-tix" role="list">
+/**
+ * Each open Ticket as one row, the whole row the link to it: its number, its words cut to
+ * a line (the whole message in the link's title) and, when there are several, its Urgency. "Show full messages" lets
+ * them wrap; static/dispatch-map.js shows it only when a line is actually cut.
+ */
+function ticketRows(p: PropertyView): Html {
+  // One Ticket's Urgency is the card's, already in the chip above it.
+  const several = p.openTickets.length > 1;
+  return html`<ul class="dispatch-tix" role="list" aria-label="Open Tickets at ${p.address}">
       ${p.openTickets.map(
-        (t) => html`<li><a class="dispatch-tix-line is-${t.urgency}" href="/tickets/${t.ticketId}" title="${t.description}"><span class="dispatch-tix-num num">#${t.ticketId}</span><span class="dispatch-tix-text">${t.description}</span><span class="sr-only"> (${URGENCY_WORD[t.urgency] ?? t.urgency})</span></a></li>`,
+        (t) => html`<li><a class="dispatch-tix-line is-${t.urgency}" href="/tickets/${t.ticketId}" title="${t.description}"><span class="dispatch-tix-num num">#${t.ticketId}</span><span class="dispatch-tix-text">${t.description}</span>${several ? urgencyBadge(t.urgency) : html`<span class="sr-only"> (${URGENCY_WORD[t.urgency] ?? t.urgency})</span>`}</a></li>`,
       )}
     </ul>
-    <button type="button" class="dispatch-tix-more js-only" aria-expanded="false" data-tix-more>Show full messages${icon('caret-down', { size: 'size-3.5' })}</button>`;
+    <button type="button" class="dispatch-tix-more" aria-expanded="false" data-tix-more hidden>Show full messages${icon('caret-down', { size: 'size-3.5' })}</button>`;
 }
 
 /**

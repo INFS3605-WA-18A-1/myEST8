@@ -2,7 +2,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { signIn } from './support/actions.ts';
 
 // The Dispatch map in a real browser: MapLibre draws the basemap, the pins are real
-// buttons laid over it, overlapping pins are grouped until zoomed in, and the table and
+// buttons laid over it, overlapping pins are grouped until zoomed in, and the list and
 // the keyboard pick a Property just as the mouse does. Roles and names only, and nothing
 // here reads canvas pixels or waits on a tile download: the pins are DOM markers.
 
@@ -116,7 +116,7 @@ test('pins that overlap are grouped with a count, and a group splits when it is 
   await zoomInUntilVisible(map, pinOf(map, KING_ST));
 });
 
-test('picking a Property in the table opens its panel and shows its pin, even when it was in a group', async ({ page }) => {
+test('picking a Property in the list opens its panel and shows its pin, even when it was in a group', async ({ page }) => {
   await stubBasemap(page);
   await signIn(page);
   await page.goto('/dispatch');
@@ -125,9 +125,9 @@ test('picking a Property in the table opens its panel and shows its pin, even wh
   await expect(groups(map).first()).toBeVisible();
   await expect(page.getByRole('heading', { name: KING_ST, level: 2 })).toBeHidden();
 
-  // 12 King St has no open Tickets, so it sits in the folded table.
-  await page.getByText(/^Show the \d+ Properties with no open Tickets/).click();
-  await page.getByRole('table', { name: /^Properties with no open Tickets/ }).getByRole('link', { name: KING_ST }).click();
+  // 12 King St has no open Tickets, so it sits in the folded list.
+  await page.getByText(/^\d+ Properties with no open Tickets/).click();
+  await page.getByRole('list', { name: /^Properties with no open Tickets/ }).getByRole('link', { name: KING_ST }).click();
 
   await expect(page.getByRole('heading', { name: KING_ST, level: 2 })).toBeVisible();
   await expect(page.getByRole('heading', { name: /^Nearest Tradies, within 15 km/, level: 3 })).toBeVisible();
@@ -158,18 +158,18 @@ test('Enter on a focused pin opens its panel, and Close puts the focus back on t
   await expect(pin).toBeFocused();
 });
 
-test('without WebGL the map is replaced by a note that points to the table, and the table still picks a Property', async ({ page }) => {
+test('without WebGL the map is replaced by a note that points to the list, and the list still picks a Property', async ({ page }) => {
   await stubBasemap(page);
   await page.addInitScript('HTMLCanvasElement.prototype.getContext = () => null;');
   await signIn(page);
   await page.goto('/dispatch');
 
   await expect(page.getByText(/^The map could not load/)).toBeVisible();
-  await expect(page.getByText(/The table below lists the same Properties/)).toBeVisible();
+  await expect(page.getByText(/The list below has the same Properties/)).toBeVisible();
   await expect(page.getByText('The map needs JavaScript')).toBeHidden();
 
-  await page.getByText(/^Show the \d+ Properties with no open Tickets/).click();
-  await page.getByRole('table', { name: /^Properties with no open Tickets/ }).getByRole('link', { name: KING_ST }).click();
+  await page.getByText(/^\d+ Properties with no open Tickets/).click();
+  await page.getByRole('list', { name: /^Properties with no open Tickets/ }).getByRole('link', { name: KING_ST }).click();
   await expect(page.getByRole('heading', { name: KING_ST, level: 2 })).toBeVisible();
 });
 
@@ -188,12 +188,12 @@ test('on a phone the page never scrolls sideways, and the panel opens under the 
   await stubBasemap(page);
   await signIn(page);
   await page.goto('/dispatch');
-  await page.getByText(/^Show the \d+ Properties with no open Tickets/).click();
+  await page.getByText(/^\d+ Properties with no open Tickets/).click();
 
   const overflow = () => page.evaluate<number>('document.documentElement.scrollWidth - document.documentElement.clientWidth');
   expect(await overflow()).toBe(0);
 
-  await page.getByRole('table', { name: /^Properties with no open Tickets/ }).getByRole('link', { name: KING_ST }).click();
+  await page.getByRole('list', { name: /^Properties with no open Tickets/ }).getByRole('link', { name: KING_ST }).click();
   const heading = page.getByRole('heading', { name: KING_ST, level: 2 });
   await expect(heading).toBeInViewport();
   // Measured together, as the page may still be scrolling to the panel.
@@ -201,4 +201,23 @@ test('on a phone the page never scrolls sideways, and the panel opens under the 
   const gap = () => heading.evaluate((h, m) => h.getBoundingClientRect().top - m!.getBoundingClientRect().bottom, map);
   await expect.poll(gap).toBeGreaterThan(0);
   expect(await overflow()).toBe(0);
+});
+
+test('on a phone the Properties are cards inside the page, each address and Ticket row within its card', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await signIn(page);
+  await page.goto('/dispatch');
+  const quiet = page.getByText(/^\d+ Propert(y|ies) with no open Tickets/);
+  if (await quiet.count()) await quiet.click();
+
+  const cards = page.locator('#properties .dispatch-card');
+  await expect(cards.first()).toBeVisible();
+  expect(await page.evaluate<number>('document.documentElement.scrollWidth - document.documentElement.clientWidth')).toBeLessThanOrEqual(0);
+  for (const card of await cards.all()) {
+    const box = (await card.boundingBox())!;
+    for (const part of await card.locator('.dispatch-card-address, .dispatch-tix-line').all()) {
+      const inner = (await part.boundingBox())!;
+      expect(inner.x + inner.width).toBeLessThanOrEqual(box.x + box.width + 1);
+    }
+  }
 });
