@@ -809,6 +809,39 @@ onContent((root) => {
   }
 });
 
+// === Profiles: the Ticket history button ===
+// Each household lists its open Tickets under the card. With this file running the list is
+// folded away behind its Ticket history button; without it the Tickets are just listed.
+onContent((root) => {
+  for (const button of root.querySelectorAll('[data-history-toggle]')) {
+    const panel = root.querySelector(`#${button.getAttribute('aria-controls')}`);
+    if (!panel) continue;
+    button.hidden = false;
+    panel.hidden = true;
+    button.addEventListener('click', () => {
+      const open = panel.hidden;
+      panel.hidden = !open;
+      button.setAttribute('aria-expanded', String(open));
+    });
+  }
+});
+
+// === Profiles: a Property photo that will not load ===
+// A household's photo is found for its address. When the file is gone or the address finds
+// nothing, the broken picture is swapped for the quiet empty slot (a dashed box) rather
+// than leaving a blank square. Image errors do not bubble, so this listens in capture.
+const photoGone = (img) => img.closest('.household-photo-slot')?.classList.add('is-empty');
+document.addEventListener(
+  'error',
+  (event) => {
+    if (event.target instanceof HTMLImageElement && event.target.classList.contains('household-photo')) photoGone(event.target);
+  },
+  true,
+);
+onContent((root) => {
+  for (const img of root.querySelectorAll('img.household-photo')) if (img.complete && img.currentSrc && img.naturalWidth === 0) photoGone(img);
+});
+
 // === photo viewer ===
 // A photoGrid ([data-photo-grid]) is a list of links to full images, which open in
 // the same tab without this file. Here a click on one opens that grid's photos in

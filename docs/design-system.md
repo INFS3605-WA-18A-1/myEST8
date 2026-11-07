@@ -68,7 +68,7 @@ myEST8 is where a Property Manager at a small Australian Agency sees every repai
 ## Shape, space and elevation
 
 - Radius: `--radius-sm` 4px on rows, badges, inputs, dockets and tiles inside a card; `--radius-btn` 6px on buttons and segmented controls; `--radius-card` 16px on every card, section and panel; `--radius-pill` 999px on badges, chips and avatars only. Alerts and chat bubbles keep 8px. Borders are 1px `--line`.
-- **Squircles are for hover and press fills only.** A fill that answers the pointer on a row or link inside a card (Profiles' Tenant, Ticket, Tradie and unlinked rows, the Owner's name in its tab, the Add profile menu items) is a squircle: `corner-shape: squircle` with a 14px radius where the browser supports it, and a 10px rounded rectangle where it doesn't. The fill is inset from the card's edges, never a full-bleed stripe: Sand on hover, `--line` while pressed, over `--dur-fast` and `--ease-out`. Cards, sections, badges, buttons and dockets keep their radii, so shape still says what a thing is.
+- **Squircles are for hover and press fills only.** A fill that answers the pointer on a row or link inside a card (the Add profile menu items) is a squircle: `corner-shape: squircle` with a 14px radius where the browser supports it, and a 10px rounded rectangle where it doesn't. The fill is inset from the card's edges, never a full-bleed stripe: Sand on hover, `--line` while pressed, over `--dur-fast` and `--ease-out`. Cards, sections, badges, buttons and dockets keep their radii, so shape still says what a thing is.
 - **An icon beside text that may wrap sits on the first line** (an address chip, a contact link, a card's address, a Ticket on Profiles): the row aligns to the top and the 16px icon moves down by `(1lh - 16px) / 2`. Icons beside one line of text centre on it; every icon is within 1px of its text's centre.
 - Spacing steps 4, 8, 12, 16, 24, 32. Content column max 1280px with 24px gutters (16px under 1024px).
 - Sections cast `--shadow-soft`; menus, dialogs and the phone frame cast `--shadow-lift`; nothing else casts a shadow.
@@ -157,7 +157,7 @@ On phones the order is Do next, Waiting on others (one compact strip of counts),
 │ map  (24rem tall, 32rem from 1024px)         │ panel: the picked  │
 │                                              │ Property or Tradie │
 ├──────────────────────────────────────────────┴────────────────────┤
-│ Properties: Address  Suburb  Open Tickets  Worst urgency           │
+│ Properties: Address  Suburb  Open Tickets  Urgency           │
 ├────────────────────────────────────────────────────────────────────┤
 │ Tradie schedule: Tradie × today and the next six days              │
 └────────────────────────────────────────────────────────────────────┘
@@ -740,6 +740,19 @@ One page for the people and places, in place of the five lists in the rail. Thos
 - **Add profile.** A `<details data-menu>` in the page header, the same disclosure as the user menu (it closes on a click elsewhere and on Escape). The summary is one Harbour button that looks split: a plus and "Add profile", then a chevron behind `--action-divider`. The whole control opens the menu, and the chevron turns while it is open. Hover darkens the whole control. Focus is one 2px Harbour ring. Property, Tenant, Property Owner, Building Manager and Tradie, each to its own `/new` page; the items take the squircle fill on hover. Adding a Property is `/properties/new`; the list's button goes there, and a refused save is that page again.
 - **Mine and All** narrow the Properties, as on the other lists. Tradies, and people linked to no Property, are the Agency's either way. Search (`q`) keeps households whose address, suburb or anyone in them matches, and Tradies whose business name, contact name or Trade matches.
 - **The rail** has one Profiles item (`address-book`), with no group heading. A Property, Tenant, Property Owner, Building Manager or Tradie page, including each `/new` page, keeps it current.
+
+### Profiles: soft card layout
+
+The page is one white card under the title (`.profiles-card`, 18px radius, soft shadow, no overflow clipping so the Add profile menu can open past its edge). This replaces the squircle rows, the Owner tab and the photo strip described above; the data, the search, Mine and All, and the Add profile menu are unchanged.
+
+- **Header.** The count sentence stays as the subtitle. Beside the title, a white capsule of chips opens each kind of profile: All (the current page, Night fill), Properties, Tenants, Property Owners, Tradies and Building Managers, each with its count. They link to the same lists as the sentence.
+- **Toolbar band.** A cool grey band across the card's top: the search on the left, Mine / All and Add profile on the right.
+- **Two columns from 1024px.** Households on the left; a Paper column on the right with the Tradies and, under a hairline, Not linked to a Property. On a phone the Tradies follow the households.
+- **Households head.** "Households" with the count, and at the right how many Tickets are open and approvals are waiting across what is shown (an Owner of several Properties counted once).
+- **Household card.** A white card with a hairline and 16px radius, laid out in a grid: the photo, the words, two tiles, and a Ticket history row beneath. The photo is 11rem wide with 12px corners on the left and fills the height of the card. It is the one found for the Property's address when it was added, or the one a Property Manager uploaded. A Property with none shows a dashed "Add a photo" link to `/properties/:id#photo`, and a photo that fails to load turns into the same dashed box ("Photo unavailable"; app.js). On a phone the photo is a band across the top. The words are the Owner (a small label and name) with the Wattle "N approvals waiting" pill, the address (Bricolage 18/600) with the suburb in Slate, the Tenants as a row of initials and names (an open Ticket count shows only when the Property has several Tenants; the Concern chip stays), "No Tenants yet" with an Add a Tenant button when there are none, and the Building Manager. Two tiles follow: the open Ticket count, and the highest Urgency, labelled "Urgency" (Urgent red, High amber, Routine grey, or a green "Clear / Nothing to fix"), then a round arrow to the Property. From 1280px the tiles sit to the right of the words; under that they sit below them.
+- **Ticket history.** A Harbour-tinted pill button under the people (hidden until app.js runs, so without a script the Tickets are just listed). It opens the open Tickets across the card, High first: `#id`, the words, the Urgency badge, the day reported and a caret, each row a link to its Ticket, under "Open all in Tickets" (no number, since the tile already counts them). A household with none open has no button and says "No open Tickets".
+- **Tradies.** One white row each: a Harbour initials circle, the business name (the link, covering the row), their Trades in Slate, "N open Jobs" or "Not on the map" when it applies, and the myEST8 rating as a soft Wattle chip. They stay in order of their first Trade. A dashed "Add a Tradie" row ends the list; "See all" opens `/tradies`.
+- **Not linked to a Property.** Former Tenants, Property Owners and Building Managers as outlined chips with initials, under the Tradies.
 
 ## Settings (`/settings`)
 
