@@ -504,37 +504,33 @@ function ratings(t: Pick<TradieView, 'myEst8Rating' | 'googleRating'>): Html {
 }
 
 /**
- * The Properties with open Tickets, the most urgent first: the address (the link that
- * picks it), suburb, each open Ticket by its issue, and the worst Urgency. The ones with
- * nothing open fold into a disclosure under them.
+ * The Properties with open Tickets, the most urgent first. Each is one row: its photo with a
+ * house in the colour of its worst Urgency, the address (the link that picks it) under it, the
+ * suburb, and each open Ticket as one line with its number and an edge in its own Urgency.
+ * Long messages are cut to a line; "Show full messages" (with JavaScript) lets them wrap. The
+ * ones with nothing open fold into a disclosure under them.
  */
 function propertyTable(properties: PropertyView[]): Html {
   if (!properties.length) return emptyState('No Properties yet. Add one in Settings and it will appear here.');
   const open = properties.filter((p) => p.openTickets.length);
   const quiet = properties.filter((p) => !p.openTickets.length);
   return html`${open.length
-      ? html`<div class="table-frame dispatch-stack">
-          <table class="table table-sm">
+      ? html`<div class="dispatch-props">
+          <table class="dispatch-props-table">
             <caption class="sr-only">Properties with open Tickets, the most urgent first. The link in each row opens its details beside the map.</caption>
             <thead>
               <tr>
                 <th scope="col">Address</th>
                 <th scope="col">Suburb</th>
                 <th scope="col">Open Tickets</th>
-                <th scope="col">Worst urgency</th>
-                <th scope="col"><span class="sr-only">Details</span></th>
               </tr>
             </thead>
             <tbody>
               ${open.map(
                 (p) => html`<tr data-row="property-${p.propertyId}" data-urgency="${p.worstUrgency ?? ''}">
                   ${addressCell(p)}
-                  <td>${p.suburb}</td>
-                  <td class="dispatch-tickets">
-                    <ul class="dispatch-list">${p.openTickets.map((t) => html`<li>${ticketCell({ ticketId: t.ticketId, issue: t.description })}</li>`)}</ul>
-                  </td>
-                  <td>${p.worstUrgency ? urgencyBadge(p.worstUrgency) : ''}</td>
-                  <td class="dispatch-go-cell"><a class="dispatch-go" href="#panel-property-${p.propertyId}" data-select="property-${p.propertyId}" aria-label="Details for ${p.address}">${icon('caret-right', { size: 'size-4' })}</a></td>
+                  <td class="dispatch-suburb">${p.suburb}</td>
+                  <td class="dispatch-tickets">${ticketLines(p)}</td>
                 </tr>`,
               )}
             </tbody>
@@ -544,8 +540,8 @@ function propertyTable(properties: PropertyView[]): Html {
     ${quiet.length
       ? html`<div class="dispatch-foot"><p class="dispatch-showing">Showing ${open.length} of ${properties.length} properties</p><details class="dispatch-more">
           <summary class="cursor-pointer text-sm font-medium text-action">Show the ${quiet.length} ${quiet.length === 1 ? 'Property' : 'Properties'} with no open Tickets</summary>
-          <div class="table-frame dispatch-stack">
-            <table class="table table-sm">
+          <div class="dispatch-props">
+            <table class="dispatch-props-table is-quiet">
               <caption class="sr-only">Properties with no open Tickets. The link in each row opens its details beside the map.</caption>
               <thead>
                 <tr>
@@ -554,7 +550,7 @@ function propertyTable(properties: PropertyView[]): Html {
                 </tr>
               </thead>
               <tbody>
-                ${quiet.map((p) => html`<tr data-row="property-${p.propertyId}">${addressCell(p)}<td>${p.suburb}</td></tr>`)}
+                ${quiet.map((p) => html`<tr data-row="property-${p.propertyId}">${addressCell(p)}<td class="dispatch-suburb">${p.suburb}</td></tr>`)}
               </tbody>
             </table>
           </div>
@@ -562,11 +558,27 @@ function propertyTable(properties: PropertyView[]): Html {
       : ''}`;
 }
 
+const URGENCY_WORD: Record<string, string> = { urgent: 'Urgent', high: 'High', routine: 'Routine' };
+
+/** The Property's photo (a picture mark while it has none or it will not load), a house in its worst Urgency's colour, and the address that picks it. */
 function addressCell(p: PropertyView): Html {
   return html`<th scope="row" class="dispatch-address">
-    <a class="entity-link entity-link-property" href="#panel-property-${p.propertyId}" data-select="property-${p.propertyId}">${icon('house-line', { size: 'size-4' })}<span>${p.address}</span></a>
+    <a class="dispatch-prop" href="#panel-property-${p.propertyId}" data-select="property-${p.propertyId}">
+      <span class="dispatch-photo">${icon('image', { size: 'size-5' })}${p.photoUrl ? html`<img src="${p.photoUrl}" alt="" width="640" height="400" loading="lazy" decoding="async" />` : ''}<span class="dispatch-house" aria-hidden="true">${icon('house-line', { size: 'size-3.5', weight: 'fill' })}</span></span>
+      <span class="dispatch-prop-address">${p.address}</span>${p.worstUrgency ? html`<span class="sr-only">, worst urgency ${URGENCY_WORD[p.worstUrgency]}</span>` : ''}
+    </a>
     ${p.location ? '' : html`<span class="dispatch-not-found">${badge('Address not found', 'warning')}</span>`}
   </th>`;
+}
+
+/** Each open Ticket as one line: its number and its words, an edge in its Urgency (said in words for a screen reader), the whole line the link to the Ticket. */
+function ticketLines(p: PropertyView): Html {
+  return html`<ul class="dispatch-tix" role="list">
+      ${p.openTickets.map(
+        (t) => html`<li><a class="dispatch-tix-line is-${t.urgency}" href="/tickets/${t.ticketId}" title="${t.description}"><span class="dispatch-tix-num num">#${t.ticketId}</span><span class="dispatch-tix-text">${t.description}</span><span class="sr-only"> (${URGENCY_WORD[t.urgency] ?? t.urgency})</span></a></li>`,
+      )}
+    </ul>
+    <button type="button" class="dispatch-tix-more js-only" aria-expanded="false" data-tix-more>Show full messages${icon('caret-down', { size: 'size-3.5' })}</button>`;
 }
 
 /**

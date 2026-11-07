@@ -4734,78 +4734,6 @@
       background: var(--info-bg);
     }
 
-    /* The Properties tables. From 640px they are tables, their columns wide enough to
-       read; on phones each row is a block (like table({ stack: true }) in ui.ts, which
-       can't carry the row header and data-row these rows need), so nothing scrolls
-       sideways. */
-    @media (min-width: 640px) {
-      .dispatch-stack .dispatch-address {
-        min-width: 12rem;
-      }
-      .dispatch-stack .dispatch-tickets {
-        min-width: 16rem;
-      }
-    }
-    @media (max-width: 639.98px) {
-      .dispatch-stack {
-        overflow: visible;
-        background: transparent;
-        border: 0;
-        border-radius: 0;
-      }
-      .dispatch-stack :where(table, tbody) {
-        display: block;
-      }
-      .dispatch-stack thead {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
-      }
-      .dispatch-stack tbody {
-        display: grid;
-        gap: 8px;
-      }
-      .dispatch-stack tbody tr {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 6px 8px;
-        padding: 10px 12px;
-        background: var(--surface);
-        border: 1px solid var(--line);
-        border-radius: var(--radius-sm);
-      }
-      .dispatch-stack tbody :where(th, td) {
-        display: block;
-        height: auto;
-        min-width: 0;
-        padding: 0;
-        border: 0;
-        background: transparent;
-      }
-      /* A Property: its address, then the suburb with the worst urgency at the end, then its Tickets. */
-      .dispatch-stack tbody th {
-        flex-basis: 100%;
-        font-size: 14px;
-      }
-      .dispatch-stack tbody td:nth-child(2) {
-        color: var(--muted);
-      }
-      .dispatch-stack tbody td.dispatch-tickets {
-        order: 1;
-        flex-basis: 100%;
-      }
-      .dispatch-stack tbody td:nth-child(4) {
-        margin-left: auto;
-      }
-      .dispatch-stack tbody tr[data-selected] {
-        background: var(--info-bg);
-        border-color: var(--action);
-      }
-    }
   }
 }
 
@@ -9378,12 +9306,6 @@
         align-self: start;
       }
     }
-    .dispatch-stack .dispatch-address .entity-link {
-      border: 0;
-      background: transparent;
-      padding: 0;
-      font-weight: 600;
-    }
     .dispatch-card-legend strong {
       font-size: 14px;
       color: var(--ink);
@@ -9438,49 +9360,258 @@
       font: inherit;
       font-size: 14px;
     }
-    .soft-card .dispatch-stack {
-      border: 0;
-      border-radius: 0;
-      background: transparent;
+    /* Properties: one row for each, its photo and address, its suburb, and its open Tickets as
+       lines edged in their Urgency. From 640px a table; on a phone each row is a block. */
+    .dispatch-props {
+      min-width: 0;
     }
-    .soft-card .dispatch-stack thead th {
+    .dispatch-props-table {
+      width: 100%;
+      table-layout: fixed;
+      border-collapse: collapse;
+    }
+    .dispatch-props-table th,
+    .dispatch-props-table td {
+      padding: 16px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+    .dispatch-props-table thead th {
+      padding-block: 10px;
+      border-bottom: 1px solid var(--line);
       font-size: 13px;
       font-weight: 500;
       color: var(--muted);
-      background: transparent;
     }
-    .dispatch-stack tr[hidden] {
-      display: none !important;
+    .dispatch-props-table thead th:first-child,
+    .dispatch-props-table tbody th {
+      width: 13rem;
     }
-    /* The address in the Properties table: a house in a rounded square, coloured by the worst Urgency. */
-    .dispatch-stack .dispatch-address .entity-link {
-      align-items: center;
+    .dispatch-props-table thead th:nth-child(2),
+    .dispatch-props-table .dispatch-suburb {
+      width: 8.5rem;
     }
-    .dispatch-stack .dispatch-address .entity-link svg {
-      flex: none;
-      margin-block-start: 0;
-      width: 34px !important;
-      height: 34px !important;
-      padding: 8px;
-      box-sizing: border-box;
-      border-radius: var(--radius-sm);
+    .dispatch-props-table tbody tr {
+      border-top: 1px solid var(--line);
+    }
+    .dispatch-props-table tbody tr:first-child {
+      border-top: 0;
+    }
+    .dispatch-props-table tbody tr[hidden] {
+      display: none;
+    }
+    .dispatch-props-table tbody tr[data-selected] {
+      background: var(--info-bg);
+    }
+    .dispatch-suburb {
+      font-size: 14px;
+      color: var(--muted);
+    }
+    .dispatch-prop {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      color: var(--ink);
+      text-decoration: none;
+    }
+    .dispatch-prop:hover .dispatch-prop-address {
+      text-decoration: underline;
+    }
+    .dispatch-prop-address {
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+    .dispatch-photo {
+      position: relative;
+      display: grid;
+      place-items: center;
+      width: 96px;
+      aspect-ratio: 3 / 2;
+      border-radius: 12px;
       background: var(--surface-band);
       color: var(--muted);
     }
-    .dispatch-stack tr[data-urgency='routine'] .dispatch-address .entity-link svg {
-      background: var(--info-bg);
-      color: var(--action);
+    .dispatch-photo img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border-radius: inherit;
+      object-fit: cover;
     }
-    .dispatch-stack tr[data-urgency='high'] .dispatch-address .entity-link svg {
+    .dispatch-house {
+      position: absolute;
+      right: -6px;
+      bottom: -6px;
+      display: grid;
+      place-items: center;
+      width: 24px;
+      height: 24px;
+      border-radius: 8px;
+      background: var(--muted);
+      color: var(--surface);
+      box-shadow: 0 0 0 2px var(--surface);
+    }
+    .dispatch-props-table tr[data-urgency='routine'] .dispatch-house {
+      background: var(--action);
+    }
+    .dispatch-props-table tr[data-urgency='high'] .dispatch-house {
       background: var(--high);
-      color: var(--surface);
     }
-    .dispatch-stack tr[data-urgency='urgent'] .dispatch-address .entity-link svg {
+    .dispatch-props-table tr[data-urgency='urgent'] .dispatch-house {
       background: var(--urgent);
-      color: var(--surface);
     }
-    .dispatch-stack .dispatch-address .entity-link {
-      gap: 10px;
+    .dispatch-tix {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .dispatch-tix li {
+      min-width: 0;
+    }
+    .dispatch-tix-line {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+      padding: 8px 12px 8px 10px;
+      border-left: 3px solid var(--muted);
+      border-radius: 4px 12px 12px 4px;
+      background: var(--page);
+      color: var(--ink);
+      font-size: 14px;
+      line-height: 1.4;
+      text-decoration: none;
+    }
+    .dispatch-tix-line:hover {
+      filter: brightness(0.97);
+    }
+    .dispatch-tix-line.is-high {
+      border-left-color: var(--high);
+      background: var(--high-bg);
+    }
+    .dispatch-tix-line.is-urgent {
+      border-left-color: var(--urgent);
+      background: var(--urgent-bg);
+    }
+    .dispatch-tix-num {
+      flex: none;
+      padding: 1px 8px;
+      border-radius: 8px;
+      background: #e4e8ec;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .is-high > .dispatch-tix-num {
+      background: #fbe0c4;
+      color: var(--high);
+    }
+    .is-urgent > .dispatch-tix-num {
+      background: #f9d4cf;
+      color: var(--urgent);
+    }
+    .dispatch-tix-text {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .dispatch-tickets.is-full .dispatch-tix-line {
+      align-items: flex-start;
+    }
+    .dispatch-tickets.is-full .dispatch-tix-text {
+      overflow: visible;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+    .dispatch-tix-more {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      margin-top: 8px;
+      padding: 4px 0;
+      border: 0;
+      background: transparent;
+      color: var(--action);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .dispatch-tix-more:hover {
+      text-decoration: underline;
+    }
+    .dispatch-tix-more svg {
+      transition: rotate var(--dur-fast) var(--ease-out);
+    }
+    .dispatch-tix-more[aria-expanded='true'] svg {
+      rotate: 180deg;
+    }
+    @media (pointer: coarse) {
+      .dispatch-tix-more {
+        min-height: 44px;
+      }
+    }
+    @media (max-width: 639.98px) {
+      .dispatch-props-table :where(table, thead, tbody, tr, th, td) {
+        display: block;
+      }
+      .dispatch-props-table thead {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+      .dispatch-props-table tbody {
+        display: grid;
+        gap: 10px;
+      }
+      .dispatch-props-table tbody tr,
+      .dispatch-props-table tbody tr:first-child {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px 12px;
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: var(--surface);
+      }
+      .dispatch-props-table tbody tr[data-selected] {
+        border-color: var(--action);
+      }
+      .dispatch-props-table tbody :where(th, td),
+      .dispatch-props-table tbody th {
+        width: auto;
+        min-width: 0;
+        padding: 0;
+      }
+      .dispatch-props-table tbody th {
+        flex: 1 1 12rem;
+      }
+      .dispatch-prop {
+        flex-direction: row;
+        align-items: center;
+      }
+      .dispatch-photo {
+        flex: none;
+        width: 72px;
+      }
+      .dispatch-props-table tbody td.dispatch-suburb {
+        order: 1;
+      }
+      .dispatch-props-table tbody td.dispatch-tickets {
+        order: 2;
+        flex-basis: 100%;
+      }
     }
 
     /* A Work Order's free times: one line of quick choices. The one in the Start box is filled. */
@@ -9529,28 +9660,6 @@
       scale: 0.96;
       transition-duration: var(--dur-fast);
       transition-timing-function: var(--ease-out);
-    }
-    .dispatch-go-cell {
-      width: 56px;
-      text-align: right;
-    }
-    .dispatch-go {
-      display: inline-grid;
-      width: 36px;
-      height: 36px;
-      place-items: center;
-      border: 1px solid var(--line);
-      border-radius: 50%;
-      color: var(--ink);
-      transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), scale var(--dur-slow) var(--ease-spring);
-    }
-    .dispatch-go:active {
-      scale: 0.96;
-      transition-duration: var(--dur-fast);
-      transition-timing-function: var(--ease-out);
-    }
-    .dispatch-go:hover {
-      background: var(--info-bg);
     }
     /* The header's search and filters. */
     .dispatch-controls {
@@ -9798,9 +9907,6 @@
       color: var(--high);
     }
     @media (max-width: 639.98px) {
-      .dispatch-go-cell {
-        display: none;
-      }
       .glance-tile-value {
         font-size: 26px;
       }
