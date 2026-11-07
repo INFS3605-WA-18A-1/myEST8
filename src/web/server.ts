@@ -22,6 +22,7 @@ import { rateLimit } from './rate-limit.ts';
 import { loadNavCounts } from './shell.ts';
 import { loadSetupLink } from './pages/welcome.ts';
 import { tenantPages } from './tenant-pages.ts';
+import type { AuthKit } from '../adapters/workos.ts';
 
 /**
  * The whole web app: assets, the no-login Tenant pages, provider webhooks and
@@ -48,6 +49,8 @@ export function createWebApp(deps: {
   /** What onboarding can connect (Gmail). */
   connectors?: ChannelConnectors;
   demo?: DemoControls;
+  /** WorkOS AuthKit (ADR 0020): the one sign-in and sign-up page, and colleagues' invitations. Absent keeps the password forms. */
+  authKit?: AuthKit | null;
   /** Whether the landing page lists the demo Agency's sign-ins. Defaults to whether `demo` is set. */
   demoSignIns?: boolean;
 }) {
@@ -71,8 +74,8 @@ export function createWebApp(deps: {
   // The Tenant picks a visit time. A GET only shows the button.
   web.route('/', visitOfferPages(deps.app));
   web.route('/', createHttpApp(deps.app, deps));
-  web.route('/', authRoutes(deps.app, deps.sessions));
-  web.route('/', signupRoutes(deps.app, deps.sessions));
+  web.route('/', authRoutes(deps.app, deps.sessions, { authKit: deps.authKit, publicUrl: deps.publicUrl }));
+  web.route('/', signupRoutes(deps.app, deps.sessions, deps.authKit ?? null));
   // The two public pages an account agrees to (/terms, /privacy): no session needed.
   web.route('/', legalRoutes());
   // Signed out, / is the landing page; signed in, it falls through to the dashboard.
@@ -83,6 +86,7 @@ export function createWebApp(deps: {
   signedIn.use('*', async (c, next) => {
     c.set('demo', !!deps.demo);
     c.set('unavailableChannels', deps.connectors?.unavailable ?? []);
+    if (deps.authKit) c.set('invite', deps.authKit.invite);
     await next();
   });
   signedIn.use('*', loadNavCounts());

@@ -101,6 +101,9 @@ export function createApp(
     /** Checks a Property Manager's email and password. Returns their id, or null. */
     login: (email: string, password: string) => profiles.verifyLogin(email, password),
 
+    /** The Property Manager with this verified email (WorkOS AuthKit sign-in). Returns their id, or null. */
+    loginByVerifiedEmail: (email: string) => profiles.propertyManagerIdByEmail(email),
+
     /** Called by the webhooks: stores the message and returns straight away. False when no Agency has the address it was sent to. */
     receiveInbound: (message: InboundMessage): Promise<boolean> => intake.receive(message),
 
@@ -277,8 +280,11 @@ export function createApp(
             throw error;
           }
         },
-        /** Adds a colleague as a Property Manager. Returns their id and a temporary password to pass on, shown once. */
-        addColleague: (input: { name: string; email: string }) => profiles.addColleague(agencyId, input),
+        /**
+         * Adds a colleague as a Property Manager. Returns their id and a temporary password to pass on, shown once,
+         * or null with `temporaryPassword: false`, when they sign in through WorkOS AuthKit.
+         */
+        addColleague: (input: { name: string; email: string }, o?: { temporaryPassword: boolean }) => profiles.addColleague(agencyId, input, o),
         /** Renames the Agency and changes its time zone. Refuses field by field. Pages read the new values on the next request. */
         editAgency: (input: { name: string; timeZone: string }) => profiles.editAgency(agencyId, input),
         /**

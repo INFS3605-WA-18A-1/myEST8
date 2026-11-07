@@ -32,3 +32,4 @@ ds-bundle/
 google-cloud-cli-*.tar.gz
 .vercel
 .env*.local
+.env.local.bak

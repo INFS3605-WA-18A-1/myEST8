@@ -12,6 +12,8 @@ export type WebEnv = {
     demo?: boolean;
     /** Channels this server can't deliver on, so setup doesn't wait for them (see ChannelConnectors.unavailable). */
     unavailableChannels?: ChannelType[];
+    /** Emails a colleague WorkOS AuthKit's invitation to create their sign-in; unset without AuthKit, when colleagues get a temporary password. */
+    invite?: (email: string) => Promise<void>;
     navCounts?: { tickets: number; approvals: number };
     /** Where setup picks up again while the Agency is not fully set up (see `loadSetupLink`), else unset. */
     setupHref?: string;
