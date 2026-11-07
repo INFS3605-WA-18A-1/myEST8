@@ -55,23 +55,25 @@ describe('Profiles', () => {
     expect(page.indexOf(OCEAN_AVE)).toBeLessThan(page.indexOf(KING_ST));
   });
 
-  test('puts Tradies in their own box, grouped by their first Trade', async () => {
+  test('puts Tradies in their own box, in order of their first Trade, each with their Trades and rating', async () => {
     const w = await webWorld();
     const cookie = await w.signIn();
 
     const page = await (await w.get('/profiles', cookie)).text();
     const tradies = page.slice(page.indexOf('id="profiles-tradies"'));
     const text = visible(tradies);
-    expect(tradies).toContain('>Tradies<');
-    expect(text.indexOf('Plumbing')).toBeLessThan(text.indexOf("Pete's Plumbing"));
-    expect(text.indexOf("Pete's Plumbing")).toBeLessThan(text.indexOf('Electrical'));
-    expect(text.indexOf('Electrical')).toBeLessThan(text.indexOf('Sparky Sam'));
+    expect(tradies).toContain('>Tradies <span');
+    // Plumbers come before electricians, by their first Trade.
+    expect(text.indexOf("Pete's Plumbing")).toBeLessThan(text.indexOf('Sparky Sam'));
     expect(tradies).toContain('href="/tradies"');
+    expect(tradies).toContain('aria-hidden="true">PP</span>');
+    expect(tradies).toContain('href="/tradies/new"');
     expect(text).toContain('Not on the map');
     const start = tradies.indexOf(`href="/tradies/${w.ids.pete}"`);
     const pete = tradies.slice(start, tradies.indexOf('</li>', start));
     expect(pete).toContain('title="Pete&#39;s Plumbing"');
     expect(pete).not.toContain('Google');
+    expect(visible(pete)).toContain('Plumbing');
     expect(visible(pete)).toContain('myEST8');
     expect(visible(pete)).toContain("Pete's Plumbing");
   });
@@ -114,7 +116,7 @@ describe('Profiles', () => {
     expect(mine).not.toContain('href="/tenants?filter=all"');
     expect(mine).not.toContain('See all Properties');
     expect(mine).not.toContain('See all Tenants');
-    expect(mine).toContain('See all Tradies');
+    expect(visible(mine)).toContain('See all Tradies');
 
     const all = await (await w.get('/profiles?filter=all', cookie)).text();
     expect(all).toContain(OCEAN_AVE);
@@ -190,8 +192,46 @@ describe('Profiles', () => {
     const src = /src="(\/properties\/\d+\/photo\?v=\d+)"/.exec(king)?.[1];
     expect(src).toMatch(new RegExp(`^/properties/${w.ids.kingSt}/photo\\?v=\\d+$`));
     expect(king).toContain(`class="household-photo" src="${src}" alt="" width="640" height="400" loading="lazy" decoding="async"`);
+    // No photo: a dashed link to where one is added, and no picture.
     expect(ocean).not.toContain('<img');
-    expect(ocean).not.toContain('household-photo');
+    expect(ocean).not.toContain('class="household-photo"');
+    expect(ocean).toContain(`<a class="household-photo-slot is-empty" href="/properties/${w.ids.oceanAve}#photo">`);
+    expect(visible(ocean)).toContain('Add a photo');
+  });
+
+  test('a household shows its open Tickets and worst Urgency in tiles, and the Tickets behind a toggle', async () => {
+    const w = await webWorld();
+    const tap = await tomsTapTicket(w);
+    const cookie = await w.signIn();
+
+    const page = await (await w.get('/profiles', cookie)).text();
+    const king = page.split('<article class="household">').slice(1).find((card) => card.includes(KING_ST)) ?? '';
+    const tiles = visible(king.slice(king.indexOf('class="household-status"'), king.indexOf('</details>')));
+    expect(tiles).toContain('1 Open Ticket');
+    expect(tiles).toContain('Worst urgency');
+    const toggle = king.slice(king.indexOf('<details class="household-history">'), king.indexOf('</details>'));
+    expect(visible(toggle)).toContain('Ticket history');
+    expect(visible(toggle)).toContain('1 open');
+    expect(visible(toggle)).toContain(`#${tap.ticketId}`);
+    expect(toggle).toContain(`class="household-ticket" href="/tickets/${tap.ticketId}"`);
+    expect(toggle).toContain('href="/tickets"');
+    // Nothing open: Clear, no toggle.
+    const calm = page.split('<article class="household">').slice(1).find((card) => !card.includes('household-history')) ?? '';
+    if (calm) expect(visible(calm)).toContain('Nothing to fix');
+    // The header counts them.
+    expect(visible(page)).toContain('1 open Ticket');
+  });
+
+  test('the chips beside the title open each kind of profile, and All is this page', async () => {
+    const w = await webWorld();
+    const cookie = await w.signIn();
+
+    const page = await (await w.get('/profiles', cookie)).text();
+    const chips = page.slice(page.indexOf('<nav class="profiles-chips"'), page.indexOf('</nav>', page.indexOf('<nav class="profiles-chips"')));
+    expect(chips).toContain('profiles-chip is-active" href="/profiles"');
+    for (const href of ['/properties', '/tenants', '/owners', '/tradies', '/building-managers']) expect(chips).toContain(`href="${href}"`);
+    expect(visible(chips)).toContain('Properties 1');
+    expect(visible(chips)).toContain('Tradies 6');
   });
 
   test('the side menu has one Profiles item, current on a profile page', async () => {

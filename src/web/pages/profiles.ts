@@ -1,7 +1,10 @@
-// The Profiles page: one household per Property, Tradies in their own box, and the
-// people linked to no Property. Mine is this Property Manager's Properties; Tradies
-// are the Agency's either way. Adding anyone starts from the menu, on that profile's
-// own page.
+// The Profiles page: one white card under the title. Its top band holds the search, Mine /
+// All and Add profile. Below, one household per Property on the left (the Property's photo,
+// its Owner and people, how many Tickets are open and the worst Urgency, and the open
+// Tickets behind a Ticket history toggle), and on the right the Tradies and the people
+// linked to no Property. Mine is this Property Manager's Properties; Tradies are the
+// Agency's either way. The chips in the header are the lists for each kind of profile.
+// Adding anyone starts from the menu, on that profile's own page.
 
 import { Hono } from 'hono';
 import { html } from 'hono/html';
@@ -40,6 +43,7 @@ export function profilePages() {
     const tradies = q ? overview.tradies.map((group) => ({ ...group, tradies: group.tradies.filter((tradie) => tradieMatches(tradie, q)) })).filter((group) => group.tradies.length) : overview.tradies;
     const unlinked = q ? filterUnlinked(overview.unlinked, q) : overview.unlinked;
     const counts = q ? countsOf(households, tradies, unlinked) : overview.counts;
+    const { timeZone } = actions.agency();
     return c.html(
       page({
         title: 'Profiles',
@@ -47,19 +51,28 @@ export function profilePages() {
         active: 'profiles',
         shell: shellInfo(c),
         subtitle: summary(counts, filter, q),
-        controls: html`${search(filter, q)}${segmented(
-          [
-            { label: 'Mine', href: hrefFor('mine', q), active: filter === 'mine' },
-            { label: 'All', href: hrefFor('all', q), active: filter === 'all' },
-          ],
-          'Whose Properties',
-        )}${addMenu()}`,
-        body: html`<div class="profiles-board">
-          <div class="profiles-main">
-            ${householdsBlock(households, q, filter)}
-            ${unlinkedBlock(unlinked)}
+        controls: profileChips(counts, filter, q),
+        body: html`<div class="profiles-card">
+          <div class="profiles-toolbar">
+            ${search(filter, q)}
+            <div class="profiles-toolbar-end">
+              ${segmented(
+                [
+                  { label: 'Mine', href: hrefFor('mine', q), active: filter === 'mine' },
+                  { label: 'All', href: hrefFor('all', q), active: filter === 'all' },
+                ],
+                'Whose Properties',
+              )}
+              ${addMenu()}
+            </div>
           </div>
-          ${tradiesBlock(tradies, q, filter)}
+          <div class="profiles-board">
+            <div class="profiles-main">${householdsBlock(households, q, filter, timeZone)}</div>
+            <aside class="profiles-side" aria-label="Tradies and people without a Property">
+              ${tradiesBlock(tradies, q, filter)}
+              ${unlinkedBlock(unlinked)}
+            </aside>
+          </div>
         </div>`,
       }),
     );
@@ -105,11 +118,31 @@ function addMenu(): Html {
   </details>`;
 }
 
-function householdsBlock(households: Household[], q: string, filter: Filter): Html {
+/** The kinds of profile as chips beside the title: each opens its list; All is this page. */
+function profileChips(counts: Counts, filter: Filter, q: string): Html {
+  const chip = (label: string, href: string, n: number | null, active = false) => html`<a class="profiles-chip${active ? ' is-active' : ''}" href="${href}" ${active ? html`aria-current="page"` : ''}>${label}${n ? html` <span class="num">${n}</span>` : ''}</a>`;
+  return html`<nav class="profiles-chips" aria-label="Profile types">
+    ${chip('All', hrefFor(filter, q), null, true)}
+    ${chip('Properties', '/properties', counts.properties)}
+    ${chip('Tenants', filter === 'all' ? '/tenants?filter=all' : '/tenants', counts.tenants)}
+    ${chip('Property Owners', '/owners', counts.owners)}
+    ${chip('Tradies', '/tradies', counts.tradies)}
+    ${chip('Building Managers', '/building-managers', counts.buildingManagers)}
+  </nav>`;
+}
+
+function householdsBlock(households: Household[], q: string, filter: Filter, timeZone: string): Html {
+  const open = households.reduce((sum, household) => sum + household.openTickets, 0);
+  // An Owner of several Properties is counted once.
+  const waiting = [...new Map(households.map((household) => [household.owner.id, household.owner.approvalsWaiting])).values()].reduce((sum, n) => sum + n, 0);
+  const note = [open ? `${open} open ${open === 1 ? 'Ticket' : 'Tickets'}` : '', waiting ? `${waiting} ${waiting === 1 ? 'approval' : 'approvals'} waiting` : ''].filter(Boolean).join(' · ');
   return html`<section class="profiles-households" aria-labelledby="profiles-households">
-    <h2 class="section-title" id="profiles-households">Households</h2>
+    <div class="profiles-head">
+      <h2 class="profiles-title" id="profiles-households">Households${households.length ? html` <span class="num">${households.length}</span>` : ''}</h2>
+      ${note ? html`<p class="profiles-note num">${note}</p>` : ''}
+    </div>
     ${households.length
-      ? html`<div class="household-list">${households.map(householdCard)}</div>`
+      ? html`<div class="household-list">${households.map((household) => householdCard(household, timeZone))}</div>`
       : q
         ? emptyState('No households match that search.', linkButton('Clear search', hrefFor(filter, ''), { variant: 'ghost', size: 'sm' }))
         : filter === 'mine'
@@ -124,103 +157,138 @@ function suburbOf(household: Household): Html {
   return html` <span class="household-suburb">${household.suburb}</span>`;
 }
 
-/** How many open Tickets a household lists before it sends you to the Property for the rest. */
-const TICKETS_SHOWN = 3;
+/** "Kevin He" is KH; a single name gives its first two letters. */
+function initials(name: string): string {
+  const words = name.split(/\s+/).filter(Boolean);
+  if (words.length > 1) return words.slice(0, 2).map((word) => word[0] ?? '').join('').toUpperCase();
+  return (words[0] ?? name).slice(0, 2).toUpperCase();
+}
+
+/** "29 Oct", in the Agency's time zone. */
+function shortDate(iso: string, timeZone: string): string {
+  return new Intl.DateTimeFormat('en-GB', { timeZone, day: 'numeric', month: 'short' }).format(new Date(iso));
+}
 
 /**
- * One household: the Owner's tab on the card's top edge, then two columns. On the left
- * the address with its Tenants hanging off it and the Building Manager; on the right
- * what is wrong there, the open Tickets, High first. On a phone the Tickets follow the people.
- * A Property photo, when there is one, sits on the card's right edge (a band along the
- * bottom on a phone). No photo leaves the card as it is.
+ * One household. On the left the Property's photo, the one found for its address (or a
+ * link to add one when it has none); beside it the Owner and any approvals waiting, the
+ * address, and the Tenants and Building Manager; then two tiles, how many Tickets are open
+ * and the worst Urgency, and an arrow to the Property. A Ticket history toggle under them
+ * opens the open Tickets, each a row to its Ticket. On a phone the photo is a band on top.
  */
-function householdCard(household: Household): Html {
+function householdCard(household: Household, timeZone: string): Html {
   const waiting = household.owner.approvalsWaiting;
   return html`<article class="household">
-    <p class="household-owner">
-      <span class="household-role">Owner</span>
-      <a href="/owners/${household.owner.id}">${household.owner.name}</a>
-      ${waiting ? html`<a class="household-waiting" href="/approvals">${waiting === 1 ? '1 approval waiting' : `${waiting} approvals waiting`}</a>` : ''}
-    </p>
-    <div class="household-body">
-      <div class="household-place">
-        <h3 class="household-address"><a href="/properties/${household.propertyId}">${household.address}</a>${suburbOf(household)}</h3>
-        <ul class="household-people">
-          ${household.tenants.length
-            ? household.tenants.map(
-                (tenant) => html`<li>
-                  <div class="household-person">
-                    <a href="/tenants/${tenant.id}">${tenant.name}</a>
-                    ${tenant.openTickets ? html`<span class="household-count">${tenant.openTickets === 1 ? '1 open Ticket' : `${tenant.openTickets} open Tickets`}</span>` : ''}
-                    ${tenant.concern ? badge('Concern', 'warning') : ''}
-                  </div>
-                </li>`,
-              )
-            : html`<li class="is-quiet"><div class="household-person"><span>No Tenants</span> ${linkButton('Add a Tenant', '/tenants/new', { variant: 'ghost', size: 'sm' })}</div></li>`}
-        </ul>
-        ${household.buildingManager
-          ? html`<p class="household-manager"><span class="household-role">Building Manager</span> <a href="/building-managers/${household.buildingManager.id}">${household.buildingManager.name}</a></p>`
-          : ''}
-      </div>
-      ${householdTickets(household)}
-    </div>
     ${householdPhoto(household)}
+    <div class="household-main">
+      <p class="household-owner">
+        <span class="household-role">Owner</span>
+        <a href="/owners/${household.owner.id}">${household.owner.name}</a>
+        ${waiting ? html`<a class="household-waiting" href="/approvals">${waiting === 1 ? '1 approval waiting' : `${waiting} approvals waiting`}</a>` : ''}
+      </p>
+      <h3 class="household-address"><a href="/properties/${household.propertyId}">${household.address}</a>${suburbOf(household)}</h3>
+      <ul class="household-people">
+        ${household.tenants.length
+          ? household.tenants.map(
+              (tenant) => html`<li>
+                <div class="household-person">
+                  <span class="household-avatar" aria-hidden="true">${initials(tenant.name)}</span>
+                  <a href="/tenants/${tenant.id}">${tenant.name}</a>
+                  ${tenant.openTickets ? html`<span class="household-count">${tenant.openTickets === 1 ? '1 open Ticket' : `${tenant.openTickets} open Tickets`}</span>` : ''}
+                  ${tenant.concern ? badge('Concern', 'warning') : ''}
+                </div>
+              </li>`,
+            )
+          : html`<li class="is-quiet"><div class="household-person"><span class="household-avatar is-empty" aria-hidden="true">${icon('plus', { size: 'size-3' })}</span><span>No Tenants yet</span></div></li>`}
+      </ul>
+      ${household.buildingManager
+        ? html`<p class="household-manager"><span class="household-role">Building Manager</span> <a href="/building-managers/${household.buildingManager.id}">${household.buildingManager.name}</a></p>`
+        : ''}
+      ${household.tenants.length ? '' : html`<div class="household-add"><a class="btn btn-primary btn-sm" href="/tenants/new">${icon('plus', { size: 'size-4' })}Add a Tenant</a></div>`}
+      ${household.tickets.length ? '' : html`<p class="household-calm">No open Tickets</p>`}
+    </div>
+    ${householdTiles(household)}
+    ${householdHistory(household, timeZone)}
   </article>`;
 }
 
 /**
- * The Property's photo, flush with the card. Decorative: the address is already the heading.
- * Width and height are the street-photo frame; the card's CSS crops it with object-fit.
+ * The Property's photo, found for its address when it was added, or the one a Property
+ * Manager uploaded. Decorative: the address is already the heading. Width and height are
+ * the street-photo frame; the card's CSS crops it. With no photo the slot is a dashed link
+ * to where one is added.
  */
 function householdPhoto(household: Household): Html {
-  if (!household.photoUrl) return html``;
-  return html`<div class="household-photo-slot">
+  if (!household.photoUrl) {
+    return html`<a class="household-photo-slot is-empty" href="/properties/${household.propertyId}#photo">${icon('camera', { size: 'size-5' })}<span>Add a photo</span></a>`;
+  }
+  return html`<a class="household-photo-slot" href="/properties/${household.propertyId}" tabindex="-1" aria-hidden="true">
     <img class="household-photo" src="${household.photoUrl}" alt="" width="640" height="400" loading="lazy" decoding="async" />
+  </a>`;
+}
+
+const WORST_WORDS: Record<string, string> = { urgent: 'Most urgent', high: 'Worst urgency', routine: 'Worst urgency' };
+
+/** How many Tickets are open and the worst Urgency among them, then the way into the Property. */
+function householdTiles(household: Household): Html {
+  const worst = household.worstUrgency;
+  return html`<div class="household-status">
+    <div class="household-tile">
+      <p class="household-tile-value num">${household.openTickets}</p>
+      <p class="household-tile-label">${household.openTickets === 1 ? 'Open Ticket' : 'Open Tickets'}</p>
+    </div>
+    <div class="household-tile is-${worst ?? 'clear'}">
+      <p class="household-tile-value">${worst ? humanise(worst) : 'Clear'}</p>
+      <p class="household-tile-label">${worst ? WORST_WORDS[worst] : 'Nothing to fix'}</p>
+    </div>
+    <a class="household-go" href="/properties/${household.propertyId}" aria-label="Open ${household.address}">${icon('caret-right', { size: 'size-4' })}</a>
   </div>`;
 }
 
-/** The household's open Tickets, each a row to the Ticket with its Urgency; one quiet line when there are none. */
-function householdTickets(household: Household): Html {
-  if (!household.tickets.length) return html`<p class="household-calm">No open Tickets</p>`;
-  const more = household.tickets.length - TICKETS_SHOWN;
-  return html`<div class="household-tickets">
-    <ul aria-label="Open Tickets">
-      ${household.tickets.slice(0, TICKETS_SHOWN).map(
-        (ticket) => html`<li>
-          <a class="household-ticket" href="/tickets/${ticket.id}" title="${ticket.title}">
-            ${icon('ticket', { size: 'size-4' })}<span class="household-ticket-title">${ticket.title}</span>${urgencyBadge(ticket.urgency)}
-          </a>
-        </li>`,
-      )}
-    </ul>
-    ${more > 0 ? html`<a class="household-more" href="/properties/${household.propertyId}">${more === 1 ? '1 more open Ticket' : `${more} more open Tickets`}</a>` : ''}
-  </div>`;
+/**
+ * The open Tickets behind a toggle, High first: the number, its words, its Urgency and the
+ * day it was reported, each row a link to the Ticket. None open: no toggle.
+ */
+function householdHistory(household: Household, timeZone: string): Html {
+  if (!household.tickets.length) return html``;
+  const n = household.tickets.length;
+  return html`<details class="household-history">
+    <summary class="household-history-toggle">${icon('clock-counter-clockwise', { size: 'size-4' })}<span>Ticket history</span><span class="household-history-count num">${n} open</span>${icon('caret-down', { size: 'size-3.5' })}</summary>
+    <div class="household-history-panel">
+      <div class="household-history-head">
+        <span class="household-history-title">Open Tickets</span>
+        <a class="link" href="/tickets">Open all ${n} in Tickets</a>
+      </div>
+      <ul aria-label="Open Tickets">
+        ${household.tickets.map(
+          (ticket) => html`<li>
+            <a class="household-ticket" href="/tickets/${ticket.id}" title="${ticket.title}">
+              <span class="household-ticket-id num">#${ticket.id}</span><span class="household-ticket-title">${ticket.title}</span>${urgencyBadge(ticket.urgency)}<span class="household-ticket-date num">${shortDate(ticket.reportedAt, timeZone)}</span>${icon('caret-right', { size: 'size-4' })}
+            </a>
+          </li>`,
+        )}
+      </ul>
+    </div>
+  </details>`;
 }
 
 function tradiesBlock(groups: TradieGroup[], q: string, filter: Filter): Html {
-  return html`<div class="profiles-tradies">
-    <section class="section" aria-labelledby="profiles-tradies">
-      <div class="section-head">
-        <h2 class="section-title" id="profiles-tradies">Tradies</h2>
-        <div class="section-actions">${linkButton('See all Tradies', '/tradies', { variant: 'ghost', size: 'sm' })}</div>
-      </div>
-      <div class="section-body">
-        ${groups.length ? html`<p class="tradies-note">By their first Trade, with their myEST8 rating.</p>` : ''}
-        ${groups.length
-          ? groups.map(
-              (group) => html`<section class="tradie-group" aria-label="${humanise(group.trade)}">
-                <h3 class="tradie-group-title">${humanise(group.trade)}</h3>
-                <ul class="tradie-rows">
-                  ${group.tradies.map(tradieRow)}
-                </ul>
-              </section>`,
-            )
-          : q
-            ? emptyState('No Tradies match that search.', linkButton('Clear search', hrefFor(filter, ''), { variant: 'ghost', size: 'sm' }))
-            : emptyState('No Tradies yet. Add a Tradie to send them work.', linkButton('Add a Tradie', '/tradies/new', { variant: 'primary' }))}
-      </div>
-    </section>
-  </div>`;
+  const rows = groups.flatMap((group) => group.tradies);
+  return html`<section class="profiles-tradies" aria-labelledby="profiles-tradies">
+    <div class="profiles-head">
+      <h2 class="profiles-title" id="profiles-tradies">Tradies${rows.length ? html` <span class="num">${rows.length}</span>` : ''}</h2>
+      <a class="link profiles-seeall" href="/tradies">See all<span class="sr-only"> Tradies</span></a>
+    </div>
+    ${rows.length ? html`<p class="tradies-note">By their first Trade, with their myEST8 rating.</p>` : ''}
+    ${rows.length
+      ? html`<ul class="tradie-rows">
+          ${rows.map(tradieRow)}
+        </ul>
+        <a class="tradie-add" href="/tradies/new">${icon('plus', { size: 'size-4' })}Add a Tradie</a>`
+      : q
+        ? emptyState('No Tradies match that search.', linkButton('Clear search', hrefFor(filter, ''), { variant: 'ghost', size: 'sm' }))
+        : emptyState('No Tradies yet. Add a Tradie to send them work.', linkButton('Add a Tradie', '/tradies/new', { variant: 'primary' }))}
+  </section>`;
 }
 
 function tradieRow(tradie: TradieRow): Html {
@@ -228,9 +296,13 @@ function tradieRow(tradie: TradieRow): Html {
   const jobs = tradie.openJobs ? html`<span class="tradie-jobs">${tradie.openJobs === 1 ? '1 open Job' : `${tradie.openJobs} open Jobs`}</span>` : '';
   const offMap = tradie.onMap ? '' : badge('Not on the map', 'warning');
   return html`<li>
-    <a href="/tradies/${tradie.id}" title="${tradie.businessName}">${tradie.businessName}</a>
+    <span class="tradie-avatar" aria-hidden="true">${initials(tradie.businessName)}</span>
+    <span class="tradie-text">
+      <a href="/tradies/${tradie.id}" title="${tradie.businessName}">${tradie.businessName}</a>
+      <span class="tradie-trades">${tradie.trades.map((trade) => humanise(trade)).join(', ')}</span>
+      ${jobs || offMap ? html`<span class="tradie-extra">${jobs}${offMap}</span>` : ''}
+    </span>
     <span class="tradie-rating"><span class="sr-only">myEST8</span>${icon('star', { weight: 'fill', size: 'size-3.5' })}<strong class="num">${tradie.myEst8Rating.average.toFixed(1)}</strong><span class="num" aria-hidden="true">(${tradie.myEst8Rating.count})</span><span class="sr-only">from ${tradie.myEst8Rating.count} ${noun}</span></span>
-    ${jobs || offMap ? html`<span class="tradie-extra">${jobs}${offMap}</span>` : ''}
   </li>`;
 }
 
@@ -241,16 +313,14 @@ function unlinkedBlock(unlinked: Unlinked): Html {
     people.length
       ? html`<section aria-label="${title}">
           <h3 class="unlinked-title">${title}</h3>
-          <ul class="unlinked-list">${people.map((person) => html`<li><a href="${href(person.id)}">${person.name}</a></li>`)}</ul>
+          <ul class="unlinked-list">${people.map((person) => html`<li><a href="${href(person.id)}"><span class="household-avatar" aria-hidden="true">${initials(person.name)}</span>${person.name}</a></li>`)}</ul>
         </section>`
       : '';
-  return html`<section class="section profiles-unlinked" aria-labelledby="profiles-unlinked">
-    <div class="section-head"><h2 class="section-title" id="profiles-unlinked">Not linked to a Property</h2></div>
-    <div class="section-body">
-      ${group('Former Tenants', unlinked.tenants, (id) => `/tenants/${id}`)}
-      ${group('Property Owners', unlinked.owners, (id) => `/owners/${id}`)}
-      ${group('Building Managers', unlinked.buildingManagers, (id) => `/building-managers/${id}`)}
-    </div>
+  return html`<section class="profiles-unlinked" aria-labelledby="profiles-unlinked">
+    <h2 class="profiles-title" id="profiles-unlinked">Not linked to a Property</h2>
+    ${group('Former Tenants', unlinked.tenants, (id) => `/tenants/${id}`)}
+    ${group('Property Owners', unlinked.owners, (id) => `/owners/${id}`)}
+    ${group('Building Managers', unlinked.buildingManagers, (id) => `/building-managers/${id}`)}
   </section>`;
 }
 

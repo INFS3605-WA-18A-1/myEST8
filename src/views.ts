@@ -948,7 +948,7 @@ export function createViews(ctx: Context) {
             // What the open Tickets are about, High first, so the household shows what is wrong there.
             tickets: propertyTickets.map((ticket) => {
               const issue = openIssues.get(ticket.issueId);
-              return { id: ticket.id, title: issue ? (issue.summary ?? issue.description) : `Ticket #${ticket.id}`, urgency: ticket.urgency };
+              return { id: ticket.id, title: issue ? (issue.summary ?? issue.description) : `Ticket #${ticket.id}`, urgency: ticket.urgency, reportedAt: ticket.reportedAt };
             }),
             owner: {
               id: property.ownerId,
