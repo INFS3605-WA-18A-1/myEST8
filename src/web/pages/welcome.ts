@@ -46,7 +46,9 @@ import {
   addTradieFrom,
   addTradieSection,
   CHANNELS,
+  addColleague,
   colleagueAdded,
+  type ColleagueAdded,
   colleagueForm,
   channelBadge,
   channelGuide,
@@ -149,10 +151,10 @@ export function welcomePages(o: { demo: boolean; connectors?: ChannelConnectors 
     const form = (await c.req.parseBody({ all: true })) as FormValues;
     const colleague = { name: text(form, 'name'), email: text(form, 'email') };
     try {
-      const { temporaryPassword } = await c.var.actions.addColleague(colleague);
+      const added = await addColleague(c, colleague);
       // The page shows a password: keep it out of every cache.
       c.header('Cache-Control', 'no-store');
-      return c.html(await teamStep(c, { added: { ...colleague, temporaryPassword } }));
+      return c.html(await teamStep(c, { added }));
     } catch (error) {
       if (!(error instanceof ActionError)) throw error;
       return c.html(await teamStep(c, { values: valuesOf(form), errors: fieldErrors(error, 'email') }), 400);
@@ -289,7 +291,7 @@ async function welcomeStep(c: WizardContext): Promise<Html> {
 
 // 2 Your team
 
-async function teamStep(c: WizardContext, o: { added?: { name: string; email: string; temporaryPassword: string }; values?: Values; errors?: Errors }): Promise<Html> {
+async function teamStep(c: WizardContext, o: { added?: ColleagueAdded; values?: Values; errors?: Errors }): Promise<Html> {
   const { actions, pm } = c.var;
   const team = await actions.propertyManagers();
   const origin = new URL(c.req.url).origin;
@@ -309,7 +311,7 @@ async function teamStep(c: WizardContext, o: { added?: { name: string; email: st
       )}
       ${card({
         title: 'Add a colleague',
-        body: colleagueForm({ action: '/welcome/team', values: o.values, errors: o.errors, primary: team.length <= 1 }),
+        body: colleagueForm({ action: '/welcome/team', values: o.values, errors: o.errors, primary: team.length <= 1, invites: !!c.var.invite }),
       })}
     `,
   });

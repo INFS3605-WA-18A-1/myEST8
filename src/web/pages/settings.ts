@@ -44,7 +44,9 @@ import { importPages, settingsImportPath } from './import.ts';
 import {
   CHANNELS,
   channelChip,
+  addColleague,
   colleagueAdded,
+  type ColleagueAdded,
   colleagueForm,
   fieldGrid,
   IMPORT_NOUNS,
@@ -147,10 +149,10 @@ export function settingsPages(o: { connectors?: ChannelConnectors } = {}) {
     const form = (await c.req.parseBody({ all: true })) as FormValues;
     const colleague = { name: text(form, 'name'), email: text(form, 'email') };
     try {
-      const { temporaryPassword } = await c.var.actions.addColleague(colleague);
+      const added = await addColleague(c, colleague);
       // The page shows a password: keep it out of every cache, and out of the address bar.
       c.header('Cache-Control', 'no-store');
-      return c.html(settingsPage(c, 'team', await teamTab(c, { added: { ...colleague, temporaryPassword } }), { flash: null }));
+      return c.html(settingsPage(c, 'team', await teamTab(c, { added }), { flash: null }));
     } catch (error) {
       if (!(error instanceof ActionError)) throw error;
       const errors = Object.keys(error.fields).length ? { ...error.fields } : { email: error.message };
@@ -312,7 +314,7 @@ async function channelsTab(actions: PropertyManagerActions, timeZone: string, co
 
 // Team
 
-async function teamTab(c: Context<WebEnv>, o: { added?: { name: string; email: string; temporaryPassword: string }; values?: Values; errors?: Errors }): Promise<Html> {
+async function teamTab(c: Context<WebEnv>, o: { added?: ColleagueAdded; values?: Values; errors?: Errors }): Promise<Html> {
   const { actions, pm } = c.var;
   const team = await actions.propertyManagers();
   const properties = await actions.properties();
@@ -337,7 +339,7 @@ async function teamTab(c: Context<WebEnv>, o: { added?: { name: string; email: s
       id: 'add-colleague',
       title: 'Add a colleague',
       body: html`<p class="settings-intro">They get their own sign-in and see their own Properties first. Tenants, Tradies and Property Owners never need an account.</p>
-        ${colleagueForm({ action: '/settings/team', values: o.values, errors: o.errors })}`,
+        ${colleagueForm({ action: '/settings/team', values: o.values, errors: o.errors, invites: !!c.var.invite })}`,
     })}`;
 }
 

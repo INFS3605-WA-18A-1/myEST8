@@ -33,6 +33,7 @@ import { migrate } from '../migrate.ts';
 import { UndeliverableError, type ChannelType, type Clock, type Messenger } from '../ports.ts';
 import { ActionError, normalizeAddress } from '../shared.ts';
 import { createSmsNumbers, type SmsNumbers } from '../sms-numbers.ts';
+import { authKitFromEnv } from '../adapters/workos.ts';
 import { createSessions } from '../web/auth.ts';
 import { createWebApp } from '../web/server.ts';
 import { OffsetClock } from './clock.ts';
@@ -106,6 +107,8 @@ function hostedProviders(env: Env): HostedProvider[] {
     { provider: 'inbound email', required: true, missing: unset('RESEND_WEBHOOK_SECRET', 'RESEND_INBOUND_DOMAIN') },
     { provider: 'file links', required: true, missing: unset('FILE_LINK_SECRET') },
     { provider: 'worker cron', required: true, missing: unset('CRON_SECRET') },
+    // Without it Property Managers sign in with a password (ADR 0020). Never an unclaimed or test environment's keys in production.
+    { provider: 'sign-in (WorkOS AuthKit)', required: false, missing: unset('WORKOS_API_KEY', 'WORKOS_CLIENT_ID', 'WORKOS_COOKIE_PASSWORD') },
     { provider: 'imageMatcher', required: false, missing: unset('VISION_API_URL') },
     { provider: 'quoteReader', required: false, missing: unset('QUOTES_API_URL') },
   ];
@@ -537,6 +540,9 @@ export async function createDemo<Seeded extends boolean = true>(
     whatsapp: env.META_APP_SECRET?.trim() && env.META_WEBHOOK_VERIFY_TOKEN?.trim() ? { appSecret: env.META_APP_SECRET.trim(), verifyToken: env.META_WEBHOOK_VERIFY_TOKEN.trim() } : null,
     resend,
     textbee: providers.textbee,
+    // The demo Agency's made-up Property Managers sign in with the password on the landing page,
+    // so a seeded demo keeps the password forms. Everywhere else WORKOS_* turns on AuthKit.
+    authKit: seed === null ? authKitFromEnv(env) : null,
     connectors: {
       gmail: mailboxes?.connector ?? null,
       smsInbound: hosted ? 'none' : 'simulator',
