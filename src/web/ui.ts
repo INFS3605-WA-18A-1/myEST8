@@ -862,7 +862,7 @@ function rowAttributes(attributes: RowAttributes | undefined): Html | string {
 /** A select's option. `keywords` are more words a searchable select matches it by (a Property's suburb, a Tradie's name). */
 export type Option = { value: string; label: string; keywords?: string };
 
-function optionTags(options: Option[], value: string): Html[] {
+export function optionTags(options: Option[], value: string): Html[] {
   return options.map(
     (opt) => html`<option value="${opt.value}" ${value === opt.value ? 'selected' : ''}${opt.keywords ? html` data-keywords="${opt.keywords}"` : ''}>${opt.label}</option>`,
   );

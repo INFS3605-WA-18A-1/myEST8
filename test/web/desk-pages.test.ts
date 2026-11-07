@@ -73,6 +73,8 @@ function sectionOf(html: string, title: string) {
 }
 
 /** The table row that links to Ticket `id`, or '' when there is none. */
+const archiveRowOf = (html: string, id: number) => html.split('<li class="ar-row">').find((r) => r.includes(`href="/tickets/${id}"`)) ?? '';
+
 const rowOf = (html: string, id: number) => html.split('<tr>').find((r) => r.includes(`href="/tickets/${id}"`)) ?? '';
 
 /** The Tickets page's card for Ticket `id`, or '' when there is none. */
@@ -323,9 +325,9 @@ describe('Archive', () => {
     expect(leak).toBeGreaterThan(-1);
     expect(tap).toBeGreaterThan(leak);
     expect(html).not.toContain(`href="/tickets/${ids.fan}"`);
-    expect(visible(rowOf(html, ids.tap))).toMatch(/Plumbing Cancelled/);
-    expect(visible(rowOf(html, ids.tap))).toMatch(/Closed/);
-    expect(rowOf(html, ids.tap)).toContain('queue-thumb');
+    expect(visible(archiveRowOf(html, ids.tap))).toMatch(/Plumbing[\s\S]*Cancelled/);
+    expect(visible(archiveRowOf(html, ids.tap))).toMatch(/Resolved/);
+    expect(archiveRowOf(html, ids.tap)).toContain('queue-thumb');
   });
 
   test('shows the Property Manager’s own until All is chosen, and takes the same filters', async () => {
@@ -340,6 +342,30 @@ describe('Archive', () => {
     const high = await text(w, '/archive?filter=all&urgency=high');
     expect(high).toContain(`href="/tickets/${ids.leak}"`);
     expect(high).not.toContain(`href="/tickets/${ids.tap}"`);
+  });
+
+  test('searches by issue, address or Ticket number, and says so when nothing matches', async () => {
+    const w = await webWorld();
+    const ids = await twoClosed(w);
+
+    const byNumber = await text(w, `/archive?filter=all&q=%23${ids.tap}`);
+    expect(byNumber).toContain(`href="/tickets/${ids.tap}"`);
+    expect(byNumber).not.toContain(`href="/tickets/${ids.leak}"`);
+
+    const none = await text(w, '/archive?filter=all&q=zzzz');
+    expect(visible(none)).toContain('No closed Tickets match these filters.');
+    expect(none).not.toContain(`href="/tickets/${ids.tap}"`);
+  });
+
+  test('sorts oldest first and narrows by date range', async () => {
+    const w = await webWorld();
+    const ids = await twoClosed(w);
+
+    const oldest = await text(w, '/archive?filter=all&sort=oldest');
+    expect(oldest.indexOf(`href="/tickets/${ids.tap}"`)).toBeLessThan(oldest.indexOf(`href="/tickets/${ids.leak}"`));
+
+    const recent = await text(w, '/archive?filter=all&range=30');
+    expect(recent).toContain(`href="/tickets/${ids.leak}"`);
   });
 
   test('says so when nothing is closed yet', async () => {
