@@ -131,6 +131,7 @@ export function createViews(ctx: Context) {
           ticketId: ticket.id,
           propertyId: ticket.propertyId,
           ...(await propertyLabel(ticket.propertyId)),
+          tenantId: ticket.tenantId,
           tenantName: (await profiles.person(ticket.tenantId)).name,
           description: issue.description,
           urgency: ticket.urgency,

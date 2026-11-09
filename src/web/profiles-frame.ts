@@ -33,7 +33,7 @@ export function profileChips(active: ProfileTab, counts: ProfileCounts, filter: 
     ${TABS.map(({ tab, label, path, count }) => {
       const on = tab === active;
       const n = count ? counts[count] : 0;
-      return html`<a class="profiles-chip${on ? ' is-active' : ''}" href="${profileHref(path, filter)}" ${on ? html`aria-current="page"` : ''}>${label}${n ? html` <span class="num">${n}</span>` : ''}</a>`;
+      return html`<a class="profiles-chip${on ? ' is-active' : ''}" href="${profileHref(path, filter)}" title="${label}" ${on ? html`aria-current="page"` : ''}><span class="profiles-chip-label">${label}</span>${n ? html` <span class="num">${n}</span>` : ''}</a>`;
     })}
   </nav>`;
 }
