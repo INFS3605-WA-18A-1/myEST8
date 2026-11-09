@@ -13179,7 +13179,6 @@
       color: var(--ink);
     }
     .ar-trade,
-    .ar-tenant,
     .ar-manager {
       font-size: 12px;
       color: var(--muted);

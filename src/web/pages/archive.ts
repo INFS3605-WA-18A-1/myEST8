@@ -239,7 +239,6 @@ function closedRow(t: ClosedTicket, o: { all: boolean; now: Date; timeZone: stri
       <p class="ar-head">
         <span class="ar-number num">Ticket #${t.ticketId}</span>
         ${trades ? html`<span class="ar-trade">${trades}</span>` : ''}
-        <span class="ar-tenant">${t.tenantName}</span>
         ${t.urgency !== 'routine' ? urgencyBadge(t.urgency) : ''}
         ${t.unreadMessages ? html`<span class="ticket-cell-unread"><span class="unread-dot" aria-hidden="true"></span>${t.unreadMessages} unread</span>` : ''}
       </p>
