@@ -356,6 +356,19 @@ describe('Archive', () => {
     expect(none).not.toContain(`href="/tickets/${ids.tap}"`);
   });
 
+  test('filters by Tenant, and counts each Tenant\'s closed Tickets in the list', async () => {
+    const w = await webWorld();
+    const ids = await twoClosed(w);
+
+    const all = await text(w, '/archive?filter=all');
+    expect(all).toContain('Any Tenant');
+    expect(all).toMatch(/Tom[^<]*\(1\)/);
+
+    const toms = await text(w, `/archive?filter=all&tenant=${w.ids.tom}`);
+    expect(toms).toContain(`href="/tickets/${ids.tap}"`);
+    expect(toms).not.toContain(`href="/tickets/${ids.leak}"`);
+  });
+
   test('sorts oldest first and narrows by date range', async () => {
     const w = await webWorld();
     const ids = await twoClosed(w);

@@ -38,12 +38,14 @@ type Range = (typeof RANGES)[number]['value'];
 type Sort = (typeof SORTS)[number]['value'];
 
 /** What the Archive reads from its query beyond the shared list filter. */
-type ArchiveView = { q: string; range: Range; sort: Sort; limit: number };
+type ArchiveView = { q: string; tenantId?: number; range: Range; sort: Sort; limit: number };
 
 function archiveViewOf(query: (name: string) => string | undefined): ArchiveView {
   const limit = Number(query('limit'));
+  const tenant = query('tenant') ?? '';
   return {
     q: (query('q') ?? '').trim().slice(0, 100),
+    ...(/^[1-9]\d*$/.test(tenant) && { tenantId: Number(tenant) }),
     range: RANGES.find((r) => r.value === query('range'))?.value ?? 'all',
     sort: SORTS.find((s) => s.value === query('sort'))?.value ?? 'recent',
     limit: Number.isInteger(limit) && limit > PAGE_SIZE ? Math.min(limit, 1000) : PAGE_SIZE,
@@ -54,6 +56,7 @@ function archiveViewOf(query: (name: string) => string | undefined): ArchiveView
 function archiveQuery(f: ListFilter, v: Partial<ArchiveView>): string {
   const params = new URLSearchParams(listFilterQuery(f));
   if (v.q) params.set('q', v.q);
+  if (v.tenantId) params.set('tenant', String(v.tenantId));
   if (v.range && v.range !== 'all') params.set('range', v.range);
   if (v.sort && v.sort !== 'recent') params.set('sort', v.sort);
   if (v.limit && v.limit > PAGE_SIZE) params.set('limit', String(v.limit));
@@ -62,7 +65,7 @@ function archiveQuery(f: ListFilter, v: Partial<ArchiveView>): string {
 }
 
 /** Whether a search or date range narrows the list, beyond the shared filters. */
-const narrowed = (v: ArchiveView) => Boolean(v.q || v.range !== 'all');
+const narrowed = (v: ArchiveView) => Boolean(v.q || v.tenantId || v.range !== 'all');
 
 /** The Tickets closed within `range` of `now`, in the Agency's time zone for "This year". */
 function inRange(t: ClosedTicket, range: Range, now: Date, timeZone: string): boolean {
@@ -70,6 +73,15 @@ function inRange(t: ClosedTicket, range: Range, now: Date, timeZone: string): bo
   if (!t.closedAt) return false;
   if (range === 'year') return wallClock(new Date(t.closedAt), timeZone).year === wallClock(now, timeZone).year;
   return now.getTime() - new Date(t.closedAt).getTime() <= Number(range) * DAY;
+}
+
+/** The Tenants who raised the given Tickets, by name, each with how many of them are theirs. */
+function tenantOptions(tickets: ClosedTicket[]): Option[] {
+  const byId = new Map<number, { name: string; count: number }>();
+  for (const t of tickets) byId.set(t.tenantId, { name: t.tenantName, count: (byId.get(t.tenantId)?.count ?? 0) + 1 });
+  return [...byId]
+    .sort(([aId, a], [bId, b]) => a.name.localeCompare(b.name) || aId - bId)
+    .map(([id, t]) => ({ value: String(id), label: `${t.name} (${t.count})` }));
 }
 
 /** Whether every word typed is in the Ticket's issue, address or Trades, or is its number ("5" or "#5"). */
@@ -92,7 +104,9 @@ export function archivePages() {
     const timeZone = actions.agency().timeZone;
     const now = actions.now();
     const [everyClosed, properties] = await Promise.all([actions.tickets({ ...listOptions(f), status: 'closed' }), actions.properties()]);
-    const closed = everyClosed.filter((t) => inRange(t, v.range, now, timeZone) && matches(t, v.q));
+    // The Tenant list counts what the other filters leave, so each number is what choosing that Tenant would show.
+    const beforeTenant = everyClosed.filter((t) => inRange(t, v.range, now, timeZone) && matches(t, v.q));
+    const closed = v.tenantId ? beforeTenant.filter((t) => t.tenantId === v.tenantId) : beforeTenant;
     if (v.sort === 'oldest') closed.reverse();
     const shown = closed.slice(0, v.limit);
     const mine = f.scope === 'mine';
@@ -125,7 +139,7 @@ export function archivePages() {
         subtitle: 'Closed Tickets, how each ended and when.',
         controls: scopeControl('/archive', f),
         body: html`<div class="archive-page">
-          ${archiveBar(f, v, propertyOptions(properties), filtered(f) || narrowed(v) ? clearHref : undefined)}
+          ${archiveBar(f, v, propertyOptions(properties), tenantOptions(beforeTenant), filtered(f) || narrowed(v) ? clearHref : undefined)}
           ${section({
             title: 'Closed Tickets',
             id: 'closed',
@@ -141,12 +155,12 @@ export function archivePages() {
 }
 
 /**
- * One bar over the list, in the Tickets page's look: a search box, then the Trade, Property,
+ * One bar over the list, in the Tickets page's look: a search box, then the Trade, Property, Tenant,
  * date range and sort selects. A GET form that keeps Mine/All; app.js applies it as a select
  * changes or the search is committed, and the Apply button is for pages without it.
  * Urgency is not a filter here: it matters little once a Ticket is closed.
  */
-function archiveBar(f: ListFilter, v: ArchiveView, properties: Option[], clearHref: string | undefined): Html {
+function archiveBar(f: ListFilter, v: ArchiveView, properties: Option[], tenants: Option[], clearHref: string | undefined): Html {
   const select = (name: string, label: string, all: string | undefined, options: readonly Option[], value: string | undefined, search = false) =>
     html`<label class="filter-bar-field${search ? ' filter-bar-search' : ''}"><span class="filter-bar-label">${label}</span>
       <select name="${name}" class="select select-sm" ${search ? 'data-combobox' : ''}>
@@ -164,6 +178,7 @@ function archiveBar(f: ListFilter, v: ArchiveView, properties: Option[], clearHr
     <div class="filter-bar is-compact">
       ${select('trade', 'Trade', 'Any Trade', TRADES.map((t) => ({ value: t, label: humanise(t) })), f.trade)}
       ${select('property', 'Property', 'Any Property', properties, f.propertyId ? String(f.propertyId) : undefined, true)}
+      ${select('tenant', 'Tenant', 'Any Tenant', tenants, v.tenantId ? String(v.tenantId) : undefined, true)}
       ${select('range', 'Closed', undefined, RANGES, v.range)}
       ${select('sort', 'Sort', undefined, SORTS, v.sort)}
       <button type="submit" class="btn btn-sm filter-bar-apply">Apply</button>
@@ -224,6 +239,7 @@ function closedRow(t: ClosedTicket, o: { all: boolean; now: Date; timeZone: stri
       <p class="ar-head">
         <span class="ar-number num">Ticket #${t.ticketId}</span>
         ${trades ? html`<span class="ar-trade">${trades}</span>` : ''}
+        <span class="ar-tenant">${t.tenantName}</span>
         ${t.urgency !== 'routine' ? urgencyBadge(t.urgency) : ''}
         ${t.unreadMessages ? html`<span class="ticket-cell-unread"><span class="unread-dot" aria-hidden="true"></span>${t.unreadMessages} unread</span>` : ''}
       </p>
@@ -235,6 +251,6 @@ function closedRow(t: ClosedTicket, o: { all: boolean; now: Date; timeZone: stri
       <span class="ar-ago">${formatAge(t.closedAt, o.now)}</span>
       <span class="ar-date">${formatDay(t.closedAt, o.timeZone)}</span>
     </div>
-    <span class="ar-chevron" aria-hidden="true">${icon('caret-right', { size: 'size-4' })}</span>
+    <span class="ar-chevron" aria-hidden="true">${icon('caret-right', { size: 'size-5' })}</span>
   </li>`;
 }

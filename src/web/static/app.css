@@ -13072,6 +13072,21 @@
     .ar-bar {
       justify-content: flex-start;
     }
+    /* Wide enough for "Recently closed" and a Tenant's name with its count. */
+    .ar-bar .filter-bar.is-compact select,
+    .ar-bar .filter-bar.is-compact .combobox-input {
+      width: 10rem;
+    }
+    /* The dropdown arrow, drawn the same on a plain select and on the searchable Property box,
+       and set 18px in from the edge (the browser's own sits about 8px in) with room before the text. */
+    .ar-bar .filter-bar.is-compact :is(select, .combobox-input) {
+      appearance: none;
+      padding-right: 2.5rem;
+      background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+      background-position: calc(100% - 22px) 50%, calc(100% - 17px) 50%;
+      background-size: 5px 5px;
+      background-repeat: no-repeat;
+    }
     .ar-search {
       position: relative;
       display: flex;
@@ -13127,10 +13142,10 @@
     .ar-row {
       position: relative;
       display: grid;
-      grid-template-columns: 48px minmax(0, 1fr) 11rem 7.5rem 16px;
+      grid-template-columns: 48px minmax(0, 1fr) 11rem 7.5rem 32px;
       align-items: center;
       gap: 16px;
-      padding: 12px 16px;
+      padding: 12px 12px 12px 16px;
       background: var(--surface);
       transition: background-color var(--dur-fast) var(--ease-out);
     }
@@ -13164,6 +13179,7 @@
       color: var(--ink);
     }
     .ar-trade,
+    .ar-tenant,
     .ar-manager {
       font-size: 12px;
       color: var(--muted);
@@ -13204,8 +13220,19 @@
       color: var(--ink);
       white-space: nowrap;
     }
+    /* The arrow gets a column of its own, centred, so it never touches the row's edge or the date beside it. */
     .ar-chevron {
+      display: grid;
+      place-items: center;
+      width: 32px;
+      height: 32px;
       color: var(--control);
+      border-radius: 999px;
+      transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+    }
+    .ar-row:hover .ar-chevron {
+      color: var(--action);
+      background: var(--surface);
     }
     .ar-more {
       display: flex;
