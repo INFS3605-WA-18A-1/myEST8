@@ -3302,6 +3302,28 @@
         justify-content: flex-end;
       }
     }
+    /* The Profiles chips need more room than most controls, so they keep a line of their own
+       under the title until the page is wide enough to show them beside it. */
+    @container content (min-width: 40rem) and (max-width: 71.99rem) {
+      .page-header:has(.profiles-chips):has(.page-header-controls):not(:has(.page-header-controls :is(input, select))) {
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-areas:
+          'lead end'
+          'controls controls';
+      }
+      .page-header.has-meta:has(.profiles-chips):has(.page-header-controls):not(:has(.page-header-controls :is(input, select))) {
+        grid-template-areas:
+          'lead end'
+          'controls controls'
+          'meta meta';
+      }
+      .page-header:has(.profiles-chips):not(:has(.page-header-controls :is(input, select))) .page-header-controls {
+        justify-content: flex-start;
+      }
+      .page-header:has(.profiles-chips) .page-header-date {
+        margin-left: auto;
+      }
+    }
     @container content (min-width: 62rem) {
       .page-header:has(.page-header-controls) {
         grid-template-columns: auto minmax(0, 1fr) auto;
@@ -11528,9 +11550,15 @@
        Mine / All and Add profile; households on the left; Tradies and the people with no
        Property in a Paper column on the right. No overflow clipping on the card, so the
        Add profile menu can open past its edge. */
+    /* One row at any width: the chips shrink and their names end in "…" rather than wrapping.
+       On a phone, where even the shortened chips don't fit, the row scrolls sideways. */
     .profiles-chips {
       display: flex;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
+      min-width: 0;
+      max-width: 100%;
+      overflow-x: auto;
+      scrollbar-width: none;
       gap: 4px;
       padding: 4px;
       border-radius: 999px;
@@ -11539,8 +11567,12 @@
     }
     .profiles-chip {
       display: inline-flex;
+      flex: 0 1 auto;
       align-items: center;
       gap: 6px;
+      /* Room for the first letters of the name and its count, however narrow the row gets. */
+      min-width: 5.5rem;
+      overflow: hidden;
       min-height: 32px;
       padding: 0 14px;
       border-radius: 999px;
@@ -11552,7 +11584,19 @@
     .profiles-chip:hover {
       background: var(--page);
     }
+    /* "All" and the chip shown keep their full width; the others give way first. */
+    .profiles-chip:first-child,
+    .profiles-chip.is-active {
+      flex-shrink: 0;
+      min-width: auto;
+    }
+    .profiles-chip-label {
+      min-width: 2.5em;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
     .profiles-chip .num {
+      flex-shrink: 0;
       font-weight: 700;
     }
     .profiles-chip.is-active {
@@ -13069,13 +13113,38 @@
       display: grid;
       gap: 16px;
     }
+    /* The search takes what the selects leave, all on one line; on a narrower page the search
+       gets its own line and the selects share the line under it in equal columns. */
     .ar-bar {
-      justify-content: flex-start;
+      display: grid;
+      grid-template-columns: minmax(14rem, 1fr) auto;
+      align-items: center;
     }
-    /* Wide enough for "Recently closed" and a Tenant's name with its count. */
+    .ar-bar .filter-bar.is-compact {
+      flex-wrap: nowrap;
+      margin-left: 0;
+    }
+    /* Up to wide enough for a Tenant's name with its count. */
+    .ar-bar .filter-bar.is-compact .filter-bar-field {
+      flex: 0 1 10rem;
+      min-width: 7.5rem;
+    }
     .ar-bar .filter-bar.is-compact select,
+    .ar-bar .filter-bar.is-compact .combobox,
     .ar-bar .filter-bar.is-compact .combobox-input {
-      width: 10rem;
+      width: 100%;
+    }
+    @container content (max-width: 71.99rem) {
+      .ar-bar {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .ar-bar .filter-bar.is-compact {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+      }
+      .ar-bar .filter-bar.is-compact .filter-bar-field {
+        min-width: 0;
+      }
     }
     /* The dropdown arrow, drawn the same on a plain select and on the searchable Property box,
        and set 18px in from the edge (the browser's own sits about 8px in) with room before the text. */
@@ -13091,13 +13160,12 @@
       position: relative;
       display: flex;
       align-items: center;
-      flex: 1 1 16rem;
-      min-width: 12rem;
-      max-width: 26rem;
+      min-width: 0;
       color: var(--muted);
     }
     .ar-search > svg {
       position: absolute;
+      z-index: 1;
       left: 10px;
       pointer-events: none;
     }

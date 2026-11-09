@@ -31,8 +31,8 @@ const RANGES = [
   { value: 'year', label: 'This year' },
 ] as const;
 const SORTS = [
-  { value: 'recent', label: 'Recently closed' },
-  { value: 'oldest', label: 'Oldest closed' },
+  { value: 'recent', label: 'Newest first' },
+  { value: 'oldest', label: 'Oldest first' },
 ] as const;
 type Range = (typeof RANGES)[number]['value'];
 type Sort = (typeof SORTS)[number]['value'];
