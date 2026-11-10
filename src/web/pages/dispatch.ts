@@ -120,8 +120,6 @@ export function dispatchPages() {
     const urgentOpen = properties.reduce((n, p) => n + p.openTickets.filter((t) => t.urgency !== 'routine').length, 0);
     const placed = properties.filter((p) => p.location).length;
     const tradiesPlaced = tradies.filter((t) => t.location).length;
-    const count = (n: number, total: number, noun: string) => `${n === total ? n : `${n} of ${total}`} ${noun}`;
-    const subtitle = `${[count(placed, properties.length, properties.length === 1 ? 'Property' : 'Properties'), tradies.length ? count(tradiesPlaced, tradies.length, tradies.length === 1 ? 'Tradie' : 'Tradies') : ''].filter(Boolean).join(' and ')} on the map`;
 
     return c.html(
       page({
@@ -130,7 +128,6 @@ export function dispatchPages() {
         active: 'dispatch',
         shell: shellInfo(c),
         flash: flashFrom(c.req.url),
-        subtitle,
         controls: dispatchControls({ search, region, regions, trade }),
         actions: missing ? postButton('/dispatch/addresses', 'Look up missing addresses', { size: 'sm' }) : undefined,
         body: html`
@@ -343,7 +340,7 @@ function workOrderForm(job: DispatchJob, timeZone: string, now: string): Html {
   return html`<form method="post" action="/dispatch/jobs/${job.jobId}/work-order" class="dispatch-card-body">
     <p class="dispatch-card-legend">
       ${entityLink('tradie', b.businessName, `/tradies/${b.tradieId}`)} approved at <strong class="num">${formatMoney(b.priceCents)}</strong>.
-      Send the Work Order to book the visit; the Tenant and Property Owner are told the time.
+      Send the Work Order to book the visit; the Tenant and Owner are told the time.
     </p>
     ${b.freeSlots.length
       ? html`<div class="free-times">

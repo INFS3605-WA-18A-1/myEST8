@@ -124,7 +124,7 @@ export function tenantPages(app: App) {
 function thanks(sent: number, link: UploadLink) {
   const noun = link.kind === 'photos' ? 'photo' : 'file';
   const count = Number.isInteger(sent) && sent > 0 && sent <= MAX_FILES ? `your ${sent === 1 ? noun : `${sent} ${noun}s`}` : 'your upload';
-  const next = link.kind === 'receipt' ? ' They will check it and pass your Reimbursement Request to the property owner.' : '';
+  const next = link.kind === 'receipt' ? ' They will check it and pass your Reimbursement Request to the owner.' : '';
   return `Thanks, ${link.agencyName} has ${count}.${next} You can add more below if you need to.`;
 }
 
@@ -198,7 +198,7 @@ function uploadPage(token: string, link: UploadLink, o: { error?: string; thanks
               <li>Photos straight from your camera keep their details, like when they were taken, which helps us act faster.</li>
             </ul>`
           : html`<ul class="tenant-tips">
-              <li>We need the receipt to get you reimbursed: without it the property owner can't pay you back.</li>
+              <li>We need the receipt to get you reimbursed: without it the owner can't pay you back.</li>
               <li>Make sure the whole receipt is in the photo and the amount is easy to read.</li>
               <li>If the tradie emailed you a PDF, you can send that instead.</li>
             </ul>`,

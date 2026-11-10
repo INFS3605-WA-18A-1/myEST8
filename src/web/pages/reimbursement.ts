@@ -45,7 +45,7 @@ type TimelineEvent = Reimbursement['timeline'][number];
 const REIMBURSEMENT_STATUS: Record<UrgentRepairStatus, [string, Tone]> = {
   reminder_sent: ['Awaiting receipt', 'neutral'],
   receipt_received: ['Awaiting your review', 'warning'],
-  receipt_forwarded: ['With Property Owner', 'info'],
+  receipt_forwarded: ['With Owner', 'info'],
   reimbursed: ['Reimbursed', 'success'],
 };
 
@@ -96,7 +96,7 @@ export function reimbursementPages() {
     await actions.forwardReimbursement(request.urgentRepairId, { amountCents });
     const after = await actions.reimbursement(request.urgentRepairId);
     const over = after.overLimit ? ` The amount is over the ${formatMoney(after.limitCents)} limit for an Urgent Repair.` : '';
-    return `Forwarded to ${after.owner.name}, the Property Owner, with you copied in.${over}`;
+    return `Forwarded to ${after.owner.name}, the Owner, with you copied in.${over}`;
   });
 
   onPost(pages, '/:id/reimbursed', async (actions, request) => {
@@ -157,7 +157,7 @@ function body(r: Reimbursement, timeZone: string, now: Date): Html {
   return html`${header(r, now)} ${progress(r, timeZone)}
     ${r.overLimit
       ? alert(
-          `${formatMoney(r.amountCents)} is over the ${formatMoney(r.limitCents)} a Tenant can claim for an Urgent Repair. You can still forward it; the Property Owner decides what to pay.`,
+          `${formatMoney(r.amountCents)} is over the ${formatMoney(r.limitCents)} a Tenant can claim for an Urgent Repair. You can still forward it; the Owner decides what to pay.`,
           'warning',
           { title: 'Over the limit' },
         )
@@ -173,7 +173,7 @@ function body(r: Reimbursement, timeZone: string, now: Date): Html {
           markRead: `/reimbursements/${r.urgentRepairId}/read`,
           contacts: [
             { name: r.tenant.name, role: 'Tenant', mobile: r.tenant.mobile, email: r.tenant.email },
-            { name: r.owner.name, role: 'Property Owner', mobile: r.owner.mobile, email: r.owner.email },
+            { name: r.owner.name, role: 'Owner', mobile: r.owner.mobile, email: r.owner.email },
           ],
         })}
       </div>
@@ -209,7 +209,7 @@ function progress(r: Reimbursement, timeZone: string): Html {
   const items = [
     { label: 'Reported', done: true, detail: when(r.reportedAt) },
     { label: 'Receipt received', done: r.receipts.length > 0, detail: when(r.receivedAt) },
-    { label: 'Forwarded to Property Owner', done: forwarded, detail: when(r.forwardedAt) },
+    { label: 'Forwarded to Owner', done: forwarded, detail: when(r.forwardedAt) },
     { label: 'Reimbursed', done: r.status === 'reimbursed', detail: when(r.reimbursedAt) },
   ].map(({ detail, ...item }) => (detail ? { ...item, detail } : item));
   const current = { reminder_sent: 1, receipt_received: 2, receipt_forwarded: 3, reimbursed: undefined }[r.status];
@@ -237,13 +237,13 @@ function nextCard(r: Reimbursement, timeZone: string): Html {
       return card({
         title: 'Check the receipt and forward it',
         body: html`<div class="space-y-3">
-          <p>Check the receipts below match the repair and the amount. Forwarding emails them to ${owner}, the Property Owner, with you copied in.</p>
+          <p>Check the receipts below match the repair and the amount. Forwarding emails them to ${owner}, the Owner, with you copied in.</p>
           ${reimbursementForwardForm(r, `/reimbursements/${r.urgentRepairId}/forward`)}
         </div>`,
       });
     case 'receipt_forwarded':
       return card({
-        title: 'With the Property Owner',
+        title: 'With the Owner',
         body: html`<div class="space-y-3">
           <p>Forwarded to ${owner}${r.forwardedAt ? ` on ${formatWhen(r.forwardedAt, timeZone)}` : ''}. Once they have paid ${tenant} back, mark it reimbursed and ${tenant} is told.</p>
           ${postButton(`/reimbursements/${r.urgentRepairId}/reimbursed`, 'Mark reimbursed', { confirm: `Mark this reimbursed? ${tenant} will be told.` })}
@@ -284,7 +284,7 @@ export function reimbursementForwardForm(r: Forwardable, action: string, o: { co
         ...(o.compact ? {} : { hint: `${amount} Up to ${formatMoney(r.limitCents)} can be claimed; more is warned about, not refused.` }),
       })}
     </div>
-    ${button(o.compact ? 'Forward to Owner' : 'Forward to Property Owner', o.compact ? { size: 'sm' } : {})}
+    ${button(o.compact ? 'Forward to Owner' : 'Forward to Owner', o.compact ? { size: 'sm' } : {})}
   </form>`;
 }
 
@@ -314,7 +314,7 @@ function detailsCard(r: Reimbursement): Html {
   const rows: [string, Html | string][] = [
     ...(r.summary ? [["The Tenant's words", r.description] as [string, string]] : []),
     ['Tenant', contact(r.tenant)],
-    ['Property Owner', contact(r.owner)],
+    ['Owner', contact(r.owner)],
     ['Property Manager', r.propertyManager],
   ];
   return card({
@@ -349,7 +349,7 @@ function describe(event: TimelineEvent): { title: string; detail?: string } {
       return { title: `${files === 1 ? 'Receipt' : `${files} receipt files`} received ${how}`, ...(amount ? { detail: `Claimed ${amount}` } : {}) };
     }
     case 'forwarded':
-      return { title: `${d.again ? 'Forwarded again' : 'Forwarded'} to ${typeof d.ownerName === 'string' ? d.ownerName : 'the Property Owner'}`, ...(amount ? { detail: amount } : {}) };
+      return { title: `${d.again ? 'Forwarded again' : 'Forwarded'} to ${typeof d.ownerName === 'string' ? d.ownerName : 'the Owner'}`, ...(amount ? { detail: amount } : {}) };
     case 'reimbursed':
       return { title: 'Marked reimbursed', ...(amount ? { detail: amount } : {}) };
     default:

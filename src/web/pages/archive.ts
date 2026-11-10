@@ -136,7 +136,6 @@ export function archivePages() {
         active: 'archive',
         flash: flashFrom(c.req.url),
         shell: await shellInfo(c),
-        subtitle: 'Closed Tickets, how each ended and when.',
         controls: scopeControl('/archive', f),
         body: html`<div class="archive-page">
           ${archiveBar(f, v, propertyOptions(properties), tenantOptions(beforeTenant), filtered(f) || narrowed(v) ? clearHref : undefined)}

@@ -16,7 +16,7 @@ const TABS: { tab: ProfileTab; label: string; path: string; count: keyof Profile
   { tab: 'all', label: 'All', path: '/profiles', count: null },
   { tab: 'properties', label: 'Properties', path: '/properties', count: 'properties' },
   { tab: 'tenants', label: 'Tenants', path: '/tenants', count: 'tenants' },
-  { tab: 'owners', label: 'Property Owners', path: '/owners', count: 'owners' },
+  { tab: 'owners', label: 'Owners', path: '/owners', count: 'owners' },
   { tab: 'tradies', label: 'Tradies', path: '/tradies', count: 'tradies' },
   { tab: 'building-managers', label: 'Building Managers', path: '/building-managers', count: 'buildingManagers' },
 ];

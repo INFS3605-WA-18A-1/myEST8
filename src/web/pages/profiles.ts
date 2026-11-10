@@ -25,7 +25,7 @@ type Filter = 'mine' | 'all';
 const ADD: { label: string; href: string }[] = [
   { label: 'Property', href: '/properties/new' },
   { label: 'Tenant', href: '/tenants/new' },
-  { label: 'Property Owner', href: '/owners/new' },
+  { label: 'Owner', href: '/owners/new' },
   { label: 'Building Manager', href: '/building-managers/new' },
   { label: 'Tradie', href: '/tradies/new' },
 ];
@@ -50,7 +50,7 @@ export function profilePages() {
         pm,
         active: 'profiles',
         shell: shellInfo(c),
-        subtitle: summary(counts, filter, q),
+        ...(q && { subtitle: summary(counts, filter, q) }),
         controls: profileChips('all', overview.counts, filter),
         body: profilesCard({
           search: search(filter, q),
@@ -317,7 +317,7 @@ function unlinkedBlock(unlinked: Unlinked): Html {
   return html`<section class="profiles-unlinked" aria-labelledby="profiles-unlinked">
     <h2 class="profiles-title" id="profiles-unlinked">Not linked to a Property</h2>
     ${group('Former Tenants', unlinked.tenants, (id) => `/tenants/${id}`)}
-    ${group('Property Owners', unlinked.owners, (id) => `/owners/${id}`)}
+    ${group('Owners', unlinked.owners, (id) => `/owners/${id}`)}
     ${group('Building Managers', unlinked.buildingManagers, (id) => `/building-managers/${id}`)}
   </section>`;
 }
@@ -327,7 +327,7 @@ function summary(counts: Counts, filter: Filter, q: string): Html | string {
   const items = [
     countItem(counts.properties, 'Property', 'Properties', '/properties'),
     countItem(counts.tenants, 'Tenant', 'Tenants', filter === 'all' ? '/tenants?filter=all' : '/tenants'),
-    countItem(counts.owners, 'Property Owner', 'Property Owners', '/owners'),
+    countItem(counts.owners, 'Owner', 'Owners', '/owners'),
     countItem(counts.buildingManagers, 'Building Manager', 'Building Managers', '/building-managers'),
     countItem(counts.tradies, 'Tradie', 'Tradies', '/tradies'),
   ].filter((item): item is CountItem => item !== null);

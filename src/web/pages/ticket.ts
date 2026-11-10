@@ -113,7 +113,7 @@ export function ticketPages() {
 
   onPost(pages, '/:id/close', async ({ actions, ticket }) => {
     await actions.closeTicket(ticket.ticketId);
-    return 'Ticket closed. The Tenant and Property Owner have been told.';
+    return 'Ticket closed. The Tenant and Owner have been told.';
   });
 
   onPost(pages, '/:id/read', async ({ actions, ticket }) => {
@@ -176,7 +176,7 @@ export function ticketPages() {
     const chosen = quoteIn(await actions.ticket(ticket.ticketId), params.quoteId).quote;
     // "Chosen" is the Property Manager's act; only the Property Owner approves.
     return chosen.status === 'awaiting_owner'
-      ? `Firm Quote from ${chosen.businessName} chosen. It takes the Repair Cost over the Max Repair Cost, so the Property Owner has been asked to approve it.`
+      ? `Firm Quote from ${chosen.businessName} chosen. It takes the Repair Cost over the Max Repair Cost, so the Owner has been asked to approve it.`
       : `Firm Quote from ${chosen.businessName} chosen`;
   });
 
@@ -597,7 +597,7 @@ function peopleCard(t: TicketView): Html {
   }
   for (const [tradieId, name] of tradies) people.push({ name, role: 'Tradie', href: `/tradies/${tradieId}` });
   // The Property Owner is on the Ticket only once their approval is asked for (or has been given).
-  if (t.jobs.some((job) => job.approval)) people.push({ name: t.owner.name, role: 'Property Owner', href: `/owners/${t.owner.personId}`, mobile: t.owner.mobile, email: t.owner.email });
+  if (t.jobs.some((job) => job.approval)) people.push({ name: t.owner.name, role: 'Owner', href: `/owners/${t.owner.personId}`, mobile: t.owner.mobile, email: t.owner.email });
   return html`<section class="ticket-people-card is-list" aria-label="People on this Ticket">
     <h2 class="ticket-people-title">People on this Ticket</h2>
     <ul class="ticket-people-list" role="list">
@@ -623,7 +623,7 @@ function costTiles(t: TicketView): Html {
       <div class="ticket-cost${overMax ? ' is-over' : ''}">
         <p class="ticket-cost-head"><span class="ticket-cost-icon" aria-hidden="true">${icon('receipt', { size: 'size-4' })}</span><span class="ticket-cost-label">Repair Cost</span></p>
         <strong class="ticket-cost-amount num">${t.repairCostCents > 0 ? formatMoney(t.repairCostCents) : '—'}</strong>
-        ${overMax ? html`<span class="ticket-cost-note">Over the Max Repair Cost, with the Property Owner's approval</span>` : nothing}
+        ${overMax ? html`<span class="ticket-cost-note">Over the Max Repair Cost, with the Owner's approval</span>` : nothing}
         <a class="btn btn-sm btn-secondary" href="#ticket-costs" data-tab-link="ticket-costs">Costs</a>
       </div>
       <div class="ticket-cost is-max">
@@ -896,7 +896,7 @@ function jobStep(t: TicketView, job: JobView, x: Extras): NextStep | null {
     }
     case 'awaiting_owner': {
       const quote = job.quotes.find((q) => q.quoteId === job.approval?.quoteId);
-      return wait(`Waiting on the Property Owner to approve ${formatMoney(quote?.priceCents ?? null)}`, 'approval');
+      return wait(`Waiting on the Owner to approve ${formatMoney(quote?.priceCents ?? null)}`, 'approval');
     }
     case 'approved': {
       const approved = job.quotes.find((q) => q.status === 'approved');
@@ -1027,7 +1027,7 @@ function detailsCard(t: TicketView): Html {
     title: 'Ticket details',
     body: facts([
       ['Property Manager', t.propertyManager],
-      ['Property Owner', entityLink('person', t.owner.name, `/owners/${t.owner.personId}`)],
+      ['Owner', entityLink('person', t.owner.name, `/owners/${t.owner.personId}`)],
       ...(t.buildingManager ? [['Building Manager', entityLink('person', t.buildingManager.name, `/building-managers/${t.buildingManager.personId}`)] as [string, Html]] : []),
       ...(frequent.length ? [['Frequent issues here', frequent.map((f) => `${humanise(f.trade)} (${f.tickets} ${plural(f.tickets, 'Ticket')})`).join(', ')] as [string, string]] : []),
       ...(t.imageMatch && t.imageMatch.result !== 'matches' ? [['Photo check', photoCheck] as [string, Html]] : []),
@@ -1039,7 +1039,7 @@ function detailsCard(t: TicketView): Html {
 function closeControl(t: TicketView): Html {
   if (t.status !== 'open' || t.jobs.some(isOpen)) return nothing;
   return html`<div id="close-ticket">
-    <form method="post" action="/tickets/${t.ticketId}/close" class="inline-flex" data-confirm="Close this Ticket? The Tenant and Property Owner will be told.">
+    <form method="post" action="/tickets/${t.ticketId}/close" class="inline-flex" data-confirm="Close this Ticket? The Tenant and Owner will be told.">
       <button type="submit" class="btn btn-primary btn-sm">${icon('check-circle', { size: 'size-4' })}Close Ticket</button>
     </form>
   </div>`;
@@ -1207,7 +1207,7 @@ function nextAction(t: TicketView, job: JobView, x: Extras): Html {
 function quotingAction(t: TicketView, job: JobView, x: Extras): Html {
   const declined = job.approval?.status === 'declined';
   return html`<div class="space-y-6">
-    ${declined ? alert('The Property Owner said NO. Choose another Firm Quote.', 'warning') : nothing}
+    ${declined ? alert('The Owner said NO. Choose another Firm Quote.', 'warning') : nothing}
     ${job.checkTrade && !job.quoteRequests.length ? tradeForm(t, job) : nothing}
     ${job.quoteRequests.length ? tradieProgress(t, job, x) : nothing}
     ${job.quotes.length ? quotesSection(t, job, x) : nothing}
@@ -1736,12 +1736,12 @@ function approvalSection(t: TicketView, job: JobView, approval: NonNullable<JobV
   const repairCost = typeof asked?.repairCostCents === 'number' ? asked.repairCostCents : null;
   const waiting = approval.status === 'requested' || approval.status === 'reminded';
   return html`<section class="space-y-3" id="job-${job.jobId}-approval">
-    ${sectionHeader('Property Owner approval', statusBadge(approval.status))}
+    ${sectionHeader('Owner approval', statusBadge(approval.status))}
     ${unreachedNote(t, x)}
     <p>
       Asked ${formatWhen(approval.requestedAt, x.timeZone)} to approve ${quote ? `${quote.businessName}'s` : 'the'} Quote of
       ${formatMoney(quote?.priceCents ?? null)}, which takes the Repair Cost to ${formatMoney(repairCost)}, over the Max Repair Cost of
-      ${formatMoney(t.maxRepairCostCents)}. The Property Owner replies YES or NO.
+      ${formatMoney(t.maxRepairCostCents)}. The Owner replies YES or NO.
     </p>
     ${waiting
       ? html`<p class="text-muted">
@@ -1760,7 +1760,7 @@ function workOrderForm(t: TicketView, job: JobView, x: Extras): Html {
     ${sectionHeader('Work Order')}
     <p>
       ${approved ? `${approved.businessName}'s Quote of ${formatMoney(approved.priceCents)} is approved.` : ''}
-      Send the Work Order to book the visit: the Tradie gets the address, and the Tenant and Property Owner are told the time.
+      Send the Work Order to book the visit: the Tradie gets the address, and the Tenant and Owner are told the time.
     </p>
     <form method="post" action="/tickets/${t.ticketId}/jobs/${job.jobId}/work-order" class="ticket-inline-form">
       <div class="min-w-56 flex-1">
@@ -2008,14 +2008,14 @@ function describeEvent(t: TicketView, event: TimelineEvent, x: Extras): { title:
     }
     case 'approval_requested': {
       const total = typeof d.repairCostCents === 'number' ? `Repair Cost would be ${formatMoney(d.repairCostCents)}` : undefined;
-      return { title: 'Property Owner asked to approve', detail: details(job, total) };
+      return { title: 'Owner asked to approve', detail: details(job, total) };
     }
     case 'quote_approved':
       return d.stage === 'estimate'
         ? { title: `${tradie}'s Estimate approved, capped`, detail: details(job, price ? `Not-to-exceed Cap ${price}` : undefined) }
         : { title: `${d.stage === 'firm' ? 'Firm Quote' : 'Quote'} from ${tradie} approved`, detail: details(job, price) };
     case 'owner_declined':
-      return { title: 'Property Owner declined the Quote', detail: details(job, price) };
+      return { title: 'Owner declined the Quote', detail: details(job, price) };
     case 'work_order_sent':
       return { title: `Work Order sent to ${tradie}`, detail: details(job, visit) };
     case 'visit_times_asked':
@@ -2061,7 +2061,7 @@ function messagesCard(t: TicketView, x: Extras): Html {
       markRead: `/tickets/${t.ticketId}/read`,
       contacts: [
         { name: t.tenantName, role: 'Tenant', mobile: t.tenantMobile, email: t.tenantEmail },
-        { name: t.owner.name, role: 'Property Owner', mobile: t.owner.mobile, email: t.owner.email },
+        { name: t.owner.name, role: 'Owner', mobile: t.owner.mobile, email: t.owner.email },
       ],
       more: toggle,
     })}

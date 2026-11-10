@@ -277,12 +277,12 @@ export function propertyFields(o: {
     ${fieldGrid(html`
       ${propertyPlaceFields({ values, errors })}
       ${field({
-        label: 'Property Owner',
+        label: 'Owner',
         name: 'ownerId',
         id: 'property-owner',
         type: 'select',
         required: true,
-        placeholder: 'Choose the Property Owner',
+        placeholder: 'Choose the Owner',
         value: valueOf(values, 'ownerId'),
         options: o.owners.map((p) => ({ value: String(p.id), label: p.name })),
         error: errors?.ownerId,
@@ -307,7 +307,7 @@ export function propertyFields(o: {
         required: true,
         placeholder: '500',
         value: valueOf(values, 'maxRepairCost'),
-        hint: "The most a Ticket's Repair Cost can reach before the Property Owner must approve.",
+        hint: "The most a Ticket's Repair Cost can reach before the Owner must approve.",
         error: errors?.maxRepairCost,
       })}
       ${field({
@@ -823,7 +823,7 @@ function colleagueInvited(added: ColleagueAdded, o: { origin: string; agencyName
 
 /** Each kind of import as the pages name it: one and many. */
 export const IMPORT_NOUNS: Record<ImportKind, { one: string; many: string }> = {
-  owners: { one: 'Property Owner', many: 'Property Owners' },
+  owners: { one: 'Owner', many: 'Owners' },
   'building-managers': { one: 'Building Manager', many: 'Building Managers' },
   tradies: { one: 'Tradie', many: 'Tradies' },
   properties: { one: 'Property', many: 'Properties' },

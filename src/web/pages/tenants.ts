@@ -72,7 +72,6 @@ export function tenantProfilePages() {
         active: 'profiles',
         flash,
         shell: shellInfo(c),
-        subtitle: tenants.length ? `${tenants.length} ${tenants.length === 1 ? 'Tenant' : 'Tenants'}${filter === 'mine' ? ' on your Properties' : ' in the Agency'}, by name.` : undefined,
         controls: profileChips('tenants', overview.counts, filter),
         body: profilesCard({
           search: listFilter('Filter Tenants', 'Name or address'),

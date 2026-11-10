@@ -46,7 +46,6 @@ export function tradiePages() {
         active: 'profiles',
         flash,
         shell: shellInfo(c),
-        subtitle: 'Best myEST8 rating first. The two ratings are shown side by side, never combined.',
         controls: profileChips('tradies', overview.counts, filter),
         body: profilesCard({
           search: listFilter('Filter Tradies', 'Business, name or Trade'),

@@ -129,7 +129,7 @@ export async function smsNumberPanel(actions: Actions, o: { from: Origin; curren
   if (status.number) {
     const { kind, phoneNumber } = status.number;
     return html`<div data-sms-number="${kind}">
-      <p class="text-sm"><strong class="break-all">${phoneNumber}</strong> is the Agency's SMS number (${NAME[kind]}). Tenants, Tradies and Property Owners text it, and myEST8 replies from it.</p>
+      <p class="text-sm"><strong class="break-all">${phoneNumber}</strong> is the Agency's SMS number (${NAME[kind]}). Tenants, Tradies and Owners text it, and myEST8 replies from it.</p>
       <div class="mt-3">${linkButton(kind === 'created' ? 'Release this number' : 'Disconnect this number', `/sms-number/release?from=${from}`, { variant: 'secondary', size: 'sm' })}</div>
     </div>`;
   }

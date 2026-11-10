@@ -98,7 +98,7 @@ function hero(): Html {
           myEST8 is the maintenance desk for Property Managers at small Agencies. It asks the follow-up questions and chases the Quotes. You make the calls.
         </p>
         <div class="lp-actions">${linkButton(SIGN_UP, '/signup', { variant: 'primary', size: 'lg' })} ${linkButton('Sign in', '/login', { size: 'lg' })}</div>
-        <p class="lp-note">Tenants, Tradies and Property Owners never need an account. They reply by text or email.</p>
+        <p class="lp-note">Tenants, Tradies and Owners never need an account. They reply by text or email.</p>
         <p class="lp-figure-block"><span class="lp-figure-num num">2</span><span>decisions on a typical repair. myEST8 chases the rest.</span></p>
       </div>
       <figure class="lp-hero-figure">
@@ -128,7 +128,7 @@ function demoSignIns(): Html {
         <h2 id="demo" class="lp-h3">Try the demo Agency</h2>
         <p>
           Harbour Realty has two Property Managers. Sign in as either, then use the Phone simulator to message in as a Tenant, Tradie or
-          Property Owner.
+          Owner.
         </p>
         <p>The password for both is <span class="num lp-demo-password">${DEMO_LOGINS.password}</span>.</p>
       </div>
@@ -253,9 +253,9 @@ const EXAMPLES: Example[] = [
     thread: [
       {
         from: 'out',
-        text: html`This sounds urgent. You can arrange the repair yourself straight away and claim up to $1,000 back from the property owner. Please use one
+        text: html`This sounds urgent. You can arrange the repair yourself straight away and claim up to $1,000 back from the owner. Please use one
           of the property’s nominated tradies where possible: Flow Bros Plumbing 0412 555 019. When it’s done, send us the receipt (a photo or PDF) here,
-          and we’ll pass your Reimbursement Request to the property owner: <span class="lp-link-text">${UPLOAD_LINK}</span>`,
+          and we’ll pass your Reimbursement Request to the owner: <span class="lp-link-text">${UPLOAD_LINK}</span>`,
       },
     ],
     result: html`<div class="lp-request is-urgent" data-ui>
@@ -274,7 +274,7 @@ const EXAMPLES: Example[] = [
       </dl>
       <p class="lp-urgent-note">
         It never waits on Quotes or becomes a Ticket. Priya calls the Nominated Tradie and sends the receipt, and her Reimbursement Request goes to the
-        Property Owner.
+        Owner.
       </p>
     </div>`,
   },
@@ -420,7 +420,7 @@ const DECISIONS = [
   },
   {
     title: 'Choose the Firm Quote',
-    text: 'Pick one. If it takes the Repair Cost over the Property’s Max Repair Cost, myEST8 asks the Property Owner first.',
+    text: 'Pick one. If it takes the Repair Cost over the Property’s Max Repair Cost, myEST8 asks the Owner first.',
   },
 ];
 
@@ -429,7 +429,7 @@ const CHORES = [
   { icon: 'chat-circle-dots', text: 'Asks the Tenant the follow-up questions, checks the photos when they arrive, and fills in a summary of the issue with AI.' },
   { icon: 'siren', text: 'Spots an Urgent Repair and tells the Tenant to arrange it with a Nominated Tradie, so it never waits on Quotes.' },
   { icon: 'paper-plane-tilt', text: 'Suggests up to four Tradies for the Trade, sends Quote Requests to at least two, and reminds them after 48 hours.' },
-  { icon: 'signature', text: 'Asks the Property Owner to approve a Quote over the Max Repair Cost, and reminds them after a day.' },
+  { icon: 'signature', text: 'Asks the Owner to approve a Quote over the Max Repair Cost, and reminds them after a day.' },
   { icon: 'calendar-check', text: 'Sends the Work Order, books the visit and tells the Tenant when the Tradie is coming.' },
 ];
 
@@ -437,7 +437,7 @@ const CHORES = [
 const PEOPLE = [
   { who: 'Tenants', text: 'Report by SMS or email, in their own words, and upload photos from a link.' },
   { who: 'Tradies', text: 'Get Quote Requests and Work Orders by text or email, and reply with a price and a time.' },
-  { who: 'Property Owners', text: 'Approve a Quote over the Max Repair Cost by replying YES or NO.' },
+  { who: 'Owners', text: 'Approve a Quote over the Max Repair Cost by replying YES or NO.' },
 ];
 
 /**

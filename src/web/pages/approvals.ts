@@ -35,7 +35,6 @@ export function approvalPages() {
         active: 'approvals',
         flash: flashFrom(c.req.url),
         shell: await shellInfo(c),
-        subtitle: "Quotes held up until a Property Owner says yes, and Tenants' Reimbursement Requests for Urgent Repairs they arranged.",
         controls: segmented([
           { label: 'Mine', href: '/approvals', active: !all },
           { label: 'All', href: '/approvals?filter=all', active: all },
@@ -58,7 +57,7 @@ function body(waiting: Approvals, all: boolean, timeZone: string, now: Date): Ht
   const claims = waiting.reimbursements;
   if (!owners.length && !claims.length) {
     return emptyState(
-      'Nothing is waiting on a Property Owner, and no Reimbursement Requests are open. A Quote lands here when choosing it would take a Ticket over its Max Repair Cost, and a Reimbursement Request when a Tenant arranges an Urgent Repair.',
+      'Nothing is waiting on an Owner, and no Reimbursement Requests are open. A Quote lands here when choosing it would take a Ticket over its Max Repair Cost, and a Reimbursement Request when a Tenant arranges an Urgent Repair.',
       all ? undefined : linkButton('Show all approvals', '/approvals?filter=all'),
     );
   }
@@ -68,7 +67,7 @@ function body(waiting: Approvals, all: boolean, timeZone: string, now: Date): Ht
   const barShown = [owners.length > 0, silent > 0, claims.length > 0].filter(Boolean).length > 1;
   return html`<div class="appr-panel">
     ${stageBar(owners, silent, claims, toReview, now)}
-    ${owners.length ? list('Waiting on a Property Owner', 'owners', owners.length, 'owners', barShown ? '' : ownersNote(owners, now), owners.map((w) => ownerCard(w, timeZone, now))) : ''}
+    ${owners.length ? list('Waiting on an Owner', 'owners', owners.length, 'owners', barShown ? '' : ownersNote(owners, now), owners.map((w) => ownerCard(w, timeZone, now))) : ''}
     ${claims.length ? list('Reimbursement Requests', 'reimbursements', claims.length, 'claims', barShown ? '' : claimsNote(claims, toReview, now), claims.map((u) => claimCard(u, all, timeZone, now))) : ''}
     <p class="appr-done">${icon('seal-check', { size: 'size-8' })}<span>That's everything waiting on approval.</span></p>
   </div>`;
@@ -92,7 +91,7 @@ function stageBar(owners: Approvals['waitingOnOwner'], silent: number, claims: A
   const stage = (kind: string, label: string, count: number, note: string) =>
     html`<li class="appr-stage-item"><div class="appr-stage is-${kind}"><span class="appr-stage-label">${label}</span><span class="appr-stage-count">${count}</span></div><p class="appr-stage-note">${note}</p></li>`;
   const stages = [
-    ...(owners.length ? [stage('owners', 'Waiting on a Property Owner', owners.length, ownersNote(owners, now))] : []),
+    ...(owners.length ? [stage('owners', 'Waiting on an Owner', owners.length, ownersNote(owners, now))] : []),
     ...(silent ? [stage('silent', 'No reply for 48 hours', silent, 'Reminder sent · needs you')] : []),
     ...(claims.length ? [stage('claims', 'Reimbursement Requests', claims.length, claimsNote(claims, toReview, now))] : []),
   ];
@@ -134,7 +133,7 @@ function ownerCard(w: Approvals['waitingOnOwner'][number], timeZone: string, now
       </details>
     </div>
     <div class="appr-figures">
-      ${person('Property Owner', w.ownerName, 'owner', w.ownerMobile ? html`<p class="appr-person-contact">${contactLink('mobile', w.ownerMobile, { title: true })}</p>` : undefined)}
+      ${person('Owner', w.ownerName, 'owner', w.ownerMobile ? html`<p class="appr-person-contact">${contactLink('mobile', w.ownerMobile, { title: true })}</p>` : undefined)}
       <div class="appr-col"><p class="appr-label">Quote</p>
         <div class="appr-tile"><p class="appr-amount">${formatMoney(w.quotePriceCents)}</p><p class="appr-tile-note">${w.tradieBusinessName}</p></div></div>
       <div class="appr-col"><p class="appr-label">Over the limit</p>
@@ -161,7 +160,7 @@ function claimCard(u: Approvals['reimbursements'][number], all: boolean, timeZon
     </div>
     <div class="appr-figures">
       ${person('Tenant', u.tenantName, 'tenant')}
-      ${person('Property Owner', u.ownerName, 'owner')}
+      ${person('Owner', u.ownerName, 'owner')}
       <div class="appr-col"><p class="appr-label">Amount</p>
         ${
           u.amountCents === null

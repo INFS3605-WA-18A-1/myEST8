@@ -130,7 +130,6 @@ export function dashboardPages() {
       page({
         title: 'Dashboard',
         heading: `Hi, ${firstName}`,
-        subtitle: helloLine(waiting, view.inbox.length, filter),
         pm,
         active: 'dashboard',
         flash: flashFrom(c.req.url),
@@ -260,22 +259,6 @@ function idParam(c: Context<WebEnv>, name: string) {
 }
 
 // Greeting and glance
-
-/**
- * "4 things need you today · 4 messages in the inbox": the line under "Hi, Alice".
- * On All it is the team's work, so it says so ("11 things need the team today").
- */
-function helloLine(things: number, inbox: number, filter: Filter): string {
-  const team = filter === 'all';
-  const waiting =
-    things === 0
-      ? team
-        ? 'Nothing needs the team right now'
-        : 'Nothing needs you right now'
-      : `${things} ${things === 1 ? 'thing needs' : 'things need'} ${team ? 'the team' : 'you'} today`;
-  const messages = inbox ? ` · ${inbox} ${inbox === 1 ? 'message' : 'messages'} in the inbox` : '';
-  return `${waiting}${messages}`;
-}
 
 type Decided = { toCheck: BoardTicket[]; toBook: BoardTicket[]; toChoose: BoardTicket[] };
 
@@ -571,7 +554,7 @@ function alertRow(alert: Alert, timeZone: string): Html {
     case 'owner_no_reply':
       return queueRow({
         href: `/tickets/${alert.ticketId}`,
-        title: `${alert.ownerName}, the Property Owner, hasn't replied since ${formatWhen(alert.requestedAt, timeZone)}`,
+        title: `${alert.ownerName}, the Owner, hasn't replied since ${formatWhen(alert.requestedAt, timeZone)}`,
         detail: streetOf(alert.propertyAddress),
         badges: [badge('Approval', 'warning')],
         decision: true,

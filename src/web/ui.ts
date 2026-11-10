@@ -14,7 +14,7 @@ import { icon } from './icons.ts';
 import type { ShellInfo } from './shell.ts';
 
 /** What each role is called on screen ("Property Owner"): the same words the core uses in its refusals. */
-export const ROLE_LABEL: Record<Role, string> = { tenant: 'Tenant', owner: 'Property Owner', tradie: 'Tradie', building_manager: 'Building Manager' };
+export const ROLE_LABEL: Record<Role, string> = { tenant: 'Tenant', owner: 'Owner', tradie: 'Tradie', building_manager: 'Building Manager' };
 
 export type Html = HtmlEscapedString | Promise<HtmlEscapedString>;
 export type Flash = { kind: 'ok' | 'error'; message: string };
@@ -716,7 +716,7 @@ const STATUS_TONE: Record<string, Tone> = {
 const STATUS_LABEL: Record<string, string> = {
   maintenance_request: 'Maintenance Request',
   urgent: 'Urgent Repair',
-  declined_by_owner: 'Declined by Property Owner',
+  declined_by_owner: 'Declined by Owner',
   estimated: 'Estimate in',
   inspection_booked: 'Site Inspection booked',
   inspected: 'Inspected',
@@ -730,7 +730,7 @@ const STATUS_LABEL: Record<string, string> = {
  */
 export const JOB_STAGES: { status: string; label: string }[] = [
   { status: 'quoting', label: 'Quoting' },
-  { status: 'awaiting_owner', label: 'With Property Owner' },
+  { status: 'awaiting_owner', label: 'With Owner' },
   { status: 'approved', label: 'Ready to book' },
   { status: 'scheduled', label: 'Booked' },
   { status: 'done', label: 'Done' },
@@ -742,7 +742,7 @@ export const JOB_STAGES: { status: string; label: string }[] = [
  * its steps (ADR 0009), then the Job stages after it, with their words from JOB_STAGES.
  * Site inspection and With Property Owner can be skipped ("Not needed").
  */
-export const JOB_TRACKER_STAGES = ['Estimates', 'Site inspection', 'Firm Quote', 'With Property Owner', 'Ready to book', 'Booked', 'Done'] as const;
+export const JOB_TRACKER_STAGES = ['Estimates', 'Site inspection', 'Firm Quote', 'With Owner', 'Ready to book', 'Booked', 'Done'] as const;
 
 /** The label for a Job stage ("scheduled" is "Booked"). Other values are humanised. */
 export function jobStageLabel(status: string): string {

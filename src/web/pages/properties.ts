@@ -57,7 +57,6 @@ export function propertyPages() {
         active: 'profiles',
         flash: flashFrom(c.req.url),
         shell: shellInfo(c),
-        subtitle: `${properties.length} ${properties.length === 1 ? 'Property' : 'Properties'}${filter === 'mine' ? ' you look after' : ' managed by the Agency'}.`,
         controls: profileChips('properties', overview.counts, filter),
         body: profilesCard({
           search: listFilter('Filter Properties', 'Address, Owner or Tenant'),
@@ -137,7 +136,7 @@ export function propertyPages() {
         return c.var.actions.editProperty(id, {
           address: text(form, 'address'),
           suburb: text(form, 'suburb'),
-          ownerId: chosenId(form, 'ownerId', 'the Property Owner'),
+          ownerId: chosenId(form, 'ownerId', 'the Owner'),
           propertyManagerId: chosenId(form, 'propertyManagerId', 'the Property Manager'),
           maxRepairCostCents: maxRepairCost(form),
           nominatedTradieIds: nominatedFrom(form),
@@ -233,7 +232,7 @@ export async function addPropertyPage(c: Context<WebEnv>, refused?: AddPropertyR
         id: 'add-property',
         title: 'Add a Property',
         body: html`
-          ${owners.length ? '' : html`<p class="mb-3 text-sm text-high">Add a Property Owner on the Setup page first.</p>`}
+          ${owners.length ? '' : html`<p class="mb-3 text-sm text-high">Add an Owner on the Setup page first.</p>`}
           ${refused ? alert(refused.message, 'error') : ''}
           <form method="post" action="/setup/properties">
             ${propertyFields({ owners, buildingManagers, propertyManagers, tradies, manager: pm.id, values: refused?.values, errors: refused?.errors })}
@@ -282,7 +281,7 @@ function list(properties: Overview[], filter: ProfileFilter): Html {
   if (!properties.length && filter === 'mine') return emptyState('You look after no Properties yet.', linkButton('Show all Properties', '/properties?filter=all'));
   if (!properties.length) return emptyState('No Properties yet. Add the first one to start taking reports.', linkButton('Add a Property', '/properties/new', { variant: 'primary' }));
   return table(
-    ['Property', 'Open Tickets', 'Max Repair Cost', 'Property Owner', 'Tenants', 'Property Manager'],
+    ['Property', 'Open Tickets', 'Max Repair Cost', 'Owner', 'Tenants', 'Property Manager'],
     properties.map((p) => [
       rowLink(p.address, `/properties/${p.propertyId}`),
       html`<span class="${p.openTickets ? 'property-open' : 'text-muted'}">${p.openTickets}</span>`,
@@ -368,10 +367,10 @@ async function facts(c: Context<WebEnv>, p: PropertyView, editing: boolean, refu
         }),
       },
       {
-        label: 'Property Owner',
+        label: 'Owner',
         read: contact(p.owner, `/owners/${p.owner.personId}`),
         for: 'property-owner',
-        control: select('ownerId', 'property-owner', 'Property Owner', owners.map((x) => ({ value: String(x.id), label: x.name })), 'Choose the Property Owner'),
+        control: select('ownerId', 'property-owner', 'Owner', owners.map((x) => ({ value: String(x.id), label: x.name })), 'Choose the Owner'),
       },
       {
         label: 'Property Manager',
