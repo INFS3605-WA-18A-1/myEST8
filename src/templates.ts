@@ -221,6 +221,13 @@ export const templates = {
     'Inspection cancelled',
     (d, a) => `${d.tradieBusinessName} won't be coming to inspect on ${visit(d.visitStart, a)}: that visit is cancelled, so you don't need to be home for it. We'll let you know when the repair is booked.`,
   ),
+  // The Tenant said a finished repair isn't fixed. No promise of a date: the Property Manager decides what happens next.
+  'tenant.not_fixed_received': template<{ tenantName: string; propertyAddress: string; trade: Trade }>(
+    "Sorry it isn't fixed",
+    (d, a) =>
+      `Hi ${d.tenantName}, this is ${a.name}. Sorry the ${trade(d.trade)} repair at ${d.propertyAddress} isn't fixed. ` +
+      "We've passed this to your property manager, who will arrange for it to be looked at again. Reply with any photos or details that would help.",
+  ),
   'tenant.fixed_properly': template<DoneJob>(
     'Was it fixed properly?',
     (d, a) =>

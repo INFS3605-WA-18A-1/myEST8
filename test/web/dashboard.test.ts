@@ -396,6 +396,33 @@ describe('Tickets on the dashboard', () => {
 });
 
 describe('the Agency inbox', () => {
+  test('Not fixed: the low rating shows the Ticket and the done Job, and one press adds the redo Job and opens the Ticket', async () => {
+    const w = await webWorld();
+    const job = await tomsTapTicket(w);
+    const [quote] = await confirmedQuotes(w, job, [[w.tradies.finn, 150_00, TUE_9AM]]);
+    await w.alice.chooseQuote(quote!.quoteId, 'Only plumber free this week');
+    await w.alice.sendWorkOrder(job.jobId);
+    const { workOrder } = await jobView(w, job);
+    w.h.classifier.when('Done', { replyType: 'done', relatedItem: `work_order:${workOrder!.workOrderId}` });
+    w.h.clock.advance(Math.max(0, TUE_9AM.getTime() + 60_000 - w.h.clock.now().getTime()));
+    await w.h.receive(w.tradies.finn.address, 'Done');
+    await w.h.answer(TOM, '1 still leaking', '1');
+    const cookie = await w.signIn();
+
+    const dashboard = await page(w, '/', cookie);
+    expect(dashboard).toContain('Not fixed');
+    expect(dashboard).toContain(`href="/tickets/${job.ticketId}">Ticket #${job.ticketId}</a>`);
+    expect(dashboard).toMatch(/plumbing Job on .*finished by Flow Bros/s);
+    const itemId = match(dashboard, /action="\/inbox\/(\d+)\/rework"/);
+    expect(dashboard).toContain(`Add a Job to Ticket #${job.ticketId}`);
+
+    const res = await w.post(`/inbox/${itemId}/rework`, {}, cookie);
+    expect(res.headers.get('location')!.startsWith(`/tickets/${job.ticketId}?ok=`)).toBe(true);
+    const ticket = await follow(w, res, cookie);
+    expect(ticket).toContain(`Job added to Ticket #${job.ticketId} to redo the work`);
+    expect(ticket).toContain('Job 2: Plumbing (redo)');
+  });
+
   test('an unknown sender is linked to a Tenant, then the message is dismissed', async () => {
     const w = await webWorld();
     const cookie = await w.signIn();

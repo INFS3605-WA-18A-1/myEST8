@@ -10212,6 +10212,12 @@
       white-space: pre-line;
       overflow-wrap: anywhere;
     }
+    /* The Ticket a "Not fixed" or closed-Ticket message is about, and the done Job it would redo. */
+    .inbox-item-ticket {
+      margin: 8px 0 0;
+      font-size: 14px;
+      line-height: 1.45;
+    }
     .inbox-item-from {
       display: flex;
       flex-wrap: wrap;

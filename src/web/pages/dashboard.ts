@@ -26,6 +26,7 @@ import {
   field,
   flashFrom,
   formatTime,
+  formatDay,
   formatWhen,
   humanise,
   linkButton,
@@ -65,6 +66,8 @@ const INBOX_REASON: Record<InboxItem['reason'], [string, Tone]> = {
   low_confidence: ['Agent unsure', 'info'],
   common_area_no_building_manager: ['Common Area with no Building Manager', 'warning'],
   shared_address: ['Shared address', 'warning'],
+  not_fixed: ['Not fixed', 'warning'],
+  closed_ticket: ['About a closed Ticket', 'neutral'],
 };
 
 const GUESS_LABEL: Record<string, string> = {
@@ -82,6 +85,7 @@ const MESSAGE_CLASS: Record<string, string> = {
   update: 'Update',
   common_area: 'Common Area issue',
   other: 'Not maintenance',
+  not_fixed: 'Not fixed',
 };
 
 /** The same stages in a few words, for the counts above the Ticket rows and each row's marker. */
@@ -210,6 +214,17 @@ export function dashboardPages() {
     formAction(c, back(c), async () => {
       await c.var.actions.routeInboxItem(idParam(c, 'itemId'));
       return { ok: 'Message routed with the best guess' };
+    }),
+  );
+
+  // "Not fixed": a Job to redo the done one on the same Ticket, then on to that Ticket to send its Quote Requests.
+  pages.post('/inbox/:itemId{[0-9]+}/rework', (c) =>
+    formAction(c, back(c), async () => {
+      const added = await c.var.actions.reworkFromInbox(idParam(c, 'itemId'));
+      return {
+        ok: added.reopened ? `Ticket #${added.ticketId} reopened with a Job to redo the work` : `Job added to Ticket #${added.ticketId} to redo the work`,
+        redirect: `/tickets/${added.ticketId}`,
+      };
     }),
   );
 
@@ -760,7 +775,8 @@ function triageCard(item: InboxItem, people: Person[], timeZone: string, q: stri
           item.candidates.map((c) => ({ label: `${c.name} (${ROLE_LABEL[c.role]})`, href: profileHref(c.role, c.personId) })),
         )
       : ''}
-    ${guesses
+    ${item.ticket ? inboxTicketNote(item.ticket, timeZone) : ''}
+    ${guesses && item.reason !== 'not_fixed'
       ? html`<details class="inbox-item-guess">
           <summary>Looks like: ${guessSummary(guesses)}</summary>
           ${dl(Object.entries(guesses).map(([question, answer]) => [guessLabel(question), guessAnswer(answer)]))}
@@ -788,9 +804,11 @@ function triageCard(item: InboxItem, people: Person[], timeZone: string, q: stri
             ${button('Link sender')}
             </form>
           </details>`
-        : item.reason === 'low_confidence' && item.bestGuess
-          ? postButton(`${base}/route${q}`, 'Route with best guess', { size: 'sm' })
-          : ''}
+        : item.reason === 'not_fixed' && item.ticket?.redo && !item.ticket.redo.inProgress
+          ? postButton(`${base}/rework${q}`, item.ticket.closed ? `Reopen Ticket #${item.ticket.ticketId} with a new Job` : `Add a Job to Ticket #${item.ticket.ticketId}`, { size: 'sm' })
+          : item.reason === 'low_confidence' && item.bestGuess
+            ? postButton(`${base}/route${q}`, 'Route with best guess', { size: 'sm' })
+            : ''}
       ${postButton(`${base}/dismiss${q}`, 'Dismiss', { variant: 'ghost', size: 'sm' })}
     </div>
   </article>`;
@@ -1019,6 +1037,21 @@ function urgentRepairsList(repairs: UrgentRepair[], timeZone: string): Html {
  * The best guess in one line: what kind of message, what it is about, then its
  * Urgency and Trade. "Update on Ticket 12, Routine, Plumbing".
  */
+/**
+ * The Ticket a "Not fixed" or closed-Ticket message is about: a link to it, and for
+ * "Not fixed" the done Job that would be redone, or that a Job is already under way.
+ */
+function inboxTicketNote(t: NonNullable<InboxItem['ticket']>, timeZone: string): Html {
+  const ticket = html`<a class="link" href="/tickets/${t.ticketId}">Ticket #${t.ticketId}</a>${t.closed ? ' (closed)' : ''}`;
+  if (!t.redo) return html`<p class="inbox-item-ticket">About ${ticket}.</p>`;
+  const by = t.redo.tradieBusinessName ? ` by ${t.redo.tradieBusinessName}` : '';
+  const on = t.redo.doneOn ? ` on ${formatDay(t.redo.doneOn, timeZone)}` : '';
+  return html`<p class="inbox-item-ticket">
+    The Tenant says the ${humanise(t.redo.trade).toLowerCase()} Job on ${ticket}, finished${by}${on}, isn't fixed.
+    ${t.redo.inProgress ? 'A Job on the Ticket is already under way.' : 'Adding a Job keeps it on the same Ticket.'}
+  </p>`;
+}
+
 function guessSummary(g: Record<string, string>): string {
   const kind =
     g.replyType && g.replyType !== 'other'

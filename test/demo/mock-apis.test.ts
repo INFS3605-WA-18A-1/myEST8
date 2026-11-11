@@ -101,6 +101,16 @@ describe('mock classifier', () => {
     expect(await ask(text, tenant(openItems), MESSAGE_CLASS)).toEqual({ answer, confidence });
   });
 
+  test('message class and item: "still dripping" once the Tradie has finished is not fixed, about the done Job', async () => {
+    const doneJob: Item = { ref: 'job:4', summary: 'plumbing Job (done: the Tradie finished it) on Ticket 2' };
+    const state = tenant([TICKET, doneJob]);
+    const classes = { id: 'messageClass', options: [...MESSAGE_CLASS.options, 'not_fixed'] };
+    expect(await ask('The tap is still dripping', state, classes)).toEqual({ answer: 'not_fixed', confidence: 0.9 });
+    expect(await ask('The tap is still dripping', state, refsOf(state.openItems))).toEqual({ answer: 'job:4', confidence: 0.9 });
+    // With nothing finished, the same words are a chaser.
+    expect(await ask('The tap is still dripping', tenant([TICKET]), classes)).toEqual({ answer: 'update', confidence: 0.9 });
+  });
+
   test('message class: an attachment while an Urgent Repair waits for its receipt is an update', async () => {
     expect(await ask('Here you go', tenant([URGENT_REPAIR], true), MESSAGE_CLASS)).toEqual({ answer: 'update', confidence: 0.9 });
   });
