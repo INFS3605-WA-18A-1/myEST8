@@ -51,7 +51,7 @@ import {
   fieldGrid,
   IMPORT_NOUNS,
   importPanel,
-  inboundEmailField,
+  emailSetup,
   phoneChannelForm,
   templatePath,
   unavailableChip,
@@ -284,8 +284,7 @@ async function channelsTab(actions: PropertyManagerActions, timeZone: string, co
           id: 'email',
           title: channelName('email'),
           actions: channelChip(current, { waiting: email.state === 'waiting', verified: email.state === 'verified' }),
-          body: html`<p class="text-sm">Forward the Agency inbox to this address. Mail sent there reaches myEST8.</p>
-            <div class="mt-3">${inboundEmailField(email.address)}</div>`,
+          body: emailSetup(email),
         });
       }
       // SMS: the server's phone, else the Twilio panel, else a typed number proved with a code.

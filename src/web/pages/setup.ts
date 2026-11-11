@@ -43,7 +43,8 @@ import {
   channelGuide,
   channelLine,
   channelOf,
-  inboundEmailField,
+  emailSetup,
+  type InboundEmail,
   phoneChannelForm,
   chosenId,
   nominatedFrom,
@@ -370,7 +371,7 @@ async function channelsArea(
   shown: Shown,
   connectors: ChannelConnectors,
   agencyId: number,
-  email: { address: string; state: 'waiting' | 'verified' | 'connected' },
+  email: InboundEmail,
   pending: { channelType: AgencyChannel['type']; address: string }[],
   smsPanel: Html | null,
 ): Promise<Html> {
@@ -407,7 +408,7 @@ function channelCard(
   timeZone: string,
   origin: string,
   via: { gmailBlock: Html | null; unavailable: ChannelType[]; smsInbound: 'simulator' | 'none'; smsPanel: Html | null },
-  email: { address: string; state: 'waiting' | 'verified' | 'connected' },
+  email: InboundEmail,
   pending: { address: string } | undefined,
 ): Html {
   const waiting = channel.type === 'email' && email.state === 'waiting';
@@ -424,7 +425,7 @@ function channelCard(
       ${connected && !(channel.type === 'sms' && via.smsPanel) ? channelLine(connected, timeZone, { waiting, smsInbound: via.smsInbound }) : ''}
       <div class="mt-3">
         ${channel.type === 'email'
-          ? html`${inboundEmailField(email.address)}${via.gmailBlock ?? ''}`
+          ? html`${emailSetup(email)}${via.gmailBlock ?? ''}`
           : via.smsPanel ?? phoneChannelForm({
                 channel,
                 postTo: '/setup/channels',
@@ -434,7 +435,7 @@ function channelCard(
                 className: rowForm,
               })}
       </div>
-      ${channel.type === 'sms' && via.smsPanel ? '' : html`<div class="mt-3">${channelGuide(channel.type, origin)}</div>`}
+      ${channel.type === 'email' || via.smsPanel ? '' : html`<div class="mt-3">${channelGuide(channel.type, origin)}</div>`}
     `,
   });
 }

@@ -43,7 +43,7 @@ export function createHttpApp(
     /** Meta's WhatsApp Cloud API: the app secret that signs webhooks, and the verify token for its handshake. */
     whatsapp?: { appSecret: string; verifyToken: string } | null;
     /** Resend inbound email. Absent unless both the webhook secret and the API key are set. */
-    resend?: { webhookSecret: string; apiKey: string; fetch?: typeof fetch } | null;
+    resend?: { webhookSecret: string; apiKey: string; inboundDomain?: string; fetch?: typeof fetch } | null;
     /** The server's textbee phone (ADR 0013). Absent turns /webhooks/textbee off with a 404. */
     textbee?: { webhookSecret: string; number: string } | null;
   },
@@ -162,6 +162,7 @@ export function createHttpApp(
       apiKey: config.resend.apiKey,
       fetch: config.resend.fetch ?? fetch,
       receivedAt: config.clock.now(),
+      inboundDomain: config.resend.inboundDomain,
     });
     if (message) await app.receiveInbound(message);
     return c.text('ok', 200);
