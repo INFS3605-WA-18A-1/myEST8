@@ -13721,3 +13721,20 @@
     }
   }
 }
+
+/* Toasts (client/toaster.tsx). Unlayered, because Sonner injects its own unlayered styles; each
+   toast is the page's soft alert, lifted off the page with the card shadow, in the app's type. */
+html [data-sonner-toaster] {
+  --width: min(440px, calc(100vw - 24px));
+  font-family: inherit;
+}
+html [data-sonner-toast] .flash-toast {
+  width: 100%;
+  box-shadow: 0 6px 24px rgb(19 33 46 / 0.12), var(--shadow-soft);
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  text-align: start;
+}
+html [data-sonner-toast] .flash-toast-icon {
+  display: inline-flex;
+}

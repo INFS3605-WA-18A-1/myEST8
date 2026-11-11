@@ -29,6 +29,8 @@ const ASSETS: Record<string, { file: () => string; type: string }> = {
   'legal.css': { file: () => fileURLToPath(new URL('./static/legal.css', import.meta.url)), type: CSS },
   'tenant.css': { file: () => fileURLToPath(new URL('./static/tenant.css', import.meta.url)), type: CSS },
   'app.js': { file: () => fileURLToPath(new URL('./static/app.js', import.meta.url)), type: JS },
+  // The React islands, built from ./client by `npm run islands` (docs/adr/0021).
+  'islands.js': { file: () => fileURLToPath(new URL('./static/islands.js', import.meta.url)), type: JS },
   // MapLibre starts its worker from the module's own URL, with maplibre-gl-worker.mjs beside it.
   'maplibre-gl.mjs': { file: () => maplibre('maplibre-gl.mjs'), type: JS },
   'maplibre-gl-worker.mjs': { file: () => maplibre('maplibre-gl-worker.mjs'), type: JS },
