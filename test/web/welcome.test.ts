@@ -23,7 +23,7 @@ async function submit(w: Web, path: string, fields: Fields, cookie: string) {
   return { location, page: await page(w, location.split('#')[0]!, cookie) };
 }
 
-/** A first Property with its Property Owner and Tenant, with `changes` applied. */
+/** A first Property with its Owner and Tenant, with `changes` applied. */
 function propertyFields(changes: Fields = {}): Fields {
   return {
     address: '3 Sun St, Newtown NSW 2042',
@@ -187,12 +187,12 @@ describe('the onboarding wizard', () => {
     expect(decodeURIComponent(typed.headers.get('location')!)).not.toContain('inbox@sunrise.example');
     expect(visible(await page(w, '/welcome/channels', sam))).not.toContain('inbox@sunrise.example');
 
-    // 4 First Property, with its Property Owner and Tenant in one form.
+    // 4 First Property, with its Owner and Tenant in one form.
     const property = await submit(w, '/welcome/property', propertyFields(), sam);
     expect(property.location).toMatch(/^\/welcome\/property\?added=\d+$/);
     const shown = visible(property.page);
     expect(shown).toContain('Property added');
-    expect(shown).toContain('3 Sun St, Newtown NSW 2042 is set up with Property Owner Omar Owen and Tenant Tina Tan');
+    expect(shown).toContain('3 Sun St, Newtown NSW 2042 is set up with Owner Omar Owen and Tenant Tina Tan');
     expect(shown).toContain('$300.00');
     expect(shown).toContain('Add another Property');
 
@@ -322,7 +322,7 @@ describe('the onboarding wizard', () => {
     expect(data.properties.find((property) => property.address === address)).toMatchObject({ lat: -33.8983619, lng: 151.1205914 });
   });
 
-  test("a Property Owner already added is reused for another Property, and a Tenant's number can be a new Property Owner's", async () => {
+  test("an Owner already added is reused for another Property, and a Tenant's number can be a new Owner's", async () => {
     const w = await webWorld();
     const sam = await w.signUp();
     await submit(w, '/welcome/property', propertyFields(), sam);
@@ -338,7 +338,7 @@ describe('the onboarding wizard', () => {
       propertyFields({ address: '7 Sun St, Newtown NSW 2042', ownerName: 'Uma Ung', ownerMobile: '0400 000 999', tenantName: 'Vic Vo', tenantMobile: '0400 000 995' }),
       sam,
     );
-    expect(visible(shared.page)).toContain('7 Sun St, Newtown NSW 2042 is set up with Property Owner Uma Ung and Tenant Vic Vo');
+    expect(visible(shared.page)).toContain('7 Sun St, Newtown NSW 2042 is set up with Owner Uma Ung and Tenant Vic Vo');
     expect(visible(shared.page)).not.toContain('already belongs');
     const pm = await one<{ id: number }>(w.h.db, 'SELECT id FROM property_managers WHERE email = ?', 'sam@sunrise.example');
     const sunrise = w.h.as(pm!.id);
@@ -346,7 +346,7 @@ describe('the onboarding wizard', () => {
     expect((await sunrise.people('tenant')).find((p) => p.name === 'Tina Tan')).toMatchObject({ mobile: '+61400000999' });
   });
 
-  test("adding a Property Owner with a Tenant's email saves, with no refusal", async () => {
+  test("adding an Owner with a Tenant's email saves, with no refusal", async () => {
     const w = await webWorld();
     const cookie = await w.signUp();
     await submit(w, '/welcome/property', propertyFields({ tenantEmail: 'tina@sunrise.example' }), cookie);
@@ -368,7 +368,7 @@ describe('the onboarding wizard', () => {
 
     const shown = visible(saved.page);
     expect(shown).toContain('Property added');
-    expect(shown).toContain('7 Sun St, Newtown NSW 2042 is set up with Property Owner Uma Ung and Tenant Vic Vo');
+    expect(shown).toContain('7 Sun St, Newtown NSW 2042 is set up with Owner Uma Ung and Tenant Vic Vo');
     expect(shown).not.toContain('already belongs');
 
     const sam = await one<{ id: number }>(w.h.db, 'SELECT id FROM property_managers WHERE email = ?', 'sam@sunrise.example');
@@ -377,7 +377,7 @@ describe('the onboarding wizard', () => {
     expect((await sunrise.people('tenant')).find((p) => p.name === 'Tina Tan')).toMatchObject({ email: 'tina@sunrise.example', mobile: '+61400000999' });
   });
 
-  test('a new Property Owner and a new Tenant on the same Property can share an email, and both keep it', async () => {
+  test('a new Owner and a new Tenant on the same Property can share an email, and both keep it', async () => {
     const w = await webWorld();
     const cookie = await w.signUp();
 
@@ -395,7 +395,7 @@ describe('the onboarding wizard', () => {
 
     const shown = visible(saved.page);
     expect(shown).toContain('Property added');
-    expect(shown).toContain('3 Sun St, Newtown NSW 2042 is set up with Property Owner Omar Owen and Tenant Tina Tan');
+    expect(shown).toContain('3 Sun St, Newtown NSW 2042 is set up with Owner Omar Owen and Tenant Tina Tan');
 
     const sam = await one<{ id: number }>(w.h.db, 'SELECT id FROM property_managers WHERE email = ?', 'sam@sunrise.example');
     const sunrise = w.h.as(sam!.id);

@@ -96,7 +96,7 @@ describe('Settings', () => {
 
     const page = await (await w.get('/settings?tab=import', cookie)).text();
     const text = visible(page);
-    const order = ['Import Property Owners', 'Import Building Managers', 'Import Properties', 'Import Tenants', 'Import Tradies'];
+    const order = ['Import Owners', 'Import Building Managers', 'Import Properties', 'Import Tenants', 'Import Tradies'];
     for (const label of order) expect(text).toContain(label);
     for (let i = 1; i < order.length; i++) expect(text.indexOf(order[i - 1]!)).toBeLessThan(text.indexOf(order[i]!));
     expect(page).toContain('href="/settings/import/owners"');
@@ -232,7 +232,7 @@ describe('Settings stays on its own pages', () => {
     expect(reviewUrl).toMatch(/^\/settings\/imports\/[\w-]+$/);
 
     const review = await (await w.get(reviewUrl, cookie)).text();
-    expect(visible(review)).toContain('Review Property Owners');
+    expect(visible(review)).toContain('Review Owners');
     expect(visible(review)).toContain('Back to the upload');
     expect(review).toContain('class="settings-layout is-wide"');
     expect(review).toContain(`action="${reviewUrl}"`);
@@ -243,9 +243,9 @@ describe('Settings stays on its own pages', () => {
     expect(added.status).toBe(303);
     const done = added.headers.get('location')!;
     // A posted `from` cannot steer a Settings import back to Setup.
-    expect(done).toMatch(/^\/settings\?tab=import&ok=Added%201%20Property%20Owner\./);
+    expect(done).toMatch(/^\/settings\?tab=import&ok=Added%201%20Owner\./);
     const page = await (await w.get(done, cookie)).text();
-    expect(visible(page)).toContain('Added 1 Property Owner.');
+    expect(visible(page)).toContain('Added 1 Owner.');
     expect(leaving(page)).toEqual([]);
   });
 });

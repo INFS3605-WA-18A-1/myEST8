@@ -19,6 +19,7 @@ import { formAction, list, text } from '../forms.ts';
 import { icon } from '../icons.ts';
 import { shellInfo } from '../shell.ts';
 import { addButton, listFilter, profileChips, profileHref, profilesCard, type ProfileFilter } from '../profiles-frame.ts';
+import { callButton, initials, insight, neighboursIn, profileCard, profileHero, profileTabs, sideFact, sideHead } from '../profile-card.ts';
 import { alert, badge, button, contactLink, editSwap, emptyState, inlineEdit, field, flashFrom, formatMoney, formatWhen, humanise, linkButton, othersUsing, page, postButton, profileRead, ratingChip, rowLink, section, sharedAddressNote, table, ticketCell, type Html } from '../ui.ts';
 import { timeRange } from './calendar.ts';
 import { addTradieSection, contactControls, contactFrom, importPanel, listingChoice, saveDetails, tradesControl, tradieFields, valueOf, type DetailsEdit, type Errors, type Values } from './onboarding-forms.ts';
@@ -107,7 +108,7 @@ export async function addTradiePage(c: Context<WebEnv>, refused?: AddTradieRefus
       active: 'profiles',
       shell: shellInfo(c),
       flash,
-      actions: linkButton('Back to Tradies', '/tradies', { variant: 'ghost', size: 'sm' }),
+      back: { label: 'Tradies', href: '/tradies' },
       body: section({
         title: 'Add a Tradie',
         body: html`
@@ -159,8 +160,7 @@ async function profilePage(c: Context<WebEnv>, id: number, refused?: DetailsEdit
   const editing = !removed && (!!refused || c.req.query('edit') === 'details');
   const people = await actions.people();
   const directory = removed ? [] : await actions.tradieDirectory();
-  const at = directory.findIndex((entry) => entry.tradieId === id);
-  const neighbours = { before: at > 0 ? directory[at - 1]! : null, after: at >= 0 && at < directory.length - 1 ? directory[at + 1]! : null };
+  const neighbours = neighboursIn(directory, (entry) => entry.tradieId, id, (entry) => ({ href: `/tradies/${entry.tradieId}`, name: entry.businessName ?? entry.name }));
   const notice = removed
     ? html`${alert(`Removed from the Agency on ${longDate(tradie.removedAt!, timeZone)}.`, 'info')}${refused ? alert(refused.message, 'error') : ''}`
     : '';
@@ -174,25 +174,15 @@ async function profilePage(c: Context<WebEnv>, id: number, refused?: DetailsEdit
       flash,
       crumbs: [{ label: 'Profiles', href: '/profiles' }, { label: 'Tradies', href: '/tradies' }, { label: name }],
       body: html`${notice}
-        <div class="tradie-card">
-          ${hero(tradie, removed, neighbours)}
-          <div class="tradie-board">
-            <div class="tradie-main">${tabs(tradie, timeZone)}</div>
-            <aside class="tradie-side" aria-label="About ${name}">
-              ${details(tradie, editing, refused, people)}
-              ${removed ? '' : serviceArea(tradie, flash, c.req.query('form'))}
-            </aside>
-          </div>
-        </div>`,
+        ${profileCard({
+          hero: hero(tradie, removed, neighbours),
+          main: tabs(tradie, timeZone),
+          side: html`${details(tradie, editing, refused, people)}${removed ? '' : serviceArea(tradie, flash, c.req.query('form'))}`,
+          about: name,
+        })}`,
     }),
     refused ? 400 : 200,
   );
-}
-
-/** "PP" for Proximity Plumbing. */
-function initials(name: string): string {
-  const words = name.split(/\s+/).filter(Boolean);
-  return (words.length > 1 ? `${words[0]![0]}${words[1]![0]}` : name.slice(0, 2)).toUpperCase();
 }
 
 /**
@@ -200,30 +190,21 @@ function initials(name: string): string {
  * for and their myEST8 rating, then Remove, a Call button for the contact (when there is a
  * mobile) and a step to the Tradie before and after in the directory's order.
  */
-function hero(t: TradieView, removed: boolean, near: { before: DirectoryEntry | null; after: DirectoryEntry | null }): Html {
+function hero(t: TradieView, removed: boolean, steps: ReturnType<typeof neighboursIn>): Html {
   const name = t.businessName ?? t.name;
-  const first = t.name.split(/\s+/)[0]!;
-  const step = (entry: DirectoryEntry | null, label: string, glyph: 'caret-left' | 'caret-right') =>
-    entry
-      ? html`<a class="tradie-step" href="/tradies/${entry.tradieId}" aria-label="${label}: ${entry.businessName ?? entry.name}" title="${label}: ${entry.businessName ?? entry.name}">${icon(glyph, { size: 'size-4' })}</a>`
-      : html`<span class="tradie-step is-off" aria-hidden="true">${icon(glyph, { size: 'size-4' })}</span>`;
-  return html`<header class="tradie-hero">
-    <a class="tradie-back" href="/tradies" aria-label="Back to Tradies" title="Back to Tradies">${icon('caret-left', { size: 'size-4' })}</a>
-    <span class="tradie-hero-avatar" aria-hidden="true">${initials(name)}</span>
-    <div class="tradie-hero-text">
-      <h1 class="tradie-name">${name}</h1>
-      <p class="tradie-hero-meta">
-        ${removed ? badge('Removed', 'neutral') : html`<span class="tradie-onlist">${icon('check', { size: 'size-3.5', weight: 'bold' })}On your list</span>`}
-        ${t.businessName ? html`<span class="tradie-hero-dot" aria-hidden="true">·</span><span>Contact <strong>${t.name}</strong></span>` : ''}
-        <span class="tradie-hero-dot" aria-hidden="true">·</span><span class="tradie-hero-rating">${icon('star', { size: 'size-3.5', weight: 'fill' })}<strong class="num">${t.myEst8Rating.average.toFixed(1)}</strong> myEST8 rating</span>
-      </p>
-    </div>
-    <div class="tradie-hero-actions">
-      ${removed ? '' : removeButton(t)}
-      ${t.mobile ? html`<a class="btn btn-primary btn-sm" href="tel:${t.mobile.replace(/\s+/g, '')}">${icon('phone', { size: 'size-4' })}Call ${first}</a>` : ''}
-      ${removed ? '' : html`<span class="tradie-steps">${step(near.before, 'Previous Tradie', 'caret-left')}${step(near.after, 'Next Tradie', 'caret-right')}</span>`}
-    </div>
-  </header>`;
+  return profileHero({
+    back: { href: '/tradies', label: 'Back to Tradies' },
+    avatar: initials(name),
+    name,
+    meta: [
+      removed ? badge('Removed', 'neutral') : html`<span class="tradie-onlist">${icon('check', { size: 'size-3.5', weight: 'bold' })}On your list</span>`,
+      t.businessName ? html`<span>Contact <strong>${t.name}</strong></span>` : '',
+      html`<span class="tradie-hero-rating">${icon('star', { size: 'size-3.5', weight: 'fill' })}<strong class="num">${t.myEst8Rating.average.toFixed(1)}</strong> myEST8 rating</span>`,
+    ],
+    actions: html`${removed ? '' : removeButton(t)}${callButton(t.name, t.mobile)}`,
+    steps: removed ? null : steps,
+    noun: 'Tradie',
+  });
 }
 
 function removeButton(t: TradieView): Html {
@@ -373,8 +354,7 @@ function details(t: TradieView, editing: boolean, refused: DetailsEdit | undefin
   const errors = refused?.errors;
   const controls = contactControls('tradie', { values, errors });
   const reach = (kind: 'mobile' | 'email', value: string | null) => (value ? html`${contactLink(kind, value)}${sharedAddressNote('Also', othersUsing(people, value, t.tradieId))}` : html`<span class="text-muted">—</span>`);
-  const row = (label: string, read: Html | string, edit?: { for: string; control: Html }) =>
-    html`<div class="tradie-fact"><dt>${edit ? html`<label for="${edit.for}">${label}</label>` : label}</dt><dd>${editSwap(read, edit?.control)}</dd></div>`;
+  const row = sideFact;
   return inlineEdit({
     id: 'details',
     label: 'Tradie details',
@@ -387,7 +367,7 @@ function details(t: TradieView, editing: boolean, refused: DetailsEdit | undefin
     className: 'tradie-side-card',
     refusal: refused && !Object.keys(refused.errors).length ? refused.message : undefined,
     view: (tools) => html`
-      <div class="tradie-side-head"><h2 class="tradie-side-title">Tradie details</h2>${tools}</div>
+      ${sideHead('Tradie details', tools)}
       <dl class="tradie-facts">
         ${row('Contact', t.name, controls.name)}
         <div class="tradie-fact inline-edit-only"><dt><label for="tradie-business">Business name</label></dt><dd><div class="inline-edit-control">${field({ label: 'Business name', name: 'businessName', id: 'tradie-business', required: true, bare: true, value: valueOf(values, 'businessName'), error: errors?.businessName })}</div></dd></div>
@@ -490,26 +470,9 @@ function bookings(t: TradieView, timeZone: string): Html {
  * three panes are listed one under another, each under its heading.
  */
 function tabs(t: TradieView, timeZone: string): Html {
-  const tab = (id: string, label: string, count: number | null, selected = false) =>
-    html`<button type="button" role="tab" id="tab-${id}" class="tradie-tab" aria-controls="${id}" aria-selected="${selected ? 'true' : 'false'}">${label}${count === null ? '' : html` <span class="tradie-tab-count num">${count}</span>`}</button>`;
-  const ratingsGiven = t.ratings.length;
-  return html`<section class="tradie-tabs" data-tabs aria-label="${t.businessName ?? t.name}'s work">
-    <div class="tradie-tablist js-only" role="tablist" aria-label="Views">
-      ${tab('tradie-quotes', 'Previous Quotes', t.previousQuotes.length, true)}${tab('tradie-jobs', 'Jobs', t.bookings.length)}${tab('tradie-ratings', 'Ratings', ratingsGiven)}
-    </div>
-    <div class="tradie-pane" role="tabpanel" id="tradie-quotes" aria-labelledby="tab-tradie-quotes">
-      <h2 class="tradie-pane-title">Previous Quotes</h2>
-      <div class="tradie-insight"><p class="tradie-insight-tag">${icon('sparkle', { size: 'size-3.5', weight: 'fill' })}myEST8 insight</p>${profileRead(t.read)}</div>
-      ${ratingSummary(t)}
-      ${quotes(t, timeZone)}
-    </div>
-    <div class="tradie-pane" role="tabpanel" id="tradie-jobs" aria-labelledby="tab-tradie-jobs">
-      <h2 class="tradie-pane-title">Upcoming bookings</h2>
-      ${bookings(t, timeZone)}
-    </div>
-    <div class="tradie-pane" role="tabpanel" id="tradie-ratings" aria-labelledby="tab-tradie-ratings">
-      <h2 class="tradie-pane-title">Ratings</h2>
-      ${ratings(t, timeZone)}
-    </div>
-  </section>`;
+  return profileTabs(`${t.businessName ?? t.name}'s work`, [
+    { id: 'tradie-quotes', label: 'Previous Quotes', count: t.previousQuotes.length, body: html`${insight(profileRead(t.read))}${ratingSummary(t)}${quotes(t, timeZone)}` },
+    { id: 'tradie-jobs', label: 'Jobs', count: t.bookings.length, title: 'Upcoming bookings', body: bookings(t, timeZone) },
+    { id: 'tradie-ratings', label: 'Ratings', count: t.ratings.length, body: ratings(t, timeZone) },
+  ]);
 }

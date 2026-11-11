@@ -335,7 +335,7 @@ export function createViews(ctx: Context) {
 
       const stageWord: Record<Stage, string> = {
         quoting: 'Quoting',
-        awaiting_owner: 'With Property Owner',
+        awaiting_owner: 'With Owner',
         approved: 'Ready to book',
         scheduled: 'Booked',
         done: 'Done',
@@ -1059,6 +1059,44 @@ export function createViews(ctx: Context) {
       const property = await profiles.property(ticket.propertyId);
       const owner = await profiles.person(property.ownerId);
       const buildingManager = property.buildingManagerId ? await profiles.person(property.buildingManagerId) : null;
+      const jobs = await tickets.jobsOf(ticket.id);
+      const jobViews = await Promise.all(
+        jobs.map(async (job) => {
+          const quotesView = await modules.quotes.jobView(agencyId, job.id);
+          const quoting = job.status === 'quoting';
+          const counts = (await modules.quotes.quotingOf([job.id])).get(job.id) ?? NO_QUOTING;
+          return {
+            jobId: job.id,
+            trade: job.trade,
+            checkTrade: job.checkTrade,
+            status: job.status,
+            ...quotesView,
+            /** Every Quote, Estimates and Firm Quotes alike, with its Tradie's ratings. */
+            quotes: await Promise.all(
+              quotesView.quotes.map(async (q) => {
+                const tradie = await profiles.personInAgency(agencyId, q.tradieId, 'tradie');
+                return {
+                  ...q,
+                  myEst8Rating: await profiles.myEst8Rating(q.tradieId),
+                  googleRating: tradie.googlePlaceId ? { rating: tradie.googleRating, reviewCount: tradie.googleReviewCount } : null,
+                };
+              }),
+            ),
+            /** The Job's Quote counts, as the board reads them. */
+            quoting: counts,
+            /** What the Property Manager decides next while the Job is getting Quotes; null otherwise. */
+            decision: quoting ? quotingDecision(counts) : null,
+            workOrder: await modules.scheduling.workOrderForJob(job.id),
+            /** Times the Tradie has offered that the Tenant has not picked yet. */
+            offeredVisit: await modules.scheduling.offeredVisit(job.id),
+            /** Site Inspections (not cancelled), and free slots to prefill booking the ones Tradies need. */
+            inspections: {
+              visits: await modules.scheduling.inspectionVisits(job.id),
+              slots: quoting && counts.toInspect ? await modules.scheduling.inspectionSlots(agencyId, job.id) : [],
+            },
+          };
+        }),
+      );
       return {
         ...(await ticketSummaries([ticket]))[0]!,
         ...(await issueDetails(issue)),
@@ -1071,45 +1109,16 @@ export function createViews(ctx: Context) {
         buildingManager: buildingManager ? { personId: buildingManager.id, name: buildingManager.name } : null,
         frequentIssues: await profiles.frequentIssues(property.id),
         repairCostCents: await modules.quotes.repairCost(ticket.id),
-        jobs: await Promise.all(
-          (await tickets.jobsOf(ticket.id)).map(async (job) => {
-            const quotesView = await modules.quotes.jobView(agencyId, job.id);
-            const quoting = job.status === 'quoting';
-            const counts = (await modules.quotes.quotingOf([job.id])).get(job.id) ?? NO_QUOTING;
-            return {
-              jobId: job.id,
-              trade: job.trade,
-              checkTrade: job.checkTrade,
-              status: job.status,
-              ...quotesView,
-              /** Every Quote, Estimates and Firm Quotes alike, with its Tradie's ratings. */
-              quotes: await Promise.all(
-                quotesView.quotes.map(async (q) => {
-                  const tradie = await profiles.personInAgency(agencyId, q.tradieId, 'tradie');
-                  return {
-                    ...q,
-                    myEst8Rating: await profiles.myEst8Rating(q.tradieId),
-                    googleRating: tradie.googlePlaceId ? { rating: tradie.googleRating, reviewCount: tradie.googleReviewCount } : null,
-                  };
-                }),
-              ),
-              /** The Job's Quote counts, as the board reads them. */
-              quoting: counts,
-              /** What the Property Manager decides next while the Job is getting Quotes; null otherwise. */
-              decision: quoting ? quotingDecision(counts) : null,
-              workOrder: await modules.scheduling.workOrderForJob(job.id),
-              /** Times the Tradie has offered that the Tenant has not picked yet. */
-              offeredVisit: await modules.scheduling.offeredVisit(job.id),
-              /** Site Inspections (not cancelled), and free slots to prefill booking the ones Tradies need. */
-              inspections: {
-                visits: await modules.scheduling.inspectionVisits(job.id),
-                slots: quoting && counts.toInspect ? await modules.scheduling.inspectionSlots(agencyId, job.id) : [],
-              },
-            };
-          }),
-        ),
+        jobs: jobViews,
         timeline: await tickets.timeline(ticket.id),
         messages: await tickets.messages(ticket.issueId),
+        /** Every Tradie asked for a Quote on the Ticket, or booked, so its messages can name them. */
+        tradieContacts: await Promise.all(
+          [...new Set(jobViews.flatMap((job) => [...job.quoteRequests.map((r) => r.tradieId), ...(job.workOrder ? [job.workOrder.tradieId] : [])]))].map(async (tradieId) => {
+            const tradie = await profiles.personInAgency(agencyId, tradieId, 'tradie');
+            return { tradieId, name: tradie.businessName ?? tradie.name, mobile: tradie.mobile, email: tradie.email };
+          }),
+        ),
       };
     },
   };

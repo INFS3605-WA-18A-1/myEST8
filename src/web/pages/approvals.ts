@@ -117,7 +117,8 @@ function person(label: string, name: string, tone: 'owner' | 'tenant', contact?:
 
 /** A Quote held up for a Property Owner: where its reminder stands, the Ticket and Property, who, how much, and how far over the limit. */
 function ownerCard(w: Approvals['waitingOnOwner'][number], timeZone: string, now: Date): Html {
-  const over = Math.round((w.repairCostCents / w.maxRepairCostCents) * 100);
+  // How far past the limit the Repair Cost goes, as a share of the limit: 0% is at the limit, 100% is double it.
+  const over = Math.max(0, Math.round((w.overByCents / w.maxRepairCostCents) * 100));
   return html`<article class="appr-card ${w.silent ? 'is-silent' : 'is-waiting'}">
     <div class="appr-status">
       <p class="appr-status-main">${w.silent ? 'No reply for 48 hours' : 'Waiting for the Owner'}</p>
@@ -138,8 +139,8 @@ function ownerCard(w: Approvals['waitingOnOwner'][number], timeZone: string, now
         <div class="appr-tile"><p class="appr-amount">${formatMoney(w.quotePriceCents)}</p><p class="appr-tile-note">${w.tradieBusinessName}</p></div></div>
       <div class="appr-col"><p class="appr-label">Over the limit</p>
         <div class="appr-over">
-          <span class="appr-ring" style="--pct:${Math.min(100, over)}"><span>${over}%</span></span>
-          <div><p class="appr-amount is-over">${formatMoney(w.overByCents)}</p><p class="appr-tile-note">${formatMoney(w.repairCostCents)} of ${formatMoney(w.maxRepairCostCents)}</p></div>
+          <span class="appr-ring${over >= 100 ? ' is-full' : ''}" style="--pct:${Math.min(100, over)}" role="img" aria-label="${over}% over the limit"><span class="num">${over > 999 ? '999+' : `+${over}`}<small>%</small></span></span>
+          <div><p class="appr-amount is-over">${formatMoney(w.overByCents)}</p><p class="appr-tile-note">${formatMoney(w.repairCostCents)} against a ${formatMoney(w.maxRepairCostCents)} limit</p></div>
         </div></div>
     </div>
   </article>`;

@@ -57,6 +57,18 @@ export function createWebApp(deps: {
   const web = new Hono();
   // A page reads the same rows many times over; each GET shares its reads (src/db.ts).
   web.use('*', (c, next) => (c.req.method === 'GET' || c.req.method === 'HEAD' ? withReadCache(next) : next()));
+  // A form static/app.js posts with fetch (x-myest8-post) gets its redirect as a header
+  // instead: fetch would follow it and drop the #fragment, and the page decides whether the
+  // next page replaces it in the history (the same page again) or comes after it.
+  web.use('*', async (c, next) => {
+    await next();
+    if (c.req.method !== 'POST' || !c.req.header('x-myest8-post')) return;
+    const location = c.res.headers.get('location');
+    if (c.res.status < 300 || c.res.status >= 400 || !location) return;
+    // A redirect status with no Location is handed to fetch as it is, not followed.
+    c.res.headers.delete('location');
+    c.res.headers.set('x-myest8-redirect', location);
+  });
   // The no-login Tenant links (a tracker, the upload page and its posts) and the Tradie's quote page.
   const links = rateLimit({ max: 60, windowMs: 60_000 });
   // The browser suite shares one address, and a run opens more upload and quote
@@ -88,6 +100,12 @@ export function createWebApp(deps: {
     c.set('unavailableChannels', deps.connectors?.unavailable ?? []);
     if (deps.authKit) c.set('invite', deps.authKit.invite);
     await next();
+  });
+  // Signed-in pages change as the work moves on, so the browser keeps none to show again:
+  // Back loads the page afresh (static/app.js reloads one the back-forward cache kept anyway).
+  signedIn.use('*', async (c, next) => {
+    await next();
+    if ((c.res.headers.get('content-type') ?? '').startsWith('text/html') && !c.res.headers.has('cache-control')) c.res.headers.set('cache-control', 'no-store');
   });
   signedIn.use('*', loadNavCounts());
   signedIn.use('*', loadSetupLink());

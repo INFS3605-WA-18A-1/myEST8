@@ -5,7 +5,7 @@ import { HANA_EMAIL, OLIVIA_EMAIL, PETE } from '../support/world.ts';
 const detailsOf = (page: string) => page.slice(page.indexOf('id="details"'), page.indexOf('</section>', page.indexOf('id="details"')));
 
 describe('a shared contact address on the page', () => {
-  test("adding a Property Owner with a Tenant's email saves, with no refusal", async () => {
+  test("adding an Owner with a Tenant's email saves, with no refusal", async () => {
     const w = await webWorld();
     const cookie = await w.signIn();
 
@@ -14,7 +14,7 @@ describe('a shared contact address on the page', () => {
     expect(res.status).toBe(303);
     expect(res.headers.get('location')).toMatch(/^\/owners\?ok=/);
     const list = visible(await (await w.get(res.headers.get('location')!, cookie)).text());
-    expect(list).toContain('Kevin He added as a Property Owner');
+    expect(list).toContain('Kevin He added as an Owner');
     expect(list).not.toContain('already belongs');
     expect((await w.alice.people('owner')).find((p) => p.name === 'Kevin He')).toMatchObject({ email: 'hana@example.com' });
     expect(await w.alice.tenant(w.ids.hana)).toMatchObject({ name: 'Hana Ho', email: 'hana@example.com' });
@@ -31,7 +31,7 @@ describe('a shared contact address on the page', () => {
 
     const tenant = detailsOf(await (await w.get(`/tenants/${w.ids.hana}`, cookie)).text());
     expect(tenant).toContain(`href="/owners/${kevin}"`);
-    expect(visible(tenant)).toContain('Also Kevin He (Property Owner)');
+    expect(visible(tenant)).toContain('Also Kevin He (Owner)');
   });
 
   test('the Inbox modal for a shared address names both people and offers Pick a contact', async () => {
@@ -45,7 +45,7 @@ describe('a shared contact address on the page', () => {
     expect(box).toContain('Shared address');
     expect(box).toMatch(
       new RegExp(
-        `Could be <a href="/owners/${w.ids.olivia}">Olivia Owens \\(Property Owner\\)</a> or <a href="/tradies/${w.ids.pete}">Pete Park \\(Tradie\\)</a>\\.`,
+        `Could be <a href="/owners/${w.ids.olivia}">Olivia Owens \\(Owner\\)</a> or <a href="/tradies/${w.ids.pete}">Pete Park \\(Tradie\\)</a>\\.`,
       ),
     );
     expect(box).toContain(`href="/owners/${w.ids.olivia}"`);

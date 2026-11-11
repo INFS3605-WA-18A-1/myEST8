@@ -11,6 +11,7 @@ import type { WebEnv } from '../env.ts';
 import { formAction } from '../forms.ts';
 import { shellInfo } from '../shell.ts';
 import { addButton, listFilter, mineAll, profileChips, profilesCard, type ProfileFilter } from '../profiles-frame.ts';
+import { callButton, editOnlyFact, initials, insight, neighboursIn, profileCard, profileHero, profileTabs, sideFact, sideHead } from '../profile-card.ts';
 import {
   alert,
   badge,
@@ -212,7 +213,7 @@ function addPersonPage(c: Context<WebEnv>, kind: Kind, refused?: AddPersonRefusa
       pm,
       active: kind.nav,
       shell: shellInfo(c),
-      actions: linkButton(`Back to ${kind.title}`, kind.path, { variant: 'ghost', size: 'sm' }),
+      back: { label: kind.title, href: kind.path },
       body: section({
         title: `Add a ${kind.singular}`,
         body: html`${refused ? alert(refused.message, 'error') : ''}
@@ -247,9 +248,33 @@ async function profilePage(c: Context<WebEnv>, kind: Kind, id: number, refused?:
   // A removed person can't be edited: no form, even if one is asked for or a save is refused.
   const editing = !removed && (!!refused || c.req.query('edit') === 'details');
   const people = await actions.people();
+  const listed = people.filter((p) => p.role === kind.role);
+  const steps = removed ? null : neighboursIn(listed, (p) => p.id, id, (p) => ({ href: `${kind.path}/${p.id}`, name: p.name }));
   const notice = removed
     ? html`${alert(`Removed from the Agency on ${longDate(person.removedAt!, timeZone)}.`, 'info')}${refused ? alert(refused.message, 'error') : ''}`
     : '';
+  const owns = person.properties.length;
+  const hero = profileHero({
+    back: { href: kind.path, label: `Back to ${kind.title}` },
+    avatar: initials(person.name),
+    name: person.name,
+    meta: [
+      removed ? badge('Removed', 'neutral') : html`<span class="profile-role">${kind.singular}</span>`,
+      html`<span><strong class="num">${owns}</strong> ${owns === 1 ? 'Property' : 'Properties'}</span>`,
+      !person.mobile && !person.email ? badge('No way to reach', 'warning') : '',
+    ],
+    actions: html`${removed ? '' : removeButton(kind, person)}${callButton(person.name, person.mobile)}`,
+    steps,
+    noun: kind.singular,
+  });
+  const read = insight(profileRead(person.read));
+  const tabs =
+    kind.role === 'owner'
+      ? [
+          { id: 'owner-approvals', label: 'Approvals', count: person.approvals.length, body: html`${read}${approvalsList(person, timeZone)}` },
+          { id: 'owner-properties', label: 'Properties', count: owns, body: propertiesList(kind, person) },
+        ]
+      : [{ id: 'manager-properties', label: 'Properties', count: owns, body: html`${read}${propertiesList(kind, person)}` }];
   return c.html(
     page({
       title: person.name,
@@ -257,8 +282,8 @@ async function profilePage(c: Context<WebEnv>, kind: Kind, id: number, refused?:
       active: kind.nav,
       flash: flashFrom(c.req.url),
       shell: shellInfo(c),
-      actions: html`${removed ? '' : removeButton(kind, person)}${linkButton(`Back to ${kind.title}`, kind.path, { variant: 'ghost', size: 'sm' })}`,
-      body: html`${notice}${profileRead(person.read)}${facts(kind, person, editing, refused, people)} ${propertiesSection(kind, person)} ${kind.role === 'owner' ? approvalsSection(person, timeZone) : ''}`,
+      crumbs: [{ label: 'Profiles', href: '/profiles' }, { label: kind.title, href: kind.path }, { label: person.name }],
+      body: html`${notice}${profileCard({ hero, main: profileTabs(`${person.name}'s record`, tabs), side: facts(kind, person, editing, refused, people), about: person.name })}`,
     }),
     refused ? 400 : 200,
   );
@@ -283,7 +308,10 @@ function contactDetail(kind: 'mobile' | 'email', value: string | null, people: P
   return html`${contactLink(kind, value)}${sharedAddressNote('Also', othersUsing(people, value, selfId))}`;
 }
 
-/** Mobile and email, editing in place with the name (the page's title) added while editing. A removed person has no pen. */
+/**
+ * The side card: what their record adds up to, then the mobile and email, editing in place with
+ * the name (the card's title) added while editing. A removed person has no pen.
+ */
 function facts(kind: Kind, person: Profile, editing: boolean, refused: DetailsEdit | undefined, people: Parameters<typeof othersUsing>[0]): Html {
   const values = refused?.values ?? { name: person.name, mobile: person.mobile ?? '', email: person.email ?? '' };
   const controls = contactControls(kind.formId, { values, errors: refused?.errors });
@@ -297,40 +325,44 @@ function facts(kind: Kind, person: Profile, editing: boolean, refused: DetailsEd
     save: 'Save details',
     editing,
     canEdit: !person.removedAt,
-    className: 'section',
+    className: 'tradie-side-card',
     refusal: refused && !Object.keys(refused.errors).length ? refused.message : undefined,
-    rows: [
-      { label: 'Mobile', read: contactDetail('mobile', person.mobile, people, person.personId), ...controls.mobile },
-      { label: 'Email', read: contactDetail('email', person.email, people, person.personId), ...controls.email },
-      { label: 'Name', ...controls.name },
-    ],
+    view: (tools) => html`
+      ${sideHead(`${kind.singular} details`, tools)}
+      <dl class="tradie-facts">
+        ${editOnlyFact('Name', controls.name)}
+        ${sideFact('Properties', html`<span class="num">${person.properties.length}</span>`)}
+        ${kind.role === 'owner' ? sideFact('Approvals asked', html`<span class="num">${person.approvals.length}</span>`) : ''}
+      </dl>
+      <div class="tradie-side-block">
+        <h3 class="tradie-side-sub">Contact information</h3>
+        <dl class="tradie-facts is-stacked">
+          ${sideFact('Mobile', contactDetail('mobile', person.mobile, people, person.personId), controls.mobile)}
+          ${sideFact('Email', contactDetail('email', person.email, people, person.personId), controls.email)}
+        </dl>
+      </div>`,
   });
 }
 
-function propertiesSection(kind: Kind, person: Profile): Html {
+/** The Properties they own or look after, each a link to its profile. */
+function propertiesList(kind: Kind, person: Profile): Html {
   const label = kind.role === 'owner' ? 'Properties they own' : 'Properties they look after';
-  return section({
-    title: 'Properties',
-    body: person.properties.length
-      ? html`<ul class="flex flex-col gap-2">${person.properties.map((p) => html`<li>${entityLink('property', p.address, `/properties/${p.propertyId}`)}</li>`)}</ul>`
-      : emptyState(`No ${label.toLowerCase()}.`),
-  });
+  return person.properties.length
+    ? html`<ul class="profile-links" role="list">${person.properties.map((p) => html`<li>${entityLink('property', p.address, `/properties/${p.propertyId}`)}</li>`)}</ul>`
+    : emptyState(`No ${label.toLowerCase()}.`);
 }
 
 /** Recent approvals, newest first, each linking to its Ticket. */
-function approvalsSection(person: Profile, timeZone: string): Html {
-  return section({
-    title: 'Approvals',
-    body: person.approvals.length
-      ? table(
-          ['Ticket', 'Status', 'Asked'],
-          person.approvals.map((a) => [
-            entityLink('ticket', a.description, `/tickets/${a.ticketId}`),
-            statusBadge(a.status),
-            html`<span class="whitespace-nowrap">${formatWhen(a.requestedAt, timeZone)}</span>`,
-          ]),
-          { stack: 'labelled', caption: 'Approvals, newest first' },
-        )
-      : emptyState('No approvals yet.'),
-  });
+function approvalsList(person: Profile, timeZone: string): Html {
+  return person.approvals.length
+    ? table(
+        ['Ticket', 'Status', 'Asked'],
+        person.approvals.map((a) => [
+          entityLink('ticket', a.description, `/tickets/${a.ticketId}`),
+          statusBadge(a.status),
+          html`<span class="whitespace-nowrap">${formatWhen(a.requestedAt, timeZone)}</span>`,
+        ]),
+        { stack: 'labelled', caption: 'Approvals, newest first' },
+      )
+    : emptyState('No approvals yet.');
 }

@@ -87,7 +87,7 @@ const MESSAGE_CLASS: Record<string, string> = {
 /** The same stages in a few words, for the counts above the Ticket rows and each row's marker. */
 const STAGE_SHORT: Record<Stage, string> = {
   quoting: 'Quoting',
-  awaiting_owner: 'With owner',
+  awaiting_owner: 'With Owner',
   approved: 'To book',
   scheduled: 'Booked',
   done: 'Done',
@@ -815,7 +815,6 @@ function ticketsByStage(tickets: BoardTicket[], filter: Filter, now: Date): Html
     actions: linkButton('See all Tickets', filter === 'all' ? '/tickets?filter=all' : '/tickets', { variant: 'ghost', size: 'sm' }),
     body: tickets.length
       ? html`<div class="stage-board">
-          <p class="stage-caption">${filter === 'mine' ? 'Your open Tickets by stage' : 'Open Tickets by stage'}</p>
           <div class="stage-chart" style="grid-template-columns:${tracks}">
             ${STAGES.map((stage, i) => html`<i class="stage-seg stage-${stage}${counts[i] === 0 ? ' is-zero' : ''}" aria-hidden="true"></i>`)}
             ${STAGES.map((stage, i) => html`<span class="stage-count${counts[i] === 0 ? ' is-zero' : ''}"><b>${counts[i]}</b> ${STAGE_SHORT[stage]}</span>`)}
@@ -856,7 +855,7 @@ function ticketRow(t: BoardTicket, now: Date): Html {
   const sub = html`${street} · ${ageOf(t.reportedAt, now)}${quoting ? html` · ${quoting}` : ''}${t.urgency === 'urgent' || t.urgency === 'high' ? html` · <span class="ticket-row-urgency is-${t.urgency}">${humanise(t.urgency)}</span>` : ''}`;
   const stage = html`<span class="ticket-row-stage">
       <span class="stage-segs" aria-hidden="true">${STAGES.map((s, i) => html`<i class="${i <= reached ? `on stage-${t.stage}` : ''}"></i>`)}</span>
-      <span class="ticket-row-stage-name">${readyToClose ? 'Done · ready to close' : STAGE_SHORT[t.stage]}</span>
+      <span class="ticket-row-stage-name">${STAGE_SHORT[t.stage]}</span>
       ${readyToClose ? linkButton('Close ticket', `/tickets/${t.ticketId}`, { variant: 'secondary', size: 'sm' }) : ''}
     </span>`;
   if (!readyToClose) {

@@ -180,7 +180,7 @@ export function createOnboarding({ ports, modules }: Context) {
       const owner = await profiles.personInAgency(agencyId, ownerId, 'owner');
       if (owner.removedAt) invalid(`${owner.name} has already been removed`);
       const owned = (await profiles.properties(agencyId)).filter((p) => p.ownerId === ownerId);
-      if (owned.length) invalid(`${owner.name} owns ${andList(owned.map((p) => p.address))}. Give ${owned.length === 1 ? 'it' : 'them'} another Property Owner first.`);
+      if (owned.length) invalid(`${owner.name} owns ${andList(owned.map((p) => p.address))}. Give ${owned.length === 1 ? 'it' : 'them'} another Owner first.`);
       await profiles.removePerson(ownerId);
       return owner.name;
     },
@@ -241,7 +241,7 @@ export function createOnboarding({ ports, modules }: Context) {
         const job = `${undecided.trade.replaceAll('_', ' ')} at ${undecided.propertyAddress}`;
         invalid(
           undecided.withOwner
-            ? `${name} has a Quote waiting on the Property Owner for ${job}. Wait for their decision first.`
+            ? `${name} has a Quote waiting on the Owner for ${job}. Wait for their decision first.`
             : `${name} has an open Quote Request for ${job}. Choose a Quote or cancel the Job first.`,
         );
       }

@@ -87,7 +87,7 @@ test('a Tradie and a Property are added, and setup shows what is done', async ({
   await emails.nth(1).fill('tina@tenant.example');
   await page.getByLabel('Tenancy start date').fill('2026-01-01');
   await page.getByRole('button', { name: 'Add the Property' }).click();
-  await expect(page.getByText(`${ADDRESS} is set up with Property Owner Olive`)).toBeVisible();
+  await expect(page.getByText(`${ADDRESS} is set up with Owner Olive`)).toBeVisible();
 
   await page.getByRole('link', { name: 'Continue' }).click();
   await expect(page.getByRole('heading', { level: 2, name: 'Your setup' })).toBeVisible();

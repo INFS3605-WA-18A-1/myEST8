@@ -142,7 +142,7 @@ describe('the upload page', () => {
     const res = await postFiles(w, path, [new File([new Uint8Array([1, 2])], 'receipt.pdf', { type: 'application/pdf' })], { amount: '$480.50' });
 
     expect(res.status).toBe(303);
-    expect(await readable(await w.get(res.headers.get('location')!))).toContain('pass your Reimbursement Request to the property owner');
+    expect(await readable(await w.get(res.headers.get('location')!))).toContain('pass your Reimbursement Request to the owner');
     expect(h.messenger.to(OLIVIA_EMAIL)).toEqual([]);
     expect((await w.alice.dashboard()).urgentRepairs).toMatchObject([{ status: 'receipt_received', receipts: 1 }]);
     const [repair] = (await w.alice.dashboard()).urgentRepairs;

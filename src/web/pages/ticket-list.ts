@@ -51,11 +51,11 @@ export function ticketListPages() {
         body: html`
           <div class="tickets-page">
             ${stageBar(everyOpen, f, stage, properties)}
-            ${section({ title: 'New Maintenance Requests', id: 'requests', actions: requests.length ? html`${countBadge(requests.length)}<span class="tk-section-note">Waiting for you to confirm</span>` : undefined, body: requestList(byUrgency(requests), now, f) })}
+            ${section({ title: 'New Maintenance Requests', id: 'requests', actions: requests.length ? countBadge(requests.length) : undefined, body: requestList(byUrgency(requests), now, f) })}
             ${section({
               title: 'Open Tickets',
               id: 'open',
-              actions: html`${countBadge(open.length)}${open.length ? html`<span class="tk-section-note">Most urgent first, then oldest</span>` : ''}`,
+              actions: countBadge(open.length),
               body: open.length
                 ? html`${ticketCards(open, now)}${stageLegend()}`
                 : emptyState(

@@ -371,8 +371,8 @@ describe('ui', () => {
 
   it('names the Job stages in the doc’s words, and a Job’s approved stage is Ready to book', async () => {
     expect(jobStageLabel('scheduled')).toBe('Booked');
-    expect(jobStageLabel('awaiting_owner')).toBe('With Property Owner');
-    expect(await render(statusBadge('awaiting_owner'))).toContain('With Property Owner');
+    expect(jobStageLabel('awaiting_owner')).toBe('With Owner');
+    expect(await render(statusBadge('awaiting_owner'))).toContain('With Owner');
     expect(await render(statusBadge('scheduled'))).toContain('Booked');
     expect(await render(statusBadge('approved', { job: true }))).toContain('Ready to book');
     expect(await render(statusBadge('approved'))).toContain('Approved');
@@ -503,13 +503,13 @@ describe('ui', () => {
 
   it('labels each stacked cell with its column header when asked, so a phone row still says what each value is', async () => {
     const out = await render(
-      table(['Property', 'Property Owner', 'Open Tickets', ''], [[html`12 King St`, html`Olivia Owens`, html`2`, html`<a href="/x">Edit</a>`]], {
+      table(['Property', 'Owner', 'Open Tickets', ''], [[html`12 King St`, html`Olivia Owens`, html`2`, html`<a href="/x">Edit</a>`]], {
         align: ['left', 'left', 'right', 'left'],
         stack: 'labelled',
       }),
     );
     expect(out).toContain('<div class="table-frame is-stacked is-labelled">');
-    expect(out).toContain('<td data-label="Property Owner">Olivia Owens</td>');
+    expect(out).toContain('<td data-label="Owner">Olivia Owens</td>');
     expect(out).toContain('<td class="num text-right" data-label="Open Tickets">2</td>');
     // The first cell leads the row, and a column with no header has nothing to say.
     expect(out).toContain('<td>12 King St</td>');
@@ -547,7 +547,7 @@ describe('ui', () => {
   });
 
   it('pairs each label with its value in a facts list, escaping both', async () => {
-    const out = await render(dl([['Max Repair Cost', '$500.00'], ['Property Owner', HOSTILE]]));
+    const out = await render(dl([['Max Repair Cost', '$500.00'], ['Owner', HOSTILE]]));
     expect(out).toMatch(/^<dl class="facts">/);
     const rows = out.split('<div class="facts-row">').slice(1);
     expect(rows).toHaveLength(2);

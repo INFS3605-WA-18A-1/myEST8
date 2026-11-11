@@ -11,7 +11,7 @@ describe('Properties', () => {
     const res = await w.get('/properties?filter=all', cookie);
     expect(res.status).toBe(200);
     const page = await res.text();
-    expect(page).toContain('2 Properties managed by the Agency.');
+    expect(page).not.toContain('page-subtitle');
     expect(page).toContain(`href="/properties/${w.ids.kingSt}"`);
     expect(visible(page)).toContain('Open Tickets');
     expect(visible(page)).toContain(OCEAN_AVE);
@@ -34,7 +34,7 @@ describe('Properties', () => {
     expect(page).toContain('table-frame is-stacked is-labelled');
     expect(row).toMatch(/data-label="Open Tickets"><span class="property-open">1<\/span>/);
     expect(row).toMatch(/data-label="Max Repair Cost">\$500\.00/);
-    expect(row).toMatch(/data-label="Property Owner">/);
+    expect(row).toMatch(/data-label="Owner">/);
     expect(row).toContain(`href="/owners/${w.ids.olivia}"`);
     expect(row).toContain('Olivia Owens');
   });
@@ -50,10 +50,10 @@ describe('Properties', () => {
     const text = visible(page);
     expect(text).toContain(KING_ST);
     expect(page).toContain(`href="/tickets/${ticketId}"`);
-    for (const heading of ['Open Tickets', 'Max Repair Cost', 'Property Owner', 'Tenants', 'Nominated Tradies', 'Closed Tickets']) expect(text).toContain(heading);
+    for (const heading of ['Open Tickets', 'Max Repair Cost', 'Owner', 'Tenants', 'Nominated Tradies', 'Closed Tickets']) expect(text).toContain(heading);
     expect(text).toContain('Olivia Owens');
     expect(page).toContain('href="/properties"');
-    expect(page).toContain('Back to Properties');
+    expect(page).toContain('<a class="tradie-back" href="/properties" aria-label="Back to Properties"');
   });
 
   test('on a profile, Tenants and Nominated Tradies stack on phones with their values labelled', async () => {
@@ -61,11 +61,11 @@ describe('Properties', () => {
     const cookie = await w.signIn();
 
     const page = await (await w.get(`/properties/${w.ids.kingSt}`, cookie)).text();
-    const tenants = page.slice(page.indexOf('aria-label="Tenants"'), page.indexOf('aria-label="Nominated Tradies"'));
+    const tenants = page.slice(page.indexOf('id="property-tenants"'), page.indexOf('id="property-tradies"'));
     expect(tenants).toContain('table-frame is-stacked is-labelled');
     expect(tenants).toContain(`data-label="Mobile"><a class="contact-link num" href="tel:${HANA}">`);
     expect(tenants).toContain(`data-label="Email"><a class="contact-link is-email" href="mailto:${HANA_EMAIL}">`);
-    const nominated = page.slice(page.indexOf('aria-label="Nominated Tradies"'), page.indexOf('aria-label="Frequent issues"'));
+    const nominated = page.slice(page.indexOf('id="property-tradies"'), page.indexOf('class="tradie-side"'));
     expect(nominated).toContain('table-frame is-stacked is-labelled');
     expect(visible(nominated)).toMatch(/Sparky Sam Electrical/);
   });
@@ -256,9 +256,9 @@ describe('editing a Property from its profile', () => {
     expect(form).toContain('aria-label="Save details"');
     expect(form).toContain(`<a href="/properties/${w.ids.kingSt}#details" class="icon-btn inline-edit-cancel" data-inline-cancel aria-label="Cancel editing" title="Cancel">`);
     expect(form).toContain('is-editing');
-    // The page's other sections stay.
-    expect(page).toContain('aria-label="Open Tickets"');
-    expect(page).toContain('aria-label="Tenants"');
+    // The page's other tabs stay.
+    expect(page).toContain('id="property-open"');
+    expect(page).toContain('id="property-tenants"');
   });
 
   test('Building Manager selected on a Property that has one', async () => {
@@ -309,7 +309,7 @@ describe('editing a Property from its profile', () => {
     expect(form).toMatch(/<input[^>]* name="maxRepairCost"[^>]* value="650"/);
     expect(form).toMatch(new RegExp(`<option value="${w.ids.bobId}" selected>Bob Baker</option>`));
     expect(form).toMatch(new RegExp(`<option value="${w.ids.pete}" selected `));
-    expect(form).toMatch(/<p id="property-owner-error" class="field-error">Choose the Property Owner<\/p>/);
+    expect(form).toMatch(/<p id="property-owner-error" class="field-error">Choose the Owner<\/p>/);
     expect((await w.alice.properties()).find((p) => p.id === w.ids.kingSt)).toMatchObject({ address: KING_ST, maxRepairCostCents: 500_00 });
 
     const noAddress = await w.post(`/properties/${w.ids.kingSt}/details`, { ...posted(w), address: ' ' }, cookie);

@@ -277,7 +277,6 @@ function tradiesBlock(groups: TradieGroup[], q: string, filter: Filter): Html {
       <h2 class="profiles-title" id="profiles-tradies">Tradies${rows.length ? html` <span class="num">${rows.length}</span>` : ''}</h2>
       <a class="link profiles-seeall" href="/tradies">See all<span class="sr-only"> Tradies</span></a>
     </div>
-    ${rows.length ? html`<p class="tradies-note">By their first Trade, with their myEST8 rating.</p>` : ''}
     ${rows.length
       ? html`<ul class="tradie-rows">
           ${rows.map(tradieRow)}
