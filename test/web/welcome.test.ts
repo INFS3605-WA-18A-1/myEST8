@@ -170,7 +170,8 @@ describe('the onboarding wizard', () => {
     expect(before).toContain('sunrise-realty@mail.example.test');
     expect(before).toContain('Waiting for your first message');
     expect(before).toContain('Copy');
-    expect(before).toContain('Forward');
+    expect(before).toContain('Set up email forwarding');
+    expect(before).toContain("Copy the Agency's inbound address");
     expect(before).not.toContain('WhatsApp sandbox');
     expect(before).not.toContain('SendGrid');
 
@@ -195,8 +196,9 @@ describe('the onboarding wizard', () => {
       receivedAt: w.h.clock.now(),
     });
     const confirming = visible(await page(w, '/welcome/channels', sam));
-    expect(confirming).toContain('Confirm forwarding in Gmail');
-    expect(confirming).toMatch(/Gmail sent a confirmation for forwarding from sam@gmail\.example ?\. The code is 912345678/);
+    expect(confirming).toMatch(/Gmail sent a confirmation code for sam@gmail\.example ?\./);
+    expect(confirming).toContain('912345678');
+    expect(confirming).toContain('Gmail only: confirm the code (next)');
     expect(confirming).toContain('Waiting for your first message');
 
     const typed = await w.post('/welcome/channels', { type: 'email', address: 'inbox@sunrise.example' }, sam);
