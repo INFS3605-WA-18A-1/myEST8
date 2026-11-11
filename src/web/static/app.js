@@ -1,12 +1,8 @@
 // Small enhancements for every page. Pages work without this file: it only adds
-// confirm dialogs, a guard against double submits, dismissable flash messages,
-// the drawer that opens the rail under 1024px, collapsing the rail from 1024px,
+// confirm dialogs, a guard against double submits, the drawer that opens the rail under 1024px, collapsing the rail from 1024px,
 // closing the user menu, a loading bar, and in-page navigation (at the end).
 
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
-const motionMs = (token) => (reduceMotion.matches ? 0 : parseFloat(getComputedStyle(document.documentElement).getPropertyValue(token)) || 0);
-const motionEase = (token) => getComputedStyle(document.documentElement).getPropertyValue(token).trim() || 'cubic-bezier(0.25, 1, 0.5, 1)';
-
 /** Closes a disclosure after its panel has left, so the close is quicker than the open. */
 function closeDisclosure(details, { focusSummary = false } = {}) {
   if (!details.open || details.classList.contains('is-closing')) return;
@@ -19,23 +15,6 @@ function closeDisclosure(details, { focusSummary = false } = {}) {
     details.classList.remove('is-closing');
     details.open = false;
   });
-}
-
-/** Collapses a flash, then removes it. With no motion it goes at once. */
-function dismissFlash(flash) {
-  const ms = motionMs('--dur-base');
-  if (!ms || !flash.animate) return flash.remove();
-  const gap = parseFloat(getComputedStyle(flash.parentElement).rowGap) || 0;
-  flash.style.overflow = 'hidden';
-  flash
-    .animate(
-      [
-        { opacity: 1, height: `${flash.offsetHeight}px` },
-        { opacity: 0, height: '0px', paddingBlock: '0px', borderWidth: '0px', marginBlockEnd: `${-gap}px` },
-      ],
-      { duration: ms, easing: motionEase('--ease-exit'), fill: 'forwards' },
-    )
-    .finished.finally(() => flash.remove());
 }
 
 let viewTransition;
@@ -245,28 +224,7 @@ try {
   // Coming back with the browser's Back button restores the page as it was left.
   window.addEventListener('pageshow', () => document.querySelectorAll('form[data-submitting]').forEach(release));
 
-  // Flash messages get a close button (Phosphor's x, like every other icon); "ok"
-  // ones also fade after a while, unless the pointer or focus is on them. Errors
-  // stay until closed.
-  const X_ICON =
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="currentColor" width="16" height="16" aria-hidden="true" focusable="false"><path d="M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z"/></svg>';
-  onContent((root) => {
-    const flashes = root instanceof Element && root.matches('[data-flash]') ? [root] : [...root.querySelectorAll('[data-flash]')];
-    for (const flash of flashes) {
-      if (flash.querySelector('.flash-close')) continue;
-      const close = document.createElement('button');
-      close.type = 'button';
-      close.className = 'btn btn-ghost btn-sm btn-square flash-close';
-      close.setAttribute('aria-label', 'Dismiss message');
-      close.innerHTML = X_ICON;
-      close.addEventListener('click', () => dismissFlash(flash));
-      flash.append(close);
-      if (flash.dataset.flash === 'ok') {
-        const fade = () => (flash.matches(':hover, :focus-within') ? setTimeout(fade, 2000) : dismissFlash(flash));
-        setTimeout(fade, 8000);
-      }
-    }
-  });
+  // Flash messages become toasts in the React islands (client/toaster.tsx).
 
   // Drop ?ok= / ?error= from the address bar so a reload doesn't repeat the message.
   const url = new URL(window.location.href);

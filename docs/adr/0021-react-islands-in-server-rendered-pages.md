@@ -1,0 +1,17 @@
+# React islands in server-rendered pages
+
+We are moving the browser side of myEST8 towards React, a piece at a time, without changing how pages are made. Hono still renders every page on the server from the templates in `src/web/ui.ts` and `src/web/pages/`, and every page still works without JavaScript. What changes is the code that runs in the browser: a widget that needs more than a few lines of behaviour becomes a React island, a component mounted into an element the server drew (`island(name, props, fallback)` in `ui.ts`, mounted by `src/web/client/islands.tsx`). Vite builds the islands into one ES module, `src/web/static/islands.js` (`npm run islands`), which is committed like `tw.css` and served from `/assets` after `app.js`.
+
+We chose islands over rewriting the app as a React single-page app because the server-rendered pages are what the tests, the no-JavaScript fallbacks, the in-page navigation and the Vercel function are built around, and they work. Islands let us take well-made components from the React ecosystem (the curated list in our UI review: Sonner for toasts, base-ui for menus, popovers and selects, cmdk for a command menu, motion and NumberFlow for movement and numbers) where hand-written `app.js` is weakest, while keeping the design language. Every island draws with the same daisyUI classes and `app.css` tokens as the server; the variant classes live in one place, `src/web/variants.ts` (cva and clsx), used by both sides.
+
+The first island is the toaster. A flash is still drawn in the page by the server; with JavaScript, `client/toaster.tsx` moves it into a Sonner toast that is the same soft alert (tint, Phosphor icon, `status` or `alert`), with a close button, "ok" ones fading after 8 s and errors staying until closed.
+
+The rules for what comes next:
+
+- **The server draws first.** An island has a server-rendered fallback (a plain form, a link, the list) that works without JavaScript, and the island replaces or enhances it. No page is blank until React loads.
+- **One design system.** Islands use `variants.ts` and the existing classes and tokens. No second component library's look, no CSS-in-JS. A library's own injected styles are overridden in `app.css` (unlayered, since they are).
+- **Replace, don't duplicate.** When an island takes over a widget, the `app.js` code for it goes in the same change (the toaster removed the flash close button and fade).
+- **Shared state through the page.** Islands read their props from `data-props` and talk to the server through the same forms and URLs; app.js's `myest8:content` event mounts islands in content swapped in place.
+- **Pages stay on Hono's templates** until most of a page's behaviour is islands. Rendering whole pages with React on the server (`react-dom/server`) is the step after this, decided in its own ADR.
+
+The cost is weight and a build step. React, React DOM and Sonner are about 256 KB minified, 78 KB gzipped, on every page that loads the desk runtime, where `app.js` was the only script. Pages that pass `runtime: false` (the no-login Tenant, visit and quote pages) do not load it: they don't show flashes. The bundle is cached for a year by its content hash. Changing anything under `src/web/client/` (or `variants.ts`) means running `npm run islands` and committing `static/islands.js`, and `npm run typecheck` now checks the client with its own `tsconfig.json` (DOM types, JSX).

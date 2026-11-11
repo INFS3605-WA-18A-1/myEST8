@@ -6,12 +6,14 @@
 // utilities prebuilt into static/tw.css (npm run css). Some layouts are
 // adapted from HyperUI (https://hyperui.dev, MIT); each component says where it came from.
 
+import { clsx } from 'clsx';
 import { html, raw } from 'hono/html';
 import type { HtmlEscapedString } from 'hono/utils/html';
 import type { Role } from '../shared.ts';
 import { assetUrl } from './assets.ts';
 import { icon } from './icons.ts';
 import type { ShellInfo } from './shell.ts';
+import { alertVariants, buttonVariants } from './variants.ts';
 
 /** What each role is called on screen ("Property Owner"): the same words the core uses in its refusals. */
 export const ROLE_LABEL: Record<Role, string> = { tenant: 'Tenant', owner: 'Owner', tradie: 'Tradie', building_manager: 'Building Manager' };
@@ -62,7 +64,10 @@ export function head(title: string, o: { css?: string[]; runtime?: boolean } = {
     <link rel="stylesheet" href="${assetUrl('daisyui.css')}" />
     <link rel="stylesheet" href="${assetUrl('app.css')}" />
     ${(o.css ?? []).map((file) => html`<link rel="stylesheet" href="${assetUrl(file)}" />`)}
-    ${o.runtime === false ? '' : html`<link rel="stylesheet" href="${assetUrl('tw.css')}" />`}
+    ${o.runtime === false
+      ? ''
+      : html`<link rel="stylesheet" href="${assetUrl('tw.css')}" />
+    <script type="module" src="${assetUrl('islands.js')}"></script>`}
     <script src="${assetUrl('app.js')}" defer></script>
     <script type="speculationrules">${raw(SPECULATION_RULES)}</script>`;
 }
@@ -357,16 +362,26 @@ export function withFlash(path: string, kind: Flash['kind'], message: string) {
   return `${base}${base.includes('?') ? '&' : '?'}${kind}=${encodeURIComponent(message)}${fragment}`;
 }
 
-/** The message after an action, one line under the page header. app.js adds a close button and fades "ok" ones. */
+/**
+ * The message after an action, one line under the page header. With JavaScript the toaster island
+ * (client/toaster.tsx) moves it into a toast with a close button, and "ok" ones fade.
+ */
 export function flashMessage(flash: Flash): Html {
   const error = flash.kind === 'error';
-  return html`<div role="${error ? 'alert' : 'status'}" data-flash="${flash.kind}" class="alert alert-soft ${error ? 'alert-error' : 'alert-success'} py-2 text-sm">
+  return html`<div role="${error ? 'alert' : 'status'}" data-flash="${flash.kind}" data-flash-message="${flash.message}" class="${clsx(alertVariants({ tone: error ? 'error' : 'success' }), 'py-2 text-sm')}">
     ${error ? ICON.error : ICON.success}
     <span><span class="sr-only">${error ? 'Error: ' : 'Done: '}</span>${flash.message}</span>
   </div>`;
 }
 
-const ALERT_TONE: Record<Tone, string> = { neutral: '', info: 'alert-info', success: 'alert-success', warning: 'alert-warning', error: 'alert-error' };
+/**
+ * Where a React island mounts (client/islands.tsx): `name` is a component in its ISLANDS list and
+ * `props` reach it as JSON. `fallback` is what shows without JavaScript, until React replaces it.
+ */
+export function island(name: string, props: Record<string, unknown> = {}, fallback: Html | string = ''): Html {
+  return html`<div data-island="${name}" data-props="${JSON.stringify(props)}">${fallback}</div>`;
+}
+
 const TONE_WORD: Record<Tone, string> = { neutral: 'Note', info: 'Note', success: 'Done', warning: 'Warning', error: 'Error' };
 
 /**
@@ -375,7 +390,7 @@ const TONE_WORD: Record<Tone, string> = { neutral: 'Note', info: 'Note', success
  */
 export function alert(body: Html | string, tone: Tone = 'info', o: { title?: string } = {}): Html {
   const urgent = tone === 'warning' || tone === 'error';
-  return html`<div role="${urgent ? 'alert' : 'status'}" class="alert alert-soft ${ALERT_TONE[tone]} items-start">
+  return html`<div role="${urgent ? 'alert' : 'status'}" class="${clsx(alertVariants({ tone }), 'items-start')}">
     ${urgent ? ICON.error : tone === 'success' ? ICON.success : ICON.info}
     <div class="min-w-0">
       <span class="sr-only">${TONE_WORD[tone]}: </span>
@@ -395,13 +410,11 @@ export function doneBox(message: Html | string): Html {
   return html`<div role="status" class="tenant-done"><span aria-hidden="true">✓</span> ${message}</div>`;
 }
 
-const VARIANT: Record<Variant, string> = { primary: 'btn-primary', secondary: 'btn-outline', danger: 'btn-danger', ghost: 'btn-ghost' };
-
 /** Button sizes: `sm` 32px for rows and lanes, `md` (default) 36px, `lg` 44px for a page's main way in. All are 44px on phones. */
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
 function buttonClass(variant: Variant, size: ButtonSize | undefined, block: boolean | undefined) {
-  return `btn ${VARIANT[variant]}${size === 'sm' ? ' btn-sm' : size === 'lg' ? ' btn-lg' : ''}${block ? ' btn-block' : ''}`;
+  return buttonVariants({ variant, size, block });
 }
 
 /** A form button (daisyUI btn). `block` makes it full width, as on phone forms; `icon` is a Phosphor icon name shown before the label; `formaction` sends a form's fields somewhere other than its own action. */
