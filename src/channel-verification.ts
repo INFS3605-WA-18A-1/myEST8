@@ -5,6 +5,7 @@
 import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
 import type { Context } from './context.ts';
 import { all, one, run, transaction } from './db.ts';
+import { GMAIL_FORWARDING_SENDER, readGmailForwardingConfirmation, type GmailForwardingConfirmation } from './gmail-forwarding.ts';
 import { ProviderRefusedError, UndeliverableError, type ChannelType } from './ports.ts';
 import { addMs, invalid, isEmail, iso, normalizeAddress, phoneProblem } from './shared.ts';
 
@@ -54,8 +55,23 @@ export function createChannelVerification({ db, clock, modules }: Context) {
     if (!CHANNEL_TYPES.includes(channelType)) invalid(`Unknown channel ${channelType}`);
   }
 
+  /** True once real mail has come in. Gmail's forwarding confirmation doesn't count: forwarding isn't on until it is confirmed. */
   async function heardEmail(agencyId: number) {
-    return Boolean(await one(db, 'SELECT 1 FROM inbound_messages WHERE agency_id = ? AND channel_type = ? LIMIT 1', agencyId, 'email'));
+    return Boolean(
+      await one(db, 'SELECT 1 FROM inbound_messages WHERE agency_id = ? AND channel_type = ? AND sender <> ? LIMIT 1', agencyId, 'email', GMAIL_FORWARDING_SENDER),
+    );
+  }
+
+  /** The latest Gmail forwarding confirmation the Agency's inbound address received, if any. */
+  async function gmailConfirmation(agencyId: number): Promise<GmailForwardingConfirmation | null> {
+    const row = await one<{ text: string }>(
+      db,
+      'SELECT text FROM inbound_messages WHERE agency_id = ? AND channel_type = ? AND sender = ? ORDER BY id DESC LIMIT 1',
+      agencyId,
+      'email',
+      GMAIL_FORWARDING_SENDER,
+    );
+    return row ? readGmailForwardingConfirmation(row.text) : null;
   }
 
   return {
@@ -155,8 +171,12 @@ export function createChannelVerification({ db, clock, modules }: Context) {
      * The Agency's inbound email address, `<slug>@RESEND_INBOUND_DOMAIN`, stored
      * as its email channel. An address already connected (Gmail, the demo) is
      * left as it is. `waiting` until the first inbound email, then `verified`.
+     * While waiting, `gmailConfirmation` is Gmail's forwarding confirmation code
+     * and link, once Gmail has sent them to the address.
      */
-    async ensureInboundEmail(agencyId: number): Promise<{ address: string; state: 'waiting' | 'verified' | 'connected' }> {
+    async ensureInboundEmail(
+      agencyId: number,
+    ): Promise<{ address: string; state: 'waiting' | 'verified' | 'connected'; gmailConfirmation?: GmailForwardingConfirmation }> {
       const domain = inboundEmailDomain();
       const existing = await profiles.channelAddress(agencyId, 'email');
       if (existing && !existing.endsWith(`@${domain}`)) {
@@ -172,7 +192,9 @@ export function createChannelVerification({ db, clock, modules }: Context) {
         if (owner !== null && owner !== agencyId) address = `${slug}-${agencyId}@${domain}`;
         await profiles.connectChannel(agencyId, 'email', address);
       }
-      return { address, state: (await heardEmail(agencyId)) ? 'verified' : 'waiting' };
+      if (await heardEmail(agencyId)) return { address, state: 'verified' };
+      const confirmation = await gmailConfirmation(agencyId);
+      return { address, state: 'waiting', ...(confirmation ? { gmailConfirmation: confirmation } : {}) };
     },
   };
 }

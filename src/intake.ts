@@ -1,6 +1,7 @@
 import { option, question, TRADE_OPTIONS } from './classifier-questions.ts';
 import type { Context } from './context.ts';
 import { all, one, run, transaction } from './db.ts';
+import { isGmailForwardingConfirmation } from './gmail-forwarding.ts';
 import { checkPhotoMetadata } from './photo-checks.ts';
 import type { ChannelType, ClassifierAnswer, ClassifierOption, ClassifierQuestion, InboundMessage } from './ports.ts';
 import type { Person, Property } from './profiles.ts';
@@ -868,10 +869,12 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
               : { filename: a.filename, contentType: a.contentType, url: a.url },
           );
         }
+        // Gmail's forwarding confirmation is kept for the channels page to show, not handled as a request.
+        const confirmation = message.channelType === 'email' && isGmailForwardingConfirmation(message.from);
         const inboundId = await run(
           db,
-          `INSERT INTO inbound_messages (provider_message_id, agency_id, channel_type, sender, text, attachments, received_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+          `INSERT INTO inbound_messages (provider_message_id, agency_id, channel_type, sender, text, attachments, received_at, processed)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
           message.providerMessageId,
           agencyId,
           message.channelType,
@@ -879,8 +882,9 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
           message.text,
           JSON.stringify(attachments),
           iso(message.receivedAt),
+          confirmation ? 1 : 0,
         );
-        await worker.schedule('intake.process', { inboundId });
+        if (!confirmation) await worker.schedule('intake.process', { inboundId });
       });
       return true;
     },

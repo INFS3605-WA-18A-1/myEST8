@@ -6,6 +6,7 @@
 import type { Context } from 'hono';
 import { html } from 'hono/html';
 import type { PropertyManagerActions } from '../../app.ts';
+import type { GmailForwardingConfirmation } from '../../gmail-forwarding.ts';
 import { MAX_IMPORT_ROWS, type ImportKind } from '../../imports.ts';
 import type { ChannelType } from '../../ports.ts';
 import { MAX_SHEET_BYTES } from '../../spreadsheet.ts';
@@ -192,6 +193,15 @@ export function phoneChannelForm(o: {
       : ''}`;
 }
 
+/** Gmail's forwarding settings and Outlook's, for the forwarding steps. Same tab, like every link: Back returns. */
+const GMAIL_FORWARDING_URL = 'https://mail.google.com/mail/u/0/#settings/fwdandpop';
+const OUTLOOK_FORWARDING_URL = 'https://outlook.live.com/mail/0/options/mail/forwarding';
+const OUTLOOK_WORK_FORWARDING_URL = 'https://outlook.office.com/mail/options/mail/forwarding';
+
+function externalLink(href: string, text: string): Html {
+  return html`<a class="link" href="${href}" rel="noreferrer">${text}</a>`;
+}
+
 /** The Agency's inbound address, with a button that copies it (app.js). The field can be copied by hand without JavaScript. */
 export function inboundEmailField(address: string): Html {
   return html`<div class="flex flex-wrap items-end gap-3">
@@ -200,6 +210,76 @@ export function inboundEmailField(address: string): Html {
       <input id="email-address" class="input w-full" type="email" readonly value="${address}" />
     </div>
     <button type="button" class="btn btn-outline" data-copy-for="email-address">Copy</button>
+  </div>`;
+}
+
+/** The Agency's inbound email as `ensureInboundEmail` gives it. */
+export type InboundEmail = Awaited<ReturnType<PropertyManagerActions['ensureInboundEmail']>>;
+
+/**
+ * The email channel's setup. Until the first email arrives, the forwarding steps in
+ * full, highlighted, with the address to copy in step 1. Once it has, the address and
+ * the same steps folded away, for when the Agency changes its inbox.
+ */
+export function emailSetup(email: InboundEmail): Html {
+  if (email.state === 'waiting') return forwardingSteps(email.address, email.gmailConfirmation);
+  return html`${inboundEmailField(email.address)}<div class="mt-3">${channelGuide('email', '')}</div>`;
+}
+
+function forwardingStep(n: number, title: string, body: Html, state: 'done' | 'current' | 'todo' = 'todo'): Html {
+  return html`<li class="fwd-step ${state === 'todo' ? '' : `is-${state}`}" ${state === 'current' ? html`aria-current="step"` : ''}>
+    <span class="fwd-step-num" aria-hidden="true">${state === 'done' ? '✓' : String(n)}</span>
+    <div class="fwd-step-body">
+      <p class="fwd-step-title">${title}<span class="sr-only">${state === 'done' ? ' (done)' : state === 'current' ? ' (next)' : ''}</span></p>
+      ${body}
+    </div>
+  </li>`;
+}
+
+/**
+ * The four forwarding steps: copy the address, forward to it from Gmail or Outlook,
+ * confirm Gmail's code, send a test. Gmail's code arriving proves the first two
+ * happened, so they are ticked then and the code step is the one to do.
+ */
+function forwardingSteps(address: string, confirmation: GmailForwardingConfirmation | undefined): Html {
+  const forwarded = confirmation ? 'done' : 'todo';
+  return html`<div class="fwd-setup" role="group" aria-labelledby="fwd-setup-title" data-forwarding-setup>
+    <p id="fwd-setup-title" class="fwd-setup-title">Set up email forwarding</p>
+    <p class="fwd-setup-lead">Forward the Agency inbox to myEST8. Resend receives the mail and turns it into Maintenance Requests. About 2 minutes.</p>
+    <ol class="fwd-steps">
+      ${forwardingStep(1, "Copy the Agency's inbound address", inboundEmailField(address), forwarded)}
+      ${forwardingStep(
+        2,
+        "Forward the Agency inbox to it",
+        html`<div class="fwd-providers">
+            <div class="fwd-provider">
+              <p class="fwd-provider-name">Gmail or Google Workspace</p>
+              <p>In ${externalLink(GMAIL_FORWARDING_URL, "Gmail's Forwarding settings")}, press <strong>Add a forwarding address</strong>, paste the address, then <strong>Next</strong> and <strong>Proceed</strong>.</p>
+            </div>
+            <div class="fwd-provider">
+              <p class="fwd-provider-name">Outlook or Microsoft 365</p>
+              <p>In Outlook's forwarding settings (${externalLink(OUTLOOK_FORWARDING_URL, 'Outlook.com')} or ${externalLink(OUTLOOK_WORK_FORWARDING_URL, 'a work account')}), turn on <strong>Enable forwarding</strong>, paste the address and press <strong>Save</strong>.</p>
+              <p class="fwd-note">A work account's admin may block forwarding outside the organisation. If the test never arrives, ask them to allow it.</p>
+            </div>
+          </div>
+          <p class="fwd-note">Another provider: add a forwarding rule to the address.</p>`,
+        forwarded,
+      )}
+      ${forwardingStep(3, 'Gmail only: confirm the code', confirmation ? gmailConfirmationBody(confirmation) : html`<p>Gmail emails a confirmation code to the inbound address. It shows here within a minute: refresh this page. Outlook has no code, so skip this step.</p>`, confirmation ? 'current' : 'todo')}
+      ${forwardingStep(4, 'Send a test email', html`<p>Email the Agency inbox from a different address, because Gmail doesn't forward mail you send yourself. When it arrives here, Email shows Verified.</p>`)}
+    </ol>
+  </div>`;
+}
+
+/** Gmail's confirmation code, large, for the Property Manager to enter back in Gmail. */
+function gmailConfirmationBody(confirmation: GmailForwardingConfirmation): Html {
+  const from = confirmation.requestedBy ? html` for <strong class="break-words">${confirmation.requestedBy}</strong>` : '';
+  return html`<div class="fwd-confirm" data-gmail-confirmation>
+    <p>Gmail sent a confirmation code${from}.</p>
+    ${confirmation.code ? html`<p class="fwd-code" data-gmail-code>${confirmation.code}</p>` : ''}
+    <p>${confirmation.code ? html`In ${externalLink(GMAIL_FORWARDING_URL, "Gmail's Forwarding settings")}, enter the code and press <strong>Verify</strong>.` : html`Open Gmail's link below to confirm it.`}
+      Then choose <strong>Forward a copy of incoming mail to</strong> this address and press <strong>Save Changes</strong> at the bottom of the page.</p>
+    ${confirmation.link ? html`<p>${externalLink(confirmation.link, "Or confirm with Gmail's link")}</p>` : ''}
   </div>`;
 }
 
@@ -220,11 +300,21 @@ export function channelGuide(type: 'sms' | 'email', _origin: string, o: { open?:
       return html`<details class="text-sm" ${open}>
           <summary class="setup-disclosure">${icon('caret-right', { size: 'size-4' })}<span>Forward mail to myEST8</span></summary>
           <p class="mt-2">myEST8 gives the Agency an address on its inbound domain. Forward the Agency inbox to that address. Resend receives the mail and turns it into Maintenance Requests.</p>
-          <ol class="mt-2 ml-5 list-decimal space-y-1">
+          <p class="mt-3 font-semibold">Gmail or Google Workspace</p>
+          <ol class="mt-1 ml-5 list-decimal space-y-1">
             <li>Copy the inbound address shown here.</li>
-            <li>In the Agency's email, add a forwarding rule to that address.</li>
-            <li>Send one message to the Agency inbox so it is forwarded on. This row stays on waiting for your first message until that mail arrives, then it shows Verified.</li>
+            <li>In ${externalLink(GMAIL_FORWARDING_URL, "Gmail's Forwarding settings")}, press <strong>Add a forwarding address</strong> and paste it.</li>
+            <li>Gmail sends a confirmation code to that address. It shows up on this page within a minute: refresh it. Enter the code in Gmail and press Verify.</li>
+            <li>Choose <strong>Forward a copy of incoming mail to</strong> the address, then <strong>Save Changes</strong>.</li>
           </ol>
+          <p class="mt-3 font-semibold">Outlook or Microsoft 365</p>
+          <ol class="mt-1 ml-5 list-decimal space-y-1">
+            <li>Open Outlook's forwarding settings: ${externalLink(OUTLOOK_FORWARDING_URL, 'Outlook.com')} or ${externalLink(OUTLOOK_WORK_FORWARDING_URL, 'a work account')}.</li>
+            <li>Turn on <strong>Enable forwarding</strong>, paste the address and press Save. There is no code.</li>
+            <li>A work account's admin may block forwarding outside the organisation. If the test below never arrives, ask them to allow it.</li>
+          </ol>
+          <p class="mt-3">Any other provider: add a forwarding rule to the address.</p>
+          <p class="mt-2">Then send a test to the Agency inbox from a different address, because Gmail doesn't forward mail you send yourself. This row stays on waiting for your first message until that mail arrives, then it shows Verified.</p>
         </details>`;
   }
 }

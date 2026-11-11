@@ -164,6 +164,55 @@ describe('channel verification', () => {
     expect(await sam.ensureInboundEmail()).toEqual({ address: 'sunrise-realty@mail.example.test', state: 'verified' });
   });
 
+  test("shows Gmail's forwarding confirmation code, keeps waiting, and doesn't treat it as a request", async () => {
+    const { h, agencyId, sam } = await sunrise();
+    await sam.ensureInboundEmail();
+
+    await h.app.receiveInbound({
+      providerMessageId: 're-gmail-confirm',
+      agencyChannel: 'sunrise-realty@mail.example.test',
+      channelType: 'email',
+      from: 'forwarding-noreply@google.com',
+      text: [
+        'sam.sunrise@gmail.com has requested to automatically forward mail to your email',
+        'address sunrise-realty@mail.example.test.',
+        'Confirmation code: 912345678',
+        '',
+        'To allow sam.sunrise@gmail.com to automatically forward mail to your address, please click the link below to confirm the request:',
+        '',
+        'https://mail-settings.google.com/mail/vf-%5BANGjdJ8%5D-abc123',
+      ].join('\n'),
+      attachments: [],
+      receivedAt: h.clock.now(),
+    });
+    await h.advance(0);
+
+    expect(await sam.ensureInboundEmail()).toEqual({
+      address: 'sunrise-realty@mail.example.test',
+      state: 'waiting',
+      gmailConfirmation: { code: '912345678', link: 'https://mail-settings.google.com/mail/vf-%5BANGjdJ8%5D-abc123', requestedBy: 'sam.sunrise@gmail.com' },
+    });
+    expect(await one(h.db, 'SELECT processed FROM inbound_messages WHERE agency_id = ?', agencyId)).toEqual({ processed: 1 });
+    expect(h.messenger.templatesTo('forwarding-noreply@google.com')).toEqual([]);
+  });
+
+  test('drops a link in a Gmail confirmation that does not go to Google', async () => {
+    const { h, sam } = await sunrise();
+    await sam.ensureInboundEmail();
+
+    await h.app.receiveInbound({
+      providerMessageId: 're-gmail-forged',
+      agencyChannel: 'sunrise-realty@mail.example.test',
+      channelType: 'email',
+      from: 'forwarding-noreply@google.com',
+      text: 'Confirmation code: 123456789\nhttps://mail.google.com.evil.example/mail/vf-1',
+      attachments: [],
+      receivedAt: h.clock.now(),
+    });
+
+    expect((await sam.ensureInboundEmail()).gmailConfirmation).toEqual({ code: '123456789', link: null, requestedBy: null });
+  });
+
   test('records a WhatsApp delivery failure against the outbound message', async () => {
     const w = await world();
     w.h.classifier.when('The kitchen tap is dripping', { messageClass: 'new_issue', relatedItem: 'none', urgency: 'routine', trade: 'plumbing' });
