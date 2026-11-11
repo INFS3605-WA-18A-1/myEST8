@@ -57,7 +57,7 @@ export function ticketListPages() {
               id: 'open',
               actions: countBadge(open.length),
               body: open.length
-                ? html`${ticketCards(open, now)}${stageLegend()}`
+                ? ticketCards(open, now)
                 : emptyState(
                     filtered(f) || stage
                       ? `No open Tickets match these filters${f.scope === 'mine' ? ' on your Properties' : ''}.`
@@ -236,7 +236,3 @@ function ticketCards(tickets: ListedTicket[], now: Date): Html {
   </ul>`;
 }
 
-/** The five stages in order, so the bar on each card reads the same way. */
-function stageLegend(): Html {
-  return html`<p class="tk-legend"><span class="tk-legend-label">Stages</span>${STAGES.map((s) => html`<span class="tk-legend-item"><i class="stage-${s}"></i>${STAGE_TAB[s] === 'Ready to close' ? 'Done' : STAGE_TAB[s]}</span>`)}</p>`;
-}

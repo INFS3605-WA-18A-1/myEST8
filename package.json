@@ -29,6 +29,7 @@
     "smoke:live": "tsx scripts/smoke-live.ts"
   },
   "dependencies": {
+    "@base-ui/react": "^1.9.0",
     "@fontsource-variable/bricolage-grotesque": "^5.3.0",
     "@fontsource-variable/public-sans": "^5.3.0",
     "@hono/node-server": "^2.1.6",

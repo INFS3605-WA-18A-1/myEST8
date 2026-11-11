@@ -18,10 +18,9 @@
 
 // === The Properties list's filter and search (progressive: without JavaScript every card shows) ===
 (() => {
-  const tabs = [...document.querySelectorAll('[data-prop-filter]')];
   const search = document.querySelector('[data-prop-search]');
   const section = document.getElementById('properties');
-  if (!tabs.length || !search || !section) return;
+  if (!section?.querySelector('[data-prop-filter]') || !search) return;
   let mode = 'all';
   function apply() {
     const words = search.value.trim().toLowerCase();
@@ -33,9 +32,15 @@
     }
     // "Open tickets" and "High & urgent" leave the quiet Properties folded away.
     for (const more of section.querySelectorAll('details.dispatch-more')) more.hidden = mode !== 'all' && !words;
-    for (const tab of tabs) tab.setAttribute('aria-pressed', String(tab.dataset.propFilter === mode));
+    for (const tab of section.querySelectorAll('[data-prop-filter]')) tab.setAttribute('aria-pressed', String(tab.dataset.propFilter === mode));
   }
-  for (const tab of tabs) tab.addEventListener('click', () => { mode = tab.dataset.propFilter; apply(); });
+  // Delegated, so a React toggle that replaces the buttons still filters.
+  section.addEventListener('click', (event) => {
+    const tab = event.target instanceof Element ? event.target.closest('[data-prop-filter]') : null;
+    if (!tab || !section.contains(tab)) return;
+    mode = tab.dataset.propFilter;
+    apply();
+  });
   search.addEventListener('input', apply);
 })();
 
@@ -45,7 +50,14 @@
   const queue = document.querySelector('#to-dispatch > .dispatch-queue');
   const first = queue?.querySelector(':scope > li');
   if (!queue || !first) return;
-  const fit = () => queue.style.setProperty('--queue-first', `${first.getBoundingClientRect().height}px`);
+  // Measure with the cap off, or a too-small cap makes the next measure smaller still.
+  const fit = () => {
+    const cap = queue.style.maxHeight;
+    queue.style.maxHeight = 'none';
+    const height = first.getBoundingClientRect().height;
+    queue.style.maxHeight = cap;
+    if (height > 0) queue.style.setProperty('--queue-first', `${Math.ceil(height)}px`);
+  };
   new ResizeObserver(fit).observe(first);
   fit();
 })();
