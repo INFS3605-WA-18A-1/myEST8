@@ -209,7 +209,7 @@ describe('Tickets: open Tickets', () => {
     expect(fan).toContain('Done · ready to close');
     expect(fan).toContain('Close ticket');
     expect(cardOf(html, ids.fan)).toContain(`action="/tickets/${ids.fan}/close"`);
-    expect(html).toContain('class="tk-legend"');
+    expect(html).not.toContain('class="tk-legend"');
   });
 
   test('stage tabs count the open Tickets and narrow the cards, keeping the other filters', async () => {

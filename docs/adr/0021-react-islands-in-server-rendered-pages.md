@@ -4,7 +4,7 @@ We are moving the browser side of myEST8 towards React, a piece at a time, witho
 
 We chose islands over rewriting the app as a React single-page app because the server-rendered pages are what the tests, the no-JavaScript fallbacks, the in-page navigation and the Vercel function are built around, and they work. Islands let us take well-made components from the React ecosystem (the curated list in our UI review: Sonner for toasts, base-ui for menus, popovers and selects, cmdk for a command menu, motion and NumberFlow for movement and numbers) where hand-written `app.js` is weakest, while keeping the design language. Every island draws with the same daisyUI classes and `app.css` tokens as the server; the variant classes live in one place, `src/web/variants.ts` (cva and clsx), used by both sides.
 
-The first island is the toaster. A flash is still drawn in the page by the server; with JavaScript, `client/toaster.tsx` moves it into a Sonner toast that is the same soft alert (tint, Phosphor icon, `status` or `alert`), with a close button, "ok" ones fading after 8 s and errors staying until closed.
+The first islands are the toaster and the desk controls. Filter dropdowns and the Dispatch property toggles are base-ui (`client/controls.tsx`); the native select or button stays in the page for when there is no JavaScript. Mine/All and the Schedule views stay links. A flash is still drawn in the page by the server; with JavaScript, `client/toaster.tsx` moves it into a Sonner toast that is the same soft alert (tint, Phosphor icon, `status` or `alert`), with a close button, "ok" ones fading after 8 s and errors staying until closed.
 
 The rules for what comes next:
 

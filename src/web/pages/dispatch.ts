@@ -293,7 +293,7 @@ function queue(waiting: Waiting[], tradies: TradieView[], timeZone: string, now:
 
 function queueCard({ job, ticket, property }: Waiting, tradies: TradieView[], timeZone: string, now: string): Html {
   const id = `dispatch-job-${job.jobId}`;
-  return html`<li class="dispatch-card" id="${id}" aria-labelledby="${id}-title">
+  return html`<li class="dispatch-job" id="${id}" aria-labelledby="${id}-title">
     <div class="dispatch-card-head">
       <p class="dispatch-ticketbox" aria-hidden="true"><span>Ticket</span><b class="num">#${ticket.ticketId}</b></p>
       <div class="min-w-0">
