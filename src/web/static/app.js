@@ -1429,6 +1429,33 @@ onContent((root) => {
 (() => {
   let opener = null;
 
+  const INBOX_PAGE = 8;
+
+  // The thread opens on its newest messages. Scrolling up reveals older ones, a page at a time,
+  // keeping the message that was in view where it was.
+  function pinThread(pane) {
+    const list = pane.querySelector('.inbox-messages');
+    if (!(list instanceof HTMLElement)) return;
+    const items = [...list.querySelectorAll('.inbox-message')];
+    if (!list.dataset.inboxShown) list.dataset.inboxShown = String(Math.min(INBOX_PAGE, items.length));
+    const shown = Number(list.dataset.inboxShown);
+    items.forEach((item, i) => { item.hidden = i < items.length - shown; });
+    list.scrollTop = list.scrollHeight;
+    if (list.dataset.inboxBound) return;
+    list.dataset.inboxBound = 'true';
+    list.addEventListener('scroll', () => {
+      if (list.scrollTop > 48) return;
+      const all = [...list.querySelectorAll('.inbox-message')];
+      const current = Number(list.dataset.inboxShown);
+      if (current >= all.length) return;
+      const before = list.scrollHeight;
+      list.dataset.inboxShown = String(Math.min(all.length, current + INBOX_PAGE));
+      const next = Number(list.dataset.inboxShown);
+      all.forEach((item, i) => { item.hidden = i < all.length - next; });
+      list.scrollTop += list.scrollHeight - before;
+    });
+  }
+
   function select(dialog, index) {
     for (const button of dialog.querySelectorAll('[data-inbox-person]')) {
       const on = Number(button.getAttribute('data-inbox-person')) === index;
@@ -1438,6 +1465,8 @@ onContent((root) => {
     for (const pane of dialog.querySelectorAll('[data-inbox-thread]')) {
       pane.hidden = Number(pane.getAttribute('data-inbox-thread')) !== index;
     }
+    const visible = dialog.querySelector(`[data-inbox-thread="${index}"]`);
+    if (visible instanceof HTMLElement) requestAnimationFrame(() => pinThread(visible));
   }
 
   function open(link, index) {

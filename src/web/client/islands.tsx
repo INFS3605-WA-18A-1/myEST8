@@ -8,6 +8,7 @@
 
 import { type ComponentType, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { upgradeControls } from './controls.tsx';
 import { FlashToaster, toastFlashes } from './toaster.tsx';
 
 /** Components a server page can place with `island(name, props)` (ui.ts). */
@@ -42,10 +43,12 @@ function PageToaster() {
 
 pageRoot('toaster').render(<PageToaster />);
 mountIslands(document);
+upgradeControls(document);
 
 document.addEventListener('myest8:content', (event) => {
   const root = (event as CustomEvent<ParentNode>).detail;
   if (!root) return;
   toastFlashes(root);
   mountIslands(root);
+  upgradeControls(root);
 });
