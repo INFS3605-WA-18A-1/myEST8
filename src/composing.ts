@@ -40,6 +40,7 @@ export const PURPOSES: Record<TemplateName, string> = {
   'tenant.visit_moved': 'Telling a Tenant their visit has moved to a new time, and asking them to confirm it',
   'tenant.inspection': 'Telling a Tenant a Tradie will inspect the issue before a firm price, and asking them to confirm the time',
   'tenant.inspection_cancelled': 'Telling a Tenant a Site Inspection is cancelled, so they need not be home for it',
+  'tenant.not_fixed_received': 'Telling a Tenant who says a finished repair is not fixed that their Property Manager will arrange for it to be looked at again',
   'tenant.fixed_properly': 'Telling a Tenant the Tradie has finished, what they did, and asking how well it was fixed',
   'tenant.reimbursed': 'Telling a Tenant the Property Owner has paid their Reimbursement Request',
   'tenant.ticket_closed': 'Telling a Tenant their repair is complete: what was done, by whom and when',

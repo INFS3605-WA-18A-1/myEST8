@@ -399,6 +399,7 @@ describe('every template', () => {
       { tradieBusinessName: 'Drip Doctors', trade: 'plumbing', visitStart: TUE, confirmLink: `${LINK}/v/confirm/abc`, anotherTimeLink: `${LINK}/v/confirm/abc?another=1` },
     ],
     'tenant.inspection_cancelled': [{ tradieBusinessName: 'Drip Doctors', visitStart: TUE }],
+    'tenant.not_fixed_received': [{ tenantName: 'Tom', propertyAddress: '12 King St, Newtown', trade: 'plumbing' as const }],
     'tenant.fixed_properly': [{ trade: 'plumbing' as const, tradieBusinessName: "Pete's Plumbing", doneOn: TUE, work: 'Replace the tap washer' }],
     'tenant.reimbursed': [{ propertyAddress: '12 King St, Newtown', amountCents: 180_00 }],
     'tenant.ticket_closed': [{ propertyAddress: '12 King St, Newtown', summary: 'Dripping kitchen tap', jobs: [{ trade: 'plumbing' as const, tradieBusinessName: "Pete's Plumbing", doneOn: TUE, work: 'Replace the tap washer' }] }],

@@ -136,6 +136,13 @@ const RECEIPT_WORDS = ['receipt', 'invoice', 'paid'];
 
 const urgentRepairOpen = (r: Reading) => r.openItems.some((i) => i.ref.startsWith('urgent_repair:'));
 
+const NOT_FIXED_WORDS = ['not fixed', 'isnt fixed', 'still', 'again', 'came back', 'back again', 'didnt fix', 'didnt work', 'not working', 'broken'];
+/** The done Jobs among the open items: the ones a "not fixed" can be about. */
+const doneJobs = (r: Reading) => r.openItems.filter((i) => i.ref.startsWith('job:') && i.summary.includes('done: the Tradie finished it'));
+
+/** "Still dripping" or "it's back" once a Tradie has finished: a report that the repair isn't fixed. */
+const isNotFixed = (r: Reading) => doneJobs(r).length > 0 && mentions(r.text, NOT_FIXED_WORDS);
+
 /** A follow-up about something already open: a chaser, a scheduling reply, or a receipt for an Urgent Repair. */
 function isUpdate(r: Reading) {
   if (r.openItems.length === 0) return false;
@@ -145,6 +152,7 @@ function isUpdate(r: Reading) {
 const messageClass: Rule = (r) => {
   if (mentions(r.text, COMMON_AREA_WORDS)) return answer('common_area');
   if (mentions(r.text, OTHER_WORDS)) return answer('other');
+  if (isNotFixed(r)) return answer('not_fixed');
   if (isUpdate(r)) return answer('update');
   // "Help!" could be anything: unsure, so it goes to the inbox.
   if (wordCount(r.text) < 3 && !anyKeyword(r.text)) return answer('new_issue', UNSURE);
@@ -231,6 +239,7 @@ function pickItem(r: Reading, items: Item[]): ClassifierAnswer {
 
 const relatedItem: Rule = (r) => {
   if (r.senderRole === 'tradie' || r.senderRole === 'property_owner') return pickItem(r, r.waitingItems);
+  if (isNotFixed(r)) return pickItem(r, doneJobs(r));
   if (isUpdate(r)) return pickItem(r, r.openItems);
   // A new issue that reads like an open one (a housemate's report) is a duplicate.
   const duplicate = r.openItems.find((i) => !i.ref.startsWith('job:') && sharedWords(r.text, i.summary) >= 2);

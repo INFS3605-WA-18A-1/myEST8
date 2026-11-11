@@ -127,6 +127,11 @@ export function ticketPages() {
     return `${humanise(trade)} Job added`;
   });
 
+  onPost(pages, '/:id/redo', async ({ actions, ticket }) => {
+    const added = await actions.redoTicket(ticket.ticketId);
+    return added.reopened ? 'Ticket reopened with a Job to redo the work' : 'Job added to redo the work';
+  });
+
   onPost(pages, '/:id/jobs/:jobId/trade', async ({ actions, ticket, form, params }) => {
     const job = jobIn(ticket, params.jobId);
     const trade = tradeFrom(form);
@@ -600,6 +605,26 @@ function addJobTile(t: TicketView, done: boolean): Html {
   </details>`;
 }
 
+/**
+ * "Not fixed?": once every Job is done or cancelled (or the Ticket is closed), a Job to redo
+ * the latest done Job, for when the Tenant says it isn't fixed without messaging (a phone
+ * call). It stays one Ticket: a closed one is reopened.
+ */
+function redoTile(t: TicketView): Html {
+  const done = t.jobs.filter((j) => j.status === 'done').at(-1);
+  if (!done || t.jobs.some(isOpen)) return nothing;
+  const closed = t.status !== 'open';
+  return html`<details class="ticket-add-job" id="redo-job">
+    <summary><span>Not fixed? Redo the work</span><span class="ticket-add-plus" aria-hidden="true">${icon('arrow-counter-clockwise', { size: 'size-6' })}</span></summary>
+    <form method="post" action="/tickets/${t.ticketId}/redo" class="ticket-inline-form"${closed ? html` data-confirm="Reopen this Ticket to redo the work?"` : nothing}>
+      <p class="min-w-48 flex-1 text-sm">
+        Adds a ${humanise(done.trade).toLowerCase()} Job to this Ticket to redo the work, for when the Tenant says it isn't fixed.${closed ? ' The Ticket is reopened.' : ''}
+      </p>
+      ${button(closed ? 'Reopen with a new Job' : 'Add a Job to redo it', { variant: 'secondary' })}
+    </form>
+  </details>`;
+}
+
 /** Two letters for an avatar: the first letters of the first two words ("Lena Le" is LL). */
 function initials(name: string): string {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('');
@@ -666,7 +691,7 @@ const REPORTED_COLUMN = 'Reported';
 const TIMELINE_COLUMN: Record<string, string> = (() => {
   const [ESTIMATES, SITE, FIRM, OWNER, READY, BOOKED, DONE] = JOB_TRACKER_STAGES;
   const columns: [string, string[]][] = [
-    [REPORTED_COLUMN, ['reported', 'confirmed', 'urgency_changed', 'summary_edited', 'job_added', 'trade_changed', 'job_cancelled']],
+    [REPORTED_COLUMN, ['reported', 'confirmed', 'urgency_changed', 'summary_edited', 'job_added', 'trade_changed', 'job_cancelled', 'reopened']],
     [ESTIMATES!, ['quote_requests_sent', 'tradie_declined', 'quote_received', 'estimate_received']],
     [SITE!, ['inspection_need_set', 'inspection_booked', 'inspected', 'inspection_cancelled', 'site_quotes_booked', 'site_quotes_skipped', 'site_quote_done']],
     [FIRM!, ['firm_quote_received', 'quotes_final', 'quote_chosen']],
@@ -1052,12 +1077,14 @@ function closeControl(t: TicketView): Html {
  * Under the Jobs while the Ticket is open: Add another Job, and when the Ticket can be closed.
  */
 function jobsFoot(t: TicketView, done: boolean): Html {
-  if (t.status !== 'open') return nothing;
+  const redo = redoTile(t);
+  if (t.status !== 'open') return redo === nothing ? nothing : html`<div class="ticket-jobs-foot">${redo}</div>`;
   const openJobs = t.jobs.filter(isOpen).length;
   const add = addJobTile(t, done);
-  if (add === nothing && !openJobs) return nothing;
+  if (add === nothing && redo === nothing && !openJobs) return nothing;
   return html`<div class="ticket-jobs-foot">
     ${add}
+    ${redo}
     ${openJobs ? html`<p class="ticket-close-hint">Close once every Job is done or cancelled (${openJobs} still open).</p>` : nothing}
   </div>`;
 }
@@ -1997,7 +2024,9 @@ function describeEvent(t: TicketView, event: TimelineEvent, x: Extras): { title:
     case 'urgency_changed':
       return { title: `Urgency changed to ${humanise(String(d.urgency))}` };
     case 'job_added':
-      return { title: `${humanise(String(d.trade))} Job added` };
+      return d.reworkOf ? { title: `${humanise(String(d.trade))} Job added to redo the work`, detail: 'The Tenant said it wasn\'t fixed' } : { title: `${humanise(String(d.trade))} Job added` };
+    case 'reopened':
+      return { title: 'Ticket reopened', detail: "The Tenant said the repair wasn't fixed" };
     case 'trade_changed':
       return { title: `Trade changed to ${humanise(String(d.trade))}`, detail: job };
     case 'job_cancelled':
@@ -2097,7 +2126,8 @@ function jobLabel(t: TicketView, jobId: number): string {
   const index = t.jobs.findIndex((j) => j.jobId === jobId);
   const job = t.jobs[index];
   if (!job) return 'Job';
-  return t.jobs.length > 1 ? `Job ${index + 1}: ${humanise(job.trade)}` : `${humanise(job.trade)} Job`;
+  const label = t.jobs.length > 1 ? `Job ${index + 1}: ${humanise(job.trade)}` : `${humanise(job.trade)} Job`;
+  return job.reworkOf ? `${label} (redo)` : label;
 }
 
 function lastEvent(t: TicketView, kind: string, jobId: number): Record<string, unknown> | undefined {

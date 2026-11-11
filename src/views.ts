@@ -1070,6 +1070,7 @@ export function createViews(ctx: Context) {
             trade: job.trade,
             checkTrade: job.checkTrade,
             status: job.status,
+            reworkOf: job.reworkOf,
             ...quotesView,
             /** Every Quote, Estimates and Firm Quotes alike, with its Tradie's ratings. */
             quotes: await Promise.all(
