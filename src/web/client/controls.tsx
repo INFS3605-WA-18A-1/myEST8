@@ -100,7 +100,7 @@ function upgradeDispatchTabs(group: HTMLElement) {
 /** Upgrades the desk's filter dropdowns and toggles inside `root`. */
 export function upgradeControls(root: ParentNode) {
   const scope = root instanceof Element || root instanceof Document ? root : document;
-  for (const select of scope.querySelectorAll<HTMLSelectElement>('.filter-bar select:not([data-combobox]), .dispatch-pick select')) upgradeSelect(select);
+  for (const select of scope.querySelectorAll<HTMLSelectElement>('.filter-bar select:not([data-combobox]), .dispatch-pick select, .schedule-filters select, .tradie-select select')) upgradeSelect(select);
   // Mine/All and the Schedule views stay real links: the page swap and the tests follow those hrefs.
   // The Dispatch property tabs are buttons, so they become a base-ui toggle group.
   for (const group of scope.querySelectorAll<HTMLElement>('.dispatch-tabs:not(.base-toggle)')) upgradeDispatchTabs(group);
