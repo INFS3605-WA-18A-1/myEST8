@@ -134,7 +134,7 @@ function unseal(secret: string, value: string | undefined): PendingSignUp | null
 function problemPage(message: string) {
   return authPage({
     title: 'Sign in to myEST8',
-    subtitle: 'For Property Managers. Tenants, Tradies and Property Owners never need an account.',
+    subtitle: 'For Property Managers. Tenants, Tradies and Owners never need an account.',
     flash: { kind: 'error', message },
     size: 'login',
     footer: SIGNED_OUT_FOOTER,

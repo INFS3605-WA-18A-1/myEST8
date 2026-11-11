@@ -274,7 +274,7 @@ async function welcomeStep(c: WizardContext): Promise<Html> {
           <li><strong>Your team.</strong> Add the other Property Managers so each has their own sign-in. Optional.</li>
           <li><strong>Channels.</strong> Connect the SMS number and email inbox Tenants already use, and test each one.</li>
           <li><strong>Tradies.</strong> The Tradies you already use, with their Trades and a starting rating.</li>
-          <li><strong>Your first Property.</strong> Its address, Max Repair Cost, Property Owner and Tenant.</li>
+          <li><strong>Your first Property.</strong> Its address, Max Repair Cost, Owner and Tenant.</li>
         </ol>`,
       })}
       ${card({
@@ -301,7 +301,7 @@ async function teamStep(c: WizardContext, o: { added?: ColleagueAdded; values?: 
     body: html`
       <p>
         Add the other Property Managers at ${actions.agency().name}. Each gets their own sign-in and sees their own Properties first, and can cover for
-        colleagues when needed. Tenants, Tradies and Property Owners never need an account.
+        colleagues when needed. Tenants, Tradies and Owners never need an account.
       </p>
       ${o.added ? colleagueAdded(o.added, { origin, agencyName: actions.agency().name }) : ''}
       ${table(
@@ -364,7 +364,7 @@ async function channelsStep(c: WizardContext, demo: boolean, connectors: Channel
     flash: flash && !WORKING_CHANNELS.some((ch) => ch.key === flashChannel) ? flash : null,
     body: html`
       <p>
-        Tenants, Tradies and Property Owners reach ${agency.name} by SMS, WhatsApp and email.
+        Tenants, Tradies and Owners reach ${agency.name} by SMS, WhatsApp and email.
         ${serverPhone ? "Connect the server's SMS phone." : smsNumbers ? 'Set up the number Tenants will text.' : 'Verify SMS with a code sent to the number.'}
         Email arrives at the address below once you forward the Agency inbox to it.${demo ? ' In the demo nothing is really sent, and the addresses work with the phone simulator.' : ''}
       </p>
@@ -561,7 +561,7 @@ async function readPropertyForm(actions: Actions, form: FormValues, myId: number
     return existing;
   }
 
-  const ownerExisting = checkContact('owner', 'Property Owner', 'owner', true);
+  const ownerExisting = checkContact('owner', 'Owner', 'owner', true);
   const tenantContact = contactFrom(form, 'tenant');
   checkContact('tenant', 'Tenant', 'tenant', false);
   const tenancyStart = text(form, 'tenancyStart');
@@ -645,20 +645,20 @@ async function propertyStep(c: WizardContext, o: { values?: Values; errors?: Err
     flash: flashFrom(c.req.url),
     body: html`
       <p>
-        A Property is one rentable dwelling with its own lease. Add it with its Property Owner and Tenant, and the intake agent can act on their messages
+        A Property is one rentable dwelling with its own lease. Add it with its Owner and Tenant, and the intake agent can act on their messages
         straight away. You can add the rest later, here or in Setup.
       </p>
       ${added
         ? alert(
-            html`${added.address} is set up with Property Owner ${nameOf(added.ownerId)} and Tenant ${sentence(tenantsOf(added.id))}. Repairs up to
-              ${formatMoney(added.maxRepairCostCents)} go ahead without asking the Property Owner.`,
+            html`${added.address} is set up with Owner ${nameOf(added.ownerId)} and Tenant ${sentence(tenantsOf(added.id))}. Repairs up to
+              ${formatMoney(added.maxRepairCostCents)} go ahead without asking the Owner.`,
             'success',
             { title: 'Property added' },
           )
         : ''}
       ${properties.length
         ? table(
-            ['Address', 'Property Owner', 'Tenants', 'Max Repair Cost'],
+            ['Address', 'Owner', 'Tenants', 'Max Repair Cost'],
             properties.map((p) => [
               html`${p.address}`,
               html`${nameOf(p.ownerId)}`,
@@ -704,7 +704,7 @@ async function propertyForm(actions: Actions, myId: number, o: { values?: Values
             required: true,
             placeholder: '500',
             value: valueOf(values, 'maxRepairCost'),
-            hint: "Repairs over this need the Property Owner's approval.",
+            hint: "Repairs over this need the Owner's approval.",
             error: errors.maxRepairCost,
           })}
           ${managers.length > 1
@@ -723,7 +723,7 @@ async function propertyForm(actions: Actions, myId: number, o: { values?: Values
         `),
       )}
       ${group(
-        'Property Owner',
+        'Owner',
         fieldGrid(
           contactFields('owner', {
             scope: 'owner',

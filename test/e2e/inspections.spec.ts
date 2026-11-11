@@ -165,7 +165,7 @@ test('two Tradies on their own paths: one inspects first, both give Firm Quotes,
   await page.goto(ticketUrl);
   await eventually(page, () => expect(page.getByText('Choose a Firm Quote: 2 in').first()).toBeVisible({ timeout: 1_000 }));
   await expect(page.getByText('Superseded by Firm Quote').first()).toBeVisible();
-  page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('row', { name: /Pete's Plumbing.*Replace the tap cartridge/ }).getByRole('button', { name: 'Choose this Firm Quote' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Choose this Firm Quote' }).click();
   await expect(page.getByText("Firm Quote from Pete's Plumbing chosen", { exact: true }).first()).toBeVisible();
 });

@@ -82,7 +82,7 @@ type Shown = { error: Html; open: boolean };
 /** The areas of the page, in dependency order. */
 const AREAS = [
   ['channels', 'Channels'],
-  ['people', 'Property Owners and Building Managers'],
+  ['people', 'Owners and Building Managers'],
   ['tradies', 'Tradies'],
   ['properties', 'Properties'],
   ['tenants', 'Tenants'],
@@ -134,7 +134,7 @@ export function setupPages(o: { connectors?: ChannelConnectors } = {}) {
         body: html`
           ${areasNav(agency, channels, connectors.unavailable)}
           ${section({ id: 'channels', title: 'Channels', body: await channelsArea(origin, channels, timeZone, shownFor('channels'), connectors, actions.agency().id, email, pending, smsPanel) })}
-          ${section({ id: 'people', title: 'Property Owners and Building Managers', body: peopleArea(agency, shownFor) })}
+          ${section({ id: 'people', title: 'Owners and Building Managers', body: peopleArea(agency, shownFor) })}
           ${section({ id: 'tradies', title: 'Tradies', body: html`${await tradiesArea(c, agency, choice, shownFor('tradie'))}${importForm('tradies', shownFor('import-tradies'))}` })}
           ${section({ id: 'properties', title: 'Properties', body: html`${propertiesArea(agency, pm.id, shownFor('property'))}${importForm('properties', shownFor('import-properties'))}` })}
           ${section({ id: 'tenants', title: 'Tenants', body: html`${tenantsArea(agency, shownFor('tenant'))}${importForm('tenants', shownFor('import-tenants'))}` })}
@@ -176,7 +176,7 @@ export function setupPages(o: { connectors?: ChannelConnectors } = {}) {
     const save = async (form: FormValues) => {
       const contact = contactFrom(form);
       await c.var.actions.addOwner(contact);
-      return { ok: `${contact.name} added as a Property Owner`, redirect: here };
+      return { ok: `${contact.name} added as an Owner`, redirect: here };
     };
     if (here === '/owners') return refusedOnPage(c, save, addOwnerPage);
     return formAction(c, `${here}?form=owner`, save);
@@ -225,7 +225,7 @@ export function setupPages(o: { connectors?: ChannelConnectors } = {}) {
       await c.var.actions.addProperty({
         address,
         suburb: text(form, 'suburb'),
-        ownerId: chosenId(form, 'ownerId', 'the Property Owner'),
+        ownerId: chosenId(form, 'ownerId', 'the Owner'),
         propertyManagerId: chosenId(form, 'propertyManagerId', 'the Property Manager'),
         maxRepairCostCents,
         nominatedTradieIds: nominatedFrom(form),
@@ -309,7 +309,7 @@ function areasNav(agency: Agency, channels: AgencyChannel[], unavailable: readon
   const connected = WORKING_CHANNELS.filter((ch) => channels.some((c) => c.type === ch.key)).map((ch) => (ch.key === 'email' ? 'email' : ch.name));
   const said = connected.length > 1 ? `${connected.slice(0, -1).join(', ')} and ${connected.at(-1)}` : (connected[0] ?? '');
   const people = [
-    ...(agency.owners.length ? [count(agency.owners.length, 'Property Owner')] : []),
+    ...(agency.owners.length ? [count(agency.owners.length, 'Owner')] : []),
     ...(agency.buildingManagers.length ? [count(agency.buildingManagers.length, 'Building Manager')] : []),
   ];
   const state: Record<(typeof AREAS)[number][0], string | null> = {
@@ -376,7 +376,7 @@ async function channelsArea(
 ): Promise<Html> {
   const gmailBlock = connectors.gmail ? await gmailControls(connectors.gmail, agencyId, 'setup') : null;
   return html`
-    <p class="text-sm">Tenants, Tradies and Property Owners reach the Agency by SMS, WhatsApp and email. ${connectors.smsPhone ? "Connect the server's SMS phone." : smsPanel ? 'Set up the number Tenants will text.' : 'Verify a phone number with a code.'} Forward the Agency inbox to the email address below.</p>
+    <p class="text-sm">Tenants, Tradies and Owners reach the Agency by SMS, WhatsApp and email. ${connectors.smsPhone ? "Connect the server's SMS phone." : smsPanel ? 'Set up the number Tenants will text.' : 'Verify a phone number with a code.'} Forward the Agency inbox to the email address below.</p>
     ${shown.error}
     <div class="mt-4 grid gap-4 ${smsPanel ? '' : 'md:grid-cols-2 xl:grid-cols-3'}">
       ${WORKING_CHANNELS.map(({ key }) => {
@@ -444,13 +444,13 @@ function peopleArea(agency: Agency, shownFor: (key: FormKey) => Shown): Html {
   const buildingManager = shownFor('building-manager');
   return html`<div class="setup-people">
     <div class="setup-people-col">
-      <h3 class="section-title">Property Owners</h3>
-      <div class="setup-people-table">${peopleTable(agency.owners, 'No Property Owners yet.', '/owners', 'Property Owners')}</div>
+      <h3 class="section-title">Owners</h3>
+      <div class="setup-people-table">${peopleTable(agency.owners, 'No Owners yet.', '/owners', 'Owners')}</div>
       ${addForm(
-        'Add a Property Owner',
+        'Add an Owner',
         owner.open,
         html`${owner.error}
-          ${addPersonForm({ id: 'owner', action: '/setup/owners', submit: 'Add Property Owner' })}`,
+          ${addPersonForm({ id: 'owner', action: '/setup/owners', submit: 'Add Owner' })}`,
       )}
       ${importForm('owners', shownFor('import-owners'))}
     </div>
@@ -506,26 +506,26 @@ function propertiesArea(agency: Agency, myId: number, shown: Shown): Html {
     html`${nameOf(agency.buildingManagers, p.buildingManagerId) === '—' ? emptyValue() : nameOf(agency.buildingManagers, p.buildingManagerId)}`,
   ]);
   return html`
-    <p class="text-sm">Each Property has one Property Owner and is assigned to one Property Manager. Open one from <a class="link" href="/properties">Properties</a>.</p>
+    <p class="text-sm">Each Property has one Owner and is assigned to one Property Manager. Open one from <a class="link" href="/properties">Properties</a>.</p>
     <div class="setup-compact">${agency.properties.length
-      ? table(['Address', 'Property Manager', 'Property Owner', 'Max Repair Cost', 'Tenants', 'Nominated Tradies', 'Building Manager'], rows, { caption: 'Properties', stack: 'labelled' })
+      ? table(['Address', 'Property Manager', 'Owner', 'Max Repair Cost', 'Tenants', 'Nominated Tradies', 'Building Manager'], rows, { caption: 'Properties', stack: 'labelled' })
       : emptyState('No Properties yet.')}</div>
     ${seeAllIn(agency.properties.length, 'Property', 'Properties', '/properties')}
     ${addForm(
       'Add a Property',
       shown.open,
-      html`${agency.owners.length ? '' : html`<p class="mb-3 text-sm text-high">Add a Property Owner first.</p>`}
+      html`${agency.owners.length ? '' : html`<p class="mb-3 text-sm text-high">Add an Owner first.</p>`}
         <form method="post" action="/setup/properties?from=setup">
           ${shown.error}
           ${fieldGrid(html`
             ${propertyPlaceFields()}
             ${field({
-              label: 'Property Owner',
+              label: 'Owner',
               name: 'ownerId',
               id: 'property-owner',
               type: 'select',
               required: true,
-              placeholder: 'Choose the Property Owner',
+              placeholder: 'Choose the Owner',
               options: agency.owners.map((o) => ({ value: String(o.id), label: o.name })),
             })}
             ${field({
@@ -546,7 +546,7 @@ function propertiesArea(agency: Agency, myId: number, shown: Shown): Html {
               min: 0,
               required: true,
               placeholder: '500',
-              hint: "The most a Ticket's Repair Cost can reach before the Property Owner must approve.",
+              hint: "The most a Ticket's Repair Cost can reach before the Owner must approve.",
             })}
             ${field({
               label: 'Building Manager (strata only)',

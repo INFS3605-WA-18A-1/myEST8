@@ -44,7 +44,7 @@ describe('the Reimbursement Request page', () => {
       expect(readable).toContain(expected);
     }
     expect(html).toContain(`href="/properties/${w.ids.kingSt}"`);
-    for (const step of ['Reported', 'Receipt received', 'Forwarded to Property Owner', 'Reimbursed']) expect(readable).toContain(step);
+    for (const step of ['Reported', 'Receipt received', 'Forwarded to Owner', 'Reimbursed']) expect(readable).toContain(step);
     expect(ticks(html)).toBe(1);
     // The message source: Tom's report and what he was sent.
     expect(readable).toContain('From Tom Tran (Tenant) by SMS');
@@ -57,7 +57,7 @@ describe('the Reimbursement Request page', () => {
     expect(w.h.messenger.to(TOM).filter((m) => m.template === 'tenant.urgent_repair_reminder')).toHaveLength(2);
   });
 
-  test('with the receipt in, shows it, forwards it to the Property Owner, then marks it reimbursed', async () => {
+  test('with the receipt in, shows it, forwards it to the Owner, then marks it reimbursed', async () => {
     const w = await webWorld();
     const cookie = await w.signIn();
     const { link, id } = await tomsBurstPipe(w);
@@ -80,8 +80,8 @@ describe('the Reimbursement Request page', () => {
     expect((await w.get(`/files/${receipts[1]!.fileId}`, cookie)).headers.get('content-type')).toBe('application/pdf');
 
     const forwarded = await follow(w, await w.post(`/reimbursements/${id}/forward`, { amount: '$430' }, cookie), cookie);
-    expect(visible(forwarded)).toContain('Forwarded to Olivia Owens, the Property Owner, with you copied in.');
-    expect(visible(forwarded)).toContain('With Property Owner');
+    expect(visible(forwarded)).toContain('Forwarded to Olivia Owens, the Owner, with you copied in.');
+    expect(visible(forwarded)).toContain('With Owner');
     expect(visible(forwarded)).toContain('Forwarded to Olivia Owens');
     expect(ticks(forwarded)).toBe(3);
     expect(w.h.messenger.to(OLIVIA_EMAIL)).toMatchObject([{ template: 'owner.urgent_repair_receipt', cc: ['alice@harbour.example'], attachments: ['receipt.jpg', 'invoice.pdf'], data: { amountCents: 430_00 } }]);
@@ -119,7 +119,7 @@ describe('the Reimbursement Request page', () => {
     const { link, id } = await tomsBurstPipe(w);
 
     const early = await follow(w, await w.post(`/reimbursements/${id}/reimbursed`, {}, cookie), cookie);
-    expect(visible(early)).toContain('Forward the receipt to the Property Owner before marking it reimbursed');
+    expect(visible(early)).toContain('Forward the receipt to the Owner before marking it reimbursed');
 
     await w.h.upload(link, [{ filename: 'receipt.jpg', contentType: 'image/jpeg', content: new Uint8Array([1]) }]);
     const blank = await follow(w, await w.post(`/reimbursements/${id}/forward`, { amount: '' }, cookie), cookie);

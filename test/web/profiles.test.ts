@@ -27,7 +27,8 @@ describe('Profiles', () => {
     const cookie = await w.signIn();
 
     const page = await (await w.get('/profiles?filter=all', cookie)).text();
-    expect(page).toContain('>2 Properties</a>, <a href="/tenants?filter=all">3 Tenants</a>, <a href="/owners">2 Property Owners</a>, <a href="/building-managers">1 Building Manager</a> and <a href="/tradies">6 Tradies</a>');
+    // The tabs carry the counts, so there is no sentence repeating them under the title.
+    expect(page).not.toContain('page-subtitle');
     const cards = page.split('<article class="household">').slice(1);
     const king = cards.find((card) => card.includes(KING_ST)) ?? '';
     const ocean = cards.find((card) => card.includes(OCEAN_AVE)) ?? '';
@@ -110,7 +111,7 @@ describe('Profiles', () => {
     expect(mine).toContain(KING_ST);
     expect(mine).not.toContain(OCEAN_AVE);
     expect(visible(mine)).toContain("Pete's Plumbing");
-    expect(mine).toContain('>1 Property</a>, <a href="/tenants">2 Tenants</a>, <a href="/owners">1 Property Owner</a> and <a href="/tradies">6 Tradies</a>');
+    expect(mine).not.toContain('page-subtitle');
     expect(mine).toContain('href="/properties"');
     expect(mine).toContain('href="/tenants"');
     expect(mine).not.toContain('href="/tenants?filter=all"');
@@ -121,7 +122,6 @@ describe('Profiles', () => {
     const all = await (await w.get('/profiles?filter=all', cookie)).text();
     expect(all).toContain(OCEAN_AVE);
     expect(all).toContain('Bella Bui');
-    expect(all).toContain('>2 Properties</a>, <a href="/tenants?filter=all">3 Tenants</a>, <a href="/owners">2 Property Owners</a>, <a href="/building-managers">1 Building Manager</a> and <a href="/tradies">6 Tradies</a>');
     expect(all).toContain('href="/tenants?filter=all"');
     // The chips keep All, so every list opens on All too (Tradies, the Agency's either way, carry it on).
     expect(all).toContain('href="/properties?filter=all"');

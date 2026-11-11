@@ -164,11 +164,11 @@ describe('importing Properties', () => {
       values: { address: '3 Rose St, Glebe NSW 2037', suburb: 'Glebe', ownerName: 'Olivia Owens', maxRepairCost: '$1,200.00', propertyManager: 'Alice Archer' },
       filled: { suburb: { by: 'rule' } },
     });
-    expect(rowAt(preview, 3).notes).toContain('Adds Nora New as a new Property Owner');
-    expect(rowAt(preview, 4).notes).toContain('Uses Nora New, the new Property Owner from row 3');
+    expect(rowAt(preview, 3).notes).toContain('Adds Nora New as a new Owner');
+    expect(rowAt(preview, 4).notes).toContain('Uses Nora New, the new Owner from row 3');
     expect(rowAt(preview, 5)).toMatchObject({ status: 'duplicate', included: false });
     expect(rowAt(preview, 6)).toMatchObject({ status: 'needs_fix' });
-    expect(rowAt(preview, 6).problems.ownerName).toMatch(/No Property Owner called Who Knows/);
+    expect(rowAt(preview, 6).problems.ownerName).toMatch(/No Owner called Who Knows/);
 
     const result = await w.alice.confirmImport(token, { included: [0, 1, 2] });
     expect(result).toMatchObject({ added: 3, failed: [] });

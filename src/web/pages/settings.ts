@@ -91,7 +91,7 @@ function settingsRow(o: { label: string; hint?: string; actions: Html }): Html {
 const IMPORTS: { kind: ImportKind; hint: string }[] = [
   { kind: 'owners', hint: 'Name, mobile and email.' },
   { kind: 'building-managers', hint: 'For strata Properties.' },
-  { kind: 'properties', hint: 'Needs their Property Owners first.' },
+  { kind: 'properties', hint: 'Needs their Owners first.' },
   { kind: 'tenants', hint: 'Needs their Properties first.' },
   { kind: 'tradies', hint: 'Business, Trades and a starting rating.' },
 ];
@@ -338,7 +338,7 @@ async function teamTab(c: Context<WebEnv>, o: { added?: ColleagueAdded; values?:
     ${section({
       id: 'add-colleague',
       title: 'Add a colleague',
-      body: html`<p class="settings-intro">They get their own sign-in and see their own Properties first. Tenants, Tradies and Property Owners never need an account.</p>
+      body: html`<p class="settings-intro">They get their own sign-in and see their own Properties first. Tenants, Tradies and Owners never need an account.</p>
         ${colleagueForm({ action: '/settings/team', values: o.values, errors: o.errors, invites: !!c.var.invite })}`,
     })}`;
 }

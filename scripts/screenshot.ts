@@ -59,6 +59,12 @@ try {
       const res = await page.goto(base + target.path, { waitUntil: 'networkidle' });
       // Tailwind's browser build styles the page after load.
       await page.waitForTimeout(300);
+      // Entrance animations (the Approvals stages draw in over about 1.3s) finish first, so a
+      // shot never shows a half-drawn element; endless ones are left running, capped at 3s.
+      await page.evaluate(`Promise.race([
+        Promise.all(document.getAnimations().filter((a) => a.effect?.getTiming().iterations !== Infinity).map((a) => a.finished.catch(() => {}))),
+        new Promise((resolve) => setTimeout(resolve, 3000)),
+      ])`);
       const file = `${out}/${target.name}.${viewportName}`;
       await page.screenshot({ path: `${file}.png` });
       await page.screenshot({ path: `${file}.full.png`, fullPage: true });

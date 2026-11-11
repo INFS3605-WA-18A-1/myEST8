@@ -129,7 +129,7 @@ describe('Dispatch: the header search and filters', () => {
     const cookie = await w.signIn();
 
     const all = await dispatch(w, cookie);
-    expect(all).toContain('placeholder="Search properties, tickets or tradies"');
+    expect(all).toContain('placeholder="Address, Ticket or Tradie"');
     expect(pinData(all).properties.map((p) => p.address)).toContain(KING_ST);
 
     const hit = await dispatch(w, cookie, `/dispatch?q=${encodeURIComponent('kitchen tap')}`);
@@ -225,8 +225,9 @@ describe('Dispatch: the table of Properties', () => {
     expect(list).toContain('urgency-badge urgency-routine');
     expect(visible(list)).toContain('worst urgency Routine');
     expect(list).toMatch(/<h3 class="dispatch-card-address"/);
-    expect(list).toContain('data-tix-more');
-    expect(visible(list)).toContain('Show full messages');
+    // The whole message is on the Ticket, so there is no "Show full messages".
+    expect(list).not.toContain('data-tix-more');
+    expect(visible(list)).not.toContain('Show full messages');
     // Ocean Ave has nothing open: it is under a disclosure, still able to pick its panel.
     expect(visible(quiet!)).toContain('1 Property with no open Tickets');
     expect(quiet).toContain(`href="#panel-property-${w.ids.oceanAve}"`);

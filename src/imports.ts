@@ -160,20 +160,20 @@ const IMPORT_FIELDS: Record<ImportKind, ImportField[]> = {
     },
     {
       key: 'ownerName',
-      label: 'Property Owner',
+      label: 'Owner',
       example: 'Olivia Owens',
       synonyms: ['owner', 'owner name', 'owners', 'property owner', 'property owner name', 'landlord', 'landlord name', 'client'],
     },
     {
       key: 'ownerMobile',
-      label: 'Property Owner mobile',
+      label: 'Owner mobile',
       example: '0412 345 678',
       synonyms: [
         'owner mobile', 'owner phone', 'owner ph', 'owner mob', 'landlord mobile', 'landlord phone', 'landlord ph', 'landlord mob',
         'property owner mobile', 'property owner phone',
       ],
     },
-    { key: 'ownerEmail', label: 'Property Owner email', example: '', synonyms: ['owner email', 'landlord email', 'owner e mail', 'landlord e mail', 'property owner email'] },
+    { key: 'ownerEmail', label: 'Owner email', example: '', synonyms: ['owner email', 'landlord email', 'owner e mail', 'landlord e mail', 'property owner email'] },
     { key: 'propertyManager', label: 'Property Manager', example: '', synonyms: ['property manager', 'manager', 'pm', 'managed by', 'agent'] },
     { key: 'buildingManager', label: 'Building Manager', example: '', synonyms: ['building manager', 'strata manager', 'strata'] },
   ],
@@ -673,18 +673,18 @@ export function createImports({ db, clock, settings, ports, modules }: Context, 
           if (!owner && ownerName) {
             const named = people.filter((p) => p.role === 'owner' && sameName(p.name, ownerName));
             if (named.length === 1) owner = named[0];
-            else if (named.length > 1) problem('ownerName', `Two Property Owners are called ${ownerName}. Add their mobile or email to this row.`);
+            else if (named.length > 1) problem('ownerName', `Two Owners are called ${ownerName}. Add their mobile or email to this row.`);
           }
           const newOwner = !owner && ownerName && (ownerContact.mobile || ownerContact.email) ? { name: ownerName, ...ownerContact } : null;
           if (!owner && !newOwner) {
-            if (!ownerName) problem('ownerName', 'Enter the Property Owner');
-            else problem('ownerName', `No Property Owner called ${ownerName}. Choose one, or add their mobile or email to add them too.`);
+            if (!ownerName) problem('ownerName', 'Enter the Owner');
+            else problem('ownerName', `No Owner called ${ownerName}. Choose one, or add their mobile or email to add them too.`);
           }
           if (newOwner) {
             const ownerKey = `owner:${newOwner.mobile ?? newOwner.email}`;
             const first = seen.get(ownerKey);
             if (first === undefined) seen.set(ownerKey, sheetRow.line);
-            notes.push(first === undefined ? `Adds ${ownerName} as a new Property Owner` : `Uses ${ownerName}, the new Property Owner from row ${first}`);
+            notes.push(first === undefined ? `Adds ${ownerName} as a new Owner` : `Uses ${ownerName}, the new Owner from row ${first}`);
             await check(() => onboarding.checkContact(newOwner), { name: 'ownerName', mobile: 'ownerMobile', email: 'ownerEmail' });
           }
           values.ownerName = owner?.name ?? ownerName;

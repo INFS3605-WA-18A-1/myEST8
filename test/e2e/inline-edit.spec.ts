@@ -36,7 +36,7 @@ test('the pencil edits in place: tick saves, cross and Escape restore, a refusal
   await expect(page).toHaveURL(profile);
   const emailBox = page.getByRole('textbox', { name: 'Email' });
   await expect(emailBox).toBeVisible();
-  await expect(page.getByRole('textbox', { name: 'Mobile' })).toBeFocused();
+  await expect(page.getByRole('textbox', { name: 'Name' })).toBeFocused();
   await expect(page.getByRole('button', { name: 'Save details' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Cancel editing' })).toBeVisible();
 

@@ -144,8 +144,8 @@ test('the Tradie offers visit times and the Tenant books one', async ({ page, br
 
   await page.goto(ticketUrl);
   await eventually(page, () => expect(page.getByRole('button', { name: 'Choose this Firm Quote' }).first()).toBeVisible({ timeout: 1_000 }));
-  page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('row', { name: /Pete's Plumbing.*Replace the tap washer/ }).getByRole('button', { name: 'Choose this Firm Quote' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Choose this Firm Quote' }).click();
   await expect(page.getByText("Firm Quote from Pete's Plumbing chosen", { exact: true }).first()).toBeVisible();
 
   await tradie.goto(await quoteLink(page, 'Pete Park', report));
@@ -242,8 +242,8 @@ test('none of the times work, so the Tenant says when they are home and the Trad
 
   await page.goto(ticketUrl);
   await eventually(page, () => expect(page.getByRole('button', { name: 'Choose this Firm Quote' }).first()).toBeVisible({ timeout: 1_000 }));
-  page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('row', { name: /Pete's Plumbing.*Replace the tap washer/ }).getByRole('button', { name: 'Choose this Firm Quote' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Choose this Firm Quote' }).click();
   await expect(page.getByText("Firm Quote from Pete's Plumbing chosen", { exact: true }).first()).toBeVisible();
 
   const offerPath = await quoteLink(page, 'Pete Park', report);
@@ -348,8 +348,8 @@ test('a booked visit can ask for another time, and the Ticket can ask the Tradie
 
   await page.goto(ticketUrl);
   await eventually(page, () => expect(page.getByRole('button', { name: 'Choose this Firm Quote' }).first()).toBeVisible({ timeout: 1_000 }));
-  page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('row', { name: /Pete's Plumbing.*Replace the tap washer/ }).getByRole('button', { name: 'Choose this Firm Quote' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Choose this Firm Quote' }).click();
   await expect(page.getByText("Firm Quote from Pete's Plumbing chosen", { exact: true }).first()).toBeVisible();
 
   await tradie.goto(await quoteLink(page, 'Pete Park', report));
@@ -475,8 +475,8 @@ test('a Property Manager moves a visit and the Tenant confirms it from the email
 
   await page.goto(ticketUrl);
   await eventually(page, () => expect(page.getByRole('button', { name: 'Choose this Firm Quote' }).first()).toBeVisible({ timeout: 1_000 }));
-  page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('row', { name: /Pete's Plumbing.*Replace the tap washer/ }).getByRole('button', { name: 'Choose this Firm Quote' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Choose this Firm Quote' }).click();
   await expect(page.getByText("Firm Quote from Pete's Plumbing chosen", { exact: true }).first()).toBeVisible();
 
   await page.getByLabel('Start').fill(daysAhead(40, 9).input);
@@ -508,7 +508,7 @@ test('a Property Manager moves a visit and the Tenant confirms it from the email
   await expect(tenant.getByRole('button', { name: `Confirm ${moved.long}` })).toBeDisabled();
 
   await page.goto(ticketUrl);
-  await expect(page.getByText('Confirmed the visit', { exact: true })).toBeVisible();
+  await expect(page.getByText('Tenant confirmed', { exact: true }).first()).toBeVisible();
   await tradie.close();
   await tenant.close();
 });

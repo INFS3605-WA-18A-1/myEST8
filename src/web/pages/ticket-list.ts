@@ -47,16 +47,15 @@ export function ticketListPages() {
         active: 'tickets',
         flash: flashFrom(c.req.url),
         shell: await shellInfo(c),
-        subtitle: 'New Maintenance Requests waiting for you to confirm, then the open Tickets.',
         controls: scopeControl('/tickets', f),
         body: html`
           <div class="tickets-page">
             ${stageBar(everyOpen, f, stage, properties)}
-            ${section({ title: 'New Maintenance Requests', id: 'requests', actions: requests.length ? html`${countBadge(requests.length)}<span class="tk-section-note">Waiting for you to confirm</span>` : undefined, body: requestList(byUrgency(requests), now, f) })}
+            ${section({ title: 'New Maintenance Requests', id: 'requests', actions: requests.length ? countBadge(requests.length) : undefined, body: requestList(byUrgency(requests), now, f) })}
             ${section({
               title: 'Open Tickets',
               id: 'open',
-              actions: html`${countBadge(open.length)}${open.length ? html`<span class="tk-section-note">Most urgent first, then oldest</span>` : ''}`,
+              actions: countBadge(open.length),
               body: open.length
                 ? html`${ticketCards(open, now)}${stageLegend()}`
                 : emptyState(
@@ -127,7 +126,7 @@ export function issueThumb(photos: { fileId: number }[]): Html {
 /** The stage names the Property Manager reads on the Tickets page (a Ticket whose Jobs are all done waits on them to close it). */
 const STAGE_TITLE: Record<Stage, string> = {
   quoting: 'Quoting',
-  awaiting_owner: 'With Property Owner',
+  awaiting_owner: 'With Owner',
   approved: 'Ready to book',
   scheduled: 'Booked',
   done: 'Done · ready to close',
@@ -230,7 +229,7 @@ function ticketCards(tickets: ListedTicket[], now: Date): Html {
         </div>
         <div class="tk-card-actions">
           ${linkButton('View ticket', `/tickets/${t.ticketId}`, { variant: 'secondary', size: 'sm' })}
-          ${readyToClose ? postButton(`/tickets/${t.ticketId}/close`, 'Close ticket', { size: 'sm', confirm: 'Close this Ticket? The Tenant and Property Owner will be told.' }) : ''}
+          ${readyToClose ? postButton(`/tickets/${t.ticketId}/close`, 'Close ticket', { size: 'sm', confirm: 'Close this Ticket? The Tenant and Owner will be told.' }) : ''}
         </div>
       </li>`;
     })}

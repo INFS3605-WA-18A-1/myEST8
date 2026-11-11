@@ -19,7 +19,7 @@ A person living in a Property under its lease. Removing a Tenant ends their tena
 _Avoid_: resident, renter
 
 **Property Owner**:
-The owner of a Property. Must approve Quotes when a Ticket's Repair Cost would go over the Property's Max Repair Cost. Removing a Property Owner takes them out of every list and picker, and their mobile and email no longer reach the Agency as them, but their past approvals stay on record. An Owner of a Property can't be removed until that Property has another Owner.
+The owner of a Property. Must approve Quotes when a Ticket's Repair Cost would go over the Property's Max Repair Cost. Removing a Property Owner takes them out of every list and picker, and their mobile and email no longer reach the Agency as them, but their past approvals stay on record. An Owner of a Property can't be removed until that Property has another Owner. Screens call them the Owner for short.
 _Avoid_: landlord, land owner
 
 **Tradie**:

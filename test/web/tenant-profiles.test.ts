@@ -64,7 +64,7 @@ describe('Tenants', () => {
     expect(page).toContain(`href="tel:${TOM}"`);
     expect(text).toContain('Weekday mornings');
     expect(text).toContain('Alice Archer');
-    for (const heading of ['Tickets', 'Maintenance Requests waiting', 'Reimbursement Requests']) expect(page).toContain(`aria-label="${heading}"`);
+    for (const heading of ['Tickets', 'Maintenance Requests waiting', 'Reimbursement Requests']) expect(page).toContain(`<h2 class="tradie-pane-title">${heading}</h2>`);
     expect(page).toContain(`href="/tickets/${ticketId}"`);
     expect(page).toContain(`href="/reimbursements/${urgentRepairId}"`);
     expect(text).toContain('Reminder sent');
@@ -121,7 +121,7 @@ describe('links to Tenant profiles', () => {
     expect(list).toContain(`href="/tenants/${w.ids.bella}"`);
 
     const profile = await (await w.get(`/properties/${w.ids.kingSt}`, cookie)).text();
-    const tenants = profile.slice(profile.indexOf('aria-label="Tenants"'), profile.indexOf('aria-label="Nominated Tradies"'));
+    const tenants = profile.slice(profile.indexOf('id="property-tenants"'), profile.indexOf('id="property-tradies"'));
     expect(tenants).toContain(`href="/tenants/${w.ids.tom}"`);
     expect(tenants).toContain(`href="/tenants/${w.ids.hana}"`);
   });
@@ -156,7 +156,7 @@ describe('adding and removing Tenants', () => {
     const form = await (await w.get('/tenants/new', cookie)).text();
     expect(form).toContain('Add a Tenant');
     expect(form).toContain('action="/setup/tenants"');
-    expect(form).toContain('Back to Tenants');
+    expect(form).toContain('<a class="page-back" href="/tenants">');
     expect(form).toMatch(new RegExp(`<option value="${w.ids.kingSt}"[^>]*>${KING_ST}</option>`));
 
     const res = await w.post('/setup/tenants', { name: 'Tina Test', mobile: '0412 000 111', propertyId: w.ids.kingSt, tenancyStart: '2026-09-01' }, cookie);
@@ -177,7 +177,7 @@ describe('adding and removing Tenants', () => {
     expect(page).toContain('Enter a mobile number or email address');
     expect(page).toContain('value="Tina Test"');
     expect(page).toContain('value="2026-09-01"');
-    expect(page).toContain('Back to Tenants');
+    expect(page).toContain('<a class="page-back" href="/tenants">');
   });
 
   test('removing a Tenant takes them off the list and their Property, keeps their profile, and frees their mobile', async () => {

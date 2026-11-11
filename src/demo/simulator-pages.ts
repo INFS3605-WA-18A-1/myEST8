@@ -23,14 +23,14 @@ const FEED_PAGE = 20;
 const GROUPS: [Role, string][] = [
   ['tenant', 'Tenants'],
   ['tradie', 'Tradies'],
-  ['owner', 'Property Owners'],
+  ['owner', 'Owners'],
   ['building_manager', 'Building Managers'],
 ];
 
 const ROLE_LABEL: Record<Role, string> = {
   tenant: 'Tenant',
   tradie: 'Tradie',
-  owner: 'Property Owner',
+  owner: 'Owner',
   building_manager: 'Building Manager',
 };
 
@@ -361,7 +361,7 @@ function pickPrompt(contacts: DemoContact[]): Html {
     title: 'Act as someone',
     body: contacts.length
       ? html`<p>Pick someone to act as. You'll see what myEST8 sent them, and can reply as them.</p>`
-      : emptyState('No people to act as yet. Add Tenants, Tradies, Property Owners or Building Managers in Setup.'),
+      : emptyState('No people to act as yet. Add Tenants, Tradies, Owners or Building Managers in Setup.'),
   });
 }
 

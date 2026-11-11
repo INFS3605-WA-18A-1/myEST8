@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { signIn, unique } from './support/actions.ts';
 
-// On a phone: open Property Owners, open an Owner, add an email with the pen and save.
+// On a phone: open Owners, open an Owner, add an email with the pen and save.
 // The Owner is this run's own, so the spec can run beside the others. Nothing scrolls sideways.
 
 const overflow = (page: Page) => page.evaluate<number>('document.documentElement.scrollWidth - document.documentElement.clientWidth');
@@ -18,8 +18,8 @@ test('on a phone, an Owner gets an email from the pen and nothing scrolls sidewa
   await page.goto('/owners/new');
   await page.getByRole('textbox', { name: 'Name' }).fill(name);
   await page.getByRole('textbox', { name: 'Mobile' }).fill(mobile());
-  await page.getByRole('button', { name: 'Add Property Owner' }).click();
-  await expect(page.getByText(`${name} added as a Property Owner`)).toBeVisible();
+  await page.getByRole('button', { name: 'Add Owner' }).click();
+  await expect(page.getByText(`${name} added as an Owner`)).toBeVisible();
   expect(await overflow(page)).toBeLessThanOrEqual(0);
 
   await page.getByRole('link', { name }).click();

@@ -195,7 +195,7 @@ describe('Property Owner approval', () => {
     const warning = await alice.chooseQuote(quote!.quoteId);
 
     expect(warning).toBe(
-      "Sent to the Property Owner for approval, but the email to Olivia Owens didn't go: the email provider is limiting how many emails go out. Use Resend approval request.",
+      "Sent to the Owner for approval, but the email to Olivia Owens didn't go: the email provider is limiting how many emails go out. Use Resend approval request.",
     );
     const view = await jobView(w, job);
     expect(view).toMatchObject({ status: 'awaiting_owner', approval: { status: 'requested' } });
@@ -224,7 +224,7 @@ describe('Property Owner approval', () => {
     logged.mockRestore();
 
     expect(warning).toBe(
-      "Sent to the Property Owner for approval, but the email to Olivia Owens didn't go: the message couldn't be sent. Use Resend approval request.",
+      "Sent to the Owner for approval, but the email to Olivia Owens didn't go: the message couldn't be sent. Use Resend approval request.",
     );
     expect(await jobView(w, job)).toMatchObject({ status: 'awaiting_owner', approval: { status: 'requested' } });
     expect(output).toHaveLength(1);

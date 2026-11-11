@@ -392,9 +392,9 @@ function outcomeNote(p: QuotePage): Html | string {
         'success',
       );
     case 'with_owner':
-      return alert(`${p.agencyName} would like to go with your quote and has asked the Property Owner to approve it. If they do, a Work Order with the visit time will follow.`, 'info');
+      return alert(`${p.agencyName} would like to go with your quote and has asked the Owner to approve it. If they do, a Work Order with the visit time will follow.`, 'info');
     case 'on_hold':
-      return alert(`Still open: ${p.agencyName} is waiting on the Property Owner about another quote, so it can't take yours just now. If the Owner says no, ${p.agencyName} may come back to you.`, 'info');
+      return alert(`Still open: ${p.agencyName} is waiting on the Owner about another quote, so it can't take yours just now. If the Owner says no, ${p.agencyName} may come back to you.`, 'info');
     case 'not_chosen':
       return alert(`${p.agencyName} has gone with another quote this time. Thanks for quoting.`, 'info');
     case 'declined':

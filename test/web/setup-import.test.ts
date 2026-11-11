@@ -34,7 +34,7 @@ describe('spreadsheet templates', () => {
     expect(res.headers.get('content-type')).toBe('text/csv; charset=utf-8');
     expect(res.headers.get('content-disposition')).toBe('attachment; filename="myest8-properties.csv"');
     const [headings, example] = (await res.text()).replace(/^﻿/, '').split('\r\n');
-    expect(headings).toBe('Address,Suburb,Max Repair Cost,Property Owner,Property Owner mobile,Property Owner email,Property Manager,Building Manager');
+    expect(headings).toBe('Address,Suburb,Max Repair Cost,Owner,Owner mobile,Owner email,Property Manager,Building Manager');
     expect(example).toContain('"12 King St, Newtown NSW 2042",Newtown,500,Olivia Owens');
 
     expect((await w.get('/setup/templates/nonsense.csv', cookie)).status).toBe(404);
@@ -74,18 +74,18 @@ describe('uploading a spreadsheet', () => {
     const review = await follow(w, res, cookie);
     expect(review.location).toMatch(/^\/setup\/imports\/[\w-]+$/);
     const text = visible(review.page);
-    for (const words of ['Review Property Owners', 'From owners.csv', 'Ready', 'Duplicate', 'Needs a fix', 'Already added: Olivia Owens', 'Matched by name', 'Matched by AI', '+61412111222']) {
+    for (const words of ['Review Owners', 'From owners.csv', 'Ready', 'Duplicate', 'Needs a fix', 'Already added: Olivia Owens', 'Matched by name', 'Matched by AI', '+61412111222']) {
       expect(text).toContain(words);
     }
-    expect(text).toContain('Add 1 Property Owner');
+    expect(text).toContain('Add 1 Owner');
     expect(review.page).toContain('name="row-2-mobile"');
     expect(review.page).toContain('Enter a mobile number or email address');
 
     // The Property Manager fills in the flagged cell and adds both rows.
     const token = review.location.split('/').at(-1)!;
     const added = await follow(w, await w.post(`/setup/imports/${token}`, { intent: 'add', include: ['0', '2'], 'row-2-mobile': '0412 999 000' }, cookie), cookie);
-    expect(added.location).toMatch(/^\/setup\?ok=Added%202%20Property%20Owners\.#people$/);
-    expect(added.page).toContain('Added 2 Property Owners.');
+    expect(added.location).toMatch(/^\/setup\?ok=Added%202%20Owners\.#people$/);
+    expect(added.page).toContain('Added 2 Owners.');
     expect(added.page).toContain('Priya Patel');
     expect(added.page).toContain('+61412999000');
 
@@ -181,7 +181,7 @@ describe('uploading a spreadsheet', () => {
 
     const remapped = await follow(w, await w.post(`/setup/imports/${token}/columns`, { 'column-0': 'name', 'column-1': 'email' }, cookie), cookie);
     expect(visible(remapped.page)).toContain('You chose');
-    expect(visible(remapped.page)).toContain('Add 1 Property Owner');
+    expect(visible(remapped.page)).toContain('Add 1 Owner');
 
     const bob = await w.signIn('bob@harbour.example');
     expect((await w.get(`/setup/imports/${token}`, bob)).headers.get('location')).toMatch(/expired/);

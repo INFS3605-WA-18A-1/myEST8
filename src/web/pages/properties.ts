@@ -17,6 +17,7 @@ import { icon } from '../icons.ts';
 import type { WebEnv } from '../env.ts';
 import { shellInfo } from '../shell.ts';
 import { addButton, listFilter, mineAll, profileChips, profilesCard, type ProfileFilter } from '../profiles-frame.ts';
+import { neighboursIn, profileCard, profileHero, profileTabs, sideFact, sideHead } from '../profile-card.ts';
 import { streamOf } from '../stream.ts';
 import { alert, badge, button, contactLink, emptyState, entityLink, field, inlineEdit, flashFrom, formatAge, formatMoney, humanise, linkButton, page, postButton, rowLink, section, sectionHeader, statusBadge, table, ticketCell, urgencyBadge, withFlash, type Html } from '../ui.ts';
 import { chosenId, importPanel, nominatedFrom, postedLocation, propertyFields, propertyPlaceFields, saveDetails, tradiePicker, valueOf, type DetailsEdit, type Errors, type Values } from './onboarding-forms.ts';
@@ -57,7 +58,6 @@ export function propertyPages() {
         active: 'profiles',
         flash: flashFrom(c.req.url),
         shell: shellInfo(c),
-        subtitle: `${properties.length} ${properties.length === 1 ? 'Property' : 'Properties'}${filter === 'mine' ? ' you look after' : ' managed by the Agency'}.`,
         controls: profileChips('properties', overview.counts, filter),
         body: profilesCard({
           search: listFilter('Filter Properties', 'Address, Owner or Tenant'),
@@ -137,7 +137,7 @@ export function propertyPages() {
         return c.var.actions.editProperty(id, {
           address: text(form, 'address'),
           suburb: text(form, 'suburb'),
-          ownerId: chosenId(form, 'ownerId', 'the Property Owner'),
+          ownerId: chosenId(form, 'ownerId', 'the Owner'),
           propertyManagerId: chosenId(form, 'propertyManagerId', 'the Property Manager'),
           maxRepairCostCents: maxRepairCost(form),
           nominatedTradieIds: nominatedFrom(form),
@@ -189,19 +189,35 @@ async function profilePage(c: Context<WebEnv>, id: number, refused?: DetailsEdit
   }
   const now = actions.now();
   const editing = !!refused || c.req.query('edit') === 'details';
+  const everything = await actions.propertyOverviews();
+  const p = property;
+  const hero = profileHero({
+    back: { href: '/properties', label: 'Back to Properties' },
+    avatar: icon('house', { size: 'size-8' }),
+    name: p.address,
+    meta: [
+      html`<span>Owner ${entityLink('person', p.owner.name, `/owners/${p.owner.personId}`)}</span>`,
+      html`<span><strong class="num">${p.tenants.length}</strong> ${p.tenants.length === 1 ? 'Tenant' : 'Tenants'}</span>`,
+      html`<span>Max Repair Cost <strong class="num">${formatMoney(p.maxRepairCostCents)}</strong></span>`,
+    ],
+    steps: neighboursIn(everything, (x) => x.propertyId, id, (x) => ({ href: `/properties/${x.propertyId}`, name: x.address })),
+    noun: 'Property',
+  });
+  const tabs = profileTabs(`${p.address}'s history`, [
+    { id: 'property-open', label: 'Open Tickets', count: p.openTickets.length, body: html`${frequent(p)}${openTickets(p, now)}` },
+    { id: 'property-closed', label: 'Closed Tickets', count: p.closedTickets.length, body: closedTickets(p, now) },
+    { id: 'property-tenants', label: 'Tenants', count: p.tenants.length, body: tenants(p) },
+    { id: 'property-tradies', label: 'Nominated Tradies', count: p.nominatedTradies.length, body: nominated(p) },
+  ]);
   return c.html(
     page({
-      title: property.address,
+      title: p.address,
       pm,
       active: 'profiles',
       flash: flashFrom(c.req.url),
       shell: shellInfo(c),
-      actions: linkButton('Back to Properties', '/properties', { variant: 'ghost', size: 'sm' }),
-      body: html`
-        ${photoBlock(property)} ${openTickets(property, now)} ${await facts(c, property, editing, refused)}
-        <div class="grid gap-6 lg:grid-cols-2">${tenants(property)}${nominated(property)}</div>
-        ${frequent(property)} ${closedTickets(property, now)}
-      `,
+      crumbs: [{ label: 'Profiles', href: '/profiles' }, { label: 'Properties', href: '/properties' }, { label: p.address }],
+      body: profileCard({ hero, main: tabs, side: html`${await facts(c, p, editing, refused)}${photoBlock(p)}`, about: p.address }),
     }),
     refused ? 400 : 200,
   );
@@ -228,12 +244,12 @@ export async function addPropertyPage(c: Context<WebEnv>, refused?: AddPropertyR
       active: 'profiles',
       flash,
       shell: shellInfo(c),
-      actions: linkButton('Back to Properties', '/properties', { variant: 'ghost', size: 'sm' }),
+      back: { label: 'Properties', href: '/properties' },
       body: section({
         id: 'add-property',
         title: 'Add a Property',
         body: html`
-          ${owners.length ? '' : html`<p class="mb-3 text-sm text-high">Add a Property Owner on the Setup page first.</p>`}
+          ${owners.length ? '' : html`<p class="mb-3 text-sm text-high">Add an Owner on the Setup page first.</p>`}
           ${refused ? alert(refused.message, 'error') : ''}
           <form method="post" action="/setup/properties">
             ${propertyFields({ owners, buildingManagers, propertyManagers, tradies, manager: pm.id, values: refused?.values, errors: refused?.errors })}
@@ -252,10 +268,9 @@ export async function addPropertyPage(c: Context<WebEnv>, refused?: AddPropertyR
 
 /** The Property's photo, and the ways a Property Manager changes it. */
 function photoBlock(p: PropertyView): Html {
-  return section({
-    id: 'photo',
-    title: 'Photo',
-    body: html`<div class="property-photo">
+  return html`<section class="tradie-side-card" id="photo" aria-label="Photo">
+    ${sideHead('Photo')}
+    <div class="property-photo">
       ${p.photoUrl
         ? html`<figure class="property-photo-frame">
             <img src="${p.photoUrl}" alt="Photo of ${p.address}" width="640" height="400" />
@@ -274,15 +289,15 @@ function photoBlock(p: PropertyView): Html {
         <div class="property-photo-actions">${button('Replace photo', { variant: 'secondary', size: 'sm' })}</div>
       </form>
       ${p.photoSource === 'manager' ? html`<div class="property-photo-actions">${postButton(`/properties/${p.propertyId}/photo/online`, 'Use the online photo', { variant: 'ghost', size: 'sm' })}</div>` : ''}
-    </div>`,
-  });
+    </div>
+  </section>`;
 }
 
 function list(properties: Overview[], filter: ProfileFilter): Html {
   if (!properties.length && filter === 'mine') return emptyState('You look after no Properties yet.', linkButton('Show all Properties', '/properties?filter=all'));
   if (!properties.length) return emptyState('No Properties yet. Add the first one to start taking reports.', linkButton('Add a Property', '/properties/new', { variant: 'primary' }));
   return table(
-    ['Property', 'Open Tickets', 'Max Repair Cost', 'Property Owner', 'Tenants', 'Property Manager'],
+    ['Property', 'Open Tickets', 'Max Repair Cost', 'Owner', 'Tenants', 'Property Manager'],
     properties.map((p) => [
       rowLink(p.address, `/properties/${p.propertyId}`),
       html`<span class="${p.openTickets ? 'property-open' : 'text-muted'}">${p.openTickets}</span>`,
@@ -335,6 +350,19 @@ async function facts(c: Context<WebEnv>, p: PropertyView, editing: boolean, refu
   const errors = refused?.errors;
   const select = (name: string, id: string, label: string, options: { value: string; label: string }[], placeholder?: string) =>
     field({ label, name, id, type: 'select', required: name !== 'buildingManagerId', bare: true, placeholder, value: valueOf(values, name), options, error: errors?.[name] });
+  const money = field({
+    label: 'Max Repair Cost ($)',
+    name: 'maxRepairCost',
+    id: 'property-max',
+    type: 'number',
+    step: '0.01',
+    min: 0,
+    required: true,
+    bare: true,
+    className: 'inline-edit-money',
+    value: valueOf(values, 'maxRepairCost'),
+    error: errors?.maxRepairCost,
+  });
   return inlineEdit({
     id: 'details',
     label: 'Property details',
@@ -343,54 +371,33 @@ async function facts(c: Context<WebEnv>, p: PropertyView, editing: boolean, refu
     cancel: `/properties/${p.propertyId}#details`,
     save: 'Save details',
     editing,
-    className: 'section',
+    className: 'tradie-side-card',
     refresh: ['nominated-tradies'],
     refusal: refused && !Object.keys(refused.errors).length ? refused.message : undefined,
-    layout: 'grid',
-    listClass: 'property-facts',
-    rows: [
-      {
-        label: 'Max Repair Cost',
-        read: html`<span class="property-facts-money num">${formatMoney(p.maxRepairCostCents)}</span>`,
-        for: 'property-max',
-        control: field({
-          label: 'Max Repair Cost ($)',
-          name: 'maxRepairCost',
-          id: 'property-max',
-          type: 'number',
-          step: '0.01',
-          min: 0,
-          required: true,
-          bare: true,
-          className: 'inline-edit-money',
-          value: valueOf(values, 'maxRepairCost'),
-          error: errors?.maxRepairCost,
-        }),
-      },
-      {
-        label: 'Property Owner',
-        read: contact(p.owner, `/owners/${p.owner.personId}`),
-        for: 'property-owner',
-        control: select('ownerId', 'property-owner', 'Property Owner', owners.map((x) => ({ value: String(x.id), label: x.name })), 'Choose the Property Owner'),
-      },
-      {
-        label: 'Property Manager',
-        read: p.propertyManager,
-        for: 'property-manager',
-        control: select('propertyManagerId', 'property-manager', 'Property Manager', propertyManagers.map((m) => ({ value: String(m.id), label: m.name }))),
-      },
-      {
-        label: 'Building Manager',
-        read: p.buildingManager ? contact(p.buildingManager, `/building-managers/${p.buildingManager.personId}`) : html`<span class="text-muted">None</span>`,
-        for: 'property-building-manager',
-        control: select('buildingManagerId', 'property-building-manager', 'Building Manager', [{ value: '', label: 'None' }, ...buildingManagers.map((b) => ({ value: String(b.id), label: b.name }))]),
-      },
-    ],
-    extra: html`<div class="grid gap-x-4 gap-y-3 md:grid-cols-2">${propertyPlaceFields({ values, errors })}</div>
-      <div class="mt-3">
-        ${tradies.length
-          ? tradiePicker({ id: 'property', tradies, chosen: listOf(values, 'nominatedTradieIds'), error: errors?.nominatedTradieIds })
-          : html`<p class="text-sm text-muted">Add Tradies on the Tradies page to nominate them for Urgent Repairs.</p>`}
+    view: (tools) => html`
+      ${sideHead('Property details', tools)}
+      <dl class="tradie-facts is-stacked">
+        ${sideFact('Max Repair Cost', html`<span class="property-facts-money num">${formatMoney(p.maxRepairCostCents)}</span>`, { for: 'property-max', control: money })}
+        ${sideFact('Owner', contact(p.owner, `/owners/${p.owner.personId}`), {
+          for: 'property-owner',
+          control: select('ownerId', 'property-owner', 'Owner', owners.map((x) => ({ value: String(x.id), label: x.name })), 'Choose the Owner'),
+        })}
+        ${sideFact('Property Manager', p.propertyManager, {
+          for: 'property-manager',
+          control: select('propertyManagerId', 'property-manager', 'Property Manager', propertyManagers.map((m) => ({ value: String(m.id), label: m.name }))),
+        })}
+        ${sideFact('Building Manager', p.buildingManager ? contact(p.buildingManager, `/building-managers/${p.buildingManager.personId}`) : html`<span class="text-muted">None</span>`, {
+          for: 'property-building-manager',
+          control: select('buildingManagerId', 'property-building-manager', 'Building Manager', [{ value: '', label: 'None' }, ...buildingManagers.map((b) => ({ value: String(b.id), label: b.name }))]),
+        })}
+      </dl>
+      <div class="inline-edit-only">
+        <div class="grid gap-3">
+          ${propertyPlaceFields({ values, errors })}
+          ${tradies.length
+            ? tradiePicker({ id: 'property', tradies, chosen: listOf(values, 'nominatedTradieIds'), error: errors?.nominatedTradieIds })
+            : html`<p class="text-sm text-muted">Add Tradies on the Tradies page to nominate them for Urgent Repairs.</p>`}
+        </div>
       </div>`,
   });
 }
@@ -403,9 +410,7 @@ export function formatDate(date: string): string {
 }
 
 function tenants(p: PropertyView): Html {
-  return html`<section class="section min-w-0" aria-label="Tenants">
-    ${sectionHeader('Tenants')}
-    ${p.tenants.length
+  return html`${p.tenants.length
       ? table(
           ['Tenant', 'Mobile', 'Email'],
           p.tenants.map((t) => [
@@ -415,13 +420,12 @@ function tenants(p: PropertyView): Html {
           ]),
           { caption: 'Tenants', stack: 'labelled' },
         )
-      : emptyState('No Tenants yet. Add the people who live here so they can report repairs.', linkButton('Add a Tenant', '/tenants/new'))}
-  </section>`;
+      : emptyState('No Tenants yet. Add the people who live here so they can report repairs.', linkButton('Add a Tenant', '/tenants/new'))}`;
 }
 
+/** The Nominated Tradies; a saved edit of the details swaps this block too (inlineEdit's `refresh`). */
 function nominated(p: PropertyView): Html {
-  return html`<section class="section min-w-0" id="nominated-tradies" aria-label="Nominated Tradies">
-    ${sectionHeader('Nominated Tradies')}
+  return html`<div class="min-w-0" id="nominated-tradies">
     ${p.nominatedTradies.length
       ? table(
           ['Tradie', 'Trades'],
@@ -432,23 +436,21 @@ function nominated(p: PropertyView): Html {
           { caption: 'Nominated Tradies for Urgent Repairs', stack: 'labelled' },
         )
       : emptyState('No Nominated Tradie. Tenants arrange Urgent Repairs themselves.')}
-  </section>`;
+  </div>`;
 }
 
+/** The Trades that keep coming back at the Property, in the band the tabs open with; nothing before its first Ticket. */
 function frequent(p: PropertyView): Html {
-  return html`<section class="section" aria-label="Frequent issues">
-    ${sectionHeader('Frequent issues')}
-    ${p.frequentIssues.length
-      ? html`<ul class="flex flex-wrap gap-2" role="list">${p.frequentIssues.map((i) => html`<li>${badge(`${humanise(i.trade)}: ${i.tickets} ${i.tickets === 1 ? 'Ticket' : 'Tickets'}`, 'neutral')}</li>`)}</ul>`
-      : emptyState('No Tickets on this Property yet.')}
-  </section>`;
+  if (!p.frequentIssues.length) return html``;
+  return html`<div class="tradie-insight" aria-label="Frequent issues">
+    <p class="tradie-insight-tag">${icon('chart-bar', { size: 'size-3.5', weight: 'fill' })}Frequent issues</p>
+    <ul class="flex flex-wrap gap-2" role="list">${p.frequentIssues.map((i) => html`<li>${badge(`${humanise(i.trade)}: ${i.tickets} ${i.tickets === 1 ? 'Ticket' : 'Tickets'}`, 'neutral')}</li>`)}</ul>
+  </div>`;
 }
 
 /** What is happening at the Property now: the open Tickets, issue first, with their Jobs' stages. */
 function openTickets(p: PropertyView, now: Date): Html {
-  return html`<section class="section" aria-label="Open Tickets">
-    ${sectionHeader('Open Tickets')}
-    ${p.openTickets.length
+  return html`${p.openTickets.length
       ? table(
           ['Issue', 'Urgency', 'Jobs', 'Reported'],
           p.openTickets.map((t) => [
@@ -459,15 +461,12 @@ function openTickets(p: PropertyView, now: Date): Html {
           ]),
           { caption: 'Open Tickets, most urgent first', stack: true },
         )
-      : emptyState('No open Tickets.')}
-  </section>`;
+      : emptyState('No open Tickets.')}`;
 }
 
 /** The Property's history: closed Tickets, most recently closed first. */
 function closedTickets(p: PropertyView, now: Date): Html {
-  return html`<section class="section" aria-label="Closed Tickets">
-    ${sectionHeader('Closed Tickets')}
-    ${p.closedTickets.length
+  return html`${p.closedTickets.length
       ? table(
           ['Issue', 'Trades', 'Closed'],
           p.closedTickets.map((t) => [
@@ -477,6 +476,5 @@ function closedTickets(p: PropertyView, now: Date): Html {
           ]),
           { caption: 'Closed Tickets, most recently closed first', stack: true },
         )
-      : emptyState('No closed Tickets yet.')}
-  </section>`;
+      : emptyState('No closed Tickets yet.')}`;
 }

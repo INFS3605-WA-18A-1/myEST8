@@ -136,7 +136,7 @@ describe('removing a Property Owner', () => {
     const w = await world();
 
     expect(await refusal(w.alice.removeOwner(w.ids.olivia))).toMatchObject({
-      message: `Olivia Owens owns ${KING_ST}. Give it another Property Owner first.`,
+      message: `Olivia Owens owns ${KING_ST}. Give it another Owner first.`,
     });
     expect((await w.alice.people('owner')).map((p) => p.id)).toContain(w.ids.olivia);
 

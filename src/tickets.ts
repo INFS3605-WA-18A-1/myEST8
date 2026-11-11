@@ -711,7 +711,7 @@ export function createTickets({ db, clock, settings, ports, modules }: Context) 
       return transaction(db, async () => {
         const current = await urgentRepairInAgency(agencyId, urgentRepairId);
         if (current.status === 'reimbursed') invalid('This Reimbursement Request is already reimbursed');
-        if (current.status !== 'receipt_forwarded') invalid('Forward the receipt to the Property Owner before marking it reimbursed');
+        if (current.status !== 'receipt_forwarded') invalid('Forward the receipt to the Owner before marking it reimbursed');
         const at = iso(clock.now());
         await run(db, `UPDATE urgent_repairs SET status = 'reimbursed', reimbursed_at = ? WHERE id = ?`, at, urgentRepairId);
         await recordUrgentRepairEvent(urgentRepairId, 'reimbursed', current.amountCents != null ? { amountCents: current.amountCents } : {});

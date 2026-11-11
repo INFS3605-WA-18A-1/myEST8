@@ -120,8 +120,6 @@ export function dispatchPages() {
     const urgentOpen = properties.reduce((n, p) => n + p.openTickets.filter((t) => t.urgency !== 'routine').length, 0);
     const placed = properties.filter((p) => p.location).length;
     const tradiesPlaced = tradies.filter((t) => t.location).length;
-    const count = (n: number, total: number, noun: string) => `${n === total ? n : `${n} of ${total}`} ${noun}`;
-    const subtitle = `${[count(placed, properties.length, properties.length === 1 ? 'Property' : 'Properties'), tradies.length ? count(tradiesPlaced, tradies.length, tradies.length === 1 ? 'Tradie' : 'Tradies') : ''].filter(Boolean).join(' and ')} on the map`;
 
     return c.html(
       page({
@@ -130,7 +128,6 @@ export function dispatchPages() {
         active: 'dispatch',
         shell: shellInfo(c),
         flash: flashFrom(c.req.url),
-        subtitle,
         controls: dispatchControls({ search, region, regions, trade }),
         actions: missing ? postButton('/dispatch/addresses', 'Look up missing addresses', { size: 'sm' }) : undefined,
         body: html`
@@ -258,7 +255,7 @@ function dispatchControls(o: { search: string; region: string; regions: string[]
         type="search"
         name="q"
         value="${o.search}"
-        placeholder="Search properties, tickets or tradies"
+        placeholder="Address, Ticket or Tradie"
         autocomplete="off"
         role="combobox"
         aria-autocomplete="list"
@@ -343,7 +340,7 @@ function workOrderForm(job: DispatchJob, timeZone: string, now: string): Html {
   return html`<form method="post" action="/dispatch/jobs/${job.jobId}/work-order" class="dispatch-card-body">
     <p class="dispatch-card-legend">
       ${entityLink('tradie', b.businessName, `/tradies/${b.tradieId}`)} approved at <strong class="num">${formatMoney(b.priceCents)}</strong>.
-      Send the Work Order to book the visit; the Tenant and Property Owner are told the time.
+      Send the Work Order to book the visit; the Tenant and Owner are told the time.
     </p>
     ${b.freeSlots.length
       ? html`<div class="free-times">
@@ -570,8 +567,8 @@ function propertyCard(p: PropertyView): Html {
 
 /**
  * Each open Ticket as one row, the whole row the link to it: its number, its words cut to
- * a line (the whole message in the link's title) and, when there are several, its Urgency. "Show full messages" lets
- * them wrap; static/dispatch-map.js shows it only when a line is actually cut.
+ * a line (the whole message in the link's title) and, when there are several, its Urgency.
+ * The rest of the message is a click away, on the Ticket.
  */
 function ticketRows(p: PropertyView): Html {
   // One Ticket's Urgency is the card's, already in the chip above it.
@@ -580,8 +577,7 @@ function ticketRows(p: PropertyView): Html {
       ${p.openTickets.map(
         (t) => html`<li><a class="dispatch-tix-line is-${t.urgency}" href="/tickets/${t.ticketId}" title="${t.description}"><span class="dispatch-tix-num num">#${t.ticketId}</span><span class="dispatch-tix-text">${t.description}</span>${several ? urgencyBadge(t.urgency) : html`<span class="sr-only"> (${URGENCY_WORD[t.urgency] ?? t.urgency})</span>`}</a></li>`,
       )}
-    </ul>
-    <button type="button" class="dispatch-tix-more" aria-expanded="false" data-tix-more hidden>Show full messages${icon('caret-down', { size: 'size-3.5' })}</button>`;
+    </ul>`;
 }
 
 /**

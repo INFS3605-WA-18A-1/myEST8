@@ -240,8 +240,8 @@ describe('the count strip and Needs your attention', () => {
     expect(dashboard).not.toContain('<h3 class="lane-title">Site quotes</h3>');
     expect(dashboard).toContain('Site Inspection to book');
     expect(dashboard.match(/id="inbox"/g)).toHaveLength(1);
-    // The bar is captioned for what it counts; there is no "All open Tickets" tab or second list.
-    expect(dashboard).toContain('<p class="stage-caption">Your open Tickets by stage</p>');
+    // The card's title says what the bar counts, with no caption under it; there is no "All open Tickets" tab or second list.
+    expect(dashboard).not.toContain('stage-caption');
     expect(dashboard).not.toContain('All open Tickets</a>');
     expect(dashboard.match(/id="tickets"/g)).toHaveLength(1);
   });
@@ -353,7 +353,7 @@ describe('Tickets on the dashboard', () => {
     const board = await page(w, '/', cookie);
     expect(board).toContain('<span class="stage-count"><b>1</b> Quoting</span>');
     expect(board).toContain('href="/tickets"');
-    expect(board).toContain('Your open Tickets by stage');
+    expect(board).toContain('Tickets by stage');
     expect(board).not.toContain('All open Tickets</a>');
     const asked = docketOf(board);
     expect(asked).toContain('class="ticket-row"');
