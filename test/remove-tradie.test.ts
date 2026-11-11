@@ -171,7 +171,7 @@ describe('removing a Tradie with work in progress', () => {
     await w.alice.chooseQuote(dana!.quoteId);
 
     expect(await refusal(w.alice.removeTradie(w.ids.dana))).toBe(
-      `Drip Doctors has a Quote waiting on the Property Owner for plumbing at ${KING_ST}. Wait for their decision first.`,
+      `Drip Doctors has a Quote waiting on the Owner for plumbing at ${KING_ST}. Wait for their decision first.`,
     );
     // Pete's Quote is still open: the Owner may decline Dana's.
     expect(await refusal(w.alice.removeTradie(w.ids.pete))).toBe(

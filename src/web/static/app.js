@@ -50,6 +50,14 @@ function swapView(update) {
   return viewTransition.updateCallbackDone;
 }
 
+// Back and Forward load a page afresh (signed-in pages are sent no-store), but the browser
+// still puts back what was typed or picked in its forms when the page was left. The page
+// shows things as they are now, so the forms go back to what the server sent, before
+// anything below reads them.
+if (performance.getEntriesByType?.('navigation')[0]?.type === 'back_forward') {
+  for (const form of document.forms) form.reset();
+}
+
 if (document.querySelector('.glance-list')) {
   try {
     sessionStorage.setItem('glance', '1');
@@ -148,16 +156,23 @@ try {
     if (event.target instanceof HTMLInputElement && event.target.id) markFilled(event.target);
   });
 
-  // Forms with data-confirm (postButton's `confirm`) ask first. A form already
-  // on its way isn't sent twice; the guard lifts after a while in case the
-  // response didn't navigate (a download, say).
+  // Forms with data-confirm (postButton's `confirm`) ask first, in a small panel beside the
+  // button rather than the browser's own dialog: the question, the action again (in red)
+  // and "Keep it". A form already on its way isn't sent twice; the guard lifts after a
+  // while in case the response didn't navigate (a download, say).
   document.addEventListener('submit', (event) => {
     const form = event.target;
     if (!(form instanceof HTMLFormElement)) return;
-    if (form.dataset.confirm && !window.confirm(form.dataset.confirm)) {
+    if (form.dataset.confirm && form.dataset.confirmed !== 'true') {
       event.preventDefault();
+      if (typeof HTMLElement.prototype.showPopover !== 'function') {
+        if (window.confirm(form.dataset.confirm)) send(form, event.submitter);
+        return;
+      }
+      askFirst(form, event.submitter);
       return;
     }
+    delete form.dataset.confirmed;
     if (form.dataset.submitting) {
       event.preventDefault();
       return;
@@ -170,6 +185,61 @@ try {
   function release(form) {
     delete form.dataset.submitting;
     form.removeAttribute('aria-busy');
+  }
+
+  function send(form, submitter) {
+    form.dataset.confirmed = 'true';
+    form.requestSubmit(submitter instanceof HTMLElement && submitter.form === form ? submitter : null);
+  }
+
+  // The confirm panel: a popover (Escape or a click elsewhere closes it), placed under the
+  // button that asked, or over it when there is no room below.
+  function askFirst(form, submitter) {
+    document.querySelector('.confirm-pop')?.remove();
+    const anchor = submitter instanceof HTMLElement ? submitter : form;
+    const panel = document.createElement('div');
+    panel.className = 'confirm-pop';
+    panel.popover = 'auto';
+    panel.setAttribute('role', 'alertdialog');
+    const text = document.createElement('p');
+    text.className = 'confirm-pop-text';
+    text.id = `confirm-pop-${Date.now()}`;
+    text.textContent = form.dataset.confirm;
+    panel.setAttribute('aria-labelledby', text.id);
+    const actions = document.createElement('div');
+    actions.className = 'confirm-pop-actions';
+    const keep = document.createElement('button');
+    keep.type = 'button';
+    keep.className = 'btn btn-sm btn-ghost';
+    keep.textContent = 'Keep it';
+    const yes = document.createElement('button');
+    yes.type = 'button';
+    yes.className = 'btn btn-sm btn-danger';
+    yes.textContent = form.dataset.confirmYes || anchor.textContent.trim() || 'Yes';
+    actions.append(keep, yes);
+    panel.append(text, actions);
+    document.body.append(panel);
+    panel.showPopover();
+    const rect = anchor.getBoundingClientRect();
+    const width = panel.offsetWidth;
+    const height = panel.offsetHeight;
+    const left = Math.min(Math.max(8, rect.right - width), window.innerWidth - width - 8);
+    const below = rect.bottom + 8 + height <= window.innerHeight;
+    panel.style.left = `${left}px`;
+    panel.style.top = `${below ? rect.bottom + 8 : Math.max(8, rect.top - height - 8)}px`;
+    let sending = false;
+    keep.addEventListener('click', () => panel.hidePopover());
+    yes.addEventListener('click', () => {
+      sending = true;
+      panel.hidePopover();
+      send(form, submitter);
+    });
+    panel.addEventListener('toggle', (e) => {
+      if (e.newState !== 'closed') return;
+      panel.remove();
+      if (!sending && anchor.isConnected) anchor.focus();
+    });
+    yes.focus();
   }
 
   // Coming back with the browser's Back button restores the page as it was left.
@@ -524,6 +594,98 @@ onContent((root) => {
     form.querySelector('.filter-bar-apply')?.setAttribute('hidden', '');
   }
 });
+
+// === live lists ===
+// A form[data-live] (the Archive) refreshes in place instead of loading a new page: a
+// select, tab or date applies at once, its search box [data-live-search] a moment after
+// typing stops, and a link marked [data-live-link] (a filter chip) is followed the same way.
+// The new page's [data-live-region] elements replace this one's by id, and the address bar
+// follows, so the search box keeps its focus and caret. Anything unexpected falls back to
+// an ordinary page load.
+(() => {
+  const form = document.querySelector('form[data-live]');
+  if (!form) return;
+  form.querySelector('.filter-bar-apply')?.setAttribute('hidden', '');
+  let controller = null;
+  let timer = 0;
+
+  // Only what differs from the defaults goes in the address: a select left on its first option is left out.
+  const urlOf = () => {
+    const params = new URLSearchParams();
+    for (const [name, value] of new FormData(form)) {
+      if (typeof value !== 'string' || value.trim() === '') continue;
+      const select = form.querySelector(`select[name="${CSS.escape(name)}"]`);
+      if (select instanceof HTMLSelectElement && select.options[0]?.value === value) continue;
+      params.append(name, value.trim());
+    }
+    const query = params.toString();
+    return `${form.getAttribute('action')}${query ? `?${query}` : ''}`;
+  };
+
+  async function load(url) {
+    controller?.abort();
+    controller = new AbortController();
+    document.documentElement.setAttribute('data-live-loading', '');
+    try {
+      const res = await fetch(url, { signal: controller.signal, headers: { accept: 'text/html' } });
+      if (!res.ok || !res.headers.get('content-type')?.includes('text/html')) throw new Error(String(res.status));
+      const next = new DOMParser().parseFromString(await res.text(), 'text/html');
+      const focused = document.activeElement;
+      const focusName = focused instanceof HTMLElement && focused.closest('[data-live-region]') ? focused.getAttribute('name') : null;
+      for (const region of document.querySelectorAll('[data-live-region]')) {
+        const fresh = next.getElementById(region.id);
+        if (!fresh) continue;
+        region.replaceWith(fresh);
+        document.dispatchEvent(new CustomEvent('myest8:content', { detail: fresh }));
+      }
+      // The search and sort live outside the regions; a chip or Clear all that resets them has to reset them here.
+      const params = new URL(url, location.href).searchParams;
+      for (const control of form.querySelectorAll('input[name]:not([type=hidden]), select[name]')) {
+        // Never under the caret: the person may still be typing past what this answer was for.
+        if (control.closest('[data-live-region]') || control === document.activeElement) continue;
+        const value = params.get(control.name) ?? (control instanceof HTMLSelectElement ? (control.options[0]?.value ?? '') : '');
+        if (control.value.trim() !== value) control.value = value;
+      }
+      if (focusName) form.querySelector(`[data-live-region] [name="${CSS.escape(focusName)}"]`)?.focus();
+      history.replaceState(history.state, '', url);
+    } catch (error) {
+      if (error?.name !== 'AbortError') location.assign(url);
+    } finally {
+      if (!controller.signal.aborted) document.documentElement.removeAttribute('data-live-loading');
+    }
+  }
+
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    clearTimeout(timer);
+    load(urlOf());
+  });
+  form.addEventListener('change', (event) => {
+    // A searchable select's own text box has no name; its select fires the change that counts.
+    if (!(event.target instanceof Element) || !event.target.getAttribute('name') || event.target.matches('[data-live-search]')) return;
+    clearTimeout(timer);
+    load(urlOf());
+  });
+  form.addEventListener('input', (event) => {
+    if (!(event.target instanceof Element) || !event.target.matches('[data-live-search]')) return;
+    clearTimeout(timer);
+    timer = setTimeout(() => load(urlOf()), 280);
+  });
+  form.addEventListener('click', (event) => {
+    const link = event.target instanceof Element ? event.target.closest('a[data-live-link]') : null;
+    if (!link || event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+    event.preventDefault();
+    clearTimeout(timer);
+    load(link.href);
+  });
+  // The results sit outside the form; their own "Show more" and "Clear filters" refresh the same way.
+  document.addEventListener('click', (event) => {
+    const link = event.target instanceof Element ? event.target.closest('#ar-results a[href^="/archive"]') : null;
+    if (!link || event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+    event.preventDefault();
+    load(link.href.replace(/#.*$/, ''));
+  });
+})();
 
 // === searchable selects ===
 // A <select data-combobox> (field's `search`) becomes a text box that filters its
@@ -1359,6 +1521,19 @@ onContent((root) => {
       return;
     }
 
+    // A Ticket's conversation row opens that one conversation, already scrolled to its latest message.
+    const row = target.closest('[data-dialog-open]');
+    if (row instanceof HTMLElement) {
+      const dialog = document.getElementById(row.getAttribute('data-dialog-open') ?? '');
+      if (!(dialog instanceof HTMLDialogElement)) return;
+      event.preventDefault();
+      opener = row;
+      if (!dialog.open) dialog.showModal();
+      const thread = dialog.querySelector('[data-convo-thread]');
+      if (thread instanceof HTMLElement) thread.scrollTop = thread.scrollHeight;
+      return;
+    }
+
     const link = target.closest('[data-inbox-open]');
     if (!(link instanceof HTMLElement)) return;
     event.preventDefault();
@@ -1735,7 +1910,9 @@ onContent((root) => {
       const next = doc.getElementById('main');
       if (!next || next.querySelector('script:not([type="application/json"])')) throw new Error('not this page');
       arrived.hash = url.hash;
-      if (push) history.pushState(null, '', arrived);
+      // Another tab, filter or week of the same page takes this page's place in the history,
+      // so Back goes to the page before rather than stepping back through each change.
+      if (push) history.replaceState(null, '', arrived);
       current = pageOf(arrived);
       const focused = main.contains(document.activeElement) ? document.activeElement.id : null;
       await swapView(() => {
@@ -1796,7 +1973,7 @@ onContent((root) => {
         swapView(() => {
           live.replaceWith(imported);
           const url = new URL(href);
-          history.pushState(null, '', url);
+          history.replaceState(null, '', url);
           current = pageOf(url);
           const day = url.searchParams.get('day');
           const scope = document.querySelector('#main .page-header-controls .segmented');
@@ -1850,10 +2027,70 @@ onContent((root) => {
         delete form.dataset.submitting;
         form.removeAttribute('aria-busy');
       });
+    } else if (method === 'post' && !form.target && document.querySelector('[data-shell]')) {
+      event.preventDefault();
+      post(form, submitter, url);
     } else if (!form.target) {
       start();
     }
   });
+
+  // A form that posts is sent with fetch. The server answers with where to go next
+  // (x-myest8-redirect, src/web/server.ts), and coming back to this same page replaces it in
+  // the history: Back then goes to the page before, never to this page as it was before
+  // the change. Going anywhere else is an ordinary step forward. A page that answers the
+  // form itself (a refused change, shown with its field) takes #main's place.
+  async function post(form, submitter, url) {
+    start();
+    const done = () => {
+      stop();
+      delete form.dataset.submitting;
+      form.removeAttribute('aria-busy');
+    };
+    let response;
+    try {
+      response = await fetch(url, { method: 'POST', body: new FormData(form, submitter), headers: { accept: 'text/html', 'x-myest8-post': '1' } });
+    } catch {
+      // Never reached the server: send it the ordinary way, keeping the button that was used.
+      done();
+      if (submitter?.name) form.append(Object.assign(document.createElement('input'), { type: 'hidden', name: submitter.name, value: submitter.value }));
+      return HTMLFormElement.prototype.submit.call(form);
+    }
+    let text = '';
+    try {
+      const to = response.headers.get('x-myest8-redirect');
+      if (to) {
+        const next = new URL(to, location.href);
+        if (next.origin !== location.origin || next.pathname !== location.pathname) return location.assign(next);
+        if (next.search === location.search) {
+          history.replaceState(history.state, '', next);
+          return location.reload();
+        }
+        return location.replace(next);
+      }
+      text = await response.text();
+      const doc = (response.headers.get('content-type') ?? '').includes('text/html') ? new DOMParser().parseFromString(text, 'text/html') : null;
+      const next = doc?.getElementById('main');
+      if (!main || !next || next.querySelector('script:not([type="application/json"])')) throw new Error('not a page');
+      await swapView(() => {
+        document.title = doc.title;
+        main.replaceChildren(...[...next.childNodes].map((node) => document.importNode(node, true)));
+        document.dispatchEvent(new CustomEvent('myest8:content', { detail: main }));
+        main.tabIndex = -1;
+        main.focus({ preventScroll: true });
+        window.scrollTo({ top: 0 });
+      });
+      done();
+    } catch {
+      // Some other answer (an error page): it was handled once already, so it is shown as it
+      // came rather than sent again.
+      done();
+      if (!text) return location.reload();
+      document.open();
+      document.write(text);
+      document.close();
+    }
+  }
 
   window.addEventListener('popstate', () => {
     const url = new URL(location.href);
@@ -1861,33 +2098,24 @@ onContent((root) => {
     if (!swappable || pageOf(url) === current) return;
     load(url, false);
   });
+
+  // A page the browser kept in its back-forward cache shows how things were when it was
+  // left. Coming back to it loads it again, so it shows how things are now.
+  window.addEventListener('pageshow', (event) => {
+    if (!event.persisted) return;
+    if (swappable) load(new URL(location.href), false);
+    else location.reload();
+  });
 })();
 
-// === Ticket page: Progress tabs, tools and the message log ===
+// === Ticket page: Progress tabs and tools ===
 // The Progress card's three views (Timeline, the Job, Costs) show one at a time, with its
 // tab buttons; without this file they show one under another. Its tools print the page
-// and fill the screen; the message log is kept short with a button that shows all of it.
+// and fill the screen.
 onContent((root) => {
   for (const tabs of root.querySelectorAll('[data-tabs]')) {
     const selected = tabs.querySelector('[role="tab"][aria-selected="true"]') || tabs.querySelector('[role="tab"]');
     if (selected) selectTab(selected);
-  }
-  for (const msgs of root.querySelectorAll('[data-msgs]')) {
-    const body = msgs.querySelector('.message-scroll') ?? msgs.querySelector('.section-body');
-    const toggle = msgs.querySelector('[data-msgs-toggle]');
-    if (!body || !toggle) continue;
-    // The short view starts at the top of the newest message, not halfway through it:
-    // a bubble taller than the frame reads from its first line. The 32px keeps the
-    // bubble's header clear of the top fade, where the text would fall below 4.5:1.
-    const newest = () => {
-      const bubbles = body.querySelectorAll('.chat');
-      const last = bubbles[bubbles.length - 1];
-      if (!last) return;
-      const top = last.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop;
-      body.scrollTop = Math.max(0, top - 32);
-    };
-    newest();
-    toggle.hidden = body.scrollHeight <= body.clientHeight + 4;
   }
   // A slider under the Timeline board that scrolls it sideways (and follows it), shown
   // only while the board is wider than the card. Dragging the board itself works too.
@@ -1915,10 +2143,23 @@ onContent((root) => {
       slider.hidden = max <= 4;
       slider.max = String(Math.max(0, Math.round(max)));
       slider.value = String(Math.round(board.scrollLeft));
+      board.classList.toggle('is-cut-start', board.scrollLeft > 2);
+      board.classList.toggle('is-cut-end', board.scrollLeft < max - 2);
     };
     slider.addEventListener('input', () => {
       board.scrollLeft = Number(slider.value);
     });
+    // Shift + a plain mouse wheel scrolls sideways, as it does in most browsers already;
+    // this makes it the same everywhere. A trackpad's own sideways swipe is left alone.
+    board.addEventListener(
+      'wheel',
+      (event) => {
+        if (!event.shiftKey || event.deltaX || !event.deltaY || board.scrollWidth <= board.clientWidth) return;
+        board.scrollLeft += event.deltaY;
+        event.preventDefault();
+      },
+      { passive: false },
+    );
     board.addEventListener('scroll', sync, { passive: true });
     if ('ResizeObserver' in window) new ResizeObserver(sync).observe(board);
     window.addEventListener('resize', sync);
@@ -1960,21 +2201,6 @@ document.addEventListener('click', (event) => {
     const on = card?.classList.toggle('is-expanded');
     expand.setAttribute('aria-pressed', String(Boolean(on)));
     document.documentElement.classList.toggle('has-expanded', Boolean(on));
-    return;
-  }
-  const toggle = target.closest('[data-msgs-toggle]');
-  if (toggle) {
-    const msgs = toggle.closest('[data-msgs]');
-    const open = msgs?.classList.toggle('is-open');
-    toggle.setAttribute('aria-expanded', String(Boolean(open)));
-    if (!open) {
-      // Back to the short view, starting at the newest message's first line.
-      const body = msgs.querySelector('.message-scroll') ?? msgs.querySelector('.section-body');
-      const bubbles = body?.querySelectorAll('.chat') ?? [];
-      const last = bubbles[bubbles.length - 1];
-      if (body && last) body.scrollTop = Math.max(0, last.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop - 32);
-    }
-    toggle.textContent = open ? 'Show fewer messages' : 'Show the whole conversation';
   }
 });
 

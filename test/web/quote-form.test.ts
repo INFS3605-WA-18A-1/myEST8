@@ -133,7 +133,7 @@ describe('the quote page', () => {
     expect((await quoteRequestFor(w, job, w.tradies.pete)).status).toBe('sent');
   });
 
-  test('while the Property Owner decides, says whose quote is with them and that the others are still open', async () => {
+  test('while the Owner decides, says whose quote is with them and that the others are still open', async () => {
     const { w, job, open } = await petesPage();
     await w.h.app.submitEstimate(await quoteToken(w, job, w.tradies.pete), { priceCents: 600_00, needsInspection: false });
     await w.h.app.submitEstimate(await quoteToken(w, job, w.tradies.dana), { priceCents: 700_00, needsInspection: false });
@@ -142,10 +142,10 @@ describe('the quote page', () => {
     await w.alice.chooseQuote(pete.quoteId, 'Dana is a week away');
 
     const mine = visible((await open()).html);
-    expect(mine).toContain('Harbour Realty would like to go with your quote and has asked the Property Owner to approve it');
+    expect(mine).toContain('Harbour Realty would like to go with your quote and has asked the Owner to approve it');
     expect(mine).not.toContain('has closed');
     const other = visible(await (await w.get(`/q/${await quoteToken(w, job, w.tradies.dana)}`)).text());
-    expect(other).toContain('Still open: Harbour Realty is waiting on the Property Owner about another quote');
+    expect(other).toContain('Still open: Harbour Realty is waiting on the Owner about another quote');
     expect(other).not.toContain('has closed');
   });
 

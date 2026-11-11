@@ -115,7 +115,7 @@ describe('hosted mode and missing provider settings', () => {
     const lines: string[] = [];
     const hosted = await hostedApp(await hostedEnv({ ALLOW_MOCKS: '', ...ALL_SETTINGS }), (line) => lines.push(line));
     expect(lines[0]).toMatch(/Real: classifier, places, property photos, geocoder, address suggestions, file storage, email, inbound email, file links, worker cron/);
-    expect(lines[0]).toMatch(/Mocked or off: Trade suggester, job-fit judge, request judge, imageMatcher, quoteReader\./);
+    expect(lines[0]).toMatch(/Mocked or off: Trade suggester, job-fit judge, request judge, sign-in \(WorkOS AuthKit\), imageMatcher, quoteReader\./);
     await hosted.close();
   });
 

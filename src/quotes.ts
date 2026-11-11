@@ -501,7 +501,7 @@ export function createQuotes({ db, clock, worker, ports, files, settings, module
     }
     await worker.schedule('quotes.owner_reminder', { approvalId }, addMs(clock.now(), OWNER_REMINDER_MS));
     if (failed === null || ownerName === null) return null;
-    return `Sent to the Property Owner for approval, but the email to ${ownerName} didn't go: ${failed}. Use Resend approval request.`;
+    return `Sent to the Owner for approval, but the email to ${ownerName} didn't go: ${failed}. Use Resend approval request.`;
   }
 
   /** Inserts an Estimate for a request still waiting on one, and moves the request on. Inside a transaction. */

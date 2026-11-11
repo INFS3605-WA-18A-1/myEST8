@@ -5,7 +5,7 @@ import { BARRY, BELLA, confirmedQuotes, KING_ST, OCEAN_AVE, OLIVIA, OLIVIA_EMAIL
 
 const CASEY = '+61400000199';
 
-describe('Property Owners and Building Managers', () => {
+describe('Owners and Building Managers', () => {
   test('each list links the name, shows how to reach them and their Properties, and flags who has no way to be reached', async () => {
     const w = await webWorld();
     await w.alice.addBuildingManager({ name: 'Casey Court', mobile: CASEY });
@@ -14,7 +14,7 @@ describe('Property Owners and Building Managers', () => {
 
     const owners = await (await w.get('/owners?filter=all', cookie)).text();
     expect(owners).toMatch(/<a href="\/profiles" class="rail-link" aria-current="page"/);
-    for (const heading of ['Property Owner', 'Mobile', 'Email', 'Properties']) expect(owners).toContain(`>${heading}</th>`);
+    for (const heading of ['Owner', 'Mobile', 'Email', 'Properties']) expect(owners).toContain(`>${heading}</th>`);
     expect(owners).toContain(`href="/owners/${w.ids.olivia}"`);
     expect(owners).toContain(`href="/owners/${w.ids.oscar}"`);
     expect(owners).toContain(`href="/properties/${w.ids.kingSt}"`);
@@ -55,12 +55,12 @@ describe('Property Owners and Building Managers', () => {
     expect(res.status).toBe(303);
     expect(res.headers.get('location')).toMatch(/^\/owners\?ok=/);
     const after = visible(await (await w.get(res.headers.get('location')!, cookie)).text());
-    expect(after).toContain('Priya Patel added as a Property Owner');
+    expect(after).toContain('Priya Patel added as an Owner');
     expect(after).toContain('Priya Patel');
   });
 });
 
-describe('a Property Owner profile', () => {
+describe('an Owner profile', () => {
   const PEN = (id: number) => `href="/owners/${id}?edit=details#details"`;
   const detailsOf = (page: string) => page.slice(page.indexOf('id="details"'), page.indexOf('</section>', page.indexOf('id="details"')));
 
@@ -82,7 +82,7 @@ describe('a Property Owner profile', () => {
     expect(page).toContain(`href="mailto:${OLIVIA_EMAIL}"`);
     expect(page).toContain(`href="/properties/${w.ids.kingSt}"`);
     expect(visible(page)).toContain(KING_ST);
-    expect(page).toContain('<h2 class="section-title">Approvals</h2>');
+    expect(page).toContain('<h2 class="tradie-pane-title">Approvals</h2>');
     expect(page).toContain(`href="/tickets/${job.ticketId}"`);
     expect(visible(page)).toContain('Requested');
     expect(page).toContain('href="/owners"');
@@ -127,12 +127,13 @@ describe('a Property Owner profile', () => {
       `data-confirm="Olivia Owens won't be asked to approve repairs. Their past approvals stay on the Tickets they belong to."`,
     );
     expect(page).toContain('btn-danger');
-    expect(page.indexOf('Remove Property Owner')).toBeLessThan(page.indexOf('Back to Property Owners'));
+    expect(page).toContain('Remove Owner');
+    expect(page).toContain('<a class="tradie-back" href="/owners" aria-label="Back to Owners"');
 
     const res = await w.post(`/owners/${w.ids.olivia}/remove`, {}, cookie);
     expect(res.headers.get('location')).toMatch(new RegExp(`^/owners/${w.ids.olivia}\\?error=`));
     expect(visible(await (await w.get(res.headers.get('location')!, cookie)).text())).toContain(
-      `Olivia Owens owns ${KING_ST}. Give it another Property Owner first.`,
+      `Olivia Owens owns ${KING_ST}. Give it another Owner first.`,
     );
     expect(await (await w.get('/owners', cookie)).text()).toContain(`href="/owners/${w.ids.olivia}"`);
   });
@@ -167,7 +168,8 @@ describe('a Building Manager profile', () => {
 
     const page = await (await w.get(`/building-managers/${w.ids.barry}`, cookie)).text();
     expect(page.replaceAll('&#39;', "'")).toContain(`data-confirm="Barry Strata won't be listed for Common Area issues. Their record stays."`);
-    expect(page.indexOf('Remove Building Manager')).toBeLessThan(page.indexOf('Back to Building Managers'));
+    expect(page).toContain('Remove Building Manager');
+    expect(page).toContain('<a class="tradie-back" href="/building-managers" aria-label="Back to Building Managers"');
 
     const res = await w.post(`/building-managers/${w.ids.barry}/remove`, {}, cookie);
     expect(visible(await (await w.get(res.headers.get('location')!, cookie)).text())).toContain(

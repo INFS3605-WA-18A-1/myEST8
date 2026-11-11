@@ -20,7 +20,7 @@ test('typing a demo address offers it, and choosing it by keyboard places the Pr
   await expect(address).toHaveValue('3 Parramatta Rd');
   await expect(page.getByRole('textbox', { name: 'Suburb' })).toHaveValue('Annandale');
 
-  await page.getByLabel('Property Owner').selectOption({ label: 'Olivia Owens' });
+  await page.getByLabel('Owner').selectOption({ label: 'Olivia Owens' });
   await page.getByLabel('Max Repair Cost ($)').fill('500');
   await page.getByRole('button', { name: 'Add Property' }).click();
   await expect(page.getByText('3 Parramatta Rd added')).toBeVisible();

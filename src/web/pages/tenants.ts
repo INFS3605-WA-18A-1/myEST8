@@ -17,8 +17,10 @@ import type { WebEnv } from '../env.ts';
 import { formAction } from '../forms.ts';
 import { shellInfo } from '../shell.ts';
 import { addButton, listFilter, mineAll, profileChips, profilesCard, type ProfileFilter } from '../profiles-frame.ts';
+import { callButton, editOnlyFact, initials, insight, neighboursIn, profileCard, profileHero, profileTabs, sideFact, sideHead } from '../profile-card.ts';
 import {
   alert,
+  badge,
   button,
   contactLink,
   dl,
@@ -27,6 +29,7 @@ import {
   entityLink,
   field,
   flashFrom,
+  formatDay,
   formatWhen,
   humanise,
   linkButton,
@@ -72,7 +75,6 @@ export function tenantProfilePages() {
         active: 'profiles',
         flash,
         shell: shellInfo(c),
-        subtitle: tenants.length ? `${tenants.length} ${tenants.length === 1 ? 'Tenant' : 'Tenants'}${filter === 'mine' ? ' on your Properties' : ' in the Agency'}, by name.` : undefined,
         controls: profileChips('tenants', overview.counts, filter),
         body: profilesCard({
           search: listFilter('Filter Tenants', 'Name or address'),
@@ -126,7 +128,27 @@ async function profilePage(c: Context<WebEnv>, id: number, refused?: DetailsEdit
   const { timeZone } = actions.agency();
   // Someone who has left their Property has no details to edit: their addresses are free for others.
   const editing = tenant.property !== null && (!!refused || c.req.query('edit') === 'details');
-  const people = await actions.people();
+  const [people, everyone] = await Promise.all([actions.people(), actions.tenants({ filter: 'all' })]);
+  const steps = neighboursIn(everyone, (t) => t.tenantId, id, (t) => ({ href: `/tenants/${t.tenantId}`, name: t.name }));
+  const hero = profileHero({
+    back: { href: '/tenants', label: 'Back to Tenants' },
+    avatar: initials(tenant.name),
+    name: tenant.name,
+    meta: [
+      tenant.property
+        ? html`<span>Tenant at ${entityLink('property', tenant.property.address, `/properties/${tenant.property.propertyId}`)}</span>`
+        : badge('Former Tenant', 'neutral'),
+      tenant.tenancyStart ? html`<span>Since <strong>${formatDate(tenant.tenancyStart)}</strong></span>` : '',
+    ],
+    actions: html`${tenant.property ? removeButton(tenant.tenantId, tenant.name, tenant.property.address, 'danger') : ''}${callButton(tenant.name, tenant.mobile)}`,
+    steps,
+    noun: 'Tenant',
+  });
+  const tabs = profileTabs(`${tenant.name}'s history`, [
+    { id: 'tenant-tickets', label: 'Tickets', count: tenant.tickets.length, body: html`${insight(profileRead(tenant.read))}${ticketsList(tenant, timeZone)}` },
+    { id: 'tenant-requests', label: 'Maintenance Requests', count: tenant.maintenanceRequests.length, title: 'Maintenance Requests waiting', body: requestsList(tenant, timeZone) },
+    { id: 'tenant-reimbursements', label: 'Reimbursements', count: tenant.reimbursementRequests.length, title: 'Reimbursement Requests', body: reimbursementsList(tenant, timeZone) },
+  ]);
   return c.html(
     page({
       title: tenant.name,
@@ -134,11 +156,8 @@ async function profilePage(c: Context<WebEnv>, id: number, refused?: DetailsEdit
       active: 'profiles',
       flash: flashFrom(c.req.url),
       shell: shellInfo(c),
-      subtitle: tenant.property
-        ? html`Tenant at ${entityLink('property', tenant.property.address, `/properties/${tenant.property.propertyId}`)}`
-        : 'Former Tenant: no longer at a Property',
-      actions: html`${tenant.property ? removeButton(tenant.tenantId, tenant.name, tenant.property.address) : ''}${linkButton('Back to Tenants', '/tenants', { variant: 'ghost', size: 'sm' })}`,
-      body: html`${profileRead(tenant.read)}${refused && !editing ? alert(refused.message, 'error') : ''}${facts(tenant, editing, refused, people)} ${ticketsSection(tenant, timeZone)} ${requestsSection(tenant, timeZone)} ${reimbursementsSection(tenant, timeZone)}`,
+      crumbs: [{ label: 'Profiles', href: '/profiles' }, { label: 'Tenants', href: '/tenants' }, { label: tenant.name }],
+      body: html`${refused && !editing ? alert(refused.message, 'error') : ''}${profileCard({ hero, main: tabs, side: facts(tenant, editing, refused, people), about: tenant.name })}`,
     }),
     refused ? 400 : 200,
   );
@@ -181,9 +200,9 @@ function list(tenants: TenantList, filter: Filter): Html {
   );
 }
 
-function removeButton(tenantId: number, name: string, address: string): Html {
+function removeButton(tenantId: number, name: string, address: string, variant: 'ghost' | 'danger' = 'ghost'): Html {
   return postButton(`/tenants/${tenantId}/remove`, 'Remove', {
-    variant: 'ghost',
+    variant,
     size: 'sm',
     confirm: `Remove ${name} from ${address}? Their profile and past Tickets stay on record.`,
   });
@@ -201,7 +220,7 @@ export async function addTenantPage(c: Context<WebEnv>, refused?: AddRefusal) {
       pm,
       active: 'profiles',
       shell: shellInfo(c),
-      actions: linkButton('Back to Tenants', '/tenants', { variant: 'ghost', size: 'sm' }),
+      back: { label: 'Tenants', href: '/tenants' },
       body: addForm(properties, refused),
     }),
     refused ? 400 : 200,
@@ -266,17 +285,24 @@ function facts(t: TenantView, editing: boolean, refused: DetailsEdit | undefined
     save: 'Save details',
     editing,
     canEdit: t.property !== null,
-    className: 'section',
+    className: 'tradie-side-card',
     refusal: refused && !Object.keys(refused.errors).length ? refused.message : undefined,
-    rows: [
-      { label: 'Property', read: t.property ? entityLink('property', t.property.address, `/properties/${t.property.propertyId}`) : html`<span class="text-muted">No Property</span>` },
-      { label: 'Property Manager', read: t.propertyManager ?? '—' },
-      { label: 'Tenant since', read: t.tenancyStart ? formatDate(t.tenancyStart) : '—' },
-      { label: 'Mobile', read: contactDetail('mobile', t.mobile, people, t.tenantId), ...controls.mobile },
-      { label: 'Email', read: contactDetail('email', t.email, people, t.tenantId), ...controls.email },
-      { label: 'Usually home', read: t.availability ? humanise(t.availability) : html`<span class="text-muted">Not asked yet</span>` },
-      { label: 'Name', ...controls.name },
-    ],
+    view: (tools) => html`
+      ${sideHead('Tenant details', tools)}
+      <dl class="tradie-facts">
+        ${editOnlyFact('Name', controls.name)}
+        ${sideFact('Property', t.property ? entityLink('property', t.property.address, `/properties/${t.property.propertyId}`) : html`<span class="text-muted">No Property</span>`)}
+        ${sideFact('Property Manager', t.propertyManager ?? '—')}
+        ${sideFact('Tenant since', t.tenancyStart ? formatDate(t.tenancyStart) : '—')}
+        ${sideFact('Usually home', t.availability ? humanise(t.availability) : html`<span class="text-muted">Not asked yet</span>`)}
+      </dl>
+      <div class="tradie-side-block">
+        <h3 class="tradie-side-sub">Contact information</h3>
+        <dl class="tradie-facts is-stacked">
+          ${sideFact('Mobile', contactDetail('mobile', t.mobile, people, t.tenantId), controls.mobile)}
+          ${sideFact('Email', contactDetail('email', t.email, people, t.tenantId), controls.email)}
+        </dl>
+      </div>`,
   });
 }
 
@@ -284,30 +310,25 @@ function facts(t: TenantView, editing: boolean, refused: DetailsEdit | undefined
 const otherAddress = (t: TenantView, address: string) => (t.property?.address === address ? undefined : address);
 
 /** Every Ticket the Tenant raised: open first, then the most recently closed. */
-function ticketsSection(t: TenantView, timeZone: string): Html {
-  return html`<section class="section" aria-label="Tickets">
-    ${sectionHeader('Tickets')}
-    ${t.tickets.length
+function ticketsList(t: TenantView, timeZone: string): Html {
+  return html`${t.tickets.length
       ? table(
           ['Issue', 'Urgency', 'Status', 'Reported', 'Closed'],
           t.tickets.map((x) => [
             ticketCell({ ticketId: x.ticketId, issue: x.description, address: otherAddress(t, x.propertyAddress) }),
             urgencyBadge(x.urgency),
             statusBadge(x.status),
-            html`<span class="text-muted whitespace-nowrap">${formatWhen(x.reportedAt, timeZone)}</span>`,
-            html`<span class="text-muted whitespace-nowrap">${x.closedAt ? formatWhen(x.closedAt, timeZone) : '—'}</span>`,
+            html`<span class="text-muted whitespace-nowrap">${formatDay(x.reportedAt, timeZone)}</span>`,
+            html`<span class="text-muted whitespace-nowrap">${x.closedAt ? formatDay(x.closedAt, timeZone) : '—'}</span>`,
           ]),
           { caption: 'Tickets the Tenant raised, open first', stack: true },
         )
-      : emptyState('No Tickets yet.')}
-  </section>`;
+      : emptyState('No Tickets yet.')}`;
 }
 
 /** What the Tenant reported that still waits for a Property Manager to confirm. */
-function requestsSection(t: TenantView, timeZone: string): Html {
-  return html`<section class="section" aria-label="Maintenance Requests waiting">
-    ${sectionHeader('Maintenance Requests waiting')}
-    ${t.maintenanceRequests.length
+function requestsList(t: TenantView, timeZone: string): Html {
+  return html`${t.maintenanceRequests.length
       ? table(
           ['Maintenance Request', 'Urgency', 'Reported'],
           t.maintenanceRequests.map((r) => {
@@ -320,15 +341,12 @@ function requestsSection(t: TenantView, timeZone: string): Html {
           }),
           { caption: 'Maintenance Requests waiting to be confirmed', stack: true },
         )
-      : emptyState('No Maintenance Requests waiting.')}
-  </section>`;
+      : emptyState('No Maintenance Requests waiting.')}`;
 }
 
 /** The Tenant's claims for Urgent Repairs they arranged, newest first. */
-function reimbursementsSection(t: TenantView, timeZone: string): Html {
-  return html`<section class="section" aria-label="Reimbursement Requests">
-    ${sectionHeader('Reimbursement Requests')}
-    ${t.reimbursementRequests.length
+function reimbursementsList(t: TenantView, timeZone: string): Html {
+  return html`${t.reimbursementRequests.length
       ? table(
           ['Urgent Repair', 'Status', 'Receipts', 'Reported'],
           t.reimbursementRequests.map((u) => {
@@ -342,6 +360,5 @@ function reimbursementsSection(t: TenantView, timeZone: string): Html {
           }),
           { caption: 'Reimbursement Requests, newest first', stack: true, align: ['left', 'left', 'right', 'left'] },
         )
-      : emptyState('No Reimbursement Requests.')}
-  </section>`;
+      : emptyState('No Reimbursement Requests.')}`;
 }

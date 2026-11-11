@@ -277,12 +277,12 @@ export function propertyFields(o: {
     ${fieldGrid(html`
       ${propertyPlaceFields({ values, errors })}
       ${field({
-        label: 'Property Owner',
+        label: 'Owner',
         name: 'ownerId',
         id: 'property-owner',
         type: 'select',
         required: true,
-        placeholder: 'Choose the Property Owner',
+        placeholder: 'Choose the Owner',
         value: valueOf(values, 'ownerId'),
         options: o.owners.map((p) => ({ value: String(p.id), label: p.name })),
         error: errors?.ownerId,
@@ -307,7 +307,7 @@ export function propertyFields(o: {
         required: true,
         placeholder: '500',
         value: valueOf(values, 'maxRepairCost'),
-        hint: "The most a Ticket's Repair Cost can reach before the Property Owner must approve.",
+        hint: "The most a Ticket's Repair Cost can reach before the Owner must approve.",
         error: errors?.maxRepairCost,
       })}
       ${field({
@@ -717,8 +717,30 @@ export async function tradiesTable(actions: PropertyManagerActions, tradies: Per
 
 // Adding a colleague (the guide's Your team step and Settings' Team tab)
 
-/** The name and work email of a colleague to add as a Property Manager, posted to `action`. */
-export function colleagueForm(o: { action: string; values?: Values; errors?: Errors; primary?: boolean }): Html {
+/** A colleague just added: a temporary password to pass on, or (with WorkOS AuthKit) whether their invitation email went. */
+export type ColleagueAdded = { name: string; email: string; temporaryPassword: string | null; invited: boolean };
+
+/**
+ * Adds a colleague as a Property Manager. With WorkOS AuthKit they get its invitation email
+ * and no password; an invitation that fails to send still adds them, as signing up through
+ * AuthKit with that email signs them in. Without AuthKit they get a temporary password.
+ * Throws the ActionError of a refused name or email.
+ */
+export async function addColleague(c: Context<WebEnv>, colleague: { name: string; email: string }): Promise<ColleagueAdded> {
+  const invite = c.var.invite;
+  const { temporaryPassword } = await c.var.actions.addColleague(colleague, { temporaryPassword: !invite });
+  if (!invite) return { ...colleague, temporaryPassword, invited: false };
+  try {
+    await invite(colleague.email);
+    return { ...colleague, temporaryPassword: null, invited: true };
+  } catch (error) {
+    console.error('[workos] invitation not sent:', error);
+    return { ...colleague, temporaryPassword: null, invited: false };
+  }
+}
+
+/** The name and work email of a colleague to add as a Property Manager, posted to `action`. `invites`: WorkOS AuthKit emails them. */
+export function colleagueForm(o: { action: string; values?: Values; errors?: Errors; primary?: boolean; invites?: boolean }): Html {
   return html`<form method="post" action="${o.action}" class="space-y-3">
     ${fieldGrid(html`
       ${field({ label: 'Name', name: 'name', id: 'colleague-name', required: true, autocomplete: 'off', value: valueOf(o.values, 'name'), error: o.errors?.name })}
@@ -730,11 +752,11 @@ export function colleagueForm(o: { action: string; values?: Values; errors?: Err
         required: true,
         autocomplete: 'off',
         value: valueOf(o.values, 'email'),
-        hint: 'They sign in with this. myEST8 makes them a temporary password.',
+        hint: o.invites ? 'They sign in with this. myEST8 emails them an invitation to set up their sign-in.' : 'They sign in with this. myEST8 makes them a temporary password.',
         error: o.errors?.email,
       })}
     `)}
-    <div>${button('Add colleague', { variant: o.primary ? 'primary' : 'secondary' })}</div>
+    <div>${button(o.invites ? 'Invite colleague' : 'Add colleague', { variant: o.primary ? 'primary' : 'secondary' })}</div>
   </form>`;
 }
 
@@ -743,7 +765,8 @@ export function colleagueForm(o: { action: string; values?: Values; errors?: Err
  * (shown only this once, so the page that shows it is never cached), and a share of the
  * sign-in link that leaves the password out.
  */
-export function colleagueAdded(added: { name: string; email: string; temporaryPassword: string }, o: { origin: string; agencyName: string }): Html {
+export function colleagueAdded(added: ColleagueAdded, o: { origin: string; agencyName: string }): Html {
+  if (added.temporaryPassword === null) return colleagueInvited(added, o);
   return html`${alert(
     html`<p>Pass these on to ${added.name}. The password is shown only this once, so copy it now.</p>
       <dl class="my-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
@@ -768,11 +791,39 @@ export function colleagueAdded(added: { name: string; email: string; temporaryPa
   })}`;
 }
 
+/**
+ * A colleague added with WorkOS AuthKit: their invitation went (or didn't), and a share of the
+ * sign-in link, where they can also set up their sign-in with this email.
+ */
+function colleagueInvited(added: ColleagueAdded, o: { origin: string; agencyName: string }): Html {
+  return html`${added.invited
+    ? alert(
+        html`<p>We emailed ${added.email} an invitation to set up their sign-in. Once they have, they sign in at ${o.origin}/login.</p>`,
+        'success',
+        { title: `${added.name} invited as a Property Manager` },
+      )
+    : alert(
+        html`<p>
+          ${added.name} is on your team, but the invitation email didn’t send. Send them the sign-in link below: they set up their sign-in there with
+          ${added.email}.
+        </p>`,
+        'warning',
+        { title: `${added.name} added, invitation not sent` },
+      )}
+  ${shareButton({
+    title: `Send ${added.name} their sign-in link`,
+    label: `Send ${added.name} their sign-in link`,
+    text: `You're on myEST8 for ${o.agencyName}. Sign in, or set up your sign-in, with ${added.email}.`,
+    url: `${o.origin}/login`,
+    align: 'start',
+  })}`;
+}
+
 // Importing from a spreadsheet
 
 /** Each kind of import as the pages name it: one and many. */
 export const IMPORT_NOUNS: Record<ImportKind, { one: string; many: string }> = {
-  owners: { one: 'Property Owner', many: 'Property Owners' },
+  owners: { one: 'Owner', many: 'Owners' },
   'building-managers': { one: 'Building Manager', many: 'Building Managers' },
   tradies: { one: 'Tradie', many: 'Tradies' },
   properties: { one: 'Property', many: 'Properties' },

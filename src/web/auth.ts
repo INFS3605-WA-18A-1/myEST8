@@ -13,6 +13,8 @@ import { iso } from '../shared.ts';
 import type { WebEnv } from './env.ts';
 import { authPage, otherWay } from './auth-card.ts';
 import { button, field, linkButton, type Flash } from './ui.ts';
+import type { AuthKit } from '../adapters/workos.ts';
+import { authKitRoutes, authKitSignOutUrl } from './workos.ts';
 
 /** The session cookie's name. */
 const SESSION_COOKIE = 'myest8_session';
@@ -70,9 +72,27 @@ export function createSessions(db: Db, clock: Clock) {
 }
 export type Sessions = ReturnType<typeof createSessions>;
 
-/** GET/POST /login and POST /logout. */
-export function authRoutes(app: App, sessions: Sessions) {
+/**
+ * GET /login and POST /logout. With `authKit`, /login goes to WorkOS AuthKit's hosted page,
+ * the one page for signing in and signing up (src/web/workos.ts), and signing out ends that
+ * session too. Without it (the demo and tests), /login is the email and password form.
+ */
+export function authRoutes(app: App, sessions: Sessions, o: { authKit?: AuthKit | null; publicUrl: string }) {
   const routes = new Hono();
+  const authKit = o.authKit ?? null;
+
+  routes.post('/logout', async (c) => {
+    if (!sameOrigin(c)) return c.text('Cross-site request refused', 403);
+    const token = getCookie(c, SESSION_COOKIE);
+    if (token) await sessions.end(token);
+    deleteCookie(c, SESSION_COOKIE, { path: '/', secure: isHttps(c) });
+    return c.redirect(authKitSignOutUrl(c, authKit) ?? (authKit ? '/' : '/login'), 303);
+  });
+
+  if (authKit) {
+    routes.route('/', authKitRoutes(app, sessions, authKit, o.publicUrl));
+    return routes;
+  }
 
   routes.get('/login', async (c) => {
     const next = safeNext(c.req.query('next'));
@@ -105,14 +125,6 @@ export function authRoutes(app: App, sessions: Sessions) {
     }
     await startSession(c, sessions, propertyManagerId);
     return c.redirect(next, 303);
-  });
-
-  routes.post('/logout', async (c) => {
-    if (!sameOrigin(c)) return c.text('Cross-site request refused', 403);
-    const token = getCookie(c, SESSION_COOKIE);
-    if (token) await sessions.end(token);
-    deleteCookie(c, SESSION_COOKIE, { path: '/', secure: isHttps(c) });
-    return c.redirect('/login', 303);
   });
 
   return routes;
@@ -165,13 +177,13 @@ export async function signedInId(app: App, sessions: Sessions, c: HonoContext): 
 }
 
 /** Where to go after signing in: a path on this site, never another site. */
-function safeNext(next: string | undefined): string {
+export function safeNext(next: string | undefined): string {
   if (!next || !next.startsWith('/') || next.startsWith('//') || next.startsWith('/\\') || /[\u0000-\u001f\\]/.test(next)) return '/';
   if (next === '/login' || next.startsWith('/login?') || next === '/logout') return '/';
   return next;
 }
 
-function isHttps(c: HonoContext) {
+export function isHttps(c: HonoContext) {
   return new URL(c.req.url).protocol === 'https:' || c.req.header('x-forwarded-proto')?.split(',')[0]?.trim() === 'https';
 }
 
@@ -200,7 +212,7 @@ function signInPage(o: { next: string; email?: string; flash?: Flash; errors?: {
   const errors = o.errors ?? {};
   return authPage({
     title: 'Sign in to myEST8',
-    subtitle: 'For Property Managers. Tenants, Tradies and Property Owners never need an account.',
+    subtitle: 'For Property Managers. Tenants, Tradies and Owners never need an account.',
     flash: o.flash ?? null,
     size: 'login',
     footer: SIGNED_OUT_FOOTER,

@@ -79,7 +79,8 @@ export type SignUp = {
   timeZone: string;
   name: string;
   email: string;
-  password: string;
+  /** null when WorkOS AuthKit signs them in (ADR 0020) and holds their password, not myEST8. */
+  password: string | null;
 };
 
 /** Passwords shorter than this are refused. */
@@ -373,25 +374,28 @@ export function createProfiles({ db, clock, ports, worker, modules }: Context) {
       // Checked inside the transaction, so two sign-ups with one email can't both pass the check.
       return transaction(db, async () => {
         const problems = await accountProblems(input);
-        if (!input.password) problems.password = 'Choose a password';
+        if (input.password === null) {
+          // AuthKit holds the password.
+        } else if (!input.password) problems.password = 'Choose a password';
         else if (input.password.length < MIN_PASSWORD_LENGTH) problems.password = `Use at least ${MIN_PASSWORD_LENGTH} characters`;
         if (!input.agencyName.trim()) problems.agencyName = "Enter your Agency's name";
         if (!isTimeZone(input.timeZone)) problems.timeZone = 'Choose a time zone';
         refuse(problems);
         const agencyId = await run(db, 'INSERT INTO agencies (name, time_zone) VALUES (?, ?) RETURNING id', input.agencyName.trim(), input.timeZone);
-        return insertPropertyManager(agencyId, input);
+        return insertPropertyManager(agencyId, { ...input, password: input.password ?? undefined });
       });
     },
 
     /**
-     * Adds a colleague to the Agency as a Property Manager with a temporary
-     * password, checked like a sign-up. The password is returned once, to pass on.
+     * Adds a colleague to the Agency as a Property Manager, checked like a sign-up. With
+     * `temporaryPassword`, they get one, returned once to pass on. Without it they have no
+     * password: they sign in through WorkOS AuthKit with this email (ADR 0020).
      */
-    async addColleague(agencyId: number, input: { name: string; email: string }) {
+    async addColleague(agencyId: number, input: { name: string; email: string }, o: { temporaryPassword: boolean } = { temporaryPassword: true }) {
       return transaction(db, async () => {
         refuse(await accountProblems(input));
-        const password = temporaryPassword();
-        return { propertyManagerId: await insertPropertyManager(agencyId, { ...input, password }), temporaryPassword: password };
+        const password = o.temporaryPassword ? temporaryPassword() : null;
+        return { propertyManagerId: await insertPropertyManager(agencyId, { ...input, password: password ?? undefined }), temporaryPassword: password };
       });
     },
 
@@ -441,6 +445,12 @@ export function createProfiles({ db, clock, ports, worker, modules }: Context) {
       // Hash even for an unknown email, so the response time doesn't reveal which emails exist.
       const matches = passwordMatches(password, row?.password_hash ?? UNUSABLE_HASH);
       return row?.password_hash && matches ? row.id : null;
+    },
+
+    /** The Property Manager with this email, or null. For sign-in through WorkOS AuthKit, which has already checked who they are. */
+    async propertyManagerIdByEmail(email: string): Promise<number | null> {
+      const row = await one<{ id: number }>(db, 'SELECT id FROM property_managers WHERE email = ?', normalizeAddress(email));
+      return row?.id ?? null;
     },
 
     async propertyManagers(agencyId: number): Promise<PropertyManager[]> {

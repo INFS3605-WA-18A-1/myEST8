@@ -73,6 +73,8 @@ function sectionOf(html: string, title: string) {
 }
 
 /** The table row that links to Ticket `id`, or '' when there is none. */
+const archiveRowOf = (html: string, id: number) => html.split('<li class="ar-row">').find((r) => r.includes(`href="/tickets/${id}"`)) ?? '';
+
 const rowOf = (html: string, id: number) => html.split('<tr>').find((r) => r.includes(`href="/tickets/${id}"`)) ?? '';
 
 /** The Tickets page's card for Ticket `id`, or '' when there is none. */
@@ -323,9 +325,8 @@ describe('Archive', () => {
     expect(leak).toBeGreaterThan(-1);
     expect(tap).toBeGreaterThan(leak);
     expect(html).not.toContain(`href="/tickets/${ids.fan}"`);
-    expect(visible(rowOf(html, ids.tap))).toMatch(/Plumbing Cancelled/);
-    expect(visible(rowOf(html, ids.tap))).toMatch(/Closed/);
-    expect(rowOf(html, ids.tap)).toContain('queue-thumb');
+    expect(visible(archiveRowOf(html, ids.tap))).toMatch(/Plumbing[\s\S]*Cancelled/);
+    expect(archiveRowOf(html, ids.tap)).toContain('queue-thumb');
   });
 
   test('shows the Property Manager’s own until All is chosen, and takes the same filters', async () => {
@@ -342,6 +343,81 @@ describe('Archive', () => {
     expect(high).not.toContain(`href="/tickets/${ids.tap}"`);
   });
 
+  test('searches by issue, address or Ticket number, and says so when nothing matches', async () => {
+    const w = await webWorld();
+    const ids = await twoClosed(w);
+
+    const byNumber = await text(w, `/archive?filter=all&q=%23${ids.tap}`);
+    expect(byNumber).toContain(`href="/tickets/${ids.tap}"`);
+    expect(byNumber).not.toContain(`href="/tickets/${ids.leak}"`);
+
+    const none = await text(w, '/archive?filter=all&q=zzzz');
+    expect(visible(none)).toContain('No closed Tickets match “zzzz”.');
+    expect(none).not.toContain(`href="/tickets/${ids.tap}"`);
+  });
+
+  test('filters by Tenant, and counts each Tenant\'s closed Tickets in the list', async () => {
+    const w = await webWorld();
+    const ids = await twoClosed(w);
+
+    const all = await text(w, '/archive?filter=all');
+    expect(all).toContain('Any Tenant');
+    expect(all).toMatch(/Tom[^<]*\(1\)/);
+
+    const toms = await text(w, `/archive?filter=all&tenant=${w.ids.tom}`);
+    expect(toms).toContain(`href="/tickets/${ids.tap}"`);
+    expect(toms).not.toContain(`href="/tickets/${ids.leak}"`);
+  });
+
+  test('sorts oldest first and narrows by date range', async () => {
+    const w = await webWorld();
+    const ids = await twoClosed(w);
+
+    const oldest = await text(w, '/archive?filter=all&sort=oldest');
+    expect(oldest.indexOf(`href="/tickets/${ids.tap}"`)).toBeLessThan(oldest.indexOf(`href="/tickets/${ids.leak}"`));
+
+    const recent = await text(w, '/archive?filter=all&range=30');
+    expect(recent).toContain(`href="/tickets/${ids.leak}"`);
+  });
+
+  test('tabs count how the Tickets ended, and Urgency, chosen dates and a Tenant’s name narrow the list', async () => {
+    const w = await webWorld();
+    const ids = await twoClosed(w);
+    const shows = (html: string, id: number) => html.includes(`href="/tickets/${id}"`);
+
+    // Both Tickets ended with every Job cancelled.
+    const all = visible(await text(w, '/archive?filter=all'));
+    expect(all).toMatch(/All\s*2\s*Done\s*0\s*Cancelled\s*2/);
+    const done = await text(w, '/archive?filter=all&outcome=done');
+    expect(shows(done, ids.tap) || shows(done, ids.leak)).toBe(false);
+    const cancelled = await text(w, '/archive?filter=all&outcome=cancelled');
+    expect(shows(cancelled, ids.tap) && shows(cancelled, ids.leak)).toBe(true);
+
+    const high = await text(w, '/archive?filter=all&urgency=high');
+    expect([shows(high, ids.leak), shows(high, ids.tap)]).toEqual([true, false]);
+
+    // The search reads the Tenant's name too.
+    const tom = await text(w, '/archive?filter=all&q=Tom');
+    expect([shows(tom, ids.tap), shows(tom, ids.leak)]).toEqual([true, false]);
+
+    expect(shows(await text(w, '/archive?filter=all&range=custom&from=2026-01-01'), ids.tap)).toBe(true);
+    const before = await text(w, '/archive?filter=all&range=custom&to=2026-01-01');
+    expect(shows(before, ids.tap) || shows(before, ids.leak)).toBe(false);
+    expect(before).toContain('name="from"');
+    expect(visible(before)).toContain('Until 1 Jan 2026');
+  });
+
+  test('each filter that is on is a chip that takes it off, with Clear all for more than one', async () => {
+    const w = await webWorld();
+    await twoClosed(w);
+
+    const html = await text(w, '/archive?filter=all&urgency=high&q=leak');
+    const chips = [...html.matchAll(/<a class="ar-chip" href="([^"]+)"/g)].map((m) => m[1]!.replaceAll('&amp;', '&'));
+    expect(chips).toEqual(['/archive?filter=all&urgency=high', '/archive?filter=all&q=leak']);
+    expect(html).toMatch(/<a class="link ar-clear" href="\/archive\?filter=all"[^>]*>Clear all/);
+    expect(await text(w, '/archive?filter=all')).not.toContain('class="ar-chip"');
+  });
+
   test('says so when nothing is closed yet', async () => {
     const w = await webWorld();
     const html = await text(w, '/archive', await w.signIn());
@@ -351,7 +427,7 @@ describe('Archive', () => {
 });
 
 describe('Approvals', () => {
-  test('lists the Tickets waiting on a Property Owner with the Property, the Owner, the amount over the limit and the reminder', async () => {
+  test('lists the Tickets waiting on an Owner with the Property, the Owner, the amount over the limit and the reminder', async () => {
     const w = await webWorld();
     const { ticketId } = await busyDesk(w);
 
@@ -359,14 +435,16 @@ describe('Approvals', () => {
     const readable = visible(html);
     expect(html).toContain(`href="/tickets/${ticketId}"`);
     for (const expected of [KING_ST, 'Olivia Owens', '$650.00', '$500.00', '$150.00', 'Reminder not due yet']) expect(readable).toContain(expected);
-    // A Quote with the Property Owner waits on them, not the Property Manager: a quiet count, not Wattle.
+    // A Quote with the Owner waits on them, not the Property Manager: a quiet count, not Wattle.
     expect(readable).toContain('$650.00 in Quotes');
+    // The ring is how far past the limit it goes ($150 on $500), not the cost as a share of it.
+    expect(html).toContain('aria-label="30% over the limit"');
 
     await w.h.advance(25 * HOUR);
     expect(visible(await text(w, '/approvals'))).toContain('Reminder sent');
   });
 
-  test('lists only Tickets that went over the Max Repair Cost, and drops one once the Property Owner answers', async () => {
+  test('lists only Tickets that went over the Max Repair Cost, and drops one once the Owner answers', async () => {
     const w = await webWorld();
     const { ticketId, jobId } = await busyDesk(w);
     // A second Ticket whose Quote stays within the limit is never waiting on an Owner.
@@ -390,9 +468,9 @@ describe('Approvals', () => {
     await w.h.receive(OLIVIA, 'YES go ahead');
     const after = await text(w, '/approvals');
     expect(after).not.toContain(`href="/tickets/${ticketId}"`);
-    expect(visible(after)).toContain('Nothing is waiting on a Property Owner, and no Reimbursement Requests are open.');
+    expect(visible(after)).toContain('Nothing is waiting on an Owner, and no Reimbursement Requests are open.');
     expect(after).toMatch(/href="\/approvals\?filter=all"[^>]*>\s*Show all approvals/);
-    expect(visible(after)).not.toContain('Waiting on a Property Owner');
+    expect(visible(after)).not.toContain('Waiting on an Owner');
     expect(railCount(after, '/approvals')).toBeNull();
   });
 
@@ -419,7 +497,7 @@ describe('Approvals', () => {
     // The rail counts the one to review.
     expect(railCount(html, '/approvals')).toBe('1');
     // Only the list with rows is shown.
-    expect(readable).not.toContain('Waiting on a Property Owner');
+    expect(readable).not.toContain('Waiting on an Owner');
 
     await w.alice.forwardReimbursement(received);
     await w.alice.markReimbursed(received);
@@ -445,9 +523,9 @@ describe('Approvals', () => {
 
     const { html: forwarded, location } = await follow(w, await w.post(`/reimbursements/${id}/forward?from=approvals`, { amount: '$430' }, cookie), cookie);
     expect(location).toContain('/approvals');
-    expect(visible(forwarded)).toContain('Forwarded to Olivia Owens, the Property Owner, with you copied in.');
+    expect(visible(forwarded)).toContain('Forwarded to Olivia Owens, the Owner, with you copied in.');
     const forwardedRow = reimbursementRow(forwarded, id);
-    expect(forwardedRow).toContain('With Property Owner');
+    expect(forwardedRow).toContain('With Owner');
     expect(forwardedRow).toContain('Mark reimbursed');
     expect(forwardedRow).not.toContain('/forward');
     expect(w.h.messenger.to(OLIVIA_EMAIL)).toMatchObject([
@@ -460,7 +538,7 @@ describe('Approvals', () => {
     expect(w.h.messenger.last(TOM)!.template).toBe('tenant.reimbursed');
   });
 
-  test('refuses to forward from the row without an amount, or when the Property Owner cannot be reached, and keeps it for review', async () => {
+  test('refuses to forward from the row without an amount, or when the Owner cannot be reached, and keeps it for review', async () => {
     const w = await webWorld();
     const cookie = await w.signIn();
     const { link, id } = await burstPipe(w);

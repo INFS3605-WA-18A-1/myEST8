@@ -34,36 +34,20 @@
     // "Open tickets" and "High & urgent" leave the quiet Properties folded away.
     for (const more of section.querySelectorAll('details.dispatch-more')) more.hidden = mode !== 'all' && !words;
     for (const tab of tabs) tab.setAttribute('aria-pressed', String(tab.dataset.propFilter === mode));
-    showCut();
   }
   for (const tab of tabs) tab.addEventListener('click', () => { mode = tab.dataset.propFilter; apply(); });
   search.addEventListener('input', apply);
 })();
 
-// === A Property card's "Show full messages": it lets the Ticket rows wrap. It shows only when one
-// of them is cut short (without JavaScript the rows stay one line each, the whole message in
-// the link's title), and is checked again when the window or the list changes. ===
-function showCut() {
-  for (const button of document.querySelectorAll('[data-tix-more]')) {
-    const card = button.closest('.dispatch-card');
-    if (!card || card.classList.contains('is-full')) continue;
-    button.hidden = ![...card.querySelectorAll('.dispatch-tix-text')].some((line) => line.scrollWidth > line.clientWidth + 1);
-  }
-}
+// === To dispatch is as tall as its first Job, so that card is never cut; the rest scroll
+// under it (app.css reads --queue-first). Measured again whenever that card changes size. ===
 (() => {
-  for (const button of document.querySelectorAll('[data-tix-more]')) {
-    const card = button.closest('.dispatch-card');
-    if (!card) continue;
-    button.addEventListener('click', () => {
-      const open = !card.classList.contains('is-full');
-      card.classList.toggle('is-full', open);
-      button.setAttribute('aria-expanded', String(open));
-      button.firstChild.textContent = open ? 'Hide full messages' : 'Show full messages';
-    });
-  }
-  showCut();
-  window.addEventListener('resize', showCut);
-  for (const more of document.querySelectorAll('details.dispatch-more')) more.addEventListener('toggle', showCut);
+  const queue = document.querySelector('#to-dispatch > .dispatch-queue');
+  const first = queue?.querySelector(':scope > li');
+  if (!queue || !first) return;
+  const fit = () => queue.style.setProperty('--queue-first', `${first.getBoundingClientRect().height}px`);
+  new ResizeObserver(fit).observe(first);
+  fit();
 })();
 
 // === A Property photo that will not load: the card drops its strip and the words take the width. ===

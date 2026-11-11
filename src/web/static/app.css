@@ -622,6 +622,12 @@
        two 4px strokes into one dot. */
     .select {
       padding-inline-end: 2.75rem;
+      text-overflow: ellipsis;
+    }
+    /* A small select's caret sits about 20px in; 2rem keeps the text clear of it without
+       spending the width a narrow filter ("All Properties") needs. */
+    .select.select-sm {
+      padding-inline-end: 2rem;
     }
     .checkbox {
       --input-color: var(--control);
@@ -1837,8 +1843,12 @@
       position: relative;
       z-index: 1;
     }
+    /* Done rows carry Close ticket under the stage: it fills the column, so the row keeps
+       the same edges as the rows above it whatever the stage. */
     .ticket-row-stage .btn {
+      justify-self: stretch;
       margin-top: 2px;
+      padding-inline: 6px;
     }
     .ticket-row-title .unread-dot {
       display: inline-block;
@@ -1885,8 +1895,11 @@
       box-shadow: none;
     }
     .ticket-row-stage-name {
+      max-width: 100%;
+      overflow: hidden;
       font-size: 12px;
       font-weight: 600;
+      text-overflow: ellipsis;
       white-space: nowrap;
     }
     /* Phones: the tally rows put their actions under the text, the counts wrap. */
@@ -3300,6 +3313,28 @@
       .page-header:not(:has(.page-header-controls :is(input, select))) .page-header-controls {
         flex-wrap: nowrap;
         justify-content: flex-end;
+      }
+    }
+    /* The Profiles chips need more room than most controls, so they keep a line of their own
+       under the title until the page is wide enough to show them beside it. */
+    @container content (min-width: 40rem) and (max-width: 71.99rem) {
+      .page-header:has(.profiles-chips):has(.page-header-controls):not(:has(.page-header-controls :is(input, select))) {
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-areas:
+          'lead end'
+          'controls controls';
+      }
+      .page-header.has-meta:has(.profiles-chips):has(.page-header-controls):not(:has(.page-header-controls :is(input, select))) {
+        grid-template-areas:
+          'lead end'
+          'controls controls'
+          'meta meta';
+      }
+      .page-header:has(.profiles-chips):not(:has(.page-header-controls :is(input, select))) .page-header-controls {
+        justify-content: flex-start;
+      }
+      .page-header:has(.profiles-chips) .page-header-date {
+        margin-left: auto;
       }
     }
     @container content (min-width: 62rem) {
@@ -5908,6 +5943,23 @@
       font-size: 13px;
       font-weight: 600;
     }
+    .profile-role {
+      padding: 2px 10px;
+      border-radius: 999px;
+      background: var(--info-bg);
+      color: var(--action);
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .profile-links {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
     .tradie-hero-rating {
       display: inline-flex;
       align-items: center;
@@ -6913,11 +6965,9 @@
       }
     }
     .ticket-hero { order: 1; }
-    .ticket-next-slot { order: 3; }
     .ticket-pair { order: 4; }
     .ticket-history { order: 5; min-width: 0; }
     .ticket-messages { order: 6; min-width: 0; }
-    .ticket-details { order: 9; }
     .ticket-layout .section {
       border: 0;
       border-radius: var(--radius-card);
@@ -6968,9 +7018,7 @@
       }
       .ticket-side .ticket-messages,
       .ticket-side .ticket-people,
-      .ticket-side .ticket-costs-slot,
-      .ticket-side .ticket-next-slot,
-      .ticket-side .ticket-details {
+      .ticket-side .ticket-costs-slot {
         min-width: 0;
       }
       .ticket-main {
@@ -6991,12 +7039,10 @@
       }
       .ticket-people { order: 1; }
       .ticket-costs-slot { order: 2; }
-      .ticket-next-slot { order: 3; }
-      .ticket-messages { order: 4; }
-      .ticket-details { order: 5; }
+      .ticket-messages { order: 3; }
     }
-    /* The Summary band: the Summary card (with the stage ring) and the Add another Job tile,
-       flat on the page: no outline around a card. */
+    /* The Summary band: the Summary card, with the stage ring and the Next step, flat on the
+       page: no outline around a card. */
     .ticket-hero {
       display: grid;
       grid-template-columns: minmax(0, 1fr);
@@ -7006,14 +7052,235 @@
       border-radius: 0;
     }
     .ticket-hero-card {
+      display: grid;
+      gap: 16px;
+      padding: 18px 20px;
+      background: var(--surface);
+      border-radius: var(--radius-card);
+    }
+    .ticket-hero-top {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       justify-content: space-between;
       gap: 16px;
-      padding: 18px 20px;
-      background: var(--surface);
-      border-radius: var(--radius-card);
+    }
+    /* Next sits along the bottom of the Summary, on the page's tint, so it is the second thing read. */
+    .ticket-hero-card .ticket-next-card {
+      margin: 0 -20px -18px;
+      padding: 14px 20px 16px;
+      background: var(--page);
+      border-width: 2px 0 0;
+      border-radius: 0 0 var(--radius-card) var(--radius-card);
+    }
+    .ticket-hero-card .ticket-next-card:has(.is-decision) {
+      background: color-mix(in srgb, var(--hivis) 14%, var(--surface));
+    }
+    .ticket-jobs-foot {
+      display: grid;
+      gap: 8px;
+    }
+    .ticket-report-note {
+      margin: 0 0 10px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .ticket-report-body + .ticket-report-note {
+      margin: 12px 0 0;
+    }
+    .ticket-wo {
+      display: grid;
+      gap: 10px;
+    }
+    .ticket-wo-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .ticket-tile-note {
+      display: block;
+      margin-top: 2px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .ticket-tile-note.is-ok {
+      color: var(--done);
+    }
+    .ticket-tile-note.is-waiting {
+      color: var(--muted);
+    }
+    .ticket-tile-note.is-waiting::before {
+      content: '';
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      margin-right: 6px;
+      vertical-align: 1px;
+      background: var(--amber);
+      border-radius: 50%;
+    }
+    /* A Ticket's messages: one row per person, each opening that conversation over the page. */
+    .convos-unread {
+      padding: 1px 8px;
+      font-size: 12px;
+      font-weight: 700;
+      background: var(--hivis);
+      border-radius: var(--radius-pill);
+    }
+    .convo-list {
+      display: grid;
+      gap: 2px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .convo-row {
+      display: grid;
+      grid-template-columns: 32px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 6px;
+      color: inherit;
+      text-decoration: none;
+      border-radius: var(--radius-sm);
+    }
+    .convo-row:hover {
+      background: var(--page);
+    }
+    .convo-row:focus-visible {
+      outline: 2px solid var(--action);
+      outline-offset: -2px;
+    }
+    .convo-avatar {
+      display: grid;
+      place-items: center;
+      width: 32px;
+      height: 32px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--surface);
+      background: var(--ink);
+      border-radius: 50%;
+    }
+    .convo-avatar.is-big {
+      flex: none;
+      width: 44px;
+      height: 44px;
+      font-size: 15px;
+    }
+    .convo-main {
+      display: grid;
+      gap: 1px;
+      min-width: 0;
+    }
+    .convo-who {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      min-width: 0;
+    }
+    .convo-name,
+    .convo-preview {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .convo-name {
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .convo-role {
+      flex: none;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .convo-preview {
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .convo-row.is-unread .convo-preview {
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .convo-you {
+      font-weight: 600;
+    }
+    .convo-meta {
+      display: grid;
+      justify-items: end;
+      gap: 4px;
+      font-size: 12px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .convo-count {
+      min-width: 18px;
+      padding: 1px 5px;
+      font-weight: 700;
+      color: var(--ink);
+      text-align: center;
+      background: var(--hivis);
+      border-radius: var(--radius-pill);
+    }
+    .convo-dialog {
+      width: min(640px, calc(100% - 32px));
+      max-width: 640px;
+      height: fit-content;
+    }
+    .convo-dialog-head {
+      justify-content: flex-start;
+      border-bottom: 1px solid var(--line);
+    }
+    .convo-dialog-who {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+    .convo-dialog-who .inbox-thread-name a {
+      color: inherit;
+    }
+    .convo-dialog-who .inbox-thread-sub {
+      overflow-wrap: anywhere;
+    }
+    .convo-dialog-reach {
+      display: flex;
+      flex: none;
+      gap: 6px;
+    }
+    .convo-thread {
+      flex: 1 1 auto;
+      height: auto;
+    }
+    .convo-subject {
+      font-weight: 600;
+    }
+    .convo-flags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 6px 0 0;
+    }
+    .convo-dialog-foot {
+      display: flex;
+      flex: none;
+      justify-content: flex-end;
+      padding: 12px 16px;
+      border-top: 1px solid var(--line);
+    }
+    @media (max-width: 47.99rem) {
+      .convo-dialog {
+        width: 100%;
+        max-width: none;
+        height: 100%;
+      }
+    }
+    @media (max-width: 39.99rem) {
+      .convo-dialog-head {
+        flex-wrap: wrap;
+      }
+      .convo-dialog-reach {
+        order: 3;
+        width: 100%;
+      }
     }
     .ticket-hero-text {
       display: grid;
@@ -7458,6 +7725,18 @@
     .ticket-jobs .table-frame :is(th, td):last-child {
       width: 7.5rem;
     }
+    /* A rating's source sits over its stars, so the Ratings column doesn't push Choose out of the frame. */
+    .ticket-jobs .quote-table .metric {
+      flex-wrap: wrap;
+      column-gap: 4px;
+      row-gap: 0;
+      padding-block: 2px;
+    }
+    .ticket-jobs .quote-table .metric-source {
+      flex-basis: 100%;
+      font-size: 11px;
+      line-height: 1.3;
+    }
     @media (min-width: 640px) {
       .ticket-jobs .table-frame.is-stacked tbody :is(th, td),
       .ticket-jobs .table-frame.is-stacked tbody :is(th, td):first-child {
@@ -7781,6 +8060,10 @@
       .schedule-filter {
         flex: 0 1 8.5rem;
         min-width: 7rem;
+      }
+      /* "All Properties" is the longest of the three; it keeps the width to clear the caret. */
+      .schedule-filter:has(select[name='property']) {
+        flex: 0 0 9.5rem;
       }
       .schedule-filter .select {
         width: 100%;
@@ -9017,7 +9300,7 @@
 
     /* ----- Dispatch, soft cards: the map card beside Today at a glance and To dispatch, Properties under them. */
     .dispatch-top {
-      --dispatch-h: 43rem; /* the map card and the right column share one height from 64rem */
+      --dispatch-h: 34rem; /* the map card's least height from 64rem; it grows with the right column */
       display: grid;
       grid-template-columns: minmax(0, 1fr);
       gap: 16px;
@@ -9266,30 +9549,40 @@
       display: grid;
       gap: 16px;
     }
-    /* From 64rem the right column is as tall as the map card beside it: Today at a glance
-       keeps its natural height and To dispatch takes the rest, its header fixed while its
-       cards scroll. Sharing the map's height keeps both bottoms level whatever the header does. */
+    /* From 64rem To dispatch is as tall as its first Job, so that card is never cut; the
+       rest scroll under it, a card at a time (static/dispatch-map.js sets --queue-first).
+       The map card stretches to the right column, so both bottoms stay level. */
     @media (min-width: 64rem) {
+      .dispatch-top {
+        align-items: stretch;
+      }
+      .dispatch-mapcard {
+        height: auto;
+        min-height: var(--dispatch-h);
+      }
       .dispatch-right {
         display: flex;
         flex-direction: column;
-        height: var(--dispatch-h);
+        align-self: start;
       }
       .dispatch-right > .soft-card:first-child {
         flex: none;
       }
       #to-dispatch {
         display: grid;
-        grid-template-rows: auto minmax(0, 1fr);
-        flex: 1 1 0;
-        min-height: 0;
+        grid-template-rows: auto auto;
       }
       #to-dispatch > .dispatch-queue {
         align-content: start;
-        min-height: 0;
+        max-height: var(--queue-first, 32rem);
         overflow-y: auto;
+        overscroll-behavior: contain;
+        scroll-snap-type: y proximity;
         padding-right: 4px;
         scrollbar-width: thin;
+      }
+      #to-dispatch > .dispatch-queue > li {
+        scroll-snap-align: start;
       }
       /* One sentence: it keeps its own height rather than stretching into a tall empty box. */
       #to-dispatch > .empty-state {
@@ -9539,45 +9832,6 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-    }
-    .dispatch-card.is-full .dispatch-tix-line {
-      align-items: start;
-    }
-    .dispatch-card.is-full .dispatch-tix-text {
-      overflow: visible;
-      white-space: normal;
-      overflow-wrap: anywhere;
-    }
-    .dispatch-tix-more {
-      display: inline-flex;
-      align-self: flex-start;
-      align-items: center;
-      gap: 4px;
-      padding: 2px 0;
-      border: 0;
-      background: transparent;
-      color: var(--action);
-      font: inherit;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-    }
-    .dispatch-tix-more[hidden] {
-      display: none;
-    }
-    .dispatch-tix-more:hover {
-      text-decoration: underline;
-    }
-    .dispatch-tix-more svg {
-      transition: rotate var(--dur-fast) var(--ease-out);
-    }
-    .dispatch-tix-more[aria-expanded='true'] svg {
-      rotate: 180deg;
-    }
-    @media (pointer: coarse) {
-      .dispatch-tix-more {
-        min-height: 44px;
-      }
     }
     /* The Properties with nothing open: the same cards, a little smaller, behind a quiet button. */
     .dispatch-cards.is-quiet .dispatch-card {
@@ -10064,6 +10318,49 @@
     html:not(.js) .js-only {
       display: none;
     }
+    /* Filter bars apply as soon as something changes (app.js), so their Apply button is only for
+       pages without JavaScript. Hidden here rather than by app.js, so a list refreshed in place
+       never brings it back. */
+    html.js form:is([data-live], [data-autosubmit]) .filter-bar-apply {
+      display: none;
+    }
+    /* The confirm panel app.js opens for a form with data-confirm, under the button that asked. */
+    .confirm-pop {
+      position: fixed;
+      inset: auto;
+      margin: 0;
+      width: max-content;
+      max-width: min(22rem, calc(100vw - 16px));
+      padding: 14px 16px 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface);
+      color: var(--ink);
+      box-shadow: var(--shadow-lift);
+    }
+    .confirm-pop-text {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.45;
+      text-wrap: pretty;
+    }
+    .confirm-pop-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      .confirm-pop:popover-open {
+        animation: confirm-pop-in var(--dur-fast) var(--ease-out);
+      }
+      @keyframes confirm-pop-in {
+        from {
+          opacity: 0;
+          translate: 0 -4px;
+        }
+      }
+    }
     /* Page header: a link back above the title, the Urgency beside it, the date with its icon, the alerts bell and the user's initials. */
     .page-header.has-back {
       row-gap: 0;
@@ -10214,10 +10511,13 @@
         display: flex;
         flex-direction: column;
       }
+      /* In this flex column "start" would shrink the card to its content's width; it fills
+         its half of the row, like the Tenant's report beside it. */
       .ticket-pair.is-paired > .ticket-jobs > .ticket-job {
         display: flex;
         flex: 1 1 auto;
         flex-direction: column;
+        align-self: stretch;
       }
       .ticket-pair.is-paired > .ticket-jobs > .ticket-job > .section-body {
         flex: 1;
@@ -10248,23 +10548,27 @@
       background: var(--info-bg);
       border-radius: var(--radius-sm);
     }
+    /* Tiles wrap and grow to fill each line, so two tiles over a full-width Firm Quote end at
+       its right edge (a grid's spanning tile would keep empty columns open beside them). */
     .ticket-tiles {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+      display: flex;
+      flex-wrap: wrap;
       gap: 8px;
       margin: 0 0 12px;
     }
     .ticket-tiles > div {
+      flex: 1 1 9rem;
+      min-width: 0;
       padding: 8px 12px;
       background: var(--page);
       border-radius: var(--radius-sm);
     }
     .ticket-tiles > .is-wide {
-      grid-column: 1 / -1;
+      flex-basis: 100%;
     }
     /* The Tenant's rating and yours read as one pair: full width, two equal tiles. */
     .ticket-tiles > .ticket-tiles-pair {
-      grid-column: 1 / -1;
+      flex-basis: 100%;
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 8px;
@@ -10408,13 +10712,26 @@
       cursor: grabbing;
       user-select: none;
     }
-    /* With JavaScript the slider below replaces the browser's own scrollbar; without it, the scrollbar stays. */
+    /* With JavaScript the slider below replaces the browser's own scrollbar; without it, the
+       scrollbar stays. The board still scrolls itself, so a trackpad swipe or Shift + wheel moves it. */
     html.js .tl-board {
-      overflow-x: hidden;
+      overflow-x: auto;
+      overscroll-behavior-x: contain;
       scrollbar-width: none;
     }
     html.js .tl-board::-webkit-scrollbar {
       display: none;
+    }
+    /* A board scrolled off either edge fades there, so a column cut by the edge reads as
+       more to scroll to rather than a broken card. */
+    html.js .tl-board.is-cut-start {
+      mask-image: linear-gradient(to right, transparent, #000 48px);
+    }
+    html.js .tl-board.is-cut-end {
+      mask-image: linear-gradient(to left, transparent, #000 48px);
+    }
+    html.js .tl-board.is-cut-start.is-cut-end {
+      mask-image: linear-gradient(to right, transparent, #000 48px, #000 calc(100% - 48px), transparent);
     }
     html:not(.js) .tl-board {
       overflow-x: auto;
@@ -10576,53 +10893,6 @@
       height: 44px;
       padding: 0;
       border-radius: 50%;
-    }
-    /* The message log stays short (starting at the newest message) until "Show the whole
-       conversation"; both edges fade over 32px so a clipped line never reads as the start or the end. */
-    html.js .ticket-msgs:not(.is-open) .message-scroll {
-      max-height: 12rem;
-      overflow-y: auto;
-      mask-image: linear-gradient(to bottom, transparent, var(--ink) 32px, var(--ink) calc(100% - 32px), transparent);
-    }
-    .ticket-msgs {
-      display: grid;
-      gap: 8px;
-    }
-    .ticket-msgs-toggle {
-      align-self: center;
-      justify-self: center;
-    }
-    .ticket-msgs-toggle[hidden] {
-      display: none;
-    }
-    /* Ticket details: one column of label and value, never tiles squeezed two to a row. */
-    .ticket-details .ticket-facts {
-      grid-template-columns: minmax(0, 1fr);
-      gap: 0;
-    }
-    .ticket-details .ticket-facts > div {
-      display: grid;
-      gap: 1px;
-      padding-block: 8px;
-    }
-    .ticket-details .ticket-facts > div + div {
-      border-top: 1px solid var(--line);
-    }
-    .ticket-details .ticket-facts dt {
-      font-size: 12px;
-    }
-    .ticket-details .ticket-facts dd {
-      font-size: 14px;
-      font-weight: 600;
-    }
-    .ticket-detail-note {
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-      font-size: 12px;
-      font-weight: 400;
-      color: var(--muted);
     }
   }
 }
@@ -11528,9 +11798,15 @@
        Mine / All and Add profile; households on the left; Tradies and the people with no
        Property in a Paper column on the right. No overflow clipping on the card, so the
        Add profile menu can open past its edge. */
+    /* One row at any width: the chips shrink and their names end in "…" rather than wrapping.
+       On a phone, where even the shortened chips don't fit, the row scrolls sideways. */
     .profiles-chips {
       display: flex;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
+      min-width: 0;
+      max-width: 100%;
+      overflow-x: auto;
+      scrollbar-width: none;
       gap: 4px;
       padding: 4px;
       border-radius: 999px;
@@ -11539,8 +11815,12 @@
     }
     .profiles-chip {
       display: inline-flex;
+      flex: 0 1 auto;
       align-items: center;
       gap: 6px;
+      /* Room for the first letters of the name and its count, however narrow the row gets. */
+      min-width: 5.5rem;
+      overflow: hidden;
       min-height: 32px;
       padding: 0 14px;
       border-radius: 999px;
@@ -11552,7 +11832,19 @@
     .profiles-chip:hover {
       background: var(--page);
     }
+    /* "All" and the chip shown keep their full width; the others give way first. */
+    .profiles-chip:first-child,
+    .profiles-chip.is-active {
+      flex-shrink: 0;
+      min-width: auto;
+    }
+    .profiles-chip-label {
+      min-width: 2.5em;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
     .profiles-chip .num {
+      flex-shrink: 0;
       font-weight: 700;
     }
     .profiles-chip.is-active {
@@ -11998,9 +12290,12 @@
     }
 
     /* The tiles run from the top of the address to the bottom of the Tenants. */
+    /* Two tiles of one fixed width, so "1 Open Ticket" and "12 Open Tickets", High and
+       Routine, all line up from one household to the next. */
     .household-status {
       grid-area: status;
-      display: flex;
+      display: grid;
+      grid-template-columns: repeat(2, 6.75rem);
       align-items: stretch;
       gap: 8px;
       min-width: 0;
@@ -12009,8 +12304,8 @@
       display: flex;
       flex-direction: column;
       justify-content: center;
-      min-width: 5.5rem;
-      padding: 4px 12px;
+      min-width: 0;
+      padding: 6px 8px;
       border: 1px solid var(--line);
       border-radius: 12px;
       background: var(--surface);
@@ -12024,6 +12319,7 @@
       font-family: var(--font-head);
       font-size: 20px;
       font-weight: 600;
+      font-variant-numeric: tabular-nums;
       line-height: 1.2;
       color: var(--ink);
     }
@@ -12619,8 +12915,9 @@
       padding: 0;
       list-style: none;
     }
+    /* The stages share the card's width, so the strip ends where the cards under it do. */
     .appr-stage-item {
-      flex: 0 1 22rem;
+      flex: 1 1 18rem;
       min-width: 0;
     }
     .appr-stage-item + .appr-stage-item {
@@ -12994,20 +13291,32 @@
     .appr-over > div {
       min-width: 0;
     }
+    /* The ring fills with how far over the limit a Quote goes, full at double the limit. Its
+       label is sized for the widest it can be ("+100%", "999+%"), so 0% and 245% sit alike. */
     .appr-ring {
       --fill: var(--pct);
       flex: none;
       display: grid;
       place-items: center;
-      width: 44px;
-      height: 44px;
-      background: radial-gradient(closest-side, var(--surface) 72%, transparent 74%), conic-gradient(var(--urgent) calc(var(--fill) * 1%), var(--urgent-bg) 0);
+      width: 52px;
+      height: 52px;
+      background: radial-gradient(closest-side, var(--surface) 76%, transparent 78%), conic-gradient(var(--urgent) calc(var(--fill) * 1%), var(--urgent-bg) 0);
       border-radius: 50%;
     }
     .appr-ring > span {
-      font-size: 12px;
+      display: flex;
+      align-items: baseline;
+      font-size: 11px;
       font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.02em;
+      line-height: 1;
       color: var(--urgent);
+    }
+    .appr-ring small {
+      margin-left: 1px;
+      font-size: 8.5px;
+      font-weight: 700;
     }
     .appr-done {
       display: grid;
@@ -13060,4 +13369,355 @@
   syntax: '<number>';
   inherits: false;
   initial-value: 0;
+}
+
+/* === Archive (pages/archive.ts): closed Tickets grouped by month, in the Tickets page's look === */
+@layer utilities {
+  @layer app {
+    .archive-page {
+      display: grid;
+      gap: 16px;
+    }
+    /* The bar: the search (with the sort at its end) on the first line; the outcome tabs and
+       the filters on the second; the chips for filters that are on under a hairline. */
+    .ar-bar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 10px;
+      padding: 12px;
+    }
+    .ar-bar-top {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .ar-bar-top .ar-search {
+      flex: 1 1 auto;
+    }
+    .ar-bar-top .ar-search .input {
+      height: 42px;
+      font-size: 15px;
+    }
+    .ar-bar .filter-bar.is-compact {
+      margin-left: 0;
+    }
+    .ar-sort select {
+      height: 42px;
+    }
+    .ar-controls {
+      display: grid;
+      gap: 10px;
+    }
+    .ar-filters {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px 16px;
+    }
+    .ar-outcomes {
+      min-inline-size: 0;
+      margin: 0;
+      padding: 0;
+      border: 0;
+    }
+    .ar-outcome-tab {
+      cursor: pointer;
+      user-select: none;
+    }
+    .ar-outcome-tab:has(:checked) {
+      color: var(--ink);
+      background: var(--page);
+      box-shadow: inset 0 0 0 1px var(--line);
+      font-weight: 600;
+    }
+    .ar-outcome-tab:has(:focus-visible) {
+      outline: 2px solid var(--action);
+      outline-offset: 2px;
+    }
+    /* Every select is one width, so the row lines up whatever is chosen in it. */
+    .ar-selects {
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    .ar-selects .filter-bar-field {
+      flex: 0 0 8.5rem;
+    }
+    .ar-selects {
+      gap: 8px;
+    }
+    .ar-bar .filter-bar.is-compact select,
+    .ar-bar .filter-bar.is-compact .combobox,
+    .ar-bar .filter-bar.is-compact .combobox-input {
+      width: 100%;
+    }
+    .ar-sort .filter-bar-field {
+      width: 9.25rem;
+    }
+    .ar-dates {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .ar-date-field {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .ar-date-field .input {
+      width: 10.5rem;
+    }
+    .ar-chips {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      margin: 0;
+      padding: 10px 0 0;
+      list-style: none;
+      border-top: 1px dashed var(--line);
+    }
+    .ar-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 28px;
+      padding: 0 8px 0 12px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--action);
+      text-decoration: none;
+      background: var(--info-bg);
+      border-radius: var(--radius-pill);
+      transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+    }
+    .ar-chip:hover {
+      color: var(--surface);
+      background: var(--action);
+    }
+    .ar-clear {
+      margin-left: 4px;
+      font-size: 13px;
+    }
+    /* While a live refresh is on its way the old list stays, dimmed. */
+    #ar-results {
+      transition: opacity var(--dur-fast) var(--ease-out);
+    }
+    :root[data-live-loading] #ar-results {
+      opacity: 0.55;
+    }
+    /* On a phone the search takes its own line, with the sort under it. */
+    @container content (max-width: 39.99rem) {
+      .ar-bar-top {
+        flex-wrap: wrap;
+      }
+      .ar-bar-top .ar-search,
+      .ar-sort,
+      .ar-sort .filter-bar-field {
+        flex: 1 1 100%;
+        width: 100%;
+      }
+    }
+    @container content (max-width: 63.99rem) {
+      .ar-filters {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .ar-selects {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+      }
+      .ar-selects .filter-bar-field {
+        min-width: 0;
+      }
+    }
+    /* The dropdown arrow, drawn the same on a plain select and on the searchable Property box,
+       and set 18px in from the edge (the browser's own sits about 8px in) with room before the text. */
+    .ar-bar .filter-bar.is-compact :is(select, .combobox-input) {
+      appearance: none;
+      padding-right: 2.5rem;
+      background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+      background-position: calc(100% - 22px) 50%, calc(100% - 17px) 50%;
+      background-size: 5px 5px;
+      background-repeat: no-repeat;
+    }
+    .ar-search {
+      position: relative;
+      display: flex;
+      align-items: center;
+      min-width: 0;
+      color: var(--muted);
+    }
+    .ar-search > svg {
+      position: absolute;
+      z-index: 1;
+      left: 10px;
+      pointer-events: none;
+    }
+    .ar-search .input {
+      width: 100%;
+      padding-left: 32px;
+    }
+    .ar-month {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0;
+      padding: 16px 0 8px;
+      font-family: var(--font-head);
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .ar-group:first-child .ar-month {
+      padding-top: 0;
+    }
+    .ar-month-count {
+      min-width: 22px;
+      padding: 0 6px;
+      font-family: var(--font-body);
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 20px;
+      text-align: center;
+      color: var(--ink);
+      background: var(--page);
+      border-radius: 999px;
+    }
+    .ar-rows {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .ar-row {
+      position: relative;
+      display: grid;
+      grid-template-columns: 48px minmax(0, 1fr) 11rem 7.5rem 32px;
+      align-items: center;
+      gap: 16px;
+      padding: 12px 12px 12px 16px;
+      background: var(--surface);
+      transition: background-color var(--dur-fast) var(--ease-out);
+    }
+    .ar-row + .ar-row {
+      border-top: 1px solid var(--line);
+    }
+    .ar-row:hover {
+      background: var(--page);
+    }
+    .ar-thumb {
+      width: 48px;
+      height: 48px;
+    }
+    .ar-main {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+    .ar-head,
+    .ar-address {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 2px 8px;
+      margin: 0;
+    }
+    .ar-number {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .ar-trade,
+    .ar-manager {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .ar-issue {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--ink);
+      text-decoration: none;
+    }
+    .ar-issue::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+    }
+    .ar-row:hover .ar-issue {
+      color: var(--action);
+    }
+    .ar-address .entity-link,
+    .ar-row .ticket-cell-unread {
+      position: relative;
+      z-index: 1;
+    }
+    .ar-outcome,
+    .ar-closed {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 4px;
+      font-size: 13px;
+    }
+    .ar-note,
+    .ar-date {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .ar-ago {
+      color: var(--ink);
+      white-space: nowrap;
+    }
+    /* The arrow gets a column of its own, centred, so it never touches the row's edge or the date beside it. */
+    .ar-chevron {
+      display: grid;
+      place-items: center;
+      width: 32px;
+      height: 32px;
+      color: var(--control);
+      border-radius: 999px;
+      transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+    }
+    .ar-row:hover .ar-chevron {
+      color: var(--action);
+      background: var(--surface);
+    }
+    .ar-more {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding-top: 16px;
+    }
+    .ar-more-count {
+      margin: 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    @media (max-width: 767.98px) {
+      .ar-row {
+        grid-template-columns: 48px minmax(0, 1fr);
+        gap: 8px 12px;
+      }
+      .ar-outcome,
+      .ar-closed {
+        grid-column: 2;
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px 8px;
+      }
+      .ar-chevron {
+        display: none;
+      }
+    }
+  }
 }

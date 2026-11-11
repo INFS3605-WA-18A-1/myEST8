@@ -1,4 +1,5 @@
 import { generateKeyPairSync } from 'node:crypto';
+import type { AuthKit } from '../../src/adapters/workos.ts';
 import type { DemoControls } from '../../src/demo/controls.ts';
 import type { ChannelConnectors } from '../../src/web/connectors.ts';
 import { createSessions } from '../../src/web/auth.ts';
@@ -43,7 +44,14 @@ export function buttonsOn(page: string) {
 
 /** The standard world behind the web app, with helpers to sign in and click through pages. */
 export async function webWorld(
-  options: { demo?: DemoControls; connectors?: ChannelConnectors; composer?: null; composeEmails?: boolean; smsNumbers?: NonNullable<Parameters<typeof world>[0]>['smsNumbers'] } = {},
+  options: {
+    demo?: DemoControls;
+    connectors?: ChannelConnectors;
+    composer?: null;
+    composeEmails?: boolean;
+    smsNumbers?: NonNullable<Parameters<typeof world>[0]>['smsNumbers'];
+    authKit?: AuthKit;
+  } = {},
 ) {
   const w = await world({
     ...(options.composer === null ? { composer: null } : {}),
@@ -59,6 +67,7 @@ export async function webWorld(
     sendgridPublicKey: generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).publicKey.export({ format: 'der', type: 'spki' }).toString('base64'),
     demo: options.demo,
     ...(options.connectors ? { connectors: options.connectors } : {}),
+    ...(options.authKit ? { authKit: options.authKit } : {}),
   });
 
   /** Signs in and returns the session cookie to pass to `get` and `post`. */

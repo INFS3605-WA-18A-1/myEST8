@@ -1,7 +1,7 @@
 // The live work at /tickets: the new Maintenance Requests waiting to be confirmed, then
 // the open Tickets, most urgent first and then oldest, so the worst repairs are dealt
 // with first. One filter bar (Urgency, Trade, Property) narrows both. Closed Tickets are
-// in the Archive, which shares this page's controls and table. The Ticket itself is at /tickets/:id.
+// in the Archive, which shares this page's Mine/All control and filters. The Ticket itself is at /tickets/:id.
 
 import { Hono } from 'hono';
 import { html } from 'hono/html';
@@ -13,7 +13,7 @@ import { icon } from '../icons.ts';
 import { listFilterOf, listFilterQuery, type ListFilter } from '../list-filter.ts';
 import { requestFlags } from '../request-checks.ts';
 import { shellInfo } from '../shell.ts';
-import { badge, emptyState, filterBar, flashFrom, formatAge, formatDay, humanise, linkButton, page, postButton, section, segmented, statusBadge, table, ticketCell, urgencyBadge, type Html } from '../ui.ts';
+import { badge, emptyState, filterBar, flashFrom, formatAge, humanise, linkButton, page, postButton, section, segmented, urgencyBadge, type Html } from '../ui.ts';
 import { propertyOptions } from './onboarding-forms.ts';
 import { byUrgency } from './requests.ts';
 
@@ -47,16 +47,15 @@ export function ticketListPages() {
         active: 'tickets',
         flash: flashFrom(c.req.url),
         shell: await shellInfo(c),
-        subtitle: 'New Maintenance Requests waiting for you to confirm, then the open Tickets.',
         controls: scopeControl('/tickets', f),
         body: html`
           <div class="tickets-page">
             ${stageBar(everyOpen, f, stage, properties)}
-            ${section({ title: 'New Maintenance Requests', id: 'requests', actions: requests.length ? html`${countBadge(requests.length)}<span class="tk-section-note">Waiting for you to confirm</span>` : undefined, body: requestList(byUrgency(requests), now, f) })}
+            ${section({ title: 'New Maintenance Requests', id: 'requests', actions: requests.length ? countBadge(requests.length) : undefined, body: requestList(byUrgency(requests), now, f) })}
             ${section({
               title: 'Open Tickets',
               id: 'open',
-              actions: html`${countBadge(open.length)}${open.length ? html`<span class="tk-section-note">Most urgent first, then oldest</span>` : ''}`,
+              actions: countBadge(open.length),
               body: open.length
                 ? html`${ticketCards(open, now)}${stageLegend()}`
                 : emptyState(
@@ -118,7 +117,7 @@ export function countBadge(count: number) {
  * The issue's first photo, 56px and cropped square, or a quiet placeholder when there is
  * none: the same in a request's row and a Ticket's, so the lists read alike.
  */
-function issueThumb(photos: { fileId: number }[]): Html {
+export function issueThumb(photos: { fileId: number }[]): Html {
   return photos[0]
     ? html`<img src="/files/${photos[0].fileId}" alt="Photo of the issue" width="56" height="56" loading="lazy" />`
     : html`<span class="issue-thumb-none" aria-hidden="true">${icon('image', { size: 'size-6' })}</span>`;
@@ -127,7 +126,7 @@ function issueThumb(photos: { fileId: number }[]): Html {
 /** The stage names the Property Manager reads on the Tickets page (a Ticket whose Jobs are all done waits on them to close it). */
 const STAGE_TITLE: Record<Stage, string> = {
   quoting: 'Quoting',
-  awaiting_owner: 'With Property Owner',
+  awaiting_owner: 'With Owner',
   approved: 'Ready to book',
   scheduled: 'Booked',
   done: 'Done · ready to close',
@@ -230,7 +229,7 @@ function ticketCards(tickets: ListedTicket[], now: Date): Html {
         </div>
         <div class="tk-card-actions">
           ${linkButton('View ticket', `/tickets/${t.ticketId}`, { variant: 'secondary', size: 'sm' })}
-          ${readyToClose ? postButton(`/tickets/${t.ticketId}/close`, 'Close ticket', { size: 'sm', confirm: 'Close this Ticket? The Tenant and Property Owner will be told.' }) : ''}
+          ${readyToClose ? postButton(`/tickets/${t.ticketId}/close`, 'Close ticket', { size: 'sm', confirm: 'Close this Ticket? The Tenant and Owner will be told.' }) : ''}
         </div>
       </li>`;
     })}
@@ -240,43 +239,4 @@ function ticketCards(tickets: ListedTicket[], now: Date): Html {
 /** The five stages in order, so the bar on each card reads the same way. */
 function stageLegend(): Html {
   return html`<p class="tk-legend"><span class="tk-legend-label">Stages</span>${STAGES.map((s) => html`<span class="tk-legend-item"><i class="stage-${s}"></i>${STAGE_TAB[s] === 'Ready to close' ? 'Done' : STAGE_TAB[s]}</span>`)}</p>`;
-}
-
-/**
- * Read as the docket is: the issue's photo and the issue (the row's link to the Ticket,
- * with its number quiet beside it and any unread messages), the address under it (a
- * link to the Property), then Urgency, the Jobs and their stages, and when it was
- * reported. With `closed` (the Archive) the last column is when it was closed, in the
- * Agency's time zone. On phones each row is a block: the issue, the address, then the badges.
- */
-export function ticketTable(tickets: ListedTicket[], o: { all: boolean; now: Date; closed?: { timeZone: string } }): Html {
-  const closed = o.closed;
-  return table(
-    ['Issue', 'Urgency', ...(o.all ? ['Property Manager'] : []), 'Jobs', closed ? 'Closed' : 'Reported'],
-    tickets.map((t) => [
-      html`<div class="ticket-list-issue">
-        <div class="queue-thumb">${issueThumb(t.photos)}</div>
-        ${ticketCell({ ticketId: t.ticketId, issue: t.description, address: t.propertyAddress, propertyHref: `/properties/${t.propertyId}`, unread: t.unreadMessages })}
-      </div>`,
-      html`<span class="flex flex-wrap gap-1">${urgencyBadge(t.urgency)}${t.checkUrgency ? badge('Check urgency', 'warning') : ''}</span>`,
-      ...(o.all ? [html`<span class="text-muted">${t.propertyManager}</span>`] : []),
-      jobsCell(t, !closed),
-      closed
-        ? html`<span class="text-muted whitespace-nowrap">Closed ${formatDay(t.closedAt, closed.timeZone)}</span>`
-        : html`<span class="text-muted whitespace-nowrap">${formatAge(t.reportedAt, o.now)}</span>`,
-    ]),
-    { caption: closed ? 'Closed Tickets, most recently closed first' : 'Open Tickets, most urgent and oldest first', stack: true },
-  );
-}
-
-/**
- * A Ticket's Jobs, one to a line: the Trade, then its stage. When no Job of an open
- * Ticket is open any more it waits on the Property Manager to close it, and says so.
- */
-function jobsCell(t: ListedTicket, open: boolean): Html {
-  const readyToClose = open && t.jobs.length > 0 && t.jobs.every((j) => j.status === 'done' || j.status === 'cancelled');
-  return html`<ul class="ticket-list-jobs" role="list">
-      ${t.jobs.map((j) => html`<li><span class="ticket-list-trade">${humanise(j.trade)}</span> ${statusBadge(j.status, { job: true })}</li>`)}
-    </ul>
-    ${readyToClose ? html`<p class="ticket-list-close">Ready to close</p>` : ''}`;
 }

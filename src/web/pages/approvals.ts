@@ -35,7 +35,6 @@ export function approvalPages() {
         active: 'approvals',
         flash: flashFrom(c.req.url),
         shell: await shellInfo(c),
-        subtitle: "Quotes held up until a Property Owner says yes, and Tenants' Reimbursement Requests for Urgent Repairs they arranged.",
         controls: segmented([
           { label: 'Mine', href: '/approvals', active: !all },
           { label: 'All', href: '/approvals?filter=all', active: all },
@@ -58,7 +57,7 @@ function body(waiting: Approvals, all: boolean, timeZone: string, now: Date): Ht
   const claims = waiting.reimbursements;
   if (!owners.length && !claims.length) {
     return emptyState(
-      'Nothing is waiting on a Property Owner, and no Reimbursement Requests are open. A Quote lands here when choosing it would take a Ticket over its Max Repair Cost, and a Reimbursement Request when a Tenant arranges an Urgent Repair.',
+      'Nothing is waiting on an Owner, and no Reimbursement Requests are open. A Quote lands here when choosing it would take a Ticket over its Max Repair Cost, and a Reimbursement Request when a Tenant arranges an Urgent Repair.',
       all ? undefined : linkButton('Show all approvals', '/approvals?filter=all'),
     );
   }
@@ -68,7 +67,7 @@ function body(waiting: Approvals, all: boolean, timeZone: string, now: Date): Ht
   const barShown = [owners.length > 0, silent > 0, claims.length > 0].filter(Boolean).length > 1;
   return html`<div class="appr-panel">
     ${stageBar(owners, silent, claims, toReview, now)}
-    ${owners.length ? list('Waiting on a Property Owner', 'owners', owners.length, 'owners', barShown ? '' : ownersNote(owners, now), owners.map((w) => ownerCard(w, timeZone, now))) : ''}
+    ${owners.length ? list('Waiting on an Owner', 'owners', owners.length, 'owners', barShown ? '' : ownersNote(owners, now), owners.map((w) => ownerCard(w, timeZone, now))) : ''}
     ${claims.length ? list('Reimbursement Requests', 'reimbursements', claims.length, 'claims', barShown ? '' : claimsNote(claims, toReview, now), claims.map((u) => claimCard(u, all, timeZone, now))) : ''}
     <p class="appr-done">${icon('seal-check', { size: 'size-8' })}<span>That's everything waiting on approval.</span></p>
   </div>`;
@@ -92,7 +91,7 @@ function stageBar(owners: Approvals['waitingOnOwner'], silent: number, claims: A
   const stage = (kind: string, label: string, count: number, note: string) =>
     html`<li class="appr-stage-item"><div class="appr-stage is-${kind}"><span class="appr-stage-label">${label}</span><span class="appr-stage-count">${count}</span></div><p class="appr-stage-note">${note}</p></li>`;
   const stages = [
-    ...(owners.length ? [stage('owners', 'Waiting on a Property Owner', owners.length, ownersNote(owners, now))] : []),
+    ...(owners.length ? [stage('owners', 'Waiting on an Owner', owners.length, ownersNote(owners, now))] : []),
     ...(silent ? [stage('silent', 'No reply for 48 hours', silent, 'Reminder sent · needs you')] : []),
     ...(claims.length ? [stage('claims', 'Reimbursement Requests', claims.length, claimsNote(claims, toReview, now))] : []),
   ];
@@ -118,7 +117,8 @@ function person(label: string, name: string, tone: 'owner' | 'tenant', contact?:
 
 /** A Quote held up for a Property Owner: where its reminder stands, the Ticket and Property, who, how much, and how far over the limit. */
 function ownerCard(w: Approvals['waitingOnOwner'][number], timeZone: string, now: Date): Html {
-  const over = Math.round((w.repairCostCents / w.maxRepairCostCents) * 100);
+  // How far past the limit the Repair Cost goes, as a share of the limit: 0% is at the limit, 100% is double it.
+  const over = Math.max(0, Math.round((w.overByCents / w.maxRepairCostCents) * 100));
   return html`<article class="appr-card ${w.silent ? 'is-silent' : 'is-waiting'}">
     <div class="appr-status">
       <p class="appr-status-main">${w.silent ? 'No reply for 48 hours' : 'Waiting for the Owner'}</p>
@@ -134,13 +134,13 @@ function ownerCard(w: Approvals['waitingOnOwner'][number], timeZone: string, now
       </details>
     </div>
     <div class="appr-figures">
-      ${person('Property Owner', w.ownerName, 'owner', w.ownerMobile ? html`<p class="appr-person-contact">${contactLink('mobile', w.ownerMobile, { title: true })}</p>` : undefined)}
+      ${person('Owner', w.ownerName, 'owner', w.ownerMobile ? html`<p class="appr-person-contact">${contactLink('mobile', w.ownerMobile, { title: true })}</p>` : undefined)}
       <div class="appr-col"><p class="appr-label">Quote</p>
         <div class="appr-tile"><p class="appr-amount">${formatMoney(w.quotePriceCents)}</p><p class="appr-tile-note">${w.tradieBusinessName}</p></div></div>
       <div class="appr-col"><p class="appr-label">Over the limit</p>
         <div class="appr-over">
-          <span class="appr-ring" style="--pct:${Math.min(100, over)}"><span>${over}%</span></span>
-          <div><p class="appr-amount is-over">${formatMoney(w.overByCents)}</p><p class="appr-tile-note">${formatMoney(w.repairCostCents)} of ${formatMoney(w.maxRepairCostCents)}</p></div>
+          <span class="appr-ring${over >= 100 ? ' is-full' : ''}" style="--pct:${Math.min(100, over)}" role="img" aria-label="${over}% over the limit"><span class="num">${over > 999 ? '999+' : `+${over}`}<small>%</small></span></span>
+          <div><p class="appr-amount is-over">${formatMoney(w.overByCents)}</p><p class="appr-tile-note">${formatMoney(w.repairCostCents)} against a ${formatMoney(w.maxRepairCostCents)} limit</p></div>
         </div></div>
     </div>
   </article>`;
@@ -161,7 +161,7 @@ function claimCard(u: Approvals['reimbursements'][number], all: boolean, timeZon
     </div>
     <div class="appr-figures">
       ${person('Tenant', u.tenantName, 'tenant')}
-      ${person('Property Owner', u.ownerName, 'owner')}
+      ${person('Owner', u.ownerName, 'owner')}
       <div class="appr-col"><p class="appr-label">Amount</p>
         ${
           u.amountCents === null

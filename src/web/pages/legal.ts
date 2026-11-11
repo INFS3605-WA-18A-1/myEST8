@@ -84,7 +84,7 @@ function termsPage(): Html {
       ${part(
         'People your Agency adds',
         html`<p>
-          myEST8 texts and emails Tenants, Tradies and Property Owners using the contact details your Agency enters. Only add people who expect to hear
+          myEST8 texts and emails Tenants, Tradies and Owners using the contact details your Agency enters. Only add people who expect to hear
           from the Agency, and tell them what it is.
         </p>`,
       )}
@@ -116,7 +116,7 @@ function privacyPage(): Html {
         html`<p>To run a repair, myEST8 keeps:</p>
           <ul>
             <li>the Property Manager’s name, work email, password (stored only as a hash), Agency name and time zone;</li>
-            <li>the Properties, Tenants, Tradies, Property Owners and Building Managers the Agency adds, with their contact details;</li>
+            <li>the Properties, Tenants, Tradies, Owners and Building Managers the Agency adds, with their contact details;</li>
             <li>the messages and photos people send to the Agency’s numbers and upload links;</li>
             <li>the Maintenance Requests, Tickets, Quotes, visits and approvals made from them.</li>
           </ul>`,
@@ -130,7 +130,7 @@ function privacyPage(): Html {
       ${part(
         'Who sees it',
         html`<p>
-          The Agency’s Property Managers see its records. The Tenant, Tradie or Property Owner involved in a repair gets the messages about it. The text
+          The Agency’s Property Managers see its records. The Tenant, Tradie or Owner involved in a repair gets the messages about it. The text
           and email services the Agency connects (for example Twilio for texts, and SendGrid, Resend or Gmail for email) carry those messages and see the
           address they go to. The database and hosting providers that run myEST8 store the data. myEST8 does not sell it or use it for advertising.
         </p>`,
@@ -146,7 +146,7 @@ function privacyPage(): Html {
         'Your choices',
         html`<p>
           Ask the Property Manager who added you to correct or delete your details, or for a copy of what the Agency holds. A Property Manager can remove
-          a Tenant, Tradie or Property Owner from the Agency.
+          a Tenant, Tradie or Owner from the Agency.
         </p>`,
       )}
       ${part(

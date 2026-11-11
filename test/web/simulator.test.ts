@@ -121,7 +121,7 @@ describe('the phone simulator', () => {
 
     expect(res.status).toBe(200);
     const page = await res.text();
-    for (const text of ['Tenants', 'Tradies', 'Property Owners', 'Building Managers', 'Tom Tran', 'Pete Park', 'Olivia Owens', 'Barry Strata']) {
+    for (const text of ['Tenants', 'Tradies', 'Owners', 'Building Managers', 'Tom Tran', 'Pete Park', 'Olivia Owens', 'Barry Strata']) {
       expect(page).toContain(text);
     }
     expect(page).toContain(`href="/demo?contact=${TOM_ID}"`);

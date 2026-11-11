@@ -115,12 +115,12 @@ describe('the onboarding guide', () => {
     expect(refused.page).not.toContain('Tina Test');
   });
 
-  test('adds a Property Owner, then a Property of theirs with a Nominated Tradie', async () => {
+  test('adds an Owner, then a Property of theirs with a Nominated Tradie', async () => {
     const w = await webWorld();
     const cookie = await w.signIn();
 
     const owner = await submit(w, '/setup/owners', { name: 'Priya Patel', email: 'priya@example.com' }, cookie);
-    expect(owner.page).toContain('Priya Patel added as a Property Owner');
+    expect(owner.page).toContain('Priya Patel added as an Owner');
     const ownerId = /<option value="(\d+)"[^>]*>Priya Patel<\/option>/.exec(await page(w, '/properties/new', cookie))?.[1];
     expect(ownerId).toBeDefined();
 
