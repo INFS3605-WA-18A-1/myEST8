@@ -25,6 +25,7 @@ your branch ──PR──▶ dev ──release PR──▶ master (deploys to p
 - Before you open it:
   - `npm run check` passes (typecheck, unit and end-to-end tests).
   - If you changed Tailwind classes, run `npm run css` and commit `src/web/static/tw.css`.
+ - If you changed a React island (`src/web/client/`) or `src/web/variants.ts`, run `npm run islands` and commit `src/web/static/islands.js` (`docs/adr/0021-react-islands-in-server-rendered-pages.md`).
   - If the design or the domain language changed, update `docs/design-system.md`, `CONTEXT.md` or an ADR in `docs/adr/`.
 - Title: what the change does, in sentence case ("Redesign the dashboard"). Body: what changed and why, how you tested it, screenshots for UI changes, and a link to the `.scratch` issue if there is one.
 - Another teammate reviews it, and CI's `test` check must be green before it is merged.
