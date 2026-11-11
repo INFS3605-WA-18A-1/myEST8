@@ -112,6 +112,22 @@ describe('Resend received email', () => {
     expect(stub.requests).toHaveLength(1);
   });
 
+  test('finds the inbound address of a forwarded email outside To:', async () => {
+    // Gmail and Outlook forward with the original To: line, so the Agency's inbound address is elsewhere.
+    const forwarded = (fields: Record<string, unknown>) =>
+      stubFetch(() => json({ id: EMAIL_ID, from: 'bella@example.com', to: ['Harbour Realty <info@harbour.example>'], text: 'Leak', attachments: [], ...fields }));
+    const inboundDomain = 'mail.myest8.test';
+
+    for (const fields of [{ received_for: ['harbour-realty@mail.myest8.test'] }, { cc: ['Harbour-Realty@Mail.myEST8.test'] }, { bcc: ['harbour-realty@mail.myest8.test'] }]) {
+      const message = await resendToInbound(receivedEvent(), { apiKey: API_KEY, fetch: forwarded(fields).fetch, receivedAt, inboundDomain });
+      expect(message?.agencyChannel).toBe('harbour-realty@mail.myest8.test');
+    }
+
+    // No recipient on the inbound domain: the first To: address, as before.
+    const plain = await resendToInbound(receivedEvent(), { apiKey: API_KEY, fetch: forwarded({}).fetch, receivedAt, inboundDomain });
+    expect(plain?.agencyChannel).toBe('info@harbour.example');
+  });
+
   test('uses HTML when there is no text part, and drops the quoted reply', async () => {
     const stub = stubFetch(() =>
       json({
@@ -218,6 +234,11 @@ describe('Resend env config', () => {
     expect(resendInboundConfig({ RESEND_API_KEY: '  re_test  ', RESEND_WEBHOOK_SECRET: '  whsec_local  ' })).toEqual({
       apiKey: 're_test',
       webhookSecret: 'whsec_local',
+    });
+    expect(resendInboundConfig({ RESEND_API_KEY: 're_test', RESEND_WEBHOOK_SECRET: 'whsec_local', RESEND_INBOUND_DOMAIN: ' Mail.myEST8.test ' })).toEqual({
+      apiKey: 're_test',
+      webhookSecret: 'whsec_local',
+      inboundDomain: 'mail.myest8.test',
     });
     expect(() => resendInboundConfig({ RESEND_API_KEY: 're_test' })).toThrow(/RESEND_WEBHOOK_SECRET/);
     expect(() => resendInboundConfig({ RESEND_WEBHOOK_SECRET: 'whsec_local' })).toThrow(/RESEND_API_KEY/);

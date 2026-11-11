@@ -183,6 +183,22 @@ describe('the onboarding wizard', () => {
     expect(visible(verified.page)).toContain('SMS verified');
 
     expect(visible(verified.page)).toContain("Still to do: send one email to the Agency inbox so it's forwarded here.");
+
+    // Gmail's forwarding confirmation arrives: its code shows on the email row, which keeps waiting.
+    await w.h.app.receiveInbound({
+      providerMessageId: 're-gmail-confirm',
+      agencyChannel: 'sunrise-realty@mail.example.test',
+      channelType: 'email',
+      from: 'forwarding-noreply@google.com',
+      text: 'sam@gmail.example has requested to automatically forward mail to your email address.\nConfirmation code: 912345678',
+      attachments: [],
+      receivedAt: w.h.clock.now(),
+    });
+    const confirming = visible(await page(w, '/welcome/channels', sam));
+    expect(confirming).toContain('Confirm forwarding in Gmail');
+    expect(confirming).toMatch(/Gmail sent a confirmation for forwarding from sam@gmail\.example ?\. The code is 912345678/);
+    expect(confirming).toContain('Waiting for your first message');
+
     const typed = await w.post('/welcome/channels', { type: 'email', address: 'inbox@sunrise.example' }, sam);
     expect(decodeURIComponent(typed.headers.get('location')!)).not.toContain('inbox@sunrise.example');
     expect(visible(await page(w, '/welcome/channels', sam))).not.toContain('inbox@sunrise.example');

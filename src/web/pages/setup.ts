@@ -370,7 +370,7 @@ async function channelsArea(
   shown: Shown,
   connectors: ChannelConnectors,
   agencyId: number,
-  email: { address: string; state: 'waiting' | 'verified' | 'connected' },
+  email: Awaited<ReturnType<PropertyManagerActions['ensureInboundEmail']>>,
   pending: { channelType: AgencyChannel['type']; address: string }[],
   smsPanel: Html | null,
 ): Promise<Html> {
@@ -407,7 +407,7 @@ function channelCard(
   timeZone: string,
   origin: string,
   via: { gmailBlock: Html | null; unavailable: ChannelType[]; smsInbound: 'simulator' | 'none'; smsPanel: Html | null },
-  email: { address: string; state: 'waiting' | 'verified' | 'connected' },
+  email: Awaited<ReturnType<PropertyManagerActions['ensureInboundEmail']>>,
   pending: { address: string } | undefined,
 ): Html {
   const waiting = channel.type === 'email' && email.state === 'waiting';
@@ -424,7 +424,7 @@ function channelCard(
       ${connected && !(channel.type === 'sms' && via.smsPanel) ? channelLine(connected, timeZone, { waiting, smsInbound: via.smsInbound }) : ''}
       <div class="mt-3">
         ${channel.type === 'email'
-          ? html`${inboundEmailField(email.address)}${via.gmailBlock ?? ''}`
+          ? html`${inboundEmailField(email.address, email.gmailConfirmation)}${via.gmailBlock ?? ''}`
           : via.smsPanel ?? phoneChannelForm({
                 channel,
                 postTo: '/setup/channels',

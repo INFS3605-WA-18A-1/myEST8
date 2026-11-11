@@ -397,7 +397,7 @@ async function channelsStep(c: WizardContext, demo: boolean, connectors: Channel
               ${unavailable ? unavailableNote(channel.type, connectors.unavailable) : ''}
               ${unavailable || (channel.type === 'sms' && smsPanel) ? '' : current ? channelLine(current, agency.timeZone, { waiting, smsInbound: connectors.smsInbound }) : ''}
               ${unavailable ? '' : channel.type === 'email'
-                ? html`<div class="mt-2">${inboundEmailField(email.address)}</div>${gmailBlock ?? ''}<div class="mt-2">${channelGuide(channel.type, origin)}</div>`
+                ? html`<div class="mt-2">${inboundEmailField(email.address, email.gmailConfirmation)}</div>${gmailBlock ?? ''}<div class="mt-2">${channelGuide(channel.type, origin)}</div>`
                 : smsPanel
                   ? html`<div class="mt-2">${smsPanel}</div>`
                   : html`${phoneChannelForm({
