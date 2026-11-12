@@ -8,6 +8,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import {
   confirmedEstimates,
   confirmedQuotes,
+  jobView,
   DANA,
   dateAhead,
   firmQuote,
@@ -961,5 +962,33 @@ describe('the timeline', () => {
     const page = readFileSync('src/web/pages/ticket.ts', 'utf8');
     expect(kinds.size).toBeGreaterThan(20);
     expect([...kinds].filter((kind) => !page.includes(`case '${kind}':`))).toEqual([]);
+  });
+});
+
+describe('redoing work the Tenant says is not fixed', () => {
+  test('a closed Ticket offers "Not fixed? Redo the work", which reopens it with a redo Job', async () => {
+    const w = await webWorld();
+    const job = await tomsTapTicket(w);
+    const [quote] = await confirmedQuotes(w, job, [[w.tradies.finn, 150_00, new Date('2026-10-13T09:00:00+11:00')]]);
+    await w.alice.chooseQuote(quote!.quoteId, 'Only plumber free this week');
+    await w.alice.sendWorkOrder(job.jobId);
+    const { workOrder } = await jobView(w, job);
+    w.h.classifier.when('Done', { replyType: 'done', relatedItem: `work_order:${workOrder!.workOrderId}` });
+    w.h.clock.advance(Math.max(0, new Date('2026-10-13T09:01:00+11:00').getTime() - w.h.clock.now().getTime()));
+    await w.h.receive(w.tradies.finn.address, 'Done');
+    await w.alice.closeTicket(job.ticketId);
+    const cookie = await w.signIn();
+
+    const closed = await (await w.get(`/tickets/${job.ticketId}`, cookie)).text();
+    expect(closed).toContain('Not fixed? Redo the work');
+    expect(closed).toContain(`action="/tickets/${job.ticketId}/redo"`);
+    expect(closed).toContain('Reopen with a new Job');
+
+    const res = await w.post(`/tickets/${job.ticketId}/redo`, {}, cookie);
+    expect(res.status).toBe(303);
+    const reopened = await (await w.get(res.headers.get('location')!, cookie)).text();
+    expect(reopened).toContain('Ticket reopened with a Job to redo the work');
+    expect(reopened).toContain('Job 2: Plumbing (redo)');
+    expect(reopened).not.toContain('Not fixed? Redo the work');
   });
 });

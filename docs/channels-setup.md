@@ -42,7 +42,9 @@ In the [Resend dashboard](https://resend.com/domains):
    RESEND_INBOUND_DOMAIN=mail.kevinhe.pro
    ```
 
-`RESEND_INBOUND_DOMAIN` is the subdomain from step 1, with no `@` and no scheme.
+`RESEND_INBOUND_DOMAIN` is the subdomain from step 1, with no `@` and no scheme. myEST8 also uses it to find the Agency in a forwarded email: Gmail and Outlook forward with the original To: line (the Agency's own inbox), so the inbound address may be in `received_for`, Cc or Bcc. The first recipient on this domain is the Agency's.
+
+Gmail confirms a new forwarding address by emailing it a code from `forwarding-noreply@google.com`. That email is not a Maintenance Request: myEST8 keeps it and shows the code (and Gmail's link, only when it goes to `mail.google.com` or `mail-settings.google.com`) on the email row of the welcome wizard, Setup and Settings → Channels, until real mail arrives. Outlook sends no code. A Microsoft 365 admin may block forwarding outside the organisation; the guide on those pages says so.
 
 ## 2. WhatsApp (Meta Cloud API, one number for the server)
 

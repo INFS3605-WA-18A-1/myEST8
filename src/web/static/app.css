@@ -10212,6 +10212,12 @@
       white-space: pre-line;
       overflow-wrap: anywhere;
     }
+    /* The Ticket a "Not fixed" or closed-Ticket message is about, and the done Job it would redo. */
+    .inbox-item-ticket {
+      margin: 8px 0 0;
+      font-size: 14px;
+      line-height: 1.45;
+    }
     .inbox-item-from {
       display: flex;
       flex-wrap: wrap;
@@ -13782,4 +13788,141 @@ select[data-base-select] {
 }
 .base-select-item[data-selected] {
   font-weight: 600;
+}
+
+/*
+ * Email forwarding setup: the steps in full on Harbour's tint with a Harbour edge,
+ * until the first forwarded email arrives (emailSetup in onboarding-forms.ts).
+ * Numbered on a thin track like the sign-up panel's "What happens next".
+ */
+@layer utilities {
+  @layer app {
+    .fwd-setup {
+      padding: 16px 18px 18px;
+      background: var(--info-bg);
+      border-left: 4px solid var(--action);
+      border-radius: 8px;
+      color: var(--ink);
+    }
+    .fwd-setup-title {
+      font-family: var(--font-head);
+      font-size: 16px;
+      font-weight: 700;
+      line-height: 1.25;
+    }
+    .fwd-setup-lead {
+      margin-top: 4px;
+      max-width: 72ch;
+      font-size: 14px;
+      color: var(--muted);
+    }
+    .fwd-steps {
+      display: flex;
+      flex-direction: column;
+      margin: 16px 0 0;
+      padding: 0;
+      list-style: none;
+    }
+    .fwd-step {
+      position: relative;
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr);
+      gap: 12px;
+      padding-bottom: 20px;
+    }
+    .fwd-step:last-child {
+      padding-bottom: 0;
+    }
+    .fwd-step:not(:last-child)::before {
+      content: '';
+      position: absolute;
+      top: 32px;
+      bottom: 4px;
+      left: 13.5px;
+      width: 1px;
+      background: var(--control);
+    }
+    .fwd-step-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      background: var(--surface);
+      border: 1px solid var(--control);
+      border-radius: var(--radius-pill);
+      font-family: var(--font-head);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .fwd-step.is-done .fwd-step-num {
+      background: var(--done);
+      border-color: var(--done);
+      color: var(--surface);
+    }
+    .fwd-step.is-current .fwd-step-num {
+      background: var(--action);
+      border-color: var(--action);
+      color: var(--surface);
+      box-shadow:
+        0 0 0 2px var(--info-bg),
+        0 0 0 4px var(--action);
+    }
+    .fwd-step-body {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 0;
+      padding-top: 3px;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+    .fwd-step-title {
+      font-weight: 600;
+    }
+    .fwd-providers {
+      display: grid;
+      gap: 12px;
+    }
+    @media (min-width: 48rem) {
+      .fwd-providers {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+    .fwd-provider {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 12px 14px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    .fwd-provider-name {
+      font-weight: 600;
+    }
+    .fwd-note {
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .fwd-confirm {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    /* Gmail's code, large enough to read across to Gmail's settings page. */
+    .fwd-code {
+      align-self: flex-start;
+      padding: 6px 14px;
+      background: var(--surface);
+      border: 1px dashed var(--action);
+      border-radius: 8px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      font-variant-numeric: tabular-nums;
+    }
+  }
 }

@@ -1,10 +1,16 @@
 import type { Context } from './context.ts';
 import { all, one, run, transaction, type Param } from './db.ts';
 import type { ChannelType, ImageMatchResult } from './ports.ts';
-import { invalid, iso, newToken, normalizeAddress, notFound, TRADES, URGENCIES, type Availability, type Trade, type Urgency } from './shared.ts';
+import { addMs, HOUR_MS, invalid, iso, newToken, normalizeAddress, notFound, TRADES, URGENCIES, type Availability, type Trade, type Urgency } from './shared.ts';
 
 export type IssueStatus = 'gathering' | 'awaiting_photos' | 'checking' | 'maintenance_request' | 'confirmed' | 'rejected' | 'urgent';
 const IN_INTAKE: IssueStatus[] = ['gathering', 'awaiting_photos', 'checking', 'maintenance_request'];
+
+/**
+ * How long after a Ticket closes a Tenant's "it's not fixed" still reopens it, rather
+ * than starting a new Maintenance Request. A problem back after this is a new issue.
+ */
+export const REWORK_WINDOW_DAYS = 60;
 /** An issue's photo link takes photos only while the issue is in these statuses (the same rule as intake.upload). */
 const TAKES_PHOTOS: IssueStatus[] = ['awaiting_photos', 'checking', 'maintenance_request'];
 
@@ -71,6 +77,8 @@ export interface Job {
   trade: Trade;
   checkTrade: boolean;
   status: JobStatus;
+  /** The done Job this one redoes, because the Tenant said it wasn't fixed. Null for any other Job. */
+  reworkOf: number | null;
 }
 
 export interface UrgentRepair {
@@ -150,7 +158,7 @@ type TicketRow = {
   closed_at: string | null;
 };
 
-type JobRow = { id: number; agency_id: number; ticket_id: number; trade: Trade; check_trade: number; status: JobStatus };
+type JobRow = { id: number; agency_id: number; ticket_id: number; trade: Trade; check_trade: number; status: JobStatus; rework_of: number | null };
 
 type UrgentRepairRow = {
   id: number;
@@ -245,6 +253,7 @@ const toJob = (r: JobRow): Job => ({
   trade: r.trade,
   checkTrade: !!r.check_trade,
   status: r.status,
+  reworkOf: r.rework_of ?? null,
 });
 
 function requireTrade(trade: Trade) {
@@ -808,6 +817,69 @@ export function createTickets({ db, clock, settings, ports, modules }: Context) 
       await modules.quotes.inspectionsCancelled(inspections);
     },
 
+    /**
+     * What a Tenant's "it's not fixed" about `related` would redo: the done Job named, or
+     * else the Ticket's latest done Job. Null when there is no done Job to redo (the work
+     * isn't finished yet, so the message is an ordinary update) or the Ticket closed more
+     * than REWORK_WINDOW_DAYS ago. `inProgress` is true when a Job on the Ticket is still
+     * under way: the redo is already happening.
+     */
+    async reworkTarget(related: { ticketId?: number; jobId?: number }) {
+      const ticketId = related.jobId !== undefined ? (await job(related.jobId)).ticketId : related.ticketId;
+      if (ticketId === undefined) return null;
+      const found = await ticket(ticketId);
+      if (found.status === 'closed' && (found.closedAt ?? '') < iso(addMs(clock.now(), -REWORK_WINDOW_DAYS * 24 * HOUR_MS))) return null;
+      const jobs = await jobsOf(ticketId);
+      const named = related.jobId !== undefined ? jobs.find((j) => j.id === related.jobId && j.status === 'done') : undefined;
+      const doneJob = named ?? jobs.filter((j) => j.status === 'done').at(-1);
+      if (!doneJob) return null;
+      return {
+        ticketId,
+        issueId: found.issueId,
+        doneJob,
+        ticketStatus: found.status,
+        inProgress: jobs.some((j) => j.status !== 'done' && j.status !== 'cancelled'),
+      };
+    },
+
+    /**
+     * Adds a Job to redo a done Job the Tenant says isn't fixed: same Ticket, same Trade,
+     * starting at quoting. A closed Ticket is reopened first, so the issue stays one
+     * Ticket. Refused while a Job on the Ticket is still under way.
+     */
+    async addReworkJob(agencyId: number, doneJobId: number) {
+      return transaction(db, async () => {
+        const done = await jobInAgency(agencyId, doneJobId);
+        if (done.status !== 'done') invalid('Only a done Job can be redone');
+        const parent = await ticketInAgency(agencyId, done.ticketId);
+        if ((await jobsOf(parent.id)).some((j) => j.status !== 'done' && j.status !== 'cancelled')) {
+          invalid(`Ticket #${parent.id} already has a Job under way`);
+        }
+        if (parent.status === 'closed') {
+          await run(db, `UPDATE tickets SET status = 'open', closed_at = NULL WHERE id = ?`, parent.id);
+          await recordEvent(parent.id, 'reopened', { jobId: done.id });
+        }
+        const jobId = await run(
+          db,
+          `INSERT INTO jobs (agency_id, ticket_id, trade, status, rework_of) VALUES (?, ?, ?, 'quoting', ?) RETURNING id`,
+          agencyId,
+          parent.id,
+          done.trade,
+          done.id,
+        );
+        await recordEvent(parent.id, 'job_added', { jobId, trade: done.trade, reworkOf: done.id });
+        return { ticketId: parent.id, jobId, reopened: parent.status === 'closed' };
+      });
+    },
+
+    /** A Job to redo the Ticket's latest done Job (see addReworkJob). For the Ticket page, so it has no time limit. */
+    async redoTicket(agencyId: number, ticketId: number) {
+      const found = await ticketInAgency(agencyId, ticketId);
+      const done = (await jobsOf(found.id)).filter((j) => j.status === 'done').at(-1);
+      if (!done) invalid('There is no done Job on this Ticket to redo');
+      return this.addReworkJob(agencyId, done.id);
+    },
+
     async closeTicket(agencyId: number, ticketId: number) {
       const closing = await transaction(db, async () => {
         const closing = await ticketInAgency(agencyId, ticketId);
@@ -984,8 +1056,22 @@ export function createTickets({ db, clock, settings, ports, modules }: Context) 
       }
       for (const t of await all<TicketRow>(db, `SELECT * FROM tickets WHERE property_id = ? AND status = 'open' ORDER BY id DESC`, propertyId)) {
         items.push({ ref: `ticket:${t.id}`, summary: `Ticket: ${(await issue(t.issue_id)).description}` });
-        for (const j of (await jobsOf(t.id)).filter((j) => j.status !== 'cancelled' && j.status !== 'done')) {
-          items.push({ ref: `job:${j.id}`, summary: `${j.trade} Job (${j.status.replace('_', ' ')}) on Ticket ${t.id}` });
+        // Done Jobs stay listed while the Ticket is open, so "it's not fixed" can name the Job it is about.
+        for (const j of (await jobsOf(t.id)).filter((j) => j.status !== 'cancelled')) {
+          items.push({ ref: `job:${j.id}`, summary: `${j.trade} Job (${j.status === 'done' ? 'done: the Tradie finished it' : j.status.replace('_', ' ')}) on Ticket ${t.id}` });
+        }
+      }
+      // A Ticket closed lately, with its done Jobs: the same problem back is "not fixed", not a new issue.
+      const since = iso(addMs(clock.now(), -REWORK_WINDOW_DAYS * 24 * HOUR_MS));
+      for (const t of await all<TicketRow>(
+        db,
+        `SELECT * FROM tickets WHERE property_id = ? AND status = 'closed' AND closed_at >= ? ORDER BY id DESC`,
+        propertyId,
+        since,
+      )) {
+        items.push({ ref: `ticket:${t.id}`, summary: `Closed Ticket, its repair finished: ${(await issue(t.issue_id)).description}` });
+        for (const j of (await jobsOf(t.id)).filter((j) => j.status === 'done')) {
+          items.push({ ref: `job:${j.id}`, summary: `${j.trade} Job (done: the Tradie finished it) on closed Ticket ${t.id}` });
         }
       }
       for (const u of await all<UrgentRepairRow>(

@@ -412,6 +412,8 @@ export function createApp(
         linkSender: (itemId: number, personId: number) => intake.linkSender(agencyId, itemId, personId),
         routeInboxItem: (itemId: number, overrides?: Record<string, string>) => intake.routeInboxItem(agencyId, itemId, overrides),
         dismissInboxItem: (itemId: number) => intake.dismissInboxItem(agencyId, itemId),
+        /** "Not fixed" in the Inbox: a Job on the same Ticket to redo the done one, reopening the Ticket if it closed. */
+        reworkFromInbox: (itemId: number) => intake.reworkFromInbox(agencyId, itemId),
 
         // Maintenance Requests and Tickets
         /** Confirms a Maintenance Request into a Ticket and Job; `edits.summary`, when not blank, replaces the Summary. */
@@ -431,6 +433,8 @@ export function createApp(
           tickets.changeUrgency(agencyId, target, urgency),
         setJobTrade: (jobId: number, trade: Trade) => tickets.setJobTrade(agencyId, jobId, trade),
         addJob: (ticketId: number, trade: Trade) => tickets.addJob(agencyId, ticketId, trade),
+        /** A Job to redo the Ticket's latest done Job, when the Tenant says (on the phone, say) it isn't fixed. Reopens a closed Ticket. */
+        redoTicket: (ticketId: number) => tickets.redoTicket(agencyId, ticketId),
         cancelJob: (jobId: number) => tickets.cancelJob(agencyId, jobId),
         closeTicket: (ticketId: number) => tickets.closeTicket(agencyId, ticketId),
         markTicketRead: (ticketId: number) => tickets.markRead(agencyId, ticketId),

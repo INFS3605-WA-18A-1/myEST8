@@ -58,13 +58,17 @@ export function verifyResendSignature(
   return signaturesMatch(expected, headers.signature);
 }
 
-/** Both Resend inbound settings, or null when neither is set. One without the other is a broken setup. */
-export function resendInboundConfig(env: Record<string, string | undefined>): { webhookSecret: string; apiKey: string } | null {
+/**
+ * Both Resend inbound settings, or null when neither is set. One without the other is a broken setup.
+ * `inboundDomain` (RESEND_INBOUND_DOMAIN) picks the Agency's address out of a forwarded email's recipients.
+ */
+export function resendInboundConfig(env: Record<string, string | undefined>): { webhookSecret: string; apiKey: string; inboundDomain?: string } | null {
   const webhookSecret = env.RESEND_WEBHOOK_SECRET?.trim() ?? '';
   const apiKey = env.RESEND_API_KEY?.trim() ?? '';
   if (!webhookSecret && !apiKey) return null;
   if (!webhookSecret || !apiKey) throw new Error('Set both RESEND_WEBHOOK_SECRET and RESEND_API_KEY, or neither');
-  return { webhookSecret, apiKey };
+  const inboundDomain = env.RESEND_INBOUND_DOMAIN?.trim().toLowerCase();
+  return { webhookSecret, apiKey, ...(inboundDomain ? { inboundDomain } : {}) };
 }
 
 async function getJson(fetchImpl: typeof fetch, url: string, apiKey: string): Promise<unknown> {
@@ -86,6 +90,22 @@ function addresses(value: unknown): string[] {
   if (typeof value === 'string') return [value];
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is string => typeof item === 'string');
+}
+
+/**
+ * The Agency's address among the email's recipients. A forwarded email keeps the
+ * To: line it was first sent with (the Agency's own inbox, say info@agency.example),
+ * so the inbound address can be in `received_for`, cc or bcc instead. The first
+ * recipient on the inbound domain wins; with none, the first To: address, as before.
+ */
+function agencyRecipient(email: Record<string, unknown>, inboundDomain: string | undefined): string {
+  const to = addresses(email.to).map(emailAddress);
+  if (inboundDomain) {
+    const all = [...to, ...[email.received_for, email.cc, email.bcc].flatMap(addresses).map(emailAddress)];
+    const onDomain = all.find((address) => address.endsWith(`@${inboundDomain}`));
+    if (onDomain) return onDomain;
+  }
+  return to[0] ?? '';
 }
 
 function messageText(email: Record<string, unknown>): string {
@@ -116,12 +136,12 @@ async function downloadAttachments(id: string, listed: unknown, apiKey: string, 
 /**
  * Turns an `email.received` webhook into an inbound message. The webhook has no
  * body, so this GETs the received email and, when that lists attachments, each
- * file. Text is the plain part, or HTML with the tags removed, with the quoted
+ * file. The Agency is the recipient on `inboundDomain` (see agencyRecipient). Text is the plain part, or HTML with the tags removed, with the quoted
  * reply stripped. Any other event is ignored.
  */
 export async function resendToInbound(
   event: unknown,
-  { apiKey, fetch: fetchImpl, receivedAt }: { apiKey: string; fetch: typeof fetch; receivedAt: Date },
+  { apiKey, fetch: fetchImpl, receivedAt, inboundDomain }: { apiKey: string; fetch: typeof fetch; receivedAt: Date; inboundDomain?: string },
 ): Promise<InboundMessage | null> {
   if (!isObject(event) || event.type !== 'email.received') return null;
   if (!isObject(event.data) || typeof event.data.email_id !== 'string' || !event.data.email_id) {
@@ -132,7 +152,7 @@ export async function resendToInbound(
   if (!isObject(email)) malformed('Resend', 'received email is not an object', email);
   return {
     providerMessageId: `re-${id}`,
-    agencyChannel: emailAddress(addresses(email.to)[0] ?? ''),
+    agencyChannel: agencyRecipient(email, inboundDomain),
     channelType: 'email',
     from: emailAddress(typeof email.from === 'string' ? email.from : ''),
     text: messageText(email),

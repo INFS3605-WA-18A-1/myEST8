@@ -68,6 +68,14 @@ _Avoid_: urgent repair waiting on a receipt, receipt claim
 The work one Tradie does under a Ticket.
 _Avoid_: task
 
+**Redo Job**:
+A Job added to a Ticket to redo a done Job the Tenant says isn't fixed: the same Trade, on the same Ticket, quoted and approved like any other Job. A closed Ticket is reopened for it, so one issue stays one Ticket. See ADR 0022.
+_Avoid_: rework ticket, callback, warranty job
+
+**Not fixed**:
+A Tenant's report that a repair a Tradie finished isn't fixed: a fix rating of 1 or 2, a message saying the problem is still there or came back, or the same problem reported again while its Ticket is finished or closed less than 60 days ago. It waits in the Inbox, logged on the Ticket, until a Property Manager adds a Redo Job or dismisses it. It never becomes a new Maintenance Request, unless it is urgent: Urgent Repairs never become Tickets.
+_Avoid_: complaint, reopen request
+
 **Trade**:
 The kind of work a Job needs, from a fixed list: plumbing, electrical, carpentry, roofing, appliances, locksmith, pest control, general handyman.
 _Avoid_: job type, category

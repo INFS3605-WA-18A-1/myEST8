@@ -1,6 +1,7 @@
 import { option, question, TRADE_OPTIONS } from './classifier-questions.ts';
 import type { Context } from './context.ts';
 import { all, one, run, transaction } from './db.ts';
+import { isGmailForwardingConfirmation } from './gmail-forwarding.ts';
 import { checkPhotoMetadata } from './photo-checks.ts';
 import type { ChannelType, ClassifierAnswer, ClassifierOption, ClassifierQuestion, InboundMessage } from './ports.ts';
 import type { Person, Property } from './profiles.ts';
@@ -31,7 +32,10 @@ type Awaiting =
 /** The guided questions in the order they are asked. */
 const GUIDED_ORDER: GuidedQuestion[] = ['location', 'started', 'worsening', 'availability'];
 
-type InboxReason = 'unknown_sender' | 'other' | 'low_confidence' | 'common_area_no_building_manager' | 'shared_address';
+type InboxReason = 'unknown_sender' | 'other' | 'low_confidence' | 'common_area_no_building_manager' | 'shared_address' | 'not_fixed' | 'closed_ticket';
+
+/** A fix rating this low ("not fixed at all", "mostly not fixed") is a report that the repair isn't fixed. */
+const NOT_FIXED_RATING = 2;
 type Answers = Record<string, ClassifierAnswer>;
 
 /** An inbound message once stored, with its attachments saved as files. */
@@ -211,6 +215,10 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
   async function toInbox(msg: Received, personId: number | null, reason: InboxReason, answers: Answers | null) {
     const messageId = await logInbound(msg, personId, null);
     const bestGuess = answers ? Object.fromEntries(Object.entries(answers).map(([id, a]) => [id, a.answer])) : null;
+    await addInboxItem(msg, messageId, personId, reason, bestGuess);
+  }
+
+  async function addInboxItem(msg: Received, messageId: number, personId: number | null, reason: InboxReason, bestGuess: Record<string, string> | null) {
     await run(
       db,
       `INSERT INTO inbox_items (agency_id, inbound_id, message_id, person_id, reason, best_guess, at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -290,6 +298,10 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
         [
           option('new_issue', 'Reports a maintenance problem at their Property, including one that `openItems` already has (then it is a repeat report). Not a reply about work already open'),
           option('update', 'A follow-up on something in `openItems`: asking for news, confirming a visit or asking for another time, or sending a receipt. Needs an open item to be about'),
+          option(
+            'not_fixed',
+            'Says a repair a Tradie already finished (a done Job, or a closed Ticket, in `openItems`) is not fixed: the problem is still there or came back, or the work was left unfinished or done badly',
+          ),
           option('common_area', 'About a Common Area shared by everyone in a strata building (a lift, foyer, stairwell, car park, shared pool or intercom), not their own Property'),
           option('other', 'Not about maintenance: rent, the lease, bond, inspections, payments, or anything else for the Property Manager'),
         ],
@@ -336,11 +348,51 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
     if (!sure(answers, 'relatedItem')) return toInbox(msg, tenant.id, 'low_confidence', answers);
     const ref = pick(answers, 'relatedItem');
     const related = ref === 'none' ? null : await modules.tickets.resolveRef(ref);
+    const relatedTicket = related?.ticketId === undefined ? null : await modules.tickets.ticket(related.ticketId);
+    // A repeat report of finished work is "not fixed" too: it goes back to that Ticket rather than starting a new one.
+    const target = related && (messageClass === 'not_fixed' || messageClass === 'new_issue') ? await modules.tickets.reworkTarget(related) : null;
+    if (messageClass === 'not_fixed' || (messageClass === 'new_issue' && target && !target.inProgress)) {
+      // Urgent Repairs never become Tickets: an urgent "it's back" goes the Urgent way, as a new report would.
+      if (safetyRisk(answers).risk || (sure(answers, 'urgency') && pick(answers, 'urgency') === 'urgent')) return startIssue(msg, tenant, property, answers);
+      if (target) return reportNotFixed(msg, tenant, target);
+      if (related && relatedTicket?.status !== 'closed') return handleTenantUpdate(msg, tenant, related, 'general');
+      return toInbox(msg, tenant.id, 'low_confidence', answers);
+    }
     if (messageClass === 'new_issue') {
-      return related ? attachDuplicate(msg, tenant, property, related.issueId) : startIssue(msg, tenant, property, answers);
+      // A closed Ticket with nothing to redo (its Jobs were cancelled) is no home for a new report.
+      if (!related || relatedTicket?.status === 'closed') return startIssue(msg, tenant, property, answers);
+      return attachDuplicate(msg, tenant, property, related.issueId);
     }
     if (!related) return toInbox(msg, tenant.id, 'low_confidence', answers);
+    // Nobody works a closed Ticket: a message about one waits in the Inbox, not unread on it.
+    if (relatedTicket?.status === 'closed') return toInbox(msg, tenant.id, 'closed_ticket', answers);
     return handleTenantUpdate(msg, tenant, related, pick(answers, 'updateType'));
+  }
+
+  /**
+   * The Tenant says a done Job isn't fixed. It waits in the Inbox as "Not fixed", logged on
+   * the Ticket, where one press adds a Job to redo it (reopening the Ticket if it closed).
+   * While a redo is already under way, or a "Not fixed" for the same Job already waits,
+   * the message is only logged unread on the Ticket.
+   */
+  async function reportNotFixed(msg: Received, tenant: Person, target: NonNullable<Awaited<ReturnType<typeof modules.tickets.reworkTarget>>>) {
+    const relatedItem = `job:${target.doneJob.id}`;
+    const waiting = await one(
+      db,
+      `SELECT 1 FROM inbox_items WHERE agency_id = ? AND status = 'open' AND reason = 'not_fixed' AND best_guess::jsonb ->> 'relatedItem' = ?`,
+      msg.agencyId,
+      relatedItem,
+    );
+    const messageId = await logInbound(msg, tenant.id, target.issueId, true);
+    if (target.inProgress || waiting) return;
+    await addInboxItem(msg, messageId, tenant.id, 'not_fixed', { messageClass: 'not_fixed', relatedItem });
+    const property = await modules.profiles.property((await modules.tickets.ticket(target.ticketId)).propertyId);
+    await modules.notifications.send(
+      tenant.id,
+      'tenant.not_fixed_received',
+      { tenantName: firstName(tenant), propertyAddress: property.address, trade: target.doneJob.trade },
+      { issueId: target.issueId },
+    );
   }
 
   async function startIssue(msg: Received, tenant: Person, property: Property, answers: Answers) {
@@ -441,8 +493,13 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
     }
     await stopWaiting(tenant.id, awaiting.kind);
     if (awaiting.kind === 'fix_rating') {
+      const score = Number(answer);
+      await modules.scheduling.recordTenantRating(awaiting.jobId, score);
+      // "Not fixed at all" or "mostly not fixed" is a report that it isn't fixed, not just a score.
+      const target = score <= NOT_FIXED_RATING ? await modules.tickets.reworkTarget({ jobId: awaiting.jobId }) : null;
+      if (target) return reportNotFixed(msg, tenant, target);
       await logInbound(msg, tenant.id, await issueIdOf(`job:${awaiting.jobId}`));
-      return modules.scheduling.recordTenantRating(awaiting.jobId, Number(answer));
+      return;
     }
     if (awaiting.kind === 'visit_offer') {
       await logInbound(msg, tenant.id, await modules.scheduling.visitOfferIssue(awaiting.offerId));
@@ -868,10 +925,12 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
               : { filename: a.filename, contentType: a.contentType, url: a.url },
           );
         }
+        // Gmail's forwarding confirmation is kept for the channels page to show, not handled as a request.
+        const confirmation = message.channelType === 'email' && isGmailForwardingConfirmation(message.from);
         const inboundId = await run(
           db,
-          `INSERT INTO inbound_messages (provider_message_id, agency_id, channel_type, sender, text, attachments, received_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+          `INSERT INTO inbound_messages (provider_message_id, agency_id, channel_type, sender, text, attachments, received_at, processed)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
           message.providerMessageId,
           agencyId,
           message.channelType,
@@ -879,8 +938,9 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
           message.text,
           JSON.stringify(attachments),
           iso(message.receivedAt),
+          confirmation ? 1 : 0,
         );
-        await worker.schedule('intake.process', { inboundId });
+        if (!confirmation) await worker.schedule('intake.process', { inboundId });
       });
       return true;
     },
@@ -964,15 +1024,17 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
                 .map((p) => ({ personId: p.id, name: p.name, role: p.role }))
                 .sort((a, b) => a.name.localeCompare(b.name) || a.personId - b.personId)
             : [];
+        const bestGuess = item.best_guess ? (JSON.parse(item.best_guess) as Record<string, string>) : null;
         return {
           itemId: item.id,
           reason: item.reason,
+          ticket: item.reason === 'not_fixed' || item.reason === 'closed_ticket' ? await inboxTicket(bestGuess?.relatedItem) : null,
           from: msg.from,
           personId: item.person_id,
           personName: item.person_id === null ? null : (await modules.profiles.person(item.person_id)).name,
           text: msg.text,
           receivedAt: item.at,
-          bestGuess: item.best_guess ? (JSON.parse(item.best_guess) as Record<string, string>) : null,
+          bestGuess,
           candidates,
         };
       }));
@@ -1007,6 +1069,22 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
       await route(msg, await modules.profiles.person(item.person_id), forced);
     },
 
+    /**
+     * The Inbox's one-press answer to "Not fixed": a Job on the same Ticket to redo the done
+     * Job, reopening the Ticket if it closed. The message is then dealt with.
+     */
+    async reworkFromInbox(agencyId: number, itemId: number) {
+      return transaction(db, async () => {
+        const item = await openInboxItem(agencyId, itemId);
+        const ref = item.reason === 'not_fixed' && item.best_guess ? (JSON.parse(item.best_guess) as Record<string, string>).relatedItem : undefined;
+        const jobId = ref?.startsWith('job:') ? Number(ref.slice(4)) : NaN;
+        if (!Number.isInteger(jobId)) invalid('This message is not about a done Job');
+        const added = await modules.tickets.addReworkJob(agencyId, jobId);
+        await run(db, `UPDATE inbox_items SET status = 'resolved' WHERE id = ?`, itemId);
+        return added;
+      });
+    },
+
     async dismissInboxItem(agencyId: number, itemId: number) {
       return transaction(db, async () => {
         await openInboxItem(agencyId, itemId);
@@ -1015,8 +1093,30 @@ export function createIntake({ db, clock, settings, worker, files, ports, module
     },
   };
 
+  /** The Ticket an Inbox item's best guess names, with the done Job a "Not fixed" would redo. */
+  async function inboxTicket(ref: string | undefined) {
+    const related = ref ? await modules.tickets.resolveRef(ref) : null;
+    if (related?.ticketId === undefined) return null;
+    const found = await modules.tickets.ticket(related.ticketId);
+    const target = await modules.tickets.reworkTarget(related);
+    const done = target ? await modules.scheduling.doneJob(target.doneJob.id) : null;
+    return {
+      ticketId: found.id,
+      closed: found.status === 'closed',
+      redo: target
+        ? {
+            jobId: target.doneJob.id,
+            trade: target.doneJob.trade,
+            tradieBusinessName: done?.story.tradieBusinessName ?? null,
+            doneOn: done?.story.doneOn ?? null,
+            inProgress: target.inProgress,
+          }
+        : null,
+    };
+  }
+
   async function openInboxItem(agencyId: number, itemId: number) {
-    const item = await one<{ id: number; inbound_id: number; message_id: number; person_id: number | null; best_guess: string | null }>(
+    const item = await one<{ id: number; inbound_id: number; message_id: number; person_id: number | null; reason: InboxReason; best_guess: string | null }>(
       db,
       `SELECT * FROM inbox_items WHERE id = ? AND agency_id = ? AND status = 'open'`,
       itemId,
