@@ -60,7 +60,7 @@
     "supabase": "^2.122.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
-    "vercel": "65.4.0",
+    "vercel": "65.14.0",
     "vitest": "^5.1.0",
     "write-excel-file": "4.1.1"
   }
