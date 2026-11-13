@@ -58,6 +58,7 @@
   --action: #1f5c8b; /* Harbour: primary buttons, links, focus, selected (white on it 7.1:1) */
   --action-hover: #174a70; /* Harbour, pressed darker: primary hover, link hover */
   --action-divider: rgb(255 255 255 / 0.4); /* the line in a split primary button (decorative, no contrast target) */
+  --urgent-on-night: #ff8a80; /* the error mark on a Night toast (7.1:1). Never on white */
   --hivis: #ffc233; /* Wattle: the decision stripe, the current rail item, decision chips (Night on it 10.1:1). Never text, never a button */
   --info-bg: #e8f0f7; /* Harbour's tint: info badges and alerts, "Filled in by AI" */
   --urgent: #b42318; /* urgent, errors, destructive actions */
@@ -13715,21 +13716,60 @@
   }
 }
 
-/* Toasts (client/toaster.tsx). Unlayered, because Sonner injects its own unlayered styles; each
-   toast is the page's soft alert, lifted off the page with the card shadow, in the app's type. */
+/* Toasts (client/toaster.tsx, and the landing's demo). Unlayered, because Sonner injects its own
+   unlayered styles. A toast is a Night slip lifted off the page: white words in the app's type and
+   a filled mark, Wattle for done and a light red for an error. */
 html [data-sonner-toaster] {
   --width: min(440px, calc(100vw - 24px));
   font-family: inherit;
 }
+.flash-toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--ink);
+  color: var(--surface);
+  font-weight: 500;
+  line-height: 1.4;
+  text-align: start;
+  box-shadow: var(--shadow-lift);
+}
+.flash-toast svg {
+  flex: none;
+  color: var(--hivis);
+}
+.flash-toast.is-error svg {
+  color: var(--urgent-on-night);
+}
 html [data-sonner-toast] .flash-toast {
   width: 100%;
-  box-shadow: 0 6px 24px rgb(19 33 46 / 0.12), var(--shadow-soft);
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  text-align: start;
+  font-size: 14px;
 }
-html [data-sonner-toast] .flash-toast-icon {
+.flash-toast > .flash-toast-words {
+  flex: 1;
+  min-width: 0;
+}
+.flash-toast-icon {
   display: inline-flex;
+}
+.flash-toast .flash-close {
+  margin: -6px -8px -6px 0;
+  border: 0;
+  background: transparent;
+  color: var(--rail-muted);
+}
+.flash-toast .flash-close:hover {
+  background: var(--rail-current);
+  color: var(--surface);
+}
+.flash-toast .flash-close svg {
+  color: inherit;
+}
+.flash-toast .flash-close:focus-visible {
+  outline: 2px solid var(--hivis);
+  outline-offset: 2px;
 }
 
 /* base-ui filter selects and toggles (client/controls.tsx). The native control stays in the

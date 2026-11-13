@@ -450,6 +450,82 @@ onContent((root) => {
   window.addEventListener('hashchange', () => requestAnimationFrame(() => parts.filter(inView).forEach(show)));
 })();
 
+// The hero's dashboard plays the first minutes of one repair on a loop: the
+// Tenant's text lands, myEST8 replies, the Maintenance Request opens in Do next,
+// the pointer presses Confirm, and the Ticket goes out for Quotes. landing.css
+// draws each state from the classes set here. Anyone who asks for less motion gets
+// the dashboard standing still, as the page was drawn. The loop stops while the
+// hero is off screen or the tab is hidden.
+(() => {
+  const stage = document.querySelector('.lp-stage');
+  const confirm = stage?.querySelector('.lp-app-row.is-fresh .lp-fake-btn.is-primary');
+  if (!stage || !confirm || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+  // Each step: the classes the stage has, the counts on the dashboard, and how long it holds (ms).
+  const STEPS = [
+    { on: [], next: 2, quoting: 2, stage: 3, hold: 900 },
+    { on: ['has-text'], next: 2, quoting: 2, stage: 3, hold: 1900 },
+    { on: ['has-text', 'has-reply'], next: 2, quoting: 2, stage: 3, hold: 1900 },
+    { on: ['has-text', 'has-reply', 'has-row'], next: 3, quoting: 2, stage: 3, hold: 1900 },
+    { on: ['has-text', 'has-reply', 'has-row', 'has-cursor'], next: 3, quoting: 2, stage: 3, hold: 950 },
+    { on: ['has-text', 'has-reply', 'has-row', 'has-cursor', 'is-pressing'], next: 3, quoting: 2, stage: 3, hold: 320 },
+    { on: ['has-text', 'has-reply', 'is-sent', 'has-toast'], next: 2, quoting: 3, stage: 4, hold: 3400 },
+    { on: ['is-sent'], next: 2, quoting: 3, stage: 4, hold: 900 },
+  ];
+  const CLASSES = ['has-text', 'has-reply', 'has-row', 'has-cursor', 'is-pressing', 'is-sent', 'has-toast'];
+  const counts = [...stage.querySelectorAll('[data-count]')];
+  let step = 0;
+  let timer = 0;
+  let onScreen = true;
+
+  // Where the pointer rests, and where Confirm is, both inside the stage.
+  const point = (x, y) => {
+    stage.style.setProperty('--cursor-x', `${Math.round(x)}px`);
+    stage.style.setProperty('--cursor-y', `${Math.round(y)}px`);
+  };
+  const aim = () => {
+    const box = stage.getBoundingClientRect();
+    const target = confirm.getBoundingClientRect();
+    point(target.left - box.left + target.width / 2, target.top - box.top + target.height / 2);
+  };
+  const rest = () => point(stage.clientWidth * 0.62, stage.clientHeight * 0.74);
+
+  const show = (n) => {
+    step = n;
+    const s = STEPS[n];
+    for (const name of CLASSES) stage.classList.toggle(name, s.on.includes(name));
+    for (const el of counts) {
+      const value = String(s[el.dataset.count]);
+      if (el.textContent === value) continue;
+      el.textContent = value;
+      el.classList.add('is-bumped');
+      setTimeout(() => el.classList.remove('is-bumped'), 260);
+    }
+    if (s.on.includes('has-cursor')) aim();
+    else if (!s.on.includes('has-row')) rest();
+  };
+  const play = () => {
+    clearTimeout(timer);
+    if (!onScreen || document.hidden) return;
+    timer = setTimeout(() => {
+      show((step + 1) % STEPS.length);
+      play();
+    }, STEPS[step].hold);
+  };
+
+  stage.classList.add('is-playing');
+  rest();
+  show(0);
+  document.addEventListener('visibilitychange', play);
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver(([entry]) => {
+      onScreen = entry.isIntersecting;
+      play();
+    }).observe(stage);
+  }
+  play();
+})();
+
 // === import ===
 // The review page's "Add N Properties" button counts the ticked rows as they're
 // ticked. Without this file the count is the one the page was drawn with.

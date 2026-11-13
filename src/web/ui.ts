@@ -369,7 +369,7 @@ export function withFlash(path: string, kind: Flash['kind'], message: string) {
 export function flashMessage(flash: Flash): Html {
   const error = flash.kind === 'error';
   return html`<div role="${error ? 'alert' : 'status'}" data-flash="${flash.kind}" data-flash-message="${flash.message}" class="${clsx(alertVariants({ tone: error ? 'error' : 'success' }), 'py-2 text-sm')}">
-    ${error ? ICON.error : ICON.success}
+    ${error ? icon('warning-circle', { weight: 'fill' }) : icon('check-circle', { weight: 'fill' })}
     <span><span class="sr-only">${error ? 'Error: ' : 'Done: '}</span>${flash.message}</span>
   </div>`;
 }
