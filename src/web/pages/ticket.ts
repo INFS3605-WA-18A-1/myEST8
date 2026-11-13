@@ -818,9 +818,11 @@ function progressCard(t: TicketView, x: Extras): Html {
       <div class="ticket-tablist js-only" role="tablist" aria-label="Progress views">
         ${tab('ticket-timeline', 'Timeline', true)}${tab('ticket-job', jobsTab)}${tab('ticket-costs', 'Costs')}
       </div>
-      <div class="ticket-pane" role="tabpanel" id="ticket-timeline" aria-labelledby="tab-ticket-timeline">${timelineBoard(t, x)}</div>
-      <div class="ticket-pane" role="tabpanel" id="ticket-job" aria-labelledby="tab-ticket-job">${stageTracker(t, x)}</div>
-      <div class="ticket-pane" role="tabpanel" id="ticket-costs" aria-labelledby="tab-ticket-costs">${costsPane(t)}</div>
+      <div class="tab-panes">
+        <div class="ticket-pane" role="tabpanel" id="ticket-timeline" aria-labelledby="tab-ticket-timeline">${timelineBoard(t, x)}</div>
+        <div class="ticket-pane" role="tabpanel" id="ticket-job" aria-labelledby="tab-ticket-job">${stageTracker(t, x)}</div>
+        <div class="ticket-pane" role="tabpanel" id="ticket-costs" aria-labelledby="tab-ticket-costs">${costsPane(t)}</div>
+      </div>
     </div>
   </section>`;
 }

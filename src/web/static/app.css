@@ -2433,6 +2433,11 @@
       font-size: 16px;
       font-weight: 600;
     }
+    /* The chosen day's visits keep the height of two visits and a "+ more" line, so picking
+       another day doesn't move the cards below. */
+    .visit-day {
+      min-height: 98px;
+    }
     .visit-list {
       display: grid;
       margin: 0;
@@ -7341,10 +7346,11 @@
       background: radial-gradient(closest-side, var(--surface) 88%, transparent 90%), conic-gradient(var(--done) calc(var(--pct) * 1%), var(--track) 0);
     }
     .ticket-ring-label {
-      max-width: 64px;
+      /* Whole words only: "Estimates" and "inspection" fit the ring's 77px hole at this size. */
+      max-width: 74px;
       font-family: var(--font-head);
-      font-size: 16px;
-      overflow-wrap: anywhere;
+      font-size: 14px;
+      overflow-wrap: normal;
       font-weight: 700;
       line-height: 1.15;
       text-align: center;
@@ -10704,6 +10710,19 @@
     .ticket-pane[hidden] {
       display: none;
     }
+    /* The panes share one cell, as tall as the tallest, so switching tabs never changes the
+       page's height (which would move the page under the pointer). */
+    html.js .tab-panes {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+    }
+    html.js .tab-panes > [role='tabpanel'] {
+      grid-area: 1 / 1;
+      min-width: 0;
+    }
+    html.js .tab-panes > .is-off {
+      visibility: hidden;
+    }
     .ticket-progress.is-expanded {
       position: fixed;
       inset: 16px;
@@ -10926,7 +10945,8 @@
     }
     .tk-bar {
       display: flex;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
+      min-width: 0;
       align-items: center;
       justify-content: space-between;
       gap: 8px 16px;
@@ -10936,17 +10956,26 @@
       border-radius: var(--radius-card);
       box-shadow: var(--shadow-soft);
     }
+    /* The stage tabs stay on one line, so a stage tab appearing (All shows "With Owner") never
+       wraps the bar and pushes the list down; when they don't fit they scroll sideways. */
     .tk-tabs {
       display: flex;
-      flex-wrap: wrap;
-      gap: 2px;
+      flex: 1 1 0;
+      gap: 0;
+      min-width: 0;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .tk-tabs::-webkit-scrollbar {
+      display: none;
     }
     .tk-tab {
       display: inline-flex;
+      flex: none;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
       min-height: 36px;
-      padding: 0 10px;
+      padding: 0 8px;
       font-size: 14px;
       font-weight: 500;
       color: var(--muted);
@@ -11219,6 +11248,12 @@
       flex-wrap: nowrap;
     }
     @media (max-width: 39.99rem) {
+      .tk-bar {
+        flex-wrap: wrap;
+      }
+      .tk-tabs {
+        flex-basis: 100%;
+      }
       .tk-bar .filter-bar.is-compact {
         width: 100%;
         margin-left: 0;

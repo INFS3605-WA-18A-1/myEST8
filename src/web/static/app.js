@@ -2237,7 +2237,12 @@ function selectTab(tab) {
     const on = other === tab;
     other.setAttribute('aria-selected', String(on));
     const pane = document.getElementById(other.getAttribute('aria-controls'));
-    if (pane) pane.hidden = !on;
+    if (!pane) continue;
+    // Stacked panes (.tab-panes) stay laid out, so the card keeps the tallest pane's height.
+    if (pane.parentElement?.classList.contains('tab-panes')) {
+      pane.inert = !on;
+      pane.classList.toggle('is-off', !on);
+    } else pane.hidden = !on;
   }
 }
 
