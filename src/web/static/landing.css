@@ -3,15 +3,17 @@
  * layered, so it wins over app.css and daisyUI for the lp- classes it owns.
  * Colours are app.css's tokens only (docs/design-system.md).
  *
- * Laid out like a printed report: a wide two-line headline, real photographs of
- * Sydney rental streets and tradies, and whole sections in one flat colour
- * (Sand, white, Night). Wattle means "needs your decision" exactly as in the app:
+ * The first screen is the words beside the product: a two-line headline and the
+ * dashboard drawn in the app's own colours. Below it the page is laid out like a
+ * printed report: real photographs of Sydney rental streets and tradies, and whole
+ * sections in one flat colour (Sand, white, Night). Wattle means "needs your decision" exactly as in the app:
  * the stripe on "You decide.", the seams between the stretches of the repair, and
  * the decisions list. Nothing is separated by a hairline outside the
  * interface fragments (data-ui), which keep the app's own borders.
  *
  * Type steps: 14 small, 16 body, 20 lead, 30 heading, 36 statement, and the
- * display sizes of the headline, the section titles and the footer's wordmark.
+ * display sizes of the headline and the section titles. The dashboard in the hero
+ * is drawn at the app's own dense steps (12, 13, 15 and 20).
  */
 
 /* ----- Frame ----- */
@@ -130,37 +132,56 @@ body.lp {
 /* ----- The hero ----- */
 
 /*
- * Phones: the headline, the words and the ways in, then the photograph full width.
- * From 64rem, "narrow talk, wide headline": the words in the left third, the
- * headline and the photograph in the right two thirds, both flush on the 34% line.
+ * The hero is exactly the first screen (the bar's 72px and the hero's own height
+ * make 100svh), so the product is seen without scrolling. From 64rem the words sit
+ * in five columns and the dashboard in eight, top-aligned, the dashboard as tall
+ * as the screen allows and the three figures on its foot line. Below that they
+ * stack: the words, then the dashboard in whatever the screen has left.
  */
 .lp-hero {
-  padding-block: 32px 0;
+  display: flex;
+  min-height: calc(100svh - 72px);
+  padding-block: 16px 24px;
 }
 .lp-hero-grid {
   display: grid;
+  flex: 1;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-areas: 'title' 'intro' 'figure';
+  grid-template-rows: auto minmax(300px, 1fr);
   gap: 28px;
+}
+@media (min-width: 40rem) {
+  .lp-hero {
+    padding-block: 24px 40px;
+  }
+  .lp-hero-grid {
+    grid-template-rows: auto minmax(360px, 1fr);
+    gap: 40px;
+  }
 }
 @media (min-width: 64rem) {
   .lp-hero {
-    padding-top: 48px;
+    height: calc(100svh - 72px);
+    min-height: 620px;
+    max-height: 920px;
+    padding-block: 24px 48px;
   }
-  /* The headline runs from the left gutter; the words and the ways in sit under it, in
-     the left third, so the main action is high on the page rather than pushed down. */
   .lp-hero-grid {
-    grid-template-columns: minmax(0, 34fr) minmax(0, 66fr);
-    grid-template-areas: 'title title' 'intro figure';
-    column-gap: 32px;
-    row-gap: 40px;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 8fr);
+    grid-template-rows: minmax(0, 1fr);
+    column-gap: 48px;
   }
 }
+.lp-hero-text {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  min-width: 0;
+}
 .lp-headline {
-  grid-area: title;
   margin: 0;
   font-family: var(--font-head);
-  font-size: clamp(48px, 12.4vw, 72px);
+  font-size: clamp(48px, 12.4vw, 80px);
   font-weight: 800;
   line-height: 0.92;
   letter-spacing: -0.028em;
@@ -168,7 +189,7 @@ body.lp {
 }
 @media (min-width: 64rem) {
   .lp-headline {
-    font-size: clamp(72px, 8.6vw, 136px);
+    font-size: clamp(56px, 5.8vw, 86px);
   }
 }
 /* Each line in its own mask, so it can rise from behind its baseline on load. */
@@ -203,28 +224,11 @@ body.lp {
 }
 
 .lp-intro {
-  grid-area: intro;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 28px;
-  min-width: 0;
-}
-@media (min-width: 64rem) {
-  .lp-intro {
-    padding-top: 0;
-    /* The block's foot is the photograph's foot, not the caption's. The caption's
-       line (12px above it, 22px tall) is reserved here, so the intro's content ends
-       exactly on the photo's bottom edge. */
-    padding-bottom: 34px;
-    max-width: 26em;
-    justify-content: flex-start;
-  }
-  /* The count block keeps its own height and is anchored to that foot line: it must
-     not stretch into a tall Night panel. */
-  .lp-intro .lp-figure-block {
-    margin-top: auto;
-  }
+  gap: 24px;
+  max-width: 30em;
 }
 .lp-lead {
   font-size: 20px;
@@ -233,79 +237,584 @@ body.lp {
   text-wrap: pretty;
 }
 @media (max-width: 39.99rem) {
+  .lp-lead {
+    font-size: 18px;
+  }
   .lp-intro .lp-actions {
     align-self: stretch;
   }
 }
-.lp-note {
-  font-size: 16px;
+
+/* Three figures a repair comes down to. On the wide hero they stand on the
+   dashboard's foot line; phones leave them to the sections that explain them. */
+.lp-facts {
+  display: none;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+  margin: 0;
+}
+@media (min-width: 40rem) {
+  .lp-facts {
+    display: grid;
+  }
+}
+@media (min-width: 64rem) {
+  .lp-facts {
+    margin-top: auto;
+  }
+}
+.lp-facts dt {
+  font-family: var(--font-head);
+  font-size: 36px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+.lp-facts dd {
+  margin: 8px 0 0;
+  font-size: 14px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+/* The stage holds the dashboard, which fills it edge to edge and is cut by its own
+   frame, and the Tenant's text laid over its lower left corner. */
+.lp-stage {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
+/*
+ * The dashboard: the app's own colours and parts (the Night rail, Sand ground,
+ * white cards, Wattle decision rows) at its dense type steps. A picture, so
+ * nothing in it is a control. Its frame is the one shadowed thing on the page.
+ */
+.lp-app {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid var(--line); /* taste-skill-ignore: the window's edge, inside data-ui */
+  border-radius: var(--radius-card);
+  background: var(--page);
+  box-shadow: var(--shadow-lift);
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--ink);
+}
+.lp-app-rail {
+  display: none;
+  padding: 18px 10px;
+  background: var(--rail);
+  color: var(--rail-text);
+}
+@media (min-width: 40rem) {
+  .lp-app {
+    grid-template-columns: 152px minmax(0, 1fr);
+  }
+  .lp-app-rail {
+    display: block;
+  }
+}
+.lp-app-logo {
+  padding: 0 8px 14px;
+}
+.lp-app-logo .logo {
+  color: var(--surface);
+}
+.lp-app-logo .logo-mark {
+  color: var(--hivis);
+}
+.lp-app-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lp-app-nav li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: var(--radius-btn);
+  font-weight: 600;
+}
+.lp-app-nav li.is-current {
+  background: var(--rail-current);
+  box-shadow: inset 3px 0 0 var(--hivis); /* taste-skill-ignore: the rail's current mark, a flat bar */
+  color: var(--surface);
+}
+.lp-app-count,
+.lp-app-pip {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-pill);
+  background: var(--hivis);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 700;
+}
+.lp-app-count {
+  margin-left: auto;
+}
+.lp-app-main {
+  min-width: 0;
+  padding: 16px;
+}
+@media (min-width: 40rem) {
+  .lp-app-main {
+    padding: 18px 20px;
+  }
+}
+.lp-app-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-family: var(--font-head);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.lp-app-seg {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid var(--control);
+  border-radius: var(--radius-btn);
+  background: var(--surface);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+}
+.lp-app-seg span {
+  padding: 4px 10px;
+}
+.lp-app-seg .is-on {
+  background: var(--action);
+  color: var(--surface);
+}
+.lp-app-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 14px;
+}
+.lp-app-side {
+  display: none;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+/* The Inbox and Tickets by stage need the wide window; narrower, Do next has it all. */
+@media (min-width: 48rem) and (max-width: 63.99rem), (min-width: 76rem) {
+  .lp-app-cols {
+    grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  }
+  .lp-app-side {
+    display: flex;
+  }
+}
+.lp-app-card {
+  min-width: 0;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--surface);
+}
+.lp-app-card.is-night {
+  background: var(--ink);
+  color: var(--surface);
+}
+.lp-app-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-head);
+  font-size: 15px;
+  font-weight: 600;
+}
+.lp-app-chip {
+  padding: 1px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--hivis);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+}
+.lp-app-group {
+  margin-top: 14px;
+  font-size: 12px;
+  font-weight: 600;
+}
+/* A decision row, as on the dashboard: Sand, with the Wattle edge. */
+.lp-app-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 6px;
+  padding: 10px 10px 10px 12px;
+  border-left: 3px solid var(--hivis);
+  border-radius: var(--radius-sm);
+  background: var(--page);
+}
+/* The row the Tenant's text has just become. */
+.lp-app-row.is-fresh {
+  background: var(--wattle-bg);
+}
+.lp-app-row-text {
+  min-width: 0;
+}
+.lp-app-issue {
+  font-weight: 600;
+  line-height: 1.3;
+}
+.lp-app-where {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.lp-app-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  margin-top: 8px;
+  font-size: 12px;
+}
+.lp-app-buttons {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 6px;
+}
+.lp-app .lp-fake-btn {
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 10px;
+  background: var(--surface);
+  font-size: 12px;
+}
+.lp-app .lp-fake-btn.is-primary {
+  background: var(--action);
+}
+/* Waiting on others: the Sand Deep card under Do next, a count to a tile. */
+.lp-app-card.is-waiting {
+  margin-top: 12px;
+  background: var(--sand-deep);
+}
+.lp-app-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 10px;
+}
+.lp-app-tiles span {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-paper);
+  font-size: 12px;
+  color: var(--muted-on-sand);
+}
+.lp-app-tiles b {
+  font-family: var(--font-head);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+}
+/* Next 7 days: the week as seven tiles, a dot under a day with a visit. */
+.lp-app-week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 3px;
+  margin-top: 10px;
+}
+.lp-app-week span {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px 0 9px;
+  border-radius: var(--radius-sm);
+  background: var(--page);
+  font-size: 12px;
+  line-height: 1.25;
+  color: var(--muted);
+}
+.lp-app-week b {
+  color: var(--ink);
+}
+.lp-app-week .is-today {
+  background: var(--info-bg);
+  box-shadow: inset 0 0 0 1px var(--action); /* taste-skill-ignore: today's outline, as on the dashboard */
+}
+.lp-app-week .has-visit {
+  background-image: radial-gradient(circle at 50% calc(100% - 5px), var(--action) 2px, transparent 2.5px); /* taste-skill-ignore: the visit dot */
+}
+.lp-app-next {
+  margin-top: 8px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--page);
+  font-size: 12px;
+}
+.lp-app-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--rail-current);
+  font-size: 12px;
+  color: var(--rail-text);
+}
+.lp-app-who {
+  font-weight: 600;
+  color: var(--surface);
+}
+.lp-app-stages {
+  display: flex;
+  gap: 4px;
+  height: 6px;
+  margin-top: 14px;
+}
+.lp-app-stages span {
+  flex: var(--grow) 1 0;
+  border-radius: var(--radius-pill);
+  background: var(--action);
+}
+.lp-app-stages span:nth-child(2) {
+  background: var(--stage-owner);
+}
+.lp-app-stages span:nth-child(3) {
+  background: var(--stage-scheduled);
+}
+.lp-app-stages span:nth-child(4) {
+  background: var(--stage-done);
+}
+.lp-app-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.lp-app-legend b {
   color: var(--ink);
 }
 
-.lp-hero-figure {
-  grid-area: figure;
-  position: relative;
-  margin: 0 -20px;
-  min-width: 0;
+/* The Tenant's text that became the first row: a message bubble over the window's
+   lower left corner, out into the gutter between the words and the dashboard. */
+.lp-text-card {
+  display: none;
+  position: absolute;
+  left: -16px;
+  bottom: 24px;
+  width: 204px;
+  padding: 14px 16px 16px;
+  border-radius: 16px 16px 16px 4px;
+  background: var(--surface);
+  box-shadow: var(--shadow-lift);
 }
-@media (min-width: 48rem) {
-  .lp-hero-figure {
-    margin: 0;
+@media (min-width: 40rem) {
+  .lp-text-card {
+    display: block;
   }
-}
-.lp-hero-photo {
-  overflow: hidden;
-  aspect-ratio: 4 / 3;
 }
 @media (min-width: 64rem) {
-  .lp-hero-photo {
-    aspect-ratio: 3 / 2;
-    height: auto;
+  .lp-text-card {
+    left: -44px;
+    bottom: 28px;
   }
 }
-.lp-hero-photo img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: 50% 60%;
-}
-/* The count of decisions, a Night block under the words, with the Wattle decision
-   stripe beside it (never Wattle type). It carries the left column down towards the
-   photograph's foot, so the words never leave a bare band beside the picture. */
-.lp-figure-block {
+.lp-text-card-from {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  width: 100%;
-  max-width: 26em;
-  padding: 20px 22px 22px 18px;
-  background: var(--ink);
-  border-left: 4px solid var(--hivis);
-  color: var(--surface);
-  font-size: 16px;
-  line-height: 1.35;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
 }
-.lp-figure-num {
-  font-family: var(--font-head);
-  font-size: clamp(56px, 6vw, 88px);
-  font-weight: 700;
-  line-height: 1;
-  color: var(--surface);
+.lp-text-card-words {
+  margin-top: 8px;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--ink);
 }
-.lp-hero-figure .lp-caption {
-  margin: 12px 20px 0;
+
+/*
+ * The loop. Everything above is the dashboard standing still, which is what anyone
+ * without JavaScript, or who asks for less motion, sees. app.js adds .is-playing to
+ * the stage and walks it through the repair's first minutes with four classes:
+ * .has-text (the Tenant's text lands), .has-reply (myEST8 answers), .has-row (the
+ * Maintenance Request opens in Do next), .has-cursor and .is-pressing (Confirm),
+ * then .is-sent (the row leaves, the toast says what went out, the counts tick).
+ */
+.lp-app-slot {
+  display: grid;
+  grid-template-rows: 1fr;
 }
-@media (min-width: 48rem) {
-  .lp-hero-figure .lp-caption {
-    margin-inline: 0;
+.lp-app-slot > div {
+  min-height: 0;
+  overflow: hidden;
+}
+.lp-text-card-reply {
+  display: grid;
+  grid-template-rows: 1fr;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--action);
+}
+.lp-text-card-reply > span {
+  min-height: 0;
+  overflow: hidden;
+  padding-top: 10px;
+}
+.lp-app-toast,
+.lp-cursor {
+  display: none;
+}
+/* The app's own toast (.flash-toast in app.css), set in the window's foot. */
+.lp-app-toast {
+  position: absolute;
+  right: 16px;
+  bottom: 14px;
+  left: 16px;
+  font-size: 13px;
+}
+@media (min-width: 40rem) {
+  .lp-app-toast {
+    left: auto;
+    max-width: 360px;
   }
+}
+.lp-cursor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  color: var(--ink);
+  filter: drop-shadow(0 0 1px var(--surface)) drop-shadow(0 1px 2px var(--scrim)); /* taste-skill-ignore: the pointer's white edge, so it reads on any ground */
+  pointer-events: none;
+}
+
+.lp-stage.is-playing .lp-text-card {
+  opacity: 0;
+  transform: translateY(14px) scale(0.94);
+  transform-origin: 0 100%;
+  animation: none;
+  transition:
+    opacity var(--dur-base) var(--ease-out),
+    transform 520ms var(--ease-spring);
+}
+/* On a phone the still picture has no room for the Tenant's text; the loop brings it
+   in over the window's foot, above where the toast will land. */
+@media (max-width: 39.99rem) {
+  .lp-stage.is-playing .lp-text-card {
+    display: block;
+    left: 12px;
+    bottom: 84px;
+  }
+}
+.lp-stage.is-playing.has-text .lp-text-card {
+  opacity: 1;
+  transform: none;
+}
+/* There it lies over Do next, so it steps aside as the request it became opens. */
+@media (max-width: 39.99rem) {
+  .lp-stage.is-playing.has-row .lp-text-card,
+  .lp-stage.is-playing.is-sent .lp-text-card {
+    opacity: 0;
+    transform: translateY(14px) scale(0.94);
+  }
+}
+.lp-stage.is-playing .lp-text-card-reply {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 420ms var(--ease-out),
+    opacity 420ms var(--ease-out);
+}
+.lp-stage.is-playing.has-reply .lp-text-card-reply {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+.lp-stage.is-playing .lp-app-slot {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 520ms var(--ease-emphasis),
+    opacity 320ms var(--ease-out);
+}
+.lp-stage.is-playing.has-row .lp-app-slot {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+.lp-stage.is-playing .lp-cursor {
+  display: block;
+  opacity: 0;
+  transform: translate(var(--cursor-x, 0), var(--cursor-y, 0));
+  transition:
+    transform 820ms var(--ease-emphasis),
+    opacity var(--dur-base) var(--ease-out);
+}
+.lp-stage.is-playing.has-cursor .lp-cursor {
+  opacity: 1;
+}
+.lp-app .lp-fake-btn {
+  transition:
+    transform var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
+}
+.lp-stage.is-pressing .lp-app-row.is-fresh .lp-fake-btn.is-primary {
+  transform: scale(0.92);
+  background: var(--action-hover);
+}
+.lp-stage.is-playing .lp-app-toast {
+  display: flex;
+  opacity: 0;
+  transform: translateY(12px);
+  transition:
+    opacity var(--dur-base) var(--ease-out),
+    transform 420ms var(--ease-spring);
+}
+.lp-stage.is-playing.has-toast .lp-app-toast {
+  opacity: 1;
+  transform: none;
+}
+/* What Confirm changed: one more Ticket out for Quotes, one more Tradie quoting. */
+.lp-app-stages span,
+.lp-app-quoting,
+.lp-app-pip {
+  transition:
+    flex-grow 520ms var(--ease-emphasis),
+    background-color 520ms var(--ease-out),
+    transform var(--dur-slow) var(--ease-spring);
+}
+.lp-stage.is-sent .lp-app-stages span:first-child {
+  flex-grow: 4;
+}
+.lp-stage.is-sent .lp-app-tiles .lp-app-quoting {
+  background: var(--wattle-bg);
+}
+/* A count that has just changed gives a small bump. */
+.lp-stage .lp-app-pip.is-bumped {
+  transform: scale(1.25);
 }
 
 /* ----- The demo ----- */
 
 .lp-demo {
-  margin-top: 96px;
   background: var(--surface);
 }
 .lp-demo-inner {
@@ -1057,7 +1566,7 @@ body.lp {
 
 /* ----- The way in, again ----- */
 
-/* Three photographs edge to edge, then the way in on a Night field. */
+/* Four photographs edge to edge (two by two on phones), then the way in on a Night field. */
 .lp-strip {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1069,33 +1578,24 @@ body.lp {
   object-fit: cover;
   aspect-ratio: 4 / 3;
 }
-/* Each photograph keeps its subject in the crop: the balcony its wall and window,
-   the plumber his head and hands. */
-.lp-strip img:nth-child(2) {
-  object-position: 50% 20%;
+/* Each photograph keeps its subject in the crop: the terraces their balconies, the
+   balcony its wall and window, the plumber his head and hands. */
+.lp-strip img:nth-child(1) {
+  object-position: 50% 60%;
 }
 .lp-strip img:nth-child(3) {
-  object-position: 50% 40%;
+  object-position: 50% 20%;
 }
-.lp-strip img:first-child {
-  grid-column: 1 / -1;
+.lp-strip img:nth-child(4) {
+  object-position: 50% 20%;
 }
 @media (min-width: 48rem) {
   .lp-strip {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
   .lp-strip img {
     aspect-ratio: auto;
-    height: max(300px, 44svh);
-  }
-  .lp-strip img:first-child {
-    grid-column: auto;
-  }
-}
-/* On a phone the plumber's box is short: keep the whole head. */
-@media (max-width: 47.99rem) {
-  .lp-strip img:nth-child(3) {
-    object-position: 50% 0%;
+    height: max(260px, 38svh);
   }
 }
 .lp-close-field {
@@ -1105,14 +1605,14 @@ body.lp {
 .lp-close-inner {
   display: grid;
   gap: 32px;
-  padding-block: 96px;
+  padding-block: 72px;
 }
 @media (min-width: 64rem) {
   .lp-close-inner {
     grid-template-columns: minmax(0, 58fr) minmax(0, 42fr);
     align-items: end;
     gap: 32px;
-    min-height: 44svh;
+    padding-block: 96px;
   }
 }
 .lp-close .lp-h2 {
@@ -1145,65 +1645,130 @@ body.lp {
 
 /* ----- The footer ----- */
 
-/* "Name first": the wordmark across the width, then the ways in and the photo credits. */
+/*
+ * "One grid": the name and what myEST8 is, then three short columns of links, then
+ * the photo credits, all on the same four column lines. It continues the closing
+ * band's Night, parted from it by one faint line, so the page ends on one field.
+ */
 .lp-footer {
-  padding-block: 64px 48px;
+  padding-bottom: 48px;
   background: var(--ink);
   color: var(--rail-text);
+  font-size: 14px;
 }
-.lp-footer-name {
-  overflow: hidden;
-}
-.lp-footer-name .logo {
-  font-size: clamp(64px, 17vw, 260px);
-  letter-spacing: -0.04em;
-  line-height: 0.9;
-  color: var(--surface);
-  gap: 0.18em;
-}
-.lp-footer-name .logo-mark {
-  width: 0.8em;
-  height: 0.8em;
-  color: var(--hivis);
-}
-.lp-footer-row {
+.lp-footer-grid,
+.lp-credits {
   display: grid;
-  gap: 40px;
-  margin-top: 64px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 32px 24px;
+  border-top: 1px solid var(--rail-current); /* taste-skill-ignore: the one line between the way in and the footer */
 }
-@media (min-width: 64rem) {
-  .lp-footer-row {
-    grid-template-columns: minmax(0, 34fr) minmax(0, 66fr);
-    gap: 32px;
+.lp-footer-grid {
+  padding-top: 48px;
+}
+.lp-footer-brand {
+  grid-column: 1 / -1;
+}
+@media (min-width: 40rem) {
+  .lp-footer-grid,
+  .lp-credits {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
-.lp-footer-ways {
-  font-size: 16px;
+@media (min-width: 64rem) {
+  .lp-footer-grid,
+  .lp-credits {
+    grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, 1fr));
+    column-gap: 32px;
+  }
+  .lp-footer-brand {
+    grid-column: auto;
+  }
 }
-.lp-footer-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+.lp-footer-name .logo {
+  font-size: 30px;
+  color: var(--surface);
+}
+.lp-footer-name .logo-mark {
+  width: 0.9em;
+  height: 0.9em;
+  color: var(--hivis);
+}
+.lp-footer-about {
+  max-width: 28ch;
   margin-top: 12px;
-}
-/* Ghost buttons on Night: the footer's quiet ways into the terms, not a call to action. */
-.lp-footer .btn-ghost {
+  font-size: 16px;
   color: var(--rail-text);
+}
+.lp-footer-title {
+  margin: 0 0 8px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--rail-muted);
+}
+.lp-footer-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+/* Ghost buttons on Night, set flush with their column's heading: the footer's quiet
+   links, not calls to action. A long label wraps inside its column. */
+.lp-footer .btn-ghost {
+  height: auto;
+  min-height: 36px;
+  margin-left: -10px;
+  padding: 6px 10px;
+  justify-content: flex-start;
+  text-align: left;
+  white-space: normal;
+  font-size: 15px;
+  color: var(--surface);
 }
 .lp-footer .btn-ghost:hover {
   background: var(--rail-current);
   color: var(--surface);
 }
 .lp-credits {
-  max-width: 64ch;
-  font-size: 14px;
-  color: var(--rail-text);
+  row-gap: 8px;
+  margin-top: 48px;
+  padding-top: 32px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--rail-muted);
 }
-.lp-credits-title {
-  margin: 0 0 8px;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--surface);
+.lp-credits .lp-footer-title {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+.lp-credits > div {
+  grid-column: 1 / -1;
+}
+@media (min-width: 64rem) {
+  .lp-credits .lp-footer-title {
+    grid-column: auto;
+  }
+  .lp-credits > div {
+    grid-column: 2 / -1;
+  }
+}
+.lp-credits ul {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.lp-credits li {
+  break-inside: avoid;
+  padding-block: 2px;
+}
+@media (min-width: 40rem) {
+  .lp-credits ul {
+    columns: 2;
+    column-gap: 32px;
+  }
 }
 
 /* ----- Motion ----- */
@@ -1220,11 +1785,6 @@ body.lp {
     transform: translateY(20px);
   }
 }
-@keyframes lp-drift {
-  from {
-    transform: scale(1.08);
-  }
-}
 .lp-line > span {
   animation: lp-rise-line 900ms var(--ease-emphasis) both;
 }
@@ -1234,11 +1794,16 @@ body.lp {
 .lp-intro {
   animation: lp-fade-up 700ms var(--ease-out) 420ms both;
 }
-/* The count block is inside the intro's fade: it has no second, later fade of its
-   own, so it is solid Night by the time the rest of the column is. */
-/* The one moving picture: the hero photograph settles slowly into place. */
-.lp-hero-photo img {
-  animation: lp-drift 2400ms var(--ease-out) both;
+.lp-facts {
+  animation: lp-fade-up 700ms var(--ease-out) 560ms both;
+}
+/* The product arrives with the words: the dashboard rises once, then the Tenant's
+   text lands on its corner. */
+.lp-app {
+  animation: lp-fade-up 800ms var(--ease-out) 240ms both;
+}
+.lp-text-card {
+  animation: lp-fade-up 600ms var(--ease-out) 900ms both;
 }
 
 /*
@@ -1269,14 +1834,19 @@ html.js .lp .lp-bar-chart.is-in .lp-segment:nth-child(5) {
 @media (prefers-reduced-motion: reduce) {
   .lp-line > span,
   .lp-intro,
-  .lp-hero-photo img,
+  .lp-facts,
+  .lp-app,
+  .lp-text-card,
+  .lp-cursor,
+  .lp-app-toast,
   .lp-example [data-example],
   html.js .lp [data-rise].is-in,
   html.js .lp .lp-bar-chart.is-in .lp-segment {
     animation: none;
   }
   .lp .btn,
-  .lp-choice-label {
+  .lp-choice-label,
+  .lp-app .lp-fake-btn {
     transition: none;
   }
 }

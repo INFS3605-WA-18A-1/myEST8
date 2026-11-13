@@ -1,24 +1,23 @@
 // The flash after an action, as a toast. The server still draws each flash in the page
 // (ui.ts flashMessage), so without JavaScript it stays where it was; here it moves into Sonner,
 // which stacks them, pauses while the pointer or focus is on one, and lets them be swiped away.
-// Each toast is the same soft alert the page uses: the tone's tint, its Phosphor icon and the
-// words, with `status` or `alert` as before.
+// Each toast is a Night slip (.flash-toast in app.css, the same one the landing's demo shows):
+// the server's filled Phosphor mark and the words, with `status` or `alert` as before.
 
 import { toast, Toaster } from 'sonner';
-import { alertVariants } from '../variants.ts';
 
 /** "ok" flashes fade after 8 s; errors stay until closed. */
 const OK_MS = 8000;
 
 export function FlashToaster() {
-  return <Toaster position="top-center" visibleToasts={3} offset={16} mobileOffset={12} gap={8} toastOptions={{ unstyled: true }} />;
+  return <Toaster position="bottom-right" visibleToasts={3} offset={16} mobileOffset={12} gap={8} toastOptions={{ unstyled: true }} />;
 }
 
 function FlashToast(props: { id: string | number; error: boolean; message: string; icon: string }) {
   return (
-    <div role={props.error ? 'alert' : 'status'} className={alertVariants({ tone: props.error ? 'error' : 'success', className: 'flash-toast py-2 text-sm' })}>
+    <div role={props.error ? 'alert' : 'status'} className={props.error ? 'flash-toast is-error' : 'flash-toast'}>
       <span className="flash-toast-icon" aria-hidden="true" dangerouslySetInnerHTML={{ __html: props.icon }} />
-      <span>
+      <span className="flash-toast-words">
         <span className="sr-only">{props.error ? 'Error: ' : 'Done: '}</span>
         {props.message}
       </span>

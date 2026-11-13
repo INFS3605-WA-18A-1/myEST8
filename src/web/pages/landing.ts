@@ -1,10 +1,14 @@
-// The front door at / for anyone not signed in. It says who myEST8 is for and
-// shows what it does with one repair: a Tenant's text and what myEST8 makes of it
-// (pick one of three messages), the repair as one bar from report to done, whose
-// Wattle seams are the Property Manager's two decisions, what myEST8 does without
-// being asked, and the way in. The photographs are real Sydney rental streets and
-// tradies at work, found in Wikimedia Commons and credited in the footer; none of
-// them is presented as a customer's Property or a Tradie on myEST8.
+// The front door at / for anyone not signed in. Its first screen says who myEST8 is
+// for beside the product itself: the Property Manager's dashboard, drawn in the app's
+// own markup, playing the first minutes of one repair on a loop (the Tenant's text
+// lands, myEST8 replies, the Maintenance Request appears, Confirm is pressed and a
+// Ticket goes out for Quotes). Under that, the same repair in full: a
+// Tenant's text and what myEST8 makes of it (pick one of three messages), the repair
+// as one bar from report to done, whose Wattle seams are the Property Manager's two
+// decisions, what myEST8 does without being asked, and the way in. The photographs
+// are real Sydney rental streets and tradies at work, found in Wikimedia Commons and
+// credited in the footer; none of them is presented as a customer's Property or a
+// Tradie on myEST8.
 // A signed-in Property Manager gets their dashboard at / instead.
 //
 // The page builds its own document (head() and logo() from ui.ts) so its bands can
@@ -79,32 +83,169 @@ function landingPage(o: { demo: boolean }): Html {
 
 /* ----- The hero ----- */
 
+/** What a repair asks of whom, as three figures at the foot of the hero's words. Each is a claim the page makes again below. */
+const FACTS = [
+  { figure: '2', text: 'decisions from you on a typical repair' },
+  { figure: '0', text: 'accounts for Tenants, Tradies or Property Owners' },
+  { figure: '48 h', text: 'before a Tradie who hasn’t quoted is reminded' },
+];
+
+/** The dashboard's rail in the picture: the pages a Property Manager has, Dashboard current. */
+const RAIL: { icon: string; label: string; current?: boolean; count?: number }[] = [
+  { icon: 'squares-four', label: 'Dashboard', current: true },
+  { icon: 'map-pin', label: 'Dispatch' },
+  { icon: 'ticket', label: 'Tickets', count: 2 },
+  { icon: 'archive', label: 'Archive' },
+  { icon: 'seal-check', label: 'Approvals', count: 1 },
+  { icon: 'calendar-blank', label: 'Schedule' },
+];
+
+/** The picture's week: Monday is today, and the plumber's visit is on Wednesday, as in the repair below. */
+const WEEK: { day: string; date: number; today?: boolean; visit?: boolean }[] = [
+  { day: 'M', date: 16, today: true },
+  { day: 'T', date: 17 },
+  { day: 'W', date: 18, visit: true },
+  { day: 'T', date: 19 },
+  { day: 'F', date: 20, visit: true },
+  { day: 'S', date: 21 },
+  { day: 'S', date: 22 },
+];
+
 /**
- * "Narrow talk, wide headline": the headline wide on the right, two lines, the
- * second carrying the Wattle decision stripe a decision row has on the dashboard.
- * The narrow left column says what myEST8 is, holds the ways in, and ends on the
- * count of decisions a repair asks of the Property Manager. Under the headline,
- * a Newtown terrace street.
+ * A row of the picture's Do next list: a decision waiting, with the buttons it would
+ * have (drawn, not controls). The `fresh` row is the one the demo plays: it sits in
+ * a slot that opens when the Tenant's text has become a Maintenance Request and
+ * closes when Confirm is pressed.
+ */
+const decisionRow = (o: { issue: string; where: string; tags?: Html; primary: string; secondary?: string; fresh?: boolean }) => {
+  const row = html`<div class="lp-app-row ${o.fresh ? 'is-fresh' : ''}">
+    <div class="lp-app-row-text">
+      <p class="lp-app-issue">${o.issue}</p>
+      <p class="lp-app-where">${o.where}</p>
+      ${o.tags ? html`<p class="lp-app-tags">${o.tags}</p>` : ''}
+    </div>
+    <p class="lp-app-buttons"><span class="lp-fake-btn is-primary">${o.primary}</span>${o.secondary ? html`<span class="lp-fake-btn">${o.secondary}</span>` : ''}</p>
+  </div>`;
+  return o.fresh ? html`<div class="lp-app-slot"><div>${row}</div></div>` : row;
+};
+
+/**
+ * The product, on the first screen: the Property Manager's dashboard as the app
+ * draws it (the Night rail, Do next with its Wattle decision rows, the Inbox and
+ * Tickets by stage), holding the repair the rest of the page follows. It is a
+ * picture: role="img" with one description, nothing in it to tab to, and its
+ * buttons are spans.
+ */
+function appWindow(): Html {
+  return html`<div
+    class="lp-app"
+    data-ui
+    role="img"
+    aria-label="The myEST8 dashboard. Do next lists two Maintenance Requests to confirm, the first a dripping kitchen tap at 12 King St filled in from the Tenant’s text, and two Firm Quotes to choose between. Beside it, the Inbox and the Tickets by stage."
+  >
+    <div class="lp-app-rail">
+      <p class="lp-app-logo">${logo({ size: 'sm' })}</p>
+      <ul class="lp-app-nav" role="list">
+        ${RAIL.map(
+          (item) =>
+            html`<li class="${item.current ? 'is-current' : ''}">
+              ${icon(item.icon, { size: 'size-4' })}<span>${item.label}</span>${item.count ? html`<span class="lp-app-count num">${item.count}</span>` : ''}
+            </li>`,
+        )}
+      </ul>
+    </div>
+    <div class="lp-app-main">
+      <p class="lp-app-title"><span>Dashboard</span><span class="lp-app-seg"><span class="is-on">Mine</span><span>All</span></span></p>
+      <div class="lp-app-cols">
+        <div class="lp-app-card">
+          <p class="lp-app-heading">Do next <span class="lp-app-pip num" data-count="next">3</span></p>
+          <p class="lp-app-group">Maintenance Requests to confirm</p>
+          ${decisionRow({
+            issue: 'Kitchen tap dripping under the sink since Sunday, getting worse',
+            where: '12 King St, Newtown · 2 minutes ago',
+            tags: html`${badge('Plumbing')}${urgencyBadge('high')}<span class="lp-ai-tag">Filled in by AI</span>`,
+            primary: 'Confirm',
+            secondary: 'Review',
+            fresh: true,
+          })}
+          ${decisionRow({ issue: 'Pantry door off its top hinge since last week', where: '4 Wilson St, Newtown · 3 hours ago', primary: 'Confirm', secondary: 'Review' })}
+          <p class="lp-app-group">Quotes to check</p>
+          ${decisionRow({ issue: 'Ticket #9 · Gutter leaking over the back door', where: 'Drip Doctors $180 · Flow Bros $240', primary: 'Choose a Quote' })}
+          <div class="lp-app-card is-waiting">
+            <p class="lp-app-heading">Waiting on others</p>
+            <p class="lp-app-tiles">
+              <span class="lp-app-quoting"><b class="num" data-count="quoting">2</b> Tradies quoting</span><span><b class="num">1</b> Owner approving</span><span><b class="num">1</b> Visit to arrange</span
+              ><span><b class="num">1</b> receipt with the Owner</span>
+            </p>
+          </div>
+        </div>
+        <div class="lp-app-side">
+          <div class="lp-app-card is-night">
+            <p class="lp-app-heading">Inbox <span class="lp-app-chip">2 waiting</span></p>
+            <p class="lp-app-msg"><span class="lp-app-who">Priya Nair</span><span>sunday. yes its getting worse. weekday mornings</span></p>
+            <p class="lp-app-msg"><span class="lp-app-who">Drip Doctors</span><span>$180, can do Wednesday 8 am</span></p>
+          </div>
+          <div class="lp-app-card">
+            <p class="lp-app-heading">Next 7 days</p>
+            <p class="lp-app-week">
+              ${WEEK.map((d) => html`<span class="${d.today ? 'is-today' : ''} ${d.visit ? 'has-visit' : ''}">${d.day}<b class="num">${d.date}</b></span>`)}
+            </p>
+            <p class="lp-app-next">Wed 8:00 am · Drip Doctors · 12 King St</p>
+          </div>
+          <div class="lp-app-card">
+            <p class="lp-app-heading">Tickets by stage</p>
+            <p class="lp-app-stages"><span style="--grow: 3"></span><span style="--grow: 1"></span><span style="--grow: 1"></span><span style="--grow: 2"></span></p>
+            <p class="lp-app-legend"><span><b class="num" data-count="stage">3</b> Quoting</span><span><b class="num">1</b> With Owner</span><span><b class="num">1</b> Booked</span><span><b class="num">2</b> Done</span></p>
+          </div>
+        </div>
+      </div>
+      <p class="flash-toast lp-app-toast">${icon('check-circle', { weight: 'fill', size: 'size-4' })}<span>Ticket #12 created. Quote Requests sent to 3 plumbers.</span></p>
+    </div>
+  </div>`;
+}
+
+/**
+ * "The words beside the product": the two-line headline, what myEST8 is and the
+ * ways in on the left; on the right the dashboard, as tall as the screen allows,
+ * with the Tenant's text that became its first row laid over its lower corner.
+ * The hero is exactly the first screen, so the product is seen without scrolling.
+ * With JavaScript, and unless less motion is asked for, the dashboard plays the
+ * repair's first minutes on a 12-second loop (app.js, the `landing` block); the
+ * button on its corner pauses it. Without either it stands still, as drawn here.
+ * "You decide." carries the Wattle decision stripe a decision row has on the dashboard.
  */
 function hero(): Html {
   return html`<section class="lp-hero" aria-labelledby="lp-title">
     <div class="lp-wrap lp-hero-grid">
-      <h1 id="lp-title" class="lp-headline">
-        <span class="lp-line"><span>Tenants text.</span></span>
-        <span class="lp-line is-you"><span>You decide.</span></span>
-      </h1>
-      <div class="lp-intro" data-rise>
-        <p class="lp-lead">
-          myEST8 is the maintenance desk for Property Managers at small Agencies. It asks the follow-up questions and chases the Quotes. You make the calls.
-        </p>
-        <div class="lp-actions">${linkButton(SIGN_UP, '/signup', { variant: 'primary', size: 'lg' })} ${linkButton('Sign in', '/login', { size: 'lg' })}</div>
-        <p class="lp-note">Tenants, Tradies and Owners never need an account. They reply by text or email.</p>
-        <p class="lp-figure-block"><span class="lp-figure-num num">2</span><span>decisions on a typical repair. myEST8 chases the rest.</span></p>
+      <div class="lp-hero-text">
+        <h1 id="lp-title" class="lp-headline">
+          <span class="lp-line"><span>Tenants text.</span></span>
+          <span class="lp-line is-you"><span>You decide.</span></span>
+        </h1>
+        <div class="lp-intro">
+          <p class="lp-lead">
+            myEST8 is the maintenance desk for Property Managers at small Agencies. It asks the follow-up questions and chases the Quotes. You make the calls.
+          </p>
+          <div class="lp-actions">${linkButton(SIGN_UP, '/signup', { variant: 'primary', size: 'lg' })} ${linkButton('Sign in', '/login', { size: 'lg' })}</div>
+        </div>
+        <dl class="lp-facts">
+          ${FACTS.map(
+            (fact) => html`<div>
+              <dt class="num">${fact.figure}</dt>
+              <dd>${fact.text}</dd>
+            </div>`,
+          )}
+        </dl>
       </div>
-      <figure class="lp-hero-figure">
-        <div class="lp-hero-photo">${photo('newtown-terraces.jpg', 'A row of rendered terrace houses with iron lace balconies in Newtown, Sydney', 1339, 1200, { eager: true })}</div>
-        <figcaption class="lp-caption">Terrace houses in Newtown, Sydney.</figcaption>
-      </figure>
+      <div class="lp-stage">
+        ${appWindow()}
+        <div class="lp-text-card" aria-hidden="true">
+          <p class="lp-text-card-from">${icon('chat-circle-dots', { size: 'size-4' })}Priya, by SMS · 7:42 am</p>
+          <p class="lp-text-card-words">hi the tap under the kitchen sink keeps dripping, there’s a puddle in the cupboard</p>
+          <p class="lp-text-card-reply"><span>myEST8 replied with 3 questions and a link for her photos.</span></p>
+        </div>
+        <span class="lp-cursor" aria-hidden="true">${icon('cursor', { weight: 'fill', size: 'size-6' })}</span>
+      </div>
     </div>
   </section>`;
 }
@@ -501,10 +642,11 @@ function handled(): Html {
 
 /* ----- The way in, again ----- */
 
-/** "Three photographs, then a field": Sydney rental streets and a tradie at work, then the way in on Night. */
+/** "Four photographs, then a field": Sydney rental streets and a tradie at work, then the way in on Night. */
 function closing(): Html {
   return html`<section class="lp-close" aria-labelledby="lp-close-title">
     <div class="lp-strip">
+      ${photo('newtown-terraces.jpg', 'A row of rendered terrace houses with iron lace balconies in Newtown, Sydney', 1339, 1200, { immediate: true })}
       ${photo('king-street.jpg', 'Shops and terraces along King Street, Newtown', 1000, 1333, { immediate: true })}
       ${photo('wattle-street.jpg', 'Painted iron lace on a terrace balcony in Wattle Street, Ultimo', 1920, 1083, { immediate: true })}
       ${photo('plumber-wrenches.jpg', 'A plumber tightening a fitting with two wrenches', 1096, 894, { immediate: true })}
@@ -539,25 +681,46 @@ const CREDITS = [
   { title: 'Plumber uses two wrenches to tighten a fitting', by: 'Tomwsulcer', licence: 'CC0' },
 ];
 
-/** "Name first": the wordmark at full width, what myEST8 is and the terms, then the photo credits. */
+/**
+ * "One grid": the name and what myEST8 is on the left, then three short columns
+ * (the page's sections, the ways in, the terms), every link a ghost button. Under
+ * a hairline, the photo credits as a two-column list on the same lines. It sits on
+ * the closing band's Night, so the way in and the footer read as one field.
+ */
 function footer(): Html {
+  const column = (title: string, links: [label: string, href: string][]) =>
+    html`<nav class="lp-footer-col" aria-label="${title}">
+      <h2 class="lp-footer-title">${title}</h2>
+      ${links.map(([label, href]) => linkButton(label, href, { variant: 'ghost', size: 'sm' }))}
+    </nav>`;
   return html`<footer class="lp-footer">
     <div class="lp-wrap">
-      <p class="lp-footer-name" aria-hidden="true">${logo()}</p>
-      <div class="lp-footer-row">
-        <div class="lp-footer-ways">
-          <p>${SIGNED_OUT_FOOTER}</p>
-          <nav class="lp-footer-links" aria-label="Terms and privacy">
-            ${linkButton('Terms of use', '/terms', { variant: 'ghost', size: 'sm' })}
-            ${linkButton('Privacy Policy', '/privacy', { variant: 'ghost', size: 'sm' })}
-          </nav>
+      <div class="lp-footer-grid">
+        <div class="lp-footer-brand">
+          <p class="lp-footer-name">${logo()}</p>
+          <p class="lp-footer-about">${SIGNED_OUT_FOOTER}</p>
         </div>
-        <div class="lp-credits">
-          <h2 class="lp-credits-title">Photographs</h2>
-          <p>
-            From Wikimedia Commons:
-            ${CREDITS.map((c, i) => html`${i ? '; ' : ' '}“${c.title}” by ${c.by}, ${c.licence}`)}.
-          </p>
+        ${column('On this page', [
+          ['Their words, your request', '#example'],
+          ['One leak, report to done', '#repair'],
+          ['What myEST8 handles', '#handled'],
+        ])}
+        ${column('Your account', [
+          ['Sign in', '/login'],
+          [SIGN_UP, '/signup'],
+        ])}
+        ${column('The small print', [
+          ['Terms of use', '/terms'],
+          ['Privacy Policy', '/privacy'],
+        ])}
+      </div>
+      <div class="lp-credits">
+        <h2 class="lp-footer-title">Photographs</h2>
+        <div>
+          <p>From Wikimedia Commons, each resized and otherwise unaltered.</p>
+          <ul role="list">
+            ${CREDITS.map((c) => html`<li>“${c.title}” by ${c.by}, ${c.licence}</li>`)}
+          </ul>
         </div>
       </div>
     </div>

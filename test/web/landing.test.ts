@@ -43,6 +43,40 @@ describe('the landing page', () => {
     expect(text).not.toContain('demo1234');
   });
 
+  test('the first screen shows the product: the dashboard as a picture, with the Tenant’s text that started it', async () => {
+    const w = await webWorld();
+
+    const page = await (await w.get('/')).text();
+
+    const hero = page.match(/<section class="lp-hero"[\s\S]*?<\/section>/)?.[0] ?? '';
+    // The dashboard is one described picture: nothing in it is a control or a link.
+    const app = hero.match(/<div\s+class="lp-app"[\s\S]*?<div class="lp-text-card"/)?.[0] ?? '';
+    expect(app).toMatch(/role="img"/);
+    expect(app).toMatch(/aria-label="The myEST8 dashboard\./);
+    expect(app).not.toMatch(/<(a|button|input|select|textarea)[\s>]/);
+    const text = visible(hero).replace(/\s+/g, ' ');
+    for (const words of ['Do next', 'Maintenance Requests to confirm', 'Kitchen tap dripping under the sink', 'Waiting on others', 'Inbox']) expect(text).toContain(words);
+    expect(text).toContain('hi the tap under the kitchen sink keeps dripping');
+    // The ways in are the hero's only links.
+    expect(hero.match(/<a\s/g)).toHaveLength(2);
+    // The picture names no demo Agency or person, so the hosted page shows none.
+    expect(text).not.toContain('Harbour Realty');
+  });
+
+  test('the footer is one grid: the name, three columns of links, then the credits', async () => {
+    const w = await webWorld();
+
+    const page = await (await w.get('/')).text();
+    const footer = page.match(/<footer class="lp-footer">[\s\S]*?<\/footer>/)?.[0] ?? '';
+
+    const columns = [...footer.matchAll(/<nav class="lp-footer-col" aria-label="([^"]*)">([\s\S]*?)<\/nav>/g)];
+    expect(columns.map((m) => m[1])).toEqual(['On this page', 'Your account', 'The small print']);
+    expect([...columns[0]![2]!.matchAll(/href="([^"]*)"/g)].map((m) => m[1])).toEqual(['#example', '#repair', '#handled']);
+    expect([...columns[1]![2]!.matchAll(/href="([^"]*)"/g)].map((m) => m[1])).toEqual(['/login', '/signup']);
+    expect([...columns[2]![2]!.matchAll(/href="([^"]*)"/g)].map((m) => m[1])).toEqual(['/terms', '/privacy']);
+    expect(visible(footer)).toContain('myEST8, maintenance for small property management Agencies');
+  });
+
   test('the example shows what a Tenant texts, myEST8’s real replies, and what the Property Manager gets', async () => {
     const w = await webWorld();
 
@@ -149,13 +183,23 @@ describe('the landing page', () => {
     expect(text).not.toContain('with a reply or a link');
   });
 
-  test('nothing on the page loops, and its entrances stand still for anyone who asks for less motion', async () => {
+  test('the one loop is the hero’s demo, and everything stands still for anyone who asks for less motion', async () => {
     const w = await webWorld();
 
     const page = await (await w.get('/')).text();
     const landing = await (await w.get('/assets/landing.css')).text();
+    const script = await (await w.get('/assets/app.js')).text();
 
-    expect(page).not.toContain('data-flow-pause');
+    // The demo is drawn complete and still, with no control of its own; its toast is the app's toast.
+    expect(page).not.toMatch(/class="lp-stage[^"]*is-playing/);
+    expect(page).not.toContain('lp-demo-toggle');
+    expect(page).toContain('class="flash-toast lp-app-toast"');
+    // The script never starts it under reduced motion, and stops it off screen or in a hidden tab.
+    const demo = script.slice(script.indexOf("querySelector('.lp-stage')"));
+    expect(demo).toMatch(/prefers-reduced-motion: reduce\)'\)\.matches\) return;/);
+    expect(demo).toContain('document.hidden');
+    expect(demo).toContain('IntersectionObserver');
+    // No CSS animation runs for ever: the loop is the script's, so it stops off screen.
     expect(landing).not.toMatch(/animation:[^;]*infinite/);
     expect(landing).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*\.lp-line > span[\s\S]*animation: none/);
   });
