@@ -194,7 +194,7 @@ function requestList(requests: MaintenanceRequest[], now: Date, f: ListFilter): 
           <p class="tk-request-meta">${r.tenantName} · ${formatAge(r.reportedAt, now)}</p>
         </div>
         <div class="tk-request-actions">
-          ${linkButton('Review', `/requests/${r.issueId}`, { variant: 'secondary', size: 'sm' })}${postButton(`/requests/${r.issueId}/confirm`, 'Confirm', { variant: 'confirm', size: 'sm' })}
+          ${linkButton('Review', `/requests/${r.issueId}`, { variant: 'secondary', size: 'sm' })}${postButton(`/requests/${r.issueId}/confirm`, 'Confirm', { size: 'sm', confirm: 'Confirm this Maintenance Request? It opens as a Ticket and the Tenant is told.' })}
         </div>
       </article>`,
     )}
@@ -229,7 +229,7 @@ function ticketCards(tickets: ListedTicket[], now: Date): Html {
         </div>
         <div class="tk-card-actions">
           ${linkButton('View ticket', `/tickets/${t.ticketId}`, { variant: 'secondary', size: 'sm' })}
-          ${readyToClose ? postButton(`/tickets/${t.ticketId}/close`, 'Close ticket', { variant: 'confirm', size: 'sm', confirm: 'Close this Ticket? The Tenant and Owner will be told.' }) : ''}
+          ${readyToClose ? postButton(`/tickets/${t.ticketId}/close`, 'Close ticket', { size: 'sm', confirm: 'Close this Ticket? The Tenant and Owner will be told.' }) : ''}
         </div>
       </li>`;
     })}

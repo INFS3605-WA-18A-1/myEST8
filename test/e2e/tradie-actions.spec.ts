@@ -146,6 +146,7 @@ test("a Work Order email's buttons open their pages, and Mark job done records i
   const confirm = page.getByRole('button', { name: /^Confirm( anyway)?$/ });
   if (!(await confirm.isVisible())) await page.getByText('Confirm', { exact: true }).click();
   await confirm.click();
+  await page.getByRole('alertdialog').getByRole('button', { name: /^Confirm( anyway)?$/ }).click(); // Confirm asks first
   await expect(page).toHaveURL(/\/tickets\/\d+/);
   const ticketUrl = page.url().split('?')[0]!;
 

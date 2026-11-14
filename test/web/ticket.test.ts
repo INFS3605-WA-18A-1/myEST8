@@ -570,8 +570,8 @@ describe('the Next step', () => {
     );
     expect(page.text).toMatch(/Estimates Non-binding .* Pete's Plumbing \$150\.00 Not needed None Superseded by Firm Quote \$150\.00/);
     expect(page.text.match(/Choose this Firm Quote/g)).toHaveLength(2);
-    // Choosing commits to a Quote: a green button, and the panel that asks first answers in green too (no red tone).
-    expect(page.html.match(/class="btn btn-success btn-sm btn-block"[^>]*>Choose this Firm Quote/g)).toHaveLength(2);
+    // Choose this Firm Quote is Harbour and asks first; the panel answers in green (no red tone).
+    expect(page.html.match(/class="btn btn-primary btn-sm btn-block"[^>]*>Choose this Firm Quote/g)).toHaveLength(2);
     expect(page.html).not.toMatch(/\/choose"[^>]*data-confirm-tone/);
     // The Quotes that came in one after another are one line in the timeline.
     expect(page.text).toContain("Estimates received from Pete's Plumbing and Drip Doctors");

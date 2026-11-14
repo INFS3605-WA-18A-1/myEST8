@@ -534,14 +534,14 @@ html:not(.js) .field-control .input {
   flex-wrap: wrap;
   gap: 6px;
 }
-/* The card's Confirm: a picture of the app's green Confirm button, not a control. */
+/* The card's Confirm: a picture of the primary button, not a control. */
 .au-fake-btn {
   display: inline-flex;
   align-items: center;
   height: 30px;
   padding-inline: 12px;
   border-radius: var(--radius-btn);
-  background: var(--done);
+  background: var(--action);
   color: var(--surface);
   font-family: var(--font-head);
   font-size: 13px;

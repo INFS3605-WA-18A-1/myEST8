@@ -102,6 +102,10 @@ test('two Tradies on their own paths: one inspects first, both give Firm Quotes,
   const confirm = page.getByRole('button', { name: /^Confirm( anyway)?$/ });
   if (!(await confirm.isVisible())) await page.getByText('Confirm', { exact: true }).click(); // photos in doubt: the disclosure asks first
   await confirm.click();
+  // Confirm stays Harbour and asks first; the panel's Confirm is the green that commits.
+  await expect(confirm.first()).toHaveClass(/\bbtn-primary\b/);
+  await expect(page.getByRole('alertdialog').getByRole('button', { name: /^Confirm( anyway)?$/ })).toHaveClass(/\bbtn-success\b/);
+  await page.getByRole('alertdialog').getByRole('button', { name: /^Confirm( anyway)?$/ }).click();
   await expect(page).toHaveURL(/\/tickets\/\d+/);
   const ticketUrl = page.url().split('?')[0]!;
 
@@ -128,6 +132,7 @@ test('two Tradies on their own paths: one inspects first, both give Firm Quotes,
     }).toPass({ timeout: 15_000 });
     await check.click();
     await page.getByRole('button', { name: 'Confirm Estimate' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Confirm Estimate' }).click();
     await expect(page.getByText(/Estimate from .* confirmed/)).toBeVisible();
   }
 
