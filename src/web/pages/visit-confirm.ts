@@ -88,7 +88,7 @@ function confirmPage(token: string, page: Visit, another: boolean, error?: strin
 
 /** One of the email's two choices: a form that posts it, or the same button disabled once it no longer applies. */
 function actionButton(token: string, action: 'confirm' | 'another', label: string, enabled: boolean): Html {
-  const variant = action === 'another' ? 'secondary' : 'primary';
+  const variant = action === 'another' ? 'secondary' : 'confirm';
   if (!enabled) return html`<div class="tenant-buttons">${button(label, { block: true, variant, disabled: true, type: 'button' })}</div>`;
   return html`<form method="post" action="/v/confirm/${encodeURIComponent(token)}" class="tenant-form">
     <input type="hidden" name="action" value="${action}" />

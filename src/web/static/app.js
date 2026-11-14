@@ -193,7 +193,9 @@ try {
     keep.textContent = 'Keep it';
     const yes = document.createElement('button');
     yes.type = 'button';
-    yes.className = 'btn btn-sm btn-danger';
+    // Red when the action undoes something (Cancel Job, Remove), green when it commits to one (Choose this Firm Quote).
+    const undoes = form.dataset.confirmTone === 'destructive' || anchor.classList.contains('btn-danger');
+    yes.className = `btn btn-sm ${undoes ? 'btn-error' : 'btn-success'}`;
     yes.textContent = form.dataset.confirmYes || anchor.textContent.trim() || 'Yes';
     actions.append(keep, yes);
     panel.append(text, actions);

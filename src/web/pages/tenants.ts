@@ -204,6 +204,7 @@ function removeButton(tenantId: number, name: string, address: string, variant: 
   return postButton(`/tenants/${tenantId}/remove`, 'Remove', {
     variant,
     size: 'sm',
+    destructive: true,
     confirm: `Remove ${name} from ${address}? Their profile and past Tickets stay on record.`,
   });
 }

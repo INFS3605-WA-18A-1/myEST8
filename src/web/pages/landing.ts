@@ -124,7 +124,7 @@ const decisionRow = (o: { issue: string; where: string; tags?: Html; primary: st
       <p class="lp-app-where">${o.where}</p>
       ${o.tags ? html`<p class="lp-app-tags">${o.tags}</p>` : ''}
     </div>
-    <p class="lp-app-buttons"><span class="lp-fake-btn is-primary">${o.primary}</span>${o.secondary ? html`<span class="lp-fake-btn">${o.secondary}</span>` : ''}</p>
+    <p class="lp-app-buttons"><span class="lp-fake-btn is-primary${o.primary === 'Confirm' ? ' is-confirm' : ''}">${o.primary}</span>${o.secondary ? html`<span class="lp-fake-btn">${o.secondary}</span>` : ''}</p>
   </div>`;
   return o.fresh ? html`<div class="lp-app-slot"><div>${row}</div></div>` : row;
 };
@@ -331,7 +331,7 @@ function request(o: { issue: string; trade: string; tradeFrom: string; urgency: 
       </dl>
       ${o.photo ?? ''}
     </div>
-    <p class="lp-request-actions" aria-hidden="true"><span class="lp-fake-btn is-primary">Confirm</span><span class="lp-fake-btn">Change</span></p>
+    <p class="lp-request-actions" aria-hidden="true"><span class="lp-fake-btn is-primary is-confirm">Confirm</span><span class="lp-fake-btn">Change</span></p>
   </div>`;
 }
 

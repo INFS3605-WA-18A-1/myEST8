@@ -272,7 +272,7 @@ function declinePage(token: string, page: QuotePage, error?: string): Html {
     : open
       ? html`<p>${page.agencyName} asked you to quote for the ${humanise(page.trade).toLowerCase()} job in ${page.suburb}.</p>
           <form method="post" action="/q/${encodeURIComponent(token)}/decline" class="tenant-form">
-            ${button('Decline this job', { block: true })}
+            ${button('Decline this job', { variant: 'destructive', block: true })}
           </form>`
       : html`<p>This Quote Request no longer takes a decline.</p>${disabledButton('Decline this job')}`;
   return actionPage(title, page.agencyName, html`${error ? alert(error, 'error') : ''}${body}`, declined ? doneBox('You declined this Quote Request.') : '');

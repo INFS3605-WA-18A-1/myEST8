@@ -63,10 +63,12 @@
   --info-bg: #e8f0f7; /* Harbour's tint: info badges and alerts, "Filled in by AI" */
   --urgent: #b42318; /* urgent, errors, destructive actions */
   --urgent-bg: #fdecea;
+  --urgent-hover: #8f1c13; /* Rust, pressed darker: the destructive button's hover (white on it 9.0:1) */
   --high: #9a4a0b; /* High Urgency, warnings, flags */
   --high-bg: #fdf1e3;
   --done: #2f5a3e; /* done, approved, confirmed */
   --done-bg: #e8f1ea;
+  --done-hover: #234530; /* the done green, pressed darker: the confirm button's hover (white on it 10.7:1) */
   --rail: #13212e; /* the rail is Night */
   --rail-text: #e6ebf0; /* rail text on Night (13.6:1) */
   --rail-muted: #9aa8b4; /* rail counts, the Phone simulator, the Agency (6.7:1) */
@@ -370,6 +372,32 @@
     .btn-primary:hover {
       --btn-bg: var(--action-hover);
       --btn-border: var(--action-hover);
+    }
+    /* Confirm: white on the done green, for a button that commits to a decision (white on it 7.9:1). */
+    .btn-success {
+      --btn-color: var(--done);
+      --btn-fg: var(--surface);
+    }
+    .btn-success,
+    .btn-success:hover {
+      color: var(--surface);
+    }
+    .btn-success:hover {
+      --btn-bg: var(--done-hover);
+      --btn-border: var(--done-hover);
+    }
+    /* Destructive: white on Rust, the last step of an action that undoes something (white on it 6.6:1). */
+    .btn-error {
+      --btn-color: var(--urgent);
+      --btn-fg: var(--surface);
+    }
+    .btn-error,
+    .btn-error:hover {
+      color: var(--surface);
+    }
+    .btn-error:hover {
+      --btn-bg: var(--urgent-hover);
+      --btn-border: var(--urgent-hover);
     }
     /* Secondary: surface fill, a control border, Night text. */
     .btn-outline {

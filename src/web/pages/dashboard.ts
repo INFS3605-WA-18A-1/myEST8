@@ -541,7 +541,7 @@ function requestRow(r: MaintenanceRequest, q: string, now: Date): Html {
     badges: [urgencyBadge(r.urgency), badge(humanise(r.trade)), ...requestFlags(r).map((f) => badge(f.label, f.tone))],
     meta: ageOf(r.reportedAt, now),
     decision: true,
-    actions: html`${postButton(`/requests/${r.issueId}/confirm${q}`, 'Confirm', { size: 'sm' })}${linkButton('Review', `/requests/${r.issueId}`, { variant: 'secondary', size: 'sm' })}`,
+    actions: html`${postButton(`/requests/${r.issueId}/confirm${q}`, 'Confirm', { variant: 'confirm', size: 'sm' })}${linkButton('Review', `/requests/${r.issueId}`, { variant: 'secondary', size: 'sm' })}`,
   });
 }
 

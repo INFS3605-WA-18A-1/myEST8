@@ -5,7 +5,7 @@ myEST8 is where a Property Manager at a small Australian Agency sees every repai
 ## What the identity commits to
 
 - **Shape encodes type.** Only a Ticket is a docket. Everything else is a row or a section.
-- **Harbour means act.** Primary buttons, links, focus and the selected state are Harbour. Done, approved and confirmed are a deep green (`--done`), never blue, so Harbour always means "act".
+- **Harbour means act.** Primary buttons, links, focus and the selected state are Harbour. Done, approved and confirmed are a deep green (`--done`), never blue, so Harbour always means "act"; a button that confirms a decision is that green, and one that cancels or refuses is Rust.
 - **Wattle is the decision.** On the dashboard each row in "Do next" has a 4px Wattle left edge (a receipt waiting for review uses a 1px Urgent border instead). Wattle also marks the current rail item and the counts that need a decision. It is never text, never a button, never a wash.
 - **Two shadows only.** `--shadow-soft`, a faint lift off Sand, on sections and the count strip; `--shadow-lift` on menus, dialogs and the phone frame. Nothing else casts a shadow; hierarchy otherwise comes from borders, spacing and weight.
 - **Sentence case everywhere: no all-caps, no letter-spaced eyebrows, no arrows on labels.** A single `·` may separate facts inside one quiet meta line (an age, a street, a status), never in a heading, label or button.
@@ -42,9 +42,11 @@ myEST8 is where a Property Manager at a small Australian Agency sees every repai
 | `--hivis` | Wattle | `#FFC233` | The decision stripe, the current rail item's bar, decision count chips, the logo on Night, a toast's done mark | Night on it 10.1:1 |
 | `--urgent-on-night` | Light Rust | `#FF8A80` | A toast's error mark, on Night only | 7.1:1 on Night |
 | `--info-bg` | | `#E8F0F7` | Info badges and alerts, "Filled in by AI" | Harbour on it 6.2:1, Night 14.2:1 |
-| `--urgent` / `--urgent-bg` | Rust | `#B42318` / `#FDECEA` | Urgent, errors, destructive actions | 5.8:1 on its tint, 6.6:1 on white |
+| `--urgent` / `--urgent-bg` | Rust | `#B42318` / `#FDECEA` | Urgent, errors, destructive actions (the Destructive button) | 5.8:1 on its tint, 6.6:1 on white; white on it 6.6:1 |
+| `--urgent-hover` | | `#8F1C13` | Destructive button hover | white on it 9.0:1 |
 | `--high` / `--high-bg` | Ochre | `#9A4A0B` / `#FDF1E3` | High Urgency, warnings, flags | 5.6:1 on its tint, 6.3:1 on white |
-| `--done` / `--done-bg` | | `#2F5A3E` / `#E8F1EA` | Done, approved, confirmed | 6.9:1 on its tint, 7.9:1 on white |
+| `--done` / `--done-bg` | | `#2F5A3E` / `#E8F1EA` | Done, approved, confirmed (the Confirm button) | 6.9:1 on its tint, 7.9:1 on white; white on it 7.9:1 |
+| `--done-hover` | | `#234530` | Confirm button hover | white on it 10.7:1 |
 | `--rail` | Night | `#13212E` | The rail | |
 | `--rail-text` | | `#E6EBF0` | Rail links and the wordmark in the rail | 13.6:1 on Night, 10.1:1 on the current item's band |
 | `--rail-muted` | | `#9AA8B4` | Rail counts, the Phone simulator link, the Agency's name | 6.7:1 on Night |
@@ -340,6 +342,9 @@ The browser side is moving to React, one widget at a time (`docs/adr/0021-react-
 - **Retire the old code.** When an island takes over, remove the `app.js` code it replaces in the same change.
 
 - **Buttons** (`button`, `linkButton`, `postButton`): Public Sans 600, 6 px radius. Sizes `sm` 32 px (rows and lanes), `md` 36 px (default), `lg` 44 px (a page's main way in, as on the landing page); every size is 44 px on phones and touch screens.
+  - **Colour follows the decision.** Primary (Harbour) does the next thing: send, save, add. **Confirm** (`variant: 'confirm'`, white on `--done`) commits to a decision: Confirm a Maintenance Request, Confirm Estimate, Choose this Firm Quote, Close Ticket, and the Tenant's Book and Confirm visit. **Destructive** (`variant: 'destructive'`, white on `--urgent`) is the last step of an action that undoes or refuses: Reject, Decline this job. **Danger** (Rust text, outlined) is the button that starts one, such as Cancel Job, Remove Tradie or Remove Owner; it asks first.
+  - **The confirm panel answers in the action's colour.** A `postButton` with `confirm` opens a small panel ("Keep it" and a Yes named for the action). The Yes is Destructive when the action undoes something (a Danger button, or `destructive: true` for a quiet one such as a Tenant's Remove, which sets `data-confirm-tone="destructive"`), and Confirm otherwise, so choosing a Quote is never asked in red.
+  - The pictures of the app on the landing page and the sign-in card draw Confirm in the same green (`.lp-fake-btn.is-confirm`, `.au-fake-btn`).
   - Primary: Harbour fill, white text, `--action-hover` on hover.
   - Secondary: surface fill with a 1 px `--control` border and Night text.
   - Ghost: Harbour text, no box, Paper on hover: a quiet action ("See all Tickets", "Sign out") that still reads as one. Inside a message it takes the message's colour.
