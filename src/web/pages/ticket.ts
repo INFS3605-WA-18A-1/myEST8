@@ -1070,7 +1070,7 @@ function closeControl(t: TicketView): Html {
   if (t.status !== 'open' || t.jobs.some(isOpen)) return nothing;
   return html`<div id="close-ticket">
     <form method="post" action="/tickets/${t.ticketId}/close" class="inline-flex" data-confirm="Close this Ticket? The Tenant and Owner will be told.">
-      <button type="submit" class="btn btn-success btn-sm">${icon('check-circle', { size: 'size-4' })}Close Ticket</button>
+      <button type="submit" class="btn btn-primary btn-sm">${icon('check-circle', { size: 'size-4' })}Close Ticket</button>
     </form>
   </div>`;
 }
@@ -1724,7 +1724,7 @@ function formatDate(date: string): string {
 function confirmForm(t: TicketView, q: EstimateView, x: Extras): Html {
   return html`<details class="quote-check">
     <summary class="btn btn-primary btn-sm">Check Estimate</summary>
-    <form method="post" action="/tickets/${t.ticketId}/quotes/${q.quoteId}/confirm" class="mt-3 space-y-2">
+    <form method="post" action="/tickets/${t.ticketId}/quotes/${q.quoteId}/confirm" class="mt-3 space-y-2" data-confirm="Confirm ${q.businessName}'s Estimate? Only confirmed Estimates count.">
       <p class="text-xs text-muted">
         Check what was read from the reply${q.hasPdf ? ' and its PDF' : ''} and correct anything wrong. Only confirmed Estimates count.
       </p>
@@ -1743,7 +1743,7 @@ function confirmForm(t: TicketView, q: EstimateView, x: Extras): Html {
         value: q.proposedTime ? isoToLocal(q.proposedTime, x.timeZone) : '',
         hint: `${x.timeZone} time. Leave empty if the Tradie gave none.`,
       })}
-      ${button('Confirm Estimate', { variant: 'confirm', size: 'sm', block: true })}
+      ${button('Confirm Estimate', { size: 'sm', block: true })}
     </form>
   </details>`;
 }
@@ -1776,7 +1776,7 @@ function chooseForm(t: TicketView, q: QuoteView, confirmed: number, x: Extras): 
           hint: 'For example a specialist or time-critical Job.',
         })
       : nothing}
-    ${button('Choose this Firm Quote', { variant: 'confirm', size: 'sm', block: true })}
+    ${button('Choose this Firm Quote', { size: 'sm', block: true })}
   </form>`;
 }
 

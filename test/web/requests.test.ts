@@ -142,7 +142,7 @@ describe('the Maintenance Request review', () => {
     expect(text).not.toContain('What the Tenant reported');
   });
 
-  test('Confirm is the one filled action, in green; Reject is red; Change Urgency comes back to the review and Reject to Tickets', async () => {
+  test('Confirm is the one primary action and asks first; Reject is red; Change Urgency comes back to the review and Reject to Tickets', async () => {
     const w = await webWorld();
     await report(w, TOM, 'The kitchen tap is dripping');
     await w.h.advance(48 * HOUR);
@@ -150,7 +150,9 @@ describe('the Maintenance Request review', () => {
     const html = await page(w, `/requests/${r.issueId}`, await w.signIn());
 
     const review = html.slice(html.indexOf('class="request-review"'));
-    expect(review.match(/btn-(primary|success)\b/g)).toEqual(['btn-success']);
+    expect(review.match(/btn-(primary|success)\b/g)).toEqual(['btn-primary']);
+    // A stray click commits nothing: Confirm asks first, and the panel's Confirm (app.js) is the green one.
+    expect(review).toContain('data-confirm="Confirm this Maintenance Request? It opens as a Ticket and the Tenant is told."');
     expect(review).toMatch(/<button type="submit" class="btn btn-error btn-sm"[^>]*>Reject<\/button>/);
     expect(html).toMatch(new RegExp(`<form method="post" action="/requests/${r.issueId}/summary"`));
     expect(html).toMatch(new RegExp(`<button type="submit" form="summary-form-${r.issueId}" formaction="/requests/${r.issueId}/confirm"`));
