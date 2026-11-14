@@ -505,6 +505,10 @@ body.lp {
 .lp-app .lp-fake-btn.is-primary {
   background: var(--action);
 }
+/* Confirm is the app's green Confirm button (it commits to the request), not Harbour. */
+.lp-app .lp-fake-btn.is-confirm {
+  background: var(--done);
+}
 /* Waiting on others: the Sand Deep card under Do next, a count to a tile. */
 .lp-app-card.is-waiting {
   margin-top: 12px;
@@ -779,6 +783,9 @@ body.lp {
 .lp-stage.is-pressing .lp-app-row.is-fresh .lp-fake-btn.is-primary {
   transform: scale(0.92);
   background: var(--action-hover);
+}
+.lp-stage.is-pressing .lp-app-row.is-fresh .lp-fake-btn.is-confirm {
+  background: var(--done-hover);
 }
 .lp-stage.is-playing .lp-app-toast {
   display: flex;
@@ -1265,6 +1272,10 @@ body.lp {
   border-color: var(--action);
   background: var(--action);
   color: var(--surface);
+}
+.lp-fake-btn.is-confirm {
+  border-color: var(--done);
+  background: var(--done);
 }
 .lp-urgent-note {
   margin-top: 4px;
