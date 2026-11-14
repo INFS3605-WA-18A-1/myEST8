@@ -30,7 +30,7 @@ export type NavKey =
   | 'profiles'
   | 'settings'
   | 'simulator';
-export type Variant = 'primary' | 'secondary' | 'danger' | 'ghost';
+export type Variant = 'primary' | 'confirm' | 'destructive' | 'secondary' | 'danger' | 'ghost';
 export type Tone = 'neutral' | 'info' | 'success' | 'warning' | 'error';
 export type FieldType =
   | 'text'
@@ -430,13 +430,17 @@ export function linkButton(label: string, href: string, o: { variant?: Variant; 
   return html`<a href="${href}" class="${buttonClass(o.variant ?? 'secondary', o.size, o.block)}"${o.title ? html` title="${o.title}"` : ''}>${label}</a>`;
 }
 
-/** A one-click action: a small form that POSTs `fields` to `action`. `confirm` asks first (via app.js). */
+/**
+ * A one-click action: a small form that POSTs `fields` to `action`. `confirm` asks first (via app.js): the Yes is red
+ * when the action undoes something (a Danger button, or `destructive`), else green.
+ */
 export function postButton(
   action: string,
   label: string,
-  o: { variant?: Variant; size?: ButtonSize; fields?: Record<string, string | number>; confirm?: string } = {},
+  o: { variant?: Variant; size?: ButtonSize; fields?: Record<string, string | number>; confirm?: string; destructive?: boolean } = {},
 ): Html {
-  return html`<form method="post" action="${action}" class="inline-flex" ${o.confirm ? html`data-confirm="${o.confirm}"` : ''}>
+  const undoes = o.destructive || o.variant === 'danger';
+  return html`<form method="post" action="${action}" class="inline-flex" ${o.confirm ? html`data-confirm="${o.confirm}"${undoes ? html` data-confirm-tone="destructive"` : ''}` : ''}>
     ${Object.entries(o.fields ?? {}).map(([name, value]) => html`<input type="hidden" name="${name}" value="${value}" />`)}
     ${button(label, { variant: o.variant, size: o.size })}
   </form>`;

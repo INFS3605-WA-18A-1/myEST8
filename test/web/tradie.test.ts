@@ -259,6 +259,8 @@ describe('removing a Tradie', () => {
     const form = page.slice(page.indexOf(`action="/tradies/${w.ids.nina}/remove"`) - 30, page.indexOf('</form>', page.indexOf(`action="/tradies/${w.ids.nina}/remove"`)));
     expect(form).toContain("data-confirm=\"Nina's Plumbing won't be offered for new Jobs. Their past Quotes and ratings stay on the Tickets they belong to.\"");
     expect(form).toContain('btn-danger');
+    // It undoes something, so the confirm panel's Yes is red (app.js reads the tone).
+    expect(form).toContain('data-confirm-tone="destructive"');
     expect(visible(form)).toContain('Remove Tradie');
     // The button sits in the card's top row, with the Call button.
     expect(page.indexOf('Remove Tradie')).toBeLessThan(page.indexOf('>Call '));
