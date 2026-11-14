@@ -541,7 +541,7 @@ function requestRow(r: MaintenanceRequest, q: string, now: Date): Html {
     badges: [urgencyBadge(r.urgency), badge(humanise(r.trade)), ...requestFlags(r).map((f) => badge(f.label, f.tone))],
     meta: ageOf(r.reportedAt, now),
     decision: true,
-    actions: html`${postButton(`/requests/${r.issueId}/confirm${q}`, 'Confirm', { size: 'sm' })}${linkButton('Review', `/requests/${r.issueId}`, { variant: 'secondary', size: 'sm' })}`,
+    actions: html`${postButton(`/requests/${r.issueId}/confirm${q}`, 'Confirm', { size: 'sm', confirm: 'Confirm this Maintenance Request? It opens as a Ticket and the Tenant is told.' })}${linkButton('Review', `/requests/${r.issueId}`, { variant: 'secondary', size: 'sm' })}`,
   });
 }
 
@@ -971,11 +971,11 @@ function nextSevenDays(bookings: Booking[], now: Date, timeZone: string, dayQuer
         })}
       </ol>
       <h3 class="visit-heading">${longDay(chosen)}</h3>
-      ${visits.length
+      <div class="visit-day">${visits.length
         ? html`<ul class="visit-list">${visits.slice(0, 2).map((b) => visitRow(b, timeZone))}</ul>${visits.length > 2 ? html`<a class="visit-more" href="${calendarHref(chosen, filter)}">+${visits.length - 2} more ${visits.length - 2 === 1 ? 'visit' : 'visits'} this day</a>` : ''}`
         : next
           ? nextVisitLine(next, timeZone)
-          : html`<p class="visit-none">Nothing booked in the next 7 days.</p>`}`,
+          : html`<p class="visit-none">Nothing booked in the next 7 days.</p>`}</div>`,
   });
 }
 

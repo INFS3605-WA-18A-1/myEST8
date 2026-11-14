@@ -88,12 +88,14 @@ export function profileTabs(label: string, tabs: ProfileTab[]): Html {
           html`<button type="button" role="tab" id="tab-${t.id}" class="tradie-tab" aria-controls="${t.id}" aria-selected="${i === 0 ? 'true' : 'false'}">${t.label}${t.count === null ? '' : html` <span class="tradie-tab-count num">${t.count}</span>`}</button>`,
       )}
     </div>
-    ${tabs.map(
-      (t) => html`<div class="tradie-pane" role="tabpanel" id="${t.id}" aria-labelledby="tab-${t.id}">
-        <h2 class="tradie-pane-title">${t.title ?? t.label}</h2>
-        ${t.body}
-      </div>`,
-    )}
+    <div class="tab-panes">
+      ${tabs.map(
+        (t) => html`<div class="tradie-pane" role="tabpanel" id="${t.id}" aria-labelledby="tab-${t.id}">
+          <h2 class="tradie-pane-title">${t.title ?? t.label}</h2>
+          ${t.body}
+        </div>`,
+      )}
+    </div>
   </section>`;
 }
 

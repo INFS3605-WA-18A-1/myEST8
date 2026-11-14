@@ -87,7 +87,7 @@ function offerPage(token: string, page: Offer, o: { error?: string; home?: boole
             body: html`<p>${page.tradieBusinessName} can visit ${page.address}.${page.preferred ? " This is the Tradie's preferred time." : ''}</p>
               <form method="post" action="/v/${encodeURIComponent(token)}" class="tenant-form">
                 <input type="hidden" name="pick" value="${page.pick}" />
-                ${button(`Book ${formatVisitDay(page.start, page.timeZone)}`, { block: true })}
+                ${button(`Book ${formatVisitDay(page.start, page.timeZone)}`, { variant: 'confirm', block: true })}
               </form>`,
           })
         : asking

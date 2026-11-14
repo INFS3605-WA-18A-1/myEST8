@@ -4,10 +4,14 @@
 
 import { cva, type VariantProps } from 'class-variance-authority';
 
-/** daisyUI `btn`: Primary is Harbour, Secondary outlined, Danger red, Ghost bare. Sizes are 32, 36 and 44px (44px on phones). */
+/**
+ * daisyUI `btn`: Primary is Harbour, Secondary outlined, Danger red text, Ghost bare. Confirm (filled green) is the step that
+ * commits a decision: the Yes after a Confirm or Choose asks first, or the Tenant's Book this visit. Destructive (filled red) is the last step of an undoing one:
+ * reject, decline, or the Yes after Cancel Job. Sizes are 32, 36 and 44px (44px on phones).
+ */
 export const buttonVariants = cva('btn', {
   variants: {
-    variant: { primary: 'btn-primary', secondary: 'btn-outline', danger: 'btn-danger', ghost: 'btn-ghost' },
+    variant: { primary: 'btn-primary', confirm: 'btn-success', destructive: 'btn-error', secondary: 'btn-outline', danger: 'btn-danger', ghost: 'btn-ghost' },
     size: { sm: 'btn-sm', md: '', lg: 'btn-lg' },
     block: { true: 'btn-block', false: '' },
   },

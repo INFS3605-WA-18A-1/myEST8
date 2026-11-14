@@ -102,6 +102,10 @@ test('two Tradies on their own paths: one inspects first, both give Firm Quotes,
   const confirm = page.getByRole('button', { name: /^Confirm( anyway)?$/ });
   if (!(await confirm.isVisible())) await page.getByText('Confirm', { exact: true }).click(); // photos in doubt: the disclosure asks first
   await confirm.click();
+  // Confirm stays Harbour and asks first; the panel's Confirm is the green that commits.
+  await expect(confirm.first()).toHaveClass(/\bbtn-primary\b/);
+  await expect(page.getByRole('alertdialog').getByRole('button', { name: /^Confirm( anyway)?$/ })).toHaveClass(/\bbtn-success\b/);
+  await page.getByRole('alertdialog').getByRole('button', { name: /^Confirm( anyway)?$/ }).click();
   await expect(page).toHaveURL(/\/tickets\/\d+/);
   const ticketUrl = page.url().split('?')[0]!;
 
@@ -128,6 +132,7 @@ test('two Tradies on their own paths: one inspects first, both give Firm Quotes,
     }).toPass({ timeout: 15_000 });
     await check.click();
     await page.getByRole('button', { name: 'Confirm Estimate' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Confirm Estimate' }).click();
     await expect(page.getByText(/Estimate from .* confirmed/)).toBeVisible();
   }
 
@@ -166,6 +171,8 @@ test('two Tradies on their own paths: one inspects first, both give Firm Quotes,
   await eventually(page, () => expect(page.getByText('Choose a Firm Quote: 2 in').first()).toBeVisible({ timeout: 1_000 }));
   await expect(page.getByText('Superseded by Firm Quote').first()).toBeVisible();
   await page.getByRole('row', { name: /Pete's Plumbing.*Replace the tap cartridge/ }).getByRole('button', { name: 'Choose this Firm Quote' }).click();
+  // Choosing commits to a Quote, so the panel's Yes is green, not the red of an undoing action.
+  await expect(page.getByRole('alertdialog').getByRole('button', { name: 'Choose this Firm Quote' })).toHaveClass(/\bbtn-success\b/);
   await page.getByRole('alertdialog').getByRole('button', { name: 'Choose this Firm Quote' }).click();
   await expect(page.getByText("Firm Quote from Pete's Plumbing chosen", { exact: true }).first()).toBeVisible();
 });

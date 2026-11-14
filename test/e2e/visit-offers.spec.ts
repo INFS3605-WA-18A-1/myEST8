@@ -115,6 +115,7 @@ test('the Tradie offers visit times and the Tenant books one', async ({ page, br
   const confirm = page.getByRole('button', { name: /^Confirm( anyway)?$/ });
   if (!(await confirm.isVisible())) await page.getByText('Confirm', { exact: true }).click();
   await confirm.click();
+  await page.getByRole('alertdialog').getByRole('button', { name: /^Confirm( anyway)?$/ }).click(); // Confirm asks first
   await expect(page).toHaveURL(/\/tickets\/\d+/);
   const ticketUrl = page.url().split('?')[0]!;
 
@@ -213,6 +214,7 @@ test('none of the times work, so the Tenant says when they are home and the Trad
   const confirm = page.getByRole('button', { name: /^Confirm( anyway)?$/ });
   if (!(await confirm.isVisible())) await page.getByText('Confirm', { exact: true }).click();
   await confirm.click();
+  await page.getByRole('alertdialog').getByRole('button', { name: /^Confirm( anyway)?$/ }).click(); // Confirm asks first
   await expect(page).toHaveURL(/\/tickets\/\d+/);
   const ticketUrl = page.url().split('?')[0]!;
 
@@ -319,6 +321,7 @@ test('a booked visit can ask for another time, and the Ticket can ask the Tradie
   const confirm = page.getByRole('button', { name: /^Confirm( anyway)?$/ });
   if (!(await confirm.isVisible())) await page.getByText('Confirm', { exact: true }).click();
   await confirm.click();
+  await page.getByRole('alertdialog').getByRole('button', { name: /^Confirm( anyway)?$/ }).click(); // Confirm asks first
   await expect(page).toHaveURL(/\/tickets\/\d+/);
   const ticketUrl = page.url().split('?')[0]!;
 
@@ -446,6 +449,7 @@ test('a Property Manager moves a visit and the Tenant confirms it from the email
   const confirmRequest = page.getByRole('button', { name: /^Confirm( anyway)?$/ });
   if (!(await confirmRequest.isVisible())) await page.getByText('Confirm', { exact: true }).click();
   await confirmRequest.click();
+  await page.getByRole('alertdialog').getByRole('button', { name: /^Confirm( anyway)?$/ }).click(); // Confirm asks first
   await expect(page).toHaveURL(/\/tickets\/\d+/);
   const ticketUrl = page.url().split('?')[0]!;
 

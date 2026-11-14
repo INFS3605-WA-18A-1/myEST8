@@ -818,9 +818,11 @@ function progressCard(t: TicketView, x: Extras): Html {
       <div class="ticket-tablist js-only" role="tablist" aria-label="Progress views">
         ${tab('ticket-timeline', 'Timeline', true)}${tab('ticket-job', jobsTab)}${tab('ticket-costs', 'Costs')}
       </div>
-      <div class="ticket-pane" role="tabpanel" id="ticket-timeline" aria-labelledby="tab-ticket-timeline">${timelineBoard(t, x)}</div>
-      <div class="ticket-pane" role="tabpanel" id="ticket-job" aria-labelledby="tab-ticket-job">${stageTracker(t, x)}</div>
-      <div class="ticket-pane" role="tabpanel" id="ticket-costs" aria-labelledby="tab-ticket-costs">${costsPane(t)}</div>
+      <div class="tab-panes">
+        <div class="ticket-pane" role="tabpanel" id="ticket-timeline" aria-labelledby="tab-ticket-timeline">${timelineBoard(t, x)}</div>
+        <div class="ticket-pane" role="tabpanel" id="ticket-job" aria-labelledby="tab-ticket-job">${stageTracker(t, x)}</div>
+        <div class="ticket-pane" role="tabpanel" id="ticket-costs" aria-labelledby="tab-ticket-costs">${costsPane(t)}</div>
+      </div>
     </div>
   </section>`;
 }
@@ -1722,7 +1724,7 @@ function formatDate(date: string): string {
 function confirmForm(t: TicketView, q: EstimateView, x: Extras): Html {
   return html`<details class="quote-check">
     <summary class="btn btn-primary btn-sm">Check Estimate</summary>
-    <form method="post" action="/tickets/${t.ticketId}/quotes/${q.quoteId}/confirm" class="mt-3 space-y-2">
+    <form method="post" action="/tickets/${t.ticketId}/quotes/${q.quoteId}/confirm" class="mt-3 space-y-2" data-confirm="Confirm ${q.businessName}'s Estimate? Only confirmed Estimates count.">
       <p class="text-xs text-muted">
         Check what was read from the reply${q.hasPdf ? ' and its PDF' : ''} and correct anything wrong. Only confirmed Estimates count.
       </p>

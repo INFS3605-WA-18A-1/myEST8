@@ -322,7 +322,7 @@ function decide(r: MaintenanceRequest): Html {
   const hintId = `urgency-${r.issueId}-hint`;
   // Confirm sends the Summary's form, so a Summary being edited goes with it (closed, it sends none).
   const confirmButton = (label: string, block: boolean) =>
-    html`<button type="submit" form="${summaryFormId(r)}" formaction="${base}/confirm" class="btn btn-primary${block ? ' btn-block' : ''}">${label}</button>`;
+    html`<button type="submit" form="${summaryFormId(r)}" formaction="${base}/confirm" class="btn btn-primary${block ? ' btn-block' : ''}" data-confirm="Confirm this Maintenance Request? It opens as a Ticket and the Tenant is told.">${label}</button>`;
   const confirm = doubtsPhotos(r)
     ? html`<details class="request-confirm-check">
         <summary class="btn btn-primary btn-block">Confirm</summary>
@@ -351,7 +351,7 @@ function decide(r: MaintenanceRequest): Html {
       <form method="post" action="${base}/reject" class="request-reject-form">
         <input type="hidden" name="return" value="/tickets" />
         ${field({ label: 'Reason for the Tenant', name: 'reason', id: `reason-${r.issueId}`, type: 'textarea', rows: 3, required: true, placeholder: 'Why this is rejected' })}
-        ${button('Reject', { variant: 'danger', size: 'sm' })}
+        ${button('Reject', { variant: 'destructive', size: 'sm' })}
       </form>
     </details>
   </div>`;

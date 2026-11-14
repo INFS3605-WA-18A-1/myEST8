@@ -99,6 +99,7 @@ export function calendarPages() {
     const filtered = Boolean(q.tradie || q.property || q.status);
     const bookings = scoped.filter(matches);
     const hidden = every.length - scoped.length;
+    const others = every.filter((b) => b.propertyManagerId !== pm.id).length;
     const byDay = bookingsByDay(bookings, first, timeZone);
     const ctx: Ctx = { timeZone, filter, meId: pm.id, today, now: actions.now(), q };
     const directory = await actions.tradieDirectory();
@@ -139,7 +140,12 @@ export function calendarPages() {
               ${summary(
                 bookings,
                 pm.id,
-                hidden ? html`${hidden} more ${hidden === 1 ? 'visit' : 'visits'} ${period.noun} on other Property Managers’ Properties. <a class="link" href="${hrefFor(view, first, 'all', q)}">Show all</a>` : '',
+                // All says the same line the other way round, so switching doesn't move the grid.
+                hidden
+                  ? html`${hidden} more ${hidden === 1 ? 'visit' : 'visits'} ${period.noun} on other Property Managers’ Properties. <a class="link" href="${hrefFor(view, first, 'all', q)}">Show all</a>`
+                  : others
+                    ? html`Including ${others} ${others === 1 ? 'visit' : 'visits'} ${period.noun} on other Property Managers’ Properties. <a class="link" href="${hrefFor(view, first, 'mine', q)}">Show mine</a>`
+                    : '',
               )}
               <div class="schedule-main" id="schedule" tabindex="-1">
                 ${filtered && !bookings.length ? html`<p class="schedule-none">No visits match these filters. <a class="link" href="${hrefFor(view, first, filter)}">Clear</a></p>` : ''}

@@ -135,20 +135,23 @@ try {
     if (event.target instanceof HTMLInputElement && event.target.id) markFilled(event.target);
   });
 
-  // Forms with data-confirm (postButton's `confirm`) ask first, in a small panel beside the
-  // button rather than the browser's own dialog: the question, the action again (in red)
-  // and "Keep it". A form already on its way isn't sent twice; the guard lifts after a
-  // while in case the response didn't navigate (a download, say).
+  // Forms with data-confirm (postButton's `confirm`), or a submit button with its own (a button
+  // that sends another form, such as the review's Confirm), ask first, in a small panel beside the
+  // button rather than the browser's own dialog: the question, the action again (green, or red
+  // for one that undoes something) and "Keep it". A form already on its way isn't sent twice; the
+  // guard lifts after a while in case the response didn't navigate (a download, say).
+  const questionFor = (form, submitter) => (submitter instanceof HTMLElement && submitter.dataset.confirm) || form.dataset.confirm;
   document.addEventListener('submit', (event) => {
     const form = event.target;
     if (!(form instanceof HTMLFormElement)) return;
-    if (form.dataset.confirm && form.dataset.confirmed !== 'true') {
+    const question = questionFor(form, event.submitter);
+    if (question && form.dataset.confirmed !== 'true') {
       event.preventDefault();
       if (typeof HTMLElement.prototype.showPopover !== 'function') {
-        if (window.confirm(form.dataset.confirm)) send(form, event.submitter);
+        if (window.confirm(question)) send(form, event.submitter);
         return;
       }
-      askFirst(form, event.submitter);
+      askFirst(form, event.submitter, question);
       return;
     }
     delete form.dataset.confirmed;
@@ -173,7 +176,7 @@ try {
 
   // The confirm panel: a popover (Escape or a click elsewhere closes it), placed under the
   // button that asked, or over it when there is no room below.
-  function askFirst(form, submitter) {
+  function askFirst(form, submitter, question) {
     document.querySelector('.confirm-pop')?.remove();
     const anchor = submitter instanceof HTMLElement ? submitter : form;
     const panel = document.createElement('div');
@@ -183,7 +186,7 @@ try {
     const text = document.createElement('p');
     text.className = 'confirm-pop-text';
     text.id = `confirm-pop-${Date.now()}`;
-    text.textContent = form.dataset.confirm;
+    text.textContent = question;
     panel.setAttribute('aria-labelledby', text.id);
     const actions = document.createElement('div');
     actions.className = 'confirm-pop-actions';
@@ -193,7 +196,9 @@ try {
     keep.textContent = 'Keep it';
     const yes = document.createElement('button');
     yes.type = 'button';
-    yes.className = 'btn btn-sm btn-danger';
+    // Red when the action undoes something (Cancel Job, Remove), green when it commits to one (Choose this Firm Quote).
+    const undoes = form.dataset.confirmTone === 'destructive' || anchor.classList.contains('btn-danger');
+    yes.className = `btn btn-sm ${undoes ? 'btn-error' : 'btn-success'}`;
     yes.textContent = form.dataset.confirmYes || anchor.textContent.trim() || 'Yes';
     actions.append(keep, yes);
     panel.append(text, actions);
@@ -2237,7 +2242,12 @@ function selectTab(tab) {
     const on = other === tab;
     other.setAttribute('aria-selected', String(on));
     const pane = document.getElementById(other.getAttribute('aria-controls'));
-    if (pane) pane.hidden = !on;
+    if (!pane) continue;
+    // Stacked panes (.tab-panes) stay laid out, so the card keeps the tallest pane's height.
+    if (pane.parentElement?.classList.contains('tab-panes')) {
+      pane.inert = !on;
+      pane.classList.toggle('is-off', !on);
+    } else pane.hidden = !on;
   }
 }
 
